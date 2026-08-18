@@ -43,6 +43,7 @@ def _standing(slug, name, *, bp, on, country=''):
     SeriesBadgeStanding.objects.create(
         profile=p, series_slug=slug, xp=100, progress_bp=bp,
         stages_cleared=bp // 2500, stages_total=4, advanced_at=on, country_code=country,
+        is_linked=True,
     )
     return p
 
@@ -199,7 +200,7 @@ def test_a_signed_in_hunter_is_told_when_they_are_NOT_on_the_board(client):
     assert 'Not on this board yet' in body
 
     SeriesBadgeStanding.objects.create(profile=viewer, series_slug='chase', xp=100, progress_bp=7500,
-                                       stages_cleared=3, stages_total=4, advanced_at=dt.date(2025, 2, 1))
+                                       stages_cleared=3, stages_total=4, advanced_at=dt.date(2025, 2, 1), is_linked=True)
     body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
     assert 'You are' in body and 'Not on this board yet' not in body
 

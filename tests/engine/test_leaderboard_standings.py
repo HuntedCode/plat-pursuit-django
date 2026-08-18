@@ -173,26 +173,32 @@ def test_changing_country_propagates_to_every_standing_store():
     assert ProfileJobXP.objects.get(profile=profile).country_code == 'GB'
 
 
-def test_every_store_with_a_country_mirror_is_in_the_propagation_list():
+@pytest.mark.parametrize('mirror', ['country_code', 'is_linked'])
+def test_every_store_with_a_profile_mirror_is_in_the_propagation_list(mirror):
     """The test above can only check the stores somebody remembered to add to it. This one asks the MODELS
     which stores carry a mirror, and fails if the handler's list has fallen behind.
 
     ProfileEditionStanding shipped with a `country_code` column and was missing from the handler, so an
     edition-sliced board would have kept ranking a relocated hunter under their old flag while the
     all-editions board had already moved them. Nothing errors; the two boards just quietly disagree.
+
+    Parametrized over BOTH mirrors, because `is_linked` fails worse than `country_code` does: country is a
+    filter the reader opted into, so a stale one misfiles a hunter on one slice. `is_linked` is the whole
+    board's population rule, so a store left out keeps an unverified account ranked after they verify, or
+    keeps a verified one off.
     """
     from django.apps import apps
-    from trophies.signals import country_mirrored_standings
+    from trophies.signals import profile_mirrored_standings
 
     declared = {
         model for model in apps.get_app_config('trophies').get_models()
-        if 'country_code' in {f.name for f in model._meta.get_fields()}
+        if mirror in {f.name for f in model._meta.get_fields()}
         and 'profile' in {f.name for f in model._meta.get_fields()}
     }
-    handled = set(country_mirrored_standings())
+    handled = set(profile_mirrored_standings())
 
     assert declared <= handled, (
-        f'these stores mirror Profile.country_code but the signal never updates them: '
+        f'these stores mirror Profile.{mirror} but the signal never updates them: '
         f'{sorted(m.__name__ for m in declared - handled)}'
     )
 
@@ -333,6 +339,7 @@ def test_the_evaluation_seam_actually_writes_the_advance_date():
     import datetime as dt
     from django.utils import timezone
     from trophies.models import ProfileGame, ProfileTrophyGroup, TrophyGroup
+    from django.utils import timezone
     from trophies.services.badge_apply import evaluate_and_apply
     from tests.factories import PlatformGroupFactory, BadgeSeriesFactory, GroupBadgeFactory
 
@@ -500,3 +507,99 @@ def test_the_recompute_takes_a_per_profile_lock():
     assert not any('FOR UPDATE' in q and 'trophies_profile' in q for q in sql), (
         'the recompute locked the Profile ROW, which collides with add_to_sync_target(nowait=True)'
     )
+
+
+# ------------------------------------------------------------------ the is_linked mirror ----------------
+
+def test_every_production_path_stamps_the_mirror_at_birth():
+    """The trap this denorm introduces, closed behaviourally rather than by everyone remembering.
+
+    `is_linked` is now read off the STORE, not off a join to Profile (migration 0308), so a row created
+    without it silently vanishes from its board. The propagation signal cannot save that row: it fires
+    only when a Profile's value CHANGES, so a row born after a hunter linked keeps the False default
+    forever.
+
+    This is not hypothetical -- `country_code` had exactly this bug on `ProfileJobXP`, at both creation
+    sites, from the day the column landed until 0308 repaired it. What follows walks each store's real
+    creation path and asserts the mirror arrived, so a new path that forgets fails here rather than by a
+    hunter reporting they are missing from a board.
+    """
+    from trophies.models import (
+        Job, ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
+        SeriesBadgeStanding, UserGroupBadge,
+    )
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.services.contract_service import grant_job_xp, recompute_career_standing
+    from tests.factories import (
+        BadgeSeriesFactory, ConceptFactory, GameFactory, GroupBadgeFactory, PlatformGroupFactory,
+        StageFactory,
+    )
+    from trophies.models import ProfileGame, ProfileTrophyGroup, TrophyGroup
+    from django.utils import timezone
+
+    profile = ProfileFactory(is_linked=True)
+
+    # --- the badge write seam: SeriesBadgeStanding + ProfileBadgeStanding + ProfileEditionStanding ---
+    series = BadgeSeriesFactory(series_slug='mirror')
+    stage = StageFactory(series_slug='mirror', stage_number=1)
+    concept = ConceptFactory()
+    stage.concepts.add(concept)
+    game = GameFactory(concept=concept, title_platform=['PS5'])
+    gb = GroupBadgeFactory(series=series,
+                           platform_group=PlatformGroupFactory(key='mirror-grp', platforms=['PS5']),
+                           is_live=True)
+    ProfileGame.objects.create(profile=profile, game=game, progress=100)
+    tg, _ = TrophyGroup.objects.get_or_create(game=game, trophy_group_id='default',
+                                              defaults={'trophy_group_name': 'Base'})
+    ProfileTrophyGroup.objects.create(profile=profile, trophy_group=tg, progress=100,
+                                      last_trophy_at=timezone.now())
+    evaluate_and_apply(profile, [gb])
+
+    assert SeriesBadgeStanding.objects.get(profile=profile).is_linked is True
+    assert ProfileBadgeStanding.objects.get(profile=profile).is_linked is True
+    assert ProfileEditionStanding.objects.get(profile=profile).is_linked is True
+    # ...and the earners board's own store, which is written by `apply_changes`, not by the recompute.
+    assert UserGroupBadge.objects.get(profile=profile).is_linked is True
+
+    # --- the jobs economy: ProfileJobXP (get_or_create) + ProfileCareerStanding ---
+    job = Job.objects.create(slug='mirror-job', name='Mirror', discipline='combat')
+    grant_job_xp(profile, job, 500, source='test', source_id=1)
+    recompute_career_standing(profile)
+
+    # ProfileJobXP is covered TWICE and this asserts the outcome, not one mechanism: `grant_job_xp`
+    # stamps at birth, and `recompute_career_standing` -- which always follows it -- sweeps the profile's
+    # rows. Removing either one alone leaves this green, deliberately. The end state is what a board
+    # reads, and the belt-and-braces is on purpose given this is the store the country mirror was
+    # silently wrong on for its whole life.
+    pjx = ProfileJobXP.objects.get(profile=profile, job=job)
+    assert pjx.is_linked is True, 'a job XP row reached the board with no mirror'
+    assert pjx.country_code == (profile.country_code or ''), (
+        'the country mirror is missing -- the bug 0308 repaired, reintroduced'
+    )
+    assert ProfileCareerStanding.objects.get(profile=profile).is_linked is True
+
+
+def test_verifying_an_account_propagates_to_every_store():
+    """The edge the recompute seams cannot cover. A hunter VERIFIES, which changes `is_linked` with no
+    badge evaluation behind it -- so without this handler they would stay off every board until their
+    next sync, having just done the one thing that is supposed to put them on."""
+    from trophies.models import (
+        ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
+        SeriesBadgeStanding, UserGroupBadge,
+    )
+
+    profile = ProfileFactory(is_linked=False)
+    rows = [
+        ProfileBadgeStanding.objects.create(profile=profile, total_xp=100, is_linked=False),
+        ProfileCareerStanding.objects.create(profile=profile, total_xp=100, pursuer_level=1, is_linked=False),
+        ProfileEditionStanding.objects.create(profile=profile, platform_group_key='e', total_xp=100, is_linked=False),
+        SeriesBadgeStanding.objects.create(profile=profile, series_slug='s', xp=1, progress_bp=1,
+                                           stages_cleared=1, stages_total=1, is_linked=False),
+    ]
+
+    profile.is_linked = True
+    profile.save(update_fields=['is_linked'])
+
+    for row in rows:
+        row.refresh_from_db()
+        assert row.is_linked is True, f'{type(row).__name__} was not reached by the propagation'

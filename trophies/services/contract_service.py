@@ -126,7 +126,14 @@ def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
         source=source, source_id=source_id,
         earned_contract=earned_contract, tier=tier, base_t=base_t,
     )
-    ProfileJobXP.objects.get_or_create(profile=profile, job=job)  # race-safe create
+    # Stamped at BIRTH. Both mirrors default empty/False, and the propagation signal fires only when the
+    # Profile value CHANGES -- so a row created after a hunter's last country move (or after they linked)
+    # would keep the defaults forever. For `country_code` that quietly dropped them from the
+    # country-sliced job board; for `is_linked` it would drop them from the job board entirely.
+    ProfileJobXP.objects.get_or_create(profile=profile, job=job, defaults={
+        'country_code': getattr(profile, 'country_code', '') or '',
+        'is_linked': bool(getattr(profile, 'is_linked', False)),
+    })  # race-safe create
     pjx = ProfileJobXP.objects.select_for_update().get(profile=profile, job=job)
     old_level = level_for_xp(pjx.total_xp)   # logical level before this grant (floor 1; never logs Initiate)
     pjx.total_xp += amount
@@ -512,7 +519,11 @@ def recompute_profile_job_xp(profile):
     existing = {pjx.job_id: pjx for pjx in ProfileJobXP.objects.filter(profile=profile)}
 
     for job_id, total in sums.items():
-        pjx = existing.get(job_id) or ProfileJobXP(profile=profile, job_id=job_id)
+        pjx = existing.get(job_id) or ProfileJobXP(
+            profile=profile, job_id=job_id,
+            country_code=getattr(profile, 'country_code', '') or '',
+            is_linked=bool(getattr(profile, 'is_linked', False)),
+        )
         pjx.total_xp = total or 0
         pjx.level = level_for_xp(pjx.total_xp)
         pjx.save()
@@ -547,11 +558,19 @@ def recompute_career_standing(profile):
         xp=Sum('total_xp'), lvl=Sum('level'),
     )
     country = getattr(profile, 'country_code', '') or ''
+    is_linked = bool(getattr(profile, 'is_linked', False))
     ProfileCareerStanding.objects.update_or_create(
         profile=profile,
         defaults={
             'total_xp': totals['xp'] or 0,
             'pursuer_level': totals['lvl'] or 0,
             'country_code': country,
+            'is_linked': is_linked,
         },
     )
+    # The job rows carry the same mirror and are NOT written by this function, so they are refreshed here
+    # rather than left to the propagation signal -- which only fires on CHANGE, and so would never reach a
+    # row created after the last time either value moved. See the get_or_create in `grant_job_xp`.
+    ProfileJobXP.objects.filter(profile=profile).exclude(
+        country_code=country, is_linked=is_linked,
+    ).update(country_code=country, is_linked=is_linked)

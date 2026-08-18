@@ -389,7 +389,7 @@ def _pursuers(series_slug, n):
     for _ in range(n):
         SeriesBadgeStanding.objects.create(
             profile=ProfileFactory(is_linked=True), series_slug=series_slug,
-            xp=100, progress_bp=1000, stages_cleared=1, stages_total=1,
+            xp=100, progress_bp=1000, stages_cleared=1, stages_total=1, is_linked=True,
         )
 
 

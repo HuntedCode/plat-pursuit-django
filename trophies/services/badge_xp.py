@@ -267,8 +267,8 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
                 group_xp[gb.series.series_slug][gb.platform_group.key] = xp
 
     # Read ONCE for the whole recompute: this seam writes one row per positive series plus the grand
-    # total, and the profile's country is the same for all of them.
-    country = _country_code(profile_id)
+    # total, and both mirrored values are the same for all of them.
+    country, is_linked = _mirrored_profile_fields(profile_id)
 
     for slug, s in positive.items():
         _upsert(SeriesBadgeStanding, {'profile_id': profile_id, 'series_slug': slug},
@@ -277,7 +277,7 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
                  'group_progress': dict(group_prog.get(slug, {})),
                  'group_xp': dict(group_xp.get(slug, {})),
                  'advanced_at': s.advanced_at,
-                 'country_code': country})
+                 'country_code': country, 'is_linked': is_linked})
     if zeroed:
         SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()
 
@@ -285,8 +285,9 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     if total > 0:
         badges_total, badges_by_edition = badges_held_counts(profile_id)
         _upsert(ProfileBadgeStanding, {'profile_id': profile_id},
-                {'total_xp': total, 'country_code': country, 'badges_held': badges_total})
-        _write_edition_standings(profile_id, country, badges_by_edition)
+                {'total_xp': total, 'country_code': country, 'badges_held': badges_total,
+                 'is_linked': is_linked})
+        _write_edition_standings(profile_id, country, is_linked, badges_by_edition)
     else:
         # No badge XP at all means no standing anywhere, editions included -- the boards read
         # ProfileBadgeStanding for the all-editions view and these rows for a slice, and one of them
@@ -318,7 +319,7 @@ def _live_standings(profile_id):
     return SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=live_slugs)
 
 
-def _write_edition_standings(profile_id, country, badges_by_edition):
+def _write_edition_standings(profile_id, country, is_linked, badges_by_edition):
     """Upsert the profile's per-edition standings, and drop the editions they no longer stand in.
 
     Per-edition XP is re-summed from EVERY one of the profile's SeriesBadgeStanding rows rather than from
@@ -347,15 +348,22 @@ def _write_edition_standings(profile_id, country, badges_by_edition):
             continue
         keep.append(key)
         _upsert(ProfileEditionStanding, {'profile_id': profile_id, 'platform_group_key': key},
-                {'total_xp': xp, 'country_code': country, 'badges_held': badges})
+                {'total_xp': xp, 'country_code': country, 'badges_held': badges,
+                 'is_linked': is_linked})
     ProfileEditionStanding.objects.filter(profile_id=profile_id).exclude(platform_group_key__in=keep).delete()
 
 
-def _country_code(profile_id):
-    """The profile's country, denormalized onto its standings so a country slice is an index range scan
-    rather than a join-then-filter over a board-ordered scan."""
+def _mirrored_profile_fields(profile_id):
+    """The Profile columns every standing row carries a copy of: `(country_code, is_linked)`.
+
+    Both are denormalized for the same reason -- they are board PREDICATES, and a predicate on another
+    table cannot go in this table's indexes. Read together in ONE query because this seam writes several
+    rows per recompute and both values are the same for all of them.
+    """
     from trophies.models import Profile
-    return Profile.objects.filter(pk=profile_id).values_list('country_code', flat=True).first() or ''
+    row = (Profile.objects.filter(pk=profile_id)
+           .values_list('country_code', 'is_linked').first()) or ('', False)
+    return (row[0] or ''), bool(row[1])
 
 
 def badges_held_counts(profile_id):

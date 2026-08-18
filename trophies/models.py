@@ -2813,16 +2813,41 @@ class ProfileJobXP(models.Model):
     # column narrower than its source turns any over-long value into a DataError on the propagating
     # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
     country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ['profile', 'job']
         indexes = [
             models.Index(fields=['profile'], name='profilejobxp_profile_idx'),
-            models.Index(fields=['job', 'total_xp'], name='profilejobxp_job_xp_idx'),
+            # PARTIAL on the board's own population (`_linked` + the `> 0` membership rule), the
+            # same shape migration 0307 measured on Profile. The tail is `profile_id`, so the index
+            # expresses the board's FULL ordering and a rank COUNT can be index-only rather than
+            # re-sorting. See the 0308 docstring for the numbers.
+            models.Index(fields=['job', '-total_xp', 'profile'], name='profilejobxp_job_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
             # Country-sliced per-job board. Same column order rationale as the series boards: the always-
             # filtered key first, then the slice, then the sort.
-            models.Index(fields=['job', 'country_code', '-total_xp'], name='pjx_job_cc_xp_idx'),
+            models.Index(fields=['job', 'country_code', '-total_xp', 'profile'], name='pjx_job_cc_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
         ]
 
     def __str__(self):
@@ -3136,6 +3161,24 @@ class UserGroupBadge(models.Model):
                   "date and moves when the badge's iteration changes. Use this for 'earned this week'.",
     )
 
+    # Denormalized from Profile, for the same reason the standing stores carry it: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, like the standing stores: `badge_apply.apply_changes` stamps it on award, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
+
     class Meta:
         unique_together = ['profile', 'group_badge']
         indexes = [
@@ -3214,13 +3257,39 @@ class ProfileBadgeStanding(models.Model):
     # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
     country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
 
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
-            # Badge Points rides `total_xp`'s own db_index; this is its country-sliced form, so a slice is
-            # a range scan rather than a filter over a board-ordered scan.
-            models.Index(fields=['country_code', '-total_xp'], name='pbs_country_xp_idx'),
+            # PARTIAL on the board's own population (`_linked` + the `> 0` membership rule), the
+            # same shape migration 0307 measured on Profile. The tail is `profile_id`, so the index
+            # expresses the board's FULL ordering and a rank COUNT can be index-only rather than
+            # re-sorting. See the 0308 docstring for the numbers.
+            models.Index(fields=['-total_xp', 'profile'], name='pbs_board_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            # The country-sliced form: a slice is a range scan rather than a filter over a board-ordered
+            # scan. (`total_xp` keeps its own plain db_index for non-board reads.)
+            models.Index(fields=['country_code', '-total_xp', 'profile'], name='pbs_country_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
         ]
 
     def __str__(self):
@@ -3273,6 +3342,25 @@ class ProfileEditionStanding(models.Model):
     # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
     # DataError waiting to happen.
     country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -3309,11 +3397,37 @@ class ProfileCareerStanding(models.Model):
     # column narrower than its source turns any over-long value into a DataError on the propagating
     # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
     country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
-            models.Index(fields=['country_code', '-total_xp'], name='pcs_country_xp_idx'),
+            # PARTIAL on the board's own population (`_linked` + the `> 0` membership rule), the
+            # same shape migration 0307 measured on Profile. The tail is `profile_id`, so the index
+            # expresses the board's FULL ordering and a rank COUNT can be index-only rather than
+            # re-sorting. See the 0308 docstring for the numbers.
+            models.Index(fields=['-total_xp', 'profile'], name='pcs_board_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            models.Index(fields=['country_code', '-total_xp', 'profile'], name='pcs_country_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
         ]
 
     def __str__(self):
@@ -3380,6 +3494,25 @@ class SeriesBadgeStanding(models.Model):
     # column narrower than its source turns any over-long value into a DataError on the propagating
     # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
     country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

@@ -58,11 +58,11 @@ def test_badge_points_rank_equals_position_across_a_large_tie():
     what produced the original report."""
     tied = [ProfileFactory() for _ in range(12)]
     for p in tied:
-        ProfileBadgeStanding.objects.create(profile=p, total_xp=1600)
+        ProfileBadgeStanding.objects.create(profile=p, total_xp=1600, is_linked=True)
     ProfileBadgeStanding.objects.create(
-        profile=ProfileFactory(), total_xp=9000)   # clear leader above the tie
+        profile=ProfileFactory(), total_xp=9000, is_linked=True)   # clear leader above the tie
     ProfileBadgeStanding.objects.create(
-        profile=ProfileFactory(), total_xp=100)     # and one below it
+        profile=ProfileFactory(), total_xp=100, is_linked=True)     # and one below it
 
     _assert_agrees(lb.xp_rows(limit=100), lb.xp_rank, 'Badge Points')
 
@@ -80,8 +80,8 @@ def test_trophies_rank_equals_position_when_both_figures_tie():
 
 def test_career_rank_equals_position_across_a_tie():
     for _ in range(6):
-        ProfileCareerStanding.objects.create(profile=ProfileFactory(), total_xp=750, pursuer_level=4)
-    ProfileCareerStanding.objects.create(profile=ProfileFactory(), total_xp=2000, pursuer_level=9)
+        ProfileCareerStanding.objects.create(profile=ProfileFactory(), total_xp=750, pursuer_level=4, is_linked=True)
+    ProfileCareerStanding.objects.create(profile=ProfileFactory(), total_xp=2000, pursuer_level=9, is_linked=True)
 
     _assert_agrees(lb.career_xp_rows(limit=100), lb.career_xp_rank, 'Career XP')
 
@@ -91,8 +91,8 @@ def test_job_rank_equals_position_across_a_tie():
 
     job = Job.objects.create(slug='ranker', name='Ranker', discipline='combat')
     for _ in range(5):
-        ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=300, level=2)
-    ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=1200, level=6)
+        ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=300, level=2, is_linked=True)
+    ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=1200, level=6, is_linked=True)
 
     _assert_agrees(lb.job_rows('ranker', limit=100), lambda pid: lb.job_rank('ranker', pid), 'Job board')
 
@@ -104,7 +104,7 @@ def test_series_board_rank_equals_position_including_the_null_advance_date():
     then the unique tail. All three have to be in the count."""
     def standing(bp, on):
         return SeriesBadgeStanding.objects.create(
-            profile=ProfileFactory(), series_slug='ranks', xp=1, progress_bp=bp, advanced_at=on)
+            profile=ProfileFactory(), series_slug='ranks', xp=1, progress_bp=bp, advanced_at=on, is_linked=True)
 
     standing(10000, dt.date(2026, 1, 1))
     standing(10000, dt.date(2026, 5, 1))
@@ -135,11 +135,11 @@ def test_rank_equals_position_under_a_country_slice():
     for _ in range(5):
         ProfileBadgeStanding.objects.create(
             profile=ProfileFactory(country_code='CA'), total_xp=1600,
-            country_code='CA')
+            country_code='CA', is_linked=True)
     for _ in range(3):
         ProfileBadgeStanding.objects.create(
             profile=ProfileFactory(country_code='GB'), total_xp=1600,
-            country_code='GB')
+            country_code='GB', is_linked=True)
 
     _assert_agrees(lb.xp_rows(limit=100, country='CA'),
                    lambda pid: lb.xp_rank(pid, country='CA'), 'Badge Points (CA)')
@@ -148,9 +148,9 @@ def test_rank_equals_position_under_a_country_slice():
 def test_rank_equals_position_under_an_edition_slice():
     for _ in range(5):
         ProfileEditionStanding.objects.create(
-            profile=ProfileFactory(), platform_group_key='ultra-hd', total_xp=1600)
+            profile=ProfileFactory(), platform_group_key='ultra-hd', total_xp=1600, is_linked=True)
     ProfileEditionStanding.objects.create(
-        profile=ProfileFactory(), platform_group_key='legacy-hd', total_xp=9999)
+        profile=ProfileFactory(), platform_group_key='legacy-hd', total_xp=9999, is_linked=True)
 
     _assert_agrees(lb.xp_rows(limit=100, edition='ultra-hd'),
                    lambda pid: lb.xp_rank(pid, edition='ultra-hd'), 'Badge Points (Ultra HD)')

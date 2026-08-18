@@ -46,7 +46,7 @@ def _editions():
 def _standing(key, *, country='', **kw):
     profile = ProfileFactory(country_code=country)
     ProfileEditionStanding.objects.create(
-        profile=profile, platform_group_key=key, country_code=country, **kw)
+        profile=profile, platform_group_key=key, country_code=country, **kw, is_linked=True)
     return profile
 
 
@@ -165,7 +165,7 @@ def test_badges_held_counts_only_live_badges_so_it_agrees_with_the_points_beside
     # A dormant badge the hunter somehow holds (an authoring smoke-test) must not inflate the count.
     dormant = GroupBadgeFactory(series=BadgeSeriesFactory(series_slug='unreleased'),
                                 platform_group=ultra, is_live=False)
-    UserGroupBadge.objects.create(profile=profile, group_badge=dormant)
+    UserGroupBadge.objects.create(profile=profile, group_badge=dormant, is_linked=True)
 
     from trophies.services.badge_apply import evaluate_and_apply
     evaluate_and_apply(profile, list(GroupBadge.objects.filter(is_live=True)))
@@ -258,7 +258,7 @@ def test_an_edition_rank_is_measured_against_that_edition():
     edition's population would produce a rank that is wrong and entirely plausible."""
     _standing('ultra-hd', total_xp=900)
     mine = _standing('ultra-hd', total_xp=100)
-    ProfileBadgeStanding.objects.create(profile=mine, total_xp=99999)   # huge OVERALL, small in-edition
+    ProfileBadgeStanding.objects.create(profile=mine, total_xp=99999, is_linked=True)   # huge OVERALL, small in-edition
 
     assert lb.xp_rank(mine.id, edition='ultra-hd') == 2, 'the rank was taken from the wrong store'
     assert lb.xp_rank(mine.id) == 1, 'the all-editions rank should still read the all-editions row'
@@ -287,7 +287,7 @@ def test_an_unknown_edition_reads_nothing_rather_than_everything():
     mutation testing caught it doing.
     """
     someone = _standing('ultra-hd', total_xp=100)
-    ProfileBadgeStanding.objects.create(profile=someone, total_xp=100)
+    ProfileBadgeStanding.objects.create(profile=someone, total_xp=100, is_linked=True)
 
     assert lb.xp_rows() != [], 'fixture is wrong -- the all-editions board must have something to fall back TO'
     assert lb.xp_rows(edition='no-such-edition') == []
@@ -304,7 +304,7 @@ def test_each_escape_hatch_clears_only_the_filter_it_names(client):
 
     _editions()
     ProfileCareerStanding.objects.create(
-        profile=ProfileFactory(country_code='CA', country='Canada'), total_xp=10, country_code='CA')
+        profile=ProfileFactory(country_code='CA', country='Canada'), total_xp=10, country_code='CA', is_linked=True)
 
     resp = client.get(URL, {'tab': 'points', 'country': 'CA', 'edition': 'ultra-hd'})
     body = resp.content.decode()
@@ -324,7 +324,7 @@ def test_the_edition_board_costs_the_same_number_of_queries_as_the_global_one(cl
     _editions()
     for i in range(5):
         p = _standing('ultra-hd', total_xp=100 * i)
-        ProfileBadgeStanding.objects.create(profile=p, total_xp=100 * i)
+        ProfileBadgeStanding.objects.create(profile=p, total_xp=100 * i, is_linked=True)
 
     # Warm the picker caches (viewer-independent, hour-TTL) so the first measurement is not paying
     # cold-start costs the second one skips. The property here is that SLICING is free, not that a cold

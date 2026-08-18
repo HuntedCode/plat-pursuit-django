@@ -121,10 +121,23 @@ puts a hunter on the boards immediately, with no re-evaluation.
 GAME boards are the one exception and do not go through this module: they record who PLAYED a game, which
 is catalogue data, and `game_leaderboard_service` owns them with its own `members_only` toggle.
 
-Cost, worth knowing before adding a board: the gate is a JOIN to `Profile`, and no index serves it (the
-join is by primary key, so `is_linked` is read from the heap of a wide table). `country_code` is
-denormalized onto the standing stores for exactly this reason and `is_linked` is not -- if a board read
-becomes hot, that is the fix with precedent.
+**It is a COLUMN on every store, not a join** (migration 0308), for the same reason `country_code` is:
+a predicate that lives on another table cannot go in this table's indexes. The join read `is_linked` out
+of the heap of a 48-column `Profile` once per candidate row, on public uncached pages. 0309 then makes the
+three whole-table board indexes partial on it -- the shape 0307 measured at `trophy_rank` 16.0 ms -> 3.9
+ms on `Profile`. The per-entity stores (series, edition, earners) carry the column for correctness but
+keep plain indexes: their reads are already narrowed by a leading key.
+
+Two paths keep the mirror honest, and BOTH are needed:
+
+1. Every recompute seam stamps it on the rows it writes (`badge_xp.recompute_standing`,
+   `contract_service.recompute_career_standing`, `badge_apply.apply_changes`, `grant_job_xp`).
+2. `signals._propagate_profile_flags_to_standings` catches what those miss -- a hunter VERIFYING, which
+   moves the value with no recompute behind it. Without it they would stay off every board until their
+   next sync, having just done the thing that is meant to put them on.
+
+`profile_mirrored_standings()` is the list both paths share, and a test asserts it against what the models
+actually declare, because a store left out of it does not error -- it just quietly ranks the wrong people.
 
 ## How a board is served
 

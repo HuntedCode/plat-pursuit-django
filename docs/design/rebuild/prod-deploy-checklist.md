@@ -484,6 +484,25 @@ Nothing to run. The gate is at READ, so verifying an account puts a hunter on th
 no re-evaluation. Game boards are deliberately exempt (they record who played a game, not who competes)
 and are owned by `game_leaderboard_service`, which has its own `members_only` toggle.
 
+### `is_linked` is mirrored onto the standing stores (2026-08)
+
+Migrations `trophies.0308_profile_mirrors_is_linked` and `trophies.0309_partial_board_indexes_on_standings`.
+
+- [ ] **`0308` backfills in the migration, and it is not optional.** The column defaults to False and
+      `badge_leaderboards._linked()` reads it directly, so between the AddField and the backfill EVERY
+      BOARD ON THE SITE IS EMPTY. Set-based `UPDATE ... FROM`, one statement per table. No action needed;
+      recorded so it is not mistaken for something to run afterwards.
+- [ ] **`0308` also repairs a pre-existing `country_code` bug on `ProfileJobXP`.** Rows were created with
+      `country_code = ''` at both creation sites, and the propagation signal fires only on CHANGE -- so a
+      hunter whose country never moved after their first XP grant has been invisible to the
+      country-sliced job board since that column landed. The write sites now stamp it; the migration
+      repairs the existing rows. **Expect the country-sliced job board to gain hunters on deploy.**
+- [ ] **`0309` rebuilds six indexes CONCURRENTLY** (`atomic = False`). Same failure mode as `0307`: a
+      build that fails partway leaves an INVALID index that must be dropped by hand before re-running.
+      The migration's docstring carries the exact `DROP INDEX CONCURRENTLY` and validity-check SQL.
+- [ ] **Run the migrations in order and do NOT skip 0308.** 0309's partial indexes have `is_linked=True`
+      in their condition, so building them against an unbackfilled column produces six empty indexes.
+
 ### The three board directories are gone (no deploy step)
 
 `/leaderboards/{games,badges,jobs}/` were removed without redirects -- they never left a dev machine, and

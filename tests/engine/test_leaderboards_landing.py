@@ -31,10 +31,10 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
         is_linked=True, total_plats=plats, total_trophies=trophies,
     )
     if points:
-        ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points)
+        ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points, is_linked=True)
     if career:
         ProfileCareerStanding.objects.create(
-            profile=p, country_code=country, total_xp=career, pursuer_level=level)
+            profile=p, country_code=country, total_xp=career, pursuer_level=level, is_linked=True)
     return p
 
 
@@ -81,7 +81,7 @@ def test_the_viewer_standing_is_in_the_header_not_in_the_rows(client):
     """Shown once, in the header. A per-row personal rank would make every response per-user and forfeit
     caching for the entire section, which is its defining performance property."""
     profile = ProfileFactory(display_psn_username='Me', is_linked=True)
-    ProfileBadgeStanding.objects.create(profile=profile, total_xp=100)
+    ProfileBadgeStanding.objects.create(profile=profile, total_xp=100, is_linked=True)
     client.force_login(profile.user)
 
     body = client.get(URL).content.decode()

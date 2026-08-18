@@ -203,14 +203,17 @@ def _track_profile_premium_transition(sender, instance, **kwargs):
     if not instance.pk:
         instance._old_user_is_premium = None
         instance._old_country_code = None
+        instance._old_is_linked = None
         return
     try:
-        old = Profile.objects.only('user_is_premium', 'country_code').get(pk=instance.pk)
+        old = Profile.objects.only('user_is_premium', 'country_code', 'is_linked').get(pk=instance.pk)
         instance._old_user_is_premium = old.user_is_premium
         instance._old_country_code = old.country_code
+        instance._old_is_linked = old.is_linked
     except Profile.DoesNotExist:
         instance._old_user_is_premium = None
         instance._old_country_code = None
+        instance._old_is_linked = None
 
 
 @receiver(post_save, sender=Profile, dispatch_uid="propagate_country_to_standings")
@@ -233,28 +236,52 @@ def _propagate_country_to_standings(sender, instance, created, **kwargs):
     """
     if created:
         return
-    old = getattr(instance, '_old_country_code', None)
-    new = instance.country_code or ''
-    if old is None or (old or '') == new:
+
+    changed = {}
+    old_country = getattr(instance, '_old_country_code', None)
+    if old_country is not None and (old_country or '') != (instance.country_code or ''):
+        changed['country_code'] = instance.country_code or ''
+
+    old_linked = getattr(instance, '_old_is_linked', None)
+    if old_linked is not None and bool(old_linked) != bool(instance.is_linked):
+        changed['is_linked'] = bool(instance.is_linked)
+
+    if not changed:
         return
 
-    for model in country_mirrored_standings():
-        model.objects.filter(profile_id=instance.pk).update(country_code=new)
+    # `country_code` lives on five of the six; `is_linked` on all six. Filtering the payload per store
+    # rather than keeping two handlers means one traversal on the (rare) save where both moved at once.
+    for model in profile_mirrored_standings():
+        fields = {k: v for k, v in changed.items() if k in _mirrored_fields(model)}
+        if fields:
+            model.objects.filter(profile_id=instance.pk).update(**fields)
 
 
-def country_mirrored_standings():
-    """The stores holding a denormalized copy of `Profile.country_code`.
+def profile_mirrored_standings():
+    """Every store holding a denormalized copy of a Profile column the boards read as a PREDICATE.
 
     Named and returned rather than inlined so a test can check it against what the models actually declare.
-    Adding a store and forgetting this list does not error -- it leaves that one board ranking a hunter in
-    the country they left, which nobody would think to look for.
+    Adding a store and forgetting this list does not error -- it leaves one board ranking a hunter in the
+    country they left, or (worse, since it is a whole-population rule) keeping an unverified account on a
+    board after they verify. Neither is something a reader would think to look for.
+
+    `UserGroupBadge` is here for `is_linked` but carries no `country_code`: the earners board is the one
+    board with no country slice (`earners_rows`/`earners_rank` take no `country`), so the column would be
+    dead weight. `_mirrored_fields` is what keeps that difference from needing a second list.
     """
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-        SeriesBadgeStanding,
+        SeriesBadgeStanding, UserGroupBadge,
     )
     return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding,
-            SeriesBadgeStanding, ProfileJobXP)
+            SeriesBadgeStanding, ProfileJobXP, UserGroupBadge)
+
+
+def _mirrored_fields(model):
+    """Which mirrored columns a given store actually declares. Read off the model rather than hardcoded,
+    so a store that gains or loses one cannot fall out of step with this module."""
+    names = {f.name for f in model._meta.get_fields() if hasattr(f, 'attname')}
+    return names & {'country_code', 'is_linked'}
 
 
 @receiver(pre_delete, sender=Profile, dispatch_uid="reconcile_group_badge_earned_counts_on_profile_delete")

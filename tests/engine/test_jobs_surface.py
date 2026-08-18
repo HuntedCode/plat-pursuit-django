@@ -29,7 +29,7 @@ def _xp(job, name, xp, level=1):
     went with the Job Boards directory, which was the only thing that needed a count it could gate and
     sort on before pagination."""
     p = ProfileFactory(display_psn_username=name)
-    ProfileJobXP.objects.create(profile=p, job=job, total_xp=xp, level=level)
+    ProfileJobXP.objects.create(profile=p, job=job, total_xp=xp, level=level, is_linked=True)
     return p
 
 
@@ -175,7 +175,7 @@ def test_a_signed_in_hunter_with_no_XP_is_TOLD_they_are_not_ranked(client):
     assert 'Your standing' in body and 'Not ranked yet' in body
 
     # ...and a hunter who IS ranked gets the number, not the placeholder.
-    ProfileJobXP.objects.create(profile=viewer, job=job, total_xp=900, level=2)
+    ProfileJobXP.objects.create(profile=viewer, job=job, total_xp=900, level=2, is_linked=True)
     body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'}).content.decode()
     assert '#1' in body and 'Not ranked yet' not in body
 
@@ -229,7 +229,7 @@ def test_the_standing_chip_is_on_BOTH_tabs(client):
     """
     job = _job('archivist', 'Archivist')
     viewer = ProfileFactory(display_psn_username='Ranked')
-    ProfileJobXP.objects.create(profile=viewer, job=job, total_xp=900, level=2)
+    ProfileJobXP.objects.create(profile=viewer, job=job, total_xp=900, level=2, is_linked=True)
     client.force_login(viewer.user)
 
     for tab in ('contracts', 'ranks'):

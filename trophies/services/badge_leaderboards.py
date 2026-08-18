@@ -39,7 +39,7 @@ def _slice(qs, country):
     return qs.filter(country_code=country.upper()) if country else qs
 
 
-def _linked(qs, path='profile__'):
+def _linked(qs):
     """Restrict a board's population to VERIFIED hunters.
 
     ONE rule for every board in this module, because the three Global Boards disagreed about it and the
@@ -62,9 +62,17 @@ def _linked(qs, path='profile__'):
     Game boards are the one exception and do not live here: they record who PLAYED a game, which is
     catalogue data, and `game_leaderboard_service` owns them with its own `members_only` toggle.
 
-    `path` names the hop to `Profile` for the row's own model ('' when the queryset IS Profile).
+    Reads the store's OWN `is_linked` column, not `profile__is_linked`. Every store a board reads carries
+    a mirror of it (migration 0308), for the same reason they all mirror `country_code`: a predicate on
+    another table cannot go in this table's indexes, and the join made the planner read the flag out of
+    the heap of a 48-column `Profile` on every candidate row. Migration 0309's partial indexes are what
+    that column buys, and they only work if the filter is local -- so a `profile__is_linked` here would
+    silently give the correct answer at the old cost.
+
+    `trophy_store()` does not come through here at all -- its queryset IS `Profile`, so it filters the
+    source column inline and migration 0307 already made its indexes partial on it.
     """
-    return qs.filter(**{f'{path}is_linked': True})
+    return qs.filter(is_linked=True)
 
 
 # ------------------------------------------------------------------ rank == position ---------------------

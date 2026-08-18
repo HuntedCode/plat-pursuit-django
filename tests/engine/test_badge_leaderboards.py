@@ -156,7 +156,7 @@ def test_earners_rank_is_first_to_complete_order():
 def _standing(country='', **kw):
     from trophies.models import ProfileBadgeStanding
     p = ProfileFactory(country_code=country)
-    ProfileBadgeStanding.objects.create(profile=p, country_code=country, **kw)
+    ProfileBadgeStanding.objects.create(profile=p, country_code=country, **kw, is_linked=True)
     return p
 
 
@@ -200,17 +200,23 @@ def test_an_unlinked_hunter_is_not_on_ANY_board():
     )
 
     scout = ProfileFactory(is_linked=False, total_plats=99, total_trophies=999, country_code='MT')
-    ProfileBadgeStanding.objects.create(profile=scout, total_xp=999_999, badges_held=50, country_code='MT')
+    # `is_linked=False` on the STANDINGS, mirroring the profile. These rows are the fixture's whole point:
+    # the boards read the store's own column now (migration 0308), so a scout's standings must carry the
+    # scout's flag. Setting them True here would not weaken the test, it would invert it.
+    ProfileBadgeStanding.objects.create(profile=scout, total_xp=999_999, badges_held=50,
+                                        country_code='MT', is_linked=False)
     # The EDITION store is a separate manager that `badge_store(edition)` swaps to, so the gate has to be
     # proven on it independently -- a fixture with no edition standing leaves that branch unreachable and
     # dropping `_linked` from it stays green.
     ProfileEditionStanding.objects.create(profile=scout, platform_group_key='ultra-hd',
-                                          total_xp=999_999, badges_held=50, country_code='MT')
-    ProfileCareerStanding.objects.create(profile=scout, total_xp=999_999, pursuer_level=99)
+                                          total_xp=999_999, badges_held=50, country_code='MT',
+                                          is_linked=False)
+    ProfileCareerStanding.objects.create(profile=scout, total_xp=999_999, pursuer_level=99,
+                                         is_linked=False)
     SeriesBadgeStanding.objects.create(profile=scout, series_slug='aaa', xp=9999, progress_bp=10000,
-                                       stages_cleared=2, stages_total=2)
+                                       stages_cleared=2, stages_total=2, is_linked=False)
     job = Job.objects.create(slug='ranger', name='Ranger', discipline='combat')
-    ProfileJobXP.objects.create(profile=scout, job=job, total_xp=999_999, level=99)
+    ProfileJobXP.objects.create(profile=scout, job=job, total_xp=999_999, level=99, is_linked=False)
 
     assert lb.xp_rows() == [], 'an unlinked profile is on Badge Points'
     assert lb.xp_rank(scout.id) is None
@@ -292,8 +298,8 @@ def test_every_board_can_be_sliced_by_country_without_a_separate_store():
 def test_career_xp_board_reads_the_jobs_economy():
     from trophies.models import ProfileCareerStanding
     big, small = ProfileFactory(), ProfileFactory()
-    ProfileCareerStanding.objects.create(profile=big, total_xp=5000, pursuer_level=30)
-    ProfileCareerStanding.objects.create(profile=small, total_xp=200, pursuer_level=4)
+    ProfileCareerStanding.objects.create(profile=big, total_xp=5000, pursuer_level=30, is_linked=True)
+    ProfileCareerStanding.objects.create(profile=small, total_xp=200, pursuer_level=4, is_linked=True)
 
     rows = lb.career_xp_rows()
     assert [r[0] for r in rows] == [big.id, small.id]
