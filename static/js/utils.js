@@ -2165,6 +2165,208 @@ window.PlatPursuit.HTMLUtils = HTMLUtils;
 window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.countUp = countUp;
 window.PlatPursuit.takeover = takeover;
+/**
+ * Virtualized leaderboard: a full-height spacer with only the visible rows in the DOM.
+ *
+ * Extracted from game detail's Ranks panel, where the approach was worked out, so every board can use one
+ * implementation rather than each growing its own. The surfaces this serves -- Global Boards, badge
+ * detail, job detail, game detail -- all want the same three things: the PAGE scrollbar spans the whole
+ * board, jumping to a rank is just a scroll position, and scrolling never inserts rows above the viewport
+ * (which is what made the old marker/prepend approach lurch).
+ *
+ * The list is sized to `total * rowHeight` and rows are absolutely positioned by display position, so
+ * layout never depends on what is currently mounted. Rows outside the window are evicted from the DOM but
+ * their HTML stays cached, so scrolling back is instant and re-fetches nothing.
+ *
+ * SERVER CONTRACT: `fetchRows(start, from, count)` resolves to HTML containing `rowSelector` elements for
+ * display positions [start, start+count). `start` is a display POSITION and `from` is its CANONICAL rank
+ * -- they differ only when inverted, and a board that numbers its own rows needs both.
+ *
+ * @param {Object} o
+ * @param {HTMLElement} o.list            the spacer; server-rendered first-window rows live inside it
+ * @param {number} o.total                rows on the whole board (sizes the spacer)
+ * @param {string} o.rowSelector          e.g. '.lb-row'
+ * @param {function(): number} o.rowHeight   current row height in px; re-read on resize (breakpoints)
+ * @param {function(number, number, number): Promise<string>} o.fetchRows
+ * @param {number} [o.pageSize=50]        fetch granularity; must match what the server pages by
+ * @param {boolean} [o.invert=false]      display order is the reverse of canonical rank
+ * @param {string} [o.rankKey='lbRank']   dataset key on a row holding its CANONICAL rank
+ * @param {function(): number} [o.chromeInset]  sticky-header height, so a jump lands below it
+ * @param {function(number, number, function)} [o.onRender]  (localTop, localBottom, posOf) per frame
+ * @returns {{jump: function(number), refresh: function(), destroy: function()}}
+ */
+function virtualBoard(o) {
+    var list = o.list;
+    var total = o.total;
+    var noop = function () {};
+    if (!list || !total) { return { jump: noop, refresh: noop, destroy: noop }; }
+
+    var PAGE = o.pageSize || 50;
+    var invert = !!o.invert;
+    var rankKey = o.rankKey || 'lbRank';
+    var BUFFER = 8;      // rows rendered beyond the viewport each way
+    var EVICT = 30;      // keep rows within this of the window mounted
+    var H = o.rowHeight();
+
+    var dataByPos = new Map();     // display-pos (1-indexed) -> row HTML, cached
+    var rendered = new Map();      // display-pos -> element in the DOM
+    var fetchedPages = new Set();  // page indices already fetched / in flight
+    var highlightDp = 0;           // display-pos kept lit after a jump
+    var highlightAnchor = 0;       // the destination scrollTop the jump scrolls TO
+    var highlightArmed = false;    // true once the jump scroll has actually arrived
+
+    function scroller() { return document.scrollingElement || document.documentElement; }
+    function inset() { return o.chromeInset ? o.chromeInset() : 0; }
+
+    // Canonical rank of a display position, and back. The LABEL is canonical; layout is by position.
+    function rankOf(dp) { return invert ? total - dp + 1 : dp; }
+    function posOf(rank) { return invert ? total - rank + 1 : rank; }
+
+    function clearHighlight() {
+        if (!highlightDp) { return; }
+        var el = rendered.get(highlightDp);
+        if (el) { el.classList.remove('is-found'); }
+        highlightDp = 0;
+        highlightArmed = false;
+    }
+
+    // Light `dp` and remember where the jump is scrolling to. `armed` stays false until that scroll
+    // reaches the anchor, so the jump's own (smooth) travel is never mistaken for the user scrolling away.
+    function setHighlight(dp, anchorY) {
+        clearHighlight();
+        highlightDp = dp;
+        highlightAnchor = anchorY;
+        highlightArmed = false;
+        var el = rendered.get(dp);
+        if (el) { el.classList.add('is-found'); }
+    }
+
+    list.style.height = (total * H) + 'px';
+
+    // Seed the cache + DOM from the server-rendered first window; convert those rows to absolute.
+    Array.prototype.forEach.call(list.querySelectorAll(o.rowSelector), function (el) {
+        var dp = posOf(parseInt(el.dataset[rankKey], 10));
+        el.style.top = ((dp - 1) * H) + 'px';
+        dataByPos.set(dp, el.outerHTML);
+        rendered.set(dp, el);
+    });
+    fetchedPages.add(0);                       // the first window IS page 0
+
+    function mount(dp) {
+        var tmp = document.createElement('template');
+        tmp.innerHTML = dataByPos.get(dp).trim();
+        var el = tmp.content.firstElementChild;
+        el.style.top = ((dp - 1) * H) + 'px';
+        list.appendChild(el);
+        rendered.set(dp, el);
+        if (dp === highlightDp) { el.classList.add('is-found'); }   // keep it lit across a remount
+    }
+
+    function fetchPage(p) {
+        if (fetchedPages.has(p)) { return; }
+        fetchedPages.add(p);
+        var start = p * PAGE + 1;
+        o.fetchRows(start, rankOf(start), PAGE)
+            .then(function (html) {
+                if (!list.isConnected) { return; }
+                var tmp = document.createElement('template');
+                tmp.innerHTML = String(html).trim();
+                Array.prototype.forEach.call(tmp.content.querySelectorAll(o.rowSelector), function (el, i) {
+                    dataByPos.set(start + i, el.outerHTML);
+                });
+                render();
+            })
+            .catch(function () { fetchedPages.delete(p); });   // allow a retry on the next scroll
+    }
+
+    function visible() {
+        var rect = list.getBoundingClientRect();               // list top relative to the viewport
+        var localTop = Math.max(0, -rect.top);
+        var localBottom = Math.min(total * H, window.innerHeight - rect.top);
+        return [
+            Math.max(1, Math.floor(localTop / H) + 1 - BUFFER),
+            Math.min(total, Math.ceil(localBottom / H) + BUFFER),
+            localTop,
+            localBottom
+        ];
+    }
+
+    function render() {
+        // Keep the jump highlight lit through the jump's own scroll, drop it once the USER scrolls away.
+        // Movement alone cannot tell the two apart, so we ARM on arrival: while the (smooth) scroll is
+        // still travelling toward the anchor it stays lit; once scrollTop lands within a row of the anchor
+        // it has arrived, and after that a row-plus of movement is the user leaving.
+        if (highlightDp) {
+            var dist = Math.abs(scroller().scrollTop - highlightAnchor);
+            if (!highlightArmed) { if (dist <= H) { highlightArmed = true; } }
+            else if (dist > H) { clearHighlight(); }
+        }
+        var win = visible(), first = win[0], last = win[1];
+        rendered.forEach(function (el, dp) {
+            if (dp < first - EVICT || dp > last + EVICT) { el.remove(); rendered.delete(dp); }
+        });
+        for (var dp = first; dp <= last; dp++) {
+            if (rendered.has(dp)) { continue; }
+            if (dataByPos.has(dp)) { mount(dp); }
+            else { fetchPage(Math.floor((dp - 1) / PAGE)); }
+        }
+        if (o.onRender) { o.onRender(win[2], win[3], posOf); }
+    }
+
+    // Smooth-scroll the PAGE so the target row lands ~a third down below the chrome, and keep it lit on
+    // arrival. The highlight is anchored to the DESTINATION and armed by render() once the scroll gets
+    // there, so the animation's own travel cannot read as "scrolled away" and clear it before it lands.
+    // Reduced-motion users get an instant landing, armed at once.
+    function jump(rank) {
+        var dp = Math.max(1, Math.min(posOf(rank), total));
+        var sc = scroller();
+        var listTopDoc = window.scrollY + list.getBoundingClientRect().top;
+        var chrome = inset();
+        var maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+        var y = Math.min(
+            Math.max(0, listTopDoc + (dp - 1) * H - chrome - (window.innerHeight - chrome) * 0.34),
+            maxTop
+        );
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        setHighlight(dp, y);                                   // anchor to where the scroll will land
+        sc.scrollTo({ top: y, behavior: reduce ? 'instant' : 'smooth' });
+        render();                                              // the travel mounts the rest
+    }
+
+    // The row height changes across breakpoints, so re-read it, resize the spacer, and re-place the
+    // mounted rows before rendering again.
+    function relayout() {
+        H = o.rowHeight();
+        list.style.height = (total * H) + 'px';
+        rendered.forEach(function (el, dp) { el.style.top = ((dp - 1) * H) + 'px'; });
+        render();
+    }
+
+    // Both scroll and resize coalesce to one rAF (resize -> full relayout, scroll -> render).
+    var ticking = false;
+    function tick(fn) {
+        if (ticking) { return; }
+        ticking = true;
+        requestAnimationFrame(function () { ticking = false; fn(); });
+    }
+    function onScroll() { tick(render); }
+    function onResize() { tick(relayout); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+
+    render();
+
+    return {
+        jump: jump,
+        refresh: render,
+        destroy: function () {
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onResize);
+        }
+    };
+}
+
+
 window.PlatPursuit.animatePanel = animatePanel;
 window.PlatPursuit.filterPanel = filterPanel;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
@@ -2176,6 +2378,7 @@ window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
 window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
 window.PlatPursuit.StickyReveal = StickyReveal;
+window.PlatPursuit.virtualBoard = virtualBoard;
 window.PlatPursuit.slideViewIn = slideViewIn;
 window.PlatPursuit.igniteTab = igniteTab;
 window.PlatPursuit.wireTablist = wireTablist;

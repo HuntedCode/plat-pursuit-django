@@ -240,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
         panel.querySelectorAll('[data-lb-drop-toggle]').forEach((t) => t.setAttribute('aria-expanded', 'false'));
     }
 
-    function lbScroller() { return document.scrollingElement || document.documentElement; }
 
     function lbWire(panel) {
         if (panel._lbTeardown) panel._lbTeardown();
@@ -288,169 +287,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!list || !root) return;
         const total = parseInt(list.dataset.lbTotal || root.dataset.lbTotal || '0', 10);
         if (!total) return;                                    // empty board -> nothing to virtualize
-        const invert = root.dataset.lbInvert === '1';
-        const readH = () => parseFloat(getComputedStyle(root).getPropertyValue('--lb-row-h')) || 44;
-        let H = readH();                                       // --lb-row-h changes across the md breakpoint
-        const BUFFER = 8;                                       // rows rendered beyond the viewport each way
-        const EVICT = 30;                                       // keep rows within this of the window in the DOM
-        const PAGE = parseInt(root.dataset.lbPageSize, 10) || 50;   // fetch granularity, from the server (no drift)
 
-        const dataByPos = new Map();                           // display-pos (1-indexed) -> row HTML, cached
-        const rendered = new Map();                            // display-pos -> element in the DOM
-        const fetchedPages = new Set();                        // page indices already fetched / in flight
-        let highlightDp = 0;                                  // display-pos kept lit after a jump
-        let highlightAnchor = 0;                              // the destination scrollTop the jump scrolls TO
-        let highlightArmed = false;                           // true once the jump scroll has actually arrived
-
-        // Light `dp` and remember where the jump is scrolling to. `armed` stays false until that scroll
-        // reaches the anchor, so the jump's own (smooth) travel is never mistaken for the user scrolling
-        // away. render() arms it on arrival, then a row-plus of further movement is the user leaving.
-        function setHighlight(dp, anchorY) {
-            clearHighlight();
-            highlightDp = dp;
-            highlightAnchor = anchorY;
-            highlightArmed = false;
-            const el = rendered.get(dp);
-            if (el) el.classList.add('is-found');
-        }
-        function clearHighlight() {
-            if (!highlightDp) return;
-            const el = rendered.get(highlightDp);
-            if (el) el.classList.remove('is-found');
-            highlightDp = 0;
-            highlightArmed = false;
-        }
-
-        // Canonical rank of a display position, and vice versa. The label is canonical; layout is by position.
-        const rankOf = (dp) => (invert ? total - dp + 1 : dp);
-        const posOf = (rank) => (invert ? total - rank + 1 : rank);
-
-        list.style.height = (total * H) + 'px';
-
-        // Seed the cache + DOM from the server-rendered first window; convert those rows to absolute.
-        list.querySelectorAll('.gd-lb__row').forEach((el) => {
-            const dp = posOf(parseInt(el.dataset.lbRank, 10));
-            el.style.top = ((dp - 1) * H) + 'px';
-            dataByPos.set(dp, el.outerHTML);
-            rendered.set(dp, el);
+        // The engine lives in utils.js (`PlatPursuit.virtualBoard`) so every board runs one
+        // implementation. What stays here is the game board's own wiring: where the row height comes
+        // from, how a fetch URL is built from this panel's toggles, and the minibar chevron.
+        const handle = PlatPursuit.virtualBoard({
+            list: list,
+            total: total,
+            rowSelector: '.gd-lb__row',
+            pageSize: parseInt(root.dataset.lbPageSize, 10) || 50,
+            invert: root.dataset.lbInvert === '1',
+            rowHeight: () => parseFloat(getComputedStyle(root).getPropertyValue('--lb-row-h')) || 44,
+            chromeInset: lbChromeInset,
+            fetchRows: (start, from, count) =>
+                fetch(lbOptsUrl(panel, { range: start, from: from, count: count }), LB_XHR).then(lbText),
+            // The minibar chevron: where does the viewer's row sit relative to what is on screen?
+            onRender: (localTop, localBottom, posOf) => {
+                const widget = document.querySelector('[data-lb-mb-rank]');
+                if (!widget || widget.hidden) return;
+                const vr = parseInt(root.dataset.lbViewerRank || '', 10);
+                if (!(vr >= 1)) return;
+                const H = parseFloat(getComputedStyle(root).getPropertyValue('--lb-row-h')) || 44;
+                const vTop = (posOf(vr) - 1) * H;
+                widget.dataset.lbDir = vTop + H < localTop ? 'up' : (vTop > localBottom ? 'down' : 'here');
+            },
         });
-        fetchedPages.add(0);                                   // first window == page 0
 
-        function mount(dp) {
-            const tmp = document.createElement('template');
-            tmp.innerHTML = dataByPos.get(dp).trim();
-            const el = tmp.content.firstElementChild;
-            el.style.top = ((dp - 1) * H) + 'px';
-            list.appendChild(el);
-            rendered.set(dp, el);
-            if (dp === highlightDp) el.classList.add('is-found');   // keep the jump target lit across remount
-        }
-
-        function fetchPage(p) {
-            if (fetchedPages.has(p)) return;
-            fetchedPages.add(p);
-            const start = p * PAGE + 1;
-            fetch(lbOptsUrl(panel, { range: start, from: rankOf(start), count: PAGE }), LB_XHR)
-                .then(lbText)
-                .then((html) => {
-                    if (!list.isConnected) return;
-                    const tmp = document.createElement('template');
-                    tmp.innerHTML = html.trim();
-                    tmp.content.querySelectorAll('.gd-lb__row').forEach((el, i) => dataByPos.set(start + i, el.outerHTML));
-                    render();
-                })
-                .catch(() => { fetchedPages.delete(p); });     // allow a retry on the next scroll
-        }
-
-        function visible() {
-            const rect = list.getBoundingClientRect();         // list top relative to the viewport
-            const localTop = Math.max(0, -rect.top);
-            const localBottom = Math.min(total * H, window.innerHeight - rect.top);
-            const first = Math.max(1, Math.floor(localTop / H) + 1 - BUFFER);
-            const last = Math.min(total, Math.ceil(localBottom / H) + BUFFER);
-            return [first, last, localTop, localBottom];
-        }
-
-        function render() {
-            // Keep the jump highlight lit through the jump's own scroll, drop it once the USER scrolls away.
-            // Movement alone can't tell the two apart, so we ARM on arrival: while the (smooth) scroll is
-            // still travelling toward the anchor it stays lit (not armed); once scrollTop lands within a row
-            // of the anchor it's arrived (armed); after that, a row-plus of movement is the user leaving.
-            if (highlightDp) {
-                const dist = Math.abs(lbScroller().scrollTop - highlightAnchor);
-                if (!highlightArmed) { if (dist <= H) highlightArmed = true; }
-                else if (dist > H) clearHighlight();
-            }
-            const [first, last, localTop, localBottom] = visible();
-            // Evict rows well outside the window.
-            rendered.forEach((el, dp) => {
-                if (dp < first - EVICT || dp > last + EVICT) { el.remove(); rendered.delete(dp); }
-            });
-            // Mount visible rows we have data for; fetch the pages for any we don't.
-            for (let dp = first; dp <= last; dp++) {
-                if (rendered.has(dp)) continue;
-                if (dataByPos.has(dp)) mount(dp);
-                else fetchPage(Math.floor((dp - 1) / PAGE));
-            }
-            updateArrow(localTop, localBottom);
-        }
-
-        // The minibar chevron: where does the viewer's row sit relative to what's on screen?
-        function updateArrow(localTop, localBottom) {
-            const widget = document.querySelector('[data-lb-mb-rank]');
-            if (!widget || widget.hidden) return;
-            const vr = parseInt(root.dataset.lbViewerRank || '', 10);
-            if (!(vr >= 1)) return;
-            const vTop = (posOf(vr) - 1) * H;
-            widget.dataset.lbDir = vTop + H < localTop ? 'up' : (vTop > localBottom ? 'down' : 'here');
-        }
-
-        // Jump: smooth-scroll the PAGE so the target row lands ~a third down below the chrome, and keep it
-        // lit on arrival. We anchor the highlight to the DESTINATION and let render() arm it once the scroll
-        // gets there (see setHighlight) -- so the animation's own travel can't read as "scrolled away" and
-        // clear the highlight before it lands. Reduced-motion users get an instant landing (armed at once).
-        function jump(rank) {
-            const dp = Math.max(1, Math.min(posOf(rank), total));
-            const sc = lbScroller();
-            const listTopDoc = window.scrollY + list.getBoundingClientRect().top;
-            const inset = lbChromeInset();
-            const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
-            const y = Math.min(Math.max(0, listTopDoc + (dp - 1) * H - inset - (window.innerHeight - inset) * 0.34), maxTop);
-            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            setHighlight(dp, y);                               // anchor to where the scroll will land
-            sc.scrollTo({ top: y, behavior: reduce ? 'instant' : 'smooth' });
-            render();                                          // mount the current window; the travel mounts the rest
-        }
-        panel._lbJump = jump;
-
-        // The row height changes across the md breakpoint, so re-read it, resize the spacer, and re-place
-        // the rendered rows before rendering again.
-        function relayout() {
-            H = readH();
-            list.style.height = (total * H) + 'px';
-            rendered.forEach((el, dp) => { el.style.top = ((dp - 1) * H) + 'px'; });
-            render();
-        }
-
-        // Both scroll and resize coalesce to one rAF (resize -> full relayout, scroll -> render).
-        let ticking = false;
-        function tick(fn) {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(() => { ticking = false; fn(); });
-        }
-        function onScroll() { tick(render); }
-        function onResize() { tick(relayout); }
-        window.addEventListener('scroll', onScroll, { passive: true });
-        window.addEventListener('resize', onResize, { passive: true });
+        panel._lbJump = handle.jump;
         panel._lbTeardown = () => {
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', onResize);
+            handle.destroy();
             panel._lbJump = null;
             panel._lbTeardown = null;
         };
-
-        render();
     }
 
     // The toolbar search field, wired per panel fetch (its listeners live on the replaced DOM, so they die
