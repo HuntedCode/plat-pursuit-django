@@ -342,6 +342,7 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     leading key already narrows them. That held for PAGINATION; these boards virtual-scroll now, so a
     reader deep into a popular series walks the index fetching `is_linked` per candidate -- the shape 0307
     measured at 49.7 ms. 0311 closed it."""
+    from django.db.models import Q
     from trophies.models import ProfileEditionStanding, UserGroupBadge
 
     for model, names in (
@@ -355,6 +356,24 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
             assert by_name[name].condition is not None, (
                 f'{name} is not partial -- a deep scroll will evaluate is_linked from the heap'
             )
+
+    # The exact predicate, not merely "some condition". The edition boards additionally filter
+    # `total_xp__gt=0` in `xp_rows` and `board_count`, so an index conditioned on `is_linked` alone would
+    # no longer match the query and Postgres would fall back to a full index -- silently, and this test
+    # would stay green on `condition is not None` alone.
+    linked = Q(is_linked=True)
+    linked_xp = Q(is_linked=True, total_xp__gt=0)
+    expected = {
+        (SeriesBadgeStanding, 'sbs_series_board_idx'): linked,
+        (SeriesBadgeStanding, 'sbs_series_cc_board_idx'): linked,
+        (ProfileEditionStanding, 'pes_ed_xp_idx'): linked_xp,
+        (ProfileEditionStanding, 'pes_ed_cc_xp_idx'): linked_xp,
+        (UserGroupBadge, 'ugb_badge_earned_idx'): linked,
+        (UserGroupBadge, 'ugb_badge_cc_earned_idx'): linked,
+    }
+    for (model, name), cond in expected.items():
+        got = {i.name: i for i in model._meta.indexes}[name].condition
+        assert got == cond, f'{name} is conditioned on {got}, expected {cond}'
 
 
 def test_the_evaluation_seam_actually_writes_the_advance_date():

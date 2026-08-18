@@ -159,13 +159,18 @@ def test_the_page_never_builds_the_board(client):
 
     # The header tally and the viewer's rank ARE on the page -- they sit above the switcher and show on
     # both tabs -- so ProfileJobXP is expected. What must NOT be there is the board's own row read.
+    from trophies.views.career_views import JobDetailView
+    # Derived from BOARD_SIZE rather than hardcoded: at 25 the look-ahead makes the board read `LIMIT 26`,
+    # and a literal would go vacuously true (never matching, always passing) the day BOARD_SIZE changed.
+    board_read = f'LIMIT {JobDetailView.BOARD_SIZE + 1}'
+
     assert 'trophies_profilejobxp' in sql, 'the header hunter tally is missing'
-    assert 'LIMIT 26' not in sql, 'the page built the board rows despite shipping an empty Ranks panel'
+    assert board_read not in sql, 'the page built the board rows despite shipping an empty Ranks panel'
 
     # And the panel, asked for directly, does build them.
     with CaptureQueriesContext(connection) as panel:
         client.get(reverse('job_ranks_panel', args=['archivist']))
-    assert 'LIMIT 26' in ' '.join(q['sql'] for q in panel.captured_queries)
+    assert board_read in ' '.join(q['sql'] for q in panel.captured_queries)
 
 def test_a_signed_in_hunter_with_no_XP_is_TOLD_they_are_not_ranked(client):
     """`{% if my_rank %}` alone made the standing block simply absent for an unranked hunter, which reads
@@ -305,7 +310,9 @@ def test_the_tabs_are_a_real_tablist_over_real_panels(client):
     # Scoped to the switcher: `aria-current="page"` is legitimately on the breadcrumb and the hub rail.
     strip = body[body.index('id="jobd-switch"'):body.index('</div>', body.index('id="jobd-switch"'))]
     assert 'aria-current' not in strip, 'the old link semantics survived the conversion'
-    assert '<a ' not in strip, 'the tabs are still links rather than buttons'
+    # They ARE still links -- deliberately, as the no-JS fallback (see the test below). What changed is
+    # that they carry tab semantics and are intercepted, rather than being a nav of plain page loads.
+    assert 'role="tab"' in strip and 'aria-selected' in strip
 
 
 def test_an_old_tab_ranks_bookmark_still_opens_the_board(client):
@@ -326,3 +333,52 @@ def test_an_old_tab_ranks_bookmark_still_opens_the_board(client):
     panel = body[body.index('id="jobd-view-contracts"'):]
     panel = panel[:panel.index('>')]
     assert 'hidden' in panel, 'both panels are open on ?tab=ranks'
+
+
+def test_the_tab_script_actually_REACHES_the_browser(client):
+    """The regression this file could not see.
+
+    The switcher was written into `{% block extra_js %}`. `base.html` declares no such block, and Django
+    DISCARDS a child block the parent never declared -- silently, with no error and no warning. So the
+    entire script was dropped from the response: the chips had no handler, `?tab=ranks` showed a spinner
+    that never resolved, and the job board was unreachable. Every test in this file stayed green, because
+    every one of them asserted markup or hit the panel endpoint directly.
+
+    Asserting a distinctive symbol from inside the block, so the block NAME being wrong fails here.
+    """
+    _job('archivist', 'Archivist')
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+
+    assert 'jobd-switch' in body, 'the switcher markup is missing'
+    assert "getElementById('jobd-switch')" in body, (
+        'the tab script did not render -- check the block name against the ones base.html declares'
+    )
+    assert 'wireTablist' in body, 'the switcher is not wired to the shared tablist helper'
+
+
+def test_the_tabs_still_work_without_javascript(client):
+    """They were converted to `<button>`, which left a no-JS reader unable to reach EITHER tab -- the
+    `?tab=` version had a server-side fallback for free. They are links again, intercepted by JS."""
+    job = _job('archivist', 'Archivist')
+    _xp(job, 'Someone', 500)
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    strip = body[body.index('id="jobd-switch"'):body.index('</div>', body.index('id="jobd-switch"'))]
+
+    assert 'href="?tab=ranks"' in strip and 'href="?tab=contracts"' in strip, (
+        'the tabs have no href -- without JS neither tab is reachable'
+    )
+    # ...and the server still honours it, which is what makes the href a real fallback.
+    resp = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'})
+    assert resp.context['active_tab'] == 'ranks'
+
+
+def test_the_url_written_by_the_switcher_is_the_one_the_server_reads(client):
+    """It wrote `?view=` (syncViewParam's default) while the view read `?tab=`. So clicking Ranks produced
+    a URL that reloaded on Contracts, and arriving on `?tab=ranks` then clicking Contracts left `tab=ranks`
+    in the URL while Contracts was on screen. One param, read and written."""
+    _job('archivist', 'Archivist')
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+
+    assert "param: 'tab'" in body, 'the switcher writes a param the server does not read'
+    assert "default: 'contracts'" in body

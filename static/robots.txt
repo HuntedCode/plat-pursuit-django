@@ -69,6 +69,10 @@ Disallow: /my-guides/
 # /games/<np_id>/ and /badges/<badge>/ pages remain crawlable.
 Disallow: /games/*/*
 Disallow: /badges/*/*
+# /jobs/<slug>/ranks/ is a bare HTML FRAGMENT fetched into job detail's Ranks tab -- no <html>, no title,
+# no canonical. Same shape as /badges/<slug>/ranks/, which the line above already covers. /jobs/ and
+# /jobs/<slug>/ stay crawlable.
+Disallow: /jobs/*/*
 
 # Filtered / paginated / tabbed variants of a profile. The canonical
 # /profiles/<username>/ page stays crawlable -- profiles are the free floor of

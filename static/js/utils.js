@@ -1709,15 +1709,21 @@ function wireTablist(tabs, opts) {
  * reload-safe; no-op without History. Shared by the Career tabs and Collection view toggle.
  * @param {string} view       the now-active view name
  * @param {Object} opts
- * @param {string} opts.default        the default view -- its URL drops `?view=`
+ * @param {string} opts.default        the default view -- its URL drops the param entirely
+ * @param {string} [opts.param]        the query param to write (default 'view'); use the one the SERVER
+ *                                    reads, or the URL will disagree with the page on reload
  * @param {string} [opts.paramView]    the view that owns `opts.params`
  * @param {string[]} [opts.params]     params stripped unless `view === opts.paramView`
  */
 function syncViewParam(view, opts) {
     if (!window.history || !history.replaceState) { return; }
     opts = opts || {};
+    // `param` defaults to 'view' -- the five existing callers all use that. Job detail passes 'tab',
+    // because its SERVER reads `?tab=` (old bookmarks and the board's pager links carry it) and a page
+    // that writes one param while reading another produces a URL that lies about what is on screen.
+    var key = opts.param || 'view';
     var qp = new URLSearchParams(location.search);
-    if (view === opts.default) { qp.delete('view'); } else { qp.set('view', view); }
+    if (view === opts.default) { qp.delete(key); } else { qp.set(key, view); }
     if (opts.params && view !== opts.paramView) { opts.params.forEach(function (k) { qp.delete(k); }); }
     var qs = qp.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);

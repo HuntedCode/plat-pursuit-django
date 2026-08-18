@@ -6,7 +6,6 @@ sealed subsystem and are written by the recompute the sync/apply path already ru
   Badge Points     -> ProfileBadgeStanding.total_xp                  [db_index]
   Badge Trophies   -> ProfileBadgeStanding (-platinum, -total)        [pbs_progress_idx]
   Career XP        -> ProfileCareerStanding.total_xp                  [db_index]
-  Per-series XP    -> SeriesBadgeStanding (series_slug, xp)           [sbs_series_xp_idx]
   Per-series board -> SeriesBadgeStanding (-progress_bp, advanced_at) [sbs_series_board_idx]  earners+chasers
   Per-badge earners-> UserGroupBadge (group_badge, earned_at)         [ugb_badge_earned_idx]  (rank == earned order)
 

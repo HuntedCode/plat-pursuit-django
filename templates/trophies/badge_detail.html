@@ -388,7 +388,8 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                 .catch(function () {
                     // A board that fails to load must say so. Silently leaving the spinner spinning reads
                     // as "still counting" forever, which is worse than an honest failure.
-                    body.innerHTML = '<p class="bd2-ranks__err">The board could not be loaded. Refresh to try again.</p>';
+                    if (sec._bdRanksFailed) { sec._bdRanksFailed(); }   // let a re-open retry
+                    body.innerHTML = '<p class="bd2-ranks__err">The board could not be loaded. Reopen the tab to try again.</p>';
                 });
         }
 
@@ -402,6 +403,10 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             loaded = true;
             load();
         };
+        // Reset by `load()`'s own catch, so switching away and back RETRIES a board that failed. Job
+        // detail already did this; leaving the two opposite would mean the same mechanism recovering on
+        // one page and not the other.
+        sec._bdRanksFailed = function () { loaded = false; };
     })();
 
     // -- Content tabs: Overview | Ranks -------------------------------------------------------------
@@ -442,7 +447,15 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         // URL reopens where the sharer was; `#ranks` is what the hero's "Earners" link, the community
         // band's CTA and the context band all point at, from when the board was a section on this scroll.
         var params = new URLSearchParams(location.search);
-        if (params.get('view') === 'ranks' || location.hash === '#ranks') { showView('ranks'); }
+        if (params.get('view') === 'ranks' || location.hash === '#ranks') {
+            showView('ranks');
+            // The browser already tried to scroll to `#ranks` and failed -- the panel was `hidden` at
+            // that moment -- so arriving by hash left the reader at the top of the page.
+            if (location.hash === '#ranks') {
+                var target = document.getElementById('ranks');
+                if (target && target.scrollIntoView) { target.scrollIntoView({ block: 'start' }); }
+            }
+        }
 
         // ...and those same `#ranks` links have to keep working from INSIDE the page. The browser cannot
         // scroll to a target in a `hidden` panel, so without this they became dead clicks the moment the
@@ -450,7 +463,9 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         // Delegated, so it covers every one of them without each partial needing to know about the tabs.
         document.addEventListener('click', function (ev) {
             var link = ev.target.closest && ev.target.closest('a[href="#ranks"]');
-            if (!link) { return; }
+            // Modifier-clicks belong to the browser: swallowing them means Ctrl/Cmd-click on the hero's
+            // Earners figure silently does nothing instead of opening a tab.
+            if (!link || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
             ev.preventDefault();
             showView('ranks');
             var sec = document.getElementById('ranks');

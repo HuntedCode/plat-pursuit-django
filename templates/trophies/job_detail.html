@@ -76,32 +76,18 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     pager's own links land on the right tab. {% endcomment %}
     <div class="lb-bar">
         <div class="pp-switch" id="jobd-switch" role="tablist" aria-label="Job view">
-            <button type="button" id="jobd-tab-contracts" aria-controls="jobd-view-contracts" role="tab"
-                    aria-selected="{% if active_tab == 'contracts' %}true{% else %}false{% endif %}"
-                    class="pp-switch__chip{% if active_tab == 'contracts' %} is-active{% endif %}" data-view="contracts">
+            <a href="?tab=contracts" id="jobd-tab-contracts" aria-controls="jobd-view-contracts" role="tab"
+               aria-selected="{% if active_tab == 'contracts' %}true{% else %}false{% endif %}"
+               class="pp-switch__chip{% if active_tab == 'contracts' %} is-active{% endif %}" data-view="contracts">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
                 <span class="pp-switch__lbl">Contracts</span>
-            </button>
-            <button type="button" id="jobd-tab-ranks" aria-controls="jobd-view-ranks" role="tab"
-                    aria-selected="{% if active_tab == 'ranks' %}true{% else %}false{% endif %}"
-                    class="pp-switch__chip{% if active_tab == 'ranks' %} is-active{% endif %}" data-view="ranks">
+            </a>
+            <a href="?tab=ranks" id="jobd-tab-ranks" aria-controls="jobd-view-ranks" role="tab"
+               aria-selected="{% if active_tab == 'ranks' %}true{% else %}false{% endif %}"
+               class="pp-switch__chip{% if active_tab == 'ranks' %} is-active{% endif %}" data-view="ranks">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
                 <span class="pp-switch__lbl">Ranks</span>
-            </button>
-        </div>
-    </div>
-
-    {% comment %} Ranks: an EMPTY panel, filled from `job_ranks_panel` on first activation. Game detail's
-    model -- the cheap panel is server-rendered hidden, the expensive one is fetched. That is what keeps
-    the "build one tab, not both" saving the `?tab=` version got for free from a full page reload: a
-    visitor who never opens Ranks never pays for the board. {% endcomment %}
-    <div class="jobd-view" id="jobd-view-ranks" role="tabpanel" aria-labelledby="jobd-tab-ranks"
-         data-view="ranks" data-ranks-src="{% url 'job_ranks_panel' job.slug %}"{% if active_tab != 'ranks' %} hidden{% endif %}>
-        <div class="bd2-ranks__body" data-ranks-body>
-            <div class="bd2-ranks__loading" data-ranks-loading>
-                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
-                <span>Counting the hunters&hellip;</span>
-            </div>
+            </a>
         </div>
     </div>
 
@@ -139,9 +125,23 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         </div>
         {% endif %}
     </div>{# /jobd-view-contracts #}
+
+    {% comment %} Ranks: an EMPTY panel, filled from `job_ranks_panel` on first activation. Game detail's
+    model -- the cheap panel is server-rendered hidden, the expensive one is fetched. That is what keeps
+    the "build one tab, not both" saving the `?tab=` version got for free from a full page reload: a
+    visitor who never opens Ranks never pays for the board. {% endcomment %}
+    <div class="jobd-view" id="jobd-view-ranks" role="tabpanel" aria-labelledby="jobd-tab-ranks"
+         data-view="ranks" data-ranks-src="{% url 'job_ranks_panel' job.slug %}"{% if active_tab != 'ranks' %} hidden{% endif %}>
+        <div class="bd2-ranks__body" data-ranks-body>
+            <div class="bd2-ranks__loading" data-ranks-loading>
+                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block js_scripts %}
 {{ block.super }}
 <script>
     // Content tabs: Contracts | Ranks. The mechanism badge detail and game detail use (shared
@@ -156,12 +156,14 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         var loaded = false;
 
         // The board is fetched, not server-rendered: the cheap panel ships hidden and the expensive one
-        // arrives when asked for. `loaded` guards a re-open, so switching back and forth fetches once.
-        function loadRanks(panel) {
-            if (loaded) { return; }
+        // arrives when asked for. `loaded` guards a re-open, so switching back and forth fetches once --
+        // but a PAGE change is a deliberate re-fetch, so it passes `force`.
+        function loadRanks(panel, page) {
+            if (loaded && !page) { return; }
             loaded = true;
             var body = panel.querySelector('[data-ranks-body]');
-            fetch(panel.dataset.ranksSrc, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            var url = panel.dataset.ranksSrc + (page ? '?page=' + encodeURIComponent(page) : '');
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
                 .then(function (html) {
                     body.innerHTML = html;
@@ -200,17 +202,45 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             });
             if (tablist) { tablist.syncTabindex(); }
             if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
-            if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'contracts' }); }
+            if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'contracts', param: 'tab' }); }
             // LAST: the fetch is the expensive part, so tab state is fully settled before it starts.
             if (name === 'ranks' && shown) { loadRanks(shown); }
         }
 
         tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });
 
-        // Arriving on `?tab=ranks` (an old bookmark, or the pager's own links) renders the Ranks panel
-        // already selected, so the fetch has to be kicked off without a click.
+        // The board's pager. Its links are `?tab=ranks&page=N`, which used to be honest full-page links
+        // and became DEAD the moment the board moved to a fetched panel: the page they reload no longer
+        // builds a board, so "Next" landed back on page 1 forever and a hunter ranked #300 could never
+        // reach their row -- the exact thing the pager exists to prevent. Intercepted and re-fetched in
+        // place instead. The href stays real, so it still works with no JS.
+        //
+        // Delegated from the panel, because the pager arrives WITH the fetched HTML and is replaced by
+        // every subsequent fetch.
+        var ranksPanel = document.querySelector('.jobd-view[data-view="ranks"]');
+        if (ranksPanel) {
+            ranksPanel.addEventListener('click', function (ev) {
+                var link = ev.target.closest && ev.target.closest('a.jobd__pager-btn[href]');
+                if (!link || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
+                var page = new URLSearchParams(link.getAttribute('href').split('?')[1] || '').get('page');
+                if (!page) { return; }
+                ev.preventDefault();
+                loadRanks(ranksPanel, page);
+                if (PlatPursuit.syncViewParam) {
+                    // Keep the URL shareable: `?tab=ranks` plus the page the reader is actually on.
+                    var qp = new URLSearchParams(location.search);
+                    qp.set('tab', 'ranks');
+                    qp.set('page', page);
+                    history.replaceState(null, '', location.pathname + '?' + qp.toString());
+                }
+            });
+        }
+
+        // Arriving on `?tab=ranks` (an old bookmark, or a shared pager URL) renders the Ranks panel
+        // already selected, so the fetch has to be kicked off without a click -- carrying `?page=` so a
+        // shared deep link opens the page it names rather than resetting to the top of the board.
         var opened = document.querySelector('.jobd-view[data-view="ranks"]:not([hidden])');
-        if (opened) { loadRanks(opened); }
+        if (opened) { loadRanks(opened, new URLSearchParams(location.search).get('page')); }
     })();
 </script>
 {% endblock %}
