@@ -208,3 +208,70 @@ def test_a_malformed_page_param_does_not_500(client, page):
     resp = client.get(URL, {'tab': 'trophies', 'page': page})
     assert resp.status_code == 200, f'?page={page!r} returned {resp.status_code}'
     assert 'Someone' in resp.content.decode(), f'?page={page!r} emptied the board'
+
+
+# ------------------------------------------------------------------ the rows endpoint --------------------
+
+def test_the_rows_endpoint_serves_a_window_of_bare_rows(client):
+    """The server half of the virtualized wall. It returns `.lb-row` elements and NOTHING else -- the
+    engine splices them into its own spacer, so any wall or chrome around them would be parsed and
+    discarded."""
+    for i in range(8):
+        _ranked(f'H{i:02d}', plats=100 - i, trophies=500)
+
+    body = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': 3, 'count': 2}).content.decode()
+
+    assert body.count('<li class="lb-row') == 2, 'the window is the wrong size'
+    assert '<ol' not in body and 'lb-wall' not in body, 'the fragment carries chrome the engine would discard'
+    # Numbered by SLOT from the requested start, so the rows the engine mounts at positions 3 and 4 are
+    # labelled 3 and 4 -- the rank/position invariant, across the seam between windows.
+    assert 'data-lb-rank="3"' in body and 'data-lb-rank="4"' in body
+    assert 'data-lb-rank="1"' not in body
+
+
+def test_a_window_reads_the_same_board_as_the_page(client):
+    """`board_window` is shared with the page deliberately. A rows endpoint that re-derived the tab or the
+    figure labels would be a second definition of the board, and the labels are the thing that must not
+    differ between the screenful a reader arrives on and the rest of it."""
+    for i in range(3):
+        _ranked(f'P{i}', points=900 - i)
+
+    first = client.get(URL, {'tab': 'points'}).content.decode()
+    window = client.get(reverse('leaderboard_rows'), {'tab': 'points', 'range': 1, 'count': 3}).content.decode()
+
+    assert 'points' in first and 'points' in window
+    assert 'badges' in window, 'the supporting figure label differs from the page'
+
+
+def test_the_window_honours_the_country_slice(client):
+    """A window that ignored a filter the first window applied would return different hunters mid-scroll."""
+    _ranked('Local', plats=50, trophies=100, country='GB')
+    _ranked('Abroad', plats=90, trophies=200, country='US')
+
+    body = client.get(reverse('leaderboard_rows'),
+                      {'tab': 'trophies', 'country': 'GB', 'range': 1, 'count': 50}).content.decode()
+
+    assert 'Local' in body and 'Abroad' not in body
+
+
+def test_a_crafted_window_cannot_ask_for_the_whole_board(client):
+    """`range` is an OFFSET straight into the board and `count` a LIMIT, so both are clamped: an unbounded
+    range is a nine-figure OFFSET Postgres honours by walking every skipped row."""
+    from trophies.views.badge_views import LeaderboardRowsView
+
+    _ranked('Someone', plats=5, trophies=10)
+
+    huge = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'count': 100000})
+    assert huge.status_code == 200
+    assert huge.content.decode().count('<li class="lb-row') <= LeaderboardRowsView.MAX_COUNT
+
+    for raw in ('abc', '-5', ''):
+        resp = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': raw, 'count': raw})
+        assert resp.status_code == 200, f'range={raw!r} was not handled'
+
+
+def test_the_endpoint_is_public(client):
+    """The rows are identical for every viewer -- that is what makes them cacheable, and why the viewer's
+    own rank lives in the page header rather than in a row."""
+    _ranked('Public', plats=5, trophies=10)
+    assert client.get(reverse('leaderboard_rows'), {'tab': 'trophies'}).status_code == 200

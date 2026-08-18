@@ -1,0 +1,11 @@
+{% comment %} A WINDOW of board rows, and nothing else -- no wall, no chrome.
+
+`PlatPursuit.virtualBoard` asks for display positions [start, start+count) and splices the `.lb-row`
+elements it finds into its own spacer, so anything wrapping them here would be parsed and discarded. The
+page renders the FIRST window inline (so the board is there on arrival, and without JS) and this serves
+every window after it -- both through `OverallBadgeLeaderboardsView.board_window`, so the figure labels
+cannot drift between the first screen and the rest of the same board.
+{% endcomment %}
+{% for entry in entries %}
+{% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
+{% endfor %}

@@ -8,7 +8,11 @@ rebuild removes.
 `entry` comes from `badge_leaderboards.page()`: identity hydrated live from Profile (never a
 denormalized copy, so a renamed hunter reads correctly immediately) plus the board's own numbers.
 {% endcomment %}
-<li class="lb-row{% if entry.rank <= 3 %} lb-row--podium lb-row--p{{ entry.rank }}{% endif %}">
+{% comment %} `data-lb-rank` carries the CANONICAL rank. `PlatPursuit.virtualBoard` seeds its cache from
+it when it adopts the server-rendered first window, and reads it back to place rows -- so a row that
+renders without it is invisible to a virtualized wall. Harmless on the flow walls that do not virtualize.
+{% endcomment %}
+<li class="lb-row{% if entry.rank <= 3 %} lb-row--podium lb-row--p{{ entry.rank }}{% endif %}" data-lb-rank="{{ entry.rank }}">
     {% comment %} Rank as a plain figure, not a medal: only the top three get any treatment at all, and
     they get it through the row's own edge rather than an icon competing with the avatar.
 

@@ -723,10 +723,14 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
     LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
 
+    @classmethod
+    def active_tab(cls, request):
+        raw = request.GET.get('tab', 'trophies')
+        raw = cls.LEGACY_TABS.get(raw, raw)
+        return raw if raw in cls.BOARD_KEYS else 'trophies'
+
     def _active_tab(self):
-        raw = self.request.GET.get('tab', 'trophies')
-        raw = self.LEGACY_TABS.get(raw, raw)
-        return raw if raw in self.BOARD_KEYS else 'trophies'
+        return self.active_tab(self.request)
 
     def _country(self, codes):
         """The country slice, validated against `codes` -- countries that actually have ranked hunters.
@@ -870,28 +874,102 @@ class OverallBadgeLeaderboardsView(TemplateView):
         page_num = min(page_num, paginator.num_pages)
         offset = (page_num - 1) * per
 
+        entries = self.board_window(tab, country, edition, offset, per)
+        return lb.BoardPage(entries, page_num, paginator)
+
+    @staticmethod
+    def board_window(tab, country, edition, offset, limit):
+        """ONE WINDOW of the active board, as render-ready entries.
+
+        Shared by the page (which seeds the virtualizer's first window) and by `LeaderboardRowsView`
+        (which serves every window after it). The tab branching lived inside the paginated builder, so a
+        rows endpoint would have been a second copy of the figure labels -- and those labels are the one
+        thing that must not drift between the first window and the rest of the same board.
+        """
+        cc = country or None
+        ed = edition or None
         if tab == 'trophies':
-            rows = lb.trophy_rows(limit=per, offset=offset, country=cc)
-            entries = lb.page(rows, offset, extra=lambda r: {
+            rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
+            return lb.page(rows, offset, extra=lambda r: {
                 'primary': r[1], 'primary_label': 'platinums',
                 'secondary': r[2], 'secondary_label': 'trophies',
             })
-        elif tab == 'points':
-            rows = lb.xp_rows(limit=per, offset=offset, country=cc, edition=ed)
-            entries = lb.page(rows, offset, extra=lambda r: {
+        if tab == 'points':
+            rows = lb.xp_rows(limit=limit, offset=offset, country=cc, edition=ed)
+            return lb.page(rows, offset, extra=lambda r: {
                 # Badges held is what gives the points their meaning -- 4,200 points across 30 badges is a
                 # different hunter from 4,200 across 6. The same reasoning the Trophies board's
                 # platinums-out-of-trophies pairing uses.
                 'primary': r[1], 'primary_label': 'points',
                 'secondary': r[2], 'secondary_label': 'badges',
             })
-        else:
-            rows = lb.career_xp_rows(limit=per, offset=offset, country=cc)
-            entries = lb.page(rows, offset, extra=lambda r: {
-                'primary': r[1], 'primary_label': 'XP',
-                'secondary': r[2], 'secondary_label': 'level',
-            })
-        return lb.BoardPage(entries, page_num, paginator)
+        rows = lb.career_xp_rows(limit=limit, offset=offset, country=cc)
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[1], 'primary_label': 'XP',
+            'secondary': r[2], 'secondary_label': 'level',
+        })
+
+class LeaderboardRowsView(View):
+    """`/leaderboards/rows/` -- one WINDOW of the active Global Board, as bare `.lb-row` elements.
+
+    The server half of the virtualized wall. The page renders the first window inline, and every window
+    after it comes through here: the engine asks for display positions [start, start+count) and splices
+    the rows into its spacer.
+
+    Reuses `OverallBadgeLeaderboardsView`'s own option parsing and `board_window`, deliberately. A rows
+    endpoint that re-derived the tab, the country slice or the figure labels would be a second definition
+    of the board, and the first thing to drift would be the labels -- so the rest of a board would be
+    reading a different number from the screenful the reader arrived on.
+
+    PUBLIC and viewer-independent: the rows are identical for everybody, which is what makes them
+    cacheable. The viewer's own rank lives in the page header, never in a row.
+    """
+
+    #: Hard ceiling on `count`, so a crafted URL cannot ask for the whole board in one read. The client
+    #: only ever asks for `paginate_by`; this bounds what anyone else can.
+    MAX_COUNT = 200
+
+    def get(self, request):
+        view = OverallBadgeLeaderboardsView
+        tab = view.active_tab(request)
+        codes = lb.active_countries()
+        country = self._country(request, codes)
+        edition = self._edition(request, tab, view)
+
+        start = self._int(request.GET.get('range'), 1, lo=1)
+        count = self._int(request.GET.get('count'), view.paginate_by, lo=1, hi=self.MAX_COUNT)
+
+        entries = view.board_window(tab, country, edition, start - 1, count)
+        return render(request, 'trophies/partials/leaderboard_rows.html', {'entries': entries})
+
+    @staticmethod
+    def _int(raw, default, lo=1, hi=None):
+        """Clamped at BOTH ends. `range` is an OFFSET straight into the board, so an unbounded value is a
+        nine-figure OFFSET that Postgres honours by walking every skipped row."""
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return default
+        value = max(lo, value)
+        return min(value, hi) if hi is not None else value
+
+    @staticmethod
+    def _country(request, codes):
+        """Validated against the countries that actually have ranked hunters -- an unknown code would
+        return an empty window, which reads as a gap in the board rather than a bad parameter."""
+        raw = (request.GET.get('country') or '').strip().upper()
+        return raw if raw in set(codes) else ''
+
+    @staticmethod
+    def _edition(request, tab, view):
+        """Only the boards that HAVE editions accept one, matching the page. An edition on the Trophies or
+        Career board would be silently ignored there, and a window that ignores a filter the first window
+        applied would return different hunters."""
+        if tab not in view.EDITION_BOARDS:
+            return ''
+        raw = (request.GET.get('edition') or '').strip()
+        return raw if raw in {e.key for e in lb.active_editions()} else ''
+
 
 class BadgeHowItWorksView(TemplateView):
     """`/badges/how-it-works/` -- the permanent, addressable home for the badge teaching.

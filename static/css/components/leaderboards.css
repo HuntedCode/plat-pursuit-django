@@ -95,16 +95,45 @@
 }
 
 /* ---- The wall -------------------------------------------------------------------------------------- */
-.lb-wall { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* Two walls, one row. The plain wall is the flow list every fetched panel still uses; the VIRTUAL wall
+   is a full-height spacer whose rows the engine places absolutely, so the page scrollbar spans the whole
+   board and jumping is only a scroll position. A board opts in by adding `--virtual`; nothing else about
+   the row changes. */
+.lb-wall {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: 6px;
+    --lb-row-h: 62px;
+}
+@media (min-width: 768px) { .lb-wall { --lb-row-h: 68px; } }
+.lb-wall--virtual { display: block; position: relative; gap: 0; }
+.lb-wall--virtual .lb-row { position: absolute; left: 0; right: 0; }
+/* The jump target, lit on arrival and dropped once the reader scrolls away (the engine arms it at the
+   destination so the smooth scroll's own travel does not clear it early). */
+.lb-row.is-found {
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1));
+}
 @media (prefers-reduced-motion: no-preference) {
     .pp-reveal .lb-row { opacity: 0; }
     .pp-reveal .lb-row.is-revealed { opacity: 1; }
 }
 
+/* FIXED HEIGHT, because the wall virtualizes: `PlatPursuit.virtualBoard` sizes its spacer as
+   `total x --lb-row-h` and places every row absolutely, so it has to know the height up front.
+   `--lb-row-h` is the PITCH (card + the 6px that used to be the flex `gap`) -- absolutely-positioned rows
+   sit flush, so the gap has to live inside the step rather than between the items.
+
+   The band fits TWO lines, and rows without a `displayed_title` centre their single line in the same
+   band. That was a deliberate choice over dropping the title or inlining it: the two-line identity block
+   is what the row was given, and an even wall with breathing room reads as spacing rather than as a gap.
+
+   Height applies EVERYWHERE, not only under a virtual wall, so the row is the same object on badge
+   detail, job detail and the Global Boards. Only the POSITIONING is scoped below. */
 .lb-row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center; gap: 10px;
+    height: calc(var(--lb-row-h) - 6px);
     padding: 9px 10px; border-radius: var(--pp-radius-md, 10px);
     background: var(--pp-bg-1); border: 1px solid var(--pp-border);
     /* The house material: a top-edge light-catch, the same recipe .jobc / .scard carry
