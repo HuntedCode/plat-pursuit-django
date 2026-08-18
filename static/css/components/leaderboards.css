@@ -48,16 +48,23 @@
 @media (prefers-reduced-motion: reduce) { .lb-mine__row { transition: none; } }
 
 /* ---- Switcher + filters ---------------------------------------------------------------------------- */
-/* The tab strip leads and the filters trail it. On a phone everything stacks, with the strip full-width so
-   the three chips get equal room -- a segmented control that wraps mid-strip reads as broken -- and the
-   two filters on their own rows. Side by side at 375px they would get ~160px each, which is under a
-   country name. */
-.lb-bar {
-    display: flex; flex-direction: column; align-items: stretch; gap: 10px;
-    margin: 18px 0 14px;
-}
+/* The strip's own band, above the control card. RIGHT-ALIGNED from md: up, which is the site-wide tab
+   standard -- career, game detail and the genre/theme list all wrap their switcher in
+   `flex items-center justify-end`, and this is the same call expressed in the component sheet because
+   two templates share this strip (the Global Boards and job detail) and should not each hand-roll it.
+
+   NOT right-aligned on a phone. Shrink-to-content at 375px leaves a small strip marooned against one
+   edge, and the chips lose the equal widths that stop a segmented control from wrapping mid-strip --
+   which reads as broken. So the mobile strip is full-width with equal chips, and md: releases it to the
+   right at its natural size. Same base-full-width / md-right shape the genre/theme switcher uses. */
+.lb-bar { display: flex; margin: 18px 0 14px; }
 .lb-bar .pp-switch { width: 100%; }
 .lb-bar .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+@media (min-width: 768px) {
+    .lb-bar { justify-content: flex-end; }
+    .lb-bar .pp-switch { width: auto; }
+    .lb-bar .pp-switch__chip { flex: 0 0 auto; }
+}
 /* Mobile fit pass for THIS strip. `.pp-switch__chip`'s base padding (6px 14px) is a desktop value that
    `md:` only enlarges, so the mobile pass was never actually done. Three equal chips inside 343px leave
    ~56px of label box once border, padding, icon and gap are taken -- and "Badge Trophies" is ~93px at
@@ -84,10 +91,7 @@
     background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text);
 }
 @media (min-width: 768px) {
-    .lb-bar { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; }
-    .lb-bar .pp-switch { width: auto; }
-    .lb-bar .pp-switch__chip { flex: 0 0 auto; }
-    .lb-filters { flex-direction: row; align-items: center; flex: 0 0 auto; gap: 14px; }
+    .lb-filters { flex-direction: row; align-items: center; gap: 14px; }
     .lb-filters__f { flex: 0 0 auto; }
     /* Narrower than the 190px this carried with one filter: two selects and their labels now share the
        row with the tab strip, and the edition names are short. */
