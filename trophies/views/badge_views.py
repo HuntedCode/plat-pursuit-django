@@ -732,6 +732,15 @@ class OverallBadgeLeaderboardsView(TemplateView):
         'career': ('XP', 'level'),
     }
 
+    #: What each board actually RANKS, in one line. Beside FIGURES because they answer the same question
+    #: at different lengths, and a reader who has never met "Badge Points" learns nothing from a lit chip.
+    #: The board card is the only place on the page that says what they are looking at.
+    MEANINGS = {
+        'trophies': 'Every game, every hunter. Platinums first, total trophies breaks the tie.',
+        'points': 'Points from badge stages cleared and series completed, across every edition.',
+        'career': 'XP banked from contracts, summed across all 25 jobs.',
+    }
+
     @classmethod
     def active_tab(cls, request):
         raw = request.GET.get('tab', 'trophies')
@@ -793,6 +802,19 @@ class OverallBadgeLeaderboardsView(TemplateView):
             for key, label in self.BOARDS
         ]
 
+    @staticmethod
+    def _with_ranks(links, standing):
+        """Fold the viewer's rank into each tab link, so the strip carries the standing.
+
+        They were two controls stacked: a tab strip that navigates between boards, and a pill row that
+        showed your rank on each AND linked to it. One control does both, and your standing stops being
+        a block you scroll past -- the strip is always there.
+
+        A board the viewer is not on gets `rank: None`, which the chip renders as a dash rather than
+        omitting: a missing rank on a board you could be on is information.
+        """
+        return [dict(link, rank=(standing or {}).get(link['key'])) for link in links]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
@@ -850,6 +872,8 @@ class OverallBadgeLeaderboardsView(TemplateView):
             primary_label, secondary_label = self.FIGURES[tab]
             context['primary_label'] = primary_label
             context['secondary_label'] = secondary_label
+            context['board_meaning'] = self.MEANINGS[tab]
+            context['board_label'] = dict(self.BOARDS)[tab]
 
         # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
         # Each rank is read under the SAME slice as the board it links to, so the number the reader sees
@@ -871,6 +895,8 @@ class OverallBadgeLeaderboardsView(TemplateView):
             # what the block's own comment says it is avoiding. That is the default state until the
             # standings are backfilled.
             context['my_standing'] = standing if any(v is not None for v in standing.values()) else None
+            # The tab strip carries the ranks now, so it needs them whether or not any exist.
+            context['boards'] = self._with_ranks(context['boards'], standing)
         return context
 
     def _build_board(self, tab, country, edition=''):

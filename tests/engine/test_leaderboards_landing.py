@@ -77,24 +77,37 @@ def test_switching_country_keeps_you_on_the_board_you_were_reading(client):
     assert '<input type="hidden" name="tab" value="career">' in body
 
 
-def test_the_viewer_standing_is_in_the_header_not_in_the_rows(client):
-    """Shown once, in the header. A per-row personal rank would make every response per-user and forfeit
-    caching for the entire section, which is its defining performance property."""
-    profile = ProfileFactory(display_psn_username='Me', is_linked=True)
-    ProfileBadgeStanding.objects.create(profile=profile, total_xp=100, is_linked=True)
+def test_the_viewer_standing_rides_the_tab_strip_not_the_rows(client):
+    """Shown once, and now IN THE TAB STRIP. The pills and the strip were two controls stacked -- both
+    navigated between boards, and one also carried your rank -- so the rank folded into the chip and your
+    standing stopped being a block you scroll past.
+
+    What has not changed is the rule underneath: a per-row personal rank would make every response
+    per-user and forfeit caching for the wall, which is its defining performance property. The viewer's
+    own row IS marked, but in the browser (see the client-side marker test below), never rendered in.
+    """
+    # `_ranked` puts them on the DEFAULT board too. Seeding only a badge standing left the Trophies tab
+    # empty (it reads Profile's own counters, which were 0), so there was no wall to slice.
+    profile = _ranked('Me', plats=3, trophies=30, points=100)
     client.force_login(profile.user)
 
     body = client.get(URL).content.decode()
-    assert 'lb-mine' in body, 'the viewer standing strip is missing from the header'
-    # The wall's rows must stay identical for everyone -- no per-viewer marker inside a row.
-    assert 'lb-row--me' not in body and 'is-you' not in body
+    assert 'lb-chiprank' in body, 'the tab chips do not carry the viewer rank'
+    # Sliced FROM the switch: the site navbar closes a `</nav>` earlier in the document, so searching
+    # the whole body for the close finds that one and yields a backwards (empty) slice.
+    start = body.index('<nav class="pp-switch"')
+    strip = body[start:body.index('</nav>', start)]
+    assert 'lb-chiprank' in strip, 'the rank is not in the tab strip'
+    # The wall's rows must stay identical for everyone -- no per-viewer marker rendered into one.
+    rows = body[body.index('<ol class="lb-wall'):]
+    assert 'is-you' not in rows
 
 
 def test_an_anonymous_visitor_gets_the_boards_without_a_standing_strip(client):
     _ranked('Public', plats=1, trophies=10, points=50)
     body = client.get(URL).content.decode()
     assert 'Public' in body, 'the boards are not public'
-    assert 'lb-mine' not in body, 'a standing strip rendered for an anonymous visitor'
+    assert 'lb-chiprank' not in body, 'a rank rendered on the tabs for an anonymous visitor'
 
 
 def test_a_board_page_is_a_constant_number_of_queries(client):
@@ -120,7 +133,7 @@ def test_a_board_page_is_a_constant_number_of_queries(client):
     )
 
 
-def test_the_header_tally_counts_the_board_it_sits_above(client):
+def test_the_board_card_tally_counts_the_board_it_sits_above(client):
     """The header figure and the pager's total are the same number, read once from `board_count`.
 
     It used to be `ProfileBadgeStanding.objects.count()` regardless of tab, country or the board's own
@@ -141,20 +154,22 @@ def test_the_header_tally_counts_the_board_it_sits_above(client):
         assert resp.context['ranked_total'] == resp.context['board'].paginator.count, (
             f'?tab={tab}: the header and the pager are counting different populations'
         )
-        assert f'>{expected}</div>' in resp.content.decode(), 'the figure did not reach the header'
+        # The figure lives in the BOARD CARD now -- it counts this board, and the page header is
+        # section identity that does not change between tabs.
+        assert f'>{expected}</span>' in resp.content.decode(), 'the figure did not reach the board card'
 
 
-def test_the_header_tally_follows_the_country_slice(client):
+def test_the_board_card_tally_follows_the_country_slice(client):
     """A slice changes the population, so it has to change the figure describing it."""
     _ranked('CanadaOne', country='CA', country_name='Canada', plats=1, trophies=10, points=50)
     _ranked('CanadaTwo', country='CA', country_name='Canada', plats=2, trophies=20, points=60)
     _ranked('Brit', country='GB', country_name='Britain', plats=9, trophies=90, points=900)
 
     everywhere = client.get(URL, {'tab': 'trophies'}).content.decode()
-    assert '>3</div>' in everywhere
+    assert '>3</span>' in everywhere
 
     sliced = client.get(URL, {'tab': 'trophies', 'country': 'CA'}).content.decode()
-    assert '>2</div>' in sliced, 'the header kept the global figure over a sliced wall'
+    assert '>2</span>' in sliced, 'the board card kept the global figure over a sliced wall'
 
 
 def test_the_empty_board_says_which_kind_of_empty_it_is(client):
@@ -423,3 +438,36 @@ def test_the_viewer_row_is_marked_client_side_not_rendered_in(client):
     # ...and the rows endpoint, which serves every window after the first, must stay impersonal too.
     window = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': 1, 'count': 50})
     assert 'is-you' not in window.content.decode()
+
+
+def test_the_board_card_says_what_the_board_ranks(client):
+    """Which board you are on was signalled only by which chip was lit, and "Badge Points" tells a
+    first-time visitor nothing about what a point is. The card is the one place on the page that says
+    what is being ranked -- adjacent to the wall, so the answer sits beside the thing it describes."""
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    _ranked('Someone', plats=5, trophies=50, points=100)
+
+    for tab in ('trophies', 'points', 'career'):
+        resp = client.get(URL, {'tab': tab})
+        assert resp.context['board_meaning'] == V.MEANINGS[tab]
+        assert resp.context['board_label'] == dict(V.BOARDS)[tab]
+
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+    assert 'lb-boardcard' in body
+    assert V.MEANINGS['points'] in body, 'the board card does not say what the board ranks'
+
+
+def test_a_board_the_viewer_is_not_on_shows_a_dash_not_a_gap(client):
+    """A missing rank on a board you COULD be on is information. It also keeps the strip from jittering:
+    a chip that changes width depending on whether you happen to be ranked makes the tabs move as you
+    switch between them."""
+    me = _ranked('Me', plats=3, trophies=30)      # trophies only -- not on Career
+    client.force_login(me.user)
+
+    resp = client.get(URL)
+    ranks = {b['key']: b['rank'] for b in resp.context['boards']}
+
+    assert ranks['trophies'] == 1
+    assert ranks['career'] is None, 'the fixture no longer tests an unranked board'
+    assert '&mdash;' in resp.content.decode(), 'an unranked board rendered no placeholder'

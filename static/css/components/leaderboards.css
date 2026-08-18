@@ -607,3 +607,49 @@
     box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
 }
 .lb-row.is-found .lb-row__uname { color: var(--pp-primary); }
+
+/* ---- The tab chip's rank ----------------------------------------------------------------------------
+   The standing pills folded into the strip. Quiet by default and lit on the active chip: your rank on the
+   board you are READING is the one that matters, the other two are context you glance at. A dash rather
+   than an omission when you are not on a board -- "you are not on this one" is information, and a chip
+   that changes width when you happen to be ranked makes the strip jitter between tabs. */
+.lb-chiprank {
+    margin-left: 6px; font-size: 11px; font-weight: 800;
+    color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+.pp-switch__chip.is-active .lb-chiprank { color: var(--pp-primary); }
+@media (max-width: 480px) {
+    /* Three chips with names AND ranks do not fit 375px. The rank is the part that survives on the ACTIVE
+       chip only -- it is the one you came to read; the other two are a tap away. */
+    .pp-switch__chip:not(.is-active) .lb-chiprank { display: none; }
+}
+
+/* ---- The board card ---------------------------------------------------------------------------------
+   What this board is, what it ranks, and how many are on it -- directly above the wall, so the answer to
+   "what am I looking at" is adjacent to the thing being looked at. It absorbed the page header's tally
+   (which counts the BOARD, not the section) and sits with the jump bar rather than adding a band.
+
+   Deliberately quiet: no card border, no fill. The wall below it is the content and this is a label for
+   it, so it reads as a caption rather than competing with the rows for weight. */
+.lb-boardcard {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 4px 16px; margin: 2px 0 10px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--pp-border);
+}
+.lb-boardcard__id { min-width: 0; }
+.lb-boardcard__name { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
+.lb-boardcard__what {
+    margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--pp-text-dim); max-width: 60ch;
+}
+.lb-boardcard__meta { flex: 0 0 auto; }
+.lb-boardcard__tally { display: flex; align-items: baseline; gap: 6px; }
+.lb-boardcard__tally .pp-tally { font-size: 1.15rem; color: var(--pp-primary); }
+.lb-boardcard__tallylbl {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+@media (min-width: 768px) {
+    .lb-boardcard__name { font-size: 1.15rem; }
+    .lb-boardcard__what { font-size: 13px; }
+    .lb-boardcard__tally .pp-tally { font-size: 1.4rem; }
+}

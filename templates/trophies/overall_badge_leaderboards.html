@@ -54,36 +54,25 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
                     </p>
                 </div>
 
-                {% comment %} Counts THIS board, from the same `board_count` the paginator reads, so this
-                figure and the "N total" under the wall are one number read once. {% endcomment %}
-                <div class="pp-bhead__tally shrink-0 text-right">
-                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ ranked_total }}">{{ ranked_total|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">{{ ranked_label }}{{ ranked_total|pluralize }} ranked</div>
-                </div>
+                {% comment %} The board's hunter tally used to sit here. It moved to the BOARD CARD: it
+                counts this board, and this card is the section -- one card carrying both scopes is what
+                made "Leaderboards / Where the hunt is measured" sit beside a number that changes when you
+                switch tabs. What is left here is section identity, which is the same on every board.
+
+                Worth revisiting: with the board card carrying name, meaning, filters and tally, this
+                header may turn out to be redundant. Kept for now because a page that opens straight into
+                a tab strip reads as starting mid-thought. {% endcomment %}
             </div>
 
-            {% comment %} The viewer's own standing, once, at the top -- NOT repeated per row. The ROWS are
-            identical for every viewer, which is what would let the wall be cached; a personal marker in
-            one would forfeit that for a number better shown once anyway. (This header block is the part
-            that is per-viewer, so the RESPONSE is not cacheable as a whole -- see the view docstring.)
-            Only ranks the viewer actually holds render; a blank slot says less than no slot. {% endcomment %}
-            {% if my_standing %}
-            <div class="lb-mine mt-3 md:mt-4">
-                <span class="lb-mine__k">Your standing{% if selected_edition %} in {{ selected_edition_name }}{% endif %}{% if selected_country %} in {{ selected_country_name|default:selected_country }}{% endif %}</span>
-                <span class="lb-mine__rows">
-                    {% for b in boards %}
-                    {% with rank=my_standing|dict_get:b.key %}
-                    {% if rank %}
-                    <a class="lb-mine__row{% if b.key == active_tab %} is-active{% endif %}" href="{{ b.href }}">
-                        <span class="lb-mine__lbl">{{ b.label }}</span>
-                        <span class="lb-mine__rank pp-tally">#{{ rank|intcomma }}</span>
-                    </a>
-                    {% endif %}
-                    {% endwith %}
-                    {% endfor %}
-                </span>
-            </div>
-            {% endif %}
+            {% comment %} The standing pills used to sit here, and they are in the TAB STRIP now.
+
+            They were two controls stacked: a strip that navigates between boards, and a pill row showing
+            your rank on each that ALSO linked to it. Folding the rank into the chip makes one control do
+            both, and your standing stops being a block you scroll past -- the strip is always on screen.
+
+            The ROWS are still identical for every viewer, which is what would let the wall be cached; the
+            viewer's own row is marked in the browser, never rendered in. This strip is the per-viewer
+            part, so the RESPONSE is still not cacheable as a whole -- see the view docstring. {% endcomment %}
         </div>
     </section>
 
@@ -108,6 +97,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
                 {% elif b.key == 'points' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
                 {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>{% endif %}
                 <span class="pp-switch__lbl">{{ b.label }}</span>
+                {% if my_standing %}<span class="lb-chiprank pp-tally">{% if b.rank %}#{{ b.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
             </a>
             {% endfor %}
         </nav>
@@ -184,10 +174,34 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in
         the row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden
         on phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
+        {% comment %} The BOARD CARD. Which board this is, what it ranks, how many are on it, and the way
+        in -- directly above the wall, so the answer to "what am I looking at" is adjacent to the thing
+        being looked at rather than three bands up.
+
+        It absorbed the standalone jump bar and the page header's tally rather than adding a band: a
+        title card stacked on top of what was already four bands of chrome would put a phone reader
+        further from the first row, not closer to understanding it.
+
+        The filters stay as SELECTS above rather than becoming chips in here. Chips read well as "what is
+        applied" but need somewhere to set them FROM, which means a button that opens the selects anyway
+        -- and the selects already say what is applied by showing their value. {% endcomment %}
+        <div class="lb-boardcard">
+            <div class="lb-boardcard__id">
+                <h2 class="lb-boardcard__name">{{ board_label }}</h2>
+                <p class="lb-boardcard__what">{{ board_meaning }}</p>
+            </div>
+            <div class="lb-boardcard__meta">
+                <div class="lb-boardcard__tally">
+                    <span class="pp-tally" data-countup="{{ ranked_total }}">{{ ranked_total|intcomma }}</span>
+                    <span class="lb-boardcard__tallylbl">{{ ranked_label }}{{ ranked_total|pluralize }}{% if selected_edition or selected_country %} here{% endif %}</span>
+                </div>
+            </div>
+        </div>
+
         {% comment %} The two ways to move around a board you cannot page through. Jump-to-me reuses the
-        rank the header already computed, so it costs nothing; the rank box is the same motion aimed
-        anywhere. Both are enhancements over a wall that scrolls perfectly well without them, which is why
-        neither is a link and the box is a form that does nothing on submit without JS. {% endcomment %}
+        rank the strip already shows, so it costs nothing; the rank box is the same motion aimed anywhere.
+        Both are enhancements over a wall that scrolls perfectly well without them, which is why neither
+        is a link and the box does nothing on submit without JS. {% endcomment %}
         <div class="lb-jumpbar">
             {% if my_rank %}
             <button type="button" class="lb-jump" data-lb-jump>
