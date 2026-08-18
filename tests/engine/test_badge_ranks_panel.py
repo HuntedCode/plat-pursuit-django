@@ -293,3 +293,15 @@ def test_an_unverified_account_is_not_promised_a_board_it_cannot_enter(client):
 
     body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
     assert 'Not on this board yet' not in body and 'You are' not in body
+
+
+def test_a_huge_offset_is_clamped_rather_than_scanned(client):
+    """Same reasoning as the job board's page cap: a public fragment must not accept a nine-figure
+    OFFSET. Distinct from the junk-offset test above, which covers unparseable values."""
+    _renderable('deep3', 'Deep3')
+    _standing('deep3', 'Only', bp=5000, on=dt.date(2025, 1, 1))
+
+    resp = client.get(reverse('badge_ranks_panel', args=['deep3']), {'offset': 99999999})
+
+    assert resp.status_code == 200
+    assert resp['X-Has-Next'] == '0'

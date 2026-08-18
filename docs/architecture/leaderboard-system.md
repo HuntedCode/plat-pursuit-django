@@ -104,7 +104,27 @@ overlap -- a cross-gen game qualifies for both groups -- and went with the Badge
 | `trophies/services/badge_leaderboards.py` | Every board read: the `*_KEYS` orders, `_ahead_q`, `hydrate()`, `BoardPaginator`/`BoardPage`, `board_count()`, `active_editions()` |
 | `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings (xp, progress, `advanced_at`, badges held). Runs on every sync -- it must never grow a profile-wide aggregate |
 | `trophies/services/game_leaderboard_service.py` | Per-game boards. Where the rank-equals-position rule was first solved |
-| `trophies/views/badge_views.py` | `BadgeBoardsView`, `GameBoardsView`, `JobBoardsView`, `OverallBadgeLeaderboardsView` |
+| `trophies/views/badge_views.py` | `OverallBadgeLeaderboardsView` (the landing) + `BadgeRanksPanelView` (badge detail's board fragment) |
+
+## Who is ON a board
+
+**Every board is gated on `Profile.is_linked`** -- `badge_leaderboards._linked()`, one rule for all of
+them. Only the Trophies board had it before 2026-08, which meant Badge Points ranked the scraped,
+unverified profiles the catalogue collects (scout accounts among them): `evaluate_badges --all` walks
+every profile with a PSN username, not every linked one, so those standings are real rows. A hunter could
+be on one tab of `/leaderboards/` and absent from the next.
+
+The gate is at READ, not at the write seam. Standings for unlinked profiles still exist and are still
+what a profile-scoped surface reads; they are simply not competitors. It also means verifying an account
+puts a hunter on the boards immediately, with no re-evaluation.
+
+GAME boards are the one exception and do not go through this module: they record who PLAYED a game, which
+is catalogue data, and `game_leaderboard_service` owns them with its own `members_only` toggle.
+
+Cost, worth knowing before adding a board: the gate is a JOIN to `Profile`, and no index serves it (the
+join is by primary key, so `is_linked` is read from the heap of a wide table). `country_code` is
+denormalized onto the standing stores for exactly this reason and `is_linked` is not -- if a board read
+becomes hot, that is the fix with precedent.
 
 ## How a board is served
 

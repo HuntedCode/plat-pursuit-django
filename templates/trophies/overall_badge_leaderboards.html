@@ -12,9 +12,13 @@ it (no outer card around the switcher or the wall). Career's own layout is the r
 THREE boards, not four tabs. Country stopped being a tab and became a FILTER that applies to whichever
 board is open -- the decision that keeps this section finite, since the alternative is a board per
 country. Platform edition is the second filter on that same principle, and it applies to the two BADGE
-boards only; Career XP has no editions to slice, so the control is absent there rather than inert. The old
-Series tab is not in the strip either: it is a DIRECTORY, not a board, and step 6 of the rebuild promotes
-it to `/leaderboards/badges/`. It stays reachable at `?tab=series` until then.
+boards only; Career XP has no editions to slice, so the control is absent there rather than inert.
+
+There is no Series tab. It was a DIRECTORY rather than a board, kept out of the strip and reachable at
+`?tab=series` as a placeholder for `/leaderboards/badges/` -- a page built and then removed in 2026-08 as
+a second copy of Browse Badges. The placeholder outlived its successor while reading the RETIRED tier-era
+`Badge` model, so it rendered a frozen catalogue beside live counts. `?tab=series` now maps to the
+default board via `LEGACY_TABS`.
 
 Both filters live in ONE form, so changing either keeps the other and neither needs the other's hidden
 field. Submitting also drops `page`, which is what a filter change should do.

@@ -45,7 +45,7 @@ from django.views.generic import ListView, DetailView, TemplateView
 from ..models import (
     Profile, Badge, UserBadge,
     UserTitle, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
-    ProfileCareerStanding, SeriesBadgeStanding, Game,
+    ProfileCareerStanding, SeriesBadgeStanding,
 )
 from ..forms import BadgeSearchForm
 from trophies.services.badge_detail_service import get_badge_detail
@@ -53,7 +53,6 @@ from trophies.services.badge_list_service import build_list_cards, build_series_
 from trophies.services.badge_rarity import (
     annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
 )
-from trophies.mixins import HtmxListMixin
 # Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
 # service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
 from trophies.services import badge_leaderboards as lb
@@ -597,6 +596,8 @@ class BadgeRanksPanelView(View):
     about the badge. Boards live on the thing they rank.
     """
     PREVIEW = 25
+    #: Deepest reachable slice, past any real series board.
+    MAX_OFFSET = 10_000
 
     def get(self, request, series_slug):
         series = BadgeSeries.objects.filter(series_slug=series_slug).first()
@@ -610,8 +611,10 @@ class BadgeRanksPanelView(View):
 
         # `offset > 0` means the reader pressed "show more", so only the next slice of ROWS comes back and
         # is appended. The full panel (meta line, empty state, the button itself) is emitted once.
+        # Clamped at BOTH ends -- see JobDetailView.MAX_PAGE. `?offset=99999999` on a public fragment is
+        # a nine-figure OFFSET that Postgres walks row by row; the response is empty either way.
         try:
-            offset = max(0, int(request.GET.get('offset', 0)))
+            offset = min(max(0, int(request.GET.get('offset', 0))), self.MAX_OFFSET)
         except (TypeError, ValueError):
             offset = 0
 

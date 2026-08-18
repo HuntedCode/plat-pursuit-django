@@ -489,10 +489,12 @@ prerequisite to it.
   doing a lookup each looks fine at 24 rows and is not at 200. Infinite scroll bounds the rows rendered,
   never the queries per row — those are two different problems and only one of them is solved by
   pagination.
-- **The participants gate is dataset-sized, and its failure mode is a confident lie.** `BOARD_MIN_ENTRANTS`
-  (settings, env-overridable per kind) defaults to 3 for games. On any dataset smaller than prod that
-  hides the whole catalogue behind "no board has enough hunters on it yet" -- which is specific, sounds
-  authoritative, and is wrong. Set `BOARD_MIN_ENTRANTS_GAMES=1` in dev.
+- ~~**The participants gate is dataset-sized, and its failure mode is a confident lie.**~~ **GONE with the
+  directories (2026-08).** `BOARD_MIN_ENTRANTS` was deleted from settings along with the pages that read
+  it, so there is nothing to set: `BOARD_MIN_ENTRANTS_GAMES=1` in a dev `.env` is now dead and can be
+  removed. The lesson survives the setting, though, and is worth carrying to any future gate: a
+  prod-calibrated threshold empties the page on every smaller dataset, and "no board has enough hunters
+  on it yet" is specific, authoritative, and wrong.
 - **The game gate reads `Game.played_count`, a signal-maintained denorm.** It is incremented by a
   `post_save` on ProfileGame CREATION, so `bulk_create`, fixtures and database restores bypass it and
   leave 0 while the rows sit there intact. The nightly `recalc_earn_rates` repairs it (chunked, resumable,

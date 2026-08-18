@@ -269,3 +269,17 @@ def test_a_board_of_exactly_one_page_does_not_offer_a_next(client):
     again = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks'})
     assert again.context['board_has_next'] is True
     assert len(again.context['board']) == 25, 'the look-ahead row leaked into the rendered page'
+
+
+def test_a_huge_page_number_is_clamped_rather_than_scanned(client):
+    """`?page=99999999` is a public URL that becomes a nine-figure OFFSET, and Postgres walks every
+    skipped row to honour it. The page renders empty either way, so the cap costs a reader nothing."""
+    from trophies.views.career_views import JobDetailView
+
+    job = _job('archivist', 'Archivist')
+    _xp(job, 'Someone', 500)
+
+    resp = client.get(reverse('job_detail', args=['archivist']), {'tab': 'ranks', 'page': 99999999})
+
+    assert resp.status_code == 200
+    assert resp.context['board_page'] == JobDetailView.MAX_PAGE

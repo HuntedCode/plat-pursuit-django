@@ -241,6 +241,8 @@ class JobDetailView(DetailView):
     context_object_name = 'job'
     BOARD_SIZE = 25
     CONTRACT_PAGE = 24
+    #: Deepest reachable board page. 25 x 400 = 10,000 rows, past any real job board.
+    MAX_PAGE = 400
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -283,8 +285,11 @@ class JobDetailView(DetailView):
         """The board, paginated. A job board is the only per-entity board with no other home -- badge and
         game boards each have a fuller surface to hand off to -- so stopping dead at 25 left a hunter
         ranked #300 with no way to ever see their own row."""
+        # Clamped at BOTH ends. The upper bound is not theoretical: `?page=99999999` is a public URL that
+        # becomes a nine-figure OFFSET, and Postgres walks every skipped row to honour it. The page
+        # renders empty either way, so the cap costs a reader nothing and takes the scan off the table.
         try:
-            page = max(1, int(self.request.GET.get('page', 1)))
+            page = min(max(1, int(self.request.GET.get('page', 1))), self.MAX_PAGE)
         except (TypeError, ValueError):
             page = 1
         offset = (page - 1) * self.BOARD_SIZE
