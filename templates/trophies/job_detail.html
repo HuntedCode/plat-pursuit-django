@@ -72,8 +72,8 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     nothing switched in place. That was the correct fix for the behaviour at the time; the behaviour has
     changed, so the semantics change back.
 
-    The `?tab=` links still work: the view honours the param on arrival, so old bookmarks and the
-    pager's own links land on the right tab. {% endcomment %}
+    The `?tab=` links still work: the view honours the param on arrival, so old bookmarks land on the
+    right tab. {% endcomment %}
     <div class="lb-bar">
         <div class="pp-switch" id="jobd-switch" role="tablist" aria-label="Job view">
             <a href="?tab=contracts" id="jobd-tab-contracts" aria-controls="jobd-view-contracts" role="tab"
@@ -156,28 +156,31 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         var loaded = false;
 
         // The board is fetched, not server-rendered: the cheap panel ships hidden and the expensive one
-        // arrives when asked for. `loaded` guards a re-open, so switching back and forth fetches once --
-        // but a PAGE change is a deliberate re-fetch, so it passes `force`.
-        function loadRanks(panel, page) {
-            if (loaded && !page) { return; }
+        // arrives when asked for. `loaded` guards a re-open, so switching back and forth fetches once.
+        var handle = null;      // the live board, so a retry cannot leave two mounted
+
+        // The sticky chrome a jump must land below, measured live: the nav's height differs across
+        // breakpoints, so a hardcoded inset would be wrong on one of them.
+        function chromeInset() {
+            var nav = document.querySelector('.pp-nav') || document.querySelector('header');
+            return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+        }
+
+        function loadRanks(panel) {
+            if (loaded) { return; }
             loaded = true;
             var body = panel.querySelector('[data-ranks-body]');
-            var url = panel.dataset.ranksSrc + (page ? '?page=' + encodeURIComponent(page) : '');
-            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            fetch(panel.dataset.ranksSrc, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
                 .then(function (html) {
+                    if (handle) { handle.destroy(); handle = null; }
                     body.innerHTML = html;
-                    var wall = body.querySelector('[data-lb-wall]');
-                    if (wall && PlatPursuit.staggerReveal) {
-                        PlatPursuit.staggerReveal({
-                            grid: wall, cardSelector: '.lb-row', step: 14,
-                            reveal: function (el, delayMs) {
-                                if (!el.animate) { return; }
-                                el.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
-                                           { duration: 420, delay: delayMs, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
-                            },
-                        });
-                    }
+                    if (!PlatPursuit.wireBoard) { return; }
+                    var root = body.querySelector('[data-lb-board]');
+                    // Called even when `root` is null: `wireBoard` still wires the rank box's submit and
+                    // swallows it, so an empty board cannot navigate the page away on Enter.
+                    handle = PlatPursuit.wireBoard(root, { scope: panel, chromeInset: chromeInset });
+                    PlatPursuit.boardEntrance(root);
                 })
                 .catch(function () {
                     // A board that fails to load must say so. A spinner left spinning reads as "still
@@ -217,38 +220,15 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
 
         tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });
 
-        // The board's pager. Its links are `?tab=ranks&page=N`, which used to be honest full-page links
-        // and became DEAD the moment the board moved to a fetched panel: the page they reload no longer
-        // builds a board, so "Next" landed back on page 1 forever and a hunter ranked #300 could never
-        // reach their row -- the exact thing the pager exists to prevent. Intercepted and re-fetched in
-        // place instead. The href stays real, so it still works with no JS.
+        // Arriving on `?tab=ranks` (an old bookmark, a shared link) renders the Ranks panel already
+        // selected, so the fetch has to be kicked off without a click.
         //
-        // Delegated from the panel, because the pager arrives WITH the fetched HTML and is replaced by
-        // every subsequent fetch.
-        var ranksPanel = document.querySelector('.jobd-view[data-view="ranks"]');
-        if (ranksPanel) {
-            ranksPanel.addEventListener('click', function (ev) {
-                var link = ev.target.closest && ev.target.closest('a.jobd__pager-btn[href]');
-                if (!link || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
-                var page = new URLSearchParams(link.getAttribute('href').split('?')[1] || '').get('page');
-                if (!page) { return; }
-                ev.preventDefault();
-                loadRanks(ranksPanel, page);
-                if (PlatPursuit.syncViewParam) {
-                    // Keep the URL shareable: `?tab=ranks` plus the page the reader is actually on.
-                    var qp = new URLSearchParams(location.search);
-                    qp.set('tab', 'ranks');
-                    qp.set('page', page);
-                    history.replaceState(null, '', location.pathname + '?' + qp.toString());
-                }
-            });
-        }
-
-        // Arriving on `?tab=ranks` (an old bookmark, or a shared pager URL) renders the Ranks panel
-        // already selected, so the fetch has to be kicked off without a click -- carrying `?page=` so a
-        // shared deep link opens the page it names rather than resetting to the top of the board.
+        // The pager interception that stood here is gone with the pager itself. `?page=` is no longer
+        // honoured anywhere and is not redirected either: it was only ever a job-board URL, the board it
+        // named is now reachable by scrolling or by the rank box, and a redirect would be machinery kept
+        // alive for links that only ever existed inside a control that no longer ships.
         var opened = document.querySelector('.jobd-view[data-view="ranks"]:not([hidden])');
-        if (opened) { loadRanks(opened, new URLSearchParams(location.search).get('page')); }
+        if (opened) { loadRanks(opened); }
     })();
 </script>
 {% endblock %}

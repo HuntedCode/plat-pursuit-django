@@ -14,7 +14,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseNotFound
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.views import View
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
@@ -22,6 +22,8 @@ from django.views.generic import DetailView, ListView, TemplateView
 
 from trophies.models import Contract, EarnedContract, Job
 from trophies.services import badge_leaderboards as lb
+from trophies.views import board_helpers
+from trophies.views.board_helpers import window_params
 
 from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
@@ -230,15 +232,63 @@ class JobRanksPanelView(View):
     page that renders both panels pays for both; a page that ships the cheap one and fetches the expensive
     one pays for what was asked for.
 
-    PUBLIC, like the board itself. The rows are identical for every viewer -- the viewer's own rank lives
-    in the page header, above the switcher, and is not in this fragment.
+    The ROWS are identical for every viewer -- "this one is you" is applied in the browser from
+    `data-lb-viewer-rank`, never rendered in, which is what keeps a row cacheable.
+
+    The FRAGMENT, however, is now per-viewer, and the docstring used to claim otherwise. Jump-to-me needs
+    the viewer's rank, and the rank has to reach the board root for the engine to light that row -- so
+    the wrapper carries `my_rank` even though nothing inside a row does. That costs one `job_rank` count
+    per tab open and means this fragment must not be given a shared cache key. It was impersonal before
+    the jump bar existed; the affordance is worth the trade, but it IS a trade.
+
+    TWO RESPONSES, one endpoint, matching `BadgeRanksPanelView`:
+
+      no `?range=`   the full panel -- the jump bar, the board shell, the first window
+      `?range=N`     bare `.lb-row`s for display positions [N, N+count), for the virtualizer
+
+    The prev/next pager this used to carry is gone. A job board is the only per-entity board with no
+    fuller surface to hand off to, so paging was the only way to reach row 300 at all -- and it meant
+    twelve clicks to get there. A spacer is jumped into directly, which is the same fix applied to every
+    other board.
     """
+    #: Fetch granularity, shared with every other board -- see `board_helpers.PAGE_SIZE`.
+    PAGE_SIZE = board_helpers.PAGE_SIZE
 
     def get(self, request, slug):
         job = get_object_or_404(Job, slug=slug)
+
+        if 'range' in request.GET:
+            start, count = window_params(request, self.PAGE_SIZE)
+            return render(request, 'trophies/partials/leaderboard_rows.html',
+                          {'entries': self._window(job.slug, start - 1, count)})
+
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
-        ctx = JobDetailView.ranks_context(request, job, profile, JobDetailView.BOARD_SIZE)
-        return render(request, 'trophies/partials/job_detail/_ranks_panel.html', {**ctx, 'job': job})
+        return render(request, 'trophies/partials/job_detail/_ranks_panel.html', {
+            'job': job,
+            # `rows` / `total`, matching `BadgeRanksPanelView` exactly. They were `board`/`board_total`
+            # here and `rows`/`total` there, for two panels deliberately written to mirror each other --
+            # which is the drift this whole change is about, in miniature.
+            'rows': self._window(job.slug, 0, self.PAGE_SIZE),
+            'total': lb.job_board_counts([job.slug]).get(job.slug, 0),
+            'page_size': self.PAGE_SIZE,
+            'my_rank': lb.job_rank(job.slug, profile.id) if profile else None,
+            # Reversed rather than read off `request.path`, so the panel does not silently depend on
+            # having been reached by its canonical URL.
+            'rows_url': reverse('job_ranks_panel', args=[job.slug]),
+        })
+
+    @staticmethod
+    def _window(job_slug, offset, limit):
+        """One window of the board, hydrated. Shared by both responses above: a rows endpoint that built
+        its own `extra` mapping would be a second definition of what this board's columns MEAN, and the
+        labels would be the first thing to drift -- so the rest of a board would read a different figure
+        from the screenful the reader arrived on."""
+        rows = lb.job_rows(job_slug, limit=limit, offset=offset)
+        # `offset`, not 0: `page()` numbers rows by SLOT, so a window starting at 50 numbers from 51.
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[1], 'primary_label': 'XP',
+            'secondary': r[2], 'secondary_label': 'level',
+        })
 
 
 class JobDetailView(DetailView):
@@ -258,10 +308,7 @@ class JobDetailView(DetailView):
     slug_url_kwarg = 'slug'
     template_name = 'trophies/job_detail.html'
     context_object_name = 'job'
-    BOARD_SIZE = 25
     CONTRACT_PAGE = 24
-    #: Deepest reachable board page. 25 x 400 = 10,000 rows, past any real job board.
-    MAX_PAGE = 400
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -297,38 +344,6 @@ class JobDetailView(DetailView):
             {'text': job.name},
         ]
         return context
-
-    @staticmethod
-    def ranks_context(request, job, profile, board_size):
-        """The board, paginated. Shared with `JobRanksPanelView`, which is what actually renders it -- the
-        page itself only ships the empty panel.
-
-        A job board is the only per-entity board with no other home (badge boards have their own panel
-        endpoint, game boards have `/games/<id>/leaderboard/`), so stopping dead at 25 left a hunter
-        ranked #300 with no way to ever reach the row their header rank points at."""
-        # Clamped at BOTH ends. The upper bound is not theoretical: `?page=99999999` is a public URL that
-        # becomes a nine-figure OFFSET, and Postgres walks every skipped row to honour it. The page
-        # renders empty either way, so the cap costs a reader nothing and takes the scan off the table.
-        try:
-            page = min(max(1, int(request.GET.get('page', 1))), JobDetailView.MAX_PAGE)
-        except (TypeError, ValueError):
-            page = 1
-        offset = (page - 1) * board_size
-        # +1 is the look-ahead that answers "is there a next page" without a COUNT. `board` slices it back.
-        rows = lb.job_rows(job.slug, limit=board_size + 1, offset=offset)
-        return {
-            'board_page': page,
-            'board_has_prev': page > 1,
-            # From a LOOK-AHEAD row, not from `len(rows) == BOARD_SIZE`. That test is wrong at exact
-            # multiples of the page size: a board of exactly 25 offered "Next", and the next page had no
-            # rows, so it rendered the empty state ("Nobody has banked XP here yet") with no pager on it
-            # -- browser Back was the only way out of a board that was not empty at all.
-            'board_has_next': len(rows) > board_size,
-            'board': lb.page(rows[:board_size], offset, extra=lambda r: {
-                'primary': r[1], 'primary_label': 'XP',
-                'secondary': r[2], 'secondary_label': 'level',
-            }),
-        }
 
     def _contracts(self, job, profile):
         contracts = list(

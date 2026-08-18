@@ -56,6 +56,8 @@ from trophies.services.badge_rarity import (
 # Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
 # service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
 from trophies.services import badge_leaderboards as lb
+from trophies.views import board_helpers
+from trophies.views.board_helpers import window_params
 
 logger = logging.getLogger("psn_api")
 
@@ -582,73 +584,70 @@ class BadgeDetailView(DetailView):
 
 
 class BadgeRanksPanelView(View):
-    """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks section.
+    """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks tab.
 
     Lazily fetched rather than server-rendered, copying game detail's Ranks panel: the cost scales with a
-    series' popularity, and most visitors come for the badge itself and never scroll to the board. The
-    page pays for it only when someone looks.
+    series' popularity, and most visitors come for the badge itself. The page pays for it only when
+    someone opens the tab.
 
-    Public: the board is identical for every viewer, which is what keeps it cacheable. A signed-in
-    viewer's own position is passed alongside the rows rather than marked inside one, for the same reason
-    the Global Boards landing puts it in the header.
+    The ROWS are identical for every viewer -- "this one is you" is applied in the browser from
+    `data-lb-viewer-rank`, never rendered in, because a row that knows who is reading it cannot be shared
+    between readers.
+
+    The FRAGMENT is per-viewer, though: it carries the standing line and the jump-to-me chip, both of
+    which need `my_rank`. So it must not be given a shared cache key, and it costs one rank count per tab
+    open. Job detail's panel makes the same trade for the same reason.
 
     This REPLACES `/leaderboards/badges/<slug>/`, which was a whole page for what is a section of the page
     about the badge. Boards live on the thing they rank.
+
+    TWO RESPONSES, one endpoint:
+
+      no `?range=`   the full panel -- meta line, jump bar, the board shell, the first window
+      `?range=N`     bare `.lb-row`s for display positions [N, N+count), for the virtualizer
+
+    The `?offset=` "show more" this used to serve is gone with the button. Appending 25 rows at a time
+    could not reach row 3,000 of a popular series in any reasonable number of clicks, which is the same
+    dead end the prev/next pager had -- see `leaderboard_board.html`.
     """
-    PREVIEW = 25
-    #: Deepest reachable slice, past any real series board.
-    MAX_OFFSET = 10_000
+    #: Fetch granularity, shared with every other board -- see `board_helpers.PAGE_SIZE`.
+    PAGE_SIZE = board_helpers.PAGE_SIZE
 
     def get(self, request, series_slug):
-        series = BadgeSeries.objects.filter(series_slug=series_slug).first()
-        if series is None:
-            raise Http404("Series not found")
-        # The SAME dormant gate BadgeDetailView.get_object applies. Without it this fragment answered for
-        # an unreleased series that its own page 404s -- so `/badges/<unreleased>/ranks/` confirmed the
-        # series exists and handed over its board, to anyone who guessed the slug.
-        if not request.user.is_staff and not series.group_badges.filter(is_live=True).exists():
-            raise Http404("Series not found")
+        # The SAME dormant gate BadgeDetailView.get_object applies, and it runs BEFORE the window branch
+        # below -- without it this fragment answered for an unreleased series that its own page 404s, so
+        # `/badges/<unreleased>/ranks/` confirmed the series exists and handed over its board to anyone
+        # who guessed the slug.
+        #
+        # ONE query for the public path. It was a fetch plus an `.exists()`, which is two round trips
+        # before every window a reader scrolls past; the row itself is only needed for the full panel.
+        if request.user.is_staff:
+            series = BadgeSeries.objects.filter(series_slug=series_slug).first()
+            if series is None:
+                raise Http404("Series not found")
+        else:
+            series = BadgeSeries.objects.filter(
+                series_slug=series_slug, group_badges__is_live=True).first()
+            if series is None:
+                raise Http404("Series not found")
 
-        # `offset > 0` means the reader pressed "show more", so only the next slice of ROWS comes back and
-        # is appended. The full panel (meta line, empty state, the button itself) is emitted once.
-        # Clamped at BOTH ends -- see JobDetailView.MAX_PAGE. `?offset=99999999` on a public fragment is
-        # a nine-figure OFFSET that Postgres walks row by row; the response is empty either way.
-        try:
-            offset = min(max(0, int(request.GET.get('offset', 0))), self.MAX_OFFSET)
-        except (TypeError, ValueError):
-            offset = 0
-
-        rows = lb.series_board_rows(series_slug, limit=self.PREVIEW, offset=offset)
-        # `offset`, not 0: `page()` numbers rows by SLOT, so the second slice must start at 26, not at 1.
-        # r = (profile_id, progress_bp, stages_cleared, stages_total, advanced_at). The last two were
-        # fetched and discarded: the row showed "5 stages" for a finisher and for someone on 5 of 8 alike,
-        # and the date that BREAKS THE TIE between rows on the same rung was invisible, which is what made
-        # the ordering read as arbitrary.
-        entries = lb.page(rows, offset, extra=lambda r: {
-            'primary': r[2], 'primary_of': r[3], 'primary_label': 'stages',
-            'secondary': None, 'secondary_label': '',
-            # `advanced_at` is the hunter's most recent advance -- their completion date if they finished,
-            # the latest gating stage they cleared if they are still chasing. One column, and the label
-            # stays neutral rather than claiming which, because the row does not know.
-            'when': r[4], 'when_label': 'since',
-        })
-        if offset:
-            # ROWS ONLY, plus one header. The client used to infer "that was the last slice" from a short
-            # response, which cost a dead click on every board whose size is an exact multiple of PREVIEW.
-            # A header rather than markup keeps the fragment a clean list of <li>s.
-            resp = render(request, 'trophies/partials/badge_detail/bd2_ranks_rows.html', {'rows': entries})
-            resp['X-Has-Next'] = '1' if len(entries) == self.PREVIEW and lb.series_board_rows(
-                series_slug, limit=1, offset=offset + self.PREVIEW) else '0'
-            return resp
+        if 'range' in request.GET:
+            start, count = window_params(request, self.PAGE_SIZE)
+            return render(request, 'trophies/partials/leaderboard_rows.html',
+                          {'entries': self._window(series_slug, start - 1, count)})
 
         total = lb.series_board_count(series_slug)
-
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
         my_rank = lb.series_board_rank(series_slug, profile.id) if profile else None
 
         return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
-            'rows': entries,
+            'rows': self._window(series_slug, 0, self.PAGE_SIZE),
             'total': total,
+            'page_size': self.PAGE_SIZE,
+            # The endpoint the virtualizer fetches later windows from -- this same view, reversed rather
+            # than read off `request.path`, so the panel does not silently depend on having been reached
+            # by its canonical URL.
+            'rows_url': reverse('badge_ranks_panel', args=[series_slug]),
             'my_rank': my_rank,
             # Distinguishes "signed out" from "signed in and not on this board". The template used to gate
             # the whole line on `my_rank`, so an unranked hunter got silence where the answer belonged.
@@ -657,10 +656,27 @@ class BadgeRanksPanelView(View):
             # (`badge_leaderboards._linked`), so an unverified account told "not on this board yet" is
             # being promised a board it cannot enter. Game detail already resolves its viewer this way.
             'show_my_standing': bool(profile and profile.is_linked),
-            'has_more': total > len(entries),
-            'next_offset': len(entries),
             'series': series,
         })
+
+    @staticmethod
+    def _window(series_slug, offset, limit):
+        """One window of the board, hydrated. Shared by both responses above, which is the point: a rows
+        endpoint that built its own `extra` mapping would be a second definition of what this board's
+        columns MEAN, and the first thing to drift would be the labels -- so the rest of a board would
+        read a different figure from the screenful the reader arrived on."""
+        rows = lb.series_board_rows(series_slug, limit=limit, offset=offset)
+        # `offset`, not 0: `page()` numbers rows by SLOT, so a window starting at 50 must number from 51.
+        # r = (profile_id, progress_bp, stages_cleared, stages_total, advanced_at).
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[2], 'primary_of': r[3], 'primary_label': 'stages',
+            'secondary': None, 'secondary_label': '',
+            # `advanced_at` is the hunter's most recent advance -- their completion date if they finished,
+            # the latest gating stage they cleared if they are still chasing. One column, and the label
+            # stays neutral rather than claiming which, because the row does not know.
+            'when': r[4], 'when_label': 'since',
+        })
+
 
 class OverallBadgeLeaderboardsView(TemplateView):
     """`/leaderboards/` -- Global Boards, the hub landing.
@@ -699,7 +715,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     sentence; it would serve one logged-in hunter's ranks to every subsequent visitor.
     """
     template_name = 'trophies/overall_badge_leaderboards.html'
-    paginate_by = 50
+    paginate_by = board_helpers.PAGE_SIZE
 
     # (key, label). Order is the tab order; Badge Trophies leads because it has the most entrants.
     BOARDS = (
@@ -861,14 +877,21 @@ class OverallBadgeLeaderboardsView(TemplateView):
         # badge store unconditionally: on `?tab=career` that printed the badge population above the career
         # wall, and under a country slice it printed the global figure above a sliced one.
         if tab in self.BOARD_KEYS:
-            board = self._build_board(tab, country, edition)
-            context['board'] = board
-            context['ranked_total'] = board.paginator.count
+            entries, total = self._build_board(tab, country, edition)
+            context['board_entries'] = entries
+            context['ranked_total'] = total
             context['ranked_label'] = 'hunter'
             # For the virtual wall: the client sizes its spacer and its fetch granularity from these
             # rather than carrying constants of its own, which is how a page size silently desyncs from
             # the server that pages by it.
             context['page_size'] = self.paginate_by
+            context['rows_url'] = reverse('leaderboard_rows')
+            # The SLICE, carried on every later window. Without it the second screenful of a filtered
+            # board comes back unfiltered -- the rows keep counting up, so it reads as the board rather
+            # than as a bug. Built with urlencode (urllib's, imported at the top of this module) rather
+            # than by hand: a country code is safe but an edition key is arbitrary text from the model.
+            context['rows_params'] = urlencode(
+                {k: v for k, v in (('tab', tab), ('country', country), ('edition', edition)) if v})
             primary_label, secondary_label = self.FIGURES[tab]
             context['primary_label'] = primary_label
             context['secondary_label'] = secondary_label
@@ -900,27 +923,23 @@ class OverallBadgeLeaderboardsView(TemplateView):
         return context
 
     def _build_board(self, tab, country, edition=''):
-        """One page of the active board: two queries (the board read + one hydrate) plus its count."""
-        per = self.paginate_by
-        # Guarded, because this paginator is hand-rolled rather than Django's: an unparseable `?page`
-        # raised ValueError straight out of the view, i.e. a 500 for a typo'd URL. Clamped to 1 rather
-        # than 404'd, matching the guard the series wall in this same file already uses -- dropping a
-        # reader out of a board for a malformed query param is hostile when the board is still there.
-        try:
-            page_num = max(1, int(self.request.GET.get('page') or 1))
-        except (TypeError, ValueError):
-            page_num = 1
+        """The FIRST window of the active board, and its size: two queries (the board read + one hydrate)
+        plus the count that sizes the virtual spacer.
+
+        `?page=` IS NOT READ, and that is the fix rather than an omission. This offset the first window by
+        `(page - 1) * per` back when a pager rendered underneath it, and it survived the pager's deletion
+        -- which made it worse than dead. `virtualBoard` seeds its row cache from the server-rendered
+        window and marks page 0 as already fetched, so `/leaderboards/?page=2` handed it rows 51-100,
+        recorded rows 1-50 as fetched, and then could never request them: the top of the board was fifty
+        rows of permanently blank spacer. Job detail dropped the same parameter outright; the two
+        surfaces should not disagree about it.
+        """
         cc = country or None
         ed = edition or None
-
         # The board's membership rule lives in the SERVICE, next to the rows it governs -- see
         # `lb.board_count`. This used to be a hand-rolled copy of it here, and the copy drifted.
-        paginator = lb.BoardPaginator(lb.board_count(tab, country=cc, edition=ed), per)
-        page_num = min(page_num, paginator.num_pages)
-        offset = (page_num - 1) * per
-
-        entries = self.board_window(tab, country, edition, offset, per)
-        return lb.BoardPage(entries, page_num, paginator)
+        total = lb.board_count(tab, country=cc, edition=ed)
+        return self.board_window(tab, country, edition, 0, self.paginate_by), total
 
     @staticmethod
     def board_window(tab, country, edition, offset, limit):
@@ -965,10 +984,6 @@ class LeaderboardRowsView(View):
     cacheable. The viewer's own rank lives in the page header, never in a row.
     """
 
-    #: Hard ceiling on `count`, so a crafted URL cannot ask for the whole board in one read. The client
-    #: only ever asks for `paginate_by`; this bounds what anyone else can.
-    MAX_COUNT = 200
-
     def get(self, request):
         view = OverallBadgeLeaderboardsView
         tab = view.active_tab(request)
@@ -976,22 +991,12 @@ class LeaderboardRowsView(View):
         country = self._country(request, codes)
         edition = self._edition(request, tab, view)
 
-        start = self._int(request.GET.get('range'), 1, lo=1)
-        count = self._int(request.GET.get('count'), view.paginate_by, lo=1, hi=self.MAX_COUNT)
+        # Clamped at BOTH ends by the shared parser -- `range` is an OFFSET straight into the board, so an
+        # unbounded value is a nine-figure OFFSET that Postgres honours by walking every skipped row.
+        start, count = window_params(request, view.paginate_by)
 
         entries = view.board_window(tab, country, edition, start - 1, count)
         return render(request, 'trophies/partials/leaderboard_rows.html', {'entries': entries})
-
-    @staticmethod
-    def _int(raw, default, lo=1, hi=None):
-        """Clamped at BOTH ends. `range` is an OFFSET straight into the board, so an unbounded value is a
-        nine-figure OFFSET that Postgres honours by walking every skipped row."""
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            return default
-        value = max(lo, value)
-        return min(value, hi) if hi is not None else value
 
     @staticmethod
     def _country(request, codes):

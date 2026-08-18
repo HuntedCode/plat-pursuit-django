@@ -190,65 +190,14 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             </div>
         </div>
 
-        {% comment %} The two ways to move around a board you cannot page through. Jump-to-me reuses the
-        rank the strip already shows, so it costs nothing; the rank box is the same motion aimed anywhere.
-        Both are enhancements over a wall that scrolls perfectly well without them, which is why neither
-        is a link and the box does nothing on submit without JS. {% endcomment %}
-        <div class="lb-jumpbar">
-            {% if my_rank %}
-            <button type="button" class="lb-jump" data-lb-jump>
-                <svg class="lb-jump__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
-                You&rsquo;re <b class="pp-tally">#{{ my_rank|intcomma }}</b>
-            </button>
-            {% endif %}
-            <form class="lb-goto" data-lb-gotoform>
-                <label class="lb-goto__lbl" for="lb-goto-input">Go to rank</label>
-                <input id="lb-goto-input" type="number" inputmode="numeric" min="1" max="{{ ranked_total }}"
-                       placeholder="#" aria-label="Jump to a rank on this board">
-            </form>
-        </div>
+        {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=ranked_total id_prefix='lb' only %}
       </div>
     </section>
 
-    {% if board and board.object_list %}
-    {% comment %} The board. A VIRTUAL wall: the `<ol>` is a full-height spacer (total x --lb-row-h) so the
-    page scrollbar spans the whole board, and only the visible rows live in the DOM, placed absolutely by
-    the shared `PlatPursuit.virtualBoard`. The pager is gone with it -- pagination and a spacer are two
-    answers to the same question, and this is the one that lets a reader move around the board freely.
-
-    The FIRST window is server-rendered inside the spacer, so the board is there on arrival and on a
-    no-JS read; every window after it comes from `leaderboard_rows`. The engine adopts these rows rather
-    than re-fetching them.
-
-    Everything the client needs rides on the root as data, so the JS reads no constants of its own: a
-    hardcoded page size or rows URL is the kind of thing that silently desyncs from the server. {% endcomment %}
-    <div class="lb-board" data-lb-board
-         data-lb-total="{{ ranked_total }}"
-         data-lb-page-size="{{ page_size }}"
-         data-lb-rows-url="{% url 'leaderboard_rows' %}"
-         data-lb-tab="{{ active_tab }}"
-         data-lb-country="{{ selected_country }}"
-         data-lb-edition="{{ selected_edition }}"
-         data-lb-viewer-rank="{{ my_rank|default_if_none:'' }}">
-
-        {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in
-        the row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden
-        on phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
-        <div class="lb-colhead" aria-hidden="true">
-            <span class="lb-colhead__rank">#</span>
-            <span class="lb-colhead__who">Hunter</span>
-            <span class="lb-colhead__figs">
-                <span>{{ primary_label }}</span>
-                {% if secondary_label %}<span>{{ secondary_label }}</span>{% endif %}
-            </span>
-        </div>
-
-        <ol class="lb-wall lb-wall--virtual" data-lb-wall>
-            {% for entry in board.object_list %}
-            {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
-            {% endfor %}
-        </ol>
-    </div>
+    {% if board_entries %}
+    {% comment %} The board itself -- shell, column headers and first window, shared with badge
+    detail and job detail. See `leaderboard_board.html` for why it is one file. {% endcomment %}
+    {% include 'trophies/partials/leaderboard_board.html' with entries=board_entries total=ranked_total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank primary_label=primary_label secondary_label=secondary_label only %}
 
     {% else %}
     <div class="lb-empty">
@@ -285,16 +234,6 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
 {% block js_scripts %}
 <script>
     (function () {
-        {% comment %}Either select submits the shared form on change -- a select that needs a separate
-        button is a two-step filter, and every other filter on the site applies on change. The <noscript>
-        button in the markup covers the JS-off path, so this only ever removes a step.{% endcomment %}
-        var form = document.querySelector('[data-filter-form]');
-        if (form) {
-            form.querySelectorAll('select').forEach(function (sel) {
-                sel.addEventListener('change', function () { form.submit(); });
-            });
-        }
-
         {% comment %} NO staggerReveal on this wall, and the reason is load-bearing rather than a
         preference.
 
@@ -310,22 +249,20 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         evicted at scroll speed is motion fighting motion.
 
         This is the second time the same collision has bitten -- badge detail's "Show more" appended rows
-        into a `.pp-reveal` wall and they arrived invisible too. There the fix was to hand the appended
-        nodes to the observer; here the right answer is not to hide them in the first place. {% endcomment %}
+        into a `.pp-reveal` wall and they arrived invisible too. Both surfaces now use
+        `PlatPursuit.boardEntrance`, which animates the first screenful with the Web Animations API and
+        leaves no class behind to outlive its frames. {% endcomment %}
 
-        {% comment %}The Tally ticks ONCE, on the header figure. There is no global `[data-countup]` boot
-        on this site -- every page wires its own -- so the attribute alone did nothing and the number just
-        appeared. Deliberately not applied to the rows: 50 simultaneous counters is the "frantic counters"
-        anti-pattern, and it would fight the reveal above. `countUp` jumps straight to the target under
-        reduced motion, so this needs no guard of its own.{% endcomment %}
-        var tally = document.querySelector('.pp-bhead__tally [data-countup]');
-        if (tally && window.PlatPursuit && PlatPursuit.countUp) {
-            PlatPursuit.countUp(tally, 850);
-        }
+        {% comment %} The FILTER FORM needs no handler here. A `change` listener bound to each select
+        called `form.submit()`, which navigated -- and the delegated swap below fires on the same event,
+        so a filter change started an in-place fetch and then immediately abandoned it by reloading the
+        page. Filters looked like they worked because a reload does produce the right board; what was
+        lost was the swap animation the tabs get, and the reader's place in a board they were partway
+        down. The `<noscript>` button in the markup is what covers the JS-off path.
 
-        {% comment %}No `wireTablist` here: the strip is a NAV of links, not a tablist (see the markup).
-        Arrow-key roving is for a real tab widget, and the tabindex it applies made the boards you are not
-        on unreachable by Tab.{% endcomment %}
+        No `wireTablist` either: the strip is a NAV of links, not a tablist (see the markup). Arrow-key
+        roving is for a real tab widget, and the tabindex it applies made the boards you are not on
+        unreachable by Tab. {% endcomment %}
     })();
 </script>
 
@@ -349,23 +286,26 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
  */
 (function () {
     var page = document.querySelector('[data-lb-page]');
-    if (!page || !window.PlatPursuit) { return; }
+    if (!page || !window.PlatPursuit || !PlatPursuit.wireBoard) { return; }
 
     var XHR = { headers: { 'X-Requested-With': 'XMLHttpRequest' } };
-    var root = null;        // the current [data-lb-board]
-    var board = null;       // the live virtualBoard handle
+    var board = null;       // the live board handle
+    var root = null;        // the current [data-lb-board], for the slide
 
-    function rowsUrl(extra) {
-        var qp = new URLSearchParams({ tab: root.dataset.lbTab });
-        if (root.dataset.lbCountry) { qp.set('country', root.dataset.lbCountry); }
-        if (root.dataset.lbEdition) { qp.set('edition', root.dataset.lbEdition); }
-        Object.keys(extra).forEach(function (k) { qp.set(k, extra[k]); });
-        return root.dataset.lbRowsUrl + '?' + qp.toString();
+    // Which board is showing, read off the LIT CHIP rather than a data attribute on the board. The board
+    // shell is shared with badge and job detail, which have no tabs at all, so the tab is this page's
+    // business and not the shell's.
+    function activeTab() {
+        var chip = page.querySelector('[data-board].is-active');
+        return chip ? chip.dataset.board : null;
     }
 
-    function rowHeight() {
-        var wall = root.querySelector('[data-lb-wall]');
-        return parseFloat(getComputedStyle(wall).getPropertyValue('--lb-row-h')) || 62;
+    // Read from the DOM each time rather than captured: a swap replaces the strip, and a captured order
+    // would fall out of step with the order the tabs actually render in.
+    function tabOrder() {
+        return Array.prototype.map.call(page.querySelectorAll('[data-board]'), function (t) {
+            return t.dataset.board;
+        });
     }
 
     // The sticky chrome a jump must land below, measured live: the nav's height differs across
@@ -375,63 +315,53 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
     }
 
-    function viewerRank() {
-        var n = parseInt((root && root.dataset.lbViewerRank) || '', 10);
-        return n >= 1 ? n : 0;
-    }
-
+    // SCOPE is the page wrapper, not the board root: this surface puts the jump chip and the rank box on
+    // the control card ABOVE the board, and both are replaced by every swap. Badge and job detail keep
+    // theirs inside their fetched panel and scope to that.
     function mount() {
         if (board) { board.destroy(); board = null; }
         root = page.querySelector('[data-lb-board]');
-        if (!root) { return; }                  // an empty state came back; nothing to virtualize
-        board = PlatPursuit.virtualBoard({
-            list: root.querySelector('[data-lb-wall]'),
-            total: parseInt(root.dataset.lbTotal, 10) || 0,
-            rowSelector: '.lb-row',
-            pageSize: parseInt(root.dataset.lbPageSize, 10) || 50,
-            youRank: viewerRank(),          // marks your row wherever it is mounted
-            rowHeight: rowHeight,
-            chromeInset: chromeInset,
-            fetchRows: function (start, from, count) {
-                return fetch(rowsUrl({ range: start, count: count }), XHR).then(function (r) {
-                    if (!r.ok) { throw new Error(r.status); }
-                    return r.text();
-                });
-            },
-            onRender: function (localTop, localBottom, posOf) {
-                var chip = page.querySelector('[data-lb-jump]');
-                var rank = viewerRank();
-                if (!chip || !rank) { return; }
-                var H = rowHeight();
-                var top = (posOf(rank) - 1) * H;
-                // Which way the reader would travel to reach their own row, so the chip says where it
-                // goes rather than only that it exists.
-                chip.dataset.lbDir = top + H < localTop ? 'up' : (top > localBottom ? 'down' : 'here');
-            },
-        });
+        // Called even when `root` is null (the empty state): `wireBoard` still wires the rank box's
+        // submit and swallows it, so pressing Enter on an empty board cannot do a native GET to the bare
+        // path -- which would silently drop the reader's tab, country and edition.
+        board = PlatPursuit.wireBoard(root, { scope: page, chromeInset: chromeInset });
+        // The first screenful cascades in. This page is where the reveal collision was FOUND and where
+        // its replacement is documented, and it was the one surface not actually calling it.
+        PlatPursuit.boardEntrance(root);
+
+        // The Tally ticks ONCE per mount, on the board card's figure -- which is why it lives HERE and
+        // not in a boot block: a swap replaces the card, so a one-shot boot counted the board you
+        // arrived on and every board after it just appeared. There is no global `[data-countup]` boot on
+        // this site; every page wires its own. Deliberately not applied to the rows: 50 simultaneous
+        // counters is the "frantic counters" anti-pattern. `countUp` jumps straight to the target under
+        // reduced motion, so this needs no guard.
+        var tally = page.querySelector('.lb-boardcard__tally [data-countup]');
+        if (tally && PlatPursuit.countUp) { PlatPursuit.countUp(tally, 850); }
     }
 
-    // The tab order, for the directional slide. Read off the strip rather than hardcoded, so it cannot
-    // fall out of step with the order the tabs actually render in.
-    function tabOrder() {
-        return Array.prototype.map.call(page.querySelectorAll('[data-board]'), function (t) {
-            return t.dataset.board;
-        });
-    }
+    // Which swap is the live one. Two quick tab clicks, or a tab click and then a filter change, start
+    // two fetches -- and without a token whichever RESPONDS last wins the DOM and the URL, which need not
+    // be the one the reader asked for last. It fails silently: the URL and the board agree with each
+    // other, they just both describe the wrong board. The token also stops the first response stripping
+    // `.is-swapping` while the second is still in flight, which dropped the fade mid-swap.
+    var swapSeq = 0;
 
     function swap(params) {
-        var from = root ? root.dataset.lbTab : null;
+        var from = activeTab();
         var qp = new URLSearchParams(location.search);
         Object.keys(params).forEach(function (k) {
             if (params[k]) { qp.set(k, params[k]); } else { qp.delete(k); }
         });
         var qs = qp.toString();
         var href = location.pathname + (qs ? '?' + qs : '');
+        var seq = ++swapSeq;
 
         page.classList.add('is-swapping');
         fetch(href, XHR)
             .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
             .then(function (html) {
+                if (seq !== swapSeq) { return; }        // a later swap overtook this one
+
                 var fresh = new DOMParser().parseFromString(html, 'text/html')
                     .querySelector('[data-lb-page]');
                 if (!fresh) { throw new Error('no board in the response'); }
@@ -445,42 +375,27 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
                 // which is right, since changing a country is a refresh rather than lateral travel. It
                 // gets the fade the `is-swapping` class already gives it.
                 if (root && PlatPursuit.slideViewIn) {
-                    PlatPursuit.slideViewIn(root, from, root.dataset.lbTab, tabOrder());
+                    PlatPursuit.slideViewIn(root, from, activeTab(), tabOrder());
                 }
             })
-            .catch(function () { location.href = href; })           // honest fallback: just navigate
-            .finally(function () { page.classList.remove('is-swapping'); });
+            .catch(function () {
+                if (seq !== swapSeq) { return; }        // a superseded swap must not hijack the page
+                location.href = href;                   // honest fallback: just navigate
+            })
+            .finally(function () {
+                if (seq === swapSeq) { page.classList.remove('is-swapping'); }
+            });
     }
 
     mount();
 
-    // -- jump affordances -----------------------------------------------------------------------------
-    // Both land on the same `board.jump`. The viewer's rank is already computed for the header's standing
-    // strip, so the chip costs nothing extra; the box is the same motion aimed anywhere on the board.
-    // Delegated from the page, because a swap replaces both.
+    // Tabs and filters swap in place. Delegated from the page, because a swap replaces both. The jump
+    // affordances are NOT wired here -- `wireBoard` owns those, so all three boards jump identically.
     page.addEventListener('click', function (ev) {
-        var chip = ev.target.closest && ev.target.closest('[data-lb-jump]');
-        if (chip) {
-            ev.preventDefault();
-            if (board && viewerRank()) { board.jump(viewerRank()); }
-            return;
-        }
         var tab = ev.target.closest && ev.target.closest('[data-board]');
         if (!tab || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
         ev.preventDefault();
         swap({ tab: tab.dataset.board, page: '' });
-    });
-
-    page.addEventListener('submit', function (ev) {
-        var form = ev.target.closest && ev.target.closest('[data-lb-gotoform]');
-        if (!form) { return; }
-        ev.preventDefault();
-        var input = form.querySelector('input');
-        var rank = parseInt((input && input.value) || '', 10);
-        var total = root ? (parseInt(root.dataset.lbTotal, 10) || 0) : 0;
-        if (!(rank >= 1) || !board || !total) { return; }
-        board.jump(Math.min(rank, total));
-        if (input) { input.blur(); }        // dismiss the touch keyboard before the scroll starts
     });
 
     page.addEventListener('change', function (ev) {

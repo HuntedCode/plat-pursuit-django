@@ -1,0 +1,48 @@
+{% comment %} THE BOARD, shared by every surface that has one: Global Boards, badge detail's Ranks tab and
+job detail's Ranks tab.
+
+A VIRTUAL wall. The `<ol>` is a full-height spacer (total x --lb-row-h), so the page scrollbar spans the
+whole board and only the visible rows live in the DOM, placed absolutely by `PlatPursuit.virtualBoard`.
+No pager: pagination and a spacer are two answers to the same question, and this is the one that lets a
+reader move around a board freely.
+
+The FIRST window is server-rendered inside the spacer, so the board is there on arrival and on a no-JS
+read; every window after it comes from `rows_url`. The engine adopts these rows rather than re-fetching.
+
+WHY THIS IS ONE FILE. Three boards rendering their own shell is three sets of data attributes that must
+agree with one JS contract, and the failure is silent -- a board that omits `data-lb-page-size` does not
+break, it just fetches in the wrong granularity and shows gaps. Everything the client needs rides on the
+root as data, so the JS reads no constants of its own.
+
+Include it with `only`, so a caller's unrelated context cannot satisfy one of these by accident:
+
+    {% include 'trophies/partials/leaderboard_board.html' with
+       entries=rows total=total page_size=25 rows_url=... viewer_rank=my_rank
+       primary_label='stages' when_label='since' only %}
+{% endcomment %}
+<div class="lb-board" data-lb-board
+     data-lb-total="{{ total }}"
+     data-lb-page-size="{{ page_size }}"
+     data-lb-rows-url="{{ rows_url }}"
+     {% if rows_params %}data-lb-params="{{ rows_params }}"{% endif %}
+     data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}">
+
+    {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in the
+    row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden on
+    phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
+    <div class="lb-colhead" aria-hidden="true">
+        <span class="lb-colhead__rank">#</span>
+        <span class="lb-colhead__who">Hunter</span>
+        <span class="lb-colhead__figs">
+            <span>{{ primary_label }}</span>
+            {% if secondary_label %}<span>{{ secondary_label }}</span>{% endif %}
+            {% if when_label %}<span>{{ when_label }}</span>{% endif %}
+        </span>
+    </div>
+
+    <ol class="lb-wall lb-wall--virtual" data-lb-wall>
+        {% for entry in entries %}
+        {% include 'trophies/partials/leaderboard_row.html' with entry=entry only %}
+        {% endfor %}
+    </ol>
+</div>

@@ -150,9 +150,12 @@ def test_the_board_card_tally_counts_the_board_it_sits_above(client):
         assert resp.context['ranked_total'] == expected, (
             f'?tab={tab} header counted {resp.context["ranked_total"]}, board holds {expected}'
         )
-        # The header figure and the pager's total are the SAME value, not two reads that happen to match.
-        assert resp.context['ranked_total'] == resp.context['board'].paginator.count, (
-            f'?tab={tab}: the header and the pager are counting different populations'
+        # The visible figure and the SPACER are the same value, not two reads that happen to match. This
+        # used to compare against the paginator's count; the paginator went with the pager, and the
+        # spacer inherited its job -- `data-lb-total` is what sizes the scrollbar for the whole board, so
+        # a tally that disagrees with it is a board claiming one size and scrolling another.
+        assert f'data-lb-total="{expected}"' in resp.content.decode(), (
+            f'?tab={tab}: the tally and the virtual spacer are counting different populations'
         )
         # The figure lives in the BOARD CARD now -- it counts this board, and the page header is
         # section identity that does not change between tabs.
@@ -272,13 +275,21 @@ def test_the_window_honours_the_country_slice(client):
 def test_a_crafted_window_cannot_ask_for_the_whole_board(client):
     """`range` is an OFFSET straight into the board and `count` a LIMIT, so both are clamped: an unbounded
     range is a nine-figure OFFSET Postgres honours by walking every skipped row."""
-    from trophies.views.badge_views import LeaderboardRowsView
+    from trophies.views.board_helpers import MAX_COUNT, MAX_START
 
-    _ranked('Someone', plats=5, trophies=10)
+    # MORE than the ceiling, or `count=100000` returns everything there is and `<= MAX_COUNT` holds with
+    # the clamp deleted. This test was vacuous on one row for as long as it existed.
+    for i in range(MAX_COUNT + 20):
+        _ranked(f'H{i:03d}', plats=500 - i, trophies=5000 - i)
 
     huge = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'count': 100000})
     assert huge.status_code == 200
-    assert huge.content.decode().count('<li class="lb-row') <= LeaderboardRowsView.MAX_COUNT
+    assert huge.content.decode().count('<li class="lb-row') == MAX_COUNT
+
+    far = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': 10 ** 12})
+    assert far.status_code == 200
+    assert far.context['entries'] == []
+    assert MAX_START < 10 ** 12, 'the start clamp no longer bounds what this asks for' 
 
     for raw in ('abc', '-5', ''):
         resp = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': raw, 'count': raw})
@@ -430,11 +441,19 @@ def test_the_viewer_row_is_marked_client_side_not_rendered_in(client):
     _ranked('Other', plats=50, trophies=500)
     client.force_login(me.user)
 
-    body = client.get(URL).content.decode()
+    resp = client.get(URL)
+    body = resp.content.decode()
     rows = body[body.index('<ol class="lb-wall'):]
 
     assert 'is-you' not in rows, 'the viewer marker was rendered into the rows, which un-caches them'
-    assert 'youRank: viewerRank()' in body, 'the engine is not told which row is the viewer'
+    # The MARKUP contract, not the JS. The wiring moved into `PlatPursuit.wireBoard` (utils.js), which
+    # this page does not inline -- so asserting on a line of script here passed only while the script
+    # happened to live in this template, and would go vacuously green if the attribute were dropped.
+    #
+    # Read off the context rather than hardcoded: a literal 2 would keep passing if the attribute
+    # started rendering someone else's rank.
+    assert resp.context['my_rank'] == 2, 'the fixture no longer puts the viewer second'
+    assert 'data-lb-viewer-rank="2"' in body, 'the engine is not told which row is the viewer'
     # ...and the rows endpoint, which serves every window after the first, must stay impersonal too.
     window = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': 1, 'count': 50})
     assert 'is-you' not in window.content.decode()

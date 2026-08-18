@@ -1,4 +1,3 @@
-{% load humanize %}
 {% comment %} One job's board, fetched into job detail's Ranks tab on first activation.
 
 Split out of `job_detail.html` when the tabs became in-place (2026-08). Game detail's model: cheap panels
@@ -6,30 +5,16 @@ are server-rendered hidden, and only the EXPENSIVE one is fetched -- which is wh
 tab, not both" saving that the `?tab=` version got from a full page reload. A visitor who never opens
 Ranks never pays for it.
 
-The pager here is on borrowed time: the board is being replaced by the shared virtual-scrolling one, at
-which point prev/next goes with it. Kept as-is so this change is the CONTAINER only.
+VIRTUALIZED, on the shared shell, like every other board on the site. The prev/next pager that stood here
+is gone with it: a job board is the only per-entity board with no fuller surface to hand off to, so paging
+was the only way to reach row 300 at all, and it meant twelve clicks to get there. A spacer is jumped
+into directly.
 {% endcomment %}
-{% if board %}
-<ol class="lb-wall" data-lb-wall>
-    {% for entry in board %}
-    {% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
-    {% endfor %}
-</ol>
+{% if rows %}
+{% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='jobd' only %}
 
-{% comment %} Prev/next rather than a full paginator, and rather than nothing. A job board is the only
-per-entity board with no fuller surface to hand off to, so capping at 25 left a hunter ranked #300 told
-their rank in the header and permanently unable to reach the row it points at. {% endcomment %}
-{% if board_has_prev or board_has_next %}
-<nav class="jobd__pager" aria-label="Board pages">
-    {% if board_has_prev %}
-    <a class="jobd__pager-btn" href="?tab=ranks&amp;page={{ board_page|add:'-1' }}" rel="prev"><span aria-hidden="true">&larr;</span> Previous</a>
-    {% else %}<span class="jobd__pager-btn is-off" aria-hidden="true"><span>&larr;</span> Previous</span>{% endif %}
-    <span class="jobd__pager-at">Page {{ board_page|intcomma }}</span>
-    {% if board_has_next %}
-    <a class="jobd__pager-btn" href="?tab=ranks&amp;page={{ board_page|add:'1' }}" rel="next">Next <span aria-hidden="true">&rarr;</span></a>
-    {% else %}<span class="jobd__pager-btn is-off" aria-hidden="true">Next <span>&rarr;</span></span>{% endif %}
-</nav>
-{% endif %}
+{% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url viewer_rank=my_rank primary_label='XP' secondary_label='level' only %}
+
 {% else %}
 <div class="lb-empty">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>

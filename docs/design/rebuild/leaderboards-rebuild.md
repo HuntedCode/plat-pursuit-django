@@ -452,12 +452,44 @@ Each step leaves the site working.
 | 3 | ✅ Badge Points rename (labels) | Vocabulary fixed before new surfaces spread it |
 | 4 | ✅ Global Boards landing rebuilt (3 tabs, country filter, `.lb-*` component) | The hub landing |
 | 5 | ✅ Badge detail Ranks panel (`/badge-ranks/<slug>/`, lazy); `/leaderboards/badges/<slug>/` retired + 2 redirects repointed | Boards move to entities |
-| 6 | ✅ Badge Boards + Game Boards directories; hub sub-nav live | Discovery, on shipped machinery |
+| 6 | ~~Badge Boards + Game Boards directories; hub sub-nav live~~ **REMOVED in step 9** | — |
 | 7 | ✅ `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs, public) | New Browse surface |
-| 8 | ✅ Job Boards directory; sub-nav live with all four | Section complete |
+| 8 | ~~Job Boards directory; sub-nav live with all four~~ **REMOVED in step 9** | — |
+| 9 | ✅ Directories removed (2026-08); the three boards VIRTUALIZED onto one shared shell, row, jump bar, window parser and JS engine | Every board is the same board |
 
 Steps 1–2 are the performance work. **Finishing the cutover *is* the optimization** — it is not a
 prerequisite to it.
+
+---
+
+## 8. One board, three surfaces (2026-08)
+
+The three boards were each virtualized separately and had begun to diverge -- badge detail appended 25
+rows at a time behind a "show more", job detail had a prev/next pager, and only the Global Boards landing
+scrolled. All three now run the same pieces:
+
+| Piece | Where | What it owns |
+|---|---|---|
+| `PlatPursuit.virtualBoard` | `static/js/utils.js` | The ENGINE: spacer, absolute placement, eviction, jump |
+| `PlatPursuit.wireBoard` | `static/js/utils.js` | The WIRING: read the data attributes, build the rows URL, hook the jump chip and rank box |
+| `PlatPursuit.boardEntrance` | `static/js/utils.js` | The first screenful's cascade, in WAAPI |
+| `leaderboard_board.html` | partial | The shell: root, data attributes, column headers, virtual wall |
+| `leaderboard_row.html` | partial | One row |
+| `leaderboard_rows.html` | partial | One WINDOW: bare rows, no wrapper |
+| `leaderboard_jumpbar.html` | partial | Jump-to-me + the rank box |
+| `board_helpers.window_params` | `trophies/views/` | `?range=` / `?count=`, clamped at both ends |
+| `board_helpers.PAGE_SIZE` | `trophies/views/` | 50, once. It was declared three times |
+
+**Every board endpoint answers two requests, told apart by the PRESENCE of `range`:** no `range` builds
+the full panel; `?range=N` returns bare rows for display positions `[N, N+count)`. The value is not what
+distinguishes them -- junk `range` is still a window request, because the caller asked for rows and
+splicing a jump bar into the middle of a wall is worse than an off-by-one.
+
+Game detail's board **does** use `window_params` and `MAX_START` (it was a fourth hand-rolled copy of
+the clamp, with a looser start bound), but **is deliberately NOT on the shared row.** It runs the same engine, but its rows carry
+per-tier trophy counts, a completion bar and three board-kind variants (progress / speed / playtime) that
+the shared row has no slot for. Folding it in would mean growing the shared row four ways to serve one
+caller. Uniformity across the other three is guarded by `tests/engine/test_board_uniformity.py`.
 
 ---
 
@@ -502,6 +534,38 @@ prerequisite to it.
   DB-side UPDATE.
 - **`earners_ranks()` is len(held) queries by its own docstring.** Fine for a page of medallions, not for
   a directory. Use the windowed query.
+- **`staggerReveal` and a virtualized wall are incompatible, and the collision is silent.** The helper
+  adds `.pp-reveal` to the container PERMANENTLY, and `.pp-reveal .lb-row { opacity: 0 }` holds every row
+  invisible until an IntersectionObserver grants `.is-revealed`. A virtual wall mounts and evicts rows by
+  scroll position, so they never reach that observer -- the board renders a full-height spacer of blank
+  space. This shipped twice (badge detail's "show more", then the Global Boards wall) before the boards
+  moved to `boardEntrance`, which uses WAAPI and leaves no class behind to outlive its frames.
+- **A board's page size must be read off the DOM, never as a JS constant.** `wireBoard` takes every
+  number from `data-lb-*`. A client that pages by 25 against a server that pages by 50 does not error --
+  it shows GAPS in the rows, which reads as missing hunters rather than as a bug.
+- **A row without `data-lb-rank` is invisible on a virtual wall.** The engine places rows by it. The row
+  is spliced in successfully and then positioned nowhere.
+- **Test the MOUNT, not just the markup.** A board is inert until something calls `wireBoard` on it, and
+  the failure looks like a working page whose scrolling never loads anything. Job detail's switcher was
+  once written into `{% block extra_js %}` -- a block `base.html` does not declare -- and Django discards
+  an undeclared child block with no error and no warning, so the script never reached the browser at all.
+- **Assert the call, not the name.** These pages carry an `if (!PlatPursuit.wireBoard) return;` capability
+  guard, so a test looking for the bare name passes on the guard and goes vacuously green the moment the
+  call is deleted. Caught by a mutation run, not by reading.
+- **An offset cap only does something if it sits BELOW the board.** `OFFSET n` costs
+  `min(n, board_size)` rows walked, because the scan stops when the rows run out. A cap set "past any
+  real board" is by construction a cap that never binds — which is what briefly replaced badge's 10,000
+  and job's 9,975 with 100,000,000, making both boards *cheaper to attack than before the rebuild*.
+  `MAX_START` is 1,000,000: every board is bounded by the linked-profile count, so that is roughly 20x
+  the current population — high enough that no real reader meets it, low enough to still be a bound. It
+  cannot go back to 10,000: a hunter ranked #40,000 has to be able to reach their own row.
+- **A clamp test that only asserts `CONSTANT < some_literal` pins nothing.** Three of them shipped that
+  way and none would have failed on the change above. A real one needs a board LARGER than the ceiling
+  and a range INSIDE it, so the clamp is observed rather than assumed — an over-large request against a
+  small board returns an empty window whether or not any clamping happens.
+- **Test the second response mode against the FIRST one's gates.** The dormant-series 404 sat above the
+  `?range=` branch and was only ever tested on the full-panel path, so hoisting that branch for
+  performance would have served unreleased boards with the suite green.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 

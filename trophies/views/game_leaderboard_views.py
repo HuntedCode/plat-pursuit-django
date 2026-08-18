@@ -22,6 +22,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from trophies.views.board_helpers import MAX_START, clamped_int, window_params
 from trophies.models import Game
 from trophies.services import game_leaderboard_service as svc
 
@@ -52,13 +53,19 @@ class GameLeaderboardView(View):
         # Number typeahead: preview the hunter at a specific rank -> JSON. The client already holds the total
         # (data-lb-total), so it never asks for a rank past the board -- no COUNT needed here.
         if request.GET.get('at') is not None:
-            m = board.row_at_rank(self._int(request.GET.get('at'), 0))
+            # Bounded EXPLICITLY. It leaned on `_int`'s default ceiling, which is the kind of bound that
+            # disappears the moment somebody passes an argument -- and `at` is a direct offset into the
+            # board (`row_at_rank` slices `[rank - 1: rank]` with no cap of its own).
+            m = board.row_at_rank(clamped_int(request.GET.get('at'), 0, lo=1, hi=MAX_START))
             return JsonResponse({'players': [self._player_json(m)] if m else []})
 
         # A virtual window: rows at a display range, numbered from the caller-supplied canonical rank.
         if request.GET.get('range') is not None:
-            start = self._int(request.GET.get('range'), 1)
-            count = self._int(request.GET.get('count'), svc.PAGE_SIZE, hi=200)
+            # The SHARED parser, same as the other three boards. This was a fourth hand-rolled copy whose
+            # only real difference was a looser start bound (100M, i.e. "walk the whole board"); the
+            # count ceiling already matched at 200.
+            start, count = window_params(request, svc.PAGE_SIZE)
+            # `from` is display-only numbering, so it needs no ceiling of its own.
             from_rank = self._int(request.GET.get('from'), start)
             rows = board.page_range(start, count)
             return self._rows(request, game, opts, rows, from_rank, step, profile, board.kind)
@@ -92,11 +99,9 @@ class GameLeaderboardView(View):
         return profile if profile and profile.is_linked else None
 
     @staticmethod
-    def _int(raw, default, lo=1, hi=100_000_000):
-        try:
-            return max(lo, min(int(raw), hi))
-        except (TypeError, ValueError):
-            return default
+    def _int(raw, default, lo=1, hi=None):
+        """Thin alias for the shared parser, kept because `from` wants a bound-free clamp."""
+        return clamped_int(raw, default, lo=lo, hi=hi)
 
     @staticmethod
     def _player_json(m):

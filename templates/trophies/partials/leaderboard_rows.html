@@ -7,5 +7,5 @@ every window after it -- both through `OverallBadgeLeaderboardsView.board_window
 cannot drift between the first screen and the rest of the same board.
 {% endcomment %}
 {% for entry in entries %}
-{% include 'trophies/partials/leaderboard_row.html' with entry=entry %}
+{% include 'trophies/partials/leaderboard_row.html' with entry=entry only %}
 {% endfor %}

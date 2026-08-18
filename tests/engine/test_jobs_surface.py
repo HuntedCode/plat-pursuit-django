@@ -159,10 +159,11 @@ def test_the_page_never_builds_the_board(client):
 
     # The header tally and the viewer's rank ARE on the page -- they sit above the switcher and show on
     # both tabs -- so ProfileJobXP is expected. What must NOT be there is the board's own row read.
-    from trophies.views.career_views import JobDetailView
-    # Derived from BOARD_SIZE rather than hardcoded: at 25 the look-ahead makes the board read `LIMIT 26`,
-    # and a literal would go vacuously true (never matching, always passing) the day BOARD_SIZE changed.
-    board_read = f'LIMIT {JobDetailView.BOARD_SIZE + 1}'
+    from trophies.views.career_views import JobRanksPanelView
+    # Derived from PAGE_SIZE rather than hardcoded, or a literal would go vacuously true (never matching,
+    # always passing) the day the window size changed. There is no `+ 1` any more: the look-ahead row
+    # existed to answer "is there a next page", and a virtualized board asks a COUNT instead.
+    board_read = f'LIMIT {JobRanksPanelView.PAGE_SIZE}'
 
     assert 'trophies_profilejobxp' in sql, 'the header hunter tally is missing'
     assert board_read not in sql, 'the page built the board rows despite shipping an empty Ranks panel'
@@ -197,36 +198,40 @@ def test_a_signed_OUT_visitor_gets_no_standing_block_at_all(client):
     assert 'Your standing' not in body and 'Not ranked yet' not in body
 
 
-def test_the_board_pages_past_the_first_slice(client):
-    """A job board is the only per-entity board with no fuller surface to hand off to, so capping at 25
-    left a hunter ranked #26 told their rank in the header and permanently unable to reach the row."""
+def test_the_board_serves_windows_past_the_first(client):
+    """A job board is the only per-entity board with no fuller surface to hand off to, so a hunter ranked
+    #60 has to be reachable from this panel or not at all. It used to be a prev/next pager, which reached
+    them in three clicks; it is now a virtualized wall, which reaches them by scrolling or by the rank
+    box, and the panel serves each window as bare rows.
+    """
     job = _job('archivist', 'Archivist')
-    for i in range(27):
+    for i in range(60):
         _xp(job, f'Hunter{i:02d}', 1000 - i)      # descending, so rank order == creation order
 
-    first = client.get(reverse('job_ranks_panel', args=['archivist']))
-    assert len(first.context['board']) == 25
-    assert first.context['board_has_next'] is True
-    assert first.context['board_has_prev'] is False
-    assert first.context['board'][0]['rank'] == 1
+    panel = client.get(reverse('job_ranks_panel', args=['archivist']))
+    assert len(panel.context['rows']) == 50, 'the first window is not a full page'
+    assert panel.context['rows'][0]['rank'] == 1
+    assert panel.context['total'] == 60, 'the spacer would be sized to the window, not the board'
 
-    second = client.get(reverse('job_ranks_panel', args=['archivist']), {'page': 2})
-    assert len(second.context['board']) == 2
-    assert second.context['board_has_next'] is False
-    assert second.context['board_has_prev'] is True
-    # `page()` numbers by SLOT, so page 2 must continue the count rather than restart it.
-    assert second.context['board'][0]['rank'] == 26, 'page 2 restarted the ranks at #1'
-    body = second.content.decode()
-    assert 'Hunter25' in body and 'Hunter00' not in body
+    # The second window: ROWS ONLY, no chrome -- the virtualizer splices these into its own spacer, so a
+    # wrapper here would be parsed and discarded.
+    window = client.get(reverse('job_ranks_panel', args=['archivist']), {'range': 51, 'count': 50})
+    body = window.content.decode()
+    assert body.count('<li class="lb-row') == 10
+    assert '<ol' not in body and 'lb-jumpbar' not in body, 'the window carried chrome'
+    # `page()` numbers by SLOT, so a window starting at 51 must continue the count rather than restart.
+    assert 'Hunter50' in body and 'Hunter00' not in body
+    assert len(window.context['entries']) == 10
+    assert window.context['entries'][0]['rank'] == 51, 'the second window restarted the ranks at #1'
 
 
-def test_a_junk_page_number_falls_back_to_the_first_page(client):
+def test_a_junk_range_falls_back_to_the_first_window(client):
     job = _job('archivist', 'Archivist')
     _xp(job, 'Someone', 500)
     for raw in ('0', '-3', 'abc', ''):
-        resp = client.get(reverse('job_ranks_panel', args=['archivist']), {'page': raw})
-        assert resp.status_code == 200
-        assert resp.context['board_page'] == 1, f'page={raw!r} did not fall back'
+        resp = client.get(reverse('job_ranks_panel', args=['archivist']), {'range': raw})
+        assert resp.status_code == 200, f'range={raw!r} was not handled'
+        assert resp.context['entries'][0]['rank'] == 1, f'range={raw!r} did not fall back'
 
 
 def test_the_standing_chip_is_on_BOTH_tabs(client):
@@ -259,39 +264,58 @@ def test_an_unverified_account_is_not_promised_a_board_it_cannot_enter(client):
     assert 'Your standing' not in body and 'Not ranked yet' not in body
 
 
-def test_a_board_of_exactly_one_page_does_not_offer_a_next(client):
-    """`len(rows) == BOARD_SIZE` is wrong at exact multiples of the page size: a 25-entrant board offered
-    "Next", and page 2 had no rows, so it rendered "Nobody has banked XP here yet" -- with no pager on it,
-    because the pager lives inside `{% if board %}`. Browser Back was the only way out of a board that was
-    not empty at all. A look-ahead row answers it without a COUNT.
+def test_a_crafted_window_cannot_ask_for_the_whole_board(client):
+    """`range` is an OFFSET straight into the board and `count` a LIMIT, and this is a PUBLIC fragment.
+    Both are clamped by the shared parser, so this asserts the panel goes THROUGH it.
+
+    Built on a board LARGER than `MAX_COUNT` and a `range` INSIDE it, so the clamps are observed rather
+    than assumed -- the first version asked past the end of a 3-row board, where an empty response is
+    what you get with or without a parser.
     """
-    job = _job('archivist', 'Archivist')
-    for i in range(25):                                  # EXACTLY one page
-        _xp(job, f'Hunter{i:02d}', 1000 - i)
-
-    first = client.get(reverse('job_ranks_panel', args=['archivist']))
-    assert len(first.context['board']) == 25
-    assert first.context['board_has_next'] is False, 'a full first page offered a next page that is empty'
-
-    # ...and one more entrant flips it, so the look-ahead is actually being read.
-    _xp(job, 'Hunter25', 500)
-    again = client.get(reverse('job_ranks_panel', args=['archivist']))
-    assert again.context['board_has_next'] is True
-    assert len(again.context['board']) == 25, 'the look-ahead row leaked into the rendered page'
-
-
-def test_a_huge_page_number_is_clamped_rather_than_scanned(client):
-    """`?page=99999999` is a public URL that becomes a nine-figure OFFSET, and Postgres walks every
-    skipped row to honour it. The page renders empty either way, so the cap costs a reader nothing."""
-    from trophies.views.career_views import JobDetailView
+    from trophies.views.board_helpers import MAX_COUNT, MAX_START
 
     job = _job('archivist', 'Archivist')
-    _xp(job, 'Someone', 500)
+    for i in range(MAX_COUNT + 20):
+        _xp(job, f'Hunter{i:03d}', 10000 - i)
 
-    resp = client.get(reverse('job_ranks_panel', args=['archivist']), {'page': 99999999})
+    greedy = client.get(reverse('job_ranks_panel', args=['archivist']), {'range': 1, 'count': 10 ** 6})
+    assert greedy.status_code == 200
+    assert greedy.content.decode().count('<li class="lb-row') == MAX_COUNT, (
+        'the count ceiling was not applied -- a crafted URL hydrated more than 200 profiles in one read'
+    )
 
-    assert resp.status_code == 200
-    assert resp.context['board_page'] == JobDetailView.MAX_PAGE
+    far = client.get(reverse('job_ranks_panel', args=['archivist']), {'range': 10 ** 12})
+    assert far.status_code == 200
+    assert far.context['entries'] == []
+    assert MAX_START < 10 ** 12, 'the start clamp no longer bounds what this asks for'
+
+
+def test_the_seam_between_windows_neither_repeats_nor_skips(client):
+    """The off-by-one that REPLACED the old off-by-one. The pager had a look-ahead row and two tests
+    around exact multiples of the page size; those went with it, and nothing then covered the boundary
+    the windows have: a board of exactly PAGE_SIZE, and the first row past the end.
+    """
+    from trophies.views.career_views import JobRanksPanelView
+    n = JobRanksPanelView.PAGE_SIZE
+
+    job = _job('archivist', 'Archivist')
+    for i in range(n):                                    # EXACTLY one window
+        _xp(job, f'Hunter{i:03d}', 10000 - i)
+
+    panel = client.get(reverse('job_ranks_panel', args=['archivist']))
+    assert len(panel.context['rows']) == n
+    assert panel.context['total'] == n
+
+    # One past the end: empty, not a wrapped or repeated row.
+    past = client.get(reverse('job_ranks_panel', args=['archivist']), {'range': n + 1})
+    assert past.context['entries'] == [], 'the window past the last row was not empty'
+
+    # ...and one MORE entrant makes that same range the real 51st row, so the boundary is exercised in
+    # both directions rather than only where it happens to be empty.
+    _xp(job, 'Hunter999', 1)
+    now = client.get(reverse('job_ranks_panel', args=['archivist']), {'range': n + 1})
+    assert len(now.context['entries']) == 1
+    assert now.context['entries'][0]['rank'] == n + 1, 'the seam repeated or skipped a rank'
 
 
 def test_the_tabs_are_a_real_tablist_over_real_panels(client):
@@ -317,7 +341,7 @@ def test_the_tabs_are_a_real_tablist_over_real_panels(client):
 
 def test_an_old_tab_ranks_bookmark_still_opens_the_board(client):
     """`?tab=` was the switching mechanism and is now only an entry point. It has to keep working: it is
-    what old bookmarks carry and what the board's own pager links use."""
+    what old bookmarks carry and what an old bookmark or a shared link carries."""
     job = _job('archivist', 'Archivist')
     _xp(job, 'Someone', 500)
 

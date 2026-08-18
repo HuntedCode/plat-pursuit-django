@@ -1,0 +1,39 @@
+{% comment %} The two ways to move around a board you cannot page through, shared by every board.
+
+Jump-to-me reuses a rank the surface already shows, so it costs nothing; the rank box is the same motion
+aimed anywhere. Both are ENHANCEMENTS over a wall that scrolls perfectly well without them, which is why
+neither is a link and the box does nothing on submit without JS.
+
+`novalidate`, and it is load-bearing. `max` is a useful HINT (the spinner stops at the end of the board),
+but with validation on, implicit submission of a larger number NEVER FIRES the submit event -- the
+browser shows its own bubble and the JS clamp that exists to land you at the end of the board is
+unreachable code. Keeping the attribute and turning validation off gives the hint without the dead end.
+
+The visible label is the accessible NAME. It carried an `aria-label` too ("Jump to a rank on this
+board"), which wins the name computation outright -- so the accessible name was a string that appears
+nowhere on screen, and a voice-control user saying the words they can SEE ("Go to rank") matched nothing.
+That is WCAG 2.5.3. The label is hidden on narrow screens with `.sr-only` rather than `display: none`,
+so the name survives where the text does not.
+
+`id_prefix` namespaces the input's id and its label's `for`. Duplicate ids are invalid HTML and break the
+association, so a surface that ever grows a second board passes a different prefix rather than
+discovering this at that point.
+{% endcomment %}
+{% load humanize %}
+<div class="lb-jumpbar">
+    {% if my_rank %}
+    <button type="button" class="lb-jump" data-lb-jump>
+        <svg class="lb-jump__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+        You&rsquo;re <b class="pp-tally">#{{ my_rank|intcomma }}</b>
+    </button>
+    {% endif %}
+    <form class="lb-goto" data-lb-gotoform novalidate>
+        <label class="lb-goto__lbl" for="{{ id_prefix|default:'lb' }}-goto-input">Go to rank</label>
+        <input id="{{ id_prefix|default:'lb' }}-goto-input" type="number" inputmode="numeric" min="1" max="{{ total }}"
+               placeholder="#">
+    </form>
+    {% comment %} Jumping is a scroll, and a scroll is invisible to a screen reader -- the old "show
+    more" had a live region for exactly this reason and it went with the button. Written by `wireBoard`.
+    {% endcomment %}
+    <p class="lb-goto__said sr-only" role="status" aria-live="polite" data-lb-said></p>
+</div>

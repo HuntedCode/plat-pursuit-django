@@ -22,7 +22,6 @@ rank_of / earners_rank return a profile's LIVE position (the value shown on the 
 indexed reads, whale-safe. rows(...) returns a page of (profile_id, value) for rendering; `hydrate()` turns a
 page of ids into display rows in ONE query.
 """
-import math
 from collections import defaultdict
 
 from django.db.models import Count, OuterRef, Q, Subquery
@@ -548,52 +547,6 @@ def earners_rank(profile_id, group_badge_id, country=None):
     if mine is None:
         return None      # doesn't hold it, holds it unlinked, or not in this country -- not on this board
     return qs.filter(_ahead_q(EARNERS_KEYS, {'earned_at': mine, 'profile_id': profile_id})).count() + 1
-
-
-# ------------------------------------------------------------------ page assembly ------------------------
-
-class BoardPaginator:
-    """Template-compatible paginator over a COUNT, not a queryset -- boards are keyset pages, not slices of
-    an evaluated list. Duck-types Django's Paginator for the shared pagination partial.
-
-    Carried over from the Redis service (RedisPaginator) unchanged in behaviour, so the templates neither
-    know nor care which backend produced the page."""
-
-    def __init__(self, total_count, per_page):
-        self.count = total_count
-        self.per_page = per_page
-        self.num_pages = max(1, math.ceil(total_count / per_page))
-
-
-class BoardPage:
-    """Template-compatible page object (see BoardPaginator)."""
-
-    def __init__(self, object_list, number, paginator):
-        self.object_list = object_list
-        self.number = number
-        self.paginator = paginator
-
-    def __iter__(self):
-        return iter(self.object_list)
-
-    def __len__(self):
-        return len(self.object_list)
-
-    @property
-    def has_previous(self):
-        return self.number > 1
-
-    @property
-    def has_next(self):
-        return self.number < self.paginator.num_pages
-
-    @property
-    def previous_page_number(self):
-        return self.number - 1
-
-    @property
-    def next_page_number(self):
-        return self.number + 1
 
 
 def entry(hydrated, profile_id, rank):

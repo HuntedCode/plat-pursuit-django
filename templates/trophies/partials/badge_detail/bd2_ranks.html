@@ -1,5 +1,5 @@
 {% load humanize %}
-{% comment %} The series board, fetched into badge detail's Ranks section.
+{% comment %} The series board, fetched into badge detail's Ranks tab.
 
 ONE board, not two. Earners and chasers were separate leaderboards at different grains -- earners per
 EDITION, progress per SERIES -- and they merge at series grain because that is what progress already uses.
@@ -10,8 +10,10 @@ rung of chasers with whoever got there first ahead.
 series stacks most hunters on 1/3 or 2/3; without the date those large ties would sort by profile id and
 read as unranked.
 
-Rows reuse the `.lb-row` component from Global Boards rather than a second row treatment -- a leaderboard
-row is a leaderboard row, and the drift between two of them is exactly what this rebuild removes.
+VIRTUALIZED, on the shared shell, like every other board on the site. The "show more" button that stood
+here is gone with it: 25 rows a click could not reach row 3,000 of a popular series in any reasonable
+number of clicks, so a hunter told "you are #3,140" in this very panel still could not see the row that
+number points at. A spacer can be jumped into directly.
 {% endcomment %}
 
 {% if rows %}
@@ -31,29 +33,9 @@ row is a leaderboard row, and the drift between two of them is exactly what this
     {% endif %}
 </div>
 
-<ol class="lb-wall" data-lb-wall>
-    {% include 'trophies/partials/badge_detail/bd2_ranks_rows.html' %}
-</ol>
+{% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='bd2' only %}
 
-{% if has_more %}
-{% comment %} A "show more" that APPENDS, not a link and not a paginator. The comment that stood here
-described a link to a full board page -- which does not exist and deliberately does not: `/leaderboards/
-badges/<slug>/` was replaced by this panel, on the principle that boards live on the thing they rank. So
-the promise was unkeepable and the panel simply stopped at 25, telling a hunter their rank in the same
-breath as making the row it points at unreachable.
-
-Appending in place, rather than prev/next links: this section is lazily fetched into the middle of badge
-detail, and a link would reload the page and lose the reader's place in it. {% endcomment %}
-<div class="bd2-ranks__more">
-    <button type="button" class="bd2-ranks__more-btn" data-ranks-more="{{ next_offset }}">
-        Show more
-    </button>
-    {% comment %} Appending 25 rows is silent to a screen reader without this -- the house pattern for
-    every other load-more on the site (trophies_panel, activity_sessions, games_results). It doubles as
-    the focus target when the button removes itself at the end of the board. {% endcomment %}
-    <p class="bd2-ranks__status" role="status" aria-live="polite" data-ranks-status></p>
-</div>
-{% endif %}
+{% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url viewer_rank=my_rank primary_label='stages' when_label='since' only %}
 
 {% else %}
 <div class="lb-empty">

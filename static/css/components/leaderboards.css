@@ -99,24 +99,24 @@
 }
 
 /* ---- The wall -------------------------------------------------------------------------------------- */
-/* Two walls, one row. The plain wall is the flow list every fetched panel still uses; the VIRTUAL wall
-   is a full-height spacer whose rows the engine places absolutely, so the page scrollbar spans the whole
-   board and jumping is only a scroll position. A board opts in by adding `--virtual`; nothing else about
-   the row changes. */
+/* ONE wall now. It was two -- a flow list for the fetched panels and a `--virtual` spacer for the
+   landing -- and the flow half died when badge detail and job detail were virtualized too. Its
+   `display: flex` rules were already being overridden by `--virtual` on every board that rendered, so
+   they are gone; `--lb-row-h` stays here because it is the row PITCH the engine reads, and it belongs on
+   the container whose breakpoints change it.
+
+   `--virtual` is kept as a separate class rather than folded in. It marks an opted-in behaviour with a
+   real requirement (the engine must be mounted, or the rows stack on top of each other at top: 0), and
+   a board that renders the class without the mount is a bug worth being able to see in the markup. */
 .lb-wall {
     list-style: none; margin: 0; padding: 0;
-    display: flex; flex-direction: column; gap: 6px;
     --lb-row-h: 62px;
 }
 @media (min-width: 768px) { .lb-wall { --lb-row-h: 68px; } }
-.lb-wall--virtual { display: block; position: relative; gap: 0; }
+.lb-wall--virtual { display: block; position: relative; }
 .lb-wall--virtual .lb-row { position: absolute; left: 0; right: 0; }
 /* `.is-found` (the jump landing) and `.is-you` (the persistent marker) are defined together further
    down, so the way they stack on the same row is visible in one place. */
-@media (prefers-reduced-motion: no-preference) {
-    .pp-reveal .lb-row { opacity: 0; }
-    .pp-reveal .lb-row.is-revealed { opacity: 1; }
-}
 
 /* FIXED HEIGHT, because the wall virtualizes: `PlatPursuit.virtualBoard` sizes its spacer as
    `total x --lb-row-h` and places every row absolutely, so it has to know the height up front.
@@ -286,31 +286,6 @@
 /* "Not on this board yet" is an ANSWER, not an alert -- it sits in the same slot as the rank and reads
    quieter than it, so a hunter who is ranked still sees the accent land on their number. */
 .bd2-ranks__mine--none { color: var(--pp-text-mute); }
-.bd2-ranks__more { margin-top: 10px; text-align: center; }
-.bd2-ranks__more-btn {
-    font: inherit; cursor: pointer;
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-    /* min-height, not bigger type: this is the ONLY way to read past row 25, so it is a primary control
-       and takes the 44px target the design system asks for. The label stays small; the box does not. */
-    min-height: 44px; padding: 7px 20px; border-radius: 999px;
-    color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
-}
-@media (hover: hover) {
-    .bd2-ranks__more-btn:hover:not(:disabled) {
-        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-        color: var(--pp-text);
-    }
-}
-.bd2-ranks__more-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.bd2-ranks__more-btn:disabled { opacity: 0.6; cursor: default; }
-/* The live region. Visible text, not sr-only: "25 more hunters loaded" is useful to everyone, and it is
-   also the focus target when the button removes itself at the end of the board. */
-.bd2-ranks__status {
-    margin-top: 6px; min-height: 1em; font-size: 11px; color: var(--pp-text-mute);
-}
-.bd2-ranks__status:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { .bd2-ranks__more-btn { transition: none; } }
 
 /* Loading + failure. The spinner is a real state, not a placeholder: this section is fetched, so it can
    genuinely be pending -- and it can genuinely fail, which must SAY so rather than spin forever. */
@@ -433,35 +408,6 @@
 }
 .jobd__more { margin-top: 10px; text-align: center; font-size: 11px; color: var(--pp-text-mute); }
 
-/* Board pager. Prev/next only -- a job board is browsed outward from the top, not jumped around in, and
-   a numbered paginator on a board of thousands is a row of numbers nobody presses. The disabled ends stay
-   RENDERED rather than removed so the middle label does not slide sideways between pages. */
-.jobd__pager {
-    /* `wrap` so a 4-digit page number on a 375px screen reflows instead of overflowing. Three items
-       measure ~215px today, so it never wraps in practice; the property is the guard, not the layout. */
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px;
-    margin-top: 14px; font-size: 11px;
-}
-.jobd__pager-btn {
-    /* Same reasoning as .bd2-ranks__more-btn: paging is the only way through the board, so these are
-       primary controls at the 44px target rather than secondary ones allowed to be smaller. */
-    display: inline-flex; align-items: center; min-height: 44px;
-    padding: 6px 14px; border-radius: 999px; text-decoration: none; white-space: nowrap;
-    font-weight: 700; letter-spacing: 0.04em;
-    color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
-}
-@media (hover: hover) {
-    .jobd__pager-btn:hover {
-        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-        color: var(--pp-text);
-    }
-}
-.jobd__pager-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.jobd__pager-btn.is-off { opacity: 0.35; }
-@media (hover: hover) { .jobd__pager-btn.is-off:hover { border-color: var(--pp-border); color: var(--pp-text-dim); } }
-.jobd__pager-at { color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-@media (prefers-reduced-motion: reduce) { .jobd__pager-btn { transition: none; } }
 
 /* ---- Pager ----------------------------------------------------------------------------------------- */
 /* Rebuilt from the legacy DaisyUI partial (2026-08 audit). The pill deliberately reuses `.lb-mine__row`'s
@@ -696,6 +642,12 @@
     .lb-controls .lb-filters + .lb-boardcard { align-items: center; gap: 4px 10px; margin-top: 10px; padding-top: 10px; }
     .lb-controls .lb-boardcard__name { font-size: 0.95rem; }
     /* The jump chip and the rank box fit beside each other; the label is the part that does not. */
-    .lb-controls .lb-goto__lbl { display: none; }
+    /* Visually hidden, NOT `display: none`. The label is the input's accessible NAME (there is no
+       `aria-label` any more, deliberately -- see the partial), so removing it from the box must not
+       remove it from the accessibility tree. */
+    .lb-controls .lb-goto__lbl {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+    }
     .lb-controls .lb-jumpbar { margin-top: 8px; }
 }

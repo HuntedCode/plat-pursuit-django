@@ -173,7 +173,13 @@ def test_the_panel_hides_a_dormant_series_from_the_public(client):
     series = BadgeSeriesFactory(series_slug='unreleased', name='Unreleased')
     GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='dg'), is_live=False)
 
-    assert client.get(reverse('badge_ranks_panel', args=[series.series_slug])).status_code == 404
+    # BOTH response modes. The gate runs before the `?range=` branch, and that ordering is the entire
+    # protection: hoisting the window branch above it -- a plausible "make the hot path cheap" refactor
+    # -- would serve an unreleased board to anyone who guessed the slug, with every other test green.
+    # Only the full-panel path was pinned when the second mode was added.
+    for params in ({}, {'range': 1}, {'range': 51, 'count': 50}):
+        assert client.get(reverse('badge_ranks_panel', args=[series.series_slug]),
+                          params).status_code == 404, f'a dormant series served its board for {params!r}'
 
 
 def test_staff_can_still_preview_a_dormant_series_panel(client):
@@ -217,72 +223,87 @@ def test_a_signed_out_visitor_is_told_nothing_about_a_standing_they_cannot_have(
     assert 'Not on this board yet' not in body and 'You are' not in body
 
 
-def test_the_board_can_be_read_past_the_first_slice(client):
+def test_the_board_can_be_read_past_the_first_window(client):
     """It stopped dead at 25 under a comment promising a link to a full board -- a page that does not
     exist and deliberately does not, since this panel REPLACED it. So the panel told a hunter their rank
     and in the same breath made the row it points at unreachable.
+
+    The "show more" button that first fixed it is gone too: 25 rows a click cannot reach row 3,000 of a
+    popular series in any reasonable number of clicks. The board is virtualized, and this endpoint serves
+    each window of it.
     """
     _renderable('deep', 'Deep')
-    for i in range(27):
+    for i in range(60):
         _standing('deep', f'Hunter{i:02d}', bp=9900 - i, on=dt.date(2025, 1, 1))
 
     first = client.get(reverse('badge_ranks_panel', args=['deep']))
     body = first.content.decode()
-    assert first.context['has_more'] is True
-    assert first.context['next_offset'] == 25
-    assert 'data-ranks-more="25"' in body
-    assert 'Hunter00' in body and 'Hunter26' not in body
+    assert len(first.context['rows']) == 50, 'the first window is not a full page'
+    assert first.context['total'] == 60, 'the spacer would be sized to the window, not the board'
+    assert 'data-lb-total="60"' in body
+    assert 'Hunter00' in body and 'Hunter59' not in body
 
-    more = client.get(reverse('badge_ranks_panel', args=['deep']), {'offset': 25})
-    tail = more.content.decode()
-    # ROWS ONLY -- the meta line and the button must not be re-emitted into the middle of the list.
-    assert 'Hunter25' in tail and 'Hunter26' in tail
-    assert 'bd2-ranks__meta' not in tail and 'data-ranks-more' not in tail
+    window = client.get(reverse('badge_ranks_panel', args=['deep']), {'range': 51, 'count': 50})
+    tail = window.content.decode()
+    # ROWS ONLY -- the virtualizer splices these into its own spacer, so a wrapper or any chrome here
+    # would be parsed and discarded.
+    assert tail.count('<li class="lb-row') == 10
+    assert 'bd2-ranks__meta' not in tail and '<ol' not in tail and 'lb-jumpbar' not in tail
+    assert 'Hunter50' in tail and 'Hunter00' not in tail
     # `page()` numbers by SLOT, so the continuation must not restart at #1.
-    assert more.context['rows'][0]['rank'] == 26
+    assert window.context['entries'][0]['rank'] == 51
 
 
-def test_a_junk_offset_serves_the_full_panel_rather_than_erroring(client):
+def test_a_junk_range_falls_back_to_the_first_window(client):
+    """A junk `range` is still a window request -- the param is PRESENT, so the caller wanted rows, and
+    handing back the full panel would splice a meta line and a jump bar into the middle of the wall."""
     _renderable('deep', 'Deep')
     _standing('deep', 'Only', bp=5000, on=dt.date(2025, 1, 1))
     for raw in ('abc', '-5', ''):
-        resp = client.get(reverse('badge_ranks_panel', args=['deep']), {'offset': raw})
-        assert resp.status_code == 200
-        assert 'bd2-ranks__meta' in resp.content.decode(), f'offset={raw!r} lost the panel chrome'
+        resp = client.get(reverse('badge_ranks_panel', args=['deep']), {'range': raw})
+        assert resp.status_code == 200, f'range={raw!r} was not handled'
+        assert resp.context['entries'][0]['rank'] == 1, f'range={raw!r} did not fall back'
+        assert 'bd2-ranks__meta' not in resp.content.decode(), f'range={raw!r} returned panel chrome'
 
 
-def test_the_server_decides_whether_more_remain(client):
-    """The client used to infer "that was the last slice" from a short response, which cost one dead click
-    on every board whose size is an exact multiple of the page size. `X-Has-Next` is the same header
-    `ContractsResultsView` already uses for its infinite scroll."""
+def test_no_range_at_all_serves_the_full_panel(client):
+    """The two responses are told apart by the PRESENCE of `range`, not its value, so the tab's own
+    first fetch (which sends nothing) must still get chrome."""
+    _renderable('deep', 'Deep')
+    _standing('deep', 'Only', bp=5000, on=dt.date(2025, 1, 1))
+    body = client.get(reverse('badge_ranks_panel', args=['deep'])).content.decode()
+    assert 'bd2-ranks__meta' in body and 'lb-jumpbar' in body
+
+
+def test_a_window_past_the_end_of_the_board_is_empty_not_an_error(client):
+    """The `X-Has-Next` header this replaces existed so the client could stop clicking "show more". A
+    virtualized wall never asks past its own `total`, so there is nothing to signal -- but a crafted URL
+    can, and it must come back empty rather than 500."""
     _renderable('exact', 'Exact')
-    for i in range(25):                                  # EXACTLY one slice
+    for i in range(25):
         _standing('exact', f'Hunter{i:02d}', bp=9900 - i, on=dt.date(2025, 1, 1))
 
-    full = client.get(reverse('badge_ranks_panel', args=['exact']))
-    assert full.context['has_more'] is False, 'a board of exactly one slice offered more'
-
-    _standing('exact', 'Hunter25', bp=5000, on=dt.date(2025, 1, 1))
-    more = client.get(reverse('badge_ranks_panel', args=['exact']), {'offset': 25})
-    assert more['X-Has-Next'] == '0', 'the last slice claimed more remained'
-
-    for i in range(30):
-        _standing('exact', f'Later{i:02d}', bp=4000 - i, on=dt.date(2025, 1, 1))
-    mid = client.get(reverse('badge_ranks_panel', args=['exact']), {'offset': 25})
-    assert mid['X-Has-Next'] == '1', 'a mid-board slice claimed it was the last'
+    past = client.get(reverse('badge_ranks_panel', args=['exact']), {'range': 500, 'count': 50})
+    assert past.status_code == 200
+    assert past.content.decode().count('<li class="lb-row') == 0
 
 
-def test_the_appended_rows_carry_the_class_the_reveal_engine_looks_for(client):
-    """`staggerReveal` puts `.pp-reveal` on the wall permanently, and `.pp-reveal .lb-row { opacity: 0 }`
-    -- so an appended row is INVISIBLE until the returned handle observes it and adds `.is-revealed`.
-    The client-side half of that fix cannot be tested here; what this pins is that the fragment still
-    emits `.lb-row` elements, which is the selector both the append and the observer key on."""
+def test_a_window_emits_bare_rows_with_the_rank_the_virtualizer_places_by(client):
+    """`virtualBoard` reads `data-lb-rank` off each row to place it in the spacer, so a row that renders
+    without it is INVISIBLE to a virtualized wall -- spliced in, then positioned nowhere.
+
+    This is the successor to a test that pinned `.lb-row` for `staggerReveal`'s observer. That engine is
+    gone from the boards (it hides rows a virtual wall never un-hides); the selector still matters, for a
+    different reason.
+    """
     _renderable('deep2', 'Deep2')
-    for i in range(27):
+    for i in range(60):
         _standing('deep2', f'H{i:02d}', bp=9900 - i, on=dt.date(2025, 1, 1))
 
-    tail = client.get(reverse('badge_ranks_panel', args=['deep2']), {'offset': 25}).content.decode()
-    assert tail.count('<li class="lb-row') == 2   # closing-quote-free prefix; `lb-row__rank` etc. must not match
+    tail = client.get(reverse('badge_ranks_panel', args=['deep2']), {'range': 51}).content.decode()
+    assert tail.count('<li class="lb-row') == 10   # quote-free prefix; `lb-row__rank` etc. must not match
+    assert 'data-lb-rank="51"' in tail and 'data-lb-rank="60"' in tail
+    assert 'pp-reveal' not in tail, 'the reveal engine is back on a wall that never un-hides its rows'
 
 
 def test_an_unverified_account_is_not_promised_a_board_it_cannot_enter(client):
@@ -301,16 +322,33 @@ def test_an_unverified_account_is_not_promised_a_board_it_cannot_enter(client):
     assert 'Not on this board yet' not in body and 'You are' not in body
 
 
-def test_a_huge_offset_is_clamped_rather_than_scanned(client):
-    """Same reasoning as the job board's page cap: a public fragment must not accept a nine-figure
-    OFFSET. Distinct from the junk-offset test above, which covers unparseable values."""
-    _renderable('deep3', 'Deep3')
-    _standing('deep3', 'Only', bp=5000, on=dt.date(2025, 1, 1))
+def test_a_crafted_window_cannot_ask_for_the_whole_board(client):
+    """Same reasoning as every other board: this is a PUBLIC fragment, `range` becomes a SQL OFFSET that
+    Postgres honours by walking every skipped row, and an unbounded `count` hydrates the whole board in
+    one read.
 
-    resp = client.get(reverse('badge_ranks_panel', args=['deep3']), {'offset': 99999999})
+    Built on a board LARGER than `MAX_COUNT` and a `range` INSIDE it, so the clamps are actually
+    observed. The first version asked for `range=10**12` on a one-row board: the window came back empty
+    whether or not any clamping happened, so `0 <= MAX_COUNT` held with the parser deleted entirely.
+    """
+    from trophies.views.board_helpers import MAX_COUNT, MAX_START
 
-    assert resp.status_code == 200
-    assert resp['X-Has-Next'] == '0'
+    _renderable('wide', 'Wide')
+    for i in range(MAX_COUNT + 20):
+        _standing('wide', f'H{i:03d}', bp=9900 - i, on=dt.date(2025, 1, 1))
+
+    # COUNT: asked for the lot, from the top of a board that has more than the ceiling.
+    greedy = client.get(reverse('badge_ranks_panel', args=['wide']), {'range': 1, 'count': 10 ** 6})
+    assert greedy.status_code == 200
+    assert greedy.content.decode().count('<li class="lb-row') == MAX_COUNT, (
+        'the count ceiling was not applied -- a crafted URL hydrated more than 200 profiles in one read'
+    )
+
+    # RANGE: past the end of the board, so the OFFSET actually run is the clamp rather than the URL.
+    far = client.get(reverse('badge_ranks_panel', args=['wide']), {'range': 10 ** 12})
+    assert far.status_code == 200
+    assert far.context['entries'] == []
+    assert MAX_START < 10 ** 12, 'the start clamp no longer bounds what this asks for'
 
 
 def test_a_row_shows_its_denominator_and_its_tiebreak_date(client):

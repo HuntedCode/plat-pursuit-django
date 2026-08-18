@@ -2264,6 +2264,7 @@ function virtualBoard(o) {
         // remount re-applies the mark rather than baking it into the cache.
         dataByPos.set(dp, el.outerHTML);
         rendered.set(dp, el);
+        describe(el, dp);
         markYou(el, dp);
     });
     fetchedPages.add(0);                       // the first window IS page 0
@@ -2277,15 +2278,34 @@ function virtualBoard(o) {
         el.setAttribute('aria-current', 'true');   // announced; the tint alone is not
     }
 
+    // Mounted IN ORDER, not appended. Rows are evicted and remounted as you scroll, so appending meant
+    // that scrolling UP put lower-numbered ranks at the end of the <ol> -- after which DOM order (which
+    // is the order a screen reader reads, and the order Tab walks the hunter links) no longer matched
+    // what was on screen. The mounted window is ~30 rows, so finding the insertion point is free.
     function mount(dp) {
         var tmp = document.createElement('template');
         tmp.innerHTML = dataByPos.get(dp).trim();
         var el = tmp.content.firstElementChild;
         el.style.top = ((dp - 1) * H) + 'px';
-        list.appendChild(el);
+
+        var after = null, afterDp = Infinity;
+        rendered.forEach(function (other, otherDp) {
+            if (otherDp > dp && otherDp < afterDp) { afterDp = otherDp; after = other; }
+        });
+        list.insertBefore(el, after);
+
         rendered.set(dp, el);
+        describe(el, dp);
         markYou(el, dp);
         if (dp === highlightDp) { el.classList.add('is-found'); }   // keep it lit across a remount
+    }
+
+    // The <ol> only ever holds the mounted window, so unaided it announces "list, 26 items" on a board of
+    // 60,000 -- and the number changes as you scroll. `aria-posinset`/`aria-setsize` state the real
+    // position and the real total, which is what the rank in the row means anyway.
+    function describe(el, dp) {
+        el.setAttribute('aria-posinset', dp);
+        el.setAttribute('aria-setsize', total);
     }
 
     function fetchPage(p) {
@@ -2318,6 +2338,11 @@ function virtualBoard(o) {
     }
 
     function render() {
+        // A HIDDEN panel measures as zeros, so `visible()` would compute the first screenful as on-screen
+        // and keep mounting rows on every scroll frame of whatever tab the reader is actually on. Badge
+        // and job detail leave their board mounted when the tab closes (so re-opening is instant), which
+        // is what makes this reachable.
+        if (!list.offsetParent && getComputedStyle(list).position !== 'fixed') { return; }
         // Keep the jump highlight lit through the jump's own scroll, drop it once the USER scrolls away.
         // Movement alone cannot tell the two apart, so we ARM on arrival: while the (smooth) scroll is
         // still travelling toward the anchor it stays lit; once scrollTop lands within a row of the anchor
@@ -2393,6 +2418,178 @@ function virtualBoard(o) {
 }
 
 
+/**
+ * Mount a virtualized board from its `[data-lb-board]` root, and wire its jump affordances.
+ *
+ * `virtualBoard` is the ENGINE; this is the WIRING every board was otherwise copying -- read the data
+ * attributes, build a rows URL, mount, then hook up the "you're #N" chip and the go-to-rank box. Three
+ * surfaces run boards (Global Boards, badge detail's Ranks tab, job detail's Ranks tab) and a fourth is
+ * adjacent (game detail, which has its own row component and its own toolbar). Copying ~50 lines of
+ * wiring per surface is how a board ends up fetching in a granularity its server does not page by, which
+ * fails as GAPS IN THE ROWS rather than as an error.
+ *
+ * The contract is the markup: `templates/trophies/partials/leaderboard_board.html` renders the root and
+ * `leaderboard_jumpbar.html` the affordances. A caller supplies neither a page size nor a URL -- if it
+ * did, that constant would be free to disagree with the server's. A root missing `data-lb-page-size`
+ * does NOT fall back to a guess; it declines to mount, because guessing reproduces exactly the silent
+ * row-gaps the attribute exists to prevent.
+ *
+ * Always returns a handle, never null. Even with no board to mount it wires the rank box's submit and
+ * swallows it, because that <form> has no action and an unhandled Enter is a native GET that drops the
+ * reader's filters.
+ *
+ * @param {HTMLElement} root      the `[data-lb-board]` element
+ * @param {Object} [o]
+ * @param {HTMLElement} [o.scope=root]  where the jump chip / rank box are looked for. Global Boards puts
+ *                                      them on a card ABOVE the board, so its scope is the page wrapper.
+ * @param {function(): number} [o.chromeInset]  sticky-header height, so a jump lands below it
+ * @param {function(number, number, function)} [o.onRender]  forwarded to the engine
+ * @returns {{jump: function(number), refresh: function(), destroy: function()}}  always a handle; an
+ *          inert one when there is no board (an empty state came back)
+ */
+function wireBoard(root, o) {
+    o = o || {};
+    var scope = (o && o.scope) || root;
+
+    // THE SUBMIT GUARD COMES FIRST, before any reason to bail out. The rank box is a real <form> with no
+    // action and an unnamed input, so an unhandled Enter is a native GET to the bare path -- which drops
+    // the reader's `?tab=`/`?country=`/`?edition=` and reloads the page they were reading. Wiring it only
+    // on the success path meant an empty board (or a missing one) navigated away instead of doing
+    // nothing, which is the worst of the three possible behaviours.
+    var handle = null;
+    function onSubmit(ev) {
+        var form = ev.target.closest && ev.target.closest('[data-lb-gotoform]');
+        if (!form || !scope.contains(form)) { return; }
+        ev.preventDefault();                       // unconditional: never navigate
+        if (!handle) { return; }
+        var input = form.querySelector('input');
+        var rank = parseInt((input && input.value) || '', 10);
+        if (!(rank >= 1)) { return; }
+        handle.jumpTo(Math.min(rank, handle.total));
+        if (input) { input.blur(); }               // dismiss the touch keyboard before the scroll starts
+    }
+    scope.addEventListener('submit', onSubmit);
+
+    function bail() {
+        return { jump: function () {}, refresh: function () {}, destroy: function () {
+            scope.removeEventListener('submit', onSubmit);
+        } };
+    }
+    if (!root) { return bail(); }
+    var wall = root.querySelector('[data-lb-wall]');
+    var total = parseInt(root.dataset.lbTotal, 10) || 0;
+    if (!wall || !total) { return bail(); }
+
+    // NO FALLBACK on the page size, deliberately. `|| 50` was a JS copy of a server constant, and the
+    // fallback IS the failure mode it was meant to cover: a client paging by 50 against a server paging
+    // by something else does not error, it shows gaps in the rows. Missing means misconfigured, and a
+    // board that refuses to mount is a bug somebody notices.
+    var pageSize = parseInt(root.dataset.lbPageSize, 10);
+    if (!(pageSize >= 1)) { return bail(); }
+    var XHR = { headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+    var said = scope.querySelector('[data-lb-said]');
+    var viewerRank = parseInt(root.dataset.lbViewerRank || '', 10);
+    if (!(viewerRank >= 1)) { viewerRank = 0; }
+
+    // The row height is a CSS custom property so the breakpoints own it, and it is read live rather than
+    // captured: `--lb-row-h` changes at md:, and a captured value would place every row at the old pitch
+    // after a rotate.
+    function rowHeight() {
+        return parseFloat(getComputedStyle(wall).getPropertyValue('--lb-row-h')) || 62;
+    }
+
+    var engine = PlatPursuit.virtualBoard({
+        list: wall,
+        total: total,
+        rowSelector: '.lb-row',
+        pageSize: pageSize,
+        rowHeight: rowHeight,
+        youRank: viewerRank,
+        chromeInset: o.chromeInset,
+        fetchRows: function (start, from, count) {
+            var qp = new URLSearchParams(root.dataset.lbParams || '');
+            qp.set('range', start);
+            qp.set('from', from);
+            qp.set('count', count);
+            return fetch(root.dataset.lbRowsUrl + '?' + qp.toString(), XHR).then(function (r) {
+                if (!r.ok) { throw new Error(r.status); }
+                return r.text();
+            });
+        },
+        onRender: function (localTop, localBottom, posOf) {
+            // Which way the reader would travel to reach their own row, so the chip says where it GOES
+            // rather than only that it exists.
+            var chip = scope.querySelector('[data-lb-jump]');
+            if (chip && viewerRank) {
+                var H = rowHeight();
+                var top = (posOf(viewerRank) - 1) * H;
+                chip.dataset.lbDir = top + H < localTop ? 'up' : (top > localBottom ? 'down' : 'here');
+            }
+            if (o.onRender) { o.onRender(localTop, localBottom, posOf); }
+        },
+    });
+
+    // A jump is a SCROLL, and a scroll is invisible to a screen reader -- there is no focus change and no
+    // DOM event a reader is told about. The removed "show more" had a live region for exactly this
+    // reason. `[data-lb-said]` is `sr-only`, so this costs the visual design nothing.
+    function announce(rank) {
+        if (said) { said.textContent = 'Jumped to rank ' + rank + ' of ' + total + '.'; }
+    }
+    function jumpTo(rank) {
+        engine.jump(rank);
+        announce(rank);
+    }
+
+    // DELEGATED from the scope, not bound to the chip and the form. On every surface here the board
+    // arrives by fetch and can be replaced (a tab re-open, a filter swap), so a listener bound to the
+    // elements themselves would die with the markup it was bound to -- silently, since the board still
+    // scrolls and only the jumping stops working.
+    function onClick(ev) {
+        var chip = ev.target.closest && ev.target.closest('[data-lb-jump]');
+        if (!chip || !scope.contains(chip) || !viewerRank) { return; }
+        ev.preventDefault();
+        jumpTo(viewerRank);
+    }
+    scope.addEventListener('click', onClick);
+
+    handle = {
+        total: total,
+        jumpTo: jumpTo,
+        jump: jumpTo,
+        refresh: engine.refresh,
+        destroy: function () {
+            scope.removeEventListener('click', onClick);
+            scope.removeEventListener('submit', onSubmit);
+            engine.destroy();
+        },
+    };
+    return handle;
+}
+
+/**
+ * The board's entrance: the on-screen rows cascade in once, on first mount.
+ *
+ * NOT `staggerReveal`, and that is the whole point of it existing. That helper adds `.pp-reveal` to the
+ * container permanently and `.pp-reveal .lb-row { opacity: 0 }` holds every row invisible until an
+ * IntersectionObserver grants it `.is-revealed` -- which a virtualized wall never gets, because its rows
+ * are mounted and evicted by scroll position rather than observed. The result is a board of blank space.
+ * That exact bug shipped twice (badge detail's "show more", then the Global Boards wall), so the boards
+ * animate with the Web Animations API instead: it leaves no class behind and cannot outlive its frames.
+ *
+ * @param {HTMLElement} root   the `[data-lb-board]` element
+ */
+function boardEntrance(root) {
+    if (!root || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) { return; }
+    var rows = root.querySelectorAll('.lb-row');
+    for (var i = 0; i < rows.length && i < 14; i++) {      // the visible window only -- keep it quick
+        if (!rows[i].animate) { return; }
+        rows[i].animate(
+            [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+            { duration: 340, delay: i * 26, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' }
+        );
+    }
+}
+
 window.PlatPursuit.animatePanel = animatePanel;
 window.PlatPursuit.filterPanel = filterPanel;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
@@ -2405,6 +2602,8 @@ window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
 window.PlatPursuit.StickyReveal = StickyReveal;
 window.PlatPursuit.virtualBoard = virtualBoard;
+window.PlatPursuit.wireBoard = wireBoard;
+window.PlatPursuit.boardEntrance = boardEntrance;
 window.PlatPursuit.slideViewIn = slideViewIn;
 window.PlatPursuit.igniteTab = igniteTab;
 window.PlatPursuit.wireTablist = wireTablist;

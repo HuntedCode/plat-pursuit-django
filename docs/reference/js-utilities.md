@@ -211,11 +211,45 @@ only, letting the tab's own click/Enter activate — for expensive swaps (the Ba
 `<a>` chips, where auto-activating per arrow would fire a request each keypress). Call the returned
 `syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX `afterSwap`). → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
 
+### PlatPursuit.virtualBoard / wireBoard / boardEntrance
+
+The leaderboard stack. `virtualBoard` is the engine, `wireBoard` is the per-surface wiring, and
+`boardEntrance` is the entrance animation. Three surfaces run all three (Global Boards, badge detail's
+Ranks tab, job detail's Ranks tab); game detail runs `virtualBoard` alone, with its own row component.
+
+| Function | Args | Returns |
+|---|---|---|
+| `virtualBoard(o)` | `{list, total, rowSelector, rowHeight, fetchRows, pageSize?, invert?, rankKey?, youRank?, chromeInset?, onRender?}` | `{jump, refresh, destroy}` |
+| `wireBoard(root, o?)` | `root` = `[data-lb-board]`; `{scope?, chromeInset?, onRender?}` | `{jump, refresh, destroy}`, or **null** for an empty board |
+| `boardEntrance(root)` | `root` = `[data-lb-board]` | — |
+
+`wireBoard` reads everything else off the root as `data-lb-*` (`total`, `page-size`, `rows-url`,
+`params`, `viewer-rank`), so no caller carries a page size or a URL of its own — that constant would be
+free to disagree with the server that pages by it. Markup comes from
+`templates/trophies/partials/leaderboard_board.html`.
+
+A root **missing `data-lb-page-size` does not fall back to a guess** — `wireBoard` declines to mount and
+returns an inert handle. A guess reproduces exactly the failure the attribute prevents: a client paging
+by one number against a server paging by another does not error, it shows gaps in the rows.
+
+It **always returns a handle, never null**, even with no board. It wires the rank box's `submit` and
+swallows it before anything else, because that `<form>` has no `action` and an unhandled Enter is a
+native GET to the bare path — which silently drops the reader's filters.
+
+The one remaining constant is `virtualBoard`'s `|| 62` row-height fallback, for a wall whose
+`--lb-row-h` did not resolve. That is a stylesheet failure, not a configuration one.
+
+**Do NOT use `staggerReveal` on a virtualized wall** — see below. Use `boardEntrance`.
+
 ### PlatPursuit.staggerReveal
 
 | Method | Parameters | Purpose |
 |--------|-----------|---------|
 | `staggerReveal(opts)` | `{grid, cardSelector, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids |
+
+> **Never on a virtualized list.** It adds `.pp-reveal` to the container permanently and the paired CSS
+> holds rows at `opacity: 0` until an IntersectionObserver grants `.is-revealed`. Rows mounted and evicted
+> by scroll position never reach that observer, so the list renders as blank space. Use `boardEntrance`.
 
 Hides the grid's cards (`hideClass`, default `.pp-reveal`), reveals those already present in ONE DOM-order
 batch, and returns `{ observe(nodes), disconnect() }` — call `observe()` on infinite-scroll-appended cards
