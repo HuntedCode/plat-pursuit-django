@@ -401,3 +401,25 @@ def test_the_virtual_wall_is_not_given_a_stagger_reveal(client):
     assert 'PlatPursuit.staggerReveal' not in boot, (
         'the virtualized wall has a stagger reveal again -- rows mounted on scroll will be invisible'
     )
+
+
+def test_the_viewer_row_is_marked_client_side_not_rendered_in(client):
+    """You asked for your own row to be obvious while scrolling, and the constraint worth navigating is
+    that the rows are byte-identical for every reader -- which is what keeps them cacheable, and why the
+    design puts the standing in the header rather than in a row.
+
+    Marking it in the BROWSER gives both: the engine knows the viewer's rank, so it tags that row on
+    mount. Game detail renders its `--you` modifier server-side and pays the cost this avoids.
+    """
+    me = _ranked('Me', plats=9, trophies=90)
+    _ranked('Other', plats=50, trophies=500)
+    client.force_login(me.user)
+
+    body = client.get(URL).content.decode()
+    rows = body[body.index('<ol class="lb-wall'):]
+
+    assert 'is-you' not in rows, 'the viewer marker was rendered into the rows, which un-caches them'
+    assert 'youRank: viewerRank()' in body, 'the engine is not told which row is the viewer'
+    # ...and the rows endpoint, which serves every window after the first, must stay impersonal too.
+    window = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': 1, 'count': 50})
+    assert 'is-you' not in window.content.decode()

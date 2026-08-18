@@ -2191,6 +2191,7 @@ window.PlatPursuit.takeover = takeover;
  * @param {number} [o.pageSize=50]        fetch granularity; must match what the server pages by
  * @param {boolean} [o.invert=false]      display order is the reverse of canonical rank
  * @param {string} [o.rankKey='lbRank']   dataset key on a row holding its CANONICAL rank
+ * @param {number} [o.youRank]           the viewer's rank; that row gets `.is-you` + `aria-current`
  * @param {function(): number} [o.chromeInset]  sticky-header height, so a jump lands below it
  * @param {function(number, number, function)} [o.onRender]  (localTop, localBottom, posOf) per frame
  * @returns {{jump: function(number), refresh: function(), destroy: function()}}
@@ -2204,6 +2205,7 @@ function virtualBoard(o) {
     var PAGE = o.pageSize || 50;
     var invert = !!o.invert;
     var rankKey = o.rankKey || 'lbRank';
+    var youRank = o.youRank || 0;    // 0 = anonymous, or a viewer who is not on this board
     var BUFFER = 8;      // rows rendered beyond the viewport each way
     var EVICT = 30;      // keep rows within this of the window mounted
     var H = o.rowHeight();
@@ -2258,10 +2260,22 @@ function virtualBoard(o) {
     Array.prototype.forEach.call(list.querySelectorAll(o.rowSelector), function (el) {
         var dp = posOf(parseInt(el.dataset[rankKey], 10));
         el.style.top = ((dp - 1) * H) + 'px';
+        // Cached BEFORE marking, so the stored HTML stays the server's viewer-independent version -- a
+        // remount re-applies the mark rather than baking it into the cache.
         dataByPos.set(dp, el.outerHTML);
         rendered.set(dp, el);
+        markYou(el, dp);
     });
     fetchedPages.add(0);                       // the first window IS page 0
+
+    // The viewer's own row, marked CLIENT-SIDE. The server's rows are byte-identical for every reader,
+    // which is what keeps them cacheable -- so "this one is you" is applied here rather than rendered in.
+    // Applied on every mount, not once: a row is evicted and remounted freely as you scroll past it.
+    function markYou(el, dp) {
+        if (!youRank || rankOf(dp) !== youRank) { return; }
+        el.classList.add('is-you');
+        el.setAttribute('aria-current', 'true');   // announced; the tint alone is not
+    }
 
     function mount(dp) {
         var tmp = document.createElement('template');
@@ -2270,6 +2284,7 @@ function virtualBoard(o) {
         el.style.top = ((dp - 1) * H) + 'px';
         list.appendChild(el);
         rendered.set(dp, el);
+        markYou(el, dp);
         if (dp === highlightDp) { el.classList.add('is-found'); }   // keep it lit across a remount
     }
 

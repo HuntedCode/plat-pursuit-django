@@ -357,6 +357,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             total: parseInt(root.dataset.lbTotal, 10) || 0,
             rowSelector: '.lb-row',
             pageSize: parseInt(root.dataset.lbPageSize, 10) || 50,
+            youRank: viewerRank(),          // marks your row wherever it is mounted
             rowHeight: rowHeight,
             chromeInset: chromeInset,
             fetchRows: function (start, from, count) {

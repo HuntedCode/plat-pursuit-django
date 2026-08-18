@@ -107,12 +107,8 @@
 @media (min-width: 768px) { .lb-wall { --lb-row-h: 68px; } }
 .lb-wall--virtual { display: block; position: relative; gap: 0; }
 .lb-wall--virtual .lb-row { position: absolute; left: 0; right: 0; }
-/* The jump target, lit on arrival and dropped once the reader scrolls away (the engine arms it at the
-   destination so the smooth scroll's own travel does not clear it early). */
-.lb-row.is-found {
-    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1));
-}
+/* `.is-found` (the jump landing) and `.is-you` (the persistent marker) are defined together further
+   down, so the way they stack on the same row is visible in one place. */
 @media (prefers-reduced-motion: no-preference) {
     .pp-reveal .lb-row { opacity: 0; }
     .pp-reveal .lb-row.is-revealed { opacity: 1; }
@@ -576,3 +572,38 @@
     .lb-colhead__figs { display: flex; gap: 22px; }
     .lb-colhead__figs span { text-align: right; }
 }
+
+/* ---- "This one is you" ------------------------------------------------------------------------------
+   PERSISTENT, and distinct from `.is-found` below it: `.is-you` says which row is yours whenever it is on
+   screen, `.is-found` is the transient landing flash after a jump. Both can be on the same row (you
+   jumped to yourself), so they stack rather than compete -- the tint deepens and the ring is what says
+   "just arrived".
+
+   Applied by `virtualBoard` client-side, never rendered in. The server's rows are byte-identical for
+   every reader, which is what keeps them cacheable; baking a personal marker into the HTML is the one
+   thing that would forfeit it. Game detail marks its rows server-side and pays exactly that cost. */
+.lb-row.is-you {
+    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border));
+}
+.lb-row.is-you .lb-row__uname { color: var(--pp-primary); }
+/* The podium's metal keeps the LEADING edge -- the two signals use different channels on purpose, so a
+   hunter in the top three reads as both without either being overwritten. */
+.lb-row--podium.is-you { border-left-color: color-mix(in oklab, var(--metal, var(--pp-border)) 70%, transparent); }
+/* A pill, from CSS rather than markup, because the markup is shared and viewer-independent. The row also
+   carries `aria-current="true"`, which is what actually announces it -- generated content is not
+   reliably read out, so this is reinforcement for the eye and not the only signal. */
+.lb-row.is-you .lb-row__name::after {
+    content: 'You';
+    flex: none; padding: 1px 6px; border-radius: 999px;
+    font-size: 0.56rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 18%, transparent);
+}
+/* The jump landing sits ON TOP of the persistent mark: a deeper wash plus an INSET ring (inset so a
+   fixed-height absolutely-positioned row cannot clip it). */
+.lb-row.is-found {
+    background: color-mix(in oklab, var(--pp-primary) 16%, var(--pp-bg-2));
+    box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+}
+.lb-row.is-found .lb-row__uname { color: var(--pp-primary); }
