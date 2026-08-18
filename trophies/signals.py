@@ -265,9 +265,11 @@ def profile_mirrored_standings():
     country they left, or (worse, since it is a whole-population rule) keeping an unverified account on a
     board after they verify. Neither is something a reader would think to look for.
 
-    `UserGroupBadge` is here for `is_linked` but carries no `country_code`: the earners board is the one
-    board with no country slice (`earners_rows`/`earners_rank` take no `country`), so the column would be
-    dead weight. `_mirrored_fields` is what keeps that difference from needing a second list.
+    All six carry BOTH mirrors as of migration 0310. `UserGroupBadge` was the last to get `country_code`,
+    and its lateness was historical rather than principled -- it is the badge earn-lifecycle table and
+    predates the Lane B standing stores that set the pattern. `_mirrored_fields` reads each store's
+    columns off the model rather than hardcoding them, so a store that gains or loses one cannot fall out
+    of step with this handler.
     """
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,

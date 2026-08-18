@@ -3161,6 +3161,18 @@ class UserGroupBadge(models.Model):
                   "date and moves when the badge's iteration changes. Use this for 'earned this week'.",
     )
 
+    # Denormalized from Profile, same reason as the `is_linked` mirror below and as the five standing
+    # stores that already carry this: a predicate on another table cannot go in this table's indexes.
+    #
+    # Added LAST of the six, in 2026-08, and the lateness was not a decision -- `UserGroupBadge` is the
+    # badge EARN-LIFECYCLE table, written by `badge_apply`, and it predates the Lane B standing stores that
+    # established the mirror pattern. It got read as a board without ever being reframed as one.
+    #
+    # What it buys is a country-scoped `earners_rank` -- "4th in your country to earn this" reads better on
+    # a medallion back than "#847 worldwide". It does NOT buy a sliceable list: `earners_rows` has no
+    # production caller, so the earners board is a STAT rather than a surface.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
     # Denormalized from Profile, for the same reason the standing stores carry it: it is a board
     # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
     # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
@@ -3186,6 +3198,10 @@ class UserGroupBadge(models.Model):
             # Serves the per-badge earners leaderboard (ORDER BY earned_at) AND a profile's live rank
             # (COUNT earned_at < mine) -- the value shown on the medallion back.
             models.Index(fields=['group_badge', 'earned_at'], name='ugb_badge_earned_idx'),
+            # The country-sliced form. Same column order as every other board's country index: the
+            # always-filtered key first, then the slice, then the sort.
+            models.Index(fields=['group_badge', 'country_code', 'earned_at'],
+                         name='ugb_badge_cc_earned_idx'),
         ]
 
     def __str__(self):

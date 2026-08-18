@@ -505,16 +505,25 @@ def series_board_rank(series_slug, profile_id, country=None):
 
 # ------------------------------------------------------------------ per-badge earners --------------------
 
-def _earners_qs(group_badge_id):
+def _earners_qs(group_badge_id, country=None):
     """The earners population. Verified hunters only, like every other board here -- an unlinked profile is
-    catalogue data, and a scout account holding Earn #1 on a badge is the exact case the gate exists for."""
-    return _linked(UserGroupBadge.objects.filter(group_badge_id=group_badge_id))
+    catalogue data, and a scout account holding Earn #1 on a badge is the exact case the gate exists for.
+
+    Country-sliceable as of 2026-08, when `UserGroupBadge` finally gained the `country_code` mirror the
+    other five stores already carried. Served by `ugb_badge_cc_earned_idx`."""
+    return _slice(_linked(UserGroupBadge.objects.filter(group_badge_id=group_badge_id)), country)
 
 
-def earners_rows(group_badge_id, limit=50, offset=0):
-    """First-to-complete order for one group badge: [(profile_id, earned_at), ...] earliest first."""
+def earners_rows(group_badge_id, limit=50, offset=0, country=None):
+    """First-to-complete order for one group badge: [(profile_id, earned_at), ...] earliest first.
+
+    NO PRODUCTION CALLER as of 2026-08 -- the earners board is a STAT, not a surface: `earners_rank` is
+    rendered as a number on the medallion back and in the badge stats modal, and no template lists these
+    rows. Kept rather than deleted because its tests are what pin the ordering rule that `earners_rank`
+    depends on (first-to-complete, profile id breaking the constant date ties), and because an earners
+    list is a plausible part of unifying the board surfaces. If that does not happen, delete it."""
     return list(
-        _earners_qs(group_badge_id).order_by('earned_at', 'profile_id')
+        _earners_qs(group_badge_id, country).order_by('earned_at', 'profile_id')
         .values_list('profile_id', 'earned_at')[offset:offset + limit]
     )
 
@@ -524,7 +533,7 @@ def earners_rows(group_badge_id, limit=50, offset=0):
 EARNERS_KEYS = (('earned_at', _ASC), ('profile_id', _ASC))
 
 
-def earners_rank(profile_id, group_badge_id):
+def earners_rank(profile_id, group_badge_id, country=None):
     """A profile's LIVE earners position for a group badge (1 = first to complete the current iteration), or
     None if they don't currently hold it. This is the value shown on the medallion back.
 
@@ -535,10 +544,10 @@ def earners_rank(profile_id, group_badge_id):
     alone printed one number -- "Earn #12" -- on the medallion back of all nine of them, while
     `earners_rows` seated them at 12 through 20.
     """
-    qs = _earners_qs(group_badge_id)
+    qs = _earners_qs(group_badge_id, country)
     mine = qs.filter(profile_id=profile_id).values_list('earned_at', flat=True).first()
     if mine is None:
-        return None      # doesn't hold it, or holds it unlinked -- either way, not ON this board
+        return None      # doesn't hold it, holds it unlinked, or not in this country -- not on this board
     return qs.filter(_ahead_q(EARNERS_KEYS, {'earned_at': mine, 'profile_id': profile_id})).count() + 1
 
 

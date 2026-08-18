@@ -334,3 +334,55 @@ def test_hydrate_carries_what_a_board_row_draws():
     for key in ('display_psn_username', 'avatar_url', 'flag', 'user_is_premium', 'country_code',
                 'display_title'):
         assert key in row, f'{key} is missing from the hydrated row'
+
+
+def test_the_earn_rank_can_be_scoped_to_a_country(client=None):
+    """`UserGroupBadge` was the last board store with no `country_code` mirror -- historical rather than
+    principled (it is the earn-lifecycle table and predates the standing stores). With it, "4th in your
+    country to earn this" is answerable, which reads better on a medallion back than "#847 worldwide".
+
+    Note this buys a STAT, not a surface: `earners_rows` has no production caller.
+    """
+    from trophies.models import UserGroupBadge
+
+    gb, games = _series('cc', 1)
+    first_gb, second_gb, first_us = (
+        ProfileFactory(country_code='GB'), ProfileFactory(country_code='GB'),
+        ProfileFactory(country_code='US'),
+    )
+    for i, p in enumerate((first_gb, second_gb, first_us)):
+        _complete(p, games[0], when=timezone.make_aware(dt.datetime(2020 + i, 1, 1)))
+        evaluate_and_apply(p, [gb])
+
+    # The award stamps the mirror -- the propagation signal only fires on CHANGE and would never reach a
+    # badge earned after the hunter's last country move.
+    assert UserGroupBadge.objects.get(profile=first_gb, group_badge=gb).country_code == 'GB'
+
+    assert lb.earners_rank(first_gb.id, gb.id) == 1          # global
+    assert lb.earners_rank(second_gb.id, gb.id) == 2
+    assert lb.earners_rank(first_us.id, gb.id) == 3
+    # ...and sliced, the US hunter leads their own country rather than trailing the GB pair.
+    assert lb.earners_rank(first_us.id, gb.id, country='US') == 1
+    assert lb.earners_rank(second_gb.id, gb.id, country='GB') == 2
+    assert lb.earners_rank(first_us.id, gb.id, country='GB') is None, (
+        'a hunter was ranked in a country they are not in'
+    )
+    assert [r[0] for r in lb.earners_rows(gb.id, country='GB')] == [first_gb.id, second_gb.id]
+
+
+def test_a_country_move_reaches_the_badges_already_earned():
+    """The edge the award stamp cannot cover, now that this store is in the propagation list: the mirror
+    is derived from `_mirrored_fields`, so adding the column was enough to enrol it."""
+    from trophies.models import UserGroupBadge
+
+    gb, games = _series('moved', 1)
+    hunter = ProfileFactory(country_code='GB')
+    _complete(hunter, games[0])
+    evaluate_and_apply(hunter, [gb])
+
+    hunter.country_code = 'JP'
+    hunter.save(update_fields=['country_code'])
+
+    assert UserGroupBadge.objects.get(profile=hunter, group_badge=gb).country_code == 'JP'
+    assert lb.earners_rank(hunter.id, gb.id, country='JP') == 1
+    assert lb.earners_rank(hunter.id, gb.id, country='GB') is None

@@ -77,10 +77,11 @@ def apply_changes(profile, changes, gb_map: dict) -> dict:
             UserGroupBadge.objects.create(
                 profile=profile, group_badge=gb, is_holo=ch.holo,
                 earned_at=ch.earned_date or timezone.now(),   # current-iteration completion, not the sync time
-                # Mirrored from Profile so the earners board can gate on its own table. Stamped at birth
-                # because the propagation signal only fires on CHANGE -- a badge awarded after a hunter
-                # linked would otherwise keep the False default and stay off the earners board forever.
+                # Mirrored from Profile so the earners rank can gate and slice on its own table. Stamped
+                # at birth because the propagation signal only fires on CHANGE -- a badge awarded after a
+                # hunter linked (or moved country) would otherwise keep the defaults forever.
                 is_linked=bool(getattr(profile, 'is_linked', False)),
+                country_code=getattr(profile, 'country_code', '') or '',
             )
             GroupBadge.objects.filter(id=gb.id).update(earned_count=F('earned_count') + 1)
             grant_series_title(profile.id, gb.series)
