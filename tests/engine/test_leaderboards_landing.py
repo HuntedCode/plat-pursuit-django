@@ -471,3 +471,28 @@ def test_a_board_the_viewer_is_not_on_shows_a_dash_not_a_gap(client):
     assert ranks['trophies'] == 1
     assert ranks['career'] is None, 'the fixture no longer tests an unranked board'
     assert '&mdash;' in resp.content.decode(), 'an unranked board rendered no placeholder'
+
+
+def test_the_chrome_is_carded_and_the_wall_is_not(client):
+    """The site-wide rule: STACKED CHROME CARDS + FREE CONTENT. Chrome is carded (page header, then
+    toolbar / stat cards); the content -- a grid or a list -- flows free below, never inside an outer
+    card. An infinite-scroll wall is the exact case that rule protects, because a card around it is a
+    border that grows forever.
+
+    The tab strip, the filters, the board identity and the jump bar all sat bare on the page background,
+    which is the half of the rule that was being missed.
+    """
+    _ranked('Someone', plats=5, trophies=50)
+    body = client.get(URL).content.decode()
+
+    assert 'lb-controls' in body, 'the chrome is not on a surface'
+    controls = body[body.index('lb-controls'):body.index('<div class="lb-board"')]
+    for part in ('pp-switch', 'lb-boardcard', 'lb-jumpbar'):
+        assert part in controls, f'{part} is outside the control card'
+
+    # ...and the wall is NOT inside it.
+    wall_at = body.index('<ol class="lb-wall')
+    assert wall_at > body.index('</section>', body.index('lb-controls')), (
+        'the wall is inside the control card -- an outer card around an infinite list is the thing the '
+        'rule forbids'
+    )

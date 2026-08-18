@@ -631,10 +631,12 @@
 
    Deliberately quiet: no card border, no fill. The wall below it is the content and this is a label for
    it, so it reads as a caption rather than competing with the rows for weight. */
+/* On the control card now, not bare on the page background -- see `.lb-controls`. Divided from the
+   filters above by a hairline rather than its own border, because it is a REGION of one surface. */
 .lb-boardcard {
     display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
-    gap: 4px 16px; margin: 2px 0 10px;
-    padding-bottom: 10px; border-bottom: 1px solid var(--pp-border);
+    gap: 4px 16px; margin: 12px 0 0;
+    padding-top: 12px; border-top: 1px solid var(--pp-border);
 }
 .lb-boardcard__id { min-width: 0; }
 .lb-boardcard__name { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
@@ -652,4 +654,34 @@
     .lb-boardcard__name { font-size: 1.15rem; }
     .lb-boardcard__what { font-size: 13px; }
     .lb-boardcard__tally .pp-tally { font-size: 1.4rem; }
+}
+
+
+/* ---- The control card -------------------------------------------------------------------------------
+   Tabs, filters, board identity and the way in, on ONE compact utility surface -- replacing four bands
+   that sat bare on the page background. The site-wide rule is STACKED CHROME CARDS + FREE CONTENT, and an
+   infinite-scroll wall is the case that rule exists to protect: a card around it is a border that grows
+   forever. So the chrome is carded and the wall below is not.
+
+   The card's own margins do the separating; its children drop theirs, or the surface reads as padded
+   twice. */
+.lb-controls .lb-bar { margin: 0; }
+.lb-controls .lb-jumpbar { margin-bottom: 0; margin-top: 10px; }
+
+@media (max-width: 767px) {
+    /* MOBILE FIT. Five stacked rows before the first leaderboard row is too far, and the design system's
+       instruction is to omit expendable blocks rather than make the reader scroll past them.
+
+       The MEANING line goes: it is education you need once, not on every visit, and it is the only block
+       here a returning reader has already read. Everything else earns its row -- the tabs are navigation,
+       the filters are state, the tally is the board's size, and the jump is the only way to reach your
+       own row without scrolling. */
+    .lb-controls .lb-boardcard__what { display: none; }
+    /* Name and tally share a row once the description is gone, which is what makes the saving real
+       rather than moving the same height around. */
+    .lb-controls .lb-boardcard { align-items: center; gap: 4px 10px; margin-top: 10px; padding-top: 10px; }
+    .lb-controls .lb-boardcard__name { font-size: 0.95rem; }
+    /* The jump chip and the rank box fit beside each other; the label is the part that does not. */
+    .lb-controls .lb-goto__lbl { display: none; }
+    .lb-controls .lb-jumpbar { margin-top: 8px; }
 }

@@ -86,6 +86,20 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
 
     Same call the Ratings tab already argued in its own comment. Career's chips DO carry tab roles, and
     correctly: they are buttons over real `role="tabpanel"` islands. {% endcomment %}
+    {% comment %} ONE control surface, not four bare bands. The site-wide rule is STACKED CHROME CARDS +
+    FREE CONTENT: chrome is carded (page header, then toolbar / stat cards), and the content -- a grid or
+    a list -- flows free below it, never inside an outer card. An infinite-scroll wall is the exact case
+    that rule protects: a card around it is a border that grows forever.
+
+    So the tab strip, the filters, the board's identity and the way in all sit here on a compact utility
+    card (`p-3 md:p-4` -- a control surface, not content display, so it must not feel bloated), and the
+    wall below is free. This is FEWER bands than the four bare ones it replaces, and the card ends where
+    the wall starts, so nothing about the board is boxed in or narrowed.
+
+    Tabs and identity together on purpose: you pick a board, and the same surface tells you what you
+    picked. They were answering one question a beat apart. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
+      <div class="card-body p-3 md:p-4">
     <div class="lb-bar">
         <nav class="pp-switch" aria-label="Leaderboard">
             {% for b in boards %}
@@ -150,31 +164,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         {% endif %}
     </div>
 
-    {% if board and board.object_list %}
-    {% comment %} The board. A VIRTUAL wall: the `<ol>` is a full-height spacer (total x --lb-row-h) so the
-    page scrollbar spans the whole board, and only the visible rows live in the DOM, placed absolutely by
-    the shared `PlatPursuit.virtualBoard`. The pager is gone with it -- pagination and a spacer are two
-    answers to the same question, and this is the one that lets a reader move around the board freely.
-
-    The FIRST window is server-rendered inside the spacer, so the board is there on arrival and on a
-    no-JS read; every window after it comes from `leaderboard_rows`. The engine adopts these rows rather
-    than re-fetching them.
-
-    Everything the client needs rides on the root as data, so the JS reads no constants of its own: a
-    hardcoded page size or rows URL is the kind of thing that silently desyncs from the server. {% endcomment %}
-    <div class="lb-board" data-lb-board
-         data-lb-total="{{ ranked_total }}"
-         data-lb-page-size="{{ page_size }}"
-         data-lb-rows-url="{% url 'leaderboard_rows' %}"
-         data-lb-tab="{{ active_tab }}"
-         data-lb-country="{{ selected_country }}"
-         data-lb-edition="{{ selected_edition }}"
-         data-lb-viewer-rank="{{ my_rank|default_if_none:'' }}">
-
-        {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in
-        the row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden
-        on phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
-        {% comment %} The BOARD CARD. Which board this is, what it ranks, how many are on it, and the way
+    {% comment %} The BOARD IDENTITY. Which board this is, what it ranks, how many are on it, and the way
         in -- directly above the wall, so the answer to "what am I looking at" is adjacent to the thing
         being looked at rather than three bands up.
 
@@ -215,7 +205,33 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
                        placeholder="#" aria-label="Jump to a rank on this board">
             </form>
         </div>
+      </div>
+    </section>
 
+    {% if board and board.object_list %}
+    {% comment %} The board. A VIRTUAL wall: the `<ol>` is a full-height spacer (total x --lb-row-h) so the
+    page scrollbar spans the whole board, and only the visible rows live in the DOM, placed absolutely by
+    the shared `PlatPursuit.virtualBoard`. The pager is gone with it -- pagination and a spacer are two
+    answers to the same question, and this is the one that lets a reader move around the board freely.
+
+    The FIRST window is server-rendered inside the spacer, so the board is there on arrival and on a
+    no-JS read; every window after it comes from `leaderboard_rows`. The engine adopts these rows rather
+    than re-fetching them.
+
+    Everything the client needs rides on the root as data, so the JS reads no constants of its own: a
+    hardcoded page size or rows URL is the kind of thing that silently desyncs from the server. {% endcomment %}
+    <div class="lb-board" data-lb-board
+         data-lb-total="{{ ranked_total }}"
+         data-lb-page-size="{{ page_size }}"
+         data-lb-rows-url="{% url 'leaderboard_rows' %}"
+         data-lb-tab="{{ active_tab }}"
+         data-lb-country="{{ selected_country }}"
+         data-lb-edition="{{ selected_edition }}"
+         data-lb-viewer-rank="{{ my_rank|default_if_none:'' }}">
+
+        {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in
+        the row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden
+        on phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
         <div class="lb-colhead" aria-hidden="true">
             <span class="lb-colhead__rank">#</span>
             <span class="lb-colhead__who">Hunter</span>
