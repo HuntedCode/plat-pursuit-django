@@ -215,6 +215,46 @@ def test_no_board_hides_its_rows_behind_a_reveal(surface, client):
         assert 'pp-reveal' not in resp.content.decode(), f'{surface} {label}: a reveal is back on the wall'
 
 
+@pytest.mark.parametrize('surface', SURFACES)
+def test_every_board_puts_its_chrome_on_a_surface(surface, client):
+    """STACKED CHROME CARDS + FREE CONTENT, the site-wide rule: chrome is carded, and the content -- a
+    grid or a list -- flows free below it, never inside an outer card.
+
+    This is the half the first propagation missed. Badge and job detail got the virtualized wall, the
+    shared row and the jump bar, and then put all of it bare on the page background while the landing sat
+    on a card -- so the boards behaved identically and did not look like the same product, which is the
+    whole reason the work was done.
+    """
+    panel, _ = _render(surface, client)
+    body = panel.content.decode()
+
+    assert 'lb-controls' in body, f'{surface}: the board chrome is not on a surface'
+    chrome = body[body.index('lb-controls'):body.index('<div class="lb-board"')]
+    assert 'lb-boardcard' in chrome, f'{surface}: the board identity is outside the card'
+    assert 'lb-jumpbar' in chrome, f'{surface}: the jump bar is outside the card'
+
+    # ...and the WALL is not inside it. A card around an infinite list is a border that grows forever.
+    assert body.index('<ol class="lb-wall') > body.index('</section>', body.index('lb-controls')), (
+        f'{surface}: the wall is inside the chrome card'
+    )
+
+
+@pytest.mark.parametrize('surface', SURFACES)
+def test_every_board_says_what_it_is_and_how_big_it_is(surface, client):
+    """The board card, in full: a NAME, a one-line meaning, and a counting tally. Job detail had none of
+    this; badge detail had a bare count line and its description one band up, above a panel that had not
+    loaded yet."""
+    panel, _ = _render(surface, client)
+    body = panel.content.decode()
+
+    assert 'lb-boardcard__name' in body, f'{surface}: the board does not say which board it is'
+    assert 'lb-boardcard__what' in body, f'{surface}: the board does not say what it ranks'
+    # The Tally, with the countUp hook `boardEntrance` reads -- the figure ticks on every board now, not
+    # just the one whose page happened to wire it.
+    assert 'lb-boardcard__tally' in body, f'{surface}: the board does not say how big it is'
+    assert 'data-countup="60"' in body, f'{surface}: the tally does not count the board'
+
+
 #: The PAGE each board is mounted from. The panels above are fragments; the script that mounts them lives
 #: on the page that fetches them, and a fragment test cannot see it.
 PAGES = ['global', 'badge', 'job']

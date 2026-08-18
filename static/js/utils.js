@@ -2576,9 +2576,21 @@ function wireBoard(root, o) {
  * That exact bug shipped twice (badge detail's "show more", then the Global Boards wall), so the boards
  * animate with the Web Animations API instead: it leaves no class behind and cannot outlive its frames.
  *
- * @param {HTMLElement} root   the `[data-lb-board]` element
+ * The board card's Tally ticks here too, because this is the one place all three surfaces call on every
+ * mount. It was wired on the landing alone, in a boot block that ran once -- so a tab swap replaced the
+ * card and the new figure simply appeared, and the two fetched panels never ticked at all. Deliberately
+ * NOT applied to the rows: fifty simultaneous counters is the "frantic counters" anti-pattern.
+ *
+ * @param {HTMLElement} root    the `[data-lb-board]` element
+ * @param {HTMLElement} [scope] where the board card is looked for; it sits OUTSIDE the board root, on
+ *                              the chrome card above it. Defaults to `root`.
  */
-function boardEntrance(root) {
+function boardEntrance(root, scope) {
+    var tally = (scope || root || document).querySelector('.lb-boardcard__tally [data-countup]');
+    // `countUp` jumps straight to the target under reduced motion, so it needs no guard of its own --
+    // which is why it runs before the early return below rather than after it.
+    if (tally && PlatPursuit.countUp) { PlatPursuit.countUp(tally, 850); }
+
     if (!root || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) { return; }
     var rows = root.querySelectorAll('.lb-row');
     for (var i = 0; i < rows.length && i < 14; i++) {      // the visible window only -- keep it quick

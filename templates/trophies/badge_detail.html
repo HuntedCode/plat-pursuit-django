@@ -228,7 +228,6 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
             Ranks
         </h2>
-        <p class="bd2-ranks__sub">Everyone who finished, by who got there first, then everyone still chasing.</p>
         <div class="bd2-ranks__body" data-ranks-body>
             <div class="bd2-ranks__loading" data-ranks-loading>
                 <span class="bd2-ranks__spinner" aria-hidden="true"></span>
@@ -320,7 +319,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                     // Called even when `root` is null: `wireBoard` still wires the rank box's submit and
                     // swallows it, so an empty board cannot navigate the page away on Enter.
                     handle = PlatPursuit.wireBoard(root, { scope: sec, chromeInset: chromeInset });
-                    PlatPursuit.boardEntrance(root);
+                    PlatPursuit.boardEntrance(root, sec);
                 })
                 .catch(function () {
                     // A board that fails to load must say so. Silently leaving the spinner spinning reads

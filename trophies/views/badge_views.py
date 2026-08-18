@@ -649,15 +649,27 @@ class BadgeRanksPanelView(View):
             # by its canonical URL.
             'rows_url': reverse('badge_ranks_panel', args=[series_slug]),
             'my_rank': my_rank,
-            # Distinguishes "signed out" from "signed in and not on this board". The template used to gate
-            # the whole line on `my_rank`, so an unranked hunter got silence where the answer belonged.
-            #
-            # `is_linked`, not merely "has a profile": every board population is gated on it
-            # (`badge_leaderboards._linked`), so an unverified account told "not on this board yet" is
-            # being promised a board it cannot enter. Game detail already resolves its viewer this way.
-            'show_my_standing': bool(profile and profile.is_linked),
             'series': series,
+            # The shared board card. `board_label` is the series, because on this page the board IS the
+            # series -- and the meaning line moved here off the section subtitle, where it sat above a
+            # panel that had not loaded yet.
+            'board_label': series.name,
+            'board_meaning': 'Everyone who finished, by who got there first, then everyone still chasing.',
+            'standing': self._standing(profile, my_rank),
         })
+
+    @staticmethod
+    def _standing(profile, my_rank):
+        """What the board card tells a signed-in viewer about themselves.
+
+        `is_linked`, not merely "has a profile": every board population is gated on it
+        (`badge_leaderboards._linked`), so an unverified account told "not on this board yet" is being
+        promised a board it cannot enter. Ranked viewers get nothing here -- the jump chip beneath
+        already says "You're #N", and saying it twice on one card is the kind of duplication the shared
+        partial exists to stop."""
+        if not (profile and profile.is_linked) or my_rank:
+            return ''
+        return 'Not on this board yet'
 
     @staticmethod
     def _window(series_slug, offset, limit):
@@ -897,6 +909,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
             context['secondary_label'] = secondary_label
             context['board_meaning'] = self.MEANINGS[tab]
             context['board_label'] = dict(self.BOARDS)[tab]
+            # "N hunters HERE" rather than "N hunters" when a filter is narrowing the board -- the figure
+            # is a claim about a population, and under a slice it is a claim about a smaller one.
+            context['slice_applied'] = bool(country or edition)
 
         # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
         # Each rank is read under the SAME slice as the board it links to, so the number the reader sees

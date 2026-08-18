@@ -180,7 +180,7 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     // Called even when `root` is null: `wireBoard` still wires the rank box's submit and
                     // swallows it, so an empty board cannot navigate the page away on Enter.
                     handle = PlatPursuit.wireBoard(root, { scope: panel, chromeInset: chromeInset });
-                    PlatPursuit.boardEntrance(root);
+                    PlatPursuit.boardEntrance(root, panel);
                 })
                 .catch(function () {
                     // A board that fails to load must say so. A spinner left spinning reads as "still

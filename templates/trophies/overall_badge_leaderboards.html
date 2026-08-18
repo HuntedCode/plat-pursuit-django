@@ -177,18 +177,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         The filters stay as SELECTS above rather than becoming chips in here. Chips read well as "what is
         applied" but need somewhere to set them FROM, which means a button that opens the selects anyway
         -- and the selects already say what is applied by showing their value. {% endcomment %}
-        <div class="lb-boardcard">
-            <div class="lb-boardcard__id">
-                <h2 class="lb-boardcard__name">{{ board_label }}</h2>
-                <p class="lb-boardcard__what">{{ board_meaning }}</p>
-            </div>
-            <div class="lb-boardcard__meta">
-                <div class="lb-boardcard__tally">
-                    <span class="pp-tally" data-countup="{{ ranked_total }}">{{ ranked_total|intcomma }}</span>
-                    <span class="lb-boardcard__tallylbl">{{ ranked_label }}{{ ranked_total|pluralize }}{% if selected_edition or selected_country %} here{% endif %}</span>
-                </div>
-            </div>
-        </div>
+        {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=ranked_total ranked_label=ranked_label scoped=slice_applied only %}
 
         {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=ranked_total id_prefix='lb' only %}
       </div>
@@ -325,18 +314,10 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         // submit and swallows it, so pressing Enter on an empty board cannot do a native GET to the bare
         // path -- which would silently drop the reader's tab, country and edition.
         board = PlatPursuit.wireBoard(root, { scope: page, chromeInset: chromeInset });
-        // The first screenful cascades in. This page is where the reveal collision was FOUND and where
-        // its replacement is documented, and it was the one surface not actually calling it.
-        PlatPursuit.boardEntrance(root);
-
-        // The Tally ticks ONCE per mount, on the board card's figure -- which is why it lives HERE and
-        // not in a boot block: a swap replaces the card, so a one-shot boot counted the board you
-        // arrived on and every board after it just appeared. There is no global `[data-countup]` boot on
-        // this site; every page wires its own. Deliberately not applied to the rows: 50 simultaneous
-        // counters is the "frantic counters" anti-pattern. `countUp` jumps straight to the target under
-        // reduced motion, so this needs no guard.
-        var tally = page.querySelector('.lb-boardcard__tally [data-countup]');
-        if (tally && PlatPursuit.countUp) { PlatPursuit.countUp(tally, 850); }
+        // The first screenful cascades in and the board card's Tally ticks. This page is where the
+        // reveal collision was FOUND and where its replacement is documented, and it was the one
+        // surface not actually calling it.
+        PlatPursuit.boardEntrance(root, page);
     }
 
     // Which swap is the live one. Two quick tab clicks, or a tab click and then a filter change, start

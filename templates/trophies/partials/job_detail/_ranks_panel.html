@@ -5,13 +5,21 @@ are server-rendered hidden, and only the EXPENSIVE one is fetched -- which is wh
 tab, not both" saving that the `?tab=` version got from a full page reload. A visitor who never opens
 Ranks never pays for it.
 
-VIRTUALIZED, on the shared shell, like every other board on the site. The prev/next pager that stood here
-is gone with it: a job board is the only per-entity board with no fuller surface to hand off to, so paging
-was the only way to reach row 300 at all, and it meant twelve clicks to get there. A spacer is jumped
-into directly.
+STACKED CHROME CARDS + FREE CONTENT, the site-wide rule, and the same composition the Global Boards
+landing and badge detail's Ranks tab use: identity and the way in on one compact utility card, the wall
+free below it.
+
+VIRTUALIZED. The prev/next pager that stood here is gone with it: a job board is the only per-entity
+board with no fuller surface to hand off to, so paging was the only way to reach row 300 at all, and it
+meant twelve clicks to get there.
 {% endcomment %}
 {% if rows %}
-{% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='jobd' only %}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
+  <div class="card-body p-3 md:p-4">
+    {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total standing=standing only %}
+    {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='jobd' only %}
+  </div>
+</section>
 
 {% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url viewer_rank=my_rank primary_label='XP' secondary_label='level' only %}
 

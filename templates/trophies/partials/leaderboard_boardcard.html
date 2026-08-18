@@ -1,0 +1,27 @@
+{% comment %} THE BOARD IDENTITY, shared by every board: which board this is, what it ranks, and how
+many are on it -- directly above the wall, so the answer to "what am I looking at" is adjacent to the
+thing being looked at rather than three bands up.
+
+It absorbed the standalone tally rather than adding a band. A title card stacked on top of what was
+already several bands of chrome would put a phone reader further from the first row, not closer to
+understanding it -- which is why the description is the part that drops at mobile widths.
+
+`standing` is the one slot the landing does not use: it has a tab strip whose chips carry per-board
+ranks, and a jump chip that says "You're #N". Badge and job detail have neither, so an unranked
+signed-in hunter needs somewhere to be told so -- "not on this board yet" is an ANSWER, and its absence
+reads as a missing feature rather than as the answer.
+{% endcomment %}
+{% load humanize %}
+<div class="lb-boardcard">
+    <div class="lb-boardcard__id">
+        <h2 class="lb-boardcard__name">{{ board_label }}</h2>
+        <p class="lb-boardcard__what">{{ board_meaning }}</p>
+    </div>
+    <div class="lb-boardcard__meta">
+        <div class="lb-boardcard__tally">
+            <span class="pp-tally" data-countup="{{ total }}">{{ total|intcomma }}</span>
+            <span class="lb-boardcard__tallylbl">{{ ranked_label|default:"hunter" }}{{ total|pluralize }}{% if scoped %} here{% endif %}</span>
+        </div>
+        {% if standing %}<p class="lb-boardcard__standing">{{ standing }}</p>{% endif %}
+    </div>
+</div>

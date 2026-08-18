@@ -477,6 +477,7 @@ scrolled. All three now run the same pieces:
 | `leaderboard_row.html` | partial | One row |
 | `leaderboard_rows.html` | partial | One WINDOW: bare rows, no wrapper |
 | `leaderboard_jumpbar.html` | partial | Jump-to-me + the rank box |
+| `leaderboard_boardcard.html` | partial | The identity: name, one-line meaning, counting tally |
 | `board_helpers.window_params` | `trophies/views/` | `?range=` / `?count=`, clamped at both ends |
 | `board_helpers.PAGE_SIZE` | `trophies/views/` | 50, once. It was declared three times |
 
@@ -484,6 +485,13 @@ scrolled. All three now run the same pieces:
 the full panel; `?range=N` returns bare rows for display positions `[N, N+count)`. The value is not what
 distinguishes them -- junk `range` is still a window request, because the caller asked for rows and
 splicing a jump bar into the middle of a wall is worse than an off-by-one.
+
+Each surface composes the same two bands: a compact utility card (`.lb-controls`, `p-3 md:p-4`) holding
+the board card and the jump bar, then the wall free below it. That is the site-wide STACKED CHROME CARDS
++ FREE CONTENT rule, and it is the half the first propagation missed -- badge and job detail got the
+wall, the row and the jump bar, and then sat all of it bare on the page background. The boards behaved
+identically and did not look like the same product, which was the entire point. `test_board_uniformity`
+now asserts the design as well as the contract.
 
 Game detail's board **does** use `window_params` and `MAX_START` (it was a fourth hand-rolled copy of
 the clamp, with a looser start bound), but **is deliberately NOT on the shared row.** It runs the same engine, but its rows carry

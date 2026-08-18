@@ -270,22 +270,9 @@
     font-size: 1.15rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em;
 }
 .bd2-ranks__h svg { width: 18px; height: 18px; color: var(--pp-primary); flex: 0 0 auto; }
-.bd2-ranks__sub { margin-top: 4px; font-size: 0.85rem; color: var(--pp-text-dim); }
 .bd2-ranks__body { margin-top: 14px; }
-@media (min-width: 768px) { .bd2-ranks__h { font-size: 1.35rem; } .bd2-ranks__sub { font-size: 0.92rem; } }
+@media (min-width: 768px) { .bd2-ranks__h { font-size: 1.35rem; } }
 
-/* A count and the viewer's own position, above the wall -- the same "your standing once, not per row"
-   rule the Global Boards landing follows, for the same caching reason. */
-.bd2-ranks__meta {
-    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px;
-    margin-bottom: 10px; font-size: 12px; color: var(--pp-text-dim);
-}
-.bd2-ranks__count b, .bd2-ranks__mine b { color: var(--pp-text); }
-.bd2-ranks__mine { color: var(--pp-primary); }
-.bd2-ranks__mine b { color: var(--pp-primary); }
-/* "Not on this board yet" is an ANSWER, not an alert -- it sits in the same slot as the rank and reads
-   quieter than it, so a hunter who is ranked still sees the accent land on their number. */
-.bd2-ranks__mine--none { color: var(--pp-text-mute); }
 
 /* Loading + failure. The spinner is a real state, not a placeholder: this section is fetched, so it can
    genuinely be pending -- and it can genuinely fail, which must SAY so rather than spin forever. */
@@ -601,6 +588,12 @@
 .lb-boardcard__tallylbl {
     font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--pp-text-mute);
+}
+/* "Not on this board yet" -- an ANSWER, in the slot a rank would occupy, and quieter than one so that a
+   ranked hunter still sees the accent land on their own number (which the jump chip below carries). */
+.lb-boardcard__standing {
+    margin-top: 2px; font-size: 11px; color: var(--pp-text-mute);
+    letter-spacing: 0.02em; text-align: right;
 }
 @media (min-width: 768px) {
     .lb-boardcard__name { font-size: 1.15rem; }

@@ -213,7 +213,11 @@ def test_a_signed_in_hunter_is_told_when_they_are_NOT_on_the_board(client):
     SeriesBadgeStanding.objects.create(profile=viewer, series_slug='chase', xp=100, progress_bp=7500,
                                        stages_cleared=3, stages_total=4, advanced_at=dt.date(2025, 2, 1), is_linked=True)
     body = client.get(reverse('badge_ranks_panel', args=['chase'])).content.decode()
-    assert 'You are' in body and 'Not on this board yet' not in body
+    # Once ranked, the answer moves from the board card's standing slot to the JUMP CHIP, which says
+    # "You're #N" and is also the control that takes you there. Saying it in both places on one card was
+    # the duplication the shared board card removed, so this asserts the chip rather than the old line.
+    assert 'Not on this board yet' not in body
+    assert 'data-lb-jump' in body, 'a ranked hunter is told their rank nowhere at all'
 
 
 def test_a_signed_out_visitor_is_told_nothing_about_a_standing_they_cannot_have(client):
@@ -248,7 +252,7 @@ def test_the_board_can_be_read_past_the_first_window(client):
     # ROWS ONLY -- the virtualizer splices these into its own spacer, so a wrapper or any chrome here
     # would be parsed and discarded.
     assert tail.count('<li class="lb-row') == 10
-    assert 'bd2-ranks__meta' not in tail and '<ol' not in tail and 'lb-jumpbar' not in tail
+    assert 'lb-boardcard' not in tail and '<ol' not in tail and 'lb-jumpbar' not in tail
     assert 'Hunter50' in tail and 'Hunter00' not in tail
     # `page()` numbers by SLOT, so the continuation must not restart at #1.
     assert window.context['entries'][0]['rank'] == 51
@@ -263,7 +267,7 @@ def test_a_junk_range_falls_back_to_the_first_window(client):
         resp = client.get(reverse('badge_ranks_panel', args=['deep']), {'range': raw})
         assert resp.status_code == 200, f'range={raw!r} was not handled'
         assert resp.context['entries'][0]['rank'] == 1, f'range={raw!r} did not fall back'
-        assert 'bd2-ranks__meta' not in resp.content.decode(), f'range={raw!r} returned panel chrome'
+        assert 'lb-boardcard' not in resp.content.decode(), f'range={raw!r} returned panel chrome'
 
 
 def test_no_range_at_all_serves_the_full_panel(client):
@@ -272,7 +276,7 @@ def test_no_range_at_all_serves_the_full_panel(client):
     _renderable('deep', 'Deep')
     _standing('deep', 'Only', bp=5000, on=dt.date(2025, 1, 1))
     body = client.get(reverse('badge_ranks_panel', args=['deep'])).content.decode()
-    assert 'bd2-ranks__meta' in body and 'lb-jumpbar' in body
+    assert 'lb-boardcard' in body and 'lb-jumpbar' in body
 
 
 def test_a_window_past_the_end_of_the_board_is_empty_not_an_error(client):

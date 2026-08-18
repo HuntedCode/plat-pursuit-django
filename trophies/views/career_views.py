@@ -263,6 +263,7 @@ class JobRanksPanelView(View):
                           {'entries': self._window(job.slug, start - 1, count)})
 
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        my_rank = lb.job_rank(job.slug, profile.id) if profile else None
         return render(request, 'trophies/partials/job_detail/_ranks_panel.html', {
             'job': job,
             # `rows` / `total`, matching `BadgeRanksPanelView` exactly. They were `board`/`board_total`
@@ -271,11 +272,25 @@ class JobRanksPanelView(View):
             'rows': self._window(job.slug, 0, self.PAGE_SIZE),
             'total': lb.job_board_counts([job.slug]).get(job.slug, 0),
             'page_size': self.PAGE_SIZE,
-            'my_rank': lb.job_rank(job.slug, profile.id) if profile else None,
+            'my_rank': my_rank,
+            # The shared board card, same as badge detail's panel. `board_label` is the job, because on
+            # this page the board IS the job.
+            'board_label': job.name,
+            'board_meaning': 'Every hunter who has banked XP in this job, deepest first.',
+            'standing': self._standing(profile, my_rank),
             # Reversed rather than read off `request.path`, so the panel does not silently depend on
             # having been reached by its canonical URL.
             'rows_url': reverse('job_ranks_panel', args=[job.slug]),
         })
+
+    @staticmethod
+    def _standing(profile, my_rank):
+        """What the board card tells a signed-in viewer about themselves -- see `BadgeRanksPanelView
+        ._standing`, which this deliberately mirrors. A ranked viewer gets nothing here, because the jump
+        chip beneath already says "You're #N"."""
+        if not (profile and profile.is_linked) or my_rank:
+            return ''
+        return 'Not ranked yet'
 
     @staticmethod
     def _window(job_slug, offset, limit):
