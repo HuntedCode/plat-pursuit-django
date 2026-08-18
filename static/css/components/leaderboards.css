@@ -635,9 +635,11 @@
    filters above by a hairline rather than its own border, because it is a REGION of one surface. */
 .lb-boardcard {
     display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
-    gap: 4px 16px; margin: 12px 0 0;
-    padding-top: 12px; border-top: 1px solid var(--pp-border);
+    gap: 4px 16px; margin: 0;
 }
+/* The hairline only when something sits ABOVE it on the card. A board with nothing to filter (Career
+   before any country is ranked) would otherwise open with a rule drawn against nothing. */
+.lb-filters + .lb-boardcard { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
 .lb-boardcard__id { min-width: 0; }
 .lb-boardcard__name { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
 .lb-boardcard__what {
@@ -665,7 +667,15 @@
 
    The card's own margins do the separating; its children drop theirs, or the surface reads as padded
    twice. */
-.lb-controls .lb-bar { margin: 0; }
+/* THE TAB STRIP IS NOT ON THIS CARD. `.pp-switch` is itself a bordered container of transparent chips
+   (the site-wide segmented-switcher standard), so a card under it is a bordered surface inside a bordered
+   surface. Every other switcher on the site -- career, game detail, badge detail, job detail, the badge
+   gallery, profile -- sits bare on the page for exactly that reason; it is already chrome, and a second
+   surface beneath it is the part that would look out of place.
+
+   The card's padding does the separating; its children drop their own margins, or the surface reads as
+   padded twice. */
+.lb-controls .lb-filters { margin: 0; }
 .lb-controls .lb-jumpbar { margin-bottom: 0; margin-top: 10px; }
 
 @media (max-width: 767px) {
@@ -679,7 +689,7 @@
     .lb-controls .lb-boardcard__what { display: none; }
     /* Name and tally share a row once the description is gone, which is what makes the saving real
        rather than moving the same height around. */
-    .lb-controls .lb-boardcard { align-items: center; gap: 4px 10px; margin-top: 10px; padding-top: 10px; }
+    .lb-controls .lb-filters + .lb-boardcard { align-items: center; gap: 4px 10px; margin-top: 10px; padding-top: 10px; }
     .lb-controls .lb-boardcard__name { font-size: 0.95rem; }
     /* The jump chip and the rank box fit beside each other; the label is the part that does not. */
     .lb-controls .lb-goto__lbl { display: none; }

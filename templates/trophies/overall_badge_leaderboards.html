@@ -86,20 +86,11 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
 
     Same call the Ratings tab already argued in its own comment. Career's chips DO carry tab roles, and
     correctly: they are buttons over real `role="tabpanel"` islands. {% endcomment %}
-    {% comment %} ONE control surface, not four bare bands. The site-wide rule is STACKED CHROME CARDS +
-    FREE CONTENT: chrome is carded (page header, then toolbar / stat cards), and the content -- a grid or
-    a list -- flows free below it, never inside an outer card. An infinite-scroll wall is the exact case
-    that rule protects: a card around it is a border that grows forever.
-
-    So the tab strip, the filters, the board's identity and the way in all sit here on a compact utility
-    card (`p-3 md:p-4` -- a control surface, not content display, so it must not feel bloated), and the
-    wall below is free. This is FEWER bands than the four bare ones it replaces, and the card ends where
-    the wall starts, so nothing about the board is boxed in or narrowed.
-
-    Tabs and identity together on purpose: you pick a board, and the same surface tells you what you
-    picked. They were answering one question a beat apart. {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
-      <div class="card-body p-3 md:p-4">
+    {% comment %} THE TAB STRIP SITS BARE, and deliberately. `.pp-switch` is already "a bordered container
+    of transparent chips" (the site-wide segmented-switcher standard), so a card under it is a bordered
+    surface inside a bordered surface -- and every other switcher on the site, career, game detail, badge
+    list, profile detail, job detail, sits on the page for exactly that reason. It is chrome already; a
+    second surface beneath it is the part that would look wrong. The card starts BELOW it. {% endcomment %}
     <div class="lb-bar">
         <nav class="pp-switch" aria-label="Leaderboard">
             {% for b in boards %}
@@ -115,7 +106,19 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             </a>
             {% endfor %}
         </nav>
+    </div>
 
+    {% comment %} ONE control surface, not three bare bands. The site-wide rule is STACKED CHROME CARDS +
+    FREE CONTENT: chrome is carded (page header, then toolbar / stat cards), and the content -- a grid or
+    a list -- flows free below it, never inside an outer card. An infinite-scroll wall is the exact case
+    that rule protects: a card around it is a border that grows forever.
+
+    So the filters, the board's identity and the way in sit together on a compact utility card
+    (`p-3 md:p-4` -- a control surface, not content display, so it must not feel bloated), and the wall
+    below is free. The card ends where the wall starts, so nothing about the board is boxed in or
+    narrowed. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
+      <div class="card-body p-3 md:p-4">
         {% comment %} The filters, never boards of their own. A plain GET form so it works with JS off; the
         script below submits on change. `tab` rides along as a hidden field so changing a filter keeps you
         on the board you were reading, and `page` is absent so a filter change returns you to the top.
@@ -162,7 +165,6 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             <noscript><button type="submit" class="lb-filters__go">Go</button></noscript>
         </form>
         {% endif %}
-    </div>
 
     {% comment %} The BOARD IDENTITY. Which board this is, what it ranks, how many are on it, and the way
         in -- directly above the wall, so the answer to "what am I looking at" is adjacent to the thing

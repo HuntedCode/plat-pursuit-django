@@ -479,15 +479,17 @@ def test_the_chrome_is_carded_and_the_wall_is_not(client):
     card. An infinite-scroll wall is the exact case that rule protects, because a card around it is a
     border that grows forever.
 
-    The tab strip, the filters, the board identity and the jump bar all sat bare on the page background,
-    which is the half of the rule that was being missed.
+    The filters, the board identity and the jump bar all sat bare on the page background, which is the
+    half of the rule that was being missed.
     """
     _ranked('Someone', plats=5, trophies=50)
     body = client.get(URL).content.decode()
 
     assert 'lb-controls' in body, 'the chrome is not on a surface'
     controls = body[body.index('lb-controls'):body.index('<div class="lb-board"')]
-    for part in ('pp-switch', 'lb-boardcard', 'lb-jumpbar'):
+    # The filters are conditional (a board with nobody ranked in any country has none to offer), so the
+    # unconditional chrome is what this asserts.
+    for part in ('lb-boardcard', 'lb-jumpbar'):
         assert part in controls, f'{part} is outside the control card'
 
     # ...and the wall is NOT inside it.
@@ -495,4 +497,24 @@ def test_the_chrome_is_carded_and_the_wall_is_not(client):
     assert wall_at > body.index('</section>', body.index('lb-controls')), (
         'the wall is inside the control card -- an outer card around an infinite list is the thing the '
         'rule forbids'
+    )
+
+
+def test_the_tab_strip_is_not_on_the_control_card(client):
+    """`.pp-switch` is itself a bordered container of transparent chips, so a card under it is a bordered
+    surface inside a bordered surface. Every other switcher on the site sits bare on the page for that
+    reason, and this one briefly did not -- it got swept onto the card along with the filters when the
+    chrome was given a surface.
+
+    Asserted as an ORDERING (the strip closes before the card opens) rather than a substring, because
+    'pp-switch' also appears in the page's script block and would pass a naive containment check.
+    """
+    _ranked('Someone', plats=5, trophies=50)
+    body = client.get(URL).content.decode()
+
+    strip_close = body.index('</nav>', body.index('<nav class="pp-switch"'))
+    card_open = body.rindex('<section class="card', 0, body.index('lb-controls'))
+
+    assert strip_close < card_open, (
+        'the tab strip is inside the control card -- a bordered switcher on a bordered surface'
     )
