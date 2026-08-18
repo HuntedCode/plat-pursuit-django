@@ -66,7 +66,11 @@ denormalized copy, so a renamed hunter reads correctly immediately) plus the boa
             rAF loops writing textContent into laid-out grid rows, fighting the staggerReveal already
             running -- the "frantic counters" the visual identity warns against. The Tally ticks ONCE, on
             the header figure. {% endcomment %}
-            <span class="lb-row__v pp-tally">{{ entry.primary|default:0|intcomma }}</span>
+            {% comment %} `primary_of` is the DENOMINATOR, when a board has one. Without it the badge
+            series board rendered "5 stages" for a hunter who finished a 5-stage series AND for one sitting
+            on 5 of 8 -- the same string for the top of the board and the middle of it. The total was being
+            fetched on every row and discarded. {% endcomment %}
+            <span class="lb-row__v pp-tally">{{ entry.primary|default:0|intcomma }}{% if entry.primary_of %}<span class="lb-row__of"> / {{ entry.primary_of|intcomma }}</span>{% endif %}</span>
             <span class="lb-row__k">{{ entry.primary_label }}</span>
         </span>
         {% comment %} The supporting figure is what gives the leading one its meaning -- 9 platinums out
@@ -76,6 +80,16 @@ denormalized copy, so a renamed hunter reads correctly immediately) plus the boa
         <span class="lb-row__fig lb-row__fig--sub">
             <span class="lb-row__v pp-tally">{{ entry.secondary|intcomma }}</span>
             <span class="lb-row__k">{{ entry.secondary_label }}</span>
+        </span>
+        {% endif %}
+        {% comment %} A DATE, not a figure -- its own slot because the two above go through `intcomma` and
+        a timestamp is a different kind of thing from a supporting number. On the series board it is the
+        tiebreak made visible: rows sharing a rung are ordered by who got there first, which reads as
+        arbitrary until the date is on screen. Not a Tally: it is not a quantity. {% endcomment %}
+        {% if entry.when %}
+        <span class="lb-row__fig lb-row__fig--when">
+            <span class="lb-row__v lb-row__when">{{ entry.when|date:"M Y" }}</span>
+            <span class="lb-row__k">{{ entry.when_label }}</span>
         </span>
         {% endif %}
     </span>

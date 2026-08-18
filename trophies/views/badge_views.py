@@ -620,9 +620,17 @@ class BadgeRanksPanelView(View):
 
         rows = lb.series_board_rows(series_slug, limit=self.PREVIEW, offset=offset)
         # `offset`, not 0: `page()` numbers rows by SLOT, so the second slice must start at 26, not at 1.
+        # r = (profile_id, progress_bp, stages_cleared, stages_total, advanced_at). The last two were
+        # fetched and discarded: the row showed "5 stages" for a finisher and for someone on 5 of 8 alike,
+        # and the date that BREAKS THE TIE between rows on the same rung was invisible, which is what made
+        # the ordering read as arbitrary.
         entries = lb.page(rows, offset, extra=lambda r: {
-            'primary': r[2], 'primary_label': 'stages',
+            'primary': r[2], 'primary_of': r[3], 'primary_label': 'stages',
             'secondary': None, 'secondary_label': '',
+            # `advanced_at` is the hunter's most recent advance -- their completion date if they finished,
+            # the latest gating stage they cleared if they are still chasing. One column, and the label
+            # stays neutral rather than claiming which, because the row does not know.
+            'when': r[4], 'when_label': 'since',
         })
         if offset:
             # ROWS ONLY, plus one header. The client used to infer "that was the last slice" from a short

@@ -306,3 +306,41 @@ def test_a_huge_offset_is_clamped_rather_than_scanned(client):
 
     assert resp.status_code == 200
     assert resp['X-Has-Next'] == '0'
+
+
+def test_a_row_shows_its_denominator_and_its_tiebreak_date(client):
+    """Both were fetched on every row and thrown away.
+
+    Without the denominator, a hunter who finished a 5-stage series rendered "5 stages" and one sitting on
+    5 of 8 rendered "5 stages" -- the top of the board and the middle of it, identical. And `advanced_at`
+    is what ORDERS rows sharing a rung (whoever got there first ranks higher), so leaving it off screen
+    made the ordering look arbitrary to the person reading it.
+    """
+    _renderable('shown', 'Shown')
+    _standing('shown', 'Finisher', bp=10000, on=dt.date(2024, 3, 1))
+    _standing('shown', 'Chaser', bp=5000, on=dt.date(2025, 7, 1))
+
+    resp = client.get(reverse('badge_ranks_panel', args=['shown']))
+    rows = resp.context['rows']
+    body = resp.content.decode()
+
+    # `_standing` builds stages_cleared from bp // 2500 against a stages_total of 4.
+    assert rows[0]['primary'] == 4 and rows[0]['primary_of'] == 4, 'the denominator never reached the row'
+    assert rows[1]['primary'] == 2 and rows[1]['primary_of'] == 4
+    assert rows[0]['when'] is not None, 'the tiebreak date never reached the row'
+
+    assert '/ 4' in body, 'the denominator is not rendered'
+    assert 'Mar 2024' in body and 'Jul 2025' in body, 'the tiebreak date is not rendered'
+
+
+def test_the_date_orders_rows_that_share_a_rung(client):
+    """The reason the date is worth showing: it is the sort key, not decoration. Two hunters on the same
+    number of stages are separated by who got there first."""
+    _renderable('rung', 'Rung')
+    later = _standing('rung', 'Later', bp=5000, on=dt.date(2025, 1, 1))
+    earlier = _standing('rung', 'Earlier', bp=5000, on=dt.date(2021, 1, 1))
+
+    rows = client.get(reverse('badge_ranks_panel', args=['rung'])).context['rows']
+
+    assert [r['profile_id'] for r in rows] == [earlier.id, later.id]
+    assert rows[0]['primary'] == rows[1]['primary'], 'the fixture no longer tests a shared rung'

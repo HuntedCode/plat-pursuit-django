@@ -170,6 +170,13 @@
     color: var(--pp-text-mute); line-height: 1;
 }
 .lb-row__fig--sub .lb-row__v { font-size: 12.5px; color: var(--pp-text-dim); }
+/* The denominator rides INSIDE the leading figure rather than beside it, and stays quiet: "5 / 8" should
+   read as one value, with the 5 carrying the weight. Not tabular-nums on the pair -- the slash breaks the
+   column anyway, and the Tally on the numerator already lines up. */
+.lb-row__of { font-size: 0.72em; color: var(--pp-text-mute); font-weight: 400; }
+/* The date slot. Deliberately NOT a `.pp-tally`: a timestamp is not a quantity, and giving it the Tally
+   would put three competing figures in a row that is meant to be scanned down one column. */
+.lb-row__when { font-size: 12px; color: var(--pp-text-dim); white-space: nowrap; }
 
 /* Podium: the leading edge warms, and the rank figure takes the metal. Nothing else changes -- no size
    jump, no icon, no background wash, so the wall stays a list rather than a leaderboard-shaped poster.
@@ -206,6 +213,11 @@
    where there is room for it to earn its place. */
 @media (max-width: 767px) {
     .lb-row__fig--sub { display: none; }
+    /* The date goes with it, and for the same reason: at 343px the row is already name-versus-figure, and
+       a third column takes width from the name, which is the thing a reader scans for. The DENOMINATOR
+       stays -- it is inside the leading figure, costs ~22px, and without it the top of the board is
+       indistinguishable from the middle, which is the whole point of the merge. */
+    .lb-row__fig--when { display: none; }
 }
 
 /* ---- Empty state ----------------------------------------------------------------------------------- */
