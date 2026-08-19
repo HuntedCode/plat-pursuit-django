@@ -83,9 +83,10 @@ holding the same totals sliced per edition to back the boards' edition filter.
 
 `recompute_standing` writes a fourth store in the same pass: `SeriesEditionStanding`, one row per (profile,
 series, STARTED edition), carrying that edition's points AND its own `advanced_at`. It costs no extra
-evaluation -- the loop already holds each edition's `GroupBadgeResult`, and `_advanced_at` was already
-being called per edition and discarded for all but the best one. It backs badge detail's per-edition
-board; see [leaderboard-system.md](leaderboard-system.md).
+EVALUATION -- the loop already holds each edition's `GroupBadgeResult`, and `_advanced_at` is a pure
+function of one of those, so the per-edition date was always derivable; `compute_series_standings` simply
+only ever asked for the furthest-along edition's. It backs badge detail's per-edition board; see
+[leaderboard-system.md](leaderboard-system.md).
 
 Calibrated to the "1,000,000 Club": over a projected mature catalog (~400 group badges, ~5 gating stages
 each) a completionist lands ~1.24M. See `test_million_club_calibration`.

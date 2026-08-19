@@ -3373,9 +3373,9 @@ class SeriesEditionStanding(models.Model):
     country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
     # Denormalized from Profile for the same reason every other standing store carries it: it is a board
     # PREDICATE, and a predicate on another table cannot go in this table's indexes. Kept in step by the
-    # two paths the others use -- stamped by every recompute, and repaired by
-    # `signals.profile_mirrored_standings` for the edge those miss (a hunter VERIFYING, which changes it
-    # with no recompute behind it).
+    # two paths the others use -- stamped by every recompute, and repaired by the `_propagate_*` receiver
+    # in `signals` (over the store list `profile_mirrored_standings()` returns) for the edge those miss:
+    # a hunter VERIFYING, which changes it with no recompute behind it.
     is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 

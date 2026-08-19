@@ -467,9 +467,12 @@ def test_an_edition_that_stops_being_started_loses_its_row():
 
 @pytest.mark.django_db
 def test_a_series_dropping_to_zero_takes_its_edition_rows_with_it():
-    """The half that is easy to miss. A zeroed series deletes its `SeriesBadgeStanding` row, so nothing
-    else would ever visit these -- and the edition board would keep ranking a hunter the series board has
-    already dropped. Two stores, one truth."""
+    """Two stores, one truth: the series board drops this hunter, so the edition board must too.
+
+    The mechanism is the SCOPED delete, not a special case -- a zeroed series is still a series this call
+    evaluated, so it is in `touched` and its rows go with everything else's. Worth pinning as BEHAVIOUR
+    anyway: the reason it needs no branch of its own is an argument about set membership
+    (`positive + zeroed == standings`) that a later edit could quietly break."""
     from trophies.services.badge_apply import evaluate_and_apply
     from trophies.models import (
         ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, SeriesEditionStanding,
@@ -491,6 +494,81 @@ def test_a_series_dropping_to_zero_takes_its_edition_rows_with_it():
         'the edition board still ranks a hunter whose series standing is gone'
     )
 
+
+@pytest.mark.django_db
+def test_a_scoped_recompute_leaves_another_series_edition_rows_alone():
+    """The delete is scoped to the series this call evaluated. Nothing else asserts that.
+
+    Every other test here passes every badge, so the scope is invisible: rewriting the delete to
+    `filter(profile_id=profile_id)` -- dropping the `series_slug__in` -- would pass the whole suite while
+    wiping a hunter off every OTHER badge's edition board on any `--series` run or any sync that touched
+    one game. It self-heals on the next full evaluation, which is what would make it hard to catch: the
+    boards would just be intermittently short.
+
+    `test_badge_sync_wiring` pins that callers scope by SERIES. This pins what the seam does with that.
+    """
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    a_ultra, a_legacy, a_games = _two_edition_series('scoped-a')
+    b_ultra, b_legacy, b_games = _two_edition_series('scoped-b')
+    p = ProfileFactory()
+    _complete(p, a_games[('ps5', 1)])
+    _complete(p, b_games[('ps3', 1)])
+    evaluate_and_apply(p, [a_ultra, a_legacy, b_ultra, b_legacy])
+    assert SeriesEditionStanding.objects.filter(profile=p).count() == 2
+
+    # Re-run scoped to B only, the shape `evaluate_for_sync` produces when a sync touches one B game.
+    evaluate_and_apply(p, [b_ultra, b_legacy])
+
+    rows = dict(SeriesEditionStanding.objects.filter(profile=p)
+                .values_list('series_slug', 'platform_group_key'))
+    assert rows == {'scoped-a': 'ultra-hd', 'scoped-b': 'legacy-hd'}, (
+        f'a scoped recompute reached outside its own series: {rows}'
+    )
+
+
+@pytest.mark.django_db
+def test_a_dormant_series_keeps_its_edition_rows_when_the_profile_total_hits_zero():
+    """REGRESSION. The zero-total branch deletes the two PROFILE-wide standing stores, and briefly deleted
+    this per-SERIES one alongside them -- profile-wide, reaching past the series the call evaluated.
+
+    The path is a curator's, not an edge case. `_live_standings` deliberately EXCLUDES a series whose
+    editions have all been un-lived (so a stage can be re-authored without erasing anyone's history), so a
+    hunter whose only points are in a dormant series totals 0 while their rows are deliberately preserved.
+    The nightly, evaluating the LIVE catalogue, then deleted the edition rows of a series it had not been
+    handed. Re-live the badge and the series board ranks that hunter while its own edition board says they
+    are not chasing it -- the two-stores-disagree failure the store's docstring calls out, arrived at from
+    the other direction.
+
+    The fixture needs a SECOND, live series the hunter has not started: `evaluate_and_apply` returns early
+    on an empty badge list and never reaches the seam, so evaluating "nothing" cannot exercise this and a
+    test written that way passes against the bug. The live series contributes 0 XP, which is what drives
+    the total to zero while the dormant series' rows sit there untouched.
+    """
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import GroupBadge, SeriesBadgeStanding, SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    dormant_u, dormant_l, dormant_games = _two_edition_series('dormant')
+    live_u, live_l, _live_games = _two_edition_series('still-live')
+    p = ProfileFactory()
+    _complete(p, dormant_games[('ps5', 1)])            # points, in the series about to go dormant
+    evaluate_and_apply(p, [dormant_u, dormant_l])
+    assert SeriesEditionStanding.objects.filter(profile=p).count() == 1
+
+    # The curator pulls that series to re-author it. The nightly then runs over the live catalogue, which
+    # no longer includes it -- and the hunter has done nothing in the series that IS live.
+    GroupBadge.objects.filter(series__series_slug='dormant').update(is_live=False)
+    evaluate_and_apply(p, [live_u, live_l])
+
+    assert SeriesBadgeStanding.objects.filter(profile=p, series_slug='dormant').exists(), (
+        'the fixture is not exercising the dormant path -- the series standing itself was removed'
+    )
+    assert SeriesEditionStanding.objects.filter(profile=p, series_slug='dormant').count() == 1, (
+        'a recompute deleted the edition rows of a series it was never handed'
+    )
 
 @pytest.mark.django_db
 def test_the_edition_rows_mirror_the_profile_fields_the_board_filters_on():

@@ -1012,11 +1012,13 @@
    The board moved off the main scroll and behind a tab, matching game detail and job detail -- badge
    detail was the only one rendering its board inline.
 
-   TWO controls sit above this content and they are deliberately not peers. `.bd2-groupswitch` is part of
-   the HEADER: it swaps the hero, which has to stay visible whichever tab is open or you lose track of
-   which badge you are reading. This strip is content tabs beneath it, on the small shared `.pp-switch`
-   chips, so the difference in weight says which one is chrome and which one is navigation. Editions do
-   not apply to the board (it is per SERIES), so the Ranks tab correctly carries no edition control. */
+   TWO controls, deliberately not peers and no longer stacked. This strip comes first: it decides what you
+   are looking at. `.bd2-groupswitch` sits INSIDE the Overview panel below it, because which EDITION only
+   means something once you are reading the journey -- and because editions do not apply to the board (it
+   is per SERIES), so the tab system hides the switcher on Ranks for free. The weight difference (big
+   medallion segments vs small shared `.pp-switch` chips) still says which is chrome and which is
+   navigation; the ordering is what stops the board's own "Edition" filter sharing a screen with a control
+   that spells the same word and means something else. */
 /* The content tabs, right-aligned from md: up -- the site-wide standard every other switcher follows
    (career, game detail, the genre/theme list, the leaderboard strips). This was the last one on the left.
 
@@ -1032,3 +1034,9 @@
     .bd-viewswitch .pp-switch__chip { flex: 0 0 auto; }
 }
 .bd-view[hidden] { display: none; }
+/* The edition switcher is the Overview panel's first child, and its own `margin-top: 2px` currently
+   COLLAPSES through `.bd-view` (a bare block: no padding, border, overflow or containment) to merge with
+   the strip's 14px bottom margin. Right answer, accidental mechanism -- adding padding or `overflow` to
+   `.bd-view` later would un-collapse it and silently widen the gap. Zeroed explicitly so the spacing under
+   the tab strip has exactly one owner. */
+#bd-view-overview > .bd2-groupswitch { margin-top: 0; }

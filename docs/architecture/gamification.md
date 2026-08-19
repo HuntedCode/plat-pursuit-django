@@ -2,7 +2,7 @@
 
 The gamification layer tracks XP accumulation across the platform. Two XP systems are active:
 
-1. **Badge XP** (see [badge-system.md](badge-system.md)): earned by clearing gating stages and completing group badges. Materialized on `ProfileBadgeStanding` / `SeriesBadgeStanding` / `ProfileEditionStanding`.
+1. **Badge XP** (see [badge-system.md](badge-system.md)): earned by clearing gating stages and completing group badges. Materialized on `ProfileBadgeStanding` / `SeriesBadgeStanding` / `SeriesEditionStanding` / `ProfileEditionStanding`.
 2. **Contract / job XP engine** (below): per-job XP banked when a user *accepts* a completed Contract. Decoupled from badges, with its own immutable ledger.
 
 The two are SEALED from each other on purpose. Badge XP measures curated-set completion; job XP measures

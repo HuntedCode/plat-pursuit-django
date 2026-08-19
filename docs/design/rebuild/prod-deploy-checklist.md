@@ -564,8 +564,8 @@ read-side; nothing to run.
 
 ### The per-edition badge board gets a store (2026-08)
 
-Migration `trophies.0313_series_edition_standing`, plus a one-time backfill. Spec:
-[leaderboards-rebuild.md](leaderboards-rebuild.md) §8.
+Migration `trophies.0313_series_edition_standing`. Spec:
+[leaderboards-rebuild.md](leaderboards-rebuild.md) §8, step 12.
 
 **Deploys with the section above. Nothing new to run** -- the `evaluate_badges --all` this checklist
 already requires in four places covers it.

@@ -213,8 +213,8 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     would not merely undercount -- it would DELETE the omitted edition's board row. `test_badge_sync_wiring`
     pins the scoping decision at `evaluate_for_sync`, where it is made.
 
-    ATOMIC, and serialized per profile by the lock below. This seam writes across FOUR tables and deletes
-    from two of them, and its own comments already reason about pairs of rows that must agree -- "one of
+    ATOMIC, and serialized per profile by the lock below. This seam writes across FIVE tables and deletes
+    from four of them, and its own comments already reason about pairs of rows that must agree -- "one of
     them holding a hunter the other has dropped is the kind of disagreement nobody would think to check".
     Without a transaction, any failure partway (a timeout is the likely one) left exactly that
     disagreement durably on disk. It stays SEPARATE from `apply_changes`'s transaction rather than being
@@ -271,8 +271,17 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     # `advanced_at` here is the EDITION's own date. `_advanced_at` has always taken a per-edition
     # `GroupBadgeResult`; `compute_series_standings` computes it for the furthest-along edition and drops
     # the rest, which is what made the per-edition board tiebreak on a date from a different edition.
+    # Read ONCE for the whole recompute: this seam writes one row per positive series, one per started
+    # edition, and the grand total, and both mirrored values are the same for every one of them. Hoisted
+    # above the build loop so the edition rows are complete when constructed rather than stamped in a
+    # second pass.
+    country, is_linked = _mirrored_profile_fields(profile_id)
+
     # FLAT, not keyed by series: they are written in ONE delete + ONE insert for the whole recompute (see
-    # below), so there is nothing to look up per series.
+    # below), so there is nothing to look up per series. Assumes `group_badges` is DISTINCT -- true for
+    # every caller (`GroupBadge` is unique per (series, platform_group) and they all pass a plain
+    # FK-filtered queryset), and the one statement in this seam that would raise rather than shrug if a
+    # join ever made it otherwise.
     edition_rows = []
     for gb in group_badges:
         r = desired.get(gb.id)
@@ -282,17 +291,24 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
             xp = _group_badge_xp(r)
             if xp:
                 group_xp[gb.series.series_slug][gb.platform_group.key] = xp
-            if r.gating_count > 0 and r.base_satisfied_count > 0:
+            # STARTED, which is `base_satisfied_count > 0` alone: it counts the gating stages cleared,
+            # so it is structurally <= `gating_count` and an unearnable edition (`gating_count == 0`)
+            # cannot report one. Not the same gate as `group_prog` above, which keys on `gating_count`
+            # precisely because it wants the editions this one leaves out.
+            #
+            # MEMBERSHIP, deliberately not points -- and no test can currently tell the two apart, so it
+            # is written down here instead. Under today's constants a cleared stage always pays
+            # (`XP_PER_STAGE = 500`), so `base_satisfied_count > 0` and `xp > 0` coincide exactly. Gate it
+            # on `xp` and nothing breaks until the day a stage is worth 0, at which point a visibly
+            # chasing hunter silently vanishes from the board -- which is the failure this board was
+            # rebuilt to fix, reintroduced by a simplification that looked equivalent.
+            if r.base_satisfied_count > 0:
                 edition_rows.append(SeriesEditionStanding(
                     profile_id=profile_id, series_slug=gb.series.series_slug,
                     platform_group_key=gb.platform_group.key,
                     xp=xp, stages_cleared=r.base_satisfied_count, gating_count=r.gating_count,
-                    advanced_at=_advanced_at(r),
+                    advanced_at=_advanced_at(r), country_code=country, is_linked=is_linked,
                 ))
-
-    # Read ONCE for the whole recompute: this seam writes one row per positive series plus the grand
-    # total, and both mirrored values are the same for all of them.
-    country, is_linked = _mirrored_profile_fields(profile_id)
 
     for slug, s in positive.items():
         _upsert(SeriesBadgeStanding, {'profile_id': profile_id, 'series_slug': slug},
@@ -329,8 +345,6 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     if touched:
         SeriesEditionStanding.objects.filter(profile_id=profile_id, series_slug__in=touched).delete()
     if edition_rows:
-        for row in edition_rows:
-            row.country_code, row.is_linked = country, is_linked
         SeriesEditionStanding.objects.bulk_create(edition_rows)
 
     total = _live_standings(profile_id).aggregate(t=Sum('xp'))['t'] or 0
@@ -344,9 +358,18 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
         # No badge XP at all means no standing anywhere, editions included -- the boards read
         # ProfileBadgeStanding for the all-editions view and these rows for a slice, and one of them
         # holding a hunter the other has dropped is the kind of disagreement nobody would think to check.
+        #
+        # BOTH of these are profile-wide STORES, which is what earns them a profile-wide delete.
+        # `SeriesEditionStanding` is not, and briefly had one here: it is per SERIES, so the scoped delete
+        # above already covers every series this call evaluated, and reaching past them broke the rule
+        # stated 20 lines up. The path was real rather than theoretical -- `total` comes from
+        # `_live_standings`, which deliberately EXCLUDES a series whose editions have all been un-lived so
+        # a curator can re-author it. Un-live a hunter's only series and `total` is 0 while their rows are
+        # deliberately preserved, so the nightly would delete the edition rows of a series it had not even
+        # looked at. Re-live the badge and the series board ranks them while its own edition board says
+        # they are not chasing it.
         ProfileBadgeStanding.objects.filter(profile_id=profile_id).delete()
         ProfileEditionStanding.objects.filter(profile_id=profile_id).delete()
-        SeriesEditionStanding.objects.filter(profile_id=profile_id).delete()
 
 
 def _live_standings(profile_id):

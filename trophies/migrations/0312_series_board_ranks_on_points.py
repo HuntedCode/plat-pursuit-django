@@ -19,7 +19,9 @@ two agree only because the ordering is total. Points tie in large groups by thei
 has cleared the same stages of a series holds the same total -- so the tail is doing the ordering for most
 of the board, not just resolving the occasional collision.
 
-NOT INDEXED, deliberately: the per-EDITION board (`_series_edition_qs`) sorts on a `group_xp` JSONB
+NOT INDEXED, deliberately -- AND SUPERSEDED BY 0313, which gave that board a store of its own
+(`SeriesEditionStanding`). Read the rest of this paragraph as the reasoning that led there, not as
+current behaviour: at the time, the per-EDITION board (`_series_edition_qs`) sorted on a `group_xp` JSONB
 expression, which no btree here can serve beyond the `series_slug` narrowing. One badge's chasers is a
 bounded set that Postgres sorts in `work_mem`. If a very popular series shows up in `profile_render`, the
 fix is an expression index per edition key, or a real per-(series, edition) standing row -- not a Python

@@ -92,7 +92,7 @@ This is the heart of the rebuild. **The foundation (Badge XP) is shipped and sol
 
 ### Badge XP system — REBUILT 2026-08 (standing tables, no signals)
 - **What:** Real-time XP calc/denormalization from badge progress; `total_badge_xp`, `series_badge_xp`. `bulk_gamification_update()` defers recalc during sync.
-- **Lives in:** `models.py` ProfileBadgeStanding / SeriesBadgeStanding / ProfileEditionStanding, `services/badge_xp.py`. **Deleted 2026-08**: `xp_service.py`, the gamification signals, and `ProfileGamification` as a live denorm (the table is retained but frozen).
+- **Lives in:** `models.py` ProfileBadgeStanding / SeriesBadgeStanding / SeriesEditionStanding / ProfileEditionStanding, `services/badge_xp.py`. **Deleted 2026-08**: `xp_service.py`, the gamification signals, and `ProfileGamification` as a live denorm (the table is retained but frozen).
 - **Status:** **Shipped, live.** Only the XP layer is real.
 - **Disposition:** **Keep** — load-bearing; the Pursuer's numeric foundation. Will gain fields (`job_xp`, `job_levels`, title slots) when Jobs ship — extend, don't replace.
 

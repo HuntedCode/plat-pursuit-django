@@ -14,7 +14,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
+from trophies.models import Profile, SeriesBadgeStanding, SeriesEditionStanding
 from tests.factories import (
     ProfileFactory, BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
     PlatformGroupFactory, GroupBadgeFactory,
@@ -464,6 +464,45 @@ def test_the_ranks_tab_does_not_duplicate_the_MEDALLION_switcher(client):
     assert 'bd2-gbtn' not in ranks_panel
 
 
+def test_the_edition_switcher_sits_BELOW_the_content_tabs_inside_Overview(client):
+    """Reading order: pick WHAT you are looking at, then WHICH EDITION of it.
+
+    The medallion switcher sat above the Overview | Ranks strip until 2026-08, on the reasoning that it
+    belongs to the header because it swaps the hero. It does swap the hero -- and it also implied it
+    governed both tabs, which it does not: the board is per SERIES, and it carries its own "Edition"
+    select meaning something else entirely (which BOARD you read, not which ARTWORK you see).
+
+    Living INSIDE the Overview panel is what makes that structural rather than argued: the tab system
+    hides it on Ranks for free, so the two controls that spell "edition" can never share a screen. The
+    test above pins the absence; this one pins the ORDER and the containment that produces it, because
+    the absence would also pass if somebody deleted the switcher outright.
+    """
+    series = _renderable('ordered', 'Ordered')
+    second = PlatformGroupFactory(key='ordered-legacy', name='Legacy HD', platforms=['PS3'])
+    GroupBadgeFactory(series=series, platform_group=second, is_live=True)
+
+    body = client.get(reverse('badge_detail', args=['ordered'])).content.decode()
+    # Opening TAGs throughout: the page's trailing scripts name all three of these classes.
+    tabs = body.index('id="bd-switch"')
+    overview = body.index('id="bd-view-overview"')
+    switcher = body.index('<div class="bd2-groupswitch"')
+
+    assert tabs < switcher, 'the edition switcher is above the content tabs again'
+    assert overview < switcher, (
+        'the edition switcher is below the tabs but OUTSIDE the Overview panel -- it would still be on '
+        'screen on Ranks, beside the board\'s own Edition filter'
+    )
+    # ...and inside that panel rather than merely after it: bounded by the panel that follows.
+    assert switcher < body.index('id="bd-view-ranks"')
+
+    # The hero is still ABOVE the tabs -- the switcher moved, the thing it swaps did not. Without this a
+    # future "tidy the header" could drag the medallion down with it and lose it on every tab switch.
+    assert body.index('bd2-med') < tabs
+
+    # The footnote travels with the control it explains, or it becomes a stray link under the journey.
+    assert switcher < body.index('pp-edhint-row') < body.index('data-bd2-journey')
+
+
 def test_the_in_page_links_to_the_board_are_wired_to_the_tab(client):
     """The board moved behind a tab, and a browser cannot scroll to a target inside a `hidden` panel --
     so every `href="#ranks"` on the page became a dead click the moment it moved. Silently, too: a
@@ -622,7 +661,7 @@ def test_the_ranks_panel_ships_its_filter_and_its_wiring(client):
 # ---------------------------------------------------------------------------------------------------
 # The edition filter (2026-08). Not a filter over the series board's rows -- it SWITCHES THE STORE, the
 # way the Global Boards landing swaps `ProfileBadgeStanding` for `ProfileEditionStanding`. Here the swap
-# is `SeriesBadgeStanding` -> `UserGroupBadge`, which is keyed on a GroupBadge and therefore per
+# was `SeriesBadgeStanding` -> `UserGroupBadge`, which is keyed on a GroupBadge and therefore per
 # (series x edition).
 # ---------------------------------------------------------------------------------------------------
 
@@ -751,32 +790,78 @@ def test_the_edition_board_tiebreaks_on_THAT_editions_date(client):
     separated by their progress in a DIFFERENT one, and advancing on PS5 could drop a rank on Legacy HD.
     Nothing about the board a reader was looking at had changed.
 
-    Both hunters here have identical Legacy HD standing -- same points, same date on that edition. They
-    differ only in their series-wide date, and `Later` holds the more recent one because they have been
-    busy on PS5. Under the old key `Later` sorted last; the correct answer is that PS5 is irrelevant and
-    the profile id (the unique tail) breaks a genuine tie.
+    The two hunters are tied on Legacy HD points and separable only by date, and the two dates are built
+    to DISAGREE: `FirstOnPS3` got there first on Legacy HD but has been busy on PS5 since, so their
+    series-wide date is the LATER one. The correct board puts them first; the old series-wide read puts
+    them last. An inversion, not a coincidence -- built this way because the obvious fixture (equal
+    edition dates, different series dates) produces the SAME order under both reads, so it would have
+    passed against the very regression its message names.
     """
     _two_editions()
-    early = _chasing('dual', 'EarlySeries', {'dual-ps5': [0, 5], 'dual-ps3': [2, 5]},
-                     on=dt.date(2024, 1, 1),
-                     on_by_edition={'dual-ps3': dt.date(2025, 6, 1)})
-    later = _chasing('dual', 'LateSeries', {'dual-ps5': [4, 5], 'dual-ps3': [2, 5]},
+    first = _chasing('dual', 'FirstOnPS3', {'dual-ps5': [4, 5], 'dual-ps3': [2, 5]},
                      group_xp={'dual-ps5': 4, 'dual-ps3': 2},
                      on=dt.date(2026, 1, 1),                       # busy on PS5, which must not count here
-                     on_by_edition={'dual-ps3': dt.date(2025, 6, 1)})
+                     on_by_edition={'dual-ps3': dt.date(2024, 3, 1)})
+    second = _chasing('dual', 'SecondOnPS3', {'dual-ps3': [2, 5]},
+                      group_xp={'dual-ps3': 2},
+                      on=dt.date(2025, 1, 1),
+                      on_by_edition={'dual-ps3': dt.date(2025, 9, 1)})
 
     rows = client.get(reverse('badge_ranks_panel', args=['dual']),
                       {'edition': 'dual-ps3'}).context['rows']
 
-    assert [r['psn_username'] for r in rows] == ['EarlySeries', 'LateSeries'], (
-        'the edition board ordered on a date from another edition'
+    assert [r['psn_username'] for r in rows] == ['FirstOnPS3', 'SecondOnPS3'], (
+        'the edition board ordered on a date from another edition -- reading the series-wide value here '
+        'reverses these two, which is a hunter losing a rank for progress made somewhere else'
     )
-    # ...and it is the unique TAIL doing the separating, not the series-wide date agreeing by luck: the
-    # two are tied on every key the board declares.
-    assert early.id < later.id
-    assert [r['when'] for r in rows] == [dt.date(2025, 6, 1)] * 2, (
+    # The dates shown are the EDITION's, not the series-wide ones the fixture also carries.
+    assert [r['when'] for r in rows] == [dt.date(2024, 3, 1), dt.date(2025, 9, 1)], (
         'the row is showing the series-wide date rather than this edition\'s'
     )
+    assert first is not None and second is not None
+
+
+def test_an_unlinked_hunter_is_not_on_the_edition_board(client):
+    """The gate every board in the module applies, asserted on THIS store because it is the whole
+    justification for `ses_board_idx` being partial on `is_linked`.
+
+    `evaluate_badges --all` walks every scraped PSN profile, not every verified one, so unlinked standings
+    are real rows rather than a hypothetical -- scout accounts among them. `_chasing` hardcodes
+    `is_linked=True`, which is why nothing else here can catch a dropped gate.
+    """
+    _two_editions()
+    _chasing('dual', 'Verified', {'dual-ps3': [3, 5]}, group_xp={'dual-ps3': 3})
+    scout = _chasing('dual', 'ScoutAcct', {'dual-ps3': [5, 5]}, group_xp={'dual-ps3': 5})
+    Profile.objects.filter(pk=scout.pk).update(is_linked=False)
+    SeriesEditionStanding.objects.filter(profile=scout).update(is_linked=False)
+
+    resp = client.get(reverse('badge_ranks_panel', args=['dual']), {'edition': 'dual-ps3'})
+
+    # Ahead on points, so a dropped gate puts them at the TOP rather than somewhere easy to miss.
+    assert [r['psn_username'] for r in resp.context['rows']] == ['Verified']
+    assert resp.context['total'] == 1, 'the count disagrees with the rows it is counting'
+
+
+def test_the_hunter_search_works_on_the_EDITION_board(client):
+    """`?suggest=` routes through `_series_edition_qs` + `SERIES_EDITION_KEYS` into `board_suggest`, which
+    names the ordering keys as COLUMNS (`.values(id_field, *fields)`).
+
+    That coupling is why this needs its own test rather than riding on the series board's: the keys moved
+    from JSON annotations (`ed_xp`) to real columns (`xp`) when the store landed, and a name that no
+    longer resolves is a `FieldError` 500 on a public endpoint -- not a wrong answer, a broken one.
+    """
+    _two_editions()
+    _chasing('dual', 'Findable', {'dual-ps3': [4, 5]}, group_xp={'dual-ps3': 4})
+    _chasing('dual', 'Ahead', {'dual-ps3': [5, 5]}, group_xp={'dual-ps3': 5})
+
+    resp = client.get(reverse('badge_ranks_panel', args=['dual']),
+                      {'edition': 'dual-ps3', 'suggest': 'Find'})
+
+    assert resp.status_code == 200
+    players = resp.json()['players']
+    assert [p['display'] for p in players] == ['Findable']
+    # The RANK is this board's, not the series board's: 'Ahead' has more Legacy HD points.
+    assert players[0]['rank'] == 2
 
 
 def test_the_default_board_counts_EVERY_edition(client):

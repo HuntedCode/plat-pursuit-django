@@ -539,10 +539,11 @@ was wrong in a way that looked fine:
 3. **`SeriesEditionStanding`** (migration 0313) -- a row per (profile, series, STARTED edition), with that
    edition's points and its own date.
 
-The store cost nothing to compute. `recompute_standing` already loops every edition holding its
-`GroupBadgeResult`, and `_advanced_at` was already being called per edition and discarded for all but the
-furthest-along one. What it costs is WRITE VOLUME in the nightly chain, held down by storing only STARTED
-editions -- the board's own membership rule, moved from every read to one write.
+The store cost no new evaluation. `recompute_standing` already loops every edition holding its
+`GroupBadgeResult`, and `_advanced_at` is a pure function of one of those -- `compute_series_standings`
+only ever asked it for the furthest-along edition, so the per-edition date was always one call away rather
+than one computation away. What it costs is WRITE VOLUME in the nightly chain, held down by storing only
+STARTED editions -- the board's own membership rule, moved from every read to one write.
 
 Deploy needs nothing new: the table is created empty and filled by the `evaluate_badges --all` a cutover
 runs anyway, exactly as `ProfileEditionStanding` was in 0300. A seeder command was written first and

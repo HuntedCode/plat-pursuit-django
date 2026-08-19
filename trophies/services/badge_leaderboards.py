@@ -549,9 +549,11 @@ def series_edition_rank(series_slug, edition_key, profile_id, country=None):
 
 def series_edition_countries(series_slug, edition_key):
     """Country codes with at least one hunter on ONE edition's board, for that board's picker."""
-    # CACHED, like `active_countries` above and for the same reason: viewer-independent, and a
-    # DISTINCT no index serves. The panel resolves it once per load; without this it also ran on
-    # every virtual window, which is one whole-population scan per screenful scrolled.
+    # CACHED like `active_countries` above, but for only ONE of its two reasons. Viewer-independent, yes;
+    # a DISTINCT nothing serves, no -- `ses_board_cc_idx` puts `country_code` directly after the two
+    # equality keys, so this is an index-only scan over one edition's range rather than the whole-table
+    # DISTINCT that justifies the cache upstream. Still cached, because it ran on every virtual window
+    # before this: cheap per call, needless once per screenful scrolled.
     return _cached(f'lb:picker:cc:edition:{series_slug}:{edition_key}', lambda: sorted(
         _series_edition_qs(series_slug, edition_key)
         .exclude(country_code__isnull=True).exclude(country_code='')

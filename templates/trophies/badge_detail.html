@@ -31,10 +31,20 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             </div>
             {% endif %}
 
+            {% comment %} The hero swaps with the edition switcher, but it is NOT that tablist's tabpanel and
+            no longer says it is. It carried `role="tabpanel" aria-labelledby="bd2-tab-<key>"` while the
+            switcher sat directly above it; once the switcher moved inside the Overview panel (2026-08),
+            that panel is `hidden` on Ranks -- and a tabpanel whose tab, tablist and label target have all
+            left the accessibility tree is announced as "Ultra HD, tab panel" belonging to nothing, with no
+            way to reach the control that would change it. Sighted readers see nothing wrong.
+
+            A plain div is the honest markup: the hero is a DISPLAY that follows the selection, above the
+            tabs and visible on both. The tab's real panel is the journey below, which lives beside the
+            tablist and vanishes with it. `id` kept -- it names the panel for the swap and for tests. {% endcomment %}
             <div data-bd2-panels>
                 {% for g in detail.groups %}
                 <div id="bd2-panel-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
-                     role="tabpanel" aria-labelledby="bd2-tab-{{ g.platform_group.key }}" data-bd2-view="{{ g.platform_group.key }}">
+                     data-bd2-view="{{ g.platform_group.key }}">
 
                     {% comment %} Row 1: medallion | eyebrow + title + description + meta | EARNERS. Stacks to a
                     centered column on phones (mirrors the old header's mobile treatment), rows out at sm:. {% endcomment %}
@@ -118,11 +128,63 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     side. Header, then what the badge IS, then the controls for looking at it. {% endcomment %}
     {% include 'trophies/partials/badge_detail/bd2_community.html' %}
 
-    {% comment %} Platform-group switcher -- a prominent, header-SPANNING control: one substantial button per
+    {% comment %} Content tabs -- Overview | Ranks. The board gets its own tab rather than sitting on the
+    main scroll, which is what game detail and job detail already do; badge detail was the odd one out.
+
+    TWO controls on this page, and they are not peers -- so they are no longer stacked. This strip comes
+    FIRST because it decides what you are looking at; `.bd2-groupswitch` lives inside the Overview panel
+    below, because which EDITION only means something once you are reading the journey. It was above this
+    strip until 2026-08.
+
+    That ordering also settles a collision. Both controls speak about editions and mean different things
+    by it: the group switcher changes which ARTWORK you are looking at, while the board has its own
+    `.lb-filters` select that changes which BOARD you are reading. Stacked above the tabs, both were on
+    screen at once on Ranks -- two controls, one word, different jobs, distinguishable only by looking
+    different. Now only one of them can ever be visible.
+
+    Real `role="tablist"` over real `role="tabpanel"`s -- in-place switching, so the markup is honest. This
+    is the mechanism game detail uses; job detail was `?tab=` links and has been brought onto it too. {% endcomment %}
+    {% comment %} RIGHT-ALIGNED from md: up, like every other switcher on the site -- career, game detail,
+    the genre/theme list and the board strips. This was the last one sitting left. Full width on a phone,
+    because shrink-to-content at 375px leaves a small strip marooned against one edge and the chips lose
+    the equal widths that keep a segmented control from wrapping mid-strip. {% endcomment %}
+    <div class="bd-viewswitch__row">
+    <div class="pp-switch bd-viewswitch" id="bd-switch" role="tablist" aria-label="Badge view">
+        <button type="button" id="bd-tab-overview" aria-controls="bd-view-overview" role="tab"
+                aria-selected="true" class="pp-switch__chip is-active" data-view="overview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="pp-switch__lbl">Overview</span>
+        </button>
+        <button type="button" id="bd-tab-ranks" aria-controls="bd-view-ranks" role="tab"
+                aria-selected="false" class="pp-switch__chip" data-view="ranks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+            <span class="pp-switch__lbl">Ranks</span>
+        </button>
+    </div>
+    </div>
+
+    <div class="bd-view" id="bd-view-overview" role="tabpanel" aria-labelledby="bd-tab-overview" data-view="overview">
+    {% comment %} Platform-group switcher -- a prominent, page-SPANNING control: one substantial button per
     group carrying its mini medallion (in the group's metal), name, and platforms, tinted to match the
     medallion so picking your platform badge is a fast, recognizable, spine-level choice. A deliberate,
     documented exception to the site-wide segmented-switcher standard (the platform group is an identity-level
-    pick, like the old tier ladder), grounded in the Medallion primitive. Swaps the hero above + content below. {% endcomment %}
+    pick, like the old tier ladder), grounded in the Medallion primitive. Swaps the hero above + the journey
+    below.
+
+    INSIDE the Overview panel, below the Overview | Ranks strip. It sat above that strip until 2026-08, on
+    the reasoning that it belongs to the header (it does swap the hero) and so should outrank the content
+    tabs. Reading order says otherwise: you pick WHAT you are looking at before you pick WHICH EDITION of
+    it, and a control above the tabs implies it governs both of them.
+
+    It does not. The board is per SERIES -- earning any edition counts -- so Ranks has no use for this, and
+    the board's own `.lb-filters` select already carries an "Edition" control that means something else
+    (which BOARD you are reading, not which ARTWORK). Above the strip those two sat one above the other on
+    the Ranks tab: two controls, one word, different jobs. Living in the Overview panel means the tab
+    system hides it on Ranks for free -- no JS, no `hidden` bookkeeping -- and the ambiguity is structural
+    rather than talked out of in a comment.
+
+    The hero keeps whichever edition was last picked while you are on Ranks, which is what you want: it is
+    the badge you were reading, and it is still named above the board that ranks it. {% endcomment %}
     {% if detail.has_multiple_groups %}
     <div class="bd2-groupswitch" role="tablist" aria-label="Platform group">
         {% for g in detail.groups %}
@@ -130,7 +192,7 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                 class="bd2-gbtn{% if g.platform_group.key == active_group_key %} is-active{% endif %}" data-tier="{{ g.frame.tier }}"
                 data-bd2-group="{{ g.platform_group.key }}" role="tab"
                 aria-selected="{% if g.platform_group.key == active_group_key %}true{% else %}false{% endif %}"
-                aria-controls="bd2-panel-{{ g.platform_group.key }}">
+                aria-controls="bd2-journey-{{ g.platform_group.key }}">
             <span class="bd2-gbtn__med" aria-hidden="true">{% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}</span>
             <span class="bd2-gbtn__body">
                 <span class="bd2-gbtn__name">{{ g.platform_group.name }}</span>
@@ -158,47 +220,17 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     </div>
     {% endif %}
 
-    {% comment %} Content tabs -- Overview | Ranks. The board gets its own tab rather than sitting on the
-    main scroll, which is what game detail and job detail already do; badge detail was the odd one out.
+    {% comment %} Stage journey -- per group, swapped by the edition switcher directly above it. Free
+    content below the chrome (each stage is its own bd-card).
 
-    TWO controls on this page, and they are not peers. The `.bd2-groupswitch` above is part of the HEADER:
-    it swaps the hero, and the hero has to stay visible whichever tab is open or you lose track of which
-    badge you are reading. These are content tabs beneath it, on the small `.pp-switch` chips, so the two
-    read as different kinds of control rather than two tab strips stacked.
-
-    Both tabs speak about editions, and they mean different things by it: the `.bd2-groupswitch` above
-    changes which ARTWORK you are looking at, while Ranks has its own `.lb-filters` select that changes
-    which BOARD you are reading. Two controls with one name doing one thing would be right; two doing
-    different things has to look different, which is why one is a medallion switcher and the other is a
-    filter select. See the comment on the panel itself.
-
-    Real `role="tablist"` over real `role="tabpanel"`s -- in-place switching, so the markup is honest. This
-    is the mechanism game detail uses; job detail was `?tab=` links and has been brought onto it too. {% endcomment %}
-    {% comment %} RIGHT-ALIGNED from md: up, like every other switcher on the site -- career, game detail,
-    the genre/theme list and the board strips. This was the last one sitting left. Full width on a phone,
-    because shrink-to-content at 375px leaves a small strip marooned against one edge and the chips lose
-    the equal widths that keep a segmented control from wrapping mid-strip. {% endcomment %}
-    <div class="bd-viewswitch__row">
-    <div class="pp-switch bd-viewswitch" id="bd-switch" role="tablist" aria-label="Badge view">
-        <button type="button" id="bd-tab-overview" aria-controls="bd-view-overview" role="tab"
-                aria-selected="true" class="pp-switch__chip is-active" data-view="overview">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-            <span class="pp-switch__lbl">Overview</span>
-        </button>
-        <button type="button" id="bd-tab-ranks" aria-controls="bd-view-ranks" role="tab"
-                aria-selected="false" class="pp-switch__chip" data-view="ranks">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
-            <span class="pp-switch__lbl">Ranks</span>
-        </button>
-    </div>
-    </div>
-
-    <div class="bd-view" id="bd-view-overview" role="tabpanel" aria-labelledby="bd-tab-overview" data-view="overview">
-    {% comment %} Stage journey -- per group, swaps with the selector alongside the hero. Free content below
-    the chrome (each stage is its own bd-card). {% endcomment %}
+    THIS is the edition tablist's tabpanel, and it had no semantics at all until 2026-08 -- the switcher's
+    `aria-controls` pointed at the hero, so it advertised half of what it swaps and the half that is not
+    really a panel. Tab, tablist and panel all live inside Overview now, so they appear and disappear
+    together and the relationship can never dangle. {% endcomment %}
     <div data-bd2-journey>
         {% for g in detail.groups %}
-        <div class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}" data-bd2-view="{{ g.platform_group.key }}">
+        <div id="bd2-journey-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
+             role="tabpanel" aria-labelledby="bd2-tab-{{ g.platform_group.key }}" data-bd2-view="{{ g.platform_group.key }}">
             {% if g.stages %}
             {% comment %} Requirements preview: the compact stage-tile checklist (checked when cleared), each
             tile jumping to its stage in the journey below. {% endcomment %}

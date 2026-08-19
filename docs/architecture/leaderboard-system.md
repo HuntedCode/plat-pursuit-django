@@ -66,7 +66,7 @@ as the whole thing.
 | Filter | Applies to | Mechanism |
 |---|---|---|
 | Country | all three boards | a WHERE on `country_code`, served by `(country, ...board order)` |
-| Edition | **Badge Points only** | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
+| Edition | **Badge Points only** (of the three here) | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
 
 Badge detail's Ranks tab carries the same two, and its edition filter works the same way one level down:
 a different STORE (`SeriesEditionStanding`), never a WHERE over the series board. See **The per-edition
@@ -74,9 +74,12 @@ badge board** below.
 
 Edition exists because Legacy HD and Ultra HD are genuinely different games -- XP accrues per GROUP BADGE,
 not per series -- so "who leads Legacy HD" is a question the all-editions board cannot answer. It applies to
-Badge Points ALONE: an edition is a PlatformGroup, i.e. a badge concept, and neither Trophies (every game)
-nor Career XP (the jobs economy) has editions to slice. A control that renders but changes nothing promises
-a slice that does not exist.
+Badge Points alone OF THE THREE HERE: an edition is a PlatformGroup, i.e. a badge concept, and neither
+Trophies (every game) nor Career XP (the jobs economy) has editions to slice. A control that renders but
+changes nothing promises a slice that does not exist.
+
+The rule is "wherever a badge is the subject", not "on this page only" -- badge detail's Ranks tab slices
+the same way, off its own store (`SeriesEditionStanding`, below).
 
 ### The Trophies board is not badge-scoped, deliberately
 
@@ -170,7 +173,8 @@ The per-entity stores (series, edition, earners) were left with plain indexes at
 that a leading key already narrows them to one entity's rows. **0311 made them partial too**, because that
 reasoning assumed PAGINATION: under virtual scrolling a reader can be at row 30,000 of a popular series
 and the scan fetches `is_linked` per candidate on the way. Every board index in the module is partial on
-it now, `ses_board_idx` included.
+it now -- `ses_board_idx` and `ses_board_cc_idx` were simply born that way in 0313, which is what a rule
+looks like once it has settled: the migration that introduces a board index no longer has to be told.
 
 Two paths keep the mirror honest, and BOTH are needed:
 
@@ -248,8 +252,10 @@ They are recomputed from scratch each time, so no incremental writer exists to d
   rule: a board that SCOPES a population must scope every key it orders on, not just the leading one.
 
 - **The scoped-recompute invariant is what makes the per-edition store safe to prune.**
-  `_write_series_edition_standings` deletes any edition row not in the batch it was handed, which is only
-  correct because `group_badges` is guaranteed to contain EVERY live edition of any series it touches.
+  `recompute_standing` deletes every edition row for the series it evaluated and re-inserts from the batch
+  it was handed, which is only correct because `group_badges` is guaranteed to contain EVERY live edition
+  of any series it touches. (Inline in that function, not a helper. Do not go looking for
+  `_write_edition_standings` next to it -- that one writes `ProfileEditionStanding`, a different store.)
   Scoping a recompute by BADGE rather than by SERIES would silently delete the other edition's row --
   `test_badge_sync_wiring` pins the invariant for `group_progress` and it now protects a second store.
 
