@@ -775,25 +775,61 @@ def test_the_hover_link_is_shared_with_career_not_copied():
     assert 'card.querySelector' in fn and 'closest(cardSel)' in fn
 
 
-def test_the_job_tiles_are_a_three_wide_grid(client):
-    """Three across is the CONTRACT's shape, not a layout preference: a contract levels 1 to 6 jobs
-    (`CONTRACT_XP_TOTAL = 6000` exists so the split lands on clean integers across exactly that range), so
-    a 3-column grid is at most two rows and can never leave a ragged third.
+def test_the_tile_grid_never_leaves_a_ragged_last_row(client):
+    """The column count follows the JOB count, and the property is what is asserted -- not the number.
 
-    Pinned because the column count and the 1-6 range are two facts in different files that have to agree:
-    widen the range and this silently becomes the ragged layout it was chosen to avoid.
+    A fixed 3 columns shipped first and was wrong for half the range: 4 jobs rendered as "3 and a lone
+    tile", 2 as a pair with a hole beside it. Only 3 and 6 were ever clean. A test that pinned
+    `repeat(3, 1fr)` would have passed on exactly that layout, which is why this one derives the expected
+    columns from the rule and checks the remainder instead.
+
+    5 is the documented exception: no rectangle fits it at a sensible width, so it takes 3 + 2.
     """
-    from trophies.util_modules.constants import CONTRACT_XP_TOTAL
-
     root = pathlib.Path(__file__).resolve().parents[2]
     css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
-    rule = css[css.index('.rp-jobtiles {'):]
-    rule = rule[:rule.index('}')]
-    assert 'repeat(3, 1fr)' in rule
 
-    # The split has to stay clean across 1-6 jobs, which is what makes 6 the max and 3 the right width.
+    def columns_for(n):
+        """Read the effective column count out of the CSS the way the browser resolves it: the per-count
+        override if one exists, else the base rule."""
+        override = f'.rp-jobtiles[data-n="{n}"]'
+        block = None
+        if override in css:
+            block = css[css.index(override):]
+            block = block[:block.index('}')]
+        else:
+            block = css[css.index('.rp-jobtiles {'):]
+            block = block[:block.index('}')]
+        if 'repeat(' in block:
+            return int(block[block.index('repeat(') + 7:].split(',')[0])
+        return 1
+
+    ragged = {n: columns_for(n) for n in (1, 2, 3, 4, 6) if n % columns_for(n)}
+    assert not ragged, f'these job counts leave a lone tile on the last row: {ragged}'
+    assert columns_for(5) == 3, 'five jobs should take 3 + 2; five across puts each tile under 30px'
+
+
+def test_the_tile_grid_covers_every_job_count_a_contract_can_have(client):
+    """1 to 6, and that range is not arbitrary: `CONTRACT_XP_TOTAL` is 6,000 precisely so the even split
+    lands on clean integers across it. The layout rule and the economy constant are two facts in different
+    files that have to agree -- widen the range and the grid silently goes ragged again."""
+    from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+
     for n in range(1, 7):
         assert CONTRACT_XP_TOTAL % n == 0, f'{CONTRACT_XP_TOTAL} does not split evenly across {n} jobs'
+    assert CONTRACT_XP_TOTAL % 7 != 0, (
+        'seven jobs now splits evenly, so the 1-6 range the tile grid is built around has moved'
+    )
+
+
+def test_the_tile_grid_declares_its_job_count(client):
+    """The CSS keys off `data-n`; without it every contract falls back to the 3-column base rule and the
+    adaptation silently does nothing."""
+    _solo()
+    a, b = _job('a', 'A'), _job('b', 'B')
+    _contract('Two Jobs', [a, b])
+
+    body = client.get(reverse('job_detail', args=['a']), {'tab': 'contracts'}).content.decode()
+    assert 'class="rp-jobtiles" data-n="2"' in body
 
 
 def test_a_job_tile_reserves_room_for_a_two_line_name(client):

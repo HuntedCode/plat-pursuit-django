@@ -223,12 +223,21 @@
    answered. Only this block differs; everything else about the card is identical, which is why it is a
    variant rather than a second template.
 
-   THREE ACROSS, which is the contract's own shape rather than a guess: a contract levels 1 to 6 jobs
-   (`CONTRACT_XP_TOTAL = 6000` exists to split into clean integer shares across exactly that range), so a
-   3-column grid is at most two rows and can never leave a ragged third one. The job column is `1fr`
-   beside the ring's fixed 84px, which leaves roughly 48-55px per tile -- more room each than Career's
-   5-wide map gets in the same space. */
+   THE COLUMN COUNT FOLLOWS THE JOB COUNT. A contract levels 1 to 6 jobs -- that range is why
+   `CONTRACT_XP_TOTAL` is 6,000, a number chosen to split into clean integer shares across exactly it --
+   and a fixed 3 columns was wrong for half of it: 4 jobs became "3 and a lone tile", 2 became a pair with
+   a hole beside it. Only 3 and 6 were ever clean.
+
+   Mapped per count so the last row is always full: 1 -> 1, 2 -> 2, 4 -> 2x2, and 3/5/6 -> 3. FIVE is the
+   one that cannot be rectangular at any sensible width and takes 3 + 2; five across would put each tile
+   under 30px.
+
+   The job column is `1fr` beside the ring's fixed 84px, so a 3-wide row gives roughly 48-55px per tile --
+   more room each than Career's 5-wide map gets in the same space, and a 1- or 2-wide row is generous. */
 .rp-jobtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 4px; align-content: start; }
+.rp-jobtiles[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
+.rp-jobtiles[data-n="2"],
+.rp-jobtiles[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .rp-jobtile {
     display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0;
     padding: 5px 2px 4px; border-radius: 7px; text-align: center;
