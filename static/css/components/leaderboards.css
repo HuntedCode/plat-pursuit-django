@@ -590,3 +590,27 @@
     }
     .lb-controls .lb-jumpbar { margin-top: 8px; }
 }
+
+
+/* ---- The board minibar ------------------------------------------------------------------------------
+   `/leaderboards/` only, and deliberately: the board IS the page there, so a reader routinely ends up
+   thousands of rows past every control. Badge and job detail keep their boards in a TAB on a page that
+   already has its own identity chrome, which makes a sticky bar a page-level decision rather than a
+   board one. Game detail has its own, older, per-tab minibar.
+
+   The bar reuses `.pp-minibar` wholesale (plat cards and game detail share it); what lives here is only
+   the two board controls it carries. */
+.lb-jump--mb {
+    /* Quieter than the in-page chip: the bar is a proxy, and a control that shouts in a pinned strip
+       competes with the rows it is meant to help you read. */
+    padding: 4px 10px; font-size: 11px;
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+}
+.lb-jump--mb .lb-jump__ico { width: 11px; height: 11px; }
+/* The search shrinks to fit beside the rank chip; it is the same field, not a second one. */
+.pp-minibar__controls .gd-lb__find--mb { flex: 0 1 13rem; min-width: 7rem; }
+@media (max-width: 639px) {
+    /* On a phone the bar has room for ONE control, and "where am I" beats "find someone else": the rank
+       chip is the thing you cannot get back any other way once the board card has scrolled off. */
+    .pp-minibar__controls .gd-lb__find--mb { display: none; }
+}

@@ -635,3 +635,46 @@ def test_the_board_search_returns_matches_in_BOARD_order(client):
     ranks = [p['rank'] for p in client.get(reverse('leaderboard_rows'),
                                            {'tab': 'trophies', 'suggest': 'sam'}).json()['players']]
     assert ranks == sorted(ranks) == [1, 2, 3]
+
+
+def test_the_board_carries_a_sticky_minibar(client):
+    """The board IS the page here, so a reader ends up thousands of rows past the tab strip, the board
+    card, their rank and both ways in -- with nothing above the fold but rows. The bar brings those back.
+
+    It is a PROXY, not a second set of controls: its rank chip and its search drive the same `wireBoard`
+    handle the originals do. Its attributes are `data-lb-mb-*` rather than the originals', because
+    `wireBoard` finds the search field with `querySelector` (FIRST match) and a duplicate inside the same
+    scope would wire one field and leave the other silently dead -- the collision class that cost a day on
+    game detail.
+    """
+    for i in range(4):
+        _ranked(f'H{i}', plats=100 - i, trophies=500)
+
+    body = client.get(URL).content.decode()
+
+    assert 'data-lb-minibar' in body, 'the board has no minibar'
+    assert 'data-sticky-sentinel="#lb-minibar-sentinel"' in body
+    assert 'id="lb-minibar-sentinel"' in body, 'the bar has nothing to reveal against'
+    # Proxy controls, under their own attributes.
+    assert 'data-lb-mb-rank' in body and 'data-lb-mb-find' in body
+    # ...and NOT under the originals', or one of the two search fields would never be wired.
+    # ...and the bar's own controls reuse NONE of the originals' attributes. Asserted over the bar's
+    # markup rather than by counting the page: the in-page jump chip is conditional on being ranked, so a
+    # count would pass for the wrong reason on a signed-out read.
+    bar = body[body.index('data-lb-minibar'):body.index('</div>', body.index('data-lb-mb-findform'))]
+    for attr in ('data-lb-find ', 'data-lb-findform', 'data-lb-suggest', 'data-lb-jump',
+                 'data-lb-gotoform'):
+        assert attr not in bar, f'the minibar reuses {attr}, so one of the two will never be wired'
+
+
+def test_the_minibar_lives_outside_the_swapped_wrapper(client):
+    """A tab or filter change replaces `[data-lb-page]`'s innerHTML. A minibar inside it would be torn out
+    and rebuilt under a reader mid-scroll -- and its listeners, which are wired once, would die with it."""
+    _ranked('Someone', plats=5, trophies=50)
+    body = client.get(URL).content.decode()
+
+    page_start = body.index('<div data-lb-page>')
+    page_end = body.index('</div><!-- /lb-page -->')
+    assert not (page_start < body.index('data-lb-minibar') < page_end), (
+        'the minibar is inside the swapped wrapper, so a tab change destroys it'
+    )

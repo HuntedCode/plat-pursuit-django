@@ -458,6 +458,7 @@ Each step leaves the site working.
 | 9 | ✅ Directories removed (2026-08); the three boards VIRTUALIZED onto one shared shell, row, jump bar, window parser and JS engine | Every board is the same board |
 | 10 | ✅ Game detail folded in: shared row + chrome, `invert` and `registered_only` removed, country added to it and to job detail | FOUR boards, one board |
 | 11 | ✅ Board SEARCH on all four (prefix-matched, board-scoped, ranked); board descriptions rewritten in the site's voice | The last game-detail-only feature spreads |
+| 12 | ✅ Sticky minibar on `/leaderboards/` | The board-first page keeps its controls reachable |
 
 Steps 1–2 are the performance work. **Finishing the cutover *is* the optimization** — it is not a
 prerequisite to it.
@@ -612,6 +613,15 @@ caller. Uniformity across the other three is guarded by `tests/engine/test_board
   half. The uniformity suite now also pins that the rank MATCHES the viewer's own row, per surface --
   those two numbers come from different code (rows numbered by slot, rank counted by walking ahead) and
   agree only while both reads share one population.
+- **A sticky proxy must not reuse the attributes it proxies.** The minibar's rank chip and search are
+  `data-lb-mb-*`, not `data-lb-*`, because `wireBoard` finds the search field with `querySelector` -- the
+  FIRST match -- so a duplicate inside the same scope wires one field and leaves the other silently dead.
+  Game detail's older minibar made the same call for the same reason, and the one time this rule was
+  broken (`data-lb-board` on the panel wrapper) it cost a day.
+- **The bar goes OUTSIDE the swapped wrapper; the sentinel cannot.** The sentinel marks where the chrome
+  ends, so it lives inside `[data-lb-page]` and every swap hands the observer a detached node --
+  `StickyReveal.init()` is idempotent and re-runnable for exactly this, and is called per mount. Putting
+  the BAR inside too would tear it out from under a reader mid-scroll and kill its wired-once listeners.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 

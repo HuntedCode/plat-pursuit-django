@@ -36,6 +36,50 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     because everything in it moves with the slice: the hunter tally, the standing chips AND their labels,
     which tab is lit, which filters are selected, whether the edition control renders at all, and the
     board. Rebuilding that piecewise client-side is how two versions of the same copy drift. {% endcomment %}
+    {% comment %} STICKY MINIBAR. The board is the page here, and it is the only board on the site where
+    a reader routinely ends up thousands of rows past every control -- the tab strip, the board card, your
+    rank and the two ways in all scroll away and there is nothing above the fold but rows. The bar brings
+    back exactly those: which board, how big, where you are, and the search.
+
+    It is a PROXY, not a second set of controls. Its rank chip and its search field drive the same
+    `wireBoard` handle the originals do, so there is one implementation of "jump" on the page.
+
+    Its controls carry `data-lb-mb-*` rather than the originals' attributes, deliberately: `wireBoard`
+    finds the search field with `scope.querySelector`, which takes the FIRST match, so a duplicate
+    `[data-lb-find]` inside the same scope would wire one field and silently leave the other dead. That is
+    the collision class that cost a day on game detail. Game detail's own minibar solved it the same way.
+
+    OUTSIDE `[data-lb-page]`, so a tab or filter swap (which replaces that wrapper's innerHTML) does not
+    tear the bar out from under the reader mid-scroll. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#lb-minibar-sentinel" data-lb-minibar>
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+                <span class="pp-minibar__title" data-lb-mb-title>{{ board_label }}</span>
+                <span class="pp-minibar__count" data-lb-mb-count title="{{ ranked_label }}s on this board">{{ ranked_total|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                {% comment %} Hidden until the viewer is on the board -- filled and revealed by the page's
+                own script, because a tab swap changes both the board and the rank. {% endcomment %}
+                <button type="button" class="lb-jump lb-jump--mb" data-lb-mb-rank hidden>
+                    <svg class="lb-jump__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+                    You&rsquo;re <b class="pp-tally" data-lb-mb-rank-n></b>
+                </button>
+                <form class="gd-lb__find gd-lb__find--mb" data-search-wrap data-lb-mb-findform role="search">
+                    <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" class="gd-lb__findinput" data-lb-mb-find autocomplete="off" spellcheck="false"
+                           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="lb-mb-suggest"
+                           placeholder="Find a hunter" aria-label="Find a hunter on this board" />
+                    <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <div class="gd-lb__suggest" id="lb-mb-suggest" data-lb-mb-suggest role="listbox" hidden></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div data-lb-page>
 
     {# ── Page header ── #}
@@ -190,6 +234,10 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     </section>
 
     {% if board_entries %}
+    {% comment %} The sentinel sits where the chrome ENDS: the bar reveals once the control card has
+    scrolled under the sticky nav, which is the moment its contents stop being reachable. {% endcomment %}
+    <span id="lb-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
     {% comment %} The board itself -- shell, column headers and first window, shared with badge
     detail and job detail. See `leaderboard_board.html` for why it is one file. {% endcomment %}
     {% include 'trophies/partials/leaderboard_board.html' with entries=board_entries total=ranked_total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank only %}
@@ -324,6 +372,68 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         // reveal collision was FOUND and where its replacement is documented, and it was the one
         // surface not actually calling it.
         PlatPursuit.boardEntrance(root, page);
+
+        syncMinibar();
+        // RE-OBSERVE. The bar lives outside the swapped wrapper so its listeners survive, but the
+        // SENTINEL sits inside it -- it has to, because it marks where the chrome ends -- so every swap
+        // hands the observer a detached node. `init()` is documented as idempotent and re-runnable for
+        // exactly this, and it drops observers whose target has left the DOM.
+        if (PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+    }
+
+    // The minibar is a PROXY: it re-presents the board card and the two ways in once they scroll away, and
+    // every control on it drives the same `board` handle the originals do. It lives OUTSIDE the swapped
+    // wrapper, so it is wired ONCE and re-synced per mount rather than re-created -- re-wiring it on every
+    // tab change would stack a listener per swap on an element that never goes away.
+    var mb = document.querySelector('[data-lb-minibar]');
+
+    function syncMinibar() {
+        if (!mb || !root) { return; }
+        var card = page.querySelector('.lb-boardcard');
+        var title = mb.querySelector('[data-lb-mb-title]');
+        var count = mb.querySelector('[data-lb-mb-count]');
+        if (card && title) {
+            var name = card.querySelector('.lb-boardcard__name');
+            if (name) { title.textContent = name.textContent.trim(); }
+        }
+        if (card && count) {
+            var tally = card.querySelector('.pp-tally');
+            if (tally) { count.textContent = tally.textContent.trim(); }
+        }
+        // The rank chip shows only when the viewer is ON the board being read -- which changes with the
+        // tab AND with the filters, so it is re-read from the board root every mount.
+        var chip = mb.querySelector('[data-lb-mb-rank]');
+        var rank = parseInt(root.dataset.lbViewerRank || '', 10);
+        if (chip) {
+            chip.hidden = !(rank >= 1);
+            if (rank >= 1) {
+                var n = chip.querySelector('[data-lb-mb-rank-n]');
+                if (n) { n.textContent = '#' + rank.toLocaleString(); }
+            }
+        }
+    }
+
+    if (mb) {
+        mb.addEventListener('click', function (ev) {
+            if (!ev.target.closest || !ev.target.closest('[data-lb-mb-rank]') || !board || !root) { return; }
+            var rank = parseInt(root.dataset.lbViewerRank || '', 10);
+            if (rank >= 1) { board.jump(rank); }
+        });
+        if (PlatPursuit.wireBoardSearch) {
+            PlatPursuit.wireBoardSearch({
+                input: mb.querySelector('[data-lb-mb-find]'),
+                drop: mb.querySelector('[data-lb-mb-suggest]'),
+                form: mb.querySelector('[data-lb-mb-findform]'),
+                // Read at CALL time, not captured: `root` is replaced by every swap, so a captured URL
+                // would keep searching the board the reader arrived on.
+                suggestUrl: function (q) {
+                    var qp = new URLSearchParams(root ? root.dataset.lbParams || '' : '');
+                    qp.set('suggest', q);
+                    return (root ? root.dataset.lbRowsUrl : '') + '?' + qp.toString();
+                },
+                jump: function (rank) { if (board) { board.jump(rank); } },
+            });
+        }
     }
 
     // Which swap is the live one. Two quick tab clicks, or a tab click and then a filter change, start
