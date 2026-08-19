@@ -550,6 +550,45 @@ def test_the_scroller_pages_by_the_same_number_the_endpoint_does(client):
     assert 'url: grid.dataset.resultsUrl' in body
 
 
+def test_the_cover_skeleton_is_settled_on_every_page_that_renders_the_card(client):
+    """REGRESSION, reported from the browser as "strange flashing" when switching tabs.
+
+    `.rp-tile__art::before` shimmers on an INFINITE CSS animation and the only thing that stops it is
+    `.is-loaded`, which JS adds when the image arrives. Job detail adopted the contract card without that
+    call, so every cover pulsed forever -- and because `display: none` restarts a CSS animation, hiding
+    and re-showing the tab re-synced all of them into one page-wide flash.
+
+    The behaviour now travels with the markup (`PlatPursuit.progressiveArt`, shared with Career), which is
+    the actual lesson: a skeleton whose stop condition lives in JS is not a CSS-only component, and
+    reusing the template without the call looks fine in a screenshot and wrong in motion.
+    """
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'progressiveArt(grid)' in body, 'the first page of cards never settles its cover skeleton'
+    # ...and appended pages too, or the flashing comes back the moment you scroll.
+    assert 'onAppend' in body and 'progressiveArt(n)' in body, (
+        'scroll-appended cards shimmer forever -- the skeleton is only settled for page 1'
+    )
+
+
+def test_career_and_job_detail_settle_the_skeleton_the_SAME_way():
+    """Two pages render this card and the stop condition is one line of CSS away from being wrong on
+    either. Career's copy was extracted rather than duplicated, so a fix to one is a fix to both."""
+    import pathlib as _p
+    root = _p.Path(__file__).resolve().parents[2]
+    utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    assert 'function progressiveArt(scope)' in utils
+    assert 'window.PlatPursuit.progressiveArt = progressiveArt;' in utils
+    assert 'PP.progressiveArt(scope)' in career, 'Career kept its own copy'
+    # The hand-rolled body must be gone from the page, not merely unused beside the shared one.
+    assert "art.dataset.plInit = '1'" not in career
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that

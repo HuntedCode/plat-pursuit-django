@@ -173,10 +173,20 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     (function () {
         var grid = document.getElementById('jobd-contracts');
         if (!grid || !window.PlatPursuit || !PlatPursuit.InfiniteScroller) { return; }
+        // THE COVER SKELETON. `.rp-tile__art::before` shimmers on an infinite loop until JS adds
+        // `.is-loaded`, so a page that renders this card without calling `progressiveArt` shows every
+        // cover pulsing forever -- and since `display: none` restarts a CSS animation, switching tabs
+        // re-syncs all of them into one page-wide flash. Run for the first page here and for every
+        // appended page below.
+        PlatPursuit.progressiveArt(grid);
+
         PlatPursuit.InfiniteScroller.create({
             gridId: 'jobd-contracts',
             sentinelId: 'jobd-contracts-sentinel',
             loadingId: 'jobd-contracts-loading',
+            onAppend: function (nodes) {
+                nodes.forEach(function (n) { PlatPursuit.progressiveArt(n); });
+            },
             // MUST match `CONTRACTS_PER_PAGE`, which is what the endpoint pages by: the scroller derives
             // its next page number from how many cards are already in the grid, so a mismatch here skips
             // or repeats a page rather than failing.

@@ -1758,6 +1758,42 @@ function syncViewParam(view, opts) {
 }
 
 
+
+/**
+ * progressiveArt -- settle a card's cover-art SKELETON once its image has arrived.
+ *
+ * `.rp-tile__art::before` is a shimmering placeholder running `rpShimmer ... infinite`, and the ONLY
+ * thing that stops it is `.is-loaded` on the art element. That makes the skeleton a JS responsibility
+ * wearing CSS clothes: a page that renders the card without calling this shows every cover shimmering
+ * forever, and because `display: none` restarts a CSS animation, hiding and re-showing the container
+ * re-syncs every card's loop into one page-wide pulse. Which is exactly how it was found -- as "strange
+ * flashing" when switching tabs on job detail, a page that had adopted the card and not its behaviour.
+ *
+ * Extracted from Career's `initProgressiveLoad` when job detail became the second caller. Idempotent via
+ * a `data-plInit` stamp, so it is safe to re-run over a grid that has just had a page appended -- which
+ * is the normal case under infinite scroll.
+ *
+ * Marks LOADED, not merely settled, on three paths: no image at all, an image already complete from
+ * cache (`complete && naturalWidth`, because `load` will never fire again for it), and the real `load`.
+ * `error` counts too -- a broken image is a finished one, and shimmering forever over a 404 is the worst
+ * of the three outcomes.
+ *
+ * @param {HTMLElement|Document} [scope=document]  container to search for `.rp-tile__art`
+ */
+function progressiveArt(scope) {
+    (scope || document).querySelectorAll('.rp-tile__art').forEach(function (art) {
+        if (art.dataset.plInit) { return; }
+        art.dataset.plInit = '1';
+        var img = art.querySelector('.rp-tile__cover');
+        if (!img) { art.classList.add('is-loaded'); return; }
+        if (img.complete && img.naturalWidth) { art.classList.add('is-loaded'); return; }
+        var done = function () { art.classList.add('is-loaded'); };
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+    });
+}
+
+
 /**
  * flipGrid -- the "shuffle": survivors GLIDE to their new slots when a grid re-filters or re-sorts.
  *
@@ -2893,6 +2929,7 @@ window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
 window.PlatPursuit.flipGrid = flipGrid;
+window.PlatPursuit.progressiveArt = progressiveArt;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;

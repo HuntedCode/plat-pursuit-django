@@ -1038,17 +1038,11 @@ function ppCountUp(el, dur) {
     var hasIO = 'IntersectionObserver' in window;
 
     // ---- Per-card behaviors (idempotent; data-*Init guards stop a re-init double-binding) ----
-    function initProgressiveLoad(scope) {
-        scope.querySelectorAll('.rp-tile__art').forEach(function (art) {
-            if (art.dataset.plInit) return; art.dataset.plInit = '1';
-            var img = art.querySelector('.rp-tile__cover');
-            if (!img) { art.classList.add('is-loaded'); return; }
-            if (img.complete && img.naturalWidth) { art.classList.add('is-loaded'); return; }
-            var done = function () { art.classList.add('is-loaded'); };
-            img.addEventListener('load', done, { once: true });
-            img.addEventListener('error', done, { once: true });
-        });
-    }
+    // The shared `progressiveArt` (utils.js) since job detail became the second page rendering this
+    // card. It shipped there without this call and every cover shimmered forever -- the skeleton's
+    // infinite animation only stops on `.is-loaded`, which is JS's job, so the behaviour had to travel
+    // with the markup rather than stay here.
+    function initProgressiveLoad(scope) { PP.progressiveArt(scope); }
 
     var CBEAT = 1500, CFADE = 560;   // carousel hold-per-frame + crossfade duration
     function initCarousel(scope) {
