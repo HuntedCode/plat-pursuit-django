@@ -256,6 +256,59 @@ The one remaining constant is `virtualBoard`'s `|| 62` row-height fallback, for 
 
 **Do NOT use `staggerReveal` on a virtualized wall** — see below. Use `boardEntrance`.
 
+### The contract-card behaviours
+
+`_contract_card.html` is rendered by TWO pages (Career's Contracts board and job detail's Contracts tab),
+and most of what makes it feel finished is JavaScript. The markup alone is inert or, worse, stuck: adopting
+the template without these calls is how job detail shipped with covers shimmering forever, static figures
+and a still gallery. **If you render this card on a third page, you need all five.**
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `progressiveArt(scope?)` | container | Settles the cover-art skeleton once its image arrives |
+| `coverCarousel(scope?, opts?)` | `{beat?, fade?}` | Cycles the card's `data-gallery` frames while hovered |
+| `cardReveal(opts?)` | `{jobSelector?, threshold?}` | Per-card figure reveal on scroll-in; returns `{observe, reveal, disconnect}` |
+| `staggerCards(cards, opts?)` | `{step?, cap?}` | The batch entrance rise |
+| `ringHoverLink(scope, opts?)` | `{itemSelector?, cardSelector?}` | Cross-highlights a job and its arc in the split ring |
+
+**`progressiveArt`** is the one that is not optional. `.rp-tile__art::before` is a shimmering placeholder
+running an `infinite` animation, and the ONLY thing that stops it is `.is-loaded`, which this adds. A page
+that renders the card without calling it shows every cover pulsing forever -- and because `display: none`
+restarts a CSS animation, hiding and re-showing the container re-syncs them into one page-wide flash. It
+marks loaded on three paths: no image, an image already `complete` from cache (`load` will never fire
+again for it), and the real `load`/`error` pair.
+
+**`coverCarousel`** crossfades two stacked layers so a frame never shows through to the background, drifts
+each one, and draws a segment bar. Frames are preloaded on FIRST hover, not at render -- a wall of 24 cards
+would otherwise fetch every gallery for cards nobody points at. `fade` must match the CSS transition on
+`.rp-tile__img--fx`; it is a parameter precisely so two pages cannot hold different copies of that number.
+
+**`cardReveal`** animates a card's figures into their served values: reward XP counts up, tier bars fill
+from zero, ring arcs draw around, job cells ignite in sequence. The final state is server-rendered, so
+under reduced motion or without `IntersectionObserver` every card simply stays as served. **Call
+`disconnect()` before replacing the cards it watches** -- an observer holds a strong reference to every
+target until it intersects, so a grid that swaps without releasing them retains a detached node per unseen
+card, per swap.
+
+**`staggerCards`** is the card ARRIVING; `cardReveal` is its contents animating as it scrolls past. They
+are different moments and both callers use both.
+
+**`ringHoverLink`** ties a job to its arc in both directions. The lookup is scoped to the hovered element's
+own card, or hovering one job lights that slug on every card in the wall that happens to level it. The item
+selector differs per page (Career's 25-cell map vs job detail's named tiles); everything else is shared.
+
+**Callers:** `career.html` (all five) and `job_detail.html` (all five). Each was extracted the moment a
+second caller appeared -- see the "shuffle" note in [motion-patterns](motion-patterns.md) for why that
+threshold and not sooner.
+
+> **Re-running the inert-hook sweep.** A `data-*` attribute is a promise that something reads it, and five
+> broken promises have been found on these pages. A grep for "is this string mentioned in any JS?" does
+> NOT find them: a hook can be read by a delegated global listener, by a computed `dataset[key]`, or by a
+> class-based controller, and plenty of `data-*` are CSS selectors no JS should touch. What works is a
+> reader-set-vs-renderer-set join done by hand, with those three exceptions checked individually. It is a
+> sweep to run deliberately, not an assertion -- two attempts to automate it failed on correct code
+> (`tests/engine/test_no_inert_hooks.py` records both).
+
 ### PlatPursuit.flipGrid
 
 | Method | Parameters | Purpose |
