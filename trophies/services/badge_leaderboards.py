@@ -807,8 +807,10 @@ def job_rank(job_slug, profile_id, country=None):
 def job_board_count(job_slug, country=None):
     """How many hunters sit on ONE job's board, under the active slice.
 
-    `job_board_counts` (plural) exists for the batch case and takes no country -- it was written for a
-    directory page that listed every job at once. A sliced board needs its own count or the tally above it
+    There is no batch version any more. `job_board_counts` (plural) took no country and existed for a
+    directory page that listed every job at once; that page went in 2026-08, and `/jobs/` -- its last
+    caller -- stopped showing a hunter count per card, so it was left grouping across the whole table for
+    one figure nobody reads. A sliced board needs its own count regardless, or the tally above it
     describes a different population from the rows below it.
     """
     return _job_board_qs(job_slug, country).count()
@@ -829,16 +831,3 @@ def job_countries(job_slug):
         .values_list('country_code', flat=True).distinct()
     ))
 
-
-def job_board_counts(job_slugs):
-    """Entrants per job: {job_slug: count}. Feeds the Job Boards directory's gate and its sort."""
-    from django.db.models import Count
-    from trophies.models import ProfileJobXP
-
-    if not job_slugs:
-        return {}
-    return dict(
-        _linked(ProfileJobXP.objects.filter(job_id__in=list(job_slugs), total_xp__gt=0))
-        .values('job_id').annotate(n=Count('id'))
-        .values_list('job_id', 'n')
-    )

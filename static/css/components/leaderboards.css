@@ -140,7 +140,7 @@
     height: calc(var(--lb-row-h) - 6px);
     padding: 9px 10px; border-radius: var(--pp-radius-md, 10px);
     background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-    /* The house material: a top-edge light-catch, the same recipe .jobc / .scard carry
+    /* The house material: a top-edge light-catch, the same recipe .jobt / .scard carry
        ("material over drop-shadow"). This was the one major rebuilt row surface with no material at all,
        which is most of why the wall read as a table. A static inset shadow, not a transition, so it costs
        nothing at 50 rows. */
@@ -292,112 +292,6 @@
 @keyframes ppRanksSpin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bd2-ranks__spinner { animation-duration: 2.4s; } }
 .bd2-ranks__err { padding: 26px 0; text-align: center; font-size: 13px; color: var(--pp-text-mute); }
-
-/* ---- Jobs catalogue + job detail (`/jobs/`) --------------------------------------------------------- */
-/* The toolbar was `.bdir-bar`, shared with the three board directories. Those were removed in 2026-08 and
-   `/jobs/` was the only other page using it, so it is renamed to the page that owns it rather than left
-   carrying the prefix of a surface that no longer exists. Search + ONE select. The bare
-   `data-search-wrap` attribute on the wrapper is the hook `wireSearchField` would use for a clear button
-   and in-flight spinner; `/jobs/` does not call it and never did, so those affordances are not present
-   here -- the attribute is inert until someone wires them. */
-.jobs-bar {
-    display: flex; flex-direction: column; gap: 10px; margin: 18px 0 14px;
-}
-.jobs-bar__search { position: relative; display: flex; align-items: center; min-width: 0; }
-.jobs-bar__search svg {
-    position: absolute; left: 10px; width: 15px; height: 15px; color: var(--pp-text-mute);
-    pointer-events: none;
-}
-.jobs-bar__search input {
-    width: 100%; min-width: 0; padding: 8px 12px 8px 32px; border-radius: 8px;
-    font-size: 13px; color: var(--pp-text);
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-}
-.jobs-bar__search input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
-@media (min-width: 768px) {
-    .jobs-bar { flex-direction: row; align-items: center; gap: 12px; }
-    .jobs-bar__search { flex: 1 1 auto; }
-    .jobs-bar .pp-gallery__select { flex: 0 0 auto; min-width: 180px; }
-}
-
-/* The public face of the jobs economy. Each card takes its discipline's accent from the shared `--disc-*`
-   tokens the Career page already uses, so a job reads the same colour wherever you meet it. */
-.jobs-wall {
-    display: grid; gap: 10px; margin-top: 2px;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-}
-.jobc {
-    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px;
-    padding: 12px 14px; border-radius: var(--pp-radius-lg); text-decoration: none;
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-    border-left: 3px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 70%, transparent);
-    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
-}
-@media (hover: hover) {
-    .jobc:hover { background: var(--pp-bg-2); border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 45%, var(--pp-border)); }
-}
-.jobc:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .jobc { transition: none; } }
-.jobc__ic {
-    width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px;
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
-    color: var(--disc, var(--pp-primary));
-}
-.jobc__ic svg { width: 18px; height: 18px; }
-.jobc__body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.jobc__name { font-size: 14px; font-weight: 800; color: var(--pp-text); }
-.jobc__disc {
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--disc, var(--pp-text-mute));
-}
-.jobc__desc { margin-top: 3px; font-size: 11.5px; line-height: 1.4; color: var(--pp-text-dim); }
-.jobc__facts { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
-.jobc__fact { font-size: 10.5px; color: var(--pp-text-mute); }
-.jobc__fact b { color: var(--pp-text); font-size: 12px; }
-
-.jobd__head { display: flex; align-items: center; gap: 12px; }
-.jobd__ic {
-    width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px;
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
-    color: var(--disc, var(--pp-primary));
-}
-.jobd__ic svg { width: 22px; height: 22px; }
-.jobd__disc {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--disc, var(--pp-text-mute)); margin-top: 2px;
-}
-.jobd__desc { margin-top: 10px; font-size: 0.88rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 68ch; }
-
-/* Content tab panels. `hidden` alone is enough -- these are siblings in normal flow, not a positioned
-   stack -- but the rule is explicit because a `display` set anywhere else would beat the attribute. */
-.jobd-view[hidden] { display: none; }
-
-.jobd__contracts { display: flex; flex-direction: column; gap: 6px; }
-.jobd__con {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-    padding: 10px 12px; border-radius: var(--pp-radius-md, 10px);
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-}
-/* A contract the viewer has already banked reads quieter, not louder: the list's job is to show what
-   FEEDS this job, and the ones still open are the actionable half. */
-.jobd__con.is-earned { opacity: 0.72; }
-.jobd__con-name { font-size: 13px; font-weight: 700; color: var(--pp-text); flex: 1 1 auto; min-width: 0; }
-.jobd__con-jobs { display: flex; flex-wrap: wrap; gap: 4px; }
-.jobd__con-job {
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 4px;
-    color: var(--pp-text-mute); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-}
-/* The job you are looking at is marked in its own row -- a contract splits its XP across every job it
-   names, so which one is "this" is the thing a reader needs to see. */
-.jobd__con-job.is-this {
-    color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
-}
-.jobd__con-state {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--pp-primary);
-}
-.jobd__more { margin-top: 10px; text-align: center; font-size: 11px; color: var(--pp-text-mute); }
 
 
 /* ---- Pager ----------------------------------------------------------------------------------------- */

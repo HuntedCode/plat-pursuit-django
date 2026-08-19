@@ -55,8 +55,15 @@ def test_the_jobs_catalogue_is_public(client):
 
 
 def test_the_catalogue_counts_are_grouped_not_per_card(client):
-    """Two figures per card (hunters, contracts) from grouped reads done once for the page. A count per
-    card is the shape that looks fine at 24 jobs and is wrong on principle."""
+    """The contracts figure is an ANNOTATION on the queryset, so the page costs the same number of queries
+    whatever the catalogue holds. A count per card is the shape that looks fine at 25 jobs and is wrong on
+    principle -- and it became load-bearing rather than merely tidy when `contracts` became a SORT, which
+    has to happen in the database.
+
+    (It was two grouped reads and two figures until 2026-08; the hunter count went, and the contracts
+    count moved from a second grouped query into the main one, so this page now runs FEWER queries than it
+    did before it gained a sort.)
+    """
     jobs = [_job(f'j{i}', f'Job {i}') for i in range(3)]
     for j in jobs:
         _xp(j, f'H{j.slug}', 100)
@@ -74,6 +81,216 @@ def test_the_catalogue_counts_are_grouped_not_per_card(client):
     assert len(large.captured_queries) == len(small.captured_queries), (
         f'{len(small.captured_queries)} queries for 3 jobs but {len(large.captured_queries)} for 15'
     )
+
+
+# ------------------------------------------------------------------ ordering ----------------------------
+
+def _solo():
+    """Empty the catalogue so a test can assert on EXACT contents or order.
+
+    `0247_seed_jobs` is a data migration, so the 25 real jobs exist in the test database before any
+    factory runs. Tests that only check a property (is it public, does the query count hold) are happy
+    alongside them; anything asserting a full ordering has to start from nothing or it is asserting
+    against the seed.
+    """
+    Job.objects.all().delete()
+
+
+def _seeded_catalogue():
+    """One job per discipline, created in an order that matches NEITHER answer.
+
+    Built deliberately out of sequence so the assertions cannot pass by accident: alphabetical by name,
+    alphabetical by discipline slug and canonical radar order are three different results here.
+    """
+    return [
+        _job('mind-j', 'Zeta', discipline='mind', display_order=0),
+        _job('finesse-j', 'Alpha', discipline='finesse', display_order=0),
+        _job('combat-j', 'Mu', discipline='combat', display_order=0),
+        _job('heart-j', 'Beta', discipline='heart', display_order=0),
+        _job('exploration-j', 'Nu', discipline='exploration', display_order=0),
+    ]
+
+
+def _slugs(resp):
+    """Job slugs in RENDERED order, read off the tiles' hrefs -- the order a reader actually sees, rather
+    than the queryset's, which a template could reorder without anyone noticing."""
+    import re
+    return re.findall(r'/jobs/([a-z0-9-]+)/"', resp.content.decode())
+
+
+def test_the_default_order_is_the_CANONICAL_discipline_sequence(client):
+    """Career's arrangement, which is NOT what the column gives.
+
+    `discipline` holds slugs, so ordering on it sorts alphabetically -- combat, exploration, finesse,
+    heart, mind -- while the canonical radar order is combat, exploration, MIND, HEART, FINESSE. The two
+    agree for the first two disciplines and then diverge, which is precisely why this needs pinning: a
+    regression to `order_by('discipline')` looks right until you reach the third row.
+    """
+    _solo()
+    _seeded_catalogue()
+    assert _slugs(client.get(reverse('jobs_browse'))) == [
+        'combat-j', 'exploration-j', 'mind-j', 'heart-j', 'finesse-j']
+
+
+def test_display_order_breaks_ties_WITHIN_a_discipline_only(client):
+    """`display_order` is 0-4 within a discipline, not global, so it can only ever be the second key.
+    Sorting on it first would interleave all five disciplines (every slot 0, then every slot 1)."""
+    _solo()
+    _job('c1', 'Second', discipline='combat', display_order=1)
+    _job('c0', 'First', discipline='combat', display_order=0)
+    _job('m0', 'Also First', discipline='mind', display_order=0)
+
+    assert _slugs(client.get(reverse('jobs_browse'))) == ['c0', 'c1', 'm0']
+
+
+def test_sorting_by_contracts_counts_only_LIVE_ones(client):
+    """The figure on the tile and the key it sorts by are the same annotation, so they cannot disagree --
+    which is the whole reason the count moved into the queryset. A draft contract is not something a
+    reader can act on, so it must not inflate the number that says a job is worth pursuing."""
+    _solo()
+    a, b, c = _job('a', 'A'), _job('b', 'B'), _job('c', 'C')
+    _contract('One', [b])
+    _contract('Two', [b])
+    _contract('Draft', [c], live=False)
+    _contract('Live', [a])
+
+    resp = client.get(reverse('jobs_browse'), {'sort': 'contracts'})
+    assert _slugs(resp)[:2] == ['b', 'a'], 'not ordered by live contract count'
+    assert _slugs(resp)[2] == 'c'
+    counts = {j.slug: j.contract_count for j in resp.context['jobs']}
+    assert counts == {'b': 2, 'a': 1, 'c': 0}, 'a draft contract was counted'
+
+
+def test_a_contract_feeding_several_jobs_is_not_counted_twice(client):
+    """`distinct=True` on the annotation. A Contract's XP splits across every job it names, so the join
+    multiplies without it -- and the failure is invisible on single-job contracts, which is most of them."""
+    _solo()
+    a, b = _job('a', 'A'), _job('b', 'B')
+    _contract('Shared', [a, b])
+    _contract('Also Shared', [a, b])
+
+    counts = {j.slug: j.contract_count for j in client.get(reverse('jobs_browse')).context['jobs']}
+    assert counts == {'a': 2, 'b': 2}
+
+
+def test_sorting_alphabetically_ignores_discipline(client):
+    _solo()
+    _seeded_catalogue()
+    assert _slugs(client.get(reverse('jobs_browse'), {'sort': 'alpha'})) == [
+        'finesse-j', 'heart-j', 'combat-j', 'exploration-j', 'mind-j']
+
+
+def test_an_unknown_sort_falls_back_to_the_default(client):
+    """A junk `?sort=` is a URL somebody typed or an old bookmark, not an error worth a 500 -- and falling
+    back SILENTLY is safe only because the select renders the effective sort, so the control never shows
+    an ordering the wall does not have."""
+    _solo()
+    _seeded_catalogue()
+    resp = client.get(reverse('jobs_browse'), {'sort': 'nonsense'})
+    assert resp.context['sort'] == 'discipline'
+    assert _slugs(resp)[0] == 'combat-j'
+
+
+# ------------------------------------------------------------------ filtering ---------------------------
+
+def test_the_discipline_chip_filters_the_wall(client):
+    _solo()
+    _job('c', 'Combatant', discipline='combat')
+    _job('m', 'Thinker', discipline='mind')
+
+    resp = client.get(reverse('jobs_browse'), {'discipline': 'mind'})
+    assert _slugs(resp) == ['m']
+    assert resp.context['selected_discipline'] == 'mind'
+
+
+def test_an_unknown_discipline_is_ignored_rather_than_emptying_the_wall(client):
+    """The filter comes off the querystring, so it can hold anything. Applying an unrecognised value
+    verbatim would return nothing and read as "there are no jobs" -- a plausible, wrong answer."""
+    _solo()
+    _job('c', 'Combatant', discipline='combat')
+    assert _slugs(client.get(reverse('jobs_browse'), {'discipline': 'wizardry'})) == ['c']
+
+
+def test_search_matches_name_and_description(client):
+    """Mid-word, deliberately: the site-wide PREFIX rule exists to keep search off a scan of a large
+    table, and this table is 25 curated rows."""
+    _solo()
+    _job('a', 'Cartographer', description='You map the world.')
+    _job('b', 'Slayer', description='You fight everything.')
+
+    assert _slugs(client.get(reverse('jobs_browse'), {'q': 'ograph'})) == ['a']
+    assert _slugs(client.get(reverse('jobs_browse'), {'q': 'fight'})) == ['b']
+
+
+def test_search_and_discipline_compose(client):
+    """Two filters that AND. Each dropping the other on change was a real bug on the boards' filter form;
+    the shared browse form sends the whole form, which is what stops it here."""
+    _solo()
+    _job('a', 'Ranger', discipline='combat')
+    _job('b', 'Ranger Two', discipline='mind')
+
+    resp = client.get(reverse('jobs_browse'), {'q': 'Ranger', 'discipline': 'mind'})
+    assert _slugs(resp) == ['b']
+
+
+def test_the_empty_state_says_WHICH_filter_emptied_it(client):
+    """"No jobs match" over an empty wall is true and useless. The reader needs to know which control to
+    undo, and the two cases read differently."""
+    _solo()
+    _job('a', 'Ranger', discipline='combat')
+
+    searched = client.get(reverse('jobs_browse'), {'q': 'zzz'}).content.decode()
+    assert 'zzz' in searched, 'the empty state does not name the search that emptied it'
+
+    filtered = client.get(reverse('jobs_browse'), {'discipline': 'mind'}).content.decode()
+    assert 'No jobs in this discipline yet' in filtered
+
+
+# ------------------------------------------------------------------ the HTMX swap -----------------------
+
+def test_an_htmx_request_returns_the_WALL_ALONE(client):
+    """The swap target is `#browse-results`, so a response carrying the page chrome would nest a second
+    toolbar inside the results on every filter -- and keep nesting."""
+    _job('a', 'Ranger')
+
+    full = client.get(reverse('jobs_browse')).content.decode()
+    partial = client.get(reverse('jobs_browse'), HTTP_HX_REQUEST='true').content.decode()
+
+    assert 'jobs-wall' in partial and 'Ranger' in partial
+    assert 'data-browse-form' not in partial, 'the partial carries the toolbar'
+    assert 'id="browse-results"' not in partial, 'the partial re-renders its own swap container'
+    assert '<h1' not in partial
+    # ...and the full page has all of it, so the two are not both stripped.
+    assert 'data-browse-form' in full and 'id="browse-results"' in full
+
+
+def test_the_page_wires_the_shared_browse_controller(client):
+    """`/jobs/` was the last browse page still doing a full-page `form.submit()` on a debounce, which lost
+    the reader's scroll position and the focus of the field they were typing in. Pinned by MARKUP because
+    the behaviour lives in a shared script this test cannot execute."""
+    _job('a', 'Ranger')
+    body = client.get(reverse('jobs_browse')).content.decode()
+
+    assert 'browse-filters.js' in body
+    for hook in ('data-browse-form', 'data-live-search', 'hx-target="#browse-results"'):
+        assert hook in body, f'missing {hook}'
+    # The search affordances the wrapper advertised for months with nothing wired to them.
+    assert 'data-search-clear' in body and 'data-search-wrap' in body
+
+
+def test_the_catalogue_does_not_show_a_hunter_count(client):
+    """Dropped 2026-08 with the batch counter behind it. How many people have touched a job says more
+    about which games happen to be popular than about the job, and it was the one figure on the tile a
+    reader could do nothing with. Pinned so it does not drift back in as "context"."""
+    _solo()
+    job = _job('a', 'Ranger')
+    _xp(job, 'SomeHunter', 500)
+
+    # The WALL alone, not the page: `base.html`'s own meta description says "trophy hunters", so a
+    # whole-page substring check fails on correct code -- the exact false positive this file's sibling
+    # tests keep tripping over.
+    wall = client.get(reverse('jobs_browse'), HTTP_HX_REQUEST='true').content.decode()
+    assert 'hunter' not in wall.lower(), 'the catalogue is advertising a hunter count again'
 
 
 # ------------------------------------------------------------------ job detail ---------------------------

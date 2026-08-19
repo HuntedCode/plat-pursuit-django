@@ -1,0 +1,206 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+   JOBS -- the public catalogue (`/jobs/`) + job detail (`/jobs/<slug>/`)
+   ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+   A FILE OF ITS OWN as of 2026-08. All of this lived in `leaderboards.css` because jobs were briefly a
+   Leaderboards surface (the `/leaderboards/jobs/` directory, removed 2026-08); the pages moved to the
+   BROWSE hub and the styles did not follow, so a browse page's wall was maintained next to the board
+   engine's rows. Job detail's board itself still uses `.lb-*` -- that IS a leaderboard, and it is the
+   shared one.
+
+   Accents come from the `--disc-*` tokens the Career page owns, so a job reads in the same colour on its
+   tile, on the Career radar, in the chip that filters it and on its own page. Every rule here takes the
+   hue from a `--disc` custom property set inline per element, defaulting to `--pp-primary` so a job with
+   an unseeded discipline degrades to the house accent rather than to nothing.
+   ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* ---- The catalogue toolbar -------------------------------------------------------------------------
+   Search + sort on one line, then the discipline chips beneath. Two rows rather than one because the
+   chips are a SIX-segment control: squeezed onto the same line they would either wrap mid-row or force
+   the search field down to a stub. */
+.jobs-toolbar { display: flex; flex-direction: column; gap: 10px; }
+.jobs-bar { display: flex; flex-direction: column; gap: 10px; }
+.jobs-bar__sel { display: block; min-width: 0; }
+@media (min-width: 768px) {
+    .jobs-bar { flex-direction: row; align-items: center; gap: 12px; }
+    .jobs-bar .pp-bgal__search { flex: 1 1 auto; min-width: 0; }
+    .jobs-bar__sel { flex: 0 0 auto; }
+    .jobs-bar__sel .pp-gallery__select { min-width: 180px; }
+}
+/* The no-JS submit. Visible only without JS (it sits in a <noscript>), so it needs no state beyond
+   looking like a button. */
+.jobs-bar__go {
+    margin-top: 10px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); cursor: pointer;
+}
+
+/* ---- Discipline chips -------------------------------------------------------------------------------
+   A radio group wearing chips. The `<input>` is visually hidden but NOT `display:none` -- it has to stay
+   focusable for keyboard use, and `:has(:focus-visible)` is what moves the ring onto the visible chip.
+
+   Scrolls horizontally at 375px rather than wrapping: six segments wrapping to two lines reads as two
+   controls, and the row is short enough that a swipe is the cheaper gesture. `scrollbar-width: none`
+   because the row is short and a visible bar under six chips is louder than the chips. */
+.jobs-chips {
+    display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    padding-bottom: 2px; margin: 0 -2px; padding-left: 2px; padding-right: 2px;
+}
+.jobs-chips::-webkit-scrollbar { display: none; }
+.jobs-chip {
+    position: relative; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+    font-size: 12px; font-weight: 700; color: var(--pp-text-dim);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease),
+                border-color var(--pp-dur) var(--pp-ease);
+}
+.jobs-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.jobs-chip__ic { display: inline-flex; color: var(--disc, var(--pp-text-mute)); }
+.jobs-chip__ic svg { width: 13px; height: 13px; }
+@media (hover: hover) {
+    .jobs-chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 40%, var(--pp-border)); }
+}
+/* TINTED-FLAT active, the site-wide switcher treatment: the chip takes its own discipline's hue rather
+   than a generic selected state, so the filter teaches the colour it is filtering by. */
+.jobs-chip.is-active {
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, var(--pp-border));
+}
+.jobs-chip.is-active .jobs-chip__ic { color: var(--disc, var(--pp-primary)); }
+.jobs-chip:has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .jobs-chip { transition: none; } }
+
+/* ---- The wall ---------------------------------------------------------------------------------------
+   FIVE COLUMNS at `lg`, and the number is load-bearing rather than aesthetic: the catalogue is 5
+   disciplines x 5 jobs, so in the default (discipline) ordering every row IS a discipline. The grouping
+   the flat `auto-fill` wall used to leave entirely to the accent colour now falls out of the layout, and
+   costs no vertical space -- five headings would have cost five.
+
+   It holds at `xl`/`2xl` instead of growing, for the same reason: more columns would break the rows the
+   count exists to produce. And it degrades honestly -- a search, a discipline chip or either of the other
+   two sorts breaks the rows up, at which point the accent carries the grouping as it always did.
+
+   `auto-fill` is deliberately NOT used here. It would give 5 columns at some widths and 4 or 6 at others,
+   which is the one thing this grid must not do. */
+.jobs-wall { display: grid; gap: 10px; margin-top: 2px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .jobs-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 768px) { .jobs-wall { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .jobs-wall { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; } }
+
+/* ---- The tile ---------------------------------------------------------------------------------------
+   COMPACT, because five columns at 1024px leaves roughly 190px. The card this replaced was a horizontal
+   `auto minmax(0,1fr)` grid with a 320px floor, an icon beside the text and 96 characters of description;
+   none of that survives the width, and it was not asked to. The tile scans, the job page briefs.
+
+   Stretched to a common height by the grid so a row of five reads as a row, with the contracts figure
+   pushed to the base by `margin-top: auto` -- otherwise a job with a short description floats its figure
+   mid-tile and the row's baseline zig-zags. */
+.jobt {
+    display: flex; flex-direction: column; gap: 8px; min-width: 0;
+    padding: 12px 13px; border-radius: var(--pp-radius-lg); text-decoration: none;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    border-top: 2px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 70%, transparent);
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease),
+                box-shadow var(--pp-dur) var(--pp-ease);
+}
+/* Hover GLOW, not scale: the house rule, and doubly right in a fixed 5-track grid where a growing tile
+   would push its neighbours. */
+@media (hover: hover) {
+    .jobt:hover {
+        background: var(--pp-bg-2);
+        border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 45%, var(--pp-border));
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc, var(--pp-primary)) 22%, transparent),
+                    0 6px 18px -10px color-mix(in oklab, var(--disc, var(--pp-primary)) 60%, transparent);
+    }
+    .jobt:hover .jobt__name { color: var(--pp-text); }
+}
+.jobt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .jobt { transition: none; } }
+
+.jobt__top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.jobt__ic {
+    width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px;
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
+    color: var(--disc, var(--pp-primary));
+}
+.jobt__ic svg { width: 16px; height: 16px; }
+.jobt__id { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+/* Wraps rather than truncating: at ~190px a two-word job name ("Card Shark") would otherwise ellipsise,
+   and a catalogue whose entries cannot show their own names is not a catalogue. */
+.jobt__name { font-size: 13.5px; font-weight: 800; line-height: 1.2; color: var(--pp-text); }
+.jobt__disc {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--disc, var(--pp-text-mute));
+}
+/* Two lines, clamped. The full text is on the job page; here it is a hint at what the job is FOR. */
+.jobt__desc {
+    font-size: 11px; line-height: 1.42; color: var(--pp-text-dim);
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.jobt__feed {
+    margin-top: auto; display: flex; align-items: baseline; gap: 4px;
+    font-size: 10.5px; color: var(--pp-text-mute);
+}
+.jobt__feed b { font-size: 12.5px; color: var(--pp-text); }
+
+/* ---- Empty state ------------------------------------------------------------------------------------
+   Its own rules rather than `.lb-empty`, which is the leaderboard module's. Same shape, and that is the
+   point: this page has no board on it, so borrowing a board class was only ever a symptom of the file
+   these styles used to live in. */
+.jobs-empty {
+    grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 40px 20px;
+}
+.jobs-empty svg { width: 34px; height: 34px; color: var(--pp-text-mute); opacity: 0.7; }
+.jobs-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
+.jobs-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }
+
+
+/* ---- Job detail (`/jobs/<slug>/`) -------------------------------------------------------------------
+   Moved here WITH the catalogue: one page's vocabulary, and it only lived in `leaderboards.css` for the
+   same historical reason. The Ranks tab's board is untouched and still uses the shared `.lb-*`. */
+.jobd__head { display: flex; align-items: center; gap: 12px; }
+.jobd__ic {
+    width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px;
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
+    color: var(--disc, var(--pp-primary));
+}
+.jobd__ic svg { width: 22px; height: 22px; }
+.jobd__disc {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--disc, var(--pp-text-mute)); margin-top: 2px;
+}
+.jobd__desc { margin-top: 10px; font-size: 0.88rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 68ch; }
+
+/* Content tab panels. `hidden` alone is enough -- these are siblings in normal flow, not a positioned
+   stack -- but the rule is explicit because a `display` set anywhere else would beat the attribute. */
+.jobd-view[hidden] { display: none; }
+
+.jobd__contracts { display: flex; flex-direction: column; gap: 6px; }
+.jobd__con {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    padding: 10px 12px; border-radius: var(--pp-radius-md, 10px);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+}
+/* A contract the viewer has already banked reads quieter, not louder: the list's job is to show what
+   FEEDS this job, and the ones still open are the actionable half. */
+.jobd__con.is-earned { opacity: 0.72; }
+.jobd__con-name { font-size: 13px; font-weight: 700; color: var(--pp-text); flex: 1 1 auto; min-width: 0; }
+.jobd__con-jobs { display: flex; flex-wrap: wrap; gap: 4px; }
+.jobd__con-job {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 4px;
+    color: var(--pp-text-mute); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+/* The job you are looking at is marked in its own row -- a contract splits its XP across every job it
+   names, so which one is "this" is the thing a reader needs to see. */
+.jobd__con-job.is-this {
+    color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
+}
+.jobd__con-state {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-primary);
+}
+.jobd__more { margin-top: 10px; text-align: center; font-size: 11px; color: var(--pp-text-mute); }
+

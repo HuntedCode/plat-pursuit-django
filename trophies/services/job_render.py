@@ -14,7 +14,7 @@ import json
 import math
 import random
 
-from django.db.models import Count, Sum
+from django.db.models import Case, Count, IntegerField, Sum, Value, When
 
 from trophies.models import ContractXPGrant, Job, ProfileJobXP
 from trophies.util_modules.leveling import xp_for_level, tier_for_level
@@ -33,6 +33,31 @@ DISCIPLINE_ICON = {
     'combat': 'swords', 'exploration': 'compass', 'mind': 'brain',
     'heart': 'heart', 'finesse': 'sparkles',
 }
+
+
+def discipline_order():
+    """ORDER BY the canonical discipline sequence, for querysets that want Career's arrangement.
+
+    Sorting on the `discipline` COLUMN does not give it. The column holds slugs, so Postgres sorts them
+    alphabetically -- combat, exploration, finesse, heart, mind -- and the canonical order is the one
+    `DISCIPLINE_LABELS` declares above: combat, exploration, mind, heart, finesse. It is a radar axis
+    order, not a word order, so the two agree for the first two disciplines and then quietly diverge,
+    which is the kind of wrong that reads as right. `Job.Meta.ordering` leads with the raw column and is
+    therefore in the alphabetical sequence, so anything falling back on the default ordering gets it too.
+
+    Derived FROM `DISCIPLINE_LABELS` rather than repeating its order, so the sequence has exactly one
+    definition. Pair it with `display_order` -- which is 0-4 WITHIN a discipline, not global, so on its
+    own it interleaves all five (every slot 0, then every slot 1).
+
+    Third caller is what earned this a name: `job_roster` and `job_dossier` both group in Python and
+    iterate `DISCIPLINE_LABELS` to get the same answer, which works for a page assembling tiles and not
+    for a queryset that has to sort and slice in the database.
+    """
+    return Case(
+        *[When(discipline=slug, then=Value(i)) for i, slug in enumerate(DISCIPLINE_LABELS)],
+        default=Value(len(DISCIPLINE_LABELS)),   # an unseeded discipline sorts last rather than first
+        output_field=IntegerField(),
+    )
 # Atom shape per family slot: color = family, shape = slot index within the family.
 SHAPES = ['circle', 'triangle', 'square', 'pentagon', 'hexagon']
 # Curated periodic-table marks (cap + lowercase, all unique). A designed mark, not an

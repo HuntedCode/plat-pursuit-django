@@ -247,7 +247,7 @@ def test_an_unlinked_hunter_is_not_on_ANY_board():
     assert lb.board_count('career') == 0
     assert lb.board_count('trophies') == 0
     assert lb.series_board_count('aaa') == 0
-    assert lb.job_board_counts(['ranger']) == {}
+    assert lb.job_board_count('ranger') == 0
     assert lb.board_count('points', edition='ultra-hd') == 0
 
     # ...and the country PICKER, which is the one that fails quietly: an offered country whose only

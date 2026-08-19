@@ -18,7 +18,10 @@ column:
 
   ProfileBadgeStanding   Badge Points -- ordered by total_xp across the whole table
   ProfileCareerStanding  Career XP    -- likewise
-  ProfileJobXP           `job_board_counts` groups across EVERY job on each `/jobs/` render
+  ProfileJobXP           at the time, `job_board_counts` grouped across EVERY job on each `/jobs/`
+                         render. That caller is gone (2026-08: the catalogue card dropped its hunter
+                         count), but the index stands on the job BOARD itself, which orders by
+                         `total_xp` within one job and pages through it
 
 `SeriesBadgeStanding`, `ProfileEditionStanding` and `UserGroupBadge` are read per entity (`series_slug`,
 `platform_group_key`, `group_badge`), so their existing indexes already restrict to one entity's rows

@@ -17,17 +17,19 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.utils.http import urlencode
 from django.views import View
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.db.models.functions import Lower
 from django.views.generic import DetailView, ListView, TemplateView
 
 from trophies.models import Contract, EarnedContract, Job
+from trophies.mixins import HtmxListMixin
 from trophies.services import badge_leaderboards as lb
 from trophies.views import board_helpers
 from trophies.views.board_helpers import suggest_json, window_params
 
 from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
+from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, discipline_order
 from trophies.util_modules.constants import ALL_PLATFORMS, CONTRACT_XP_TOTAL
 
 # The internal tabs a `?view=` query may deep-link to (match the template's data-view values).
@@ -172,7 +174,7 @@ class ContractModalPreviewView(View):
                       {'p': p, 'profile': None, 'is_preview': True})
 
 
-class JobsBrowseView(ListView):
+class JobsBrowseView(HtmxListMixin, ListView):
     """`/jobs/` -- the public catalogue of jobs, in the BROWSE hub.
 
     Not under Leaderboards: a catalogue of jobs is a browse surface and sits with Games, Badges,
@@ -181,41 +183,77 @@ class JobsBrowseView(ListView):
     standing across the 24 jobs, this shows what the jobs ARE. They coexist without competing.
 
     Public by design. An anonymous visitor is exactly who this page is for: it is the readable surface of
-    a system they have not signed up for yet.
+    a system they have not signed up for yet. Nothing here reads the viewer, which is also what keeps the
+    whole page cacheable.
+
+    HTMX-swapped like every other browse page (2026-08). It was the last one still doing a full-page
+    `form.submit()` on a 450ms debounce, so typing lost your scroll position and the focus of the field
+    you were typing in.
+
+    NO PAGINATION, and none is coming: the catalogue is 25 rows by construction (5 disciplines x 5 jobs),
+    curated and seeded rather than grown. `HtmxListMixin` is here for the partial swap, not the pager.
     """
     model = Job
     template_name = 'trophies/jobs_browse.html'
+    partial_template_name = 'trophies/partials/jobs_browse/browse_results.html'
     context_object_name = 'jobs'
 
+    #: Ordering per sort value.
+    #:
+    #: `discipline` is the DEFAULT and it is Career's arrangement, not the column's: sorting on the
+    #: `discipline` slug gives combat, exploration, finesse, heart, mind, while the canonical radar order
+    #: is combat, exploration, mind, heart, finesse. The two agree for two disciplines and then diverge,
+    #: which is exactly the kind of wrong that reads as right -- hence `discipline_order()`, which derives
+    #: the sequence from `DISCIPLINE_LABELS` so there is one definition of it. `display_order` is 0-4
+    #: WITHIN a discipline, so it can only ever be the second key.
+    #:
+    #: `contracts` is what feeds a job, which is the one thing a reader browsing the catalogue can act on.
+    #: A "most hunters" sort was considered and dropped with the hunter count itself: how many people have
+    #: touched a job says more about which games are popular than about the job.
+    SORTS = {
+        'discipline': [discipline_order(), 'display_order'],
+        'contracts': [F('contract_count').desc(), discipline_order(), 'display_order'],
+        'alpha': [Lower('name')],
+    }
+    DEFAULT_SORT = 'discipline'
+
     def get_queryset(self):
-        qs = Job.objects.all()
+        qs = Job.objects.annotate(
+            # ANNOTATED rather than counted per card, because the `contracts` sort has to happen in the
+            # database. It also replaces the separate grouped query this page used to run, so gaining a
+            # sort cost it a query rather than adding one. `distinct=True` because a Contract can feed
+            # several jobs and the join would otherwise multiply.
+            contract_count=Count('contracts', filter=Q(contracts__is_live=True), distinct=True),
+        )
         q = (self.request.GET.get('q') or '').strip()
         if q:
+            # `icontains` over 25 curated rows, deliberately: the site-wide PREFIX rule exists to keep a
+            # search off a full scan of a large table, and this table is smaller than one page of results
+            # anywhere else. Matching mid-word is worth more here than the index would be.
             qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q))
         disc = (self.request.GET.get('discipline') or '').strip()
         if disc in dict(Job.DISCIPLINES):
             qs = qs.filter(discipline=disc)
-        return qs.order_by('display_order', Lower('name'))
+        return qs.order_by(*self.SORTS.get(self.sort, self.SORTS[self.DEFAULT_SORT]))
+
+    @property
+    def sort(self):
+        value = (self.request.GET.get('sort') or '').strip()
+        return value if value in self.SORTS else self.DEFAULT_SORT
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        jobs = list(context['jobs'])
-        slugs = [j.slug for j in jobs]
-
-        # One grouped read for the whole page, not a count per card.
-        counts = lb.job_board_counts(slugs)
-        contract_counts = dict(
-            Contract.objects.filter(is_live=True, jobs__slug__in=slugs)
-            .values('jobs__slug').annotate(n=Count('id', distinct=True))
-            .values_list('jobs__slug', 'n')
-        )
-        for job in jobs:
-            job.hunters = counts.get(job.slug, 0)
-            job.contract_count = contract_counts.get(job.slug, 0)
-
         context.update({
             'q': (self.request.GET.get('q') or '').strip(),
-            'disciplines': Job.DISCIPLINES,
+            'sort': self.sort,
+            # Zipped here rather than looked up in the template: Django has no dict-subscript filter,
+            # and the two constants are one vocabulary that should travel together anyway. Order is
+            # `DISCIPLINE_LABELS`', i.e. the same canonical sequence `discipline_order()` sorts the wall
+            # into -- so the chips read left-to-right in the order the rows appear.
+            'disciplines': [
+                {'key': key, 'label': label, 'icon': DISCIPLINE_ICON.get(key, '')}
+                for key, label in DISCIPLINE_LABELS.items()
+            ],
             'selected_discipline': (self.request.GET.get('discipline') or '').strip(),
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
@@ -223,7 +261,6 @@ class JobsBrowseView(ListView):
             ],
         })
         return context
-
 
 class JobRanksPanelView(View):
     """`/jobs/<slug>/ranks/` -- one job's board, fetched into job detail's Ranks tab on activation.
@@ -362,7 +399,7 @@ class JobDetailView(DetailView):
         # here for exactly that reason: it briefly moved into `_ranks()` and therefore vanished from the
         # default Contracts tab, which is where a signed-in hunter lands -- the standing chip only
         # appeared once you clicked Ranks, which is the tab that already shows you the board.
-        context['board_total'] = lb.job_board_counts([job.slug]).get(job.slug, 0)
+        context['board_total'] = lb.job_board_count(job.slug)
         context['my_rank'] = lb.job_rank(job.slug, profile.id) if profile else None
         # Distinguishes "signed out" from "signed in and not on this board". The template gated the whole
         # block on `my_rank`, so an unranked hunter got silence where the answer belonged.
