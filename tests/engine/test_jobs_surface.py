@@ -844,6 +844,27 @@ def test_a_job_tile_reserves_room_for_a_two_line_name(client):
     assert 'text-overflow' not in rule and 'nowrap' not in rule, 'a job name is being truncated'
 
 
+def test_the_tile_grid_is_top_aligned_and_career_still_is_not(client):
+    """`.rp-body` centres its columns vertically, which is right for Career's 5x5 map -- a fixed five-row
+    block, always taller than the ring beside it -- and wrong for these tiles, which are one or two rows.
+    Centred, a one-job contract floats its tiles into the middle of the card while a six-job one starts at
+    the top, so the block appears to move around as you scan a wall.
+
+    The SCOPING is the half worth guarding: `:has(.rp-jobtiles)` matches only the job-scoped variant, and
+    an unscoped `align-items: start` would silently re-lay-out every card on the Contracts board -- a page
+    this change has no business touching.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
+    elements = (root / 'static' / 'css' / 'components' / 'elements.css').read_text(encoding='utf-8')
+
+    assert '.rp-body:has(.rp-jobtiles) { align-items: start; }' in css
+    # Career's own rule is untouched: still centred, still declared where the card lives.
+    base = elements[elements.index('.rp-body {'):]
+    base = base[:base.index('}')]
+    assert 'align-items: center' in base, "Career's card body is no longer centred"
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that

@@ -234,6 +234,12 @@
 
    The job column is `1fr` beside the ring's fixed 84px, so a 3-wide row gives roughly 48-55px per tile --
    more room each than Career's 5-wide map gets in the same space, and a 1- or 2-wide row is generous. */
+/* TOP-ALIGNED, and scoped so Career is untouched. `.rp-body` centres its three columns vertically, which
+   is right for the 5x5 map (a fixed 5-row block, always taller than the ring beside it) and wrong here:
+   these tiles are 1 to 2 rows, so centring floats a one-row contract's jobs into the middle of the card
+   while a two-row contract's start at the top -- the block appears to move between cards in a wall.
+   `:has(.rp-jobtiles)` matches only the job-scoped variant, so the Contracts board keeps its centring. */
+.rp-body:has(.rp-jobtiles) { align-items: start; }
 .rp-jobtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 4px; align-content: start; }
 .rp-jobtiles[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
 .rp-jobtiles[data-n="2"],
