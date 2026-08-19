@@ -788,7 +788,9 @@ class BadgeRanksPanelView(View):
 
         That sameness is the point. The reader picked a filter, not a different page: the rank, the
         hunter, the points and the date all mean what they meant a moment ago, with the points now
-        counting THIS edition rather than every edition summed. r = (profile_id, ed_xp, advanced_at)."""
+        counting THIS edition rather than every edition summed. r = (profile_id, xp, advanced_at), read from
+        `SeriesEditionStanding` -- so the DATE is this edition's own, not the series-wide one it used to
+        inherit (migration 0313)."""
         rows = lb.series_edition_rows(series_slug, edition, limit=limit, offset=offset,
                                       country=country or None)
         return lb.page(rows, offset, extra=lambda r: {

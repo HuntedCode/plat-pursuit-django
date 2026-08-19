@@ -522,6 +522,32 @@ per-tier trophy counts, a completion bar and three board-kind variants (progress
 the shared row has no slot for. Folding it in would mean growing the shared row four ways to serve one
 caller. Uniformity across the other three is guarded by `tests/engine/test_board_uniformity.py`.
 
+### Step 12: the per-edition board gets a store
+
+The edition filter on badge detail read three different things before it was right, and each wrong turn
+was wrong in a way that looked fine:
+
+1. **`UserGroupBadge`** (earners) -- genuinely per (series x edition), so it read as the obvious store. It
+   holds only FINISHERS, so any badge with chasers and no finishers emptied under every edition. Fixed by
+   reading the chasers' store instead.
+2. **`SeriesBadgeStanding`'s JSON maps** -- the right population, ordered on `Cast(group_xp -> key)` and
+   gated on `Cast(group_progress -> key -> 0) > 0`. Correct answers, and two problems underneath them:
+   nothing past `series_slug` was indexable (so every virtual window re-sorted the whole series), and the
+   tiebreak was `SeriesBadgeStanding.advanced_at`, which is SERIES-wide. **Two hunters tied on Legacy HD
+   points were separated by their Ultra HD progress -- advancing in one edition could drop a rank in
+   another.**
+3. **`SeriesEditionStanding`** (migration 0313) -- a row per (profile, series, STARTED edition), with that
+   edition's points and its own date.
+
+The store cost nothing to compute. `recompute_standing` already loops every edition holding its
+`GroupBadgeResult`, and `_advanced_at` was already being called per edition and discarded for all but the
+furthest-along one. What it costs is WRITE VOLUME in the nightly chain, held down by storing only STARTED
+editions -- the board's own membership rule, moved from every read to one write.
+
+Deploy is the one ordered step in this section: `0313` then `backfill_series_edition_standings`, because
+between them the board reads an empty table. See the
+[deploy checklist](prod-deploy-checklist.md).
+
 ---
 
 ## Gotchas and Pitfalls
@@ -537,6 +563,14 @@ caller. Uniformity across the other three is guarded by `tests/engine/test_board
 - **A board's `> 0` membership rule belongs in the row function, not only on the count.** An edition
   standing survives on zero points when the hunter has trophies there but no cleared gating stage, so an
   unfiltered read hands the last page rows the count never promised.
+- **A board that SCOPES a population must scope every key it orders on.** The per-edition board scoped its
+  points and inherited its DATE from the series, so a hunter's rank on one edition moved when they
+  advanced on another. Nothing on the board being read had changed. Scoping the leading key is the part
+  you notice; the tiebreak is the part you do not.
+- **Two stores over one truth need their prune written at the same time as their write.** A series that
+  drops to zero XP deletes its `SeriesBadgeStanding` row, so nothing would ever revisit its edition rows
+  -- leaving the edition board ranking somebody the series board had already dropped. Both deletes live
+  in `recompute_standing`, next to each other, with a test each.
 - **Tab links are built in the VIEW, per target board.** A single shared querystring tail was the first
   attempt and it handed Career an edition it ignores — so the link went one place and the rank shown beside
   it was measured somewhere else.

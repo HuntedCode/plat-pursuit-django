@@ -363,10 +363,11 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     reader deep into a popular series walks the index fetching `is_linked` per candidate -- the shape 0307
     measured at 49.7 ms. 0311 closed it."""
     from django.db.models import Q
-    from trophies.models import ProfileEditionStanding, UserGroupBadge
+    from trophies.models import ProfileEditionStanding, SeriesEditionStanding, UserGroupBadge
 
     for model, names in (
         (SeriesBadgeStanding, ('sbs_series_board_idx', 'sbs_series_cc_board_idx')),
+        (SeriesEditionStanding, ('ses_board_idx', 'ses_board_cc_idx')),
         (ProfileEditionStanding, ('pes_ed_xp_idx', 'pes_ed_cc_xp_idx')),
         (UserGroupBadge, ('ugb_badge_earned_idx', 'ugb_badge_cc_earned_idx')),
     ):
@@ -386,6 +387,11 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     expected = {
         (SeriesBadgeStanding, 'sbs_series_board_idx'): linked,
         (SeriesBadgeStanding, 'sbs_series_cc_board_idx'): linked,
+        # `is_linked` ALONE, unlike the ProfileEditionStanding pair below: this store's membership rule is
+        # applied at WRITE (only a started edition gets a row), so its reads carry no `> 0` predicate for
+        # an index to have to match.
+        (SeriesEditionStanding, 'ses_board_idx'): linked,
+        (SeriesEditionStanding, 'ses_board_cc_idx'): linked,
         (ProfileEditionStanding, 'pes_ed_xp_idx'): linked_xp,
         (ProfileEditionStanding, 'pes_ed_cc_xp_idx'): linked_xp,
         (UserGroupBadge, 'ugb_badge_earned_idx'): linked,
@@ -394,6 +400,25 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     for (model, name), cond in expected.items():
         got = {i.name: i for i in model._meta.indexes}[name].condition
         assert got == cond, f'{name} is conditioned on {got}, expected {cond}'
+
+
+def test_the_per_edition_board_index_leads_with_both_scoping_keys():
+    """Column ORDER, not just presence. The board always filters series AND edition, then optionally
+    country, then sorts -- so those keys have to come first, in that order, for the read to be a range
+    scan rather than a filter over one. An index that led with `-xp` would be present, look reasonable,
+    and serve nothing.
+
+    The trailing `profile` is the same load-bearing tail every other board index carries: `page()` numbers
+    rows by slot and `series_edition_rank` counts everyone ahead, and the two agree only because the
+    ordering ends in a unique key -- which is also what lets the rank COUNT stay index-only.
+    """
+    from trophies.models import SeriesEditionStanding
+
+    idx = {i.name: i.fields for i in SeriesEditionStanding._meta.indexes}
+    assert idx.get('ses_board_idx') == [
+        'series_slug', 'platform_group_key', '-xp', 'advanced_at', 'profile']
+    assert idx.get('ses_board_cc_idx') == [
+        'series_slug', 'platform_group_key', 'country_code', '-xp', 'advanced_at', 'profile']
 
 
 def test_the_evaluation_seam_actually_writes_the_advance_date():

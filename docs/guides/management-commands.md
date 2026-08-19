@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **87 custom management commands** spread across 7 Django apps: `trophies` (55), `core` (21), `notifications` (5), `users` (2), `milestones` (2), `fundraiser` (1), and `art_reveal` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **88 custom management commands** spread across 7 Django apps: `trophies` (56), `core` (21), `notifications` (5), `users` (2), `milestones` (2), `fundraiser` (1), and `art_reveal` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -24,6 +24,7 @@ PlatPursuit has **87 custom management commands** spread across 7 Django apps: `
 | `backfill_stub_concept_icons` | Copy `title_icon_url` from associated games to `PP_` stub Concepts missing icons. | `--dry-run`, `--batch-size` (default: 100) | `python manage.py backfill_stub_concept_icons` |
 | `clean_titles` | Strip TM/registered symbols, normalize Unicode Roman numerals, and remove "trophy set" suffixes from Game, Concept, Trophy, and GameFamily titles. | `--dry-run` | `python manage.py clean_titles --dry-run` |
 | `psn_probe` | Probe PSN API endpoints directly and dump raw payloads. Troubleshooting tool for sync discrepancies. 12 endpoints: `profile`, `profile_legacy`, `presence`, `region`, `friendship`, `trophy_summary`, `trophy_titles`, `trophy_titles_for_title`, `title_stats`, `trophies`, `trophy_groups_summary`, `game_details`. Requires `NPSSO_TOKEN` in `.env`. | `endpoint` (positional), `--user` (default: `abu_abu`), `--np-comm-id`, `--np-title-id`, `--platform` (default: `PS5`), `--trophy-group-id` (default: `all`), `--include-progress`, `--title-ids`, `--limit`, `--offset`, `--page-size`, `--first` (default: `5`, `0` = all) | `python manage.py psn_probe profile_legacy --user abu_abu` |
+| `backfill_series_edition_standings` | Seed the per-edition badge board store (migration 0313) from the JSON maps the board used to read. `advanced_at` is the one field it cannot recover -- its source holds one series-wide date -- so it seeds that, which reproduces today's behaviour exactly until the next nightly `evaluate_badges --all` writes the real per-edition dates. Skips any (profile, series) that already has rows, so a re-run cannot undo those. | `--dry-run`, `--force`, `--series` | `python manage.py backfill_series_edition_standings --dry-run` |
 | `backfill_game_regions` | Populate `Game.region` from TitleID region data (loaded by `populate_title_ids`). | `--dry-run`, `--verbose` | `python manage.py backfill_game_regions --dry-run --verbose` |
 | `audit_badge_coverage` | For each badge SERIES tracking a franchise/collection/developer, find concepts of that source not covered by the series' stages, and email the gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game needs adding to the series. Emails only when gaps exist unless `--always`. | `--dry-run`, `--always` | `python manage.py audit_badge_coverage --dry-run` |
 | `nightly` | **The nightly maintenance run, one cron entry.** Executes the badge chain in DEPENDENCY order (evaluate -> DLC sweep -> coverage audit). Each step is isolated so one failure does not cancel the rest, and the command exits non-zero if any failed. Add nightly work as a STEP here, not as a new cron entry. | `--dry-run`, `--only <label>`, `--skip <label>` | `python manage.py nightly --dry-run` |
@@ -163,6 +164,7 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `backfill_stub_concept_icons` | Copy game icons to PP_ stub Concepts |
 | `backfill_concept_trophy_groups` | Create ConceptTrophyGroup records from game TrophyGroups |
 | `backfill_game_regions` | Populate Game.region from TitleID data |
+| `backfill_series_edition_standings` | Seed `SeriesEditionStanding` (migration 0313) from `SeriesBadgeStanding`'s `group_progress` / `group_xp` maps, so nobody drops off badge detail's per-edition board while waiting for their next sync |
 | `backfill_subscription_periods` | Create SubscriptionPeriod for existing subscribers |
 | `fix_badge_picks` | Recompute fundraiser badge_picks_earned for multi-donation users |
 | `mark_recaps_sent` | Prevent stale recap sends after email fix |

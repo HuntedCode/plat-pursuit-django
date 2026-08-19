@@ -14,7 +14,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from trophies.models import SeriesBadgeStanding
+from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
 from tests.factories import (
     ProfileFactory, BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
     PlatformGroupFactory, GroupBadgeFactory,
@@ -643,12 +643,18 @@ def _two_editions(slug='dual', name='Dual'):
 
 
 def _chasing(slug, name, progress, *, xp=None, group_xp=None, on=dt.date(2025, 1, 1),
-             code='', country=''):
+             on_by_edition=None, code='', country=''):
     """A hunter with PER-EDITION progress on a series board.
 
-    `progress` is the `group_progress` read-model the edition board ranks on:
-    `{platform_group_key: [stages_cleared, gating_count]}`, materialized on every recompute for every
-    earnable edition -- started or not, so an untouched one still carries its denominator.
+    TWO STORES, because the write seam writes two. `progress` is the `group_progress` read-model the
+    COLLECTION reads: `{platform_group_key: [stages_cleared, gating_count]}`, materialized for every
+    earnable edition -- started or not, so an untouched one still carries its denominator. The per-edition
+    BOARD reads `SeriesEditionStanding`, one row per STARTED edition, which this derives from the same
+    map so a fixture cannot describe two different hunters.
+
+    `on_by_edition` gives an edition its OWN advance date. Defaulted from `on` (the series-wide value)
+    because most tests do not care, and the difference between the two is precisely the bug the store was
+    built to fix -- see `test_the_edition_board_tiebreaks_on_THAT_editions_date`.
 
     `progress_bp` and `stages_cleared` are derived here the way the engine derives them: from the
     FURTHEST-ALONG edition, never from a sum. A badge is earned per edition, so there is no such thing as
@@ -676,6 +682,15 @@ def _chasing(slug, name, progress, *, xp=None, group_xp=None, on=dt.date(2025, 1
         stages_cleared=best_cleared, stages_total=best_total,
         group_progress=progress, advanced_at=on,
     )
+    for key, (cleared, gating) in progress.items():
+        if not cleared:                     # the store's membership rule: only a STARTED edition gets a row
+            continue
+        SeriesEditionStanding.objects.create(
+            profile=prof, series_slug=slug, platform_group_key=key,
+            xp=group_xp.get(key, 0), stages_cleared=cleared, gating_count=gating,
+            advanced_at=(on_by_edition or {}).get(key, on),
+            country_code=code, is_linked=True,
+        )
     return prof
 
 
@@ -725,6 +740,42 @@ def test_the_edition_board_counts_THAT_editions_points(client):
                         {'edition': 'dual-ps3'}).context['rows'][0]
     assert legacy['primary'] == 10, (
         'the edition board showed the series total rather than the edition being asked about'
+    )
+
+
+def test_the_edition_board_tiebreaks_on_THAT_editions_date(client):
+    """The reason `SeriesEditionStanding` is a table rather than another JSON key.
+
+    The board used to read `SeriesBadgeStanding.advanced_at`, which is SERIES-wide -- the date of the
+    hunter's furthest-along edition, whichever that is. So two hunters tied on THIS edition's points were
+    separated by their progress in a DIFFERENT one, and advancing on PS5 could drop a rank on Legacy HD.
+    Nothing about the board a reader was looking at had changed.
+
+    Both hunters here have identical Legacy HD standing -- same points, same date on that edition. They
+    differ only in their series-wide date, and `Later` holds the more recent one because they have been
+    busy on PS5. Under the old key `Later` sorted last; the correct answer is that PS5 is irrelevant and
+    the profile id (the unique tail) breaks a genuine tie.
+    """
+    _two_editions()
+    early = _chasing('dual', 'EarlySeries', {'dual-ps5': [0, 5], 'dual-ps3': [2, 5]},
+                     on=dt.date(2024, 1, 1),
+                     on_by_edition={'dual-ps3': dt.date(2025, 6, 1)})
+    later = _chasing('dual', 'LateSeries', {'dual-ps5': [4, 5], 'dual-ps3': [2, 5]},
+                     group_xp={'dual-ps5': 4, 'dual-ps3': 2},
+                     on=dt.date(2026, 1, 1),                       # busy on PS5, which must not count here
+                     on_by_edition={'dual-ps3': dt.date(2025, 6, 1)})
+
+    rows = client.get(reverse('badge_ranks_panel', args=['dual']),
+                      {'edition': 'dual-ps3'}).context['rows']
+
+    assert [r['psn_username'] for r in rows] == ['EarlySeries', 'LateSeries'], (
+        'the edition board ordered on a date from another edition'
+    )
+    # ...and it is the unique TAIL doing the separating, not the series-wide date agreeing by luck: the
+    # two are tied on every key the board declares.
+    assert early.id < later.id
+    assert [r['when'] for r in rows] == [dt.date(2025, 6, 1)] * 2, (
+        'the row is showing the series-wide date rather than this edition\'s'
     )
 
 

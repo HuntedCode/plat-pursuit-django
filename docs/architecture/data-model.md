@@ -139,7 +139,7 @@ Append-only marker: one row per (profile, group_badge) ever announced to Discord
 because holds are binary, so a revoke-then-re-earn is indistinguishable from a first earn and would
 re-ping a hunter about a badge they have held for a year.
 
-#### ProfileBadgeStanding / SeriesBadgeStanding / ProfileEditionStanding
+#### ProfileBadgeStanding / SeriesBadgeStanding / SeriesEditionStanding / ProfileEditionStanding
 The materialized read-models the leaderboards sort on, all recomputed from scratch by
 `badge_xp.recompute_standing` on every evaluation (so they cannot drift):
 
@@ -147,7 +147,15 @@ The materialized read-models the leaderboards sort on, all recomputed from scrat
 |---|---|---|
 | `ProfileBadgeStanding` | per profile | grand `total_xp`, `badges_held`, `country_code` |
 | `SeriesBadgeStanding` | per (profile, series) | `xp`, `progress_bp`, `stages_cleared`/`total`, `advanced_at`, per-edition `group_progress` |
+| `SeriesEditionStanding` | per (profile, series, STARTED edition) | that edition's `xp`, `stages_cleared`/`gating_count`, and its OWN `advanced_at` |
 | `ProfileEditionStanding` | per (profile, edition) | the same totals pre-sliced, backing the boards' edition filter |
+
+`SeriesEditionStanding` is the one with a membership rule: a row exists only for an edition the hunter has
+STARTED, because it backs a board. `SeriesBadgeStanding.group_progress` deliberately keeps untouched
+editions so the Collection wall has a denominator, so the two are not redundant despite overlapping. Its
+`advanced_at` is the reason it is a table rather than a JSON key -- its parent's is series-wide, and
+tiebreaking one edition's board on another edition's date meant advancing in one could drop a rank in the
+other.
 
 #### Stage
 One "step" in a series: the Concepts a hunter must complete. `stage_number` 0 marks optional entries.

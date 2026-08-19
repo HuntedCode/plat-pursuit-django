@@ -156,6 +156,46 @@ def test_rank_equals_position_under_an_edition_slice():
                    lambda pid: lb.xp_rank(pid, edition='ultra-hd'), 'Badge Points (Ultra HD)')
 
 
+def test_series_EDITION_board_rank_equals_position_on_that_editions_own_date():
+    """The same property one level down, and the store that made it cheap.
+
+    Both the rows and the rank read `SeriesEditionStanding`, so the assertion is the usual one -- but the
+    fixture is built to catch the specific failure the store was created to fix: every hunter here carries
+    a SERIES-wide date that contradicts their edition date. A board that reached for the wrong one would
+    still produce a total order, so rank and position would agree and this test would pass; the ORDER
+    itself is checked below.
+    """
+    from trophies.models import SeriesEditionStanding
+
+    def standing(xp, on, series_wide):
+        prof = ProfileFactory(is_linked=True)
+        SeriesBadgeStanding.objects.create(
+            profile=prof, series_slug='eds', xp=xp, progress_bp=5000,
+            advanced_at=series_wide, is_linked=True)
+        return SeriesEditionStanding.objects.create(
+            profile=prof, series_slug='eds', platform_group_key='legacy-hd',
+            xp=xp, stages_cleared=1, gating_count=4, advanced_at=on, is_linked=True)
+
+    # Series-wide dates run OPPOSITE to the edition dates throughout, so an ordering that used them would
+    # come back exactly reversed rather than subtly wrong.
+    first = standing(500, dt.date(2026, 1, 1), dt.date(2026, 12, 1))
+    second = standing(500, dt.date(2026, 4, 1), dt.date(2026, 9, 1))
+    for _ in range(3):
+        standing(500, dt.date(2026, 6, 1), dt.date(2026, 6, 1))   # tied on both -> only the tail separates
+    standing(500, None, dt.date(2020, 1, 1))                       # no advance date -> last within the rung
+    standing(1000, dt.date(2026, 8, 1), dt.date(2020, 1, 1))       # more points -> above all of them
+
+    rows = lb.series_edition_rows('eds', 'legacy-hd', limit=100)
+    _assert_agrees(rows, lambda pid: lb.series_edition_rank('eds', 'legacy-hd', pid), 'Edition board')
+
+    ids = [r[0] for r in rows]
+    assert ids.index(first.profile_id) < ids.index(second.profile_id), (
+        'the edition board ordered on the series-wide date, not this edition\'s'
+    )
+    null_row = SeriesEditionStanding.objects.get(series_slug='eds', advanced_at__isnull=True)
+    assert ids.index(null_row.profile_id) == len(ids) - 1, 'the undated row did not sort last in its rung'
+
+
 # ------------------------------------------------------------------ the key lists are honest -------------
 
 @pytest.mark.parametrize('keys, label', [
@@ -163,9 +203,9 @@ def test_rank_equals_position_under_an_edition_slice():
     (lb.TROPHY_KEYS, 'TROPHY_KEYS'),
     (lb.CAREER_KEYS, 'CAREER_KEYS'),
     (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
-    # The per-EDITION series board. Its leading key is an ANNOTATION (`ed_xp`, cast out of the
-    # `group_xp` JSON) rather than a column, which changes nothing about the property being asserted:
-    # the order still has to end in a unique key or rank and position disagree.
+    # The per-EDITION series board. It IS `SERIES_BOARD_KEYS` since migration 0313 gave it a store whose
+    # columns match its parent's, and it is listed separately anyway: the name is what the board declares,
+    # and a future divergence has to stay covered without anyone remembering to add it back.
     (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'),
     (lb.JOB_KEYS, 'JOB_KEYS'),
     (lb.EARNERS_KEYS, 'EARNERS_KEYS'),

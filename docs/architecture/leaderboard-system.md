@@ -17,6 +17,7 @@ The leaderboard system ranks hunters by badge progress and Badge Points, per ser
 | Badge Points (global + country) | `ProfileBadgeStanding` | Also carries `badges_held`, the secondary stat |
 | Badge Points, per edition | `ProfileEditionStanding` | The edition FILTER. Same columns, same names, pre-sliced |
 | Per-series board | `SeriesBadgeStanding` | Earners + chasers MERGED into one board |
+| Per-series board, per edition | `SeriesEditionStanding` | The edition FILTER on badge detail. One row per STARTED edition, with that edition's own points AND its own `advanced_at` |
 | Career XP | `ProfileCareerStanding` | No Redis equivalent ever existed |
 
 All of it is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over denormalized
@@ -67,6 +68,10 @@ as the whole thing.
 | Country | all three boards | a WHERE on `country_code`, served by `(country, ...board order)` |
 | Edition | **Badge Points only** | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
 
+Badge detail's Ranks tab carries the same two, and its edition filter works the same way one level down:
+a different STORE (`SeriesEditionStanding`), never a WHERE over the series board. See **The per-edition
+badge board** below.
+
 Edition exists because Legacy HD and Ultra HD are genuinely different games -- XP accrues per GROUP BADGE,
 not per series -- so "who leads Legacy HD" is a question the all-editions board cannot answer. It applies to
 Badge Points ALONE: an edition is a PlatformGroup, i.e. a badge concept, and neither Trophies (every game)
@@ -97,12 +102,46 @@ The view validates the key first, so that path only runs on a bug.
 group, so per-edition XP and badges-held sum to the all-editions totals. (Per-edition TROPHY counts DID
 overlap -- a cross-gen game qualifies for both groups -- and went with the Badge Trophies board.)
 
+### The per-edition badge board
+
+Badge detail's Ranks tab slices by edition (`?edition=<platform_group_key>`), and that slice reads
+`SeriesEditionStanding` -- one row per (profile, series, STARTED edition). It went through three stores
+before landing there, and the wrong turns are worth keeping:
+
+| read | why it was wrong |
+|---|---|
+| `UserGroupBadge` (earners) | Genuinely per (series x edition), so it looked right. It holds only FINISHERS, so a badge with chasers and no finishers emptied under every edition. A filter must SCOPE a board, not swap it for a rarer one |
+| `SeriesBadgeStanding`'s JSON maps | Right population, wrong shape. See below |
+| `SeriesEditionStanding` | A table, migration 0313 |
+
+The JSON version ordered on `Cast(group_xp -> key)` and gated membership on
+`Cast(group_progress -> key -> 0) > 0`. Two problems, and the second is the one that mattered:
+
+1. **Unindexable.** `sbs_series_board_idx` narrowed the read to one series and then every row was
+   extracted, filtered and sorted from the heap. Nothing could stop early, the count and the rank paid it
+   too, and the virtualizer re-runs the query per window -- so scrolling a popular badge re-sorted the
+   whole series per screenful.
+2. **It tiebroke on a date from a different edition.** `SeriesBadgeStanding.advanced_at` is SERIES-wide
+   (`compute_series_standings` takes the furthest-along edition's), so two hunters tied on Legacy HD
+   points were separated by their Ultra HD progress. **Advancing in one edition could drop a rank in
+   another** -- indefensible on a board somebody is chasing. The per-edition date already existed in the
+   engine (`_advanced_at` takes one edition's `GroupBadgeResult`) and was being discarded.
+
+**Only STARTED editions get a row.** That is the difference between this store and `group_progress`, which
+deliberately keeps untouched editions as `[0, gating]` so the Collection wall has a denominator. A board
+has no use for that row, so the membership rule moved to the WRITE side where it costs nothing to apply.
+
+**Two stores that must agree.** `badge_xp.recompute_standing` writes the edition rows in the same pass that
+writes `SeriesBadgeStanding`, as a full REPLACE per (profile, series), and deletes them when the series
+zeroes out. Both halves are covered by tests, because the failure is silent: an edition board ranking a
+hunter the series board has already dropped.
+
 ## File Map
 
 | File | Purpose |
 |------|---------|
 | `trophies/services/badge_leaderboards.py` | Every board read: the `*_KEYS` orders, `_ahead_q`, `hydrate()`, `BoardPaginator`/`BoardPage`, `board_count()`, `active_editions()` |
-| `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings (xp, progress, `advanced_at`, badges held). Runs on every sync -- it must never grow a profile-wide aggregate |
+| `trophies/services/badge_xp.py` | The write seam: `recompute_standing` materializes the standings (xp, progress, `advanced_at`, badges held, and the per-edition board rows). Runs on every sync -- it must never grow a profile-wide aggregate |
 | `trophies/services/game_leaderboard_service.py` | Per-game boards. Where the rank-equals-position rule was first solved |
 | `trophies/views/badge_views.py` | `OverallBadgeLeaderboardsView` (the landing) + `BadgeRanksPanelView` (badge detail's board fragment) |
 
@@ -125,8 +164,13 @@ is catalogue data, and `game_leaderboard_service` owns them with its own `member
 a predicate that lives on another table cannot go in this table's indexes. The join read `is_linked` out
 of the heap of a 48-column `Profile` once per candidate row, on public uncached pages. 0309 then makes the
 three whole-table board indexes partial on it -- the shape 0307 measured at `trophy_rank` 16.0 ms -> 3.9
-ms on `Profile`. The per-entity stores (series, edition, earners) carry the column for correctness but
-keep plain indexes: their reads are already narrowed by a leading key.
+ms on `Profile`.
+
+The per-entity stores (series, edition, earners) were left with plain indexes at that point, reasoning
+that a leading key already narrows them to one entity's rows. **0311 made them partial too**, because that
+reasoning assumed PAGINATION: under virtual scrolling a reader can be at row 30,000 of a popular series
+and the scan fetches `is_linked` per candidate on the way. Every board index in the module is partial on
+it now, `ses_board_idx` included.
 
 Two paths keep the mirror honest, and BOTH are needed:
 
@@ -197,6 +241,18 @@ They are recomputed from scratch each time, so no incremental writer exists to d
   Splitting them (half each, or first-match-wins) would make an edition's trophy count disagree with the
   badges that edition awards.
 
+- **A per-edition board must tiebreak on a per-edition date.** `SeriesBadgeStanding.advanced_at` is
+  series-wide, so the edition board ranked hunters tied on one edition by their progress in another --
+  advancing on PS5 could drop a rank on Legacy HD, with nothing on the board the reader was looking at
+  having changed. `SeriesEditionStanding` stores each edition's own date (migration 0313). The general
+  rule: a board that SCOPES a population must scope every key it orders on, not just the leading one.
+
+- **The scoped-recompute invariant is what makes the per-edition store safe to prune.**
+  `_write_series_edition_standings` deletes any edition row not in the batch it was handed, which is only
+  correct because `group_badges` is guaranteed to contain EVERY live edition of any series it touches.
+  Scoping a recompute by BADGE rather than by SERIES would silently delete the other edition's row --
+  `test_badge_sync_wiring` pins the invariant for `group_progress` and it now protects a second store.
+
 - **`recompute_standing` may be scoped to a subset of series, so every profile-wide figure must be
   re-summed from ALL the profile's `SeriesBadgeStanding` rows** -- never from the call's own results. That
   is why per-edition XP is stored per series in `group_xp` rather than only aggregated. Summing the call's
@@ -220,7 +276,15 @@ They are recomputed from scratch each time, so no incremental writer exists to d
 
 ## Management Commands
 
-None. The boards read live from the standing tables, so there is nothing to rebuild.
+None, in steady state. The boards read live from the standing tables, so there is nothing to rebuild.
+
+`backfill_series_edition_standings` is a ONE-TIME seed for migration 0313, not maintenance: it derives the
+new per-edition rows from `SeriesBadgeStanding`'s `group_progress` / `group_xp` maps so nobody drops off
+the edition board at deploy while waiting for their next sync. `advanced_at` is the one thing it cannot
+recover (the source holds one series-wide date), so it seeds that value -- which makes the board behave
+exactly as it did before the store existed, with the real per-edition dates arriving on the next nightly
+`evaluate_badges --all`. Defaults to skipping any (profile, series) that already has rows, so a second run
+cannot undo dates the engine has since corrected; `--force` overrides.
 
 `evaluate_badges --all` (nightly) is what keeps the standings honest, but it is a badge-evaluation
 command, not a leaderboard one -- see [badge-system.md](badge-system.md).

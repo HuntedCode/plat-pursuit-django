@@ -227,6 +227,21 @@ it's *factual* (your own cleared-stage counts, not relative like `rank`/`rarity`
 the one write seam -- the same category as the `stages_cleared`/`stages_total` display fields already there,
 just per-edition. (Cutover: an `evaluate_badges` run backfills it onto existing standings.)
 
+**And a per-edition STORE (`SeriesEditionStanding`, migration 0313), which is a different thing.** The
+read-model above serves the Collection: it keeps an edition the hunter has not begun (as `[0, gating]`)
+because a wall needs a denominator for "0 / 5 stages". A BOARD does not, and badge detail's per-edition
+board tried to read the map anyway -- ordering on `Cast(group_xp -> key)`, gating on
+`Cast(group_progress -> key -> 0) > 0`. Two things broke that were not obvious from the query: nothing
+past `series_slug` was indexable (so a virtualized board re-sorted the whole series per window), and the
+tiebreak came from `SeriesBadgeStanding.advanced_at`, which is SERIES-wide -- so **advancing in one
+edition could drop a hunter's rank in another**. The store holds one row per (profile, series, STARTED
+edition) with that edition's points and its own `advanced_at`, written in the same `recompute_standing` pass
+that writes `group_progress`, using the per-edition date `_advanced_at` was already computing and
+discarding. Same category as everything above: factual, recompute-from-scratch, one write seam. The rule
+this adds to the denorm principle is about SCOPE rather than category: a read-model that serves a display
+and a store that serves a board have different membership rules, and reusing the first as the second
+smuggles the display's rule (and its coarser keys) into the board.
+
 **Lane B leaderboards** (`services/badge_leaderboards.py`, DB reads over the stores -- no Redis/rebuild cron):
 global XP (`xp_rows`/`xp_rank`), per-series XP (`series_xp_rows`/`series_rank`), per-series progress/chasers
 (`series_progress_rows`), and per-badge earners (`earners_rows` + `earners_rank`/`earners_ranks` -- the LIVE

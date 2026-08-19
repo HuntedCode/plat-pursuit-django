@@ -115,7 +115,14 @@ replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refres
 - **Schedule**: Daily, 04:00 UTC
 - **Command**: `python manage.py evaluate_badges --all`
 - **What it does**: Re-evaluates every live group badge for every profile and rewrites the standings from
-  scratch (`UserGroupBadge`, `SeriesBadgeStanding`, `ProfileBadgeStanding`, `ProfileEditionStanding`).
+  scratch (`UserGroupBadge`, `SeriesBadgeStanding`, `SeriesEditionStanding`, `ProfileBadgeStanding`,
+  `ProfileEditionStanding`).
+- **What it costs**: unchanged by the 2026-08 addition of `SeriesEditionStanding` on the CPU side (the
+  per-edition figures were already computed in the loop that writes `group_progress`), but it is more
+  rows WRITTEN -- one per started edition per engaged series, on top of the one per series. Bounded by
+  storing only STARTED editions rather than every earnable one, which is roughly half the map on a
+  two-edition series and the difference between a table that tracks engagement and one that tracks the
+  catalogue.
 - **Why it exists**: sync evaluates only the series a hunter TOUCHED, which is what keeps `sync_complete`
   cheap. That leaves three gaps this pass closes: a badge authored after a hunter's last sync, a stage or
   `PlatformGroup` edited by a curator, and any evaluation that failed and was swallowed by the non-fatal

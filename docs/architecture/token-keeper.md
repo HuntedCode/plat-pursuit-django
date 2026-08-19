@@ -226,7 +226,10 @@ Badge XP is recomputed from scratch into the standing tables by the same call.
 
 Scoping is by series rather than by badge deliberately: `recompute_standing` REPLACES a series' standing
 from only the editions it is handed, so a badge-scoped call would silently zero the editions it omitted.
-It never raises -- see `evaluate_for_sync` -- so a badge failure cannot fail a sync.
+That invariant now protects TWO stores -- `SeriesEditionStanding` (2026-08) is written as a full replace
+per (profile, series) off the same batch, so a badge-scoped call would DELETE the omitted edition's board
+row rather than merely zero a JSON key. It never raises -- see `evaluate_for_sync` -- so a badge failure
+cannot fail a sync.
 
 ### Challenge Progress
 

@@ -292,3 +292,179 @@ def test_an_unearnable_edition_can_never_report_cleared_stages():
     assert result.gating_count == 0
     assert result.base_satisfied_count == 0, 'an unearnable edition cannot report cleared gating stages'
     assert result.base_earned is False
+
+
+# ------------------------------------------------------------------ the per-edition board store ----------
+
+def _two_edition_series(slug='dual'):
+    """One series offered in two editions, each gated by its own platform's copy of every stage.
+
+    Returns `(ultra, legacy, games)` where `games[(plat, stage_no)]` is the game a hunter completes to
+    clear that stage in that edition. This is the shape `SeriesEditionStanding` exists for: the same
+    series, two independent chases, each with its own points and its own dates.
+    """
+    from tests.factories import (
+        BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
+        PlatformGroupFactory, GroupBadgeFactory,
+    )
+    series = BadgeSeriesFactory(series_slug=slug)
+    ultra = GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        key='ultra-hd', name='Ultra', platforms=['PS4', 'PS5']))
+    legacy = GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        key='legacy-hd', name='Legacy', platforms=['PS3']))
+    games = {}
+    for i in (1, 2):
+        st = StageFactory(series_slug=slug, stage_number=i)
+        c = ConceptFactory()
+        st.concepts.add(c)
+        games[('ps5', i)] = GameFactory(concept=c, title_platform=['PS5'])
+        games[('ps3', i)] = GameFactory(concept=c, title_platform=['PS3'])
+    return ultra, legacy, games
+
+
+def _complete_on(profile, game, when):
+    """`_complete`, with the trophy date pinned. `_advanced_at` reads the stage's `base_date` off
+    `ProfileTrophyGroup.last_trophy_at`, so a test about DATES has to set them rather than take now()."""
+    from trophies.models import ProfileGame, TrophyGroup, ProfileTrophyGroup
+    ProfileGame.objects.update_or_create(profile=profile, game=game, defaults={'progress': 50})
+    tg, _ = TrophyGroup.objects.get_or_create(game=game, trophy_group_id='default',
+                                              defaults={'trophy_group_name': 'B'})
+    ProfileTrophyGroup.objects.update_or_create(
+        profile=profile, trophy_group=tg, defaults={'progress': 100, 'last_trophy_at': when})
+
+
+@pytest.mark.django_db
+def test_only_a_STARTED_edition_gets_a_board_row():
+    """The store's membership rule, and the one place it differs from `group_progress`.
+
+    `group_progress` deliberately keeps an untouched edition as `[0, gating]` so the Collection wall has a
+    denominator for a chase not yet begun. A BOARD has no use for that row, and writing one would put
+    every chaser of every OTHER edition on this edition's board at zero points -- which is the padding the
+    old JSON read had to filter out on every query. Filtered at WRITE now, where it costs nothing.
+    """
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    ultra, legacy, games = _two_edition_series()
+    p = ProfileFactory()
+    _complete(p, games[('ps5', 1)])                  # Ultra HD 1/2 ; Legacy HD untouched
+    evaluate_and_apply(p, [ultra, legacy])
+
+    sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='dual')
+    assert sbs.group_progress == {'ultra-hd': [1, 2], 'legacy-hd': [0, 2]}, 'fixture is not the shape it claims'
+
+    rows = {r.platform_group_key: r for r in SeriesEditionStanding.objects.filter(profile=p)}
+    assert set(rows) == {'ultra-hd'}, 'an untouched edition was put on its own board at zero'
+    assert rows['ultra-hd'].stages_cleared == 1 and rows['ultra-hd'].gating_count == 2
+    assert rows['ultra-hd'].xp == XP_PER_STAGE
+    assert rows['ultra-hd'].series_slug == 'dual'
+
+
+@pytest.mark.django_db
+def test_each_edition_row_carries_its_OWN_advance_date():
+    """THE BUG THE STORE EXISTS FOR. `SeriesBadgeStanding.advanced_at` is series-wide -- the furthest-along
+    edition's date -- so ranking an edition board on it separated hunters tied on THIS edition by their
+    progress in a DIFFERENT one. Advancing on PS5 could drop a rank on Legacy HD.
+
+    The per-edition date was already computed and thrown away: `_advanced_at` takes one edition's
+    `GroupBadgeResult` and `compute_series_standings` calls it for the best edition only. Here Ultra HD is
+    further along AND more recent, so the series-wide date is Ultra's -- and Legacy's row must not have it.
+    """
+    import datetime as dt
+    from django.utils import timezone as tz
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    ultra, legacy, games = _two_edition_series()
+    old = tz.make_aware(dt.datetime(2024, 3, 4))
+    recent = tz.make_aware(dt.datetime(2026, 7, 8))
+    p = ProfileFactory()
+    _complete_on(p, games[('ps3', 1)], old)          # Legacy HD 1/2, long ago
+    _complete_on(p, games[('ps5', 1)], recent)       # Ultra HD  2/2 (both PS5 copies)...
+    _complete_on(p, games[('ps5', 2)], recent)
+    evaluate_and_apply(p, [ultra, legacy])
+
+    series_wide = SeriesBadgeStanding.objects.get(profile=p, series_slug='dual').advanced_at
+    rows = {r.platform_group_key: r.advanced_at for r in SeriesEditionStanding.objects.filter(profile=p)}
+
+    assert series_wide == recent.date(), "the series-wide date is not the furthest-along edition's"
+    assert rows['ultra-hd'] == recent.date()
+    assert rows['legacy-hd'] == old.date(), (
+        f"Legacy HD was dated {rows['legacy-hd']} -- its board would tiebreak on PS5 progress"
+    )
+
+
+@pytest.mark.django_db
+def test_an_edition_that_stops_being_started_loses_its_row():
+    """A full REPLACE per (profile, series), not an upsert-and-forget.
+
+    PSN corrections regress progress, and a stage's only game on a platform can be delisted out of an
+    edition. Either way the hunter stops being on that edition's board, and a row nothing prunes would
+    keep them ranked there indefinitely -- with the points they had the day it broke.
+    """
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import ProfileGame, ProfileTrophyGroup, SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    ultra, legacy, games = _two_edition_series()
+    p = ProfileFactory()
+    _complete(p, games[('ps5', 1)])
+    _complete(p, games[('ps3', 1)])
+    evaluate_and_apply(p, [ultra, legacy])
+    assert SeriesEditionStanding.objects.filter(profile=p).count() == 2
+
+    # The PS3 completion regresses; the PS5 one stands.
+    ProfileTrophyGroup.objects.filter(profile=p, trophy_group__game=games[('ps3', 1)]).update(progress=0)
+    ProfileGame.objects.filter(profile=p, game=games[('ps3', 1)]).update(progress=0)
+    evaluate_and_apply(p, [ultra, legacy])
+
+    assert list(SeriesEditionStanding.objects.filter(profile=p)
+                .values_list('platform_group_key', flat=True)) == ['ultra-hd']
+
+
+@pytest.mark.django_db
+def test_a_series_dropping_to_zero_takes_its_edition_rows_with_it():
+    """The half that is easy to miss. A zeroed series deletes its `SeriesBadgeStanding` row, so nothing
+    else would ever visit these -- and the edition board would keep ranking a hunter the series board has
+    already dropped. Two stores, one truth."""
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import (
+        ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, SeriesEditionStanding,
+    )
+    from tests.factories import ProfileFactory
+
+    ultra, legacy, games = _two_edition_series()
+    p = ProfileFactory()
+    _complete(p, games[('ps5', 1)])
+    evaluate_and_apply(p, [ultra, legacy])
+    assert SeriesEditionStanding.objects.filter(profile=p).exists()
+
+    ProfileTrophyGroup.objects.filter(profile=p).update(progress=0)
+    ProfileGame.objects.filter(profile=p).update(progress=0)
+    evaluate_and_apply(p, [ultra, legacy])
+
+    assert not SeriesBadgeStanding.objects.filter(profile=p, series_slug='dual').exists()
+    assert not SeriesEditionStanding.objects.filter(profile=p).exists(), (
+        'the edition board still ranks a hunter whose series standing is gone'
+    )
+
+
+@pytest.mark.django_db
+def test_the_edition_rows_mirror_the_profile_fields_the_board_filters_on():
+    """`country_code` and `is_linked` are board PREDICATES, and a predicate on another table cannot go in
+    this table's indexes. Stamped by the recompute like every other standing store -- `signals
+    .profile_mirrored_standings` covers the edge this misses (verifying, which changes `is_linked` with no
+    recompute behind it) and has its own guard test."""
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    ultra, legacy, games = _two_edition_series()
+    p = ProfileFactory(country_code='CA', is_linked=True)
+    _complete(p, games[('ps5', 1)])
+    evaluate_and_apply(p, [ultra, legacy])
+
+    row = SeriesEditionStanding.objects.get(profile=p)
+    assert (row.country_code, row.is_linked) == ('CA', True)

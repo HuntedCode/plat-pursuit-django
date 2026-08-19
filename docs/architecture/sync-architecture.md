@@ -208,7 +208,7 @@ The refactor preserves every existing integration point in `sync_complete`. What
 | Cache invalidation | none | REMOVED in cutover 5b: `dashboard_service` and `stats_service` were both deleted, so `_job_sync_complete` invalidates nothing. (`invalidate_timeline_cache` went earlier, with the profile timeline.) |
 | Site Heartbeat, Community Trophy Tracker | Read sync-derived state on their own crons | Unaffected by the refactor; they read from `EarnedTrophy` and `Profile`. |
 | Discord-verified 12h cadence | Configured in `refresh_profiles` cron | Unchanged. |
-| Badge XP recompute | `recompute_standing`, inside the evaluation | REPLACED in cutover 5b. `bulk_gamification_update()` is deleted; standings are recomputed from scratch per evaluation, so there is nothing to batch. |
+| Badge XP recompute | `recompute_standing`, inside the evaluation | REPLACED in cutover 5b. `bulk_gamification_update()` is deleted; standings are recomputed from scratch per evaluation, so there is nothing to batch. As of 2026-08 the same seam also writes `SeriesEditionStanding` (one row per started edition, backing badge detail's per-edition board) -- no extra evaluation, since the loop already holds each edition's result. |
 | Signal suppression patterns | `sync_signal_suppressor()` and `_sync_previous_earned` stamps | Preserved. The walk still uses the same per-game `sync_trophies` job for trophy data, which already wraps signal suppression correctly. |
 
 The frontend surfaces (hotbar polling, home syncing page, finalize_phase UI, mobile API) are unchanged. `ProfileSyncStatusView` response schema stays stable.

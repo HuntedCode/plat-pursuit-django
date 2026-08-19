@@ -217,7 +217,8 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     already committed -- see the comment in `evaluate_and_apply`."""
     from django.db import connection
     from django.db.models import Sum
-    from trophies.models import ProfileBadgeStanding, ProfileEditionStanding, SeriesBadgeStanding
+    from trophies.models import (ProfileBadgeStanding, ProfileEditionStanding, SeriesBadgeStanding,
+                                 SeriesEditionStanding)
 
     # Serializes this profile's recomputes against each other, which is the precondition `_upsert` relies
     # on. Two writers reach the same profile in normal operation: the nightly `evaluate_badges --all` and
@@ -257,6 +258,15 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
     # Per-edition XP for each series, same pass. Only positive entries are stored: a zero contributes
     # nothing to the sum it exists for, and keeping them would grow the blob with every seeded edition.
     group_xp = defaultdict(dict)
+    # The per-edition BOARD rows, from the same pass. Only STARTED editions get one
+    # (`base_satisfied_count > 0`), which is the board's own membership rule -- `group_prog` above
+    # deliberately keeps untouched editions because the Collection needs their denominator, and a board
+    # does not. Storing them would roughly double a table the nightly chain writes for every profile.
+    #
+    # `advanced_at` here is the EDITION's own date. `_advanced_at` has always taken a per-edition
+    # `GroupBadgeResult`; `compute_series_standings` computes it for the furthest-along edition and drops
+    # the rest, which is what made the per-edition board tiebreak on a date from a different edition.
+    edition_rows = defaultdict(list)
     for gb in group_badges:
         r = desired.get(gb.id)
         if r is not None and r.gating_count > 0:
@@ -265,6 +275,14 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
             xp = _group_badge_xp(r)
             if xp:
                 group_xp[gb.series.series_slug][gb.platform_group.key] = xp
+            if r.gating_count > 0 and r.base_satisfied_count > 0:
+                edition_rows[gb.series.series_slug].append({
+                    'platform_group_key': gb.platform_group.key,
+                    'xp': xp,
+                    'stages_cleared': r.base_satisfied_count,
+                    'gating_count': r.gating_count,
+                    'advanced_at': _advanced_at(r),
+                })
 
     # Read ONCE for the whole recompute: this seam writes one row per positive series plus the grand
     # total, and both mirrored values are the same for all of them.
@@ -278,8 +296,14 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
                  'group_xp': dict(group_xp.get(slug, {})),
                  'advanced_at': s.advanced_at,
                  'country_code': country, 'is_linked': is_linked})
+        _write_series_edition_standings(profile_id, slug, edition_rows.get(slug, []), country, is_linked)
     if zeroed:
         SeriesBadgeStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()
+        # The per-edition rows go with their parent. Two stores that must agree, and this is the half that
+        # is easy to forget: a series dropping to zero XP leaves no SeriesBadgeStanding row, so nothing
+        # would ever prune these and the edition board would keep ranking a hunter the series board has
+        # dropped -- exactly the disagreement the ProfileBadgeStanding branch below warns about.
+        SeriesEditionStanding.objects.filter(profile_id=profile_id, series_slug__in=zeroed).delete()
 
     total = _live_standings(profile_id).aggregate(t=Sum('xp'))['t'] or 0
     if total > 0:
@@ -294,6 +318,39 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
         # holding a hunter the other has dropped is the kind of disagreement nobody would think to check.
         ProfileBadgeStanding.objects.filter(profile_id=profile_id).delete()
         ProfileEditionStanding.objects.filter(profile_id=profile_id).delete()
+        SeriesEditionStanding.objects.filter(profile_id=profile_id).delete()
+
+
+def _write_series_edition_standings(profile_id, series_slug, rows, country, is_linked):
+    """Replace ONE series' per-edition board rows for a profile.
+
+    A full replace per (profile, series), which is what keeps this from drifting out of step with its
+    parent: an edition a hunter has stopped qualifying for (its last gating game delisted on that
+    platform, or the stage that carried it removed) leaves `rows` and is deleted here, rather than
+    lingering on the board because nothing thought to prune it.
+
+    Scoped by SERIES, never by edition -- the same invariant `group_progress` rests on, and for the same
+    reason: every caller of `recompute_standing` scopes by SERIES, so `group_badges` holds EVERY live
+    edition of any series it touches. The rows passed here are therefore the complete set for this series,
+    and the delete below cannot remove one that simply was not evaluated. `evaluate_for_sync` is where
+    that scoping is decided (`test_badge_sync_wiring` pins it); a badge-scoped call would silently drop
+    the omitted edition's board row rather than merely zero a JSON key.
+    """
+    from trophies.models import SeriesEditionStanding
+
+    keep = []
+    for row in rows:
+        _upsert(SeriesEditionStanding,
+                {'profile_id': profile_id, 'series_slug': series_slug,
+                 'platform_group_key': row['platform_group_key']},
+                {'xp': row['xp'], 'stages_cleared': row['stages_cleared'],
+                 'gating_count': row['gating_count'], 'advanced_at': row['advanced_at'],
+                 'country_code': country, 'is_linked': is_linked})
+        keep.append(row['platform_group_key'])
+    (SeriesEditionStanding.objects
+     .filter(profile_id=profile_id, series_slug=series_slug)
+     .exclude(platform_group_key__in=keep)
+     .delete())
 
 
 def _live_standings(profile_id):

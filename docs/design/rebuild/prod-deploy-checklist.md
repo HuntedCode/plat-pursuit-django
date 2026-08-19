@@ -557,13 +557,38 @@ not mistaken for a bug.
 on the game and job boards, a hunter search on all four, and a sticky minibar on `/leaderboards/`. All
 read-side; nothing to run.
 
-> **KNOWN LIMITATION, shipped deliberately.** The per-edition board tiebreaks on `advanced_at`, which is
-> SERIES-wide -- the date of the hunter's furthest-along edition, whichever that is. So two hunters tied
-> on one edition's points are separated by their progress in a DIFFERENT edition, and advancing elsewhere
-> can move a rank here. The engine already computes a per-edition date and discards all but the best one
-> (`badge_xp._advanced_at` takes a per-edition `GroupBadgeResult`), so the fix is a materialized
-> per-edition map rather than new engine work. Not blocking: it only affects the ORDER WITHIN a points
-> tie on a filtered board.
+> ~~**KNOWN LIMITATION, shipped deliberately.** The per-edition board tiebreaks on `advanced_at`, which
+> is SERIES-wide.~~ **FIXED before deploy** -- see the next section. Left here because the reasoning that
+> made it acceptable ("only the ORDER WITHIN a points tie on a filtered board") is exactly the reasoning
+> that would have shipped it, and the fix turned out to be one table and no new engine work.
+
+### The per-edition badge board gets a store (2026-08)
+
+Migration `trophies.0313_series_edition_standing`, plus a one-time backfill. Spec:
+[leaderboards-rebuild.md](leaderboards-rebuild.md) §8.
+
+**Deploys with the section above, and its backfill is the only ORDERED step in this whole area.**
+
+- [ ] **`0313` creates `SeriesEditionStanding`** -- one row per (profile, series, STARTED edition),
+      carrying that edition's points and its own `advanced_at`. Plain `CreateModel`, indexes inline, no
+      `CONCURRENTLY` needed: the table is new and empty, so unlike 0307 / 0309 / 0310 / 0311 there is
+      nothing live to lock. Fast, and it takes no data with it.
+- [ ] **THEN run `python manage.py backfill_series_edition_standings`.** Between the migration and this
+      command the per-edition board reads an EMPTY table, so every edition slice on every badge says
+      nobody is chasing it. That window is the only real risk in this deploy -- run the two together, and
+      `--series <slug>` a popular badge first if you want to eyeball it before committing.
+      - `--dry-run` counts what it would write.
+      - It derives points, stages and the denominator EXACTLY from `group_progress` / `group_xp`.
+      - `advanced_at` is seeded from the SERIES-wide value, because that is the only date the source has.
+        So the board behaves exactly as it did before the store existed (including the limitation above),
+        and the real per-edition dates arrive with the next nightly `evaluate_badges --all`. **Nobody's
+        rank moves at deploy; the fix lands overnight.**
+      - Re-running skips any (profile, series) already seeded, so it cannot clobber dates the engine has
+        since corrected. `--force` overrides, and should not be needed.
+- [ ] **Nightly cost goes up slightly.** `evaluate_badges --all` now writes one extra row per started
+      edition per engaged series. No extra evaluation (the loop already held each edition's result), and
+      storing only STARTED editions keeps it roughly half of what `group_progress` carries. Worth a glance
+      at the nightly's runtime the first morning after, not worth pre-emptive action.
 
 ### The three board directories are gone (no deploy step)
 

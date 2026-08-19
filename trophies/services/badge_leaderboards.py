@@ -7,6 +7,7 @@ sealed subsystem and are written by the recompute the sync/apply path already ru
   Badge Trophies   -> ProfileBadgeStanding (-platinum, -total)        [pbs_progress_idx]
   Career XP        -> ProfileCareerStanding.total_xp                  [db_index]
   Per-series board -> SeriesBadgeStanding (-xp, advanced_at) [sbs_series_board_idx]  earners+chasers
+  Per-edition board-> SeriesEditionStanding (-xp, advanced_at)        [ses_board_idx]   one edition of one
   Per-badge earners-> UserGroupBadge (group_badge, earned_at)         [ugb_badge_earned_idx]  (rank == earned order)
 
 Every board takes an optional `country` and every one of those slices is served by a
@@ -23,14 +24,11 @@ indexed reads, whale-safe. rows(...) returns a page of (profile_id, value) for r
 page of ids into display rows in ONE query.
 """
 
-from django.db.models import F, IntegerField, OuterRef, Q, Subquery
-from django.db.models.fields.json import KeyTextTransform, KeyTransform
-from django.db.models import Value
-from django.db.models.functions import Cast, Coalesce
+from django.db.models import F, OuterRef, Q, Subquery
 
 from trophies.models import (
     ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, SeriesBadgeStanding,
-    UserGroupBadge, UserTitle,
+    SeriesEditionStanding, UserGroupBadge, UserTitle,
 )
 
 
@@ -481,10 +479,11 @@ def _series_board_qs(series_slug, country):
     return _slice(_linked(SeriesBadgeStanding.objects.filter(series_slug=series_slug)), country)
 
 
-#: The per-edition series board. Same shape as `SERIES_BOARD_KEYS`, with that edition's own points in
-#: place of the series-wide total -- so the two boards sort by the same rules and a reader switching
+#: The per-edition series board. IDENTICAL to `SERIES_BOARD_KEYS` -- same column names, same directions --
+#: because the store below carries the same columns pre-sliced, exactly as `ProfileEditionStanding` does
+#: for the landing's Badge Points board. So the two boards sort by the same rules and a reader switching
 #: between them sees the ordering they already understand, scoped.
-SERIES_EDITION_KEYS = (('ed_xp', _DESC), ('advanced_at', _ASC_NULLS_LAST), ('profile_id', _ASC))
+SERIES_EDITION_KEYS = SERIES_BOARD_KEYS
 
 
 def _series_edition_qs(series_slug, edition_key, country=None):
@@ -496,42 +495,36 @@ def _series_edition_qs(series_slug, edition_key, country=None):
     emptied the board and said nobody was on it, which was false in the only sense a reader cares about.
     The filter has to scope the board, not swap it for a rarer one.
 
-    `group_progress` is the per-edition read-model that makes the right board possible:
-    `{platform_group_key: [stages_cleared, gating_count]}`, materialized on every recompute for every
-    EARNABLE edition -- started or not. So the same population is here, with each hunter's progress in
-    the edition being asked about, and earners sort to the top naturally (cleared == gating).
+    IT THEN READ `SeriesBadgeStanding`'s JSON maps -- the right population, wrong shape -- and it is a
+    STORE now (`SeriesEditionStanding`, migration 0313) for the two reasons that version could not fix:
 
-    `ed_cleared > 0` is the membership rule, and it is the one the landing's edition board already uses
-    (`total_xp__gt=0` on ProfileEditionStanding): an untouched edition is stored as `[0, gating]` so the
-    Collection can render its denominator, and without the gate every chaser of every OTHER edition would
-    pad this board with zeroes.
+      ORDERING. Sorting on `Cast(group_xp -> key)` and gating on `Cast(group_progress -> key -> 0) > 0`
+      meant no index past the `series_slug` narrowing, so every window re-extracted and re-sorted the
+      whole series. The comment that stood here called that bounded and it is not, on a popular badge
+      scrolled by a virtualizer that re-queries per screenful.
 
-    PERFORMANCE, stated plainly: this sorts on a JSONB expression, so it cannot use `sbs_series_board_idx`
-    beyond the `series_slug` narrowing that index already gives. One badge's chasers is a bounded set and
-    Postgres sorts it in `work_mem`, but a very popular series re-sorts on every window fetch. If that
-    shows up in `profile_render`, the fix is an expression index per edition key or a real
-    per-(series, edition) standing store -- not a Python sort.
+      THE TIEBREAK, which mattered more. `SeriesBadgeStanding.advanced_at` is SERIES-wide, so two hunters
+      tied on THIS edition's points were separated by their progress in a DIFFERENT one -- advancing on
+      PS5 could drop a rank on Legacy HD. The store carries each edition's own date.
+
+    MEMBERSHIP is now the store's own: `badge_xp` writes a row only for a STARTED edition, so "everyone
+    chasing this edition" is the table, with no gate to remember here. That is the same rule the JSON
+    version applied as `ed_cleared > 0` and the landing's edition board applies as `total_xp__gt=0`,
+    moved to the write side where it costs nothing to read.
     """
     return _slice(
-        _linked(SeriesBadgeStanding.objects.filter(series_slug=series_slug)), country
-    ).annotate(
-        ed_cleared=Cast(KeyTextTransform(0, KeyTransform(edition_key, 'group_progress')), IntegerField()),
-        # MEMBERSHIP is "started this edition"; ORDERING is points. They are deliberately different keys:
-        # a hunter can clear a gating stage that pays nothing, and gating them on points would drop
-        # somebody who is visibly chasing -- which is the whole failure this board was rebuilt to fix.
-        # `Coalesce` because `group_xp` omits an edition that has paid nothing, while `group_progress`
-        # carries every earnable one; a missing key must read as zero points, not as null.
-        ed_xp=Coalesce(
-            Cast(KeyTextTransform(edition_key, 'group_xp'), IntegerField()), Value(0)),
-    ).filter(ed_cleared__gt=0)
+        _linked(SeriesEditionStanding.objects.filter(
+            series_slug=series_slug, platform_group_key=edition_key)),
+        country,
+    )
 
 
 def series_edition_rows(series_slug, edition_key, limit=50, offset=0, country=None):
-    """One window of the per-edition board: [(profile_id, ed_xp, advanced_at), ...], most points first."""
+    """One window of the per-edition board: [(profile_id, xp, advanced_at), ...], most points first."""
     return list(
         _series_edition_qs(series_slug, edition_key, country)
-        .order_by('-ed_xp', F('advanced_at').asc(nulls_last=True), 'profile_id')
-        .values_list('profile_id', 'ed_xp', 'advanced_at')[offset:offset + limit]
+        .order_by('-xp', F('advanced_at').asc(nulls_last=True), 'profile_id')
+        .values_list('profile_id', 'xp', 'advanced_at')[offset:offset + limit]
     )
 
 
@@ -546,11 +539,11 @@ def series_edition_rank(series_slug, edition_key, profile_id, country=None):
     equally far and there sooner, or tied on both and a lower profile id.
     """
     qs = _series_edition_qs(series_slug, edition_key, country)
-    mine = qs.filter(profile_id=profile_id).values_list('ed_xp', 'advanced_at').first()
+    mine = qs.filter(profile_id=profile_id).values_list('xp', 'advanced_at').first()
     if mine is None:
         return None
     return qs.filter(_ahead_q(SERIES_EDITION_KEYS, {
-        'ed_xp': mine[0], 'advanced_at': mine[1], 'profile_id': profile_id,
+        'xp': mine[0], 'advanced_at': mine[1], 'profile_id': profile_id,
     })).count() + 1
 
 

@@ -265,7 +265,7 @@ def profile_mirrored_standings():
     country they left, or (worse, since it is a whole-population rule) keeping an unverified account on a
     board after they verify. Neither is something a reader would think to look for.
 
-    All six carry BOTH mirrors as of migration 0310. `UserGroupBadge` was the last to get `country_code`,
+    All seven carry BOTH mirrors as of migration 0310. `UserGroupBadge` was the last to get `country_code`,
     and its lateness was historical rather than principled -- it is the badge earn-lifecycle table and
     predates the Lane B standing stores that set the pattern. `_mirrored_fields` reads each store's
     columns off the model rather than hardcoding them, so a store that gains or loses one cannot fall out
@@ -273,10 +273,10 @@ def profile_mirrored_standings():
     """
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-        SeriesBadgeStanding, UserGroupBadge,
+        SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge,
     )
     return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding,
-            SeriesBadgeStanding, ProfileJobXP, UserGroupBadge)
+            SeriesBadgeStanding, SeriesEditionStanding, ProfileJobXP, UserGroupBadge)
 
 
 def _mirrored_fields(model):

@@ -3317,6 +3317,94 @@ class ProfileBadgeStanding(models.Model):
         return f"{self.profile.psn_username} - badge XP {self.total_xp}"
 
 
+class SeriesEditionStanding(models.Model):
+    """SeriesBadgeStanding sliced per PLATFORM EDITION -- what backs the per-edition board on badge detail.
+
+    A TABLE, and it replaced a JSON annotation for the two reasons that made the JSON version wrong:
+
+    ORDERING. The board sorted on `Cast(group_xp -> key)` and gated membership on
+    `Cast(group_progress -> key -> 0) > 0`, so `sbs_series_board_idx` narrowed it to one badge's rows and
+    then Postgres extracted JSON for EVERY one of them, to filter and to sort. Nothing could stop early,
+    the count and the rank paid it too, and the virtualizer re-runs the query per window -- so scrolling a
+    popular badge re-sorted tens of thousands of rows per screenful. The same argument
+    `ProfileEditionStanding` makes against a `{key: xp}` blob on its parent, one level down.
+
+    THE TIEBREAK. `SeriesBadgeStanding.advanced_at` is SERIES-wide: `compute_series_standings` derives it
+    from the furthest-along edition, whichever that is. Ordering an edition's board by it meant two
+    hunters tied on Legacy HD points were separated by their Ultra HD progress -- so ADVANCING IN ONE
+    EDITION COULD DROP YOUR RANK IN ANOTHER, which is indefensible on a board a hunter is chasing.
+    `advanced_at` here is the edition's own, from `badge_xp._advanced_at`, which has always taken a
+    per-edition `GroupBadgeResult`; the value was computed and discarded.
+
+    ONLY STARTED EDITIONS GET A ROW (`stages_cleared > 0`), which is the board's own membership rule. That
+    is the difference between this and `SeriesBadgeStanding.group_progress`, which deliberately keeps
+    untouched editions so the Collection wall has a denominator for "0 / 5 stages". A board needs no such
+    row, and storing them would roughly double a table the nightly badge chain writes for every profile.
+
+    TWO STORES THAT MUST AGREE. A series whose XP drops to zero deletes its SeriesBadgeStanding row, and
+    these must go with it; an edition that stops being started must drop out on the next recompute. The
+    write seam does both in one pass -- see `badge_xp.recompute_standing`, which already warns about exactly
+    this shape one store up ("one of them holding a hunter the other has dropped is the kind of
+    disagreement nobody would think to check").
+
+    Same recompute-from-scratch rule as every other standing, so it cannot drift from its parent.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_edition_standings')
+    series_slug = models.SlugField(max_length=100)
+    # Denormalized as a slug rather than an FK, like `series_slug` above and
+    # `ProfileEditionStanding.platform_group_key`: it keeps the board's composite indexes narrow and lets
+    # a slice be filtered straight off the URL's value without resolving a row first.
+    platform_group_key = models.SlugField(max_length=40)
+
+    xp = models.PositiveIntegerField(default=0)                # Badge Points, this series, this edition
+    stages_cleared = models.PositiveIntegerField(default=0)
+    gating_count = models.PositiveIntegerField(default=0)      # this edition's denominator
+
+    # The moment this profile reached its current standing IN THIS EDITION -- the board's tiebreak, and
+    # the whole reason this table exists rather than another JSON key. A DateField, matching its parent:
+    # `badge_xp._advanced_at` returns a stage's `base_date` or a badge's `earned_date`, both dates, and a
+    # DateTimeField here would silently coerce them and warn on every write. Nullable for the same reason
+    # its parent's is: a hunter with a row but no dated stage sorts last within their rung rather than
+    # ahead of everyone.
+    advanced_at = models.DateField(null=True, blank=True)
+
+    # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
+    # DataError waiting to happen.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+    # Denormalized from Profile for the same reason every other standing store carries it: it is a board
+    # PREDICATE, and a predicate on another table cannot go in this table's indexes. Kept in step by the
+    # two paths the others use -- stamped by every recompute, and repaired by
+    # `signals.profile_mirrored_standings` for the edge those miss (a hunter VERIFYING, which changes it
+    # with no recompute behind it).
+    is_linked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'series_slug', 'platform_group_key'],
+                                    name='uniq_profile_series_edition'),
+        ]
+        indexes = [
+            # THE BOARD. Leading (series, edition) narrows to the one being read, then the sort key, then
+            # the unique tail that lets a rank COUNT be index-only -- `badge_leaderboards` numbers a
+            # window by SLOT and computes a rank by counting everyone ahead, and those agree only because
+            # the ordering ends in a unique key.
+            #
+            # PARTIAL on `is_linked`, like every other scrolled board (0309/0311): the reads are gated on
+            # it, so the index should not carry rows no board can return.
+            models.Index(fields=['series_slug', 'platform_group_key', '-xp', 'advanced_at', 'profile'],
+                         name='ses_board_idx', condition=Q(is_linked=True)),
+            # Country-sliced. Column order matters: the two always-filtered keys, then the slice, then the
+            # sort -- so both forms of the board are a range scan rather than a filter over a scan.
+            models.Index(fields=['series_slug', 'platform_group_key', 'country_code', '-xp',
+                                 'advanced_at', 'profile'],
+                         name='ses_board_cc_idx', condition=Q(is_linked=True)),
+        ]
+
+    def __str__(self):
+        return f'{self.profile_id} - {self.series_slug} [{self.platform_group_key}] xp {self.xp}'
+
+
 class ProfileEditionStanding(models.Model):
     """ProfileBadgeStanding sliced per PLATFORM EDITION -- what backs the edition filter on the two badge boards.
 
