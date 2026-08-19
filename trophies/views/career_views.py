@@ -21,7 +21,7 @@ from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery, Sum,
 from django.db.models.functions import Coalesce, Lower
 from django.views.generic import DetailView, ListView, TemplateView
 
-from trophies.models import Contract, EarnedContract, Job, ProfileJobXP
+from trophies.models import Contract, Job, ProfileJobXP
 from trophies.mixins import HtmxListMixin
 from trophies.services import badge_leaderboards as lb
 from trophies.views import board_helpers
@@ -421,8 +421,10 @@ class JobContractsView(View):
             'contracts': data['contracts'], 'job': job, 'profile': profile,
             'disciplines': contracts_service.job_roster(),
         })
-        # The scroller stops on an empty page, but the header is what lets it stop one fetch EARLIER --
-        # same signal `ContractsResultsView` sends, so both boards speak the same protocol.
+        # `X-Has-Next` lets the scroller stop one fetch EARLIER than the empty-page fallback would --
+        # the same signal `ContractsResultsView` sends. The shared `InfiniteScroller` reads it as of the
+        # 2026-08 audit; it did not when this line was written, so the tab paid a wasted round-trip at the
+        # end of every list while this comment said otherwise.
         resp['X-Has-Next'] = '1' if data['has_next'] else '0'
         return resp
 
@@ -444,7 +446,6 @@ class JobDetailView(DetailView):
     slug_url_kwarg = 'slug'
     template_name = 'trophies/job_detail.html'
     context_object_name = 'job'
-    CONTRACT_PAGE = 24
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -552,7 +553,6 @@ class JobDetailView(DetailView):
         return {
             'contracts': data['contracts'],
             'contract_total': data['total'],
-            'contracts_has_next': data['has_next'],
             # The 25-job roster the shared card's 5x5 map needs. Passed even though this page renders the
             # PILL variant instead, because `_contract_card.html` is one template: the map branch has to
             # stay renderable or the two callers diverge the moment somebody edits it.

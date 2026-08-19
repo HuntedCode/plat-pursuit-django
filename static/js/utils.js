@@ -1017,6 +1017,9 @@ const InfiniteScroller = {
      * @param {string} [config.formSelector] - CSS selector for filter form (resets page on submit)
      * @param {string} [config.scrollKey] - localStorage key for preserving scroll position
      * @param {string} [config.url] - Results endpoint; defaults to the page's own path
+     *
+     * Reads an optional `X-Has-Next: 0` response header to stop one fetch before the end. Views that do
+     * not send it still work -- the scroller falls back to stopping on an empty page.
      * @param {string} [config.cardSelector='.card'] - CSS selector for cards in fetched HTML
      * @param {Function} [config.onTabChange] - Callback for tab change behavior
      * @param {Function} [config.onAppend] - Called with the array of freshly-appended card nodes after each page load
@@ -1062,6 +1065,13 @@ const InfiniteScroller = {
                     }
                     return;
                 }
+                // `X-Has-Next` STOPS ONE FETCH EARLIER. Without it the scroller only learns it is done
+                // by asking for a page that comes back empty, so every reader who reaches the bottom of
+                // any wall pays a wasted round-trip and a flash of the loading spinner for nothing. The
+                // header is optional: a view that does not send it falls back to the empty-page stop
+                // below, which is how every caller behaved before. Career's bespoke scroller has read
+                // this signal all along -- this is the shared one learning the same protocol.
+                const hasNextHeader = response.headers.get('X-Has-Next');
                 const html = await response.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
@@ -1074,7 +1084,9 @@ const InfiniteScroller = {
                     // Optional hook so callers can wire freshly-appended cards (e.g. a scroll-reveal observer).
                     if (typeof config.onAppend === 'function') { try { config.onAppend(appended); } catch (e) { /* non-fatal */ } }
                     page++;
-                    nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+                    nextPageUrl = hasNextHeader === '0'
+                        ? null
+                        : `${baseUrl}?page=${page}&${queryParams.toString()}`;
                 }
             } catch (error) {
                 nextPageUrl = null;
@@ -1804,7 +1816,7 @@ function syncViewParam(view, opts) {
  * @param {Object} opts
  * @param {string} [opts.jobSelector='.rp-jobcell.is-lit']  cells to ignite in sequence
  * @param {number} [opts.threshold=0.25]
- * @returns {{ observe: function(NodeList|Array), reveal: function(HTMLElement) }}
+ * @returns {{ observe: function(NodeList|Array), reveal: function(HTMLElement), disconnect: function }}
  */
 function cardReveal(opts) {
     opts = opts || {};
@@ -1851,6 +1863,12 @@ function cardReveal(opts) {
                 if (c && c.dataset && !c.dataset.revObs) { c.dataset.revObs = '1'; io.observe(c); }
             });
         },
+        // An IntersectionObserver holds a STRONG reference to every target until it intersects or is
+        // unobserved. A grid that replaces its cards without disconnecting therefore retains every card
+        // destroyed before it scrolled into view -- Career swaps its whole list on each filter, sort,
+        // scope change and facet click, so a reader working the toolbar accumulates hundreds of detached
+        // nodes. The old hand-rolled version had the same shape; the extraction is the moment to fix it.
+        disconnect: function () { if (io) { io.disconnect(); } },
     };
 }
 

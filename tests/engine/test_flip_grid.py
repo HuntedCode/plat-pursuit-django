@@ -164,3 +164,52 @@ def test_each_caller_owns_its_own_motion():
     # Collection's arrival is a SPLIT tween -- a shorter, separately-eased fade over the transform. One
     # spring-eased animation spikes the opacity and reads as a flash, which is what the extraction did.
     assert 'enterFade' in gal and 'enterScale' in gal
+
+
+def test_career_guards_every_shared_helper_call():
+    """A `TypeError` at IIFE top level takes the whole board controller with it -- the claim flow, every
+    filter and chip, `seedFromURL`, `initCards`, the scroller, the landing stagger -- while the page still
+    renders its server-side cards and looks completely correct.
+
+    `PP` is snapshotted as `window.PlatPursuit || {}`, and this repo documents a stale cached `utils.js`
+    as a real production failure mode. Four of the five delegations added during the extraction shipped
+    unguarded while the file's other eight `PlatPursuit.*` calls were all guarded, so this pins the
+    CONVENTION rather than any one instance.
+
+    Line-based: the first attempt scanned a fixed window of characters before each occurrence, which fails
+    on the guard's own mention of the name (`if (PP.x) { PP.x(...) }` contains `PP.x` twice, and the first
+    has no guard before it).
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    for helper in ('progressiveArt', 'coverCarousel', 'ringHoverLink', 'staggerCards', 'cardReveal'):
+        called = [l for l in career.split('\n') if f'PP.{helper}(' in l]
+        assert called, f'{helper} is no longer called from Career'
+        for line in called:
+            guarded = f'if (PP.{helper})' in line or f'PP.{helper} ?' in line
+            assert guarded, f'unguarded PP.{helper} -- one throw here disables everything below it:\n{line.strip()}'
+
+
+def test_the_reveal_observer_is_released_when_the_cards_it_watches_are_dropped():
+    """An IntersectionObserver holds a STRONG reference to every target until it intersects or is
+    unobserved. Career replaces its whole list on each filter, sort, scope change and facet click, so
+    without a disconnect it retains one detached card per unseen row, per interaction, for the life of the
+    page. The hand-rolled original had the same shape; the extraction was the moment to fix it.
+
+    Line-based for the ordering assertion. The first attempt sliced from `if (!append) {` to the next `}`,
+    which lands on the closing brace of the disconnect's OWN `if` -- so the slice ended before the line it
+    was comparing against. That is the same truncation the audit found in the `initReveal` guard test, made
+    twice in one day.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    assert 'disconnect: function () { if (io) { io.disconnect(); } }' in utils
+
+    lines = career.split('\n')
+    drop = next(i for i, l in enumerate(lines) if "list.innerHTML = ''" in l)
+    release = next(i for i, l in enumerate(lines) if 'cardRevealer.disconnect()' in l)
+    assert release < drop, 'the observer is released after the cards are already gone'
+    assert drop - release <= 3, 'the disconnect drifted away from the swap it protects'

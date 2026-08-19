@@ -1034,7 +1034,9 @@ function ppCountUp(el, dur) {
     if (!list) return;
     var PP = window.PlatPursuit || {};
     var API = PP.API, Toast = PP.ToastManager, debounce = PP.debounce;
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // NO `reduce` here any more: its three readers (the carousel, the reveal, the stagger) all moved
+    // into shared helpers that gate themselves. Kept out deliberately rather than left declared-and-unread,
+    // where it would read as a guard this block still applies.
     var hasIO = 'IntersectionObserver' in window;
 
     // ---- Per-card behaviors (idempotent; data-*Init guards stop a re-init double-binding) ----
@@ -1042,12 +1044,12 @@ function ppCountUp(el, dur) {
     // card. It shipped there without this call and every cover shimmered forever -- the skeleton's
     // infinite animation only stops on `.is-loaded`, which is JS's job, so the behaviour had to travel
     // with the markup rather than stay here.
-    function initProgressiveLoad(scope) { PP.progressiveArt(scope); }
+    function initProgressiveLoad(scope) { if (PP.progressiveArt) { PP.progressiveArt(scope); } }
 
     // The shared `coverCarousel` (utils.js) since job detail became the second page rendering this card.
     // Its beat and fade were local constants here; they travel with the behaviour now, and the fade still
     // has to match the CSS transition on `.rp-tile__img--fx`.
-    function initCarousel(scope) { PP.coverCarousel(scope, { beat: 1500, fade: 560 }); }
+    function initCarousel(scope) { if (PP.coverCarousel) { PP.coverCarousel(scope, { beat: 1500, fade: 560 }); } }
 
     // The scroll-in reveal (XP count-up, tier bars filling, ring arcs drawing, job cells igniting), on
     // the shared `cardReveal` since job detail became the second page that wants it.
@@ -1070,12 +1072,17 @@ function ppCountUp(el, dur) {
     }
 
     // The batch entrance rise (chip change / appended page / tab open), on the shared `staggerCards`.
-    function staggerCards(cards) { PP.staggerCards(cards); }
+    function staggerCards(cards) { if (PP.staggerCards) { PP.staggerCards(cards); } }
 
     // ---- icon <-> ring link: the shared `ringHoverLink` (utils.js), delegated so it survives
     // streamed-in cards. Extracted here when job detail became the second caller -- same behaviour, and
     // that page passes its own item selector because it shows the jobs as named pills, not as the map.
-    PP.ringHoverLink(list);
+    // GUARDED, like every other `PlatPursuit.*` call in this file. This one sits at IIFE top level, so
+    // an unguarded throw here takes the entire board controller below it with it -- the claim flow, every
+    // filter and chip, `seedFromURL`, `initCards`, the scroller and the landing stagger. The page would
+    // still render its server-side cards and look completely correct. `PP` is snapshotted as
+    // `window.PlatPursuit || {}`, and a stale cached `utils.js` is a documented failure mode here.
+    if (PP.ringHoverLink) { PP.ringHoverLink(list); }
 
     // ---- Delegated: claim flow ----
     function markAccepted(card) {
@@ -1304,7 +1311,15 @@ function ppCountUp(el, dur) {
                 hasNext = d.hasNext; setCount(d.total);
                 var tmp = document.createElement('div'); tmp.innerHTML = d.html;
                 var cards = Array.prototype.slice.call(tmp.querySelectorAll('.rp-row'));
-                if (!append) { list.innerHTML = ''; applyFacets(readFacets(tmp)); }   // facets ride the page-1 swap
+                // DISCONNECT before dropping the cards: the reveal observer holds a strong reference to
+                // every card that has not yet scrolled into view, so replacing the list without releasing
+                // them retains a detached node per card, per filter change, for the life of the page.
+                // `initCards` below re-observes whatever replaces them.
+                if (!append) {
+                    if (cardRevealer) { cardRevealer.disconnect(); }
+                    list.innerHTML = '';
+                    applyFacets(readFacets(tmp));   // facets ride the page-1 swap
+                }
                 cards.forEach(function (c) { list.appendChild(c); });
                 pageNo = n;
                 initCards(list);

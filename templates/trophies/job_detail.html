@@ -155,8 +155,12 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         Grid columns match Career's so a reader who knows one board can read the other, capped a column
         narrower: this page has no filter rail beside it, so the cards get the full width and a fifth
         column would shrink the cover art below the size that makes a contract read as a GAME. {% endcomment %}
+        {% comment %} No `data-has-next` here, deliberately. Career's grid carries one because its own
+        scroller seeds itself from it; this page uses the shared `InfiniteScroller`, which learns
+        end-of-list from the `X-Has-Next` response header. An attribute nothing reads is the decoy this
+        codebase has now been caught by four times. {% endcomment %}
         <div id="jobd-contracts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
-             data-results-url="{% url 'job_contracts' job.slug %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
+             data-results-url="{% url 'job_contracts' job.slug %}">
             {% include 'trophies/partials/job_detail/_contract_results.html' %}
         </div>
         {% comment %} Sentinel + spinner for `PlatPursuit.InfiniteScroller` -- the SHARED scroller the
