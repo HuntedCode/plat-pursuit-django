@@ -254,7 +254,22 @@ def _platform_exists(platforms):
     ))
 
 
-def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope=''):
+def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope='',
+                      contract=''):
+    # ONE CONTRACT BY SLUG, and it overrides the two defaults that would otherwise hide it.
+    #
+    # This is what a deep link into the board carries -- "show me this one", from job detail's card. Both
+    # of the board's sensible defaults are wrong for that request: `platforms` defaults to current-gen, so
+    # a PS3 contract would land on an empty board, and `scope='board'` hides fully-banked ones, so would a
+    # contract the reader finished last year. Either would send somebody who clicked a specific contract
+    # to a page saying nothing matched -- the worst possible answer, because the thing they asked for is
+    # right there in the database.
+    #
+    # An exact slug is unambiguous in a way the alternatives are not: `q` is a substring match over names
+    # AND member-game titles, so "Uncharted" would land on a board of four cards and leave the reader to
+    # find theirs.
+    if contract:
+        return qs.filter(slug=contract)
     # Board vs History split on the fully-banked gate: History = fully banked (nothing left to earn);
     # Board = everything still actionable (available/pursuing/claimable + partially-accepted). '' = no
     # split (used where the full catalog is wanted).
@@ -477,7 +492,7 @@ def _attach_banked(cards, page_contracts, profile):
 
 
 def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplines=None,
-                   jobs=None, platforms=None, sort='relevance', scope='board'):
+                   jobs=None, platforms=None, sort='relevance', scope='board', contract=''):
     """One paginated, filtered, sorted page of card dicts + metadata. `disciplines`/`jobs` are lists
     ANDed together (a contract must level every one). `platforms` defaults to current-gen (PS5/PS4);
     pass an explicit list to include legacy/VR, or [] for all platforms. `scope` splits the board:
@@ -488,7 +503,7 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
     if scope == 'history':
         base = _history_annotate(base, profile, jobs)
     qs = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs,
-                           platforms=platforms, scope=scope)
+                           platforms=platforms, scope=scope, contract=contract)
     order = _history_order(sort, jobs) if scope == 'history' else _SORTS.get(sort, _ORDER)
     qs = _card_prefetch(qs.order_by(*order))
     paginator = Paginator(qs, CONTRACTS_PER_PAGE)

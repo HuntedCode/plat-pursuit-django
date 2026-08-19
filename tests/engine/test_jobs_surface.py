@@ -622,6 +622,100 @@ def test_the_tab_strip_switches_in_place_instead_of_navigating(client):
     assert 'e.metaKey' in click and 'e.ctrlKey' in click and 'e.button === 0' in click
 
 
+def test_the_card_links_a_linked_viewer_to_that_exact_contract_on_their_board(client):
+    """The tier-2 control was a dead button here: its opener is page-local to Career, and its
+    `contract_modal` URL is login + linked gated, so even wired it would have 404'd the anonymous
+    visitors this page exists for.
+
+    `?contract=<slug>` is EXACT, and it had to be. The obvious `?q=<name>` is a substring match over
+    contract names AND member-game titles, so a contract called "Uncharted" would land the reader on a
+    board of four cards to pick from.
+    """
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('Some Contract', [job])
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'contract=some-contract' in body, 'the card does not deep-link to the contract'
+    assert 'open on your board' in body
+    # The dead affordance is gone: no modal trigger on this page.
+    assert 'data-modal-url' not in body, 'the card still renders a modal button nothing can open'
+
+
+def test_the_deep_link_is_hidden_from_anon_and_unlinked_viewers(client):
+    """Career is linked-profile gated, so the link would only ever take them to a redirect. `is_linked`
+    rather than merely authenticated, matching how badge detail picks between the real contract modal and
+    the public preview."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('Some Contract', [job])
+
+    anon = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'open on your board' not in anon and 'contract=some-contract' not in anon
+
+    unlinked = ProfileFactory(is_linked=False)
+    client.force_login(unlinked.user)
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'open on your board' not in body, 'an unlinked viewer is offered a board they cannot open'
+
+
+def test_an_exact_contract_link_overrides_the_boards_hiding_defaults(client):
+    """THE reason the deep link filters on slug rather than on `q`, and the thing that makes it land.
+
+    Career's board defaults to current-gen platforms and to `scope=board` (which hides fully-banked
+    contracts). Both are right for browsing and both would hide the very contract somebody just clicked --
+    a PS3 one, or one they finished last year -- landing them on "nothing matched" for a contract that is
+    sitting right there in the database.
+    """
+    from django.utils import timezone
+    from trophies.services import contracts_service
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    banked = _contract('Long Done', [job])
+    profile = ProfileFactory(is_linked=True)
+    EarnedContract.objects.create(profile=profile, contract=banked,
+                                  full_reached_at=timezone.now(), full_accepted_at=timezone.now())
+
+    # Default board params would hide it (fully banked + no member game on a current-gen platform)...
+    hidden = contracts_service.contracts_page(profile, scope='board')
+    assert not any(c['slug'] == 'long-done' for c in hidden['contracts'])
+    # ...and the exact slug request returns it regardless.
+    found = contracts_service.contracts_page(profile, scope='board', contract='long-done')
+    assert [c['slug'] for c in found['contracts']] == ['long-done']
+
+
+def test_the_header_figures_actually_count_up(client):
+    """Both tallies carried `data-countup` and nothing on this page ever called `countUp` -- the attribute
+    was inert on the hunter tally this replaced, and the rebuild doubled it before anyone noticed. A
+    `data-*` hook with no caller reads exactly like a working one in the markup, which is why it survives;
+    the same bug shipped on the catalogue page and was caught the same way."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert body.count('data-countup') >= 2
+    assert 'PlatPursuit.countUp' in body, 'the header tallies are decorative -- nothing counts them up'
+    assert ".jobd__tallies [data-countup]" in body
+
+
+def test_the_header_uses_the_shared_page_header_shape(client):
+    """`.pp-bhead` / `__id` / `__tally`, the structure every rebuilt browse and detail header uses. The
+    discipline-tinted icon chip stays bespoke because nothing shared carries one."""
+    _solo()
+    _job('archivist', 'Archivist')
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    # From the head CONTAINER, not the <h1>: the icon chip precedes the title, so slicing at the heading
+    # cuts the very element this asserts on.
+    head = body[body.index('pp-bhead jobd__head'):body.index('jobd-switch')]
+    assert 'pp-bhead__id' in head and 'jobd__ic' in head
+    assert 'pp-head-cascade' in body, 'the header lost its shared entrance cascade'
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that

@@ -167,7 +167,13 @@
 /* ---- Job detail (`/jobs/<slug>/`) -------------------------------------------------------------------
    Moved here WITH the catalogue: one page's vocabulary, and it only lived in `leaderboards.css` for the
    same historical reason. The Ranks tab's board is untouched and still uses the shared `.lb-*`. */
-.jobd__head { display: flex; align-items: center; gap: 12px; }
+/* `flex-start`, not `center`: the tally block is two figures now, and centring the icon and title
+   against it floated them down the card. WRAPS on a phone, where an icon, a title and two tallies on one
+   line leave each about 80px -- the tallies drop to their own row and keep their size rather than
+   shrinking to fit beside a title. */
+.jobd__head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.jobd__head > .pp-bhead__id { flex: 1 1 12rem; }
+.jobd__head > .jobd__tallies { margin-left: auto; }
 .jobd__ic {
     width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px;
     background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);

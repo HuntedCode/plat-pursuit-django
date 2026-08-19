@@ -24,9 +24,13 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 shadow-lg shadow-neutral mb-3"
              style="--disc: var(--disc-{{ job.discipline }}); border-left-color: var(--disc);">
         <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
-            <div class="jobd__head">
+{% comment %} The shared page-header shape (`.pp-bhead` / `__id` / `__tally`), the one every
+            rebuilt browse and detail page uses, with this page's own discipline-tinted icon chip kept
+            because nothing shared carries it. It was a bespoke `.jobd__head` flex row: fine at the time,
+            and one more place the header had to be re-solved. {% endcomment %}
+            <div class="pp-bhead jobd__head">
                 <span class="jobd__ic" style="--disc: var(--disc-{{ job.discipline }});">{% job_icon job.icon '' %}</span>
-                <div class="min-w-0">
+                <div class="pp-bhead__id min-w-0">
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ job.name }}</h1>
                     <p class="jobd__disc">{{ job.get_discipline_display }}</p>
                 </div>
@@ -163,6 +167,21 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
 {% block js_scripts %}
 {{ block.super }}
 <script>
+    // The header figures COUNT UP on arrival, like every other Tally on the site. Both carried
+    // `data-countup` and nothing ever called `countUp` on this page -- the attribute was inert here
+    // before this rebuild (on the hunter tally it replaced) and I doubled it before noticing. A
+    // `data-*` hook with no caller is indistinguishable from a working one in the markup, which is
+    // exactly why it survives.
+    //
+    // First paint only, with no tick-on-change: unlike the catalogue's tally these figures are static
+    // for the page -- nothing here filters them.
+    (function () {
+        if (!(window.PlatPursuit && PlatPursuit.countUp)) { return; }
+        document.querySelectorAll('.jobd__tallies [data-countup]').forEach(function (el, i) {
+            setTimeout(function () { PlatPursuit.countUp(el, 850); }, i * 90);
+        });
+    })();
+
     // ---- Contracts: infinite scroll -------------------------------------------------------------
     // The SHARED `InfiniteScroller` (utils.js), the one the browse walls use -- not Career's board
     // controller, which is ~500 lines of filters, facets, tokens and a scope toggle this tab has none of.

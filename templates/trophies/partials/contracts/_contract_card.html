@@ -179,6 +179,28 @@ The map branch stays the default and is what Career renders, untouched.
         </div>
         {% endif %}
 
+{% if job %}
+        {% comment %} JOB DETAIL: a LINK to this exact contract on the reader's own Career board, and only
+        for a viewer who has one. The shared card's tier-2 control opens a modal whose opener is page-local
+        to Career, so on this page the button rendered and did nothing -- and its `contract_modal` URL is
+        login + linked gated, so even wired it would have 404'd the anonymous visitors this page exists for.
+
+        `?contract=<slug>` is an EXACT deep link, and it had to be: the obvious `?q=<name>` is a substring
+        match over names and member-game titles, so "Uncharted" lands on a board of four cards. The slug
+        filter also overrides Career's platform and scope defaults, which would otherwise hide the very
+        contract that was asked for -- a PS3 one, or one already banked. See `_filter_contracts`.
+
+        HIDDEN, not disabled, for anon and unlinked viewers: Career is linked-profile gated, so the link
+        would only take them to a redirect. `is_linked` rather than merely authenticated, matching how
+        badge detail picks between the real modal and the public preview. {% endcomment %}
+        {% if user.is_authenticated and user.profile.is_linked %}
+        <a class="rp-tier2-btn" href="{% url 'career' %}?view=contracts&amp;contract={{ p.slug }}">
+            <span class="rp-tier2-btn__count">{{ p.game_count }}</span>
+            <span class="rp-tier2-btn__label">game{{ p.game_count|pluralize }} &middot; open on your board</span>
+            <svg class="rp-tier2-btn__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+        {% endif %}
+        {% else %}
         {% comment %} Tier 2: opens the shared contract modal (grows from the card). The server path
         supplies data-modal-url and the modal HTML is fetched on open; the legacy in-page path renders
         the modal into an inert template (p.games present) and reuses it without a round-trip. {% endcomment %}
@@ -188,5 +210,6 @@ The map branch stays the default and is what Career renders, untouched.
             <svg class="rp-tier2-btn__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         </button>
         {% if p.games %}<template class="rp-modal-src">{% include 'trophies/partials/contracts/_contract_modal.html' with p=p %}</template>{% endif %}
+        {% endif %}
     </div>
 </div>
