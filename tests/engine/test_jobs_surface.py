@@ -375,6 +375,26 @@ def test_the_page_wires_the_shared_browse_controller(client):
     assert 'data-search-clear' in body and 'data-search-wrap' in body
 
 
+def test_the_tally_ticks_from_the_previous_value_on_every_filter(client):
+    """Site-wide behaviour, and this page shipped without it: the count animated on first paint and then
+    snapped silently on every filter, which reads as broken rather than as restraint.
+
+    Pinned as MARKUP because the behaviour is in a script this suite cannot execute. `from` is the part
+    worth guarding -- without it a filter trimming 25 to 24 sweeps up from zero instead of ticking one
+    step, which is the same animation the page already plays on arrival and says nothing about the change.
+    """
+    _solo()
+    _job('a', 'Ranger')
+    body = client.get(reverse('jobs_browse')).content.decode()
+
+    script = body[body.index('data-jobs-count') :]
+    assert 'function syncTally' in script
+    assert '{ from: countLast }' in script, 'the tally sweeps from zero rather than ticking from the old value'
+    # ...and it is called on the swap, not only at boot.
+    after = script[script.index("addEventListener('htmx:afterSwap'"):]
+    assert 'syncTally()' in after[:after.index('});')], 'the tally is never updated after a filter'
+
+
 def test_the_catalogue_does_not_show_a_hunter_count(client):
     """Dropped 2026-08 with the batch counter behind it. How many people have touched a job says more
     about which games happen to be popular than about the job, and it was the one figure on the tile a

@@ -143,12 +143,25 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
         // The tally lives in the page HEADER, outside the swap target, so it has to be told what the wall
         // now holds. Counted off the rendered tiles rather than threaded through the partial: the number
         // then cannot disagree with the thing it counts.
+        //
+        // It TICKS from the old value to the new one on every filter, which is the site-wide behaviour
+        // (`tickCount` on Browse Hunters is the same six lines). This page shipped counting up on first
+        // paint only, on the theory that animating a number the reader is driving reads as lag -- but a
+        // figure that animates on arrival and then snaps silently afterwards reads as broken, and a tally
+        // ticking 25 -> 5 is the clearest signal that the filter did something.
         var tally = document.querySelector('[data-jobs-count]');
-        function syncTally(animate) {
-            if (!tally) { return; }
-            var n = results.querySelectorAll('.jobt').length;
-            tally.dataset.countup = n;
-            if (animate && PP.countUp) { PP.countUp(tally, 850); } else { tally.textContent = n.toLocaleString(); }
+        var countLast = null;
+        function syncTally() {
+            if (!tally || !PP.countUp) { return; }
+            var next = results.querySelectorAll('.jobt').length;
+            if (countLast === null) { countLast = parseFloat(tally.dataset.countup); }
+            tally.dataset.countup = next;                  // countUp reads its target from the dataset
+            // `from` the previous value, not from zero: a filter that trims 25 to 24 should tick one step,
+            // not sweep up from nothing. Unchanged counts are set flat -- re-running the same animation on
+            // the same number is a flicker with no information in it.
+            if (!isNaN(countLast) && countLast !== next) { PP.countUp(tally, 700, { from: countLast }); }
+            else { tally.textContent = next.toLocaleString(); }
+            countLast = next;
         }
 
         // The reveal engine, re-created per swap: `hx-swap="innerHTML"` replaces the wall element itself,
@@ -190,12 +203,11 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
         results.addEventListener('htmx:afterSwap', function () {
             if (flipper) { flipper.play(); }
             initReveal();
-            syncTally(false);
+            syncTally();
         });
 
         initReveal();
-        // Count up on FIRST paint only. On a filter the reader is driving the number themselves, and
-        // animating it there reads as lag rather than as flourish.
+        // First paint sweeps up from zero; every filter after it ticks from the previous value (above).
         if (tally && PP.countUp) { PP.countUp(tally, 850); }
     })();
 </script>
