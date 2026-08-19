@@ -15,7 +15,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
+from django.utils.cache import patch_cache_control
+from django.utils.decorators import method_decorator
 from django.utils.http import urlencode
+from django_ratelimit.decorators import ratelimit
 from django.views import View
 from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce, Lower
@@ -180,6 +183,12 @@ def _job_xp_supply():
 
     Every Contract pays the same global T (`CONTRACT_XP_TOTAL`, or its own `xp_total_override`) split
     EVENLY across the jobs it names, so a job's supply is the sum of its share of each live contract.
+
+    INTEGER DIVISION, deliberately: Postgres truncates, so an override of 5,000 across 3 jobs contributes
+    1,666 rather than 1,666.67. That matches `project_card`'s `t // n`, which is what the cards themselves
+    display -- the tile and the card agree, which matters more than the rounding. The consequence worth
+    knowing is that summing every job's supply comes out UNDER the sum of the contract totals; the default
+    T of 6,000 is chosen to divide cleanly across 1-6 jobs precisely so this almost never bites.
     "Supply" is `report_xp_economy`'s word for this quantity, borrowed rather than invented.
 
     It is NOT the contract count re-spelled, and the difference is the reason it is on the card beside it:
@@ -410,8 +419,20 @@ class JobContractsView(View):
     Career surface is personal. This one is the same catalogue an anonymous visitor sees on the page
     itself, so gating the second screenful would make the tab stop halfway down for exactly the readers it
     exists to persuade. A signed-in viewer's own state rides along the same cards, from the service.
+
+    RATE LIMITED because public plus paginated is a cheap loop: each request runs a `COUNT` over the
+    filtered, annotated catalogue -- `Paginator` needs it to answer `num_pages` -- so a client asking for
+    page 9999 repeatedly pays that count for an empty body every time. Keyed on IP rather than user, since
+    the readers this endpoint exists for have no account. 120/min is well above a human scrolling (one
+    fetch per screenful) and well below a loop.
+
+    `Cache-Control: private` is EXPLICIT rather than inherited. The response differs by viewer -- status
+    badges, progress, the claim state -- and it currently avoids being cached publicly only because
+    touching `request.user` makes `SessionMiddleware` add `Vary: Cookie`. That is a side effect, not a
+    declaration, and it would stop being true the moment this view stopped reading the user.
     """
 
+    @method_decorator(ratelimit(key='ip', rate='120/m', method='GET'))
     def get(self, request, slug):
         job = get_object_or_404(Job, slug=slug)
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
@@ -429,6 +450,7 @@ class JobContractsView(View):
         # 2026-08 audit; it did not when this line was written, so the tab paid a wasted round-trip at the
         # end of every list while this comment said otherwise.
         resp['X-Has-Next'] = '1' if data['has_next'] else '0'
+        patch_cache_control(resp, private=True, max_age=0)
         return resp
 
 

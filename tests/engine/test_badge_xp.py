@@ -587,3 +587,44 @@ def test_the_edition_rows_mirror_the_profile_fields_the_board_filters_on():
 
     row = SeriesEditionStanding.objects.get(profile=p)
     assert (row.country_code, row.is_linked) == ('CA', True)
+
+
+@pytest.mark.django_db
+def test_verifying_an_account_moves_its_edition_rows_onto_the_board():
+    """The BEHAVIOUR behind the list-membership guard. `profile_mirrored_standings` is asserted to CONTAIN
+    this store, which catches a store left out of the list -- but not a propagation that stops working.
+
+    `is_linked` is the whole board's population rule, so a stale mirror keeps a hunter off the edition
+    board after they verify: the recompute seam stamps it, and this signal is what covers the case with no
+    recompute behind it. A docstring in this file claimed this test existed; it did not.
+    """
+    from trophies.models import SeriesEditionStanding
+    from tests.factories import ProfileFactory
+
+    profile = ProfileFactory(is_linked=False, country_code='GB')
+    row = SeriesEditionStanding.objects.create(
+        profile=profile, series_slug='dual', platform_group_key='ultra-hd',
+        xp=500, stages_cleared=1, gating_count=2, is_linked=False, country_code='GB')
+
+    profile.is_linked = True
+    profile.save()
+    row.refresh_from_db()
+    assert row.is_linked is True, 'a verified hunter stays off every per-edition board until their next sync'
+
+    profile.country_code = 'JP'
+    profile.save()
+    row.refresh_from_db()
+    assert row.country_code == 'JP', 'a relocated hunter is ranked under their old flag on this board alone'
+
+
+@pytest.mark.django_db
+def test_the_edition_rank_of_a_hunter_with_no_row_is_None():
+    """Not 0, and not a crash. `series_edition_rank` returns None for somebody who has not started an
+    edition, and the panel reads that as "not ranked yet" -- a 0 would render as `#0`, and an exception
+    would take down a public board for a signed-in visitor who simply has not played."""
+    from trophies.services import badge_leaderboards as lb
+    from tests.factories import ProfileFactory
+
+    stranger = ProfileFactory(is_linked=True)
+    assert lb.series_edition_rank('dual', 'ultra-hd', stranger.id) is None
+    assert lb.series_edition_count('dual', 'ultra-hd') == 0

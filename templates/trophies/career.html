@@ -647,7 +647,11 @@ function ppCountUp(el, dur) {
         if (name === 'contracts' && changed) document.dispatchEvent(new CustomEvent('pp:contracts-shown'));
     }
     // Click + Arrow/Home/End keyboard nav + roving tabindex, all via the shared tablist helper.
-    tablist = PlatPursuit.wireTablist(viewTabs, { onSelect: function (t) { showView(t.dataset.view); } });
+    // Guarded like every other shared-helper call: an unguarded throw here would take the rest of this
+    // IIFE with it. Pre-existing; caught by the same audit that found four of them in the board IIFE.
+    tablist = PlatPursuit.wireTablist
+        ? PlatPursuit.wireTablist(viewTabs, { onSelect: function (t) { showView(t.dataset.view); } })
+        : null;
     // A one-shot ignite on load so the active pill "comes alive".
     var initTab = document.querySelector('.pp-switch__chip[data-view].is-active');
     if (initTab) { setTimeout(function () { if (initTab.classList.contains('is-active')) { PlatPursuit.igniteTab(initTab); } }, 260); }
@@ -1028,7 +1032,8 @@ function ppCountUp(el, dur) {
 
 // Contracts board: server-driven filter/sort + infinite scroll. Per-card behaviors (progressive
 // image load, hover carousel, reveal choreography) are re-run for every streamed-in batch via
-// initCards(); the icon<->ring link, the claim flow, and the tier-2 trigger are delegated off #rp-list.
+// initCards(); the icon<->ring link and the claim flow are delegated off #rp-list. (The tier-2 trigger
+// is NOT -- it is bound in a different IIFE above, near the modal it opens. This line said otherwise.)
 (function () {
     var list = document.getElementById('rp-list');
     if (!list) return;

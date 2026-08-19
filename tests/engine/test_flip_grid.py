@@ -213,3 +213,99 @@ def test_the_reveal_observer_is_released_when_the_cards_it_watches_are_dropped()
     release = next(i for i, l in enumerate(lines) if 'cardRevealer.disconnect()' in l)
     assert release < drop, 'the observer is released after the cards are already gone'
     assert drop - release <= 3, 'the disconnect drifted away from the swap it protects'
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════════
+# The other five helpers. Asserted as SOURCE, because the harness has no JS runtime -- but each assertion
+# names a DECISION both callers depend on, not a spelling. The audit's rule: a source test that a valid
+# refactor breaks is worse than none, so nothing here pins whitespace, a local variable name, or a
+# complete statement.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════════
+
+def _helper(name):
+    """One helper's body, bounded by the next docblock."""
+    start = UTILS.index(f'function {name}(')
+    return UTILS[start:UTILS.index('\n/**', start)]
+
+
+def test_progressive_art_settles_on_all_three_completion_paths():
+    """The cover skeleton runs an `infinite` animation that only `.is-loaded` stops, so a path that never
+    marks it leaves that card shimmering forever.
+
+    THREE paths, and the middle one is the subtle one: an image already `complete` from cache will never
+    fire `load` again, so waiting for the event strands every cached cover. `error` counts as finished
+    too -- shimmering forever over a 404 is the worst of the three outcomes.
+    """
+    fn = _helper('progressiveArt')
+    assert 'if (!img)' in fn, 'a card with no image never settles'
+    assert 'complete' in fn and 'naturalWidth' in fn, 'a cached image waits for a load event that will not fire'
+    assert "'load'" in fn and "'error'" in fn, 'a broken image shimmers forever'
+    # Idempotent, or a re-run over an appended page re-binds every card already wired.
+    assert 'plInit' in fn
+
+
+def test_ring_hover_link_lights_both_ends_and_only_within_one_card():
+    """Two decisions, both silent when lost.
+
+    BOTH ENDS: drop the segment half and hovering a job still highlights the job, so the feature looks
+    like it works while the ring -- the half it exists for -- does nothing.
+
+    ONE CARD: the lookup is scoped to the hovered element's own card. Unscoped, hovering one job on a wall
+    of 24 contracts lights that slug on every card that happens to level it.
+    """
+    fn = _helper('ringHoverLink')
+    assert 'item.classList.toggle' in fn and 'seg.classList.toggle' in fn, 'the link is one-directional'
+    assert 'card.querySelector' in fn, 'the lookup is not scoped to one card'
+    assert 'closest(cardSel)' in fn
+    # A slug goes straight into a selector string.
+    assert 'CSS.escape' in fn, 'an unusual slug would throw inside a mouse handler'
+
+
+def test_cover_carousel_preloads_late_and_hides_the_outgoing_layer_late():
+    """Two timing decisions that read as bugs when they go.
+
+    PRELOAD ON FIRST HOVER, not at render: a wall of 24 cards would otherwise fetch every frame of every
+    gallery for cards nobody points at.
+
+    HIDE THE OUTGOING LAYER AFTER THE CROSSFADE. Hide it immediately and the card's background shows
+    through for a frame between images.
+    """
+    fn = _helper('coverCarousel')
+    assert 'primed' in fn, 'every gallery preloads at render'
+    assert 'mouseenter' in fn and 'primed = true' in fn
+    assert 'hideT' in fn and 'FADE' in fn, 'the outgoing frame is hidden before the crossfade finishes'
+    # Frame 0 is the resting cover, not a third copy of the same image.
+    assert 'if (i === 0)' in fn
+    assert 'carInit' in fn
+
+
+def test_card_reveal_is_pure_enhancement_and_reveals_once():
+    """The final state is server-rendered, so this may only ever ADD motion. Under reduced motion the card
+    must be left exactly as served -- but still MARKED, or it is re-examined on every scroll."""
+    fn = _helper('cardReveal')
+    assert 'revealed' in fn, 'a card can reveal twice'
+    marked = fn.index('dataset.revealed')
+    bail = fn.index('if (reduce)')
+    assert marked < bail, 'reduced motion returns before marking, so the card is retried forever'
+    assert 'unobserve' in fn, 'observed cards are never released'
+    assert 'disconnect' in fn, 'the observer cannot be released when its cards are replaced'
+
+
+def test_stagger_cards_clears_its_own_class_so_it_can_run_again():
+    """The entrance runs on first paint, on an appended page, and on a tab opening. The class has to come
+    off at `animationend` or the second run is a no-op -- the element already has it, so nothing restarts
+    and an appended page arrives flat."""
+    fn = _helper('staggerCards')
+    assert 'animationend' in fn, 'the entrance class is never cleared'
+    assert 'rpCardIn' in fn, 'the cleanup fires on any animation, not this one'
+    assert 'remove' in fn and 'animationDelay' in fn
+    assert 'prefers-reduced-motion' in fn, 'the entrance is not gated on reduced motion'
+
+
+def test_every_shared_card_helper_gates_reduced_motion():
+    """All five animate. None may animate for a reader who has asked the OS not to."""
+    for name in ('coverCarousel', 'cardReveal', 'staggerCards', 'flipGrid'):
+        assert 'prefers-reduced-motion' in _helper(name), f'{name} ignores reduced motion'
+    # `progressiveArt` is the exception and deliberately so: it STOPS an animation rather than starting
+    # one, so gating it would leave the skeleton running for exactly the readers who asked for less.
+    assert 'prefers-reduced-motion' not in _helper('progressiveArt')

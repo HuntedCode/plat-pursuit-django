@@ -420,7 +420,11 @@ def test_the_tally_ticks_from_the_previous_value_on_every_filter(client):
 
     script = body[body.index('data-jobs-count') :]
     assert 'function syncTally' in script
-    assert '{ from: countLast }' in script, 'the tally sweeps from zero rather than ticking from the old value'
+    # The OPTION, not the object literal. This pinned `{ from: countLast }` including its brace spacing,
+    # so reformatting or renaming the local would have failed a correct page.
+    assert 'from:' in script and 'countUp' in script, (
+        'the tally sweeps from zero rather than ticking from the old value'
+    )
     # ...and it is called on the swap, not only at boot.
     after = script[script.index("addEventListener('htmx:afterSwap'"):]
     assert 'syncTally()' in after[:after.index('});')], 'the tally is never updated after a filter'
@@ -438,7 +442,10 @@ def test_the_catalogue_does_not_show_a_hunter_count(client):
     # whole-page substring check fails on correct code -- the exact false positive this file's sibling
     # tests keep tripping over.
     wall = client.get(reverse('jobs_browse'), HTTP_HX_REQUEST='true').content.decode()
-    assert 'hunter' not in wall.lower(), 'the catalogue is advertising a hunter count again'
+    # BOTH spellings. The figure was renamed "Pursuers" on job detail, so a check for "hunter" alone
+    # would miss it coming back under the name the site actually uses now.
+    for word in ('hunter', 'pursuer'):
+        assert word not in wall.lower(), f'the catalogue is advertising a {word} count again'
 
 
 # ------------------------------------------------------------------ job detail ---------------------------
@@ -608,8 +615,12 @@ def test_the_cover_skeleton_is_settled_on_every_page_that_renders_the_card(clien
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
     assert 'progressiveArt(grid)' in body, 'the first page of cards never settles its cover skeleton'
-    # ...and appended pages too, or the flashing comes back the moment you scroll.
-    assert 'onAppend' in body and 'progressiveArt(n)' in body, (
+    # ...and appended pages too, or the flashing comes back the moment you scroll. Scoped INSIDE the
+    # `onAppend` body: unscoped, the two needles need not co-occur, and `progressiveArt(n)` is a prefix of
+    # `progressiveArt(nodes)` -- so a call on the wrong variable would still have matched.
+    appended = body[body.index('onAppend'):]
+    appended = appended[:appended.index('},')]
+    assert 'progressiveArt(n);' in appended, (
         'scroll-appended cards shimmer forever -- the skeleton is only settled for page 1'
     )
 
@@ -771,7 +782,8 @@ def test_hovering_a_job_tile_can_light_its_arc_in_the_ring(client):
     ring = ring[:ring.index('</svg>')]
     assert 'data-slug="a"' in ring and 'data-slug="b"' in ring, 'the arcs carry no slug to match on'
 
-    assert "ringHoverLink(grid, { itemSelector: '.rp-jobtile' })" in body
+    # The call and its selector, not the whitespace between them.
+    assert 'ringHoverLink(grid' in body and "itemSelector: '.rp-jobtile'" in body
 
 
 def test_the_ring_caption_names_the_job_without_a_preposition(client):
@@ -903,7 +915,9 @@ def test_the_tile_grid_is_top_aligned_and_career_still_is_not(client):
     elements = (pathlib.Path(__file__).resolve().parents[2]
                 / 'static' / 'css' / 'components' / 'elements.css').read_text(encoding='utf-8')
 
-    assert '.rp-body:has(.rp-jobtiles) { align-items: start; }' in css
+    # The RULE, normalised for whitespace -- the exact spelling would break on any formatter run.
+    flat = ' '.join(css.split())
+    assert '.rp-body:has(.rp-jobtiles) { align-items: start; }' in flat
     # Career's own rule is untouched: still centred, still declared where the card lives.
     base = elements[elements.index('.rp-body {'):]
     base = base[:base.index('}')]
@@ -924,10 +938,12 @@ def test_the_cover_gallery_cycles_on_hover_here_too(client):
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
     assert 'coverCarousel(grid)' in body, 'the hover gallery is never started'
-    # ...and for scroll-appended cards, or the art stops moving the moment you scroll.
+    # ...and for scroll-appended cards, or the art stops moving the moment you scroll. Scoped INSIDE the
+    # `onAppend` body: unscoped, the two needles need not co-occur, and `coverCarousel(n)` is a prefix of
+    # `coverCarousel(nodes)` -- so a call on the wrong variable would still match.
     appended = body[body.index('onAppend'):]
     appended = appended[:appended.index('},')]
-    assert 'coverCarousel(n)' in appended
+    assert 'coverCarousel(n);' in appended
 
 
 def test_the_hover_gallery_is_shared_with_career_not_copied():
@@ -978,7 +994,7 @@ def test_the_contract_cards_stagger_in_and_reveal_on_job_detail(client):
     _contract('One', [job])
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert "cardReveal({ jobSelector: '.rp-jobtile' })" in body, 'cards never reveal their figures'
+    assert 'cardReveal(' in body and "jobSelector: '.rp-jobtile'" in body, 'cards never reveal their figures'
     assert 'PlatPursuit.staggerCards' in body, 'the cards never stagger in'
     # Appended pages get both, or the wall goes flat the moment you scroll.
     appended = body[body.index('onAppend'):]
@@ -995,7 +1011,9 @@ def test_the_entrance_plays_once_not_on_every_tab_return(client):
     _contract('One', [job])
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert 'var staggered = false;' in body and 'if (staggered ' in body
+    # The BEHAVIOUR -- a one-shot guard exists and the entrance is called through it -- rather than the
+    # name of a local and a trailing space.
+    assert 'staggerOnce' in body and 'staggered' in body
     # The panel announces itself so a reader who landed on Ranks still gets the entrance once.
     assert "pp:jobd-contracts-shown" in body
 
@@ -1041,6 +1059,74 @@ def test_the_relevance_weights_are_switched_off_where_they_are_not_read(client):
     )
 
 
+def test_the_contracts_endpoint_serves_page_two_and_says_there_is_one(client):
+    """Page 1 was the only page tested, asserting `X-Has-Next: 0`. Nothing checked that page 2 returns the
+    NEXT slice, or that the header says `1` while more remain -- and the scroller now stops on that header,
+    so a view that always sent `0` would end every wall after one screenful."""
+    from trophies.services import contracts_service
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    per_page = contracts_service.CONTRACTS_PER_PAGE
+    for i in range(per_page + 3):
+        _contract(f'Contract {i:03d}', [job])
+
+    first = client.get(reverse('job_contracts', args=['archivist']))
+    second = client.get(reverse('job_contracts', args=['archivist']), {'page': 2})
+
+    assert first['X-Has-Next'] == '1', 'the scroller is told to stop while contracts remain'
+    assert second['X-Has-Next'] == '0'
+    assert first.content.decode().count('rp-row ') == per_page
+    # DIFFERENT contracts, not the same page twice -- the failure a page-number bug produces.
+    assert second.content.decode().count('rp-row ') == 3
+    assert 'Contract 000' in first.content.decode()
+    assert 'Contract 000' not in second.content.decode()
+
+
+def test_the_sort_control_shows_the_sort_the_wall_was_built_with(client):
+    """The view falls back silently for an unknown `?sort=`, and its own comment justifies that with "the
+    select renders the effective sort". Nothing asserted the select actually does -- so the control could
+    have shown one ordering while the wall was built with another, which is the exact failure the comment
+    claims is impossible."""
+    _solo()
+    _job('a', 'Alpha')
+
+    junk = client.get(reverse('jobs_browse'), {'sort': 'nonsense'}).content.decode()
+    picker = junk[junk.index('name="sort"'):]
+    picker = picker[:picker.index('</select>')]
+    assert 'value="discipline" selected' in picker, 'the control does not show the fallback it applied'
+
+    chosen = client.get(reverse('jobs_browse'), {'sort': 'contracts'}).content.decode()
+    picker = chosen[chosen.index('name="sort"'):]
+    picker = picker[:picker.index('</select>')]
+    assert 'value="contracts" selected' in picker
+    assert picker.count('selected') == 1, 'more than one option is marked selected'
+
+
+def test_the_public_contracts_endpoint_is_rate_limited_and_marked_private(client):
+    """Public plus paginated is a cheap loop: each request runs a COUNT over the filtered, annotated
+    catalogue (Paginator needs it for `num_pages`), so asking for page 9999 repeatedly pays that count for
+    an empty body every time. Keyed on IP, since the readers this endpoint exists for have no account.
+
+    And `Cache-Control: private` is declared rather than inherited. The response differs by viewer --
+    status badges, progress, claim state -- and it avoided public caching only because touching
+    `request.user` makes SessionMiddleware add `Vary: Cookie`. A side effect is not a declaration.
+    """
+    import inspect
+    from trophies.views.career_views import JobContractsView
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    resp = client.get(reverse('job_contracts', args=['archivist']))
+    assert resp.status_code == 200
+    assert 'private' in resp.get('Cache-Control', ''), 'a per-viewer response may be cached publicly'
+
+    src = inspect.getsource(JobContractsView)
+    assert 'ratelimit' in src and "key='ip'" in src, 'the public endpoint is unthrottled'
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that
@@ -1080,7 +1166,11 @@ def test_the_header_carries_the_jobs_three_objective_stats(client):
     for label in ('Contracts', 'Total XP', 'Pursuers'):
         assert f'>{label}</div>' in head, f'the header is missing its {label} stat'
     # The XP figure is the one the catalogue tile promised, so the two pages cannot quote different totals.
-    assert str(CONTRACT_XP_TOTAL) in head or f'{CONTRACT_XP_TOTAL:,}' in head
+    # Anchored to the XP cell, and to the comma-formatted rendering `intcomma` actually produces. The
+    # `or` branch was unreachable (`data-countup` always emits the raw integer) and the needle was
+    # unanchored -- `6000` anywhere in the three-card slice satisfied it, including a different stat.
+    xp_cell = head[head.index('Total XP'):]
+    assert f'{CONTRACT_XP_TOTAL:,}' in xp_cell, 'the header is not showing the catalogue XP figure'
 
 
 def test_the_header_tells_a_linked_viewer_what_the_job_means_to_them(client):
@@ -1100,7 +1190,9 @@ def test_the_header_tells_a_linked_viewer_what_the_job_means_to_them(client):
     mine = body[body.index('jobd__mine'):body.index('jobd-switch')]
 
     assert 'Your standing' in mine
-    assert '>2</b>' in mine and 'level' in mine, 'the block does not show the viewer their level'
+    # `'level' in mine` was implied by the "to next level" assertion below, so it could only fail when
+    # the whole block was gone -- which the figure check already covers.
+    assert '>2</b>' in mine, 'the block does not show the viewer their level'
     assert '2,500' in mine, 'the block does not show what they have banked'
     assert 'to next level' in mine
 

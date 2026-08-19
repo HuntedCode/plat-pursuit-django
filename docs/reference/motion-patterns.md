@@ -132,8 +132,8 @@ first (it marks survivors), then the reveal, which then only animates genuinely 
 [js-utilities](js-utilities.md).
 
 Extracted 2026-08 from three copies (Collection gallery, Browse Hunters, jobs catalogue) that had drifted
-apart in duration and easing. Unlike the three reveal tools above — which are deliberately NOT unified,
-because their requirements genuinely differ — these three were the same tool written three times, and the
+apart in duration and easing. Unlike the three reveal tools above -- which are deliberately NOT unified,
+because their requirements genuinely differ -- these three were the same tool written three times, and the
 giveaway was that every difference between them was accidental.
 
 ### Draw an SVG stroke in (checkmarks, glyphs)

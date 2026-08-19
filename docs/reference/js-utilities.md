@@ -320,19 +320,19 @@ Returns `{measure, play, run}`. First / Last / Invert / Play, in the two shapes 
 | mechanic | call | identity |
 |---|---|---|
 | synchronous (client-side `display` toggles, same nodes) | `run(mutate)` | the element itself |
-| asynchronous (an HTMX swap REPLACES the nodes) | `measure()` on `htmx:beforeSwap`, `play()` on `htmx:afterSwap` | `key(el)` — a URL, in practice |
+| asynchronous (an HTMX swap REPLACES the nodes) | `measure()` on `htmx:beforeSwap`, `play()` on `htmx:afterSwap` | `key(el)` -- a URL, in practice |
 
 **It marks survivors `is-revealed` + `pp-revealing`, and that is the half a hand-rolled copy forgets.**
 Those are exactly the classes `staggerReveal` skips, so the two engines cooperate: the reveal animates
 arrivals, the flip animates everything that was already there. Without the mark, the unchanged part of the
-wall fades in again on every filter. Note that a survivor which did NOT move still gets marked — the tiles
+wall fades in again on every filter. Note that a survivor which did NOT move still gets marked -- the tiles
 that visibly did not change are otherwise the ones that flicker.
 
 `enter: true` fades arrivals in; leave it off wherever `staggerReveal` owns them (two engines animating one
 element is how a card flickers). `mark: false` where nothing re-reveals afterwards.
 
 Under reduced motion `measure()` no-ops, so `play()` has nothing to invert from and the layout is simply
-whatever the mutation produced — a reduced-motion reader gets no animation, never a grid that fails to
+whatever the mutation produced -- a reduced-motion reader gets no animation, never a grid that fails to
 re-filter.
 
 **Callers:** the Collection gallery (`collection.js`), Browse Hunters (`profile_list.html`), the jobs
