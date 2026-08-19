@@ -1000,6 +1000,47 @@ def test_the_entrance_plays_once_not_on_every_tab_return(client):
     assert "pp:jobd-contracts-shown" in body
 
 
+def test_the_contracts_tab_does_no_work_its_own_settings_discard(client):
+    """Three costs the tab was paying for output nothing consumed, all invisible in a screenshot.
+
+    It sorts by `name`, so the relevance and strength weights -- correlated subqueries evaluated PER ROW --
+    were computed and thrown away, and `discipline_levels` (a grouped aggregate) was computed to feed
+    them. And it renders the card's PILL branch, so the 25-job roster the MAP branch iterates was fetched
+    per page and never read.
+
+    Asserted as a query BUDGET rather than an exact number: the point is that it does not grow and does
+    not carry passengers, not that any particular count is correct forever.
+    """
+    _solo()
+    job = _job('archivist', 'Archivist')
+    for i in range(4):
+        _contract(f'C{i}', [job])
+
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(reverse('job_contracts', args=['archivist']))
+    assert resp.status_code == 200
+
+    sql = ' '.join(q['sql'] for q in ctx.captured_queries)
+    assert 'trophies_job"."display_order' not in sql or 'GROUP BY' in sql, (
+        'the 25-job roster is still being fetched for a branch this page never renders'
+    )
+    assert len(ctx.captured_queries) <= 6, (
+        f'the results endpoint runs {len(ctx.captured_queries)} queries: '
+        + '; '.join(q['sql'][:80] for q in ctx.captured_queries)
+    )
+
+
+def test_the_relevance_weights_are_switched_off_where_they_are_not_read(client):
+    """`with_ranking` was threaded through the service and then never passed -- the plumbing existed and
+    the caller kept paying. Pinned at the call site, since that is the half that was missing."""
+    from trophies.views.career_views import JobDetailView
+
+    assert JobDetailView.CONTRACT_PARAMS.get('with_ranking') is False
+    assert JobDetailView.CONTRACT_PARAMS['sort'] == 'name', (
+        'the sort changed -- if it now reads relevance, with_ranking must come back on'
+    )
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that

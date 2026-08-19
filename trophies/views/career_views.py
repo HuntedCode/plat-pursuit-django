@@ -417,9 +417,12 @@ class JobContractsView(View):
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
         page = board_helpers.clamped_int(request.GET.get('page'), 1, 1, 10_000)
         data = JobDetailView.contracts_context(job, profile, page=page)
+        # NO `disciplines`: that is the 25-job roster the card's MAP branch iterates, and passing `job`
+        # takes the pill branch instead -- so it was a query per scroll page feeding a block that never
+        # renders. Django leaves an unused variable undefined rather than erroring, and the map branch is
+        # unreachable while `job` is set.
         resp = render(request, 'trophies/partials/job_detail/_contract_results.html', {
             'contracts': data['contracts'], 'job': job, 'profile': profile,
-            'disciplines': contracts_service.job_roster(),
         })
         # `X-Has-Next` lets the scroller stop one fetch EARLIER than the empty-page fallback would --
         # the same signal `ContractsResultsView` sends. The shared `InfiniteScroller` reads it as of the
@@ -531,6 +534,10 @@ class JobDetailView(DetailView):
         # WEAKEST disciplines, which is a personal ordering on a public page -- and it would make the
         # anonymous view (no disc levels, so every weight ties) arbitrary rather than merely different.
         'sort': 'name',
+        # ...and because the sort is `name`, the relevance and strength weights are never read. They are
+        # correlated subqueries evaluated PER ROW, so leaving them on meant every page of this tab paid
+        # for two aggregates nothing consumed.
+        'with_ranking': False,
     }
 
     @classmethod
@@ -544,19 +551,16 @@ class JobDetailView(DetailView):
         `Contract.objects.filter(is_live=True, jobs=job)` plus a per-page `EarnedContract` map, which
         rebuilt a worse version of both.
         """
-        disc_levels = contracts_service.discipline_levels(profile) if profile else None
+        # No `disc_levels`: it exists to weight the relevance/strength ordering, which `with_ranking=False`
+        # above switches off. Computing it here was a grouped aggregate per request feeding nothing.
         return contracts_service.contracts_page(
-            profile, disc_levels=disc_levels, page=page, jobs=[job.slug], **cls.CONTRACT_PARAMS)
+            profile, page=page, jobs=[job.slug], **cls.CONTRACT_PARAMS)
 
     def _contracts(self, job, profile):
         data = self.contracts_context(job, profile)
         return {
             'contracts': data['contracts'],
             'contract_total': data['total'],
-            # The 25-job roster the shared card's 5x5 map needs. Passed even though this page renders the
-            # PILL variant instead, because `_contract_card.html` is one template: the map branch has to
-            # stay renderable or the two callers diverge the moment somebody edits it.
-            'disciplines': contracts_service.job_roster(),
             # The scroller derives its next page number from how many cards are already in the grid, so it
             # has to page by the same number the endpoint does. Passed rather than written as a literal in
             # the template, where a drifted copy would silently skip or repeat a page.
