@@ -1,7 +1,15 @@
 # Leaderboards — Section Rebuild
 
-> Status: **BUILT (steps 1-8, 2026-08), then PARTLY REVERSED.** Kept as the record of what was decided
-> and why; the build order below is a changelog now. Backend audit performed 2026-08; the three cost
+> Status: **SECTION CLOSED (2026-08-19).** Built in steps 1-8, partly reversed (the three directories),
+> then converged onto one board in steps 9-12. Kept as the record of what was decided and why; the build
+> order below is a changelog now.
+>
+> The closing state: four surfaces -- Global Boards, badge detail's Ranks tab, job detail's Ranks tab and
+> game detail's Ranks panel -- share one row partial, one board shell, one jump bar, one window parser,
+> one JS engine and one hunter search, with country on every one of them. Uniformity is guarded per
+> surface by `tests/engine/test_board_uniformity.py` rather than by anyone remembering. The last piece was
+> a store for the per-edition badge board (`SeriesEditionStanding`, migration 0313), which is also the
+> last thing in this section that needs a deploy step. Backend audit performed 2026-08; the three cost
 > defects it found are already fixed (commit `2b0bf02e`) and are not part of this plan.
 >
 > ### The three directories were removed (2026-08)
