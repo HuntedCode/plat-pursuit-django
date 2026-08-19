@@ -1016,6 +1016,7 @@ const InfiniteScroller = {
      * @param {number} config.paginateBy - Number of items per page (used to determine if more pages exist)
      * @param {string} [config.formSelector] - CSS selector for filter form (resets page on submit)
      * @param {string} [config.scrollKey] - localStorage key for preserving scroll position
+     * @param {string} [config.url] - Results endpoint; defaults to the page's own path
      * @param {string} [config.cardSelector='.card'] - CSS selector for cards in fetched HTML
      * @param {Function} [config.onTabChange] - Callback for tab change behavior
      * @param {Function} [config.onAppend] - Called with the array of freshly-appended card nodes after each page load
@@ -1036,7 +1037,11 @@ const InfiniteScroller = {
         // the first fetch on a full first page, so under-a-page grids never fetch regardless of this value.
         const loadedCards = grid.querySelectorAll(cardSelector).length;
         let page = config.paginateBy ? Math.max(2, Math.ceil(loadedCards / config.paginateBy) + 1) : 2;
-        const baseUrl = window.location.pathname;
+        // The page's own path by DEFAULT, which is what every caller wanted while the results partial
+        // was served by the same view (`HtmxListMixin` returns it for an XHR `?page=`). `config.url`
+        // is for a grid whose results live at a DIFFERENT address -- job detail's Contracts tab, whose
+        // page is a DetailView and whose cards come from `/jobs/<slug>/contracts/`.
+        const baseUrl = config.url || window.location.pathname;
         const queryParams = new URLSearchParams(window.location.search);
         queryParams.delete('page');
         let nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;

@@ -428,14 +428,160 @@ def test_job_detail_is_public_and_both_tabs_render_signed_out(client):
 
 
 def test_a_linked_viewer_sees_their_own_state_on_each_contract(client):
+    """The card carries the viewer's status badge, from the shared Career card since 2026-08.
+
+    The state has to be a REACHED one. This asserted merely that an `EarnedContract` existed and the
+    placeholder it was written against printed "In progress" for any row that had one -- which was wrong
+    about the product: an accepted contract with no progress on it is Not Started, and the shared card
+    says so. So the fixture now reaches the 100% tier, and the assertion is the badge that state produces.
+    """
+    from django.utils import timezone
+
     job = _job('archivist', 'Archivist')
     contract = _contract('Mine', [job])
     profile = ProfileFactory(is_linked=True)
-    EarnedContract.objects.create(profile=profile, contract=contract)
+    EarnedContract.objects.create(profile=profile, contract=contract, full_reached_at=timezone.now())
     client.force_login(profile.user)
 
     body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
-    assert 'In progress' in body or 'Ready to claim' in body or 'Banked' in body
+    assert 'Ready to Claim' in body, 'the card is not showing the viewer their own state'
+
+
+def test_the_contract_card_shows_only_THIS_jobs_pills_not_the_whole_roster(client):
+    """The one block that differs between this page's card and Career's.
+
+    Career renders a 5x5 map of all 25 jobs, lit and dim, because a reader browsing every contract needs
+    to know what each one touches. On a page that IS a job, twenty-four of those cells answer a question
+    already answered and the twenty-fifth is the only one that can be acted on -- so the map collapses to
+    this contract's own jobs, named, with the current one marked.
+    """
+    _solo()
+    a = _job('a', 'Archivist')
+    b = _job('b', 'Blacksmith')
+    _job('c', 'Cartographer')          # a third job, in the roster but NOT on this contract
+    _contract('Shared', [a, b])
+
+    body = client.get(reverse('job_detail', args=['a']), {'tab': 'contracts'}).content.decode()
+
+    assert 'rp-jobpills' in body and 'rp-jobgrid' not in body, 'the 25-cell map rendered on job detail'
+    assert 'Blacksmith' in body, "the contract's other job is not shown"
+    assert 'Cartographer' not in body, 'a job this contract does not touch is on the card'
+    # ...and the job you are standing on is the marked one.
+    marked = body[body.index('rp-jobpills'):]
+    marked = marked[:marked.index('</div>')]
+    assert 'is-this' in marked
+
+
+def test_career_still_renders_the_full_job_map(client):
+    """The variant is opt-in: no `job`, no change. Career passes none, so its card must be untouched --
+    this is the assertion that makes 'a variant, not a second template' safe to have done."""
+    from trophies.services import contracts_service
+
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[2]
+    src = (root / 'templates' / 'trophies' / 'partials' / 'contracts' / '_contract_card.html').read_text(encoding='utf-8')
+    assert '{% if job %}' in src and 'rp-jobgrid' in src, 'the map branch is gone'
+    # The roster loop must not use `job` as its variable: it would shadow the page-scope one, and the two
+    # mean opposite things (one job vs all 25).
+    grid = src[src.index('rp-jobgrid'):]
+    grid = grid[:grid.index('{% endif %}')]
+    assert '{% for rjob in d.jobs %}' in grid, 'the map loop shadows the page-scope `job` again'
+    assert contracts_service.CONTRACTS_PER_PAGE > 0
+
+
+def test_the_contracts_tab_shows_legacy_and_already_banked_contracts(client):
+    """Two `contracts_page` defaults that are right for Career and wrong here, both silent.
+
+    `platforms` defaults to current-gen, because Career is a board of what you could go and play. `scope`
+    defaults to 'board', which hides fully-banked contracts, because Career is a to-do list. This page is
+    a CATALOGUE of what feeds a job: a PS3 contract still feeds it, and so does one you finished last
+    year. Either default left in place would quietly shorten the list under a header that counts the
+    full set.
+    """
+    from django.utils import timezone
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    legacy = _contract('Legacy Only', [job])
+    banked = _contract('Long Done', [job])
+    profile = ProfileFactory(is_linked=True)
+    EarnedContract.objects.create(profile=profile, contract=banked,
+                                  full_reached_at=timezone.now(), full_accepted_at=timezone.now())
+    client.force_login(profile.user)
+
+    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
+    assert 'Long Done' in body, 'a fully-banked contract is missing -- scope is still Career\'s default'
+    assert 'Legacy Only' in body
+    assert legacy is not None
+
+
+def test_the_contracts_tab_pages_from_its_own_public_endpoint(client):
+    """Infinite scroll needs a cards-only page N, and it must be PUBLIC: this is the same catalogue an
+    anonymous visitor already sees on the page, so gating the second screenful would stop the tab halfway
+    down for exactly the readers it exists to persuade. (Career's equivalent 404s the unlinked, because
+    that whole surface is personal.)"""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('Only One', [job])
+
+    resp = client.get(reverse('job_contracts', args=['archivist']))
+    body = resp.content.decode()
+
+    assert resp.status_code == 200, 'the results endpoint is gated'
+    assert 'Only One' in body and 'rp-row' in body
+    assert '<h1' not in body and 'jobd-switch' not in body, 'the endpoint returned the whole page'
+    assert resp['X-Has-Next'] == '0'
+
+
+def test_the_scroller_pages_by_the_same_number_the_endpoint_does(client):
+    """`InfiniteScroller` derives its next page number from how many cards are already in the grid, so a
+    literal in the template that drifted from `CONTRACTS_PER_PAGE` would silently skip or repeat a whole
+    page. Passed through the context for exactly that reason."""
+    from trophies.services import contracts_service
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert f'paginateBy: {contracts_service.CONTRACTS_PER_PAGE},' in body
+    # ...and it fetches the RESULTS endpoint, not the page's own path (the scroller's default).
+    assert reverse('job_contracts', args=['archivist']) in body
+    assert 'url: grid.dataset.resultsUrl' in body
+
+
+def test_the_job_icon_sprite_is_on_the_page(client):
+    """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
+    sprite is absent -- names render with an invisible gap where the icon belongs, on a page that
+    otherwise looks fine. Career defines it once near its toolbar; this page has to define its own."""
+    _solo()
+    job = _job('archivist', 'Archivist', icon='book')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'id="jobicon-' in body, 'the icon sprite is missing, so every job pill draws a blank'
+
+
+def test_the_header_counts_contracts_and_xp_not_hunters(client):
+    """It counted hunters -- the figure the catalogue dropped for saying more about which games are
+    popular than about the job. A header promising one thing while the tab under it shows another is the
+    drift this rebuild keeps removing; the hunter count lives on the Ranks tab, whose whole subject is
+    the people on the board."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+    _xp(job, 'SomeHunter', 500)
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    # From the job's own <h1> to the tab strip -- the HEADER CARD, not the document. Slicing from the
+    # start includes `base.html`'s meta description, which says "trophy hunters" and fails this on
+    # correct code. Second time this file has been bitten by that exact string.
+    head = body[body.index('<h1'):body.index('jobd-switch')]
+
+    assert 'XP to earn' in head and 'contract' in head
+    assert 'hunter' not in head.lower(), 'the header still counts hunters'
+    # The supply is the same figure the catalogue tile shows for this job -- one contract, one job, full T.
+    assert str(CONTRACT_XP_TOTAL) in head or f'{CONTRACT_XP_TOTAL:,}' in head
 
 
 def test_the_contract_state_lookup_is_batched_for_the_page(client):

@@ -402,6 +402,30 @@ class JobRanksPanelView(View):
         })
 
 
+class JobContractsView(View):
+    """`/jobs/<slug>/contracts/` -- cards-only, page N, for job detail's infinite scroll.
+
+    PUBLIC, unlike `ContractsResultsView`, which 404s anyone without a linked profile because the whole
+    Career surface is personal. This one is the same catalogue an anonymous visitor sees on the page
+    itself, so gating the second screenful would make the tab stop halfway down for exactly the readers it
+    exists to persuade. A signed-in viewer's own state rides along the same cards, from the service.
+    """
+
+    def get(self, request, slug):
+        job = get_object_or_404(Job, slug=slug)
+        profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        page = board_helpers.clamped_int(request.GET.get('page'), 1, 1, 10_000)
+        data = JobDetailView.contracts_context(job, profile, page=page)
+        resp = render(request, 'trophies/partials/job_detail/_contract_results.html', {
+            'contracts': data['contracts'], 'job': job, 'profile': profile,
+            'disciplines': contracts_service.job_roster(),
+        })
+        # The scroller stops on an empty page, but the header is what lets it stop one fetch EARLIER --
+        # same signal `ContractsResultsView` sends, so both boards speak the same protocol.
+        resp['X-Has-Next'] = '1' if data['has_next'] else '0'
+        return resp
+
+
 class JobDetailView(DetailView):
     """`/jobs/<slug>/` -- what a job IS, the contracts that feed it, and its board.
 
@@ -434,6 +458,15 @@ class JobDetailView(DetailView):
         # here for exactly that reason: it briefly moved into `_ranks()` and therefore vanished from the
         # default Contracts tab, which is where a signed-in hunter lands -- the standing chip only
         # appeared once you clicked Ranks, which is the tab that already shows you the board.
+        # The SAME expression the catalogue tile annotates with, so the figure a reader clicked through
+        # from is the figure they land on. One extra query for one header number, on a page that already
+        # runs several -- worth it over a second definition of "XP this job can pay", which is exactly how
+        # two surfaces end up quoting different totals for the same thing.
+        context['xp_supply'] = (
+            Job.objects.filter(pk=job.pk)
+            .annotate(xp_supply=Coalesce(Subquery(_job_xp_supply(), output_field=IntegerField()), Value(0)))
+            .values_list('xp_supply', flat=True).first() or 0
+        )
         context['board_total'] = lb.job_board_count(job.slug)
         context['my_rank'] = lb.job_rank(job.slug, profile.id) if profile else None
         # Distinguishes "signed out" from "signed in and not on this board". The template gated the whole
@@ -456,23 +489,53 @@ class JobDetailView(DetailView):
         ]
         return context
 
+    #: Shared by the page and by `JobContractsView`, so the first screenful and every appended one are
+    #: built from ONE definition of what this tab shows. Two definitions is how a tab ends up filtering
+    #: differently as you scroll -- which is the same failure the leaderboard windows were rebuilt to
+    #: avoid, one surface over.
+    CONTRACT_PARAMS = {
+        # ALL platforms, not `contracts_page`'s default. That default is current-gen (PS5/PS4) because
+        # Career is a board of what you could go and play; this is a CATALOGUE of what feeds a job, and a
+        # legacy contract still feeds it. Silently omitting them would make the tab disagree with the
+        # count in the header directly above it.
+        'platforms': [],
+        # '' means NO board/history split -- the full catalogue. `scope='board'` (Career's default) hides
+        # fully-banked contracts, which is right for a to-do list and wrong here: a contract you have
+        # already completed is still one of the things that feeds this job.
+        'scope': '',
+        # Alphabetical, deliberately, where Career defaults to 'relevance'. Relevance ranks by your
+        # WEAKEST disciplines, which is a personal ordering on a public page -- and it would make the
+        # anonymous view (no disc levels, so every weight ties) arbitrary rather than merely different.
+        'sort': 'name',
+    }
+
+    @classmethod
+    def contracts_context(cls, job, profile, page=1):
+        """One page of the contracts that feed this job, as Career's own card dicts.
+
+        Reuses `contracts_service.contracts_page` rather than querying Contract here, which is what makes
+        the small card a VARIANT of the Career card instead of a second thing that looks like it. The
+        service already takes a `jobs` filter and already builds every field the card renders, so the page
+        contributes a scope, not a data layer. What it replaced was a hand-rolled
+        `Contract.objects.filter(is_live=True, jobs=job)` plus a per-page `EarnedContract` map, which
+        rebuilt a worse version of both.
+        """
+        disc_levels = contracts_service.discipline_levels(profile) if profile else None
+        return contracts_service.contracts_page(
+            profile, disc_levels=disc_levels, page=page, jobs=[job.slug], **cls.CONTRACT_PARAMS)
+
     def _contracts(self, job, profile):
-        contracts = list(
-            Contract.objects.filter(is_live=True, jobs=job)
-            .prefetch_related('jobs')
-            .order_by(Lower('name'))[:self.CONTRACT_PAGE]
-        )
-        # Per-row viewer state, BATCHED for the page. The trap here is a lookup per row: it looks fine at
-        # 24 contracts and is not at 200, and infinite scroll bounds the rows rendered but never the
-        # queries per row.
-        earned_map = {}
-        if profile and contracts:
-            earned_map = {
-                ec.contract_id: ec for ec in EarnedContract.objects.filter(
-                    profile=profile, contract__in=contracts)
-            }
+        data = self.contracts_context(job, profile)
         return {
-            'contracts': contracts,
-            'contract_total': Contract.objects.filter(is_live=True, jobs=job).count(),
-            'earned_map': earned_map,
+            'contracts': data['contracts'],
+            'contract_total': data['total'],
+            'contracts_has_next': data['has_next'],
+            # The 25-job roster the shared card's 5x5 map needs. Passed even though this page renders the
+            # PILL variant instead, because `_contract_card.html` is one template: the map branch has to
+            # stay renderable or the two callers diverge the moment somebody edits it.
+            'disciplines': contracts_service.job_roster(),
+            # The scroller derives its next page number from how many cards are already in the grid, so it
+            # has to page by the same number the endpoint does. Passed rather than written as a literal in
+            # the template, where a drifted copy would silently skip or repeat a page.
+            'contracts_per_page': contracts_service.CONTRACTS_PER_PAGE,
         }

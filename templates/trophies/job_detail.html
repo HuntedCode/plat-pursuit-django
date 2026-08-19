@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static humanize job_icons custom_filters %}
+{% load static humanize job_icons %}
 
 {% block title %}{{ job.name }}{% endblock %}
 {% block meta_description %}{{ job.name }} on Platinum Pursuit: {{ job.description|truncatechars:140 }}{% endblock %}
@@ -30,9 +30,24 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ job.name }}</h1>
                     <p class="jobd__disc">{{ job.get_discipline_display }}</p>
                 </div>
-                <div class="shrink-0 text-right">
-                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ board_total }}">{{ board_total|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">hunter{{ board_total|pluralize }}</div>
+{% comment %} CONTRACTS + XP SUPPLY, matching the catalogue tile that linked here. It counted
+                HUNTERS, which is the figure `/jobs/` dropped for saying more about which games are popular
+                than about the job -- and a header promising one thing while the tab under it shows another
+                is the drift this rebuild keeps removing. The hunter count still exists, one click away, on
+                the tab whose entire subject is the people on this board.
+
+                Both figures come from the same places the Contracts tab does: the total off
+                `contracts_page`, the supply off the same `_job_xp_supply()` the catalogue annotates with,
+                so the tile, this header and the list below cannot disagree. {% endcomment %}
+                <div class="shrink-0 text-right jobd__tallies">
+                    <div class="jobd__tally">
+                        <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ contract_total }}">{{ contract_total|intcomma }}</div>
+                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">contract{{ contract_total|pluralize }}</div>
+                    </div>
+                    <div class="jobd__tally">
+                        <div class="pp-tally text-2xl md:text-3xl leading-none" style="color: var(--disc);" data-countup="{{ xp_supply }}">{{ xp_supply|intcomma }}</div>
+                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">XP to earn</div>
+                    </div>
                 </div>
             </div>
 
@@ -93,35 +108,39 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
 
     <div class="jobd-view" id="jobd-view-contracts" role="tabpanel" aria-labelledby="jobd-tab-contracts"
          data-view="contracts"{% if active_tab == 'ranks' %} hidden{% endif %}>
+        {% comment %} The icon sprite, defined ONCE for the page. `job_icon_use` inside the cards renders
+        a `<use href="#jobicon-...">`, which resolves to nothing at all if the sprite is absent -- the
+        pills would draw their names with an invisible gap where the glyph belongs, on a page that still
+        looks basically fine. {% endcomment %}
+        {% job_icon_sprite %}
+
         {% if contracts %}
-        <div class="jobd__contracts">
-            {% for c in contracts %}
-            {% with ec=earned_map|dict_get:c.id %}
-            <div class="jobd__con{% if ec %} is-earned{% endif %}">
-                <span class="jobd__con-name">{{ c.name }}</span>
-                <span class="jobd__con-jobs">
-                    {% for j in c.jobs.all %}<span class="jobd__con-job{% if j.slug == job.slug %} is-this{% endif %}">{{ j.name }}</span>{% endfor %}
-                </span>
-                {% comment %} Viewer state, from a map built ONCE for the page. A lookup per row looks
-                fine at 24 contracts and is not at 200 -- and paging bounds the rows rendered, never the
-                queries per row. {% endcomment %}
-                {% if ec %}
-                <span class="jobd__con-state">
-                    {% if ec.platinum_accepted_at or ec.full_accepted_at %}Banked{% elif ec.platinum_reached_at or ec.full_reached_at %}Ready to claim{% else %}In progress{% endif %}
-                </span>
-                {% endif %}
-            </div>
-            {% endwith %}
-            {% endfor %}
+        {% comment %} The SAME card Career renders, in its job-scoped variant -- see
+        `_contract_card.html`. What was here before was a placeholder: a text row per contract with the
+        name, its jobs as bare words, and a state label, rebuilding a worse version of a card that already
+        existed a tab away.
+
+        Grid columns match Career's so a reader who knows one board can read the other, capped a column
+        narrower: this page has no filter rail beside it, so the cards get the full width and a fifth
+        column would shrink the cover art below the size that makes a contract read as a GAME. {% endcomment %}
+        <div id="jobd-contracts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
+             data-results-url="{% url 'job_contracts' job.slug %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
+            {% include 'trophies/partials/job_detail/_contract_results.html' %}
         </div>
-        {% if contract_total > contracts|length %}
-        <p class="jobd__more">Showing {{ contracts|length }} of {{ contract_total|intcomma }} contracts</p>
-        {% endif %}
+        {% comment %} Sentinel + spinner for `PlatPursuit.InfiniteScroller` -- the SHARED scroller the
+        browse walls use, not Career's bespoke board controller. Career's carries filters, facets, tokens
+        and a scope toggle, none of which exist here; this tab is one fixed list that only ever needs its
+        next page. {% endcomment %}
+        <div id="jobd-contracts-sentinel" aria-hidden="true"></div>
+        <div id="jobd-contracts-loading" class="hidden py-6 text-center">
+            <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+            <span class="sr-only">Loading more contracts</span>
+        </div>
         {% else %}
-        <div class="lb-empty">
+        <div class="jobs-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
-            <p class="lb-empty__title">No contracts feed this job yet</p>
-            <p class="lb-empty__sub">Contracts are curated. This one is waiting for its first.</p>
+            <p class="jobs-empty__title">No contracts feed this job yet</p>
+            <p class="jobs-empty__sub">Contracts are curated. This one is waiting for its first.</p>
         </div>
         {% endif %}
     </div>{# /jobd-view-contracts #}
@@ -144,6 +163,29 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
 {% block js_scripts %}
 {{ block.super }}
 <script>
+    // ---- Contracts: infinite scroll -------------------------------------------------------------
+    // The SHARED `InfiniteScroller` (utils.js), the one the browse walls use -- not Career's board
+    // controller, which is ~500 lines of filters, facets, tokens and a scope toggle this tab has none of.
+    // What it needs is the next page of a fixed list, which is exactly what the shared one does.
+    //
+    // Wired at page load even though the tab may be hidden: the scroller observes a sentinel, and a
+    // sentinel inside a `hidden` panel simply never intersects, so it costs nothing until the tab opens.
+    (function () {
+        var grid = document.getElementById('jobd-contracts');
+        if (!grid || !window.PlatPursuit || !PlatPursuit.InfiniteScroller) { return; }
+        PlatPursuit.InfiniteScroller.create({
+            gridId: 'jobd-contracts',
+            sentinelId: 'jobd-contracts-sentinel',
+            loadingId: 'jobd-contracts-loading',
+            // MUST match `CONTRACTS_PER_PAGE`, which is what the endpoint pages by: the scroller derives
+            // its next page number from how many cards are already in the grid, so a mismatch here skips
+            // or repeats a page rather than failing.
+            paginateBy: {{ contracts_per_page }},
+            cardSelector: '.rp-row',
+            url: grid.dataset.resultsUrl,
+        });
+    })();
+
     // Content tabs: Contracts | Ranks. The mechanism badge detail and game detail use (shared
     // wireTablist + igniteTab + syncViewParam over real role="tabpanel" islands), so all three detail
     // pages switch identically.

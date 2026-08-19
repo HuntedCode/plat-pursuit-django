@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
@@ -129,6 +129,10 @@ urlpatterns = [
     # the expensive one. MUST precede nothing in particular -- `<slug:slug>` above cannot swallow it,
     # since that pattern has no trailing segment.
     path('jobs/<slug:slug>/ranks/', JobRanksPanelView.as_view(), name='job_ranks_panel'),
+    # Cards-only page N for job detail's Contracts tab. PUBLIC, unlike Career's `contracts_results`:
+    # this is the same catalogue an anonymous visitor already sees on the page, so gating the second
+    # screenful would stop the tab halfway down for the readers it exists to persuade.
+    path('jobs/<slug:slug>/contracts/', JobContractsView.as_view(), name='job_contracts'),
 
     # Genre/Theme pages
     path('genres/', GenreThemeListView.as_view(), name='genres_list'),
