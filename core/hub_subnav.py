@@ -228,6 +228,11 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'badge_detail_with_profile': ('browse', 'badges'),
     'genre_detail': ('browse', 'genres'),
     'theme_detail': ('browse', 'genres'),
+    # Added when Jobs joined the Catalog rail (2026-08) -- and missed at the time, so browsing a job left
+    # the whole strip unhighlighted. A detail page's URL name never matches its sub-nav item's
+    # (`job_detail` vs `jobs_browse`), so every one of them needs a line here; the item shipping without
+    # one is silent, because the strip still renders.
+    'job_detail': ('browse', 'jobs'),
     'roadmap_edit': ('browse', 'games'),
     # Community
     'profile_detail': ('browse', 'profiles'),

@@ -10,6 +10,7 @@ defeats the discovery it exists for, and the board being identical for everyone 
 cacheable.
 """
 import pathlib
+import re
 
 import pytest
 from django.db import connection
@@ -449,6 +450,44 @@ def test_the_catalogue_does_not_show_a_hunter_count(client):
 
 
 # ------------------------------------------------------------------ job detail ---------------------------
+
+def test_browsing_a_job_highlights_the_jobs_subnav_item(client):
+    """A detail page's URL name never equals its sub-nav item's (`job_detail` vs `jobs_browse`), so every
+    detail page needs a line in `_URL_NAME_TO_SLUG_OVERRIDES`. Jobs joined the Catalog rail without one,
+    and the miss is silent: the strip still renders, just with nothing lit, so a visitor reading a job has
+    no idea which section of the site they are in.
+
+    Asserted on the RENDERED pill rather than the resolver, because the resolver returning the right slug
+    is only half of it -- the template has to be reading that slug to mark the pill.
+    """
+    _job('archivist', 'Archivist')
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    pill = body[body.index('>Jobs<') - 400:body.index('>Jobs<')]
+    assert 'is-active' in pill, 'the Jobs pill is not lit while a job is being read'
+    assert 'aria-current="page"' in pill, 'a screen reader is not told which section this page is in'
+
+    # ...and ONLY that one. Counting `aria-current` outright does not work -- the rail renders more than
+    # once per page (mobile and desktop) -- so this checks that every lit sub-pill anywhere on the page is
+    # the Jobs one, which holds however many times the strip is emitted.
+    lit = [body[m.end():body.index('<', m.end())]
+           for m in re.finditer(r'class="pp-subpill is-active"[^>]*>', body)]
+    assert lit, 'no sub-pill is lit at all'
+    assert set(lit) == {'Jobs'}, f'the strip is lighting more than Jobs: {sorted(set(lit))}'
+
+
+def test_every_subnav_override_points_at_a_slug_that_exists():
+    """The overrides map is hand-maintained and its failure mode is silence -- an entry naming a hub or a
+    slug that does not exist highlights nothing at all, exactly like having no entry. A typo (`job` for
+    `jobs`) reads as correct in the source and produces the bug this test was written for.
+    """
+    from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES, HUB_SUBNAV_CONFIG
+
+    hubs = {h.key: {i.slug for i in h.items} for h in HUB_SUBNAV_CONFIG}
+    for url_name, (hub_key, slug) in _URL_NAME_TO_SLUG_OVERRIDES.items():
+        assert hub_key in hubs, f'{url_name} points at hub {hub_key!r}, which does not exist'
+        assert slug in hubs[hub_key], f'{url_name} points at {hub_key}/{slug!r}, which is not an item there'
+
 
 def test_job_detail_is_public_and_both_tabs_render_signed_out(client):
     """The anon/authed split is PER TAB, not per page. Ranks is identical for everyone; Contracts shows
