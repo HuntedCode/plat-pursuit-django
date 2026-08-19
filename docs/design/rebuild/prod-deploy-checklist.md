@@ -567,28 +567,26 @@ read-side; nothing to run.
 Migration `trophies.0313_series_edition_standing`, plus a one-time backfill. Spec:
 [leaderboards-rebuild.md](leaderboards-rebuild.md) §8.
 
-**Deploys with the section above, and its backfill is the only ORDERED step in this whole area.**
+**Deploys with the section above. Nothing new to run** -- the `evaluate_badges --all` this checklist
+already requires in four places covers it.
 
 - [ ] **`0313` creates `SeriesEditionStanding`** -- one row per (profile, series, STARTED edition),
       carrying that edition's points and its own `advanced_at`. Plain `CreateModel`, indexes inline, no
       `CONCURRENTLY` needed: the table is new and empty, so unlike 0307 / 0309 / 0310 / 0311 there is
       nothing live to lock. Fast, and it takes no data with it.
-- [ ] **THEN run `python manage.py backfill_series_edition_standings`.** Between the migration and this
-      command the per-edition board reads an EMPTY table, so every edition slice on every badge says
-      nobody is chasing it. That window is the only real risk in this deploy -- run the two together, and
-      `--series <slug>` a popular badge first if you want to eyeball it before committing.
-      - `--dry-run` counts what it would write.
-      - It derives points, stages and the denominator EXACTLY from `group_progress` / `group_xp`.
-      - `advanced_at` is seeded from the SERIES-wide value, because that is the only date the source has.
-        So the board behaves exactly as it did before the store existed (including the limitation above),
-        and the real per-edition dates arrive with the next nightly `evaluate_badges --all`. **Nobody's
-        rank moves at deploy; the fix lands overnight.**
-      - Re-running skips any (profile, series) already seeded, so it cannot clobber dates the engine has
-        since corrected. `--force` overrides, and should not be needed.
+- [ ] **The `evaluate_badges --all` above fills it.** Same shape as the `ProfileEditionStanding` entry
+      further up: created empty, so until a full evaluation runs **every per-edition badge board reads as
+      "nobody is chasing this edition"** -- the page is perfect and the answer is wrong. One `--all` run
+      covers this, `group_progress`, `group_xp`, `badges_held` and `ProfileEditionStanding` together.
+      There is deliberately NO bespoke backfill command: one was written and deleted, because the only
+      `advanced_at` it could derive is `SeriesBadgeStanding`'s series-wide value -- which is the exact
+      tiebreak this table exists to remove, on a board that has never shipped and so has no published
+      ranks to preserve. Seeding it would have meant a deploy that looks finished and silently is not.
 - [ ] **Nightly cost goes up slightly.** `evaluate_badges --all` now writes one extra row per started
-      edition per engaged series. No extra evaluation (the loop already held each edition's result), and
-      storing only STARTED editions keeps it roughly half of what `group_progress` carries. Worth a glance
-      at the nightly's runtime the first morning after, not worth pre-emptive action.
+      edition per engaged series. No extra evaluation (the loop already held each edition's result), two
+      queries per profile however many series they are engaged with, and storing only STARTED editions
+      keeps it roughly half of what `group_progress` carries. Worth a glance at the nightly's runtime the
+      first morning after, not worth pre-emptive action.
 
 ### The three board directories are gone (no deploy step)
 

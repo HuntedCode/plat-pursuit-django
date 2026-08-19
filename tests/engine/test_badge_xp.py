@@ -362,6 +362,47 @@ def test_only_a_STARTED_edition_gets_a_board_row():
 
 
 @pytest.mark.django_db
+def test_the_edition_rows_cost_two_queries_however_many_series_there_are():
+    """The write seam runs on EVERY sync, so its query count must not scale with a hunter's engagement.
+
+    First written as an upsert-and-prune per series, which is `series x (editions + 1)` round trips: a
+    hunter engaged with 40 two-edition series paid ~120 queries where two do. The rows are five narrow
+    columns, so replacing them all wholesale is cheaper than working out which ones moved -- and it is
+    safe only because `recompute_standing` is atomic and holds the per-profile advisory lock, so nobody
+    can read the gap between the delete and the insert.
+
+    Asserted at TWO different engagement levels rather than against a magic number: a constant that
+    happens to be right for one fixture would go unnoticed, a count that GROWS is the actual failure.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    from trophies.services.badge_apply import evaluate_and_apply
+    from tests.factories import ProfileFactory
+
+    def edition_queries(n_series):
+        badges, games = [], {}
+        for n in range(n_series):
+            ultra, legacy, g = _two_edition_series(f'q{n_series}s{n}')
+            badges += [ultra, legacy]
+            games[n] = g
+        p = ProfileFactory()
+        for n in range(n_series):
+            _complete(p, games[n][('ps5', 1)])
+            _complete(p, games[n][('ps3', 1)])
+        evaluate_and_apply(p, badges)                     # first pass creates the rows...
+        with CaptureQueriesContext(connection) as ctx:
+            evaluate_and_apply(p, badges)                 # ...this one is the steady state
+        return len([q for q in ctx.captured_queries
+                    if 'serieseditionstanding' in q['sql'].lower()])
+
+    assert edition_queries(1) == 2, 'the edition store is not one delete plus one insert'
+    assert edition_queries(6) == 2, (
+        'the edition write scales with engaged series -- it is per-series again, and this seam runs on '
+        'every sync'
+    )
+
+
+@pytest.mark.django_db
 def test_each_edition_row_carries_its_OWN_advance_date():
     """THE BUG THE STORE EXISTS FOR. `SeriesBadgeStanding.advanced_at` is series-wide -- the furthest-along
     edition's date -- so ranking an edition board on it separated hunters tied on THIS edition by their

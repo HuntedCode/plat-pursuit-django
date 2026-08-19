@@ -276,15 +276,15 @@ They are recomputed from scratch each time, so no incremental writer exists to d
 
 ## Management Commands
 
-None, in steady state. The boards read live from the standing tables, so there is nothing to rebuild.
+None. The boards read live from the standing tables, so there is nothing to rebuild.
 
-`backfill_series_edition_standings` is a ONE-TIME seed for migration 0313, not maintenance: it derives the
-new per-edition rows from `SeriesBadgeStanding`'s `group_progress` / `group_xp` maps so nobody drops off
-the edition board at deploy while waiting for their next sync. `advanced_at` is the one thing it cannot
-recover (the source holds one series-wide date), so it seeds that value -- which makes the board behave
-exactly as it did before the store existed, with the real per-edition dates arriving on the next nightly
-`evaluate_badges --all`. Defaults to skipping any (profile, series) that already has rows, so a second run
-cannot undo dates the engine has since corrected; `--force` overrides.
+That includes new stores: `SeriesEditionStanding` (migration 0313) was created empty and populated by the
+`evaluate_badges --all` that a deploy runs anyway, exactly as `ProfileEditionStanding` was in 0300. A
+bespoke seeder for it was written and deleted -- the only `advanced_at` it could derive was the
+series-wide one this store exists to stop using, so it would have produced a board that looks migrated and
+still tiebreaks wrong. **If a new standing store ever seems to need a backfill command, check first
+whether a full evaluation is already scheduled; it usually is, and it writes better data than a seeder
+reading the old shape can.**
 
 `evaluate_badges --all` (nightly) is what keeps the standings honest, but it is a badge-evaluation
 command, not a leaderboard one -- see [badge-system.md](badge-system.md).

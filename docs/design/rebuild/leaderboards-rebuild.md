@@ -544,8 +544,10 @@ The store cost nothing to compute. `recompute_standing` already loops every edit
 furthest-along one. What it costs is WRITE VOLUME in the nightly chain, held down by storing only STARTED
 editions -- the board's own membership rule, moved from every read to one write.
 
-Deploy is the one ordered step in this section: `0313` then `backfill_series_edition_standings`, because
-between them the board reads an empty table. See the
+Deploy needs nothing new: the table is created empty and filled by the `evaluate_badges --all` a cutover
+runs anyway, exactly as `ProfileEditionStanding` was in 0300. A seeder command was written first and
+deleted -- the only `advanced_at` it could derive was the series-wide one this store exists to stop using,
+so it would have produced a board that looks migrated and still tiebreaks wrong. See the
 [deploy checklist](prod-deploy-checklist.md).
 
 ---

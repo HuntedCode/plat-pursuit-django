@@ -13,10 +13,13 @@ edition), so an edition board that tiebroke on it separated two hunters tied on 
 Ultra HD progress: ADVANCING IN ONE EDITION COULD DROP A RANK IN ANOTHER. The per-edition date already
 existed in the engine and was discarded; this stores it.
 
-NO BACKFILL IN THIS MIGRATION, deliberately. The table is populated by the same seam that writes every
-other standing, and `backfill_series_edition_standings` seeds it from the JSON maps that are already
-there without waiting on a full re-evaluation. Running the data step here would mean holding a
-transaction over every profile's badge rows during deploy. See the deploy checklist.
+NO BACKFILL, and no backfill COMMAND either. The table is populated by the same seam that writes every
+other standing, so the `evaluate_badges --all` that already runs at deploy fills it -- exactly how
+migration 0300 handled `ProfileEditionStanding`, which was created empty and hit the identical "every
+edition board says nobody is here" window. A bespoke seeder was written first and deleted: it could only
+derive `advanced_at` from `SeriesBadgeStanding`'s series-wide value, i.e. reproduce the very tiebreak this
+table exists to fix, on a board that has never been in production and therefore has no ranks to preserve.
+See the deploy checklist.
 
 CREATE, so the indexes go up inline: the table is empty and nothing reads it until the backfill, which is
 the one case where a partial index does not need CONCURRENTLY (unlike 0307 / 0309 / 0310 / 0311, which
