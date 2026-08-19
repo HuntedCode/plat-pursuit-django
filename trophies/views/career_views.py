@@ -21,7 +21,7 @@ from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery, Sum,
 from django.db.models.functions import Coalesce, Lower
 from django.views.generic import DetailView, ListView, TemplateView
 
-from trophies.models import Contract, EarnedContract, Job
+from trophies.models import Contract, EarnedContract, Job, ProfileJobXP
 from trophies.mixins import HtmxListMixin
 from trophies.services import badge_leaderboards as lb
 from trophies.views import board_helpers
@@ -30,6 +30,7 @@ from trophies.views.board_helpers import suggest_json, window_params
 from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, discipline_order
+from trophies.util_modules.leveling import xp_for_level
 from trophies.util_modules.constants import ALL_PLATFORMS, CONTRACT_XP_TOTAL
 
 # The internal tabs a `?view=` query may deep-link to (match the template's data-view values).
@@ -480,6 +481,28 @@ class JobDetailView(DetailView):
         # (`badge_leaderboards._linked`), so telling an unverified account it is "not ranked yet" promises
         # a board it cannot enter until it verifies. Game detail already resolves its viewer this way.
         context['show_my_standing'] = bool(profile and profile.is_linked)
+        # The viewer's own level + banked XP in THIS job, for the header's progress block. One row from
+        # the denormalized per-job cache (~25 rows per profile), not a Sum over the grant ledger -- that
+        # is what the cache exists for. `None` for a viewer without one, which the template reads as
+        # "level 1, nothing banked" rather than as an error: a hunter who has never worked this job is at
+        # the floor, not missing.
+        context['my_job_xp'] = (
+            ProfileJobXP.objects.filter(profile=profile, job=job).first() if context['show_my_standing']
+            else None
+        )
+        # Progress toward the NEXT level, as the Horizon the block draws. The curve is flat
+        # (`JOB_XP_PER_LEVEL` per level above 1), so this is the remainder within the current level --
+        # derived, never a second stored figure that could disagree with `level`.
+        my = context['my_job_xp']
+        level = my.level if my else 0
+        banked = my.total_xp if my else 0
+        floor_xp = xp_for_level(max(level, 1))
+        next_xp = xp_for_level(max(level, 1) + 1)
+        span = next_xp - floor_xp or 1
+        context['my_job_level'] = level
+        context['my_job_banked'] = banked
+        context['my_job_next_pct'] = max(0, min(100, round(100 * (banked - floor_xp) / span)))
+        context['my_job_to_next'] = max(0, next_xp - banked)
 
         # Contracts ONLY. The board moved to `JobRanksPanelView`, fetched when its tab is opened -- so a
         # visitor who never opens Ranks never pays for it, which is the saving the old `?tab=` version got

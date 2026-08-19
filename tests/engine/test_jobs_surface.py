@@ -697,9 +697,12 @@ def test_the_header_figures_actually_count_up(client):
     _contract('One', [job])
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert body.count('data-countup') >= 2
-    assert 'PlatPursuit.countUp' in body, 'the header tallies are decorative -- nothing counts them up'
-    assert ".jobd__tallies [data-countup]" in body
+    assert body.count('data-countup') >= 3
+    assert 'PlatPursuit.countUp' in body, 'the header figures are decorative -- nothing counts them up'
+    # Scoped to the header CARD, which is what `.pp-head-cascade` marks. The selector named
+    # `.jobd__tallies` until the stats row replaced it -- and a dead SELECTOR fails exactly as silently as
+    # the dead `data-countup` attributes this test was written for.
+    assert ".pp-head-cascade [data-countup]" in body
 
 
 def test_the_header_uses_the_shared_page_header_shape(client):
@@ -865,6 +868,41 @@ def test_the_tile_grid_is_top_aligned_and_career_still_is_not(client):
     assert 'align-items: center' in base, "Career's card body is no longer centred"
 
 
+def test_the_cover_gallery_cycles_on_hover_here_too(client):
+    """The card ships its extra frames in `data-gallery` and Career plays them; this page rendered the
+    attribute and nothing read it, so the art sat still.
+
+    Third time the same shape of omission has been found on this page -- the cover skeleton, the count-up
+    hooks, and now this. Adopting a component's MARKUP is not adopting the component: its `data-*` payload
+    is inert until something reads it, and inert looks identical to working in a screenshot.
+    """
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'coverCarousel(grid)' in body, 'the hover gallery is never started'
+    # ...and for scroll-appended cards, or the art stops moving the moment you scroll.
+    appended = body[body.index('onAppend'):]
+    appended = appended[:appended.index('},')]
+    assert 'coverCarousel(n)' in appended
+
+
+def test_the_hover_gallery_is_shared_with_career_not_copied():
+    """Fourth extraction this week (shuffle, cover skeleton, ring hover, this). Career's local `CBEAT` /
+    `CFADE` constants travel with the behaviour now -- the fade in particular has to match the CSS
+    transition on `.rp-tile__img--fx`, and two pages holding their own copy of that number is how a
+    crossfade ends up flashing on one of them."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    assert 'function coverCarousel(scope, opts)' in utils
+    assert 'window.PlatPursuit.coverCarousel = coverCarousel;' in utils
+    assert 'PP.coverCarousel(scope' in career, 'Career kept its own copy'
+    assert 'var CBEAT' not in career and "art.dataset.carInit = '1'" not in career
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that
@@ -877,26 +915,77 @@ def test_the_job_icon_sprite_is_on_the_page(client):
     assert 'id="jobicon-' in body, 'the icon sprite is missing, so every job pill draws a blank'
 
 
-def test_the_header_counts_contracts_and_xp_not_hunters(client):
-    """It counted hunters -- the figure the catalogue dropped for saying more about which games are
-    popular than about the job. A header promising one thing while the tab under it shows another is the
-    drift this rebuild keeps removing; the hunter count lives on the Ranks tab, whose whole subject is
-    the people on the board."""
+def test_the_header_carries_the_jobs_three_objective_stats(client):
+    """A real header, on the shared `.scard` row every rebuilt detail page uses -- what the job IS, before
+    anything about the viewer.
+
+    PURSUERS IS BACK HERE, reversing two earlier calls in this same rebuild, so the reasoning is pinned
+    with the test. It was dropped from the catalogue TILE for saying more about which games happen to be
+    popular than about the job, and dropped from this header when it was one of only two figures and read
+    as the headline. As one of three on the job's own page, with its board one click away, it is a fact
+    about the job rather than a claim about its worth.
+
+    All three are already computed for the page, so the row costs no queries: contracts and XP from the
+    same calls the Contracts tab makes, Pursuers from the same count the Ranks tab uses.
+    """
     _solo()
     job = _job('archivist', 'Archivist')
     _contract('One', [job])
     _xp(job, 'SomeHunter', 500)
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    # From the job's own <h1> to the tab strip -- the HEADER CARD, not the document. Slicing from the
-    # start includes `base.html`'s meta description, which says "trophy hunters" and fails this on
-    # correct code. Second time this file has been bitten by that exact string.
-    head = body[body.index('<h1'):body.index('jobd-switch')]
+    head = body[body.index('pp-bhead jobd__head'):body.index('jobd-switch')]
 
-    assert 'XP to earn' in head and 'contract' in head
-    assert 'hunter' not in head.lower(), 'the header still counts hunters'
-    # The supply is the same figure the catalogue tile shows for this job -- one contract, one job, full T.
+    # One count, not a sum: `class="scard"` is a PREFIX of `class="scard" style`, so adding the two
+    # double-counts the accented cell.
+    assert head.count('class="scard"') == 3, 'the header is not the three-stat row'
+    for label in ('Contracts', 'XP to earn', 'Pursuers'):
+        assert f'>{label}</div>' in head, f'the header is missing its {label} stat'
+    # The XP figure is the one the catalogue tile promised, so the two pages cannot quote different totals.
     assert str(CONTRACT_XP_TOTAL) in head or f'{CONTRACT_XP_TOTAL:,}' in head
+
+
+def test_the_header_tells_a_linked_viewer_what_the_job_means_to_them(client):
+    """The standing block was the RANK alone, in a bare pill -- it answered "where am I" and nothing about
+    the thing the page is about. Level and banked XP are what a job means to a hunter; the rank is the
+    competitive footnote, which is why it is now the small figure at the end of the head rather than the
+    headline."""
+    from trophies.models import ProfileJobXP
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    profile = ProfileFactory(is_linked=True)
+    ProfileJobXP.objects.create(profile=profile, job=job, total_xp=2500, level=2, is_linked=True)
+    client.force_login(profile.user)
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    mine = body[body.index('jobd__mine'):body.index('jobd-switch')]
+
+    assert 'Your standing' in mine
+    assert '>2</b>' in mine and 'level' in mine, 'the block does not show the viewer their level'
+    assert '2,500' in mine, 'the block does not show what they have banked'
+    assert 'to next level' in mine
+
+
+def test_an_unranked_linked_viewer_still_gets_the_block(client):
+    """`{% if my_rank %}` alone made it vanish for a hunter who has banked nothing in this job -- exactly
+    the reader most in need of being told where they stand. Level 1 is the floor, not a blank."""
+    _solo()
+    _job('archivist', 'Archivist')
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'Your standing' in body and 'Not ranked yet' in body
+    mine = body[body.index('jobd__mine'):body.index('jobd-switch')]
+    assert '>1</b>' in mine
+
+
+def test_the_standing_block_is_absent_for_anon(client):
+    """The page is public and cacheable precisely because nothing else on it reads the viewer."""
+    _solo()
+    _job('archivist', 'Archivist')
+    assert 'Your standing' not in client.get(reverse('job_detail', args=['archivist'])).content.decode()
 
 
 def test_the_contract_state_lookup_is_batched_for_the_page(client):

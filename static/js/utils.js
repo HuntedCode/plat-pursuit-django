@@ -1777,6 +1777,105 @@ function syncViewParam(view, opts) {
 
 
 
+
+/**
+ * coverCarousel -- a contract card's art cycles through its gallery while the pointer is on the card.
+ *
+ * The card ships its extra frames in `data-gallery` on the cover image (PSN bg -> IGDB screenshots ->
+ * IGDB artworks, deduped and capped); this plays them. Two stacked layers crossfade so a frame never
+ * flashes through to the background, each frame gets a slow Ken Burns drift, and a segment bar says how
+ * many there are and which one you are on.
+ *
+ * Extracted from Career when job detail became the second page rendering the card. It was NOT missing
+ * there by choice -- the markup was adopted and the behaviour was not, the same way the cover skeleton
+ * was, which is the recurring cost of a component whose CSS and data attributes are only half of it.
+ *
+ * OFF under reduced motion, and off where there is nothing to cycle (one frame). Idempotent per element
+ * via a `data-carInit` stamp, so it is safe to re-run over a grid that has just had a page appended.
+ *
+ * @param {HTMLElement|Document} [scope=document]  container to search for `.rp-tile__art`
+ * @param {Object} [opts]
+ * @param {number} [opts.beat=1500]   ms each frame holds
+ * @param {number} [opts.fade=560]    ms the crossfade takes (must match the CSS transition)
+ */
+function coverCarousel(scope, opts) {
+    opts = opts || {};
+    var BEAT = opts.beat || 1500;
+    var FADE = opts.fade || 560;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    (scope || document).querySelectorAll('.rp-tile__art').forEach(function (art) {
+        if (art.dataset.carInit) { return; }
+        art.dataset.carInit = '1';
+        var cover = art.querySelector('.rp-tile__cover');
+        if (!cover) { return; }
+        var card = art.closest('.rp-row') || art;
+        var extra = (cover.getAttribute('data-gallery') || '').split('|').filter(Boolean);
+        if (!extra.length) { return; }
+        var frames = [cover.src].concat(extra);
+        var layers = null, segs = null, active = null, timer = null, hideT = null, primed = false;
+
+        function build() {
+            layers = [document.createElement('img'), document.createElement('img')];
+            layers.forEach(function (l) {
+                l.className = 'rp-tile__img--fx'; l.alt = ''; art.insertBefore(l, cover.nextSibling);
+            });
+            var prog = document.createElement('div');
+            prog.className = 'rp-progress';
+            segs = frames.map(function () {
+                var s = document.createElement('span');
+                s.className = 'rp-progress__seg';
+                prog.appendChild(s);
+                return s;
+            });
+            art.appendChild(prog);
+        }
+        function setSeg(i) { if (segs) { segs.forEach(function (s, k) { s.classList.toggle('is-on', k === i); }); } }
+        function drift(el) { if (el) { el.classList.remove('rp-kb'); void el.offsetWidth; el.classList.add('rp-kb'); } }
+        function toFrame(i) {
+            setSeg(i);
+            // Frame 0 is the RESTING cover itself, not a layer -- returning to it means hiding both
+            // layers rather than loading the same image a third time.
+            if (i === 0) {
+                if (layers) { layers.forEach(function (l) { l.classList.remove('is-on'); }); }
+                active = null; drift(cover); return;
+            }
+            var incoming = (active === layers[0]) ? layers[1] : layers[0];
+            var outgoing = active;
+            incoming.src = frames[i];
+            incoming.style.zIndex = '2';
+            if (outgoing) { outgoing.style.zIndex = '1'; }
+            void incoming.offsetWidth;
+            incoming.classList.add('is-on');
+            active = incoming;
+            drift(incoming);
+            // The outgoing layer is hidden only AFTER the crossfade, or it vanishes under the incoming
+            // one and the transition shows the card's background for a frame.
+            clearTimeout(hideT);
+            if (outgoing) { hideT = setTimeout(function () { outgoing.classList.remove('is-on'); }, FADE); }
+        }
+
+        card.addEventListener('mouseenter', function () {
+            if (!layers) { build(); }
+            // Preloaded on FIRST hover, not at render: a wall of 24 cards would otherwise fetch every
+            // frame of every gallery for cards nobody points at.
+            if (!primed) { primed = true; extra.forEach(function (u) { var im = new Image(); im.src = u; }); }
+            var i = 1;
+            clearInterval(timer);
+            toFrame(1);
+            timer = setInterval(function () { i = (i + 1) % frames.length; toFrame(i); }, BEAT);
+        });
+        card.addEventListener('mouseleave', function () {
+            clearInterval(timer); timer = null;
+            clearTimeout(hideT);
+            if (layers) { layers.forEach(function (l) { l.classList.remove('is-on'); }); }
+            active = null;
+            setSeg(0);
+            [cover].concat(layers || []).forEach(function (el) { if (el) { el.classList.remove('rp-kb'); } });
+        });
+    });
+}
+
+
 /**
  * ringHoverLink -- hovering a contract card's job highlights its arc in the split ring, and vice versa.
  *
@@ -3001,6 +3100,7 @@ window.PlatPursuit.staggerReveal = staggerReveal;
 window.PlatPursuit.flipGrid = flipGrid;
 window.PlatPursuit.progressiveArt = progressiveArt;
 window.PlatPursuit.ringHoverLink = ringHoverLink;
+window.PlatPursuit.coverCarousel = coverCarousel;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;

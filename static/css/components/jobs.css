@@ -291,9 +291,32 @@
    `.rp-ring__seg.is-linked` loses and looks like the JS is not running. */
 .rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg.is-linked { opacity: 1; }
 
-/* ---- Job detail: the twin header tallies ------------------------------------------------------------
-   Contracts + XP, matching the catalogue tile that linked here. Side by side from `sm:` and stacked on a
-   phone, where two figures on one line would each get about 60px. */
-.jobd__tallies { display: flex; flex-direction: column; gap: 6px; }
-@media (min-width: 640px) { .jobd__tallies { flex-direction: row; gap: 18px; align-items: flex-start; } }
-.jobd__tally { min-width: 0; }
+/* ---- Job detail: "Your standing" ---------------------------------------------------------------------
+   The authed progress block, under the objective `.scard` row -- the shape franchise detail's "Your
+   progress" established: a labelled head with the one figure worth linking, a row of read-outs, and a
+   Horizon under them.
+
+   It was the rank alone in a bare pill, which answered "where am I" and nothing about the thing the page
+   is about. Level and banked XP are what a job MEANS to a hunter; the rank is the competitive footnote,
+   so it is the small figure at the end of the head rather than the headline. */
+.jobd__mine {
+    margin-top: 12px; padding: 10px 12px; border-radius: var(--pp-radius-lg);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 7%, var(--pp-bg-1));
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 22%, var(--pp-border));
+}
+.jobd__mine-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.jobd__mine-k {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+/* The rank LINKS to the board it came from -- the one figure here a reader might want to act on, and the
+   tab is one click away. Unranked reads as a state, not a link to nowhere. */
+.jobd__mine-rank { font-size: 15px; font-weight: 800; color: var(--disc, var(--pp-primary)); text-decoration: none; }
+@media (hover: hover) { a.jobd__mine-rank:hover { text-decoration: underline; } }
+.jobd__mine-rank--none { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); }
+.jobd__mine-figs { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 9px; }
+.jobd__mine-fig { display: inline-flex; align-items: baseline; gap: 5px; font-size: 10.5px; color: var(--pp-text-mute); }
+.jobd__mine-fig b { font-size: 14px; color: var(--pp-text); }
+/* On the tightest phones the third read-out is the expendable one: level and XP banked are the state,
+   "to next level" is the projection. */
+@media (max-width: 400px) { .jobd__mine-fig--next { display: none; } }

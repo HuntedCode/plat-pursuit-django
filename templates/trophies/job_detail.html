@@ -24,7 +24,7 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 shadow-lg shadow-neutral mb-3"
              style="--disc: var(--disc-{{ job.discipline }}); border-left-color: var(--disc);">
         <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
-{% comment %} The shared page-header shape (`.pp-bhead` / `__id` / `__tally`), the one every
+            {% comment %} The shared page-header shape (`.pp-bhead` / `__id` / `__tally`), the one every
             rebuilt browse and detail page uses, with this page's own discipline-tinted icon chip kept
             because nothing shared carries it. It was a bespoke `.jobd__head` flex row: fine at the time,
             and one more place the header had to be re-solved. {% endcomment %}
@@ -34,51 +34,79 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ job.name }}</h1>
                     <p class="jobd__disc">{{ job.get_discipline_display }}</p>
                 </div>
-{% comment %} CONTRACTS + XP SUPPLY, matching the catalogue tile that linked here. It counted
-                HUNTERS, which is the figure `/jobs/` dropped for saying more about which games are popular
-                than about the job -- and a header promising one thing while the tab under it shows another
-                is the drift this rebuild keeps removing. The hunter count still exists, one click away, on
-                the tab whose entire subject is the people on this board.
-
-                Both figures come from the same places the Contracts tab does: the total off
-                `contracts_page`, the supply off the same `_job_xp_supply()` the catalogue annotates with,
-                so the tile, this header and the list below cannot disagree. {% endcomment %}
-                <div class="shrink-0 text-right jobd__tallies">
-                    <div class="jobd__tally">
-                        <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-countup="{{ contract_total }}">{{ contract_total|intcomma }}</div>
-                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">contract{{ contract_total|pluralize }}</div>
-                    </div>
-                    <div class="jobd__tally">
-                        <div class="pp-tally text-2xl md:text-3xl leading-none" style="color: var(--disc);" data-countup="{{ xp_supply }}">{{ xp_supply|intcomma }}</div>
-                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">XP to earn</div>
-                    </div>
-                </div>
             </div>
 
             {% if job.description %}
             <p class="jobd__desc">{{ job.description }}</p>
             {% endif %}
 
-            {% if show_my_standing %}
-            {% comment %} Once, in the header -- the same rule the Global Boards landing follows, and for
-            the same reason: a per-row personal marker would make the board per-viewer and forfeit
-            caching.
+            {% comment %} WHAT THIS JOB IS, objectively -- the shared `.scard` row every rebuilt detail
+            header uses (franchise, company, genre, collection). It replaced two hand-placed figures in the
+            title row, which was a pill with numbers beside it rather than a header.
 
-            Rendered for every signed-in viewer, ranked or not. `{% if my_rank %}` alone made the block
+            All three are already computed for this page, so the row costs nothing: contracts and XP come
+            from the same places the Contracts tab does, and hunters from the same count the Ranks tab
+            uses.
+
+            HUNTERS IS BACK, and that is a deliberate reversal. It was dropped from the CATALOGUE tile for
+            saying more about which games are popular than about the job, and dropped from this header
+            when it was the sole headline figure. As one of three on the job's own page, with its board a
+            click away, it is a fact about the job rather than a claim about its worth. {% endcomment %}
+            <div class="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Contracts</div>
+                    <div class="scard__value pp-tally" data-countup="{{ contract_total }}">{{ contract_total|intcomma }}</div>
+                    <div class="scard__sub">feed this job</div>
+                </div>
+                <div class="scard" style="--scard-accent: var(--disc);">
+                    <div class="scard__label">XP to earn</div>
+                    <div class="scard__value pp-tally" data-countup="{{ xp_supply }}">{{ xp_supply|intcomma }}</div>
+                    <div class="scard__sub">across them all</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Pursuers</div>
+                    <div class="scard__value pp-tally" data-countup="{{ board_total }}">{{ board_total|intcomma }}</div>
+                    <div class="scard__sub">have banked XP</div>
+                </div>
+            </div>
+
+            {% if show_my_standing %}
+            {% comment %} YOUR standing in this job, once and in the header -- the same rule the Global
+            Boards landing follows: a per-row personal marker would make the board per-viewer and forfeit
+            caching for a page that is otherwise identical for everyone.
+
+            It was the rank alone, in a bare `.lb-mine` pill, which answered "where am I" and nothing
+            about the thing the page is actually about. Level and banked XP are what a job MEANS to a
+            hunter, and the Horizon under them is the shape every other progress read-out on the site
+            takes (franchise detail's "Your progress" is the model this follows).
+
+            Rendered for every linked viewer, ranked or not: gating the whole block on `my_rank` made it
             simply absent for a hunter who has banked nothing here, which reads as a missing feature
-            rather than as the answer to the question they opened the tab with. {% endcomment %}
-            <div class="lb-mine mt-3">
-                <span class="lb-mine__k">Your standing</span>
-                <span class="lb-mine__rows">
-                    <span class="lb-mine__row is-active">
-                        <span class="lb-mine__lbl">{{ job.name }}</span>
-                        {% if my_rank %}
-                        <span class="lb-mine__rank pp-tally">#{{ my_rank|intcomma }}</span>
-                        {% else %}
-                        <span class="lb-mine__rank lb-mine__rank--none">Not ranked yet</span>
-                        {% endif %}
+            rather than as the answer to the question they opened the page with. {% endcomment %}
+            <div class="jobd__mine" style="--disc: var(--disc-{{ job.discipline }});">
+                <div class="jobd__mine-head">
+                    <span class="jobd__mine-k">Your standing</span>
+                    {% if my_rank %}
+                    <a class="jobd__mine-rank pp-tally" href="?tab=ranks">#{{ my_rank|intcomma }}</a>
+                    {% else %}
+                    <span class="jobd__mine-rank jobd__mine-rank--none">Not ranked yet</span>
+                    {% endif %}
+                </div>
+                <div class="jobd__mine-figs">
+                    <span class="jobd__mine-fig">
+                        <b class="pp-tally">{{ my_job_level|default:"1" }}</b>
+                        <span>level</span>
                     </span>
-                </span>
+                    <span class="jobd__mine-fig">
+                        <b class="pp-tally">{{ my_job_banked|intcomma }}</b>
+                        <span>XP banked</span>
+                    </span>
+                    <span class="jobd__mine-fig jobd__mine-fig--next">
+                        <b class="pp-tally">{{ my_job_to_next|intcomma }}</b>
+                        <span>to next level</span>
+                    </span>
+                </div>
+                {% include 'components/horizon.html' with progress=my_job_next_pct accent='var(--disc)' height='6px' %}
             </div>
             {% endif %}
         </div>
@@ -177,7 +205,7 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
     // for the page -- nothing here filters them.
     (function () {
         if (!(window.PlatPursuit && PlatPursuit.countUp)) { return; }
-        document.querySelectorAll('.jobd__tallies [data-countup]').forEach(function (el, i) {
+        document.querySelectorAll('.pp-head-cascade [data-countup]').forEach(function (el, i) {
             setTimeout(function () { PlatPursuit.countUp(el, 850); }, i * 90);
         });
     })();
@@ -198,6 +226,10 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         // re-syncs all of them into one page-wide flash. Run for the first page here and for every
         // appended page below.
         PlatPursuit.progressiveArt(grid);
+        // THE HOVER GALLERY. The card ships its extra frames in `data-gallery` and Career plays them;
+        // this page rendered the attribute and nothing read it, so the art sat still -- the same
+        // markup-without-behaviour omission as the cover skeleton above, found the same way.
+        if (PlatPursuit.coverCarousel) { PlatPursuit.coverCarousel(grid); }
 
         // Hovering a job pill lights its arc in that card's split ring, and hovering an arc lights its
         // pill -- the shared `ringHoverLink`, the same one Career runs over its 25-cell map. Delegated
@@ -213,7 +245,10 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             sentinelId: 'jobd-contracts-sentinel',
             loadingId: 'jobd-contracts-loading',
             onAppend: function (nodes) {
-                nodes.forEach(function (n) { PlatPursuit.progressiveArt(n); });
+                nodes.forEach(function (n) {
+                    PlatPursuit.progressiveArt(n);
+                    if (PlatPursuit.coverCarousel) { PlatPursuit.coverCarousel(n); }
+                });
             },
             // MUST match `CONTRACTS_PER_PAGE`, which is what the endpoint pages by: the scroller derives
             // its next page number from how many cards are already in the grid, so a mismatch here skips

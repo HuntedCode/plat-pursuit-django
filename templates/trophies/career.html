@@ -1044,82 +1044,11 @@ function ppCountUp(el, dur) {
     // with the markup rather than stay here.
     function initProgressiveLoad(scope) { PP.progressiveArt(scope); }
 
-    var CBEAT = 1500, CFADE = 560;   // carousel hold-per-frame + crossfade duration
-    function initCarousel(scope) {
-        if (reduce) return;
-        scope.querySelectorAll('.rp-tile__art').forEach(function (art) {
-            if (art.dataset.carInit) return; art.dataset.carInit = '1';
-            var cover = art.querySelector('.rp-tile__cover');
-            if (!cover) return;
-            var card = art.closest('.rp-row') || art;
-            var extra = (cover.getAttribute('data-gallery') || '').split('|').filter(Boolean);
-            if (!extra.length) return;
-            var frames = [cover.src].concat(extra);
-            var layers = null, segs = null, active = null, timer = null, hideT = null, primed = false;
-            function build() {
-                layers = [document.createElement('img'), document.createElement('img')];
-                layers.forEach(function (l) { l.className = 'rp-tile__img--fx'; l.alt = ''; art.insertBefore(l, cover.nextSibling); });
-                var prog = document.createElement('div'); prog.className = 'rp-progress';
-                segs = frames.map(function () { var s = document.createElement('span'); s.className = 'rp-progress__seg'; prog.appendChild(s); return s; });
-                art.appendChild(prog);
-            }
-            function setSeg(i) { if (segs) segs.forEach(function (s, k) { s.classList.toggle('is-on', k === i); }); }
-            function drift(el) { if (el) { el.classList.remove('rp-kb'); void el.offsetWidth; el.classList.add('rp-kb'); } }
-            function toFrame(i) {
-                setSeg(i);
-                if (i === 0) { if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); }); active = null; drift(cover); return; }
-                var incoming = (active === layers[0]) ? layers[1] : layers[0];
-                var outgoing = active;
-                incoming.src = frames[i];
-                incoming.style.zIndex = '2';
-                if (outgoing) outgoing.style.zIndex = '1';
-                void incoming.offsetWidth;
-                incoming.classList.add('is-on');
-                active = incoming;
-                drift(incoming);
-                clearTimeout(hideT);
-                if (outgoing) hideT = setTimeout(function () { outgoing.classList.remove('is-on'); }, CFADE);
-            }
-            card.addEventListener('mouseenter', function () {
-                if (!layers) build();
-                if (!primed) { primed = true; extra.forEach(function (u) { var im = new Image(); im.src = u; }); }
-                var i = 1;
-                clearInterval(timer);
-                toFrame(1);
-                timer = setInterval(function () { i = (i + 1) % frames.length; toFrame(i); }, CBEAT);
-            });
-            card.addEventListener('mouseleave', function () {
-                clearInterval(timer); timer = null;
-                clearTimeout(hideT);
-                if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); });
-                active = null;
-                setSeg(0);
-                [cover].concat(layers || []).forEach(function (el) { if (el) el.classList.remove('rp-kb'); });
-            });
-        });
-    }
+    // The shared `coverCarousel` (utils.js) since job detail became the second page rendering this card.
+    // Its beat and fade were local constants here; they travel with the behaviour now, and the fade still
+    // has to match the CSS transition on `.rp-tile__img--fx`.
+    function initCarousel(scope) { PP.coverCarousel(scope, { beat: 1500, fade: 560 }); }
 
-    var revealIO = hasIO ? new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) { if (e.isIntersecting) { revealCard(e.target); revealIO.unobserve(e.target); } });
-    }, { threshold: 0.25 }) : null;
-    function revealCard(card) {
-        if (card.dataset.revealed) return; card.dataset.revealed = '1';
-        if (reduce) return;   // final states already rendered server-side
-        var xp = card.querySelector('.rp-reward-xp__val [data-countup]');
-        if (xp && typeof ppCountUp === 'function') ppCountUp(xp, 900);
-        // The two reward-tier bars fill from 0 to their data-fill%.
-        card.querySelectorAll('.rp-tier__bar').forEach(function (w) {
-            var hz = w.querySelector('.pp-horizon');
-            if (hz) { hz.style.setProperty('--horizon-progress', '0%'); void hz.offsetWidth; hz.style.setProperty('--horizon-progress', (w.dataset.fill || '0') + '%'); }
-        });
-        card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {
-            if (!seg.dataset.dash) return;
-            seg.style.strokeDasharray = '0 100'; void seg.getBoundingClientRect(); seg.style.strokeDasharray = seg.dataset.dash + ' 100';
-        });
-        card.querySelectorAll('.rp-jobcell.is-lit').forEach(function (cell, i) {
-            setTimeout(function () { cell.classList.remove('rp-ignite'); void cell.offsetWidth; cell.classList.add('rp-ignite'); }, 120 + i * 90);
-        });
-    }
     function initReveal(scope) {
         if (!revealIO) return;
         scope.querySelectorAll('.rp-row').forEach(function (c) { if (!c.dataset.revObs) { c.dataset.revObs = '1'; revealIO.observe(c); } });
