@@ -129,6 +129,11 @@
         // and marking them would fight `is-revealing` rather than cooperate with it.
         var flipper = (window.PlatPursuit && PlatPursuit.flipGrid) ? PlatPursuit.flipGrid({
             container: gal, itemSelector: '[data-gallery-cell]', enter: true, mark: false,
+            // The gallery's original numbers, passed explicitly rather than relied on as defaults: a
+            // 0.42s spring on the transform, a SHORTER 0.32s ease on the opacity, entering from
+            // scale(0.9). The split matters -- one spring-eased animation spikes the opacity and reads as
+            // a flash, which is what the extraction briefly did here.
+            duration: 420, enterFade: 320, enterScale: 0.9,
         }) : null;
         function flip(mutate) {
             if (reduced() || !flipper) { mutate(); return; }

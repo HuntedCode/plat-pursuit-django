@@ -233,6 +233,14 @@ scroll and an outer border would grow with it forever.
         // Keyed on the hunter's URL, the only stable identity across a server-rendered swap.
         var flipper = (window.PlatPursuit && PlatPursuit.flipGrid) ? PlatPursuit.flipGrid({
             container: grid, itemSelector: '.pp-hcard',
+            // THIS PAGE'S OWN motion, passed explicitly. The extraction defaulted it to Collection's
+            // 420ms spring, which stopped agreeing with the `staggerReveal` fade running beside it on the
+            // same swap -- the two halves of one transition visibly disagreeing.
+            // FADE, not SPRING: the original glided survivors on the decel curve (SPRING here is the
+            // overshoot one used for the reveal's movement). Checked against `git show e62d5cd6`
+            // rather than guessed -- restoring the wrong one of two curves declared side by side is
+            // how a 'restore' quietly becomes a second regression.
+            duration: 460, easing: FADE,
             key: function (card) {
                 var a = card.querySelector('.pp-hcard__link');
                 return a ? a.getAttribute('href') : null;

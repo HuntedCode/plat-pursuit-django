@@ -17,11 +17,19 @@ UTILS = (ROOT / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
 
 
 def _fn():
-    """The helper's body, sliced at its own boundaries so an assertion cannot match a neighbour."""
+    """The helper's body ALONE, so an assertion cannot match a neighbouring function.
+
+    The first version used the `window.PlatPursuit.flipGrid` export as its end bound, with a fallback to
+    the next docblock. The export sits ~1,100 lines below the definition, so the condition was always
+    true and the slice swallowed eight unrelated helpers -- the exact opposite of what its docstring
+    promised. Bounded by the next docblock instead, which is adjacent by construction, and length-checked
+    so a future move cannot silently widen it again.
+    """
     start = UTILS.index('function flipGrid(o) {')
-    end = UTILS.index('\nwindow.PlatPursuit.flipGrid', start) if '\nwindow.PlatPursuit.flipGrid' in UTILS[start:] \
-        else UTILS.index('\n/**', start)
-    return UTILS[start:end]
+    end = UTILS.index('\n/**', start)          # the docblock of whatever helper follows flipGrid
+    body = UTILS[start:end]
+    assert len(body) < 8000, 'the slice is no longer bounded to flipGrid'
+    return body
 
 
 def test_it_is_exported():
@@ -75,7 +83,9 @@ def test_it_measures_only_what_is_on_screen():
     fn = _fn()
     assert 'function shown(el)' in fn
     measure = fn[fn.index('function measure()'):fn.index('function play()')]
-    assert 'if (shown(el))' in measure
+    # The CALL, not the whole condition. This pinned `if (shown(el))` verbatim and went red the moment a
+    # null-key guard was added beside it -- a correct change failing a test that was checking spelling.
+    assert 'shown(el)' in measure
 
 
 def test_arrivals_are_left_alone_unless_the_caller_asks():
@@ -116,3 +126,41 @@ def test_the_hand_rolled_copies_are_gone():
         src = (ROOT / path).read_text(encoding='utf-8')
         for name in names:
             assert name not in src, f'{path} still carries `{name}` -- a second shuffle implementation'
+
+
+def test_a_null_key_is_never_used_as_a_key():
+    """Both callers' `key` functions return null for an item missing its link, and the original code
+    guarded on BOTH sides -- dropped in the extraction, restored after the audit.
+
+    Without it two keyless items collide on the key `null`: the second glides in from the FIRST one's old
+    position, and it is also marked `is-revealed`, so `staggerReveal` skips it and it appears with no
+    fade. Latent today (both templates always emit the link) and silent when it stops being latent.
+    """
+    fn = _fn()
+    measure = fn[fn.index('function measure()'):fn.index('function play()')]
+    play = fn[fn.index('function play()'):fn.index('function run(mutate)')]
+    assert 'k != null' in measure, 'a null key can be stored as a key'
+    assert 'k == null' in play, 'a null key can be looked up as a key'
+
+
+def test_each_caller_owns_its_own_motion():
+    """The extraction defaulted every caller to Collection's 420ms spring, so Browse Hunters' glide (460ms
+    on its own decel curve) stopped agreeing with the `staggerReveal` fade running beside it in the same
+    swap. A shared primitive may own the MECHANISM; it must not quietly own each page's motion vocabulary.
+
+    Asserted at the call sites rather than in the helper: the point is that the values are passed, not
+    that any particular number is right.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    hunters = (root / 'templates' / 'trophies' / 'profile_list.html').read_text(encoding='utf-8')
+    collection = (root / 'static' / 'js' / 'collection.js').read_text(encoding='utf-8')
+
+    flip = hunters[hunters.index('PlatPursuit.flipGrid({'):]
+    flip = flip[:flip.index('}) : null;')]
+    assert 'duration: 460' in flip and 'easing: FADE' in flip
+
+    gal = collection[collection.index('PlatPursuit.flipGrid({'):]
+    gal = gal[:gal.index('}) : null;')]
+    # Collection's arrival is a SPLIT tween -- a shorter, separately-eased fade over the transform. One
+    # spring-eased animation spikes the opacity and reads as a flash, which is what the extraction did.
+    assert 'enterFade' in gal and 'enterScale' in gal

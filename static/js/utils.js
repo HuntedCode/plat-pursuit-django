@@ -1759,6 +1759,9 @@ function wireTablist(tabs, opts) {
  *                                    reads, or the URL will disagree with the page on reload
  * @param {string} [opts.paramView]    the view that owns `opts.params`
  * @param {string[]} [opts.params]     params stripped unless `view === opts.paramView`
+ * @param {boolean} [opts.push=false]  PUSH a history entry instead of replacing. For a tab strip whose
+ *        controls are real links: those clicks used to be navigations, so Back returned to the previous
+ *        tab, and swallowing the navigation without pushing takes the reader off the page instead.
  */
 function syncViewParam(view, opts) {
     if (!window.history || !history.replaceState) { return; }
@@ -1771,7 +1774,13 @@ function syncViewParam(view, opts) {
     if (view === opts.default) { qp.delete(key); } else { qp.set(key, view); }
     if (opts.params && view !== opts.paramView) { opts.params.forEach(function (k) { qp.delete(k); }); }
     var qs = qp.toString();
-    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    var url = location.pathname + (qs ? '?' + qs : '') + location.hash;
+    // REPLACE by default -- a `<button>` tab never created a history entry, so pushing one would be new
+    // behaviour for the five callers that use buttons. PUSH only where the tab is an `<a href>` whose
+    // navigation is being swallowed: there the entry already existed and stopping the navigation without
+    // replacing it is what strands the reader.
+    if (opts.push && history.pushState) { history.pushState(null, '', url); }
+    else { history.replaceState(null, '', url); }
 }
 
 
@@ -2094,12 +2103,21 @@ function progressiveArt(scope) {
  *        element itself, which is correct ONLY for the synchronous case
  * @param {boolean} [o.enter=false]   fade+scale ARRIVALS in. Leave false where `staggerReveal` owns them
  * @param {boolean} [o.mark=true]     mark survivors so `staggerReveal` skips them
- * @param {number} [o.duration=420]
+ * @param {number} [o.duration=420]   glide duration (ms)
+ * @param {string} [o.easing]         glide curve. EXPOSED because the extraction silently imposed one
+ *        caller's curve on the other: Browse Hunters glided at 460ms on its own decel curve and got
+ *        Collection's 420ms spring, so its survivors' glide stopped agreeing with the `staggerReveal`
+ *        fade running beside it. A shared primitive may own the mechanism; it must not quietly own the
+ *        page's motion vocabulary.
+ * @param {number} [o.enterDuration]  arrival TRANSFORM duration (defaults to `duration`)
+ * @param {number} [o.enterFade]      arrival OPACITY duration -- deliberately separate and shorter, see below
+ * @param {number} [o.enterScale=0.9] arrival start scale
  * @returns {{ measure: function, play: function, run: function }}
  */
 function flipGrid(o) {
     var SPRING = 'cubic-bezier(0.22, 1, 0.36, 1)';
     var dur = o.duration || 420;
+    var ease = o.easing || SPRING;
     var mark = o.mark !== false;
     var first = null;
 
@@ -2119,7 +2137,14 @@ function flipGrid(o) {
     function measure() {
         if (reduced()) { first = null; return; }
         first = new Map();
-        items().forEach(function (el) { if (shown(el)) { first.set(keyOf(el), el.getBoundingClientRect()); } });
+        items().forEach(function (el) {
+            // A NULL KEY IS NOT A KEY. Both callers' `key` functions return null for an item missing its
+            // link, and the original code guarded on both sides -- dropped in the extraction. Without it
+            // two keyless items collide on `null`: the second glides in from the first one's old slot AND
+            // is marked `is-revealed`, so `staggerReveal` skips it and it pops in with no fade.
+            var k = keyOf(el);
+            if (k != null && shown(el)) { first.set(k, el.getBoundingClientRect()); }
+        });
     }
 
     function play() {
@@ -2129,13 +2154,24 @@ function flipGrid(o) {
         var moved = false;
         items().forEach(function (el) {
             if (!el.animate || !shown(el)) { return; }
-            var prev = before.get(keyOf(el));
+            var k = keyOf(el);
+            var prev = k == null ? null : before.get(k);
             if (!prev) {
                 // An ARRIVAL. Animated only where the caller has no reveal engine of its own; otherwise
                 // left alone, because two engines animating one element is how a card ends up flickering.
+                //
+                // OPACITY AND TRANSFORM ARE SEPARATE ANIMATIONS, shorter and on a decel curve for the
+                // fade. The extraction collapsed them into one spring-eased animation, which is the
+                // documented "the spring's >1 control point applied to opacity spikes it to 1 and reads
+                // as a flash" failure -- the same one `profile_list.html` and `jobs_browse.html` both
+                // carry comments about avoiding. Collection had it right and lost it in the move.
                 if (o.enter) {
-                    el.animate([{ opacity: 0, transform: 'scale(0.92)' }, { opacity: 1, transform: 'none' }],
-                               { duration: dur * 0.8, easing: SPRING });
+                    var scale = o.enterScale != null ? o.enterScale : 0.9;
+                    el.animate([{ transform: 'scale(' + scale + ')' }, { transform: 'none' }],
+                               { duration: o.enterDuration || dur, easing: ease });
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: o.enterFade || Math.round((o.enterDuration || dur) * 0.76),
+                                 easing: 'ease' });
                 }
                 return;
             }
@@ -2147,7 +2183,7 @@ function flipGrid(o) {
             if (!dx && !dy) { return; }
             moved = true;
             el.animate([{ transform: 'translate(' + dx + 'px, ' + dy + 'px)' }, { transform: 'none' }],
-                       { duration: dur, easing: SPRING });
+                       { duration: dur, easing: ease });
         });
         return moved;
     }

@@ -341,7 +341,7 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         // segmented switcher on the site glides; a tab that swaps instantly reads as a jump.
         var ORDER = tabs.map(function (t) { return t.dataset.view; });
 
-        function showView(name) {
+        function showView(name, fromPop) {
             var changed = false, active = null, shown = null, from = null;
             tabs.forEach(function (t) {
                 var on = t.dataset.view === name;
@@ -360,7 +360,15 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             }
             if (tablist) { tablist.syncTabindex(); }
             if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
-            if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'contracts', param: 'tab' }); }
+            // PUSH, uniquely on this page: its tabs are real `<a href="?tab=...">` links, so before the
+            // in-place switch they were navigations that left a history entry. `wireTablist` swallows the
+            // navigation now, and without pushing here Back would skip past the whole page -- open a job,
+            // read its board, press Back, and land on `/jobs/` instead of the tab you came from.
+            // `fromPop` suppresses it when the change WAS a Back, or every Back would push a new entry
+            // and the reader could never leave.
+            if (PlatPursuit.syncViewParam) {
+                PlatPursuit.syncViewParam(name, { default: 'contracts', param: 'tab', push: !fromPop });
+            }
             // LAST: the fetch is the expensive part, so tab state is fully settled before it starts.
             if (name === 'ranks' && shown) { loadRanks(shown); }
             // Announced so the contracts wiring can play its one-time entrance for a reader who arrived
@@ -370,6 +378,13 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         }
 
         tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });
+
+        // Back/Forward move between the tabs the reader actually visited. The server reads `?tab=` on a
+        // fresh load; this is the same reading for an in-page history move, so the two agree.
+        window.addEventListener('popstate', function () {
+            var want = new URLSearchParams(location.search).get('tab');
+            showView(want === 'ranks' ? 'ranks' : 'contracts', true);
+        });
 
         // Arriving on `?tab=ranks` (an old bookmark, a shared link) renders the Ranks panel already
         // selected, so the fetch has to be kicked off without a click.
