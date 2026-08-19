@@ -481,8 +481,12 @@ has been writing standings for all along, scout accounts included. That is the i
 it means published ranks move, so it is worth saying so rather than letting hunters discover it.
 
 Nothing to run. The gate is at READ, so verifying an account puts a hunter on the boards immediately with
-no re-evaluation. Game boards are deliberately exempt (they record who played a game, not who competes)
-and are owned by `game_leaderboard_service`, which has its own `members_only` toggle.
+no re-evaluation.
+
+> **Game boards WERE exempt and no longer are** (2026-08, see below). This paragraph used to say they
+> were "deliberately exempt (they record who played a game, not who competes)" and had their own
+> `members_only` toggle. Both halves are now false, and the population change on those boards is the
+> largest in this whole section -- read the game-board entry further down before deploying.
 
 ### `is_linked` is mirrored onto the standing stores (2026-08)
 
@@ -517,6 +521,49 @@ Migration `trophies.0311_partial_indexes_for_scrolled_boards`.
 - [ ] **Badge detail and job detail now load their board on TAB ACTIVATION**, not with the page. If board
       traffic looks like it dropped after deploy, that is the change: previously every reader who scrolled
       badge detail to the bottom fetched the board whether or not they wanted it.
+
+
+### The four boards converge, and two populations change (2026-08)
+
+Migration `trophies.0312_series_board_ranks_on_points`. Spec:
+[leaderboards-rebuild.md](leaderboards-rebuild.md) §8, steps 9-12.
+
+**Two of these move published ranks and one of them empties most of a board. Read before deploying.**
+
+- [ ] **GAME BOARDS ARE NOW `is_linked`-GATED.** This is the biggest user-visible change in the section.
+      They ranked EVERY scraped PSN profile; they now rank verified hunters only, the same rule the other
+      five boards apply. Roughly 300,000 profiles become roughly 50,000 -- so every game board on the
+      site gets dramatically shorter, and a hunter who was #40 among owners may now be #6 among members.
+      **Nothing to run** (the gate is at READ), but it is worth announcing rather than letting people
+      discover it. The paragraph above about game boards being exempt is superseded by this one.
+- [ ] **The per-series badge board ranks on POINTS, not progress.** It ordered on `progress_bp` -- the
+      furthest-along EDITION's fraction -- so its default "All editions" view ranked people by their best
+      single edition and ignored the rest. `xp` is already summed across editions before it reaches the
+      standing, so **no data changes and nothing needs recomputing**; the ORDER changes, which means
+      published per-series ranks move.
+- [ ] **`0312` rebuilds two indexes CONCURRENTLY** (`atomic = False`), repointing them from
+      `-progress_bp` to `-xp`. Same failure mode as 0307/0309/0310/0311: a build that fails partway
+      leaves an INVALID index behind that must be dropped by hand before re-running. The migration's
+      docstring carries the exact `DROP INDEX CONCURRENTLY` statements and the verification query.
+- [ ] **No data migration is needed for any of the above.** `xp` has always been populated; only the
+      ordering reads a different column.
+
+**Dropped query params.** `?invert=` and `?registered=` on the game leaderboard endpoint are gone and are
+now silently ignored rather than redirected -- they only ever existed inside controls that no longer
+ship, so nothing in the wild carries them. Recorded so an old bookmark producing an unfiltered board is
+not mistaken for a bug.
+
+**New, no action:** a per-EDITION badge board (`?edition=` on badge detail's Ranks tab), a country filter
+on the game and job boards, a hunter search on all four, and a sticky minibar on `/leaderboards/`. All
+read-side; nothing to run.
+
+> **KNOWN LIMITATION, shipped deliberately.** The per-edition board tiebreaks on `advanced_at`, which is
+> SERIES-wide -- the date of the hunter's furthest-along edition, whichever that is. So two hunters tied
+> on one edition's points are separated by their progress in a DIFFERENT edition, and advancing elsewhere
+> can move a rank here. The engine already computes a per-edition date and discards all but the best one
+> (`badge_xp._advanced_at` takes a per-edition `GroupBadgeResult`), so the fix is a materialized
+> per-edition map rather than new engine work. Not blocking: it only affects the ORDER WITHIN a points
+> tie on a filtered board.
 
 ### The three board directories are gone (no deploy step)
 
