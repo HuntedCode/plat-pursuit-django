@@ -34,7 +34,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Exists, OuterRef, Count, Sum
 from django.db.models.functions import Lower
-from django.http import Http404, HttpResponseRedirect, HttpResponseNotFound
+from django.http import Http404, HttpResponseRedirect, HttpResponseNotFound, JsonResponse
 from urllib.parse import urlencode
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy, reverse
@@ -57,7 +57,7 @@ from trophies.services.badge_rarity import (
 # service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
 from trophies.services import badge_leaderboards as lb
 from trophies.views import board_helpers
-from trophies.views.board_helpers import window_params
+from trophies.views.board_helpers import suggest_json, window_params
 
 logger = logging.getLogger("psn_api")
 
@@ -645,6 +645,13 @@ class BadgeRanksPanelView(View):
                  else lb.series_board_countries(series_slug))
         country = self._country(request, codes)
 
+        if request.GET.get('suggest') is not None:
+            qs = (lb._series_edition_qs(series_slug, edition, country or None) if edition
+                  else lb._series_board_qs(series_slug, country or None))
+            keys = lb.SERIES_EDITION_KEYS if edition else lb.SERIES_BOARD_KEYS
+            return JsonResponse(suggest_json(
+                lb.board_suggest(qs, keys, request.GET.get('suggest', ''))))
+
         if 'range' in request.GET:
             start, count = window_params(request, self.PAGE_SIZE)
             return render(request, 'trophies/partials/leaderboard_rows.html', {
@@ -656,8 +663,8 @@ class BadgeRanksPanelView(View):
             total = lb.series_edition_count(series_slug, edition, country=country or None)
             my_rank = (lb.series_edition_rank(series_slug, edition, profile.id, country=country or None)
                        if profile else None)
-            meaning = (f"Badge points earned on the {editions[edition]['name']} edition, "
-                       f"most first.")
+            meaning = (f"Everyone chasing the {editions[edition]['name']} edition, "
+                       f"by the points they have earned on it.")
         else:
             total = lb.series_board_count(series_slug, country=country or None)
             my_rank = (lb.series_board_rank(series_slug, profile.id, country=country or None)
@@ -666,7 +673,8 @@ class BadgeRanksPanelView(View):
             # "All editions" showed a board that ignored every edition but your best one -- which is what
             # made it read as broken rather than merely odd. Points are already summed across editions
             # before they reach the standing, so the board answers the question its label asks.
-            meaning = ('Badge points earned across every edition of this series, most first.')
+            meaning = ('Everyone chasing this badge, by the points they have earned '
+                       'across all its editions.')
 
         return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
             'rows': self._window(series_slug, 0, self.PAGE_SIZE, country, edition),
@@ -863,10 +871,14 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: What each board actually RANKS, in one line. Beside FIGURES because they answer the same question
     #: at different lengths, and a reader who has never met "Badge Points" learns nothing from a lit chip.
     #: The board card is the only place on the page that says what they are looking at.
+    #: What each board RANKS, in one line, in the site's own words. Each has to do three things at once:
+    #: name the population, name the ordering, and read like somebody wrote it. A reader who has never met
+    #: "Badge Points" learns nothing from a lit chip, and this line is the only place on the page that
+    #: explains the board they are looking at.
     MEANINGS = {
-        'trophies': 'Every game, every hunter. Platinums first, total trophies breaks the tie.',
-        'points': 'Points from badge stages cleared and series completed, across every edition.',
-        'career': 'XP banked from contracts, summed across all 25 jobs.',
+        'trophies': 'Every hunter on the site, ranked by platinums. Total trophies settles a tie.',
+        'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
+        'career': 'Career XP banked from contracts, across all 25 jobs.',
     }
 
     @classmethod
@@ -1056,6 +1068,26 @@ class OverallBadgeLeaderboardsView(TemplateView):
         total = lb.board_count(tab, country=cc, edition=ed)
         return self.board_window(tab, country, edition, 0, self.paginate_by), total
 
+    #: How each board's store, ordering and column names differ, in one place. `board_window` and
+    #: `board_suggest` both read it, so a search can never be scoped to a different population than the
+    #: rows it is offering to jump into.
+    @staticmethod
+    def _store_for(tab, country, edition):
+        cc = country or None
+        if tab == 'trophies':
+            # The Trophies board's store IS Profile, so its id column is `id` and its name columns are
+            # unprefixed -- the other two point AT a profile.
+            return lb._slice(lb.trophy_store(), cc), lb.TROPHY_KEYS, 'id', ''
+        if tab == 'career':
+            return lb._slice(lb.career_store(), cc), lb.CAREER_KEYS, 'profile_id', 'profile__'
+        return lb._slice(lb.badge_store(edition or None), cc), lb.XP_KEYS, 'profile_id', 'profile__'
+
+    @classmethod
+    def board_suggest(cls, tab, country, edition, query):
+        """Hunters on THIS board whose name starts with `query`, with their rank on it."""
+        qs, keys, id_field, prefix = cls._store_for(tab, country, edition)
+        return lb.board_suggest(qs, keys, query, id_field=id_field, name_prefix=prefix)
+
     @staticmethod
     def board_window(tab, country, edition, offset, limit):
         """ONE WINDOW of the active board, as render-ready entries.
@@ -1105,6 +1137,12 @@ class LeaderboardRowsView(View):
         codes = lb.active_countries()
         country = self._country(request, codes)
         edition = self._edition(request, tab, view)
+
+        # THE TYPEAHEAD. Same endpoint, same slice, a different shape -- so a suggestion always names a
+        # rank on the board being read rather than on some other version of it.
+        if request.GET.get('suggest') is not None:
+            return JsonResponse(suggest_json(
+                view.board_suggest(tab, country, edition, request.GET.get('suggest', ''))))
 
         # Clamped at BOTH ends by the shared parser -- `range` is an OFFSET straight into the board, so an
         # unbounded value is a nine-figure OFFSET that Postgres honours by walking every skipped row.

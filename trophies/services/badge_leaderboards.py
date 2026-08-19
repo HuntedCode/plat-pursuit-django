@@ -709,6 +709,50 @@ def entry(hydrated, profile_id, rank):
     }
 
 
+#: Longest accepted search query. The floor (2) stops a one-letter query matching most of the site; the
+#: ceiling stops a long one becoming a large indexed comparison. PSN Online IDs are 16 characters.
+SUGGEST_MIN, SUGGEST_MAX = 2, 32
+
+
+def board_suggest(qs, keys, query, *, id_field='profile_id', name_prefix='profile__', limit=8):
+    """Hunters on a board whose PSN name starts with `query`, each with their RANK on that board.
+
+    PREFIX, not substring, and that is the whole reason this is cheap enough to put on every board.
+    `Profile.psn_username` carries a plain btree (`psn_username_idx`) which serves `istartswith`; nothing
+    serves `icontains` on it, so a substring search is a scan of the board's population per keystroke.
+    Prefix is also the rule the universal nav search already documents and uses site-wide, so a reader
+    who has learned how search behaves in the navbar has learned how it behaves here.
+
+    SCOPED TO THE BOARD, which is the point of it existing at all: the rank returned is a position on the
+    board being read, under whatever slice is applied, so selecting a suggestion jumps somewhere that
+    exists. A global hunter search already lives in the navbar and answers a different question.
+
+    `keys` is the board's ordering, so the rank is counted the same way `*_rank` counts it -- one COUNT
+    per match, bounded by `limit`. `id_field` / `name_prefix` differ for the Trophies board, whose store
+    IS Profile rather than a standing row pointing at one.
+    """
+    q = (query or '').strip()[:SUGGEST_MAX]
+    if len(q) < SUGGEST_MIN:
+        return []
+
+    name = f'{name_prefix}psn_username__istartswith'
+    display = f'{name_prefix}display_psn_username__istartswith'
+    fields = [k for k, _ in keys]
+    rows = list(qs.filter(Q(**{name: q}) | Q(**{display: q})).values(id_field, *fields)[:limit])
+    if not rows:
+        return []
+
+    hydrated = hydrate([r[id_field] for r in rows])
+    out = [
+        entry(hydrated, r[id_field],
+              qs.filter(_ahead_q(keys, {**r, 'profile_id': r[id_field], 'id': r[id_field]})).count() + 1)
+        for r in rows
+    ]
+    # By RANK, not by name: the reader is picking a place on the board to jump to, so the list should read
+    # in board order rather than in whatever order the index handed the matches back.
+    return sorted(out, key=lambda e: e['rank'])
+
+
 def page(rows, offset, extra=None):
     """Hydrate a page of board rows into template entries, numbering ranks from `offset`.
 

@@ -55,25 +55,22 @@ MAX_COUNT = 200
 PAGE_SIZE = 50
 
 
-#: A country code is two ASCII letters (ISO 3166-1 alpha-2) in every row this site stores.
-_COUNTRY_MAX = 5
+def suggest_json(entries):
+    """The shape every board's typeahead returns: `{players: [{display, username, avatar, rank, url}]}`.
 
-
-def slice_country(request):
-    """`?country=` for a WINDOW fetch, normalized but NOT validated against the board's own codes.
-
-    The panel validates against the countries that actually have hunters on it, because an option the
-    picker offers must never empty the board. A window cannot afford that check: "which countries are on
-    this board" is a DISTINCT over the whole population, and the virtualizer fires one window per screen
-    -- so validating there turned a bounded index read into a full scan per scroll step, roughly 1,200 of
-    them on a 60k-row board.
-
-    It is safe to skip. The client only ever sends back the slice the panel rendered, so the value is
-    validated by construction; a crafted code simply selects nobody and returns an empty window, which is
-    what an out-of-range `range` already does. Length-capped so it cannot become a long string in an
-    indexed comparison.
+    Game detail's search defined this shape first and its dropdown template reads it; the other three
+    boards return it verbatim so one client-side renderer serves all four. `username` is the canonical id
+    (what a profile URL reverses against) and `display` is what the reader typed at.
     """
-    return (request.GET.get('country') or '').strip().upper()[:_COUNTRY_MAX]
+    from django.urls import reverse
+
+    return {'players': [{
+        'display': e['psn_username'],
+        'username': e['psn_username'],
+        'avatar': e['avatar_url'],
+        'rank': e['rank'],
+        'url': reverse('profile_detail', args=[e['psn_username']]) if e['psn_username'] else '',
+    } for e in entries]}
 
 
 #: A country code is two ASCII letters (ISO 3166-1 alpha-2) in every row this site stores.

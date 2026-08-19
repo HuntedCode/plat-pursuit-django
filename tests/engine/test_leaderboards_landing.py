@@ -548,3 +548,90 @@ def test_the_tab_strip_is_not_on_the_control_card(client):
     assert strip_close < card_open, (
         'the tab strip is inside the control card -- a bordered switcher on a bordered surface'
     )
+
+
+# ---------------------------------------------------------------------------------------------------
+# BOARD SEARCH (2026-08). Game detail had a hunter typeahead and the other three did not; it now runs on
+# all four, off one service function and one JSON shape.
+#
+# PREFIX matching, which is what makes it affordable everywhere: `Profile.psn_username` carries a plain
+# btree that serves `istartswith`, and nothing serves `icontains` on it. It is also the rule the universal
+# nav search already documents, so search behaves the same wherever a reader meets it.
+# ---------------------------------------------------------------------------------------------------
+
+def test_the_board_search_finds_a_hunter_and_names_their_rank(client):
+    """The rank is the whole point: a suggestion you cannot jump to is a search result on the wrong
+    board. It is counted on the board being read, so it agrees with the row numbering."""
+    _ranked('Aardvark', plats=10, trophies=100)
+    _ranked('Zebra', plats=90, trophies=900)
+
+    data = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'suggest': 'aard'}).json()
+
+    assert [p['username'] for p in data['players']] == ['Aardvark']
+    assert data['players'][0]['rank'] == 2, 'the rank is not the position on this board'
+    assert data['players'][0]['url'].endswith('/Aardvark/')
+
+
+def test_the_board_search_is_scoped_to_the_board_being_read(client):
+    """A global hunter search already lives in the navbar and answers a different question. This one has
+    to be scoped, or selecting a suggestion jumps to a rank the board does not contain."""
+    _ranked('Trophyist', plats=10, trophies=100)                    # trophies board only
+    _ranked('Trophyless', points=500)                               # badge points board only
+
+    trophies = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'suggest': 'trophy'}).json()
+    points = client.get(reverse('leaderboard_rows'), {'tab': 'points', 'suggest': 'trophy'}).json()
+
+    assert {p['username'] for p in trophies['players']} == {'Trophyist'}
+    assert {p['username'] for p in points['players']} == {'Trophyless'}
+
+
+def test_the_board_search_respects_the_active_slice(client):
+    """The country filter narrows the board, so it has to narrow the search -- and the RANK returned has
+    to be the rank on the sliced board, not the whole one."""
+    _ranked('Britone', country='GB', country_name='United Kingdom', plats=50, trophies=500)
+    _ranked('Yankone', country='US', country_name='United States', plats=90, trophies=900)
+
+    whole = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'suggest': 'brit'}).json()
+    sliced = client.get(reverse('leaderboard_rows'),
+                        {'tab': 'trophies', 'suggest': 'brit', 'country': 'GB'}).json()
+
+    assert whole['players'][0]['rank'] == 2
+    assert sliced['players'][0]['rank'] == 1, 'the search ranked against the unsliced board'
+
+
+def test_the_board_search_matches_a_PREFIX_not_a_substring(client):
+    """Deliberate, and the reason this is cheap enough to put on every board: `psn_username_idx` serves
+    `istartswith` and nothing serves `icontains` on Profile, so a substring search is a scan of the
+    board's population per keystroke. The navbar's hunter search made the same call."""
+    _ranked('Nightwing', plats=10, trophies=100)
+
+    assert client.get(reverse('leaderboard_rows'),
+                      {'tab': 'trophies', 'suggest': 'night'}).json()['players']
+    assert client.get(reverse('leaderboard_rows'),
+                      {'tab': 'trophies', 'suggest': 'wing'}).json()['players'] == []
+
+
+def test_the_board_search_is_bounded_at_both_ends(client):
+    """A public endpoint. The floor stops one letter matching most of the site; the ceiling stops a long
+    query becoming a large indexed comparison."""
+    from trophies.services.badge_leaderboards import SUGGEST_MAX
+
+    _ranked('Someone', plats=10, trophies=100)
+
+    assert client.get(reverse('leaderboard_rows'),
+                      {'tab': 'trophies', 'suggest': 's'}).json()['players'] == []
+    huge = client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'suggest': 'x' * 5000})
+    assert huge.status_code == 200 and huge.json()['players'] == []
+    assert SUGGEST_MAX < 5000, 'the ceiling no longer bounds what this asks for'
+
+
+def test_the_board_search_returns_matches_in_BOARD_order(client):
+    """The reader is picking a place to jump to, so the list should read in board order rather than in
+    whatever order the index handed the matches back."""
+    _ranked('Samone', plats=10, trophies=100)
+    _ranked('Samtwo', plats=90, trophies=900)
+    _ranked('Samthree', plats=50, trophies=500)
+
+    ranks = [p['rank'] for p in client.get(reverse('leaderboard_rows'),
+                                           {'tab': 'trophies', 'suggest': 'sam'}).json()['players']]
+    assert ranks == sorted(ranks) == [1, 2, 3]

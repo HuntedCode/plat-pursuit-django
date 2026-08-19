@@ -136,9 +136,9 @@ class GameLeaderboardView(View):
     #: What each board RANKS, in one line -- the board card's description slot. Same job as
     #: `OverallBadgeLeaderboardsView.MEANINGS`.
     MEANINGS = {
-        'progress': 'Everyone who has started this game, furthest along first.',
-        'speed': 'Fastest first trophy to last, for everyone who finished.',
-        'playtime': 'The most time on this game, longest first.',
+        'progress': 'Everyone hunting this one, by how far they have got.',
+        'speed': 'First trophy to last. Fastest run leads, finishers only.',
+        'playtime': 'Hours on the clock, longest first, as PSN reports them.',
     }
 
     #: Every LABEL a board kind uses, in one place, merged into each entry by `_entries`. The rows are

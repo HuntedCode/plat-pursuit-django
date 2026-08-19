@@ -12,7 +12,7 @@ Contracts board renders page 1 server-side, then the toolbar drives the results 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponseNotFound
+from django.http import HttpResponseNotFound, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.utils.http import urlencode
@@ -24,7 +24,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from trophies.models import Contract, EarnedContract, Job
 from trophies.services import badge_leaderboards as lb
 from trophies.views import board_helpers
-from trophies.views.board_helpers import window_params
+from trophies.views.board_helpers import suggest_json, window_params
 
 from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
@@ -263,6 +263,11 @@ class JobRanksPanelView(View):
         codes = lb.job_countries(job.slug)
         country = self._country(request, codes)
 
+        if request.GET.get('suggest') is not None:
+            return JsonResponse(suggest_json(lb.board_suggest(
+                lb._job_board_qs(job.slug, country or None), lb.JOB_KEYS,
+                request.GET.get('suggest', ''))))
+
         if 'range' in request.GET:
             start, count = window_params(request, self.PAGE_SIZE)
             return render(request, 'trophies/partials/leaderboard_rows.html',
@@ -282,7 +287,9 @@ class JobRanksPanelView(View):
             # The shared board card, same as badge detail's panel. `board_label` is the job, because on
             # this page the board IS the job.
             'board_label': job.name,
-            'board_meaning': 'Every hunter who has banked XP in this job, deepest first.',
+            # "Pursuer" rather than "hunter" here, deliberately: this is the jobs economy, and the
+            # Pursuer is the identity that economy levels. Every other board says hunter.
+            'board_meaning': 'Every Pursuer who has banked XP in this job, deepest first.',
             'standing': self._standing(profile, my_rank),
             # Reversed rather than read off `request.path`, so the panel does not silently depend on
             # having been reached by its canonical URL.

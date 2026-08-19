@@ -748,7 +748,9 @@ def test_the_default_board_counts_EVERY_edition(client):
     assert [r['psn_username'] for r in rows] == ['Both', 'OneDeep']
     assert rows[0]['primary'] == 6 and rows[0]['primary_label'] == 'points'
     assert rows[0].get('primary_of') is None, 'points were given a denominator they do not have'
-    assert 'across every edition' in resp.context['board_meaning']
+    assert 'all its editions' in resp.context['board_meaning'], (
+        'the default board no longer says it covers every edition'
+    )
     assert both is not None
 
 
@@ -816,7 +818,7 @@ def test_the_board_card_names_the_edition_it_is_showing(client):
     sliced = client.get(reverse('badge_ranks_panel', args=['dual']),
                         {'edition': 'dual-ps5'}).context['board_meaning']
 
-    assert 'across every edition' in whole
+    assert 'all its editions' in whole, 'the default board no longer says what it covers'
     assert sliced != whole and 'PS5' in sliced, 'the board card described the wrong board'
 
 
