@@ -17,8 +17,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.utils.http import urlencode
 from django.views import View
-from django.db.models import Count, F, Q
-from django.db.models.functions import Lower
+from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce, Lower
 from django.views.generic import DetailView, ListView, TemplateView
 
 from trophies.models import Contract, EarnedContract, Job
@@ -174,6 +174,40 @@ class ContractModalPreviewView(View):
                       {'p': p, 'profile': None, 'is_preview': True})
 
 
+def _job_xp_supply():
+    """Total contract XP that FEEDS one job: a correlated subquery for `JobsBrowseView`.
+
+    Every Contract pays the same global T (`CONTRACT_XP_TOTAL`, or its own `xp_total_override`) split
+    EVENLY across the jobs it names, so a job's supply is the sum of its share of each live contract.
+    "Supply" is `report_xp_economy`'s word for this quantity, borrowed rather than invented.
+
+    It is NOT the contract count re-spelled, and the difference is the reason it is on the card beside it:
+    twelve six-way-split contracts is 12,000 XP while three solo contracts is 18,000, so "more contracts"
+    and "more to gain" can point opposite ways. The count says how much there is to do; this says what it
+    is worth.
+
+    THREE THINGS ARE LOAD-BEARING here, which is why this is a named helper rather than three lines
+    inline. Two of them fail loudly and one does not:
+
+    1. The DIVISION. Summing each contract's total instead of this job's share of it stays valid SQL and
+       returns a whole, believable figure for every job -- uniformly too high, and nothing on the page
+       looks wrong. This is the only silent one, and the one the tests pin by mutation.
+    2. The job count as its own correlated subquery. `Count('jobs')` on the queryset already filtered by
+       `jobs=OuterRef('pk')` raises `FieldError: Cannot compute Sum('share'): 'share' is an aggregate` --
+       so this is not a defence against a wrong number, it is the only way to express the count at all.
+    3. `.order_by()`. `Contract.Meta.ordering` is inherited by the subquery and leaks `name` into its
+       GROUP BY, which Postgres rejects outright.
+    """
+    per_contract_jobs = (Contract.objects.filter(pk=OuterRef('pk'))
+                         .annotate(n=Count('jobs')).values('n')[:1])
+    return (Contract.objects
+            .filter(is_live=True, jobs=OuterRef('pk'))
+            .annotate(nj=Subquery(per_contract_jobs, output_field=IntegerField()))
+            .annotate(share=Coalesce('xp_total_override', Value(CONTRACT_XP_TOTAL)) / F('nj'))
+            .order_by()
+            .values(one=Value(1)).annotate(total=Sum('share')).values('total')[:1])
+
+
 class JobsBrowseView(HtmxListMixin, ListView):
     """`/jobs/` -- the public catalogue of jobs, in the BROWSE hub.
 
@@ -224,6 +258,7 @@ class JobsBrowseView(HtmxListMixin, ListView):
             # sort cost it a query rather than adding one. `distinct=True` because a Contract can feed
             # several jobs and the join would otherwise multiply.
             contract_count=Count('contracts', filter=Q(contracts__is_live=True), distinct=True),
+            xp_supply=Coalesce(Subquery(_job_xp_supply(), output_field=IntegerField()), Value(0)),
         )
         q = (self.request.GET.get('q') or '').strip()
         if q:

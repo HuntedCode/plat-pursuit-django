@@ -22,13 +22,18 @@ curated and seeded rather than grown. `HtmxListMixin` is on the view for the swa
             </span>
         </span>
         {% if job.description %}<span class="jobt__desc">{{ job.description }}</span>{% endif %}
-        {% comment %} ONE figure, from the queryset's own annotation. The hunter count that used to sit
-        beside it is gone: how many people have touched a job says more about which games happen to be
-        popular than about the job, and it was the figure a reader could do nothing with. Contracts is
-        what FEEDS a job, so it is the one that answers "is there anything here for me". {% endcomment %}
+        {% comment %} TWO figures, both annotated onto the queryset itself (one query for the wall, no
+        count per card). The hunter count that used to sit here is gone -- how many people have touched a
+        job says more about which games happen to be popular than about the job.
+
+        These two are deliberately KEPT TOGETHER despite overlapping, because they can disagree in the
+        direction that matters: a contract's XP splits evenly across every job it names, so twelve
+        six-way-split contracts is 12,000 XP while three solo contracts is 18,000. The count says how much
+        there is to DO here; the XP says what it is WORTH. Where they agree the second figure costs a
+        reader nothing; where they diverge it is the one that answers "is this worth my time". {% endcomment %}
         <span class="jobt__feed">
-            <b class="pp-tally">{{ job.contract_count|intcomma }}</b>
-            <span>contract{{ job.contract_count|pluralize }}</span>
+            <span class="jobt__fact"><b class="pp-tally">{{ job.contract_count|intcomma }}</b> contract{{ job.contract_count|pluralize }}</span>
+            <span class="jobt__fact"><b class="pp-tally">{{ job.xp_supply|intcomma }}</b> XP</span>
         </span>
     </a>
     {% empty %}

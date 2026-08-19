@@ -15,6 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from trophies.models import Contract, EarnedContract, Job, ProfileJobXP
+from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -189,6 +190,102 @@ def test_an_unknown_sort_falls_back_to_the_default(client):
     resp = client.get(reverse('jobs_browse'), {'sort': 'nonsense'})
     assert resp.context['sort'] == 'discipline'
     assert _slugs(resp)[0] == 'combat-j'
+
+
+def test_the_card_shows_the_contract_XP_that_feeds_the_job(client):
+    """Every Contract pays the same global T split EVENLY across the jobs it names, so a job's supply is
+    the sum of its share of each live contract.
+
+    The whole fixture is one assertion about that split: `a` takes a solo contract (6000), half of a
+    two-job one (3000) and a third of a three-job one (2000). A draft contract pays nothing because it is
+    not offered, and an override replaces T for its own contract only.
+    """
+    _solo()
+    a, b, c = _job('a', 'A'), _job('b', 'B'), _job('c', 'C')
+    _contract('Solo', [a])
+    _contract('Shared', [a, b])
+    _contract('Triple', [a, b, c])
+    _contract('Draft', [c], live=False)
+    Contract.objects.filter(name='Rich').delete()
+    rich = _contract('Rich', [b])
+    Contract.objects.filter(pk=rich.pk).update(xp_total_override=9000)
+
+    supply = {j.slug: j.xp_supply for j in client.get(reverse('jobs_browse')).context['jobs']}
+    assert supply == {'a': 11000, 'b': 14000, 'c': 2000}
+
+
+def test_the_supply_is_not_the_contract_count_in_disguise(client):
+    """The reason both figures are on the card. They can point OPPOSITE ways, and this is the shape that
+    does it: `many` is fed by three contracts it shares six ways, `few` by two it has to itself. More
+    contracts, less to gain.
+
+    If this ever fails by the two agreeing, the second figure has stopped earning its place -- which is a
+    product question, not a bug.
+    """
+    _solo()
+    many = _job('many', 'Many')
+    few = _job('few', 'Few')
+    filler = [_job(f'f{i}', f'F{i}') for i in range(5)]
+    for i in range(3):
+        _contract(f'Split {i}', [many] + filler)      # six ways -> 1000 each
+    for i in range(2):
+        _contract(f'Whole {i}', [few])                # 6000 each
+
+    jobs = {j.slug: j for j in client.get(reverse('jobs_browse')).context['jobs']}
+    assert jobs['many'].contract_count == 3 and jobs['few'].contract_count == 2
+    assert jobs['many'].xp_supply == 3000 and jobs['few'].xp_supply == 12000, (
+        'the split is not being applied -- every contract is paying its full total to every job'
+    )
+
+
+def test_a_multi_job_contract_does_not_pay_each_job_in_full(client):
+    """THE SILENT FAILURE, pinned on its own because it produces plausible numbers.
+
+    Dropping the `/ F('nj')` -- the "simplification" of summing each contract's total instead of this
+    job's share of it -- stays valid SQL and returns a whole, believable figure for every job, uniformly
+    too high. Verified by mutation: remove the division and this test plus its sibling above go red, and
+    nothing else on the page changes.
+
+    (The OTHER way to get this wrong fails loudly, which is worth knowing so nobody "hardens" against it:
+    computing the job count as `Count('jobs')` on the queryset already filtered by `jobs=OuterRef('pk')`
+    makes Django raise `FieldError: Cannot compute Sum('share'): 'share' is an aggregate`. That is why the
+    count is its own correlated subquery -- not to avoid a wrong number, but because there is no other way
+    to express it.)
+    """
+    _solo()
+    a, b = _job('a', 'A'), _job('b', 'B')
+    _contract('Shared', [a, b])
+
+    supply = {j.slug: j.xp_supply for j in client.get(reverse('jobs_browse')).context['jobs']}
+    assert supply == {'a': CONTRACT_XP_TOTAL // 2, 'b': CONTRACT_XP_TOTAL // 2}, (
+        f'a two-job contract paid {supply} -- the job count is being read off the filtered join'
+    )
+
+
+def test_a_job_with_no_contracts_reports_zero_rather_than_nothing(client):
+    """`Coalesce` on the subquery. A correlated aggregate over no rows is NULL, which renders as the empty
+    string in the template -- so the tile would read "contracts" and a bare "XP" with no figure at all."""
+    _solo()
+    _job('lonely', 'Lonely')
+    job = client.get(reverse('jobs_browse')).context['jobs'][0]
+    assert job.xp_supply == 0
+    assert '0</b> XP' in client.get(reverse('jobs_browse')).content.decode()
+
+
+def test_the_second_figure_costs_no_extra_query(client):
+    """It is a correlated subquery on the SAME queryset, not a second pass. Asserted against the count with
+    the annotation removed being identical -- a per-card evaluation would scale with the catalogue, which
+    the sibling test above already guards, but this pins that the wall is still ONE read."""
+    _solo()
+    jobs = [_job(f'j{i}', f'Job {i}') for i in range(4)]
+    for j in jobs:
+        _contract(f'C {j.slug}', [j])
+
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(reverse('jobs_browse'))
+    assert resp.status_code == 200
+    reads = [q for q in ctx.captured_queries if 'trophies_job' in q['sql'] and 'SELECT' in q['sql']]
+    assert len(reads) == 1, f'the wall costs {len(reads)} reads of the job table, not one'
 
 
 # ------------------------------------------------------------------ filtering ---------------------------
