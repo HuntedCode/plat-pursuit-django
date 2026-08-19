@@ -449,7 +449,7 @@ def test_a_linked_viewer_sees_their_own_state_on_each_contract(client):
     assert 'Ready to Claim' in body, 'the card is not showing the viewer their own state'
 
 
-def test_the_contract_card_shows_only_THIS_jobs_pills_not_the_whole_roster(client):
+def test_the_contract_card_shows_only_THIS_jobs_tiles_not_the_whole_roster(client):
     """The one block that differs between this page's card and Career's.
 
     Career renders a 5x5 map of all 25 jobs, lit and dim, because a reader browsing every contract needs
@@ -465,11 +465,11 @@ def test_the_contract_card_shows_only_THIS_jobs_pills_not_the_whole_roster(clien
 
     body = client.get(reverse('job_detail', args=['a']), {'tab': 'contracts'}).content.decode()
 
-    assert 'rp-jobpills' in body and 'rp-jobgrid' not in body, 'the 25-cell map rendered on job detail'
+    assert 'rp-jobtiles' in body and 'rp-jobgrid' not in body, 'the 25-cell map rendered on job detail'
     assert 'Blacksmith' in body, "the contract's other job is not shown"
     assert 'Cartographer' not in body, 'a job this contract does not touch is on the card'
     # ...and the job you are standing on is the marked one.
-    marked = body[body.index('rp-jobpills'):]
+    marked = body[body.index('rp-jobtiles'):]
     marked = marked[:marked.index('</div>')]
     assert 'is-this' in marked
 
@@ -716,7 +716,7 @@ def test_the_header_uses_the_shared_page_header_shape(client):
     assert 'pp-head-cascade' in body, 'the header lost its shared entrance cascade'
 
 
-def test_hovering_a_job_pill_can_light_its_arc_in_the_ring(client):
+def test_hovering_a_job_tile_can_light_its_arc_in_the_ring(client):
     """The ring is N equal arcs and which one is WHICH is otherwise guesswork. `_ring_segments` tags each
     arc with its job slug expressly so the two can be tied together; this asserts both ends of that tie
     are actually rendered, and that the shared helper is wired to them.
@@ -733,15 +733,15 @@ def test_hovering_a_job_pill_can_light_its_arc_in_the_ring(client):
 
     # BOTH ENDS have to carry the slug or the lookup matches nothing and the hover silently does
     # nothing -- which is why each is asserted inside its own element, not as a substring of the page.
-    pills = body[body.index('rp-jobpills'):]
-    pills = pills[:pills.index('</div>')]
-    assert 'data-slug="a"' in pills and 'data-slug="b"' in pills, 'the pills carry no slug to match on'
+    tiles = body[body.index('rp-jobtiles'):]
+    tiles = tiles[:tiles.index('</div>')]
+    assert 'data-slug="a"' in tiles and 'data-slug="b"' in tiles, 'the tiles carry no slug to match on'
 
     ring = body[body.index('class="rp-ring"'):]
     ring = ring[:ring.index('</svg>')]
     assert 'data-slug="a"' in ring and 'data-slug="b"' in ring, 'the arcs carry no slug to match on'
 
-    assert "ringHoverLink(grid, { itemSelector: '.rp-jobpill' })" in body
+    assert "ringHoverLink(grid, { itemSelector: '.rp-jobtile' })" in body
 
 
 def test_the_ring_caption_names_the_job_without_a_preposition(client):
@@ -773,6 +773,39 @@ def test_the_hover_link_is_shared_with_career_not_copied():
     fn = utils[utils.index('function ringHoverLink(scope, opts)'):]
     fn = fn[:fn.index('function progressiveArt')] if 'function progressiveArt' in fn else fn[:3000]
     assert 'card.querySelector' in fn and 'closest(cardSel)' in fn
+
+
+def test_the_job_tiles_are_a_three_wide_grid(client):
+    """Three across is the CONTRACT's shape, not a layout preference: a contract levels 1 to 6 jobs
+    (`CONTRACT_XP_TOTAL = 6000` exists so the split lands on clean integers across exactly that range), so
+    a 3-column grid is at most two rows and can never leave a ragged third.
+
+    Pinned because the column count and the 1-6 range are two facts in different files that have to agree:
+    widen the range and this silently becomes the ragged layout it was chosen to avoid.
+    """
+    from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
+    rule = css[css.index('.rp-jobtiles {'):]
+    rule = rule[:rule.index('}')]
+    assert 'repeat(3, 1fr)' in rule
+
+    # The split has to stay clean across 1-6 jobs, which is what makes 6 the max and 3 the right width.
+    for n in range(1, 7):
+        assert CONTRACT_XP_TOTAL % n == 0, f'{CONTRACT_XP_TOTAL} does not split evenly across {n} jobs'
+
+
+def test_a_job_tile_reserves_room_for_a_two_line_name(client):
+    """At tile width "Cartographer" wraps to two lines and "Mage" does not, so without a reserved height
+    the two rows of a six-job contract sit at different heights and the grid reads as broken. Names WRAP
+    rather than truncate -- the icon is already the abbreviation."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
+    rule = css[css.index('.rp-jobtile__name {'):]
+    rule = rule[:rule.index('}')]
+    assert 'min-height' in rule, 'the two rows will not line up'
+    assert 'text-overflow' not in rule and 'nowrap' not in rule, 'a job name is being truncated'
 
 
 def test_the_job_icon_sprite_is_on_the_page(client):

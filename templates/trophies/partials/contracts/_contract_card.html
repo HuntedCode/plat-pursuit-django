@@ -74,16 +74,23 @@ The map branch stays the default and is what Career renders, untouched.
 
             The one you are standing on is marked, because the figure that decides whether a contract is
             worth your time is not its total but its SHARE: a six-way split pays this job a sixth. {% endcomment %}
-            <div class="rp-jobpills" role="group" aria-label="Jobs this contract levels">
+            {% comment %} A 3-WIDE GRID, icon over name, which fits the contract exactly: a contract
+            levels 1 to 6 jobs (`CONTRACT_XP_TOTAL = 6000` is chosen to split into clean integer shares
+            across that range), so three across is at most two rows and never a ragged third.
+
+            It was a vertical list of pills first. The grid reads as one of this site's own components
+            rather than as a generic list, and it gives each job its icon at a size worth looking at --
+            the same glyph the reader meets on the Career radar and at the top of that job's own page.
+
+            `data-slug` is the tie to the ring: `ringHoverLink` matches a hovered tile to the arc carrying
+            the same slug, and back the other way. `_ring_segments` tags the arcs for exactly this. {% endcomment %}
+            <div class="rp-jobtiles" role="group" aria-label="Jobs this contract levels">
                 {% for el in p.elements %}
-                {% comment %} `data-slug` is the tie to the ring: `ringHoverLink` matches a hovered pill
-                to the arc carrying the same slug, and back the other way. `_ring_segments` tags the arcs
-                for exactly this. {% endcomment %}
-                <span class="rp-jobpill{% if el.slug == job.slug %} is-this{% endif %}" data-slug="{{ el.slug }}"
+                <span class="rp-jobtile{% if el.slug == job.slug %} is-this{% endif %}" data-slug="{{ el.slug }}"
                       style="--disc: var(--disc-{{ el.disc_slug }});"
                       title="{{ el.name }} &middot; +{{ p.xp_each|intcomma }} XP{% if el.slug == job.slug %} (this job){% endif %}">
-                    {% job_icon_use el.icon '' %}
-                    <span class="rp-jobpill__name">{{ el.name }}</span>
+                    {% job_icon_use el.icon 'rp-jobtile__ico' %}
+                    <span class="rp-jobtile__name">{{ el.name }}</span>
                 </span>
                 {% endfor %}
             </div>

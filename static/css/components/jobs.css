@@ -219,30 +219,50 @@
 
 /* ---- Job detail: the contract card's JOB-SCOPED variant ---------------------------------------------
    The shared Career card (`_contract_card.html`) renders a 5x5 map of all 25 jobs on the Contracts board
-   and these pills on job detail, where twenty-four of those cells answer a question the page has already
+   and these tiles on job detail, where twenty-four of those cells answer a question the page has already
    answered. Only this block differs; everything else about the card is identical, which is why it is a
-   variant rather than a second template. */
-.rp-jobpills { display: flex; flex-direction: column; gap: 4px; min-width: 0; align-content: start; }
-.rp-jobpill {
-    display: inline-flex; align-items: center; gap: 6px; min-width: 0;
-    padding: 3px 8px; border-radius: 999px;
-    font-size: 10.5px; font-weight: 700; line-height: 1.3;
-    color: var(--pp-text-dim);
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 10%, transparent);
-    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 22%, transparent);
+   variant rather than a second template.
+
+   THREE ACROSS, which is the contract's own shape rather than a guess: a contract levels 1 to 6 jobs
+   (`CONTRACT_XP_TOTAL = 6000` exists to split into clean integer shares across exactly that range), so a
+   3-column grid is at most two rows and can never leave a ragged third one. The job column is `1fr`
+   beside the ring's fixed 84px, which leaves roughly 48-55px per tile -- more room each than Career's
+   5-wide map gets in the same space. */
+.rp-jobtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 4px; align-content: start; }
+.rp-jobtile {
+    display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0;
+    padding: 5px 2px 4px; border-radius: 7px; text-align: center;
+    color: var(--pp-text-mute);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 8%, transparent);
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 18%, transparent);
+    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease),
+                box-shadow var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
 }
-.rp-jobpill svg { width: 12px; height: 12px; flex: 0 0 auto; color: var(--disc, var(--pp-primary)); }
-/* Names TRUNCATE rather than wrap: a pill is one line by definition, and the full name is in the title
-   attribute. Wrapping would break the card's equal heights, which the whole grid depends on. */
-.rp-jobpill__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* THE JOB YOU ARE ON. A contract splits its XP evenly across every job it names, so which of them is
-   "this one" is the fact the reader came for -- it decides whether a 6,000 XP contract pays this job
-   6,000 or 1,000. */
-.rp-jobpill.is-this {
+.rp-jobtile__ico { width: 17px; height: 17px; flex: 0 0 auto; color: var(--disc, var(--pp-primary)); }
+/* TWO LINES RESERVED, wrapping rather than truncating. At this width "Cartographer" and "Card Shark" take
+   two lines and "Mage" takes one, so without a reserved height the two rows of a 6-job contract would sit
+   at different heights and the grid would read as broken. A name is also the one thing here that must not
+   be ellipsised -- the icon is already the abbreviation. */
+.rp-jobtile__name {
+    font-size: 8.5px; font-weight: 700; line-height: 1.15; letter-spacing: 0.01em;
+    min-height: calc(2 * 1.15em); display: flex; align-items: center; justify-content: center;
+    overflow-wrap: anywhere;
+}
+/* THE JOB YOU ARE ON. A contract splits its XP evenly across every job it names, so which of these is
+   "this one" decides whether a 6,000 XP contract pays this job 6,000 or 1,000. */
+.rp-jobtile.is-this {
     color: var(--pp-text);
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 22%, transparent);
-    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 60%, transparent);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 20%, transparent);
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, transparent);
 }
+/* UNDER THE CURSOR -- paired with the ring arc of the same slug (`ringHoverLink`). A lift rather than a
+   different fill, because `is-this` and `is-linked` are different states that can land on one tile. */
+.rp-jobtile.is-linked {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 85%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, transparent);
+}
+@media (prefers-reduced-motion: reduce) { .rp-jobtile { transition: none; } }
 
 /* The ring says the same thing in the same breath: your arc holds, the rest recede. The segments already
    carry their job slug (`_ring_segments` tags them expressly so the ring and the job display can
@@ -250,22 +270,11 @@
 .rp-ring__seg.is-this { stroke-width: 4; }
 .rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg:not(.is-this) { opacity: 0.28; }
 /* ...but a HOVERED arc comes back to full, whichever job it belongs to. Without this the resting dim
-   above wins and hovering another contract's job pill highlights an arc the reader cannot see -- the
+   above wins and hovering another job's tile highlights an arc the reader cannot see -- the
    cross-highlight would be silently half-broken in exactly the case it exists for. The selector matches
    the dim rule's specificity and is declared after it, which is what makes it win; a plain
    `.rp-ring__seg.is-linked` loses and looks like the JS is not running. */
 .rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg.is-linked { opacity: 1; }
-
-/* The pill's half of the link. `is-this` (the job you are on) and `is-linked` (the job under the cursor)
-   are different states and can be the same pill, so the linked treatment is a lift -- brighter border and
-   a glow -- rather than a different fill that would fight the resting one. */
-.rp-jobpill { cursor: default; transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease); }
-.rp-jobpill.is-linked {
-    color: var(--pp-text);
-    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 85%, transparent);
-    box-shadow: 0 0 12px color-mix(in oklab, var(--disc, var(--pp-primary)) 40%, transparent);
-}
-@media (prefers-reduced-motion: reduce) { .rp-jobpill { transition: none; } }
 
 /* ---- Job detail: the twin header tallies ------------------------------------------------------------
    Contracts + XP, matching the catalogue tile that linked here. Side by side from `sm:` and stacked on a
