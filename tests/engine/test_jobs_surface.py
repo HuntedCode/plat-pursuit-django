@@ -39,6 +39,22 @@ def _xp(job, name, xp, level=1):
 _IGDB = [9000]
 
 
+def _contract_game(contract, title='Some Game'):
+    """Give a Contract a real member GAME, so the card can link to it.
+
+    Membership is DERIVED, not a join: a contract's members are the anchored, trusted-matched concepts
+    whose `IGDBMatch.igdb_id` equals the contract's own (`contracts_service._member_at_igdb`). So the
+    concept needs `anchor_migration_completed_at` set AND a trusted match on the contract's id -- a plain
+    GameFactory is not a member of anything.
+    """
+    from django.utils import timezone
+    from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
+
+    concept = ConceptFactory(unified_title=title, anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id)   # factory default status is trusted
+    return GameFactory(concept=concept)
+
+
 def _contract(name, jobs, *, live=True):
     _IGDB[0] += 1
     c = Contract.objects.create(
@@ -622,69 +638,58 @@ def test_the_tab_strip_switches_in_place_instead_of_navigating(client):
     assert 'e.metaKey' in click and 'e.ctrlKey' in click and 'e.button === 0' in click
 
 
-def test_the_card_links_a_linked_viewer_to_that_exact_contract_on_their_board(client):
+def test_the_card_links_to_the_contracts_game(client):
     """The tier-2 control was a dead button here: its opener is page-local to Career, and its
-    `contract_modal` URL is login + linked gated, so even wired it would have 404'd the anonymous
-    visitors this page exists for.
+    `contract_modal` URL is login + linked gated, so even wired it would have 404'd the anonymous visitors
+    this page exists for.
 
-    `?contract=<slug>` is EXACT, and it had to be. The obvious `?q=<name>` is a substring match over
-    contract names AND member-game titles, so a contract called "Uncharted" would land the reader on a
-    board of four cards to pick from.
+    It deep-linked to `/career/?contract=<slug>` for one afternoon. That was worse -- a filter the board
+    controller did not know about, so the first chip click repopulated the board while the URL still
+    claimed the filter, the facets counted a population the board was not showing, and `?scope=history`
+    badged untouched contracts as "Banked".
+
+    The GAME is exact, public, and already carries the shared contract modal, so it shows MORE of the
+    contract than a filtered board would have.
     """
     _solo()
     job = _job('archivist', 'Archivist')
-    _contract('Some Contract', [job])
-    profile = ProfileFactory(is_linked=True)
-    client.force_login(profile.user)
+    contract = _contract('Some Contract', [job])
+    game = _contract_game(contract)
 
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert 'contract=some-contract' in body, 'the card does not deep-link to the contract'
-    assert 'open on your board' in body
-    # The dead affordance is gone: no modal trigger on this page.
-    assert 'data-modal-url' not in body, 'the card still renders a modal button nothing can open'
+    assert reverse('game_detail', args=[game.np_communication_id]) in body
+    assert 'view the game' in body
+    # The dead affordance is gone, and so is the parameter that replaced it.
+    assert 'data-modal-url' not in body
+    assert 'contract=some-contract' not in body
 
 
-def test_the_deep_link_is_hidden_from_anon_and_unlinked_viewers(client):
-    """Career is linked-profile gated, so the link would only ever take them to a redirect. `is_linked`
-    rather than merely authenticated, matching how badge detail picks between the real contract modal and
-    the public preview."""
+def test_the_game_link_is_offered_to_anon_too(client):
+    """Unlike the Career deep link it replaced. Game detail is public, and its contract modal has a public
+    preview variant -- so the reader this page exists to persuade gets the same door, not a hidden one."""
     _solo()
     job = _job('archivist', 'Archivist')
-    _contract('Some Contract', [job])
+    contract = _contract('Some Contract', [job])
+    _contract_game(contract)
 
-    anon = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert 'open on your board' not in anon and 'contract=some-contract' not in anon
-
-    unlinked = ProfileFactory(is_linked=False)
-    client.force_login(unlinked.user)
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
-    assert 'open on your board' not in body, 'an unlinked viewer is offered a board they cannot open'
+    assert 'view the game' in body
+    # Anonymous viewers get the PREVIEW endpoint, linked ones the real modal.
+    assert reverse('contract_modal_preview', args=['some-contract']) in body
+    assert reverse('contract_modal', args=['some-contract']) not in body
 
 
-def test_an_exact_contract_link_overrides_the_boards_hiding_defaults(client):
-    """THE reason the deep link filters on slug rather than on `q`, and the thing that makes it land.
-
-    Career's board defaults to current-gen platforms and to `scope=board` (which hides fully-banked
-    contracts). Both are right for browsing and both would hide the very contract somebody just clicked --
-    a PS3 one, or one they finished last year -- landing them on "nothing matched" for a contract that is
-    sitting right there in the database.
-    """
-    from django.utils import timezone
+def test_the_board_has_no_contract_filter(client):
+    """It was added and removed the same afternoon. Pinned so it does not come back without the controller
+    integration it needs: URL seeding, param rebuilding, a clearable token, facet counting, and
+    empty-state attribution all have to learn a filter, or it becomes a state the reader cannot escape."""
     from trophies.services import contracts_service
+    import inspect
 
-    _solo()
-    job = _job('archivist', 'Archivist')
-    banked = _contract('Long Done', [job])
-    profile = ProfileFactory(is_linked=True)
-    EarnedContract.objects.create(profile=profile, contract=banked,
-                                  full_reached_at=timezone.now(), full_accepted_at=timezone.now())
-
-    # Default board params would hide it (fully banked + no member game on a current-gen platform)...
-    hidden = contracts_service.contracts_page(profile, scope='board')
-    assert not any(c['slug'] == 'long-done' for c in hidden['contracts'])
-    # ...and the exact slug request returns it regardless.
-    found = contracts_service.contracts_page(profile, scope='board', contract='long-done')
-    assert [c['slug'] for c in found['contracts']] == ['long-done']
+    sig = inspect.signature(contracts_service.contracts_page)
+    assert 'contract' not in sig.parameters, 'the exact-contract filter is back'
+    src = inspect.getsource(contracts_service._filter_contracts)
+    assert 'qs.filter(slug=' not in src
 
 
 def test_the_header_figures_actually_count_up(client):

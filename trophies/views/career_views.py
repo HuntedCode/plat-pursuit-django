@@ -57,10 +57,6 @@ def _board_params(request):
         'platforms': [p for p in g.getlist('platform') if p in _VALID_PLATFORMS] or None,  # absent -> current-gen
         'sort': g.get('sort', 'relevance'),
         'scope': 'history' if g.get('scope') == 'history' else 'board',   # Board (default) | History split
-        # An exact deep link -- "show me this contract" -- from job detail's cards. When set it overrides
-        # the platform and scope defaults, which would otherwise hide the very contract that was asked
-        # for (a legacy one, or one already banked). See `_filter_contracts`.
-        'contract': g.get('contract', '').strip(),
     }
 
 

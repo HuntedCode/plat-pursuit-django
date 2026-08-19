@@ -254,22 +254,22 @@ def _platform_exists(platforms):
     ))
 
 
-def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope='',
-                      contract=''):
-    # ONE CONTRACT BY SLUG, and it overrides the two defaults that would otherwise hide it.
+def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope=''):
+    # A `contract=<slug>` exact filter lived here for one afternoon, to back a deep link from job detail's
+    # cards. It is gone, and the reason is worth keeping: it was a filter the BOARD CONTROLLER did not
+    # know about. `seedFromURL` never read it, so `buildParams` could never re-emit it -- the first chip
+    # click silently repopulated the whole board while the URL still claimed the filter, with no token or
+    # affordance to clear it. The facets and the smart-empty suggestion were computed without it too, so a
+    # one-card board rendered chips promising hundreds, and an unresolvable slug blamed the platform
+    # filter for emptying a board it had not touched. It also returned BEFORE the scope split, so
+    # `?scope=history&contract=<untouched>` rendered a green "Banked" badge on a contract nobody had
+    # started.
     #
-    # This is what a deep link into the board carries -- "show me this one", from job detail's card. Both
-    # of the board's sensible defaults are wrong for that request: `platforms` defaults to current-gen, so
-    # a PS3 contract would land on an empty board, and `scope='board'` hides fully-banked ones, so would a
-    # contract the reader finished last year. Either would send somebody who clicked a specific contract
-    # to a page saying nothing matched -- the worst possible answer, because the thing they asked for is
-    # right there in the database.
+    # The lesson generalises: a filter is not a queryset argument, it is a member of a controller's state
+    # machine -- URL seeding, param rebuilding, facet counting, clearing, and empty-state attribution all
+    # have to learn it. Job detail links to the contract's GAME now, which is public, exact, and already
+    # carries the shared contract modal.
     #
-    # An exact slug is unambiguous in a way the alternatives are not: `q` is a substring match over names
-    # AND member-game titles, so "Uncharted" would land on a board of four cards and leave the reader to
-    # find theirs.
-    if contract:
-        return qs.filter(slug=contract)
     # Board vs History split on the fully-banked gate: History = fully banked (nothing left to earn);
     # Board = everything still actionable (available/pursuing/claimable + partially-accepted). '' = no
     # split (used where the full catalog is wanted).
@@ -492,18 +492,21 @@ def _attach_banked(cards, page_contracts, profile):
 
 
 def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplines=None,
-                   jobs=None, platforms=None, sort='relevance', scope='board', contract=''):
+                   jobs=None, platforms=None, sort='relevance', scope='board', with_ranking=True):
     """One paginated, filtered, sorted page of card dicts + metadata. `disciplines`/`jobs` are lists
     ANDed together (a contract must level every one). `platforms` defaults to current-gen (PS5/PS4);
     pass an explicit list to include legacy/VR, or [] for all platforms. `scope` splits the board:
     'board' = still-actionable contracts, 'history' = fully-banked ones (with actual banked-XP read-outs)."""
     if platforms is None:
         platforms = list(MODERN_PLATFORMS)
-    base = annotated_contracts(profile, disc_levels)
+    # `with_ranking` is threaded through because the relevance/strength weights are correlated subqueries
+    # evaluated PER ROW, and a caller sorting by name reads neither. Job detail was paying for both on
+    # every page of its Contracts tab.
+    base = annotated_contracts(profile, disc_levels, with_ranking=with_ranking)
     if scope == 'history':
         base = _history_annotate(base, profile, jobs)
     qs = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs,
-                           platforms=platforms, scope=scope, contract=contract)
+                           platforms=platforms, scope=scope)
     order = _history_order(sort, jobs) if scope == 'history' else _SORTS.get(sort, _ORDER)
     qs = _card_prefetch(qs.order_by(*order))
     paginator = Paginator(qs, CONTRACTS_PER_PAGE)
