@@ -1776,6 +1776,59 @@ function syncViewParam(view, opts) {
 
 
 
+
+/**
+ * ringHoverLink -- hovering a contract card's job highlights its arc in the split ring, and vice versa.
+ *
+ * The ring is N equal arcs, one per job the contract levels, and which arc is WHICH is otherwise
+ * guesswork: the segments carry a job slug expressly so the two can be tied together (see
+ * `contracts_service._ring_segments`). This is that tie, in both directions.
+ *
+ * Extracted from Career when job detail became the second caller. Career shows the jobs as a 25-cell map
+ * and job detail as named pills, so the ITEM selector is a parameter and everything else is shared --
+ * including the part that is easy to get wrong: the lookup is scoped to the hovered element's own CARD,
+ * so on a wall of 24 contracts hovering one job does not light that slug on all of them.
+ *
+ * DELEGATED from a container, so it survives cards streamed in by infinite scroll without re-binding.
+ *
+ * @param {HTMLElement} scope                     the container holding the cards
+ * @param {Object} [opts]
+ * @param {string} [opts.itemSelector='.rp-jobcell.is-lit']  the hoverable job element
+ * @param {string} [opts.cardSelector='.rp-row']             the card that bounds a lookup
+ */
+function ringHoverLink(scope, opts) {
+    if (!scope) { return; }
+    opts = opts || {};
+    var itemSel = opts.itemSelector || '.rp-jobcell.is-lit';
+    var cardSel = opts.cardSelector || '.rp-row';
+    var SEG = '.rp-ring__seg';
+
+    function setLink(card, slug, on) {
+        if (!card || !slug) { return; }
+        // CSS.escape, because a slug goes straight into a selector. Job slugs are tame today; the one
+        // that is not would be a silent `querySelector` throw inside a mouse handler.
+        var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+        var item = card.querySelector(itemSel + '[data-slug="' + sel + '"]');
+        var seg = card.querySelector(SEG + '[data-slug="' + sel + '"]');
+        if (item) { item.classList.toggle('is-linked', on); }
+        if (seg) { seg.classList.toggle('is-linked', on); }
+    }
+    function slugAt(target) {
+        if (!target || !target.closest) { return null; }
+        var el = target.closest(itemSel) || target.closest(SEG);
+        return el ? el.dataset.slug : null;
+    }
+    scope.addEventListener('mouseover', function (e) {
+        var s = slugAt(e.target);
+        if (s) { setLink(e.target.closest(cardSel), s, true); }
+    });
+    scope.addEventListener('mouseout', function (e) {
+        var s = slugAt(e.target);
+        if (s) { setLink(e.target.closest(cardSel), s, false); }
+    });
+}
+
+
 /**
  * progressiveArt -- settle a card's cover-art SKELETON once its image has arrived.
  *
@@ -2947,6 +3000,7 @@ window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
 window.PlatPursuit.flipGrid = flipGrid;
 window.PlatPursuit.progressiveArt = progressiveArt;
+window.PlatPursuit.ringHoverLink = ringHoverLink;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;

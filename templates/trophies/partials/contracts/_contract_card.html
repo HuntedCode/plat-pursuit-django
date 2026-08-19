@@ -76,7 +76,11 @@ The map branch stays the default and is what Career renders, untouched.
             worth your time is not its total but its SHARE: a six-way split pays this job a sixth. {% endcomment %}
             <div class="rp-jobpills" role="group" aria-label="Jobs this contract levels">
                 {% for el in p.elements %}
-                <span class="rp-jobpill{% if el.slug == job.slug %} is-this{% endif %}" style="--disc: var(--disc-{{ el.disc_slug }});"
+                {% comment %} `data-slug` is the tie to the ring: `ringHoverLink` matches a hovered pill
+                to the arc carrying the same slug, and back the other way. `_ring_segments` tags the arcs
+                for exactly this. {% endcomment %}
+                <span class="rp-jobpill{% if el.slug == job.slug %} is-this{% endif %}" data-slug="{{ el.slug }}"
+                      style="--disc: var(--disc-{{ el.disc_slug }});"
                       title="{{ el.name }} &middot; +{{ p.xp_each|intcomma }} XP{% if el.slug == job.slug %} (this job){% endif %}">
                     {% job_icon_use el.icon '' %}
                     <span class="rp-jobpill__name">{{ el.name }}</span>
@@ -114,7 +118,7 @@ The map branch stays the default and is what Career renders, untouched.
                     <div class="rp-ring__xp">
                         {% if job %}
                         <span class="pp-tally">+{{ p.xp_each|intcomma }}</span>
-                        <span class="rp-ring__xp-cap">to {{ job.name }}</span>
+                        <span class="rp-ring__xp-cap">{{ job.name }}</span>
                         {% else %}
                         <span class="pp-tally">{{ p.elements|length }}</span>
                         <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>

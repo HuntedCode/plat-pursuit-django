@@ -716,6 +716,65 @@ def test_the_header_uses_the_shared_page_header_shape(client):
     assert 'pp-head-cascade' in body, 'the header lost its shared entrance cascade'
 
 
+def test_hovering_a_job_pill_can_light_its_arc_in_the_ring(client):
+    """The ring is N equal arcs and which one is WHICH is otherwise guesswork. `_ring_segments` tags each
+    arc with its job slug expressly so the two can be tied together; this asserts both ends of that tie
+    are actually rendered, and that the shared helper is wired to them.
+
+    Career runs the same helper over its 25-cell map -- the item selector is the only difference, which is
+    why the behaviour is shared rather than copied.
+    """
+    _solo()
+    a = _job('a', 'Archivist')
+    b = _job('b', 'Blacksmith')
+    _contract('Shared', [a, b])
+
+    body = client.get(reverse('job_detail', args=['a']), {'tab': 'contracts'}).content.decode()
+
+    # BOTH ENDS have to carry the slug or the lookup matches nothing and the hover silently does
+    # nothing -- which is why each is asserted inside its own element, not as a substring of the page.
+    pills = body[body.index('rp-jobpills'):]
+    pills = pills[:pills.index('</div>')]
+    assert 'data-slug="a"' in pills and 'data-slug="b"' in pills, 'the pills carry no slug to match on'
+
+    ring = body[body.index('class="rp-ring"'):]
+    ring = ring[:ring.index('</svg>')]
+    assert 'data-slug="a"' in ring and 'data-slug="b"' in ring, 'the arcs carry no slug to match on'
+
+    assert "ringHoverLink(grid, { itemSelector: '.rp-jobpill' })" in body
+
+
+def test_the_ring_caption_names_the_job_without_a_preposition(client):
+    """"+1,000" over "Archivist" -- the figure and what it feeds. The "to" read as a sentence fragment in
+    a two-line ring centre where there is no room for one."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
+    cap = body[body.index('rp-ring__xp-cap'):]
+    cap = cap[:cap.index('</span>')]
+    assert 'Archivist' in cap and '>to ' not in cap
+
+
+def test_the_hover_link_is_shared_with_career_not_copied():
+    """Third extraction this week (after the shuffle and the cover skeleton), and the same reasoning: two
+    pages doing one thing drift, and the drift is invisible because each looks right on its own page."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    assert 'function ringHoverLink(scope, opts)' in utils
+    assert 'window.PlatPursuit.ringHoverLink = ringHoverLink;' in utils
+    assert 'PP.ringHoverLink(list)' in career, 'Career kept its own copy'
+    assert "querySelector('.rp-jobcell.is-lit[data-slug=" not in career
+    # The lookup must be scoped to the hovered CARD: unscoped, hovering one job on a wall of 24 contracts
+    # lights that slug on every card that happens to level it.
+    fn = utils[utils.index('function ringHoverLink(scope, opts)'):]
+    fn = fn[:fn.index('function progressiveArt')] if 'function progressiveArt' in fn else fn[:3000]
+    assert 'card.querySelector' in fn and 'closest(cardSel)' in fn
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that

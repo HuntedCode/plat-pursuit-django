@@ -249,6 +249,23 @@
    cross-highlight), so this costs a class and nothing else. */
 .rp-ring__seg.is-this { stroke-width: 4; }
 .rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg:not(.is-this) { opacity: 0.28; }
+/* ...but a HOVERED arc comes back to full, whichever job it belongs to. Without this the resting dim
+   above wins and hovering another contract's job pill highlights an arc the reader cannot see -- the
+   cross-highlight would be silently half-broken in exactly the case it exists for. The selector matches
+   the dim rule's specificity and is declared after it, which is what makes it win; a plain
+   `.rp-ring__seg.is-linked` loses and looks like the JS is not running. */
+.rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg.is-linked { opacity: 1; }
+
+/* The pill's half of the link. `is-this` (the job you are on) and `is-linked` (the job under the cursor)
+   are different states and can be the same pill, so the linked treatment is a lift -- brighter border and
+   a glow -- rather than a different fill that would fight the resting one. */
+.rp-jobpill { cursor: default; transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease); }
+.rp-jobpill.is-linked {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 85%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--disc, var(--pp-primary)) 40%, transparent);
+}
+@media (prefers-reduced-motion: reduce) { .rp-jobpill { transition: none; } }
 
 /* ---- Job detail: the twin header tallies ------------------------------------------------------------
    Contracts + XP, matching the catalogue tile that linked here. Side by side from `sm:` and stacked on a

@@ -199,6 +199,15 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         // appended page below.
         PlatPursuit.progressiveArt(grid);
 
+        // Hovering a job pill lights its arc in that card's split ring, and hovering an arc lights its
+        // pill -- the shared `ringHoverLink`, the same one Career runs over its 25-cell map. Delegated
+        // from the grid, so scroll-appended cards need no re-binding. The item selector differs because
+        // this page shows the jobs as named pills; everything else, including scoping each lookup to the
+        // hovered card, is shared.
+        if (PlatPursuit.ringHoverLink) {
+            PlatPursuit.ringHoverLink(grid, { itemSelector: '.rp-jobpill' });
+        }
+
         PlatPursuit.InfiniteScroller.create({
             gridId: 'jobd-contracts',
             sentinelId: 'jobd-contracts-sentinel',

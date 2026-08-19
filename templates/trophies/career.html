@@ -1145,18 +1145,10 @@ function ppCountUp(el, dur) {
         });
     }
 
-    // ---- Delegated: icon <-> ring link (survives streamed-in cards) ----
-    function setLink(card, slug, on) {
-        if (!card || !slug) return;
-        var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
-        var cell = card.querySelector('.rp-jobcell.is-lit[data-slug="' + sel + '"]');
-        var seg = card.querySelector('.rp-ring__seg[data-slug="' + sel + '"]');
-        if (cell) cell.classList.toggle('is-linked', on);
-        if (seg) seg.classList.toggle('is-linked', on);
-    }
-    function slugAt(t) { var el = t.closest && (t.closest('.rp-jobcell.is-lit') || t.closest('.rp-ring__seg')); return el ? el.dataset.slug : null; }
-    list.addEventListener('mouseover', function (e) { var s = slugAt(e.target); if (s) setLink(e.target.closest('.rp-row'), s, true); });
-    list.addEventListener('mouseout', function (e) { var s = slugAt(e.target); if (s) setLink(e.target.closest('.rp-row'), s, false); });
+    // ---- icon <-> ring link: the shared `ringHoverLink` (utils.js), delegated so it survives
+    // streamed-in cards. Extracted here when job detail became the second caller -- same behaviour, and
+    // that page passes its own item selector because it shows the jobs as named pills, not as the map.
+    PP.ringHoverLink(list);
 
     // ---- Delegated: claim flow ----
     function markAccepted(card) {
