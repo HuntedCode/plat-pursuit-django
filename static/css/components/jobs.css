@@ -17,8 +17,14 @@
 /* ---- The catalogue toolbar -------------------------------------------------------------------------
    Search + sort on one line, then the discipline chips beneath. Two rows rather than one because the
    chips are a SIX-segment control: squeezed onto the same line they would either wrap mid-row or force
-   the search field down to a stub. */
-.jobs-toolbar { display: flex; flex-direction: column; gap: 10px; }
+   the search field down to a stub.
+
+   `padding: 12px 14px; margin-bottom: 14px` are the SHARED browse-toolbar metrics, copied from
+   `.pp-hbrowse__toolbar` / `.pp-gbrowse__toolbar` rather than chosen -- two browse bars on the same site
+   should not sit differently, and `.pp-toolbar-card` is surface only (background, radius, border, shadow;
+   no box metrics at all), so a page that forgets them gets controls flush against the card's border and a
+   wall butted straight up underneath. This page had exactly that until 2026-08. */
+.jobs-toolbar { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 14px; }
 .jobs-bar { display: flex; flex-direction: column; gap: 10px; }
 .jobs-bar__sel { display: block; min-width: 0; }
 @media (min-width: 768px) {
@@ -35,41 +41,28 @@
 }
 
 /* ---- Discipline chips -------------------------------------------------------------------------------
-   A radio group wearing chips. The `<input>` is visually hidden but NOT `display:none` -- it has to stay
-   focusable for keyboard use, and `:has(:focus-visible)` is what moves the ring onto the visible chip.
+   The chips themselves are the SHARED browse filter primitive (`.pp-bgal__cgroup` / `.pp-bgal__clabel` /
+   `.pp-bgal__chip`, browse-gallery.css) that Browse Badges and Browse Games already use -- label wrapping
+   a visually-hidden input, active state off `:has(input:checked)`, focus ring off `:has(input:focus-visible)`,
+   press-scale. A hand-rolled `.jobs-chip` block lived here first and was the same control rebuilt.
 
-   Scrolls horizontally at 375px rather than wrapping: six segments wrapping to two lines reads as two
-   controls, and the row is short enough that a swipe is the cheaper gesture. `scrollbar-width: none`
-   because the row is short and a visible bar under six chips is louder than the chips. */
-.jobs-chips {
-    display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
-    padding-bottom: 2px; margin: 0 -2px; padding-left: 2px; padding-right: 2px;
-}
-.jobs-chips::-webkit-scrollbar { display: none; }
-.jobs-chip {
-    position: relative; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-    padding: 6px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap;
-    font-size: 12px; font-weight: 700; color: var(--pp-text-dim);
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease),
-                border-color var(--pp-dur) var(--pp-ease);
-}
-.jobs-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
-.jobs-chip__ic { display: inline-flex; color: var(--disc, var(--pp-text-mute)); }
-.jobs-chip__ic svg { width: 13px; height: 13px; }
-@media (hover: hover) {
-    .jobs-chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 40%, var(--pp-border)); }
-}
-/* TINTED-FLAT active, the site-wide switcher treatment: the chip takes its own discipline's hue rather
-   than a generic selected state, so the filter teaches the colour it is filtering by. */
-.jobs-chip.is-active {
-    color: var(--pp-text);
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-1));
+   What is page-specific is the HUE, and only the hue -- the same shape the badge gallery's `--rarity`
+   variant takes, and kept here rather than beside it so browse-gallery.css does not accrete a variant per
+   page. Each chip carries the discipline's own `--disc-*` token, so the filter is coloured in the vocabulary
+   it filters by, and that colour is the one the job then wears on its tile and on the Career radar. */
+.pp-bgal__chip--disc:has(input:checked) {
     border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 18%, transparent);
 }
-.jobs-chip.is-active .jobs-chip__ic { color: var(--disc, var(--pp-primary)); }
-.jobs-chip:has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .jobs-chip { transition: none; } }
+@media (hover: hover) {
+    .pp-bgal__chip--disc:hover { border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, var(--pp-border)); }
+}
+.jobs-chip__ic { display: inline-flex; margin-right: 6px; color: var(--disc, var(--pp-text-mute)); }
+.jobs-chip__ic svg { width: 13px; height: 13px; }
+/* The group keeps the shared wrap behaviour rather than scrolling: six chips wrapping to two lines at
+   375px is what every other filter row on the site does, and a bespoke horizontal scroller here would be
+   one page behaving differently for no reason a reader could name. */
+.jobs-chips { row-gap: 8px; }
 
 /* ---- The wall ---------------------------------------------------------------------------------------
    FIVE COLUMNS at `lg`, and the number is load-bearing rather than aesthetic: the catalogue is 5
@@ -83,7 +76,7 @@
 
    `auto-fill` is deliberately NOT used here. It would give 5 columns at some widths and 4 or 6 at others,
    which is the one thing this grid must not do. */
-.jobs-wall { display: grid; gap: 10px; margin-top: 2px; grid-template-columns: 1fr; }
+.jobs-wall { display: grid; gap: 10px; grid-template-columns: 1fr; }
 @media (min-width: 640px) { .jobs-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 768px) { .jobs-wall { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 1024px) { .jobs-wall { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; } }

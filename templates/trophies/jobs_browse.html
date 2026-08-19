@@ -90,26 +90,30 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
                 </label>
             </div>
 
-            {% comment %} The discipline filter, as a RADIO GROUP wearing chips rather than a select.
+            {% comment %} The discipline filter, on the SHARED browse filter-chip primitive
+            (`.pp-bgal__cgroup` + `.pp-bgal__chip`, from browse-gallery.css) that Browse Badges and Browse
+            Games already use. It was hand-rolled here first and was the same thing rebuilt: a `<label>`
+            wrapping a visually-hidden input, an active state off `:has(input:checked)`, a focus ring off
+            `:has(input:focus-visible)`, and a press-scale.
 
-            Radios, not buttons: it is a single-choice filter, so the native control already gives arrow-key
-            movement, one name in the querystring, and `browse-filters.js` auto-submit on change -- all of
-            which a div of buttons would have to reimplement. The visible chip is the `<label>`; the input
-            is visually hidden but still focusable, so the focus ring lands on the chip via `:has()`.
+            The only thing this page adds is `--disc`, exactly as the badge gallery adds `--rarity`: the
+            chip takes its own discipline's hue, which is the colour that job then wears on its tile, on
+            the Career radar and on its own page. A select hid both the axis and the vocabulary.
 
-            Worth the horizontal space a select would not take because discipline is this page's one real
-            axis, and each chip can carry its own `--disc-*` hue -- the same colour that job then wears on
-            its tile, on the Career radar and on its own page. A dropdown hides both facts. {% endcomment %}
-            <div class="jobs-chips" role="group" aria-label="Filter by discipline">
-                <label class="jobs-chip{% if not selected_discipline %} is-active{% endif %}">
+            RADIOS, where the shared chips are usually checkboxes: discipline is single-choice, so the
+            native control gives arrow-key movement and one querystring name for free -- and it means the
+            active state is CSS-only, correct on click rather than after the swap returns. {% endcomment %}
+            <div class="pp-bgal__cgroup jobs-chips" role="group" aria-label="Filter by discipline">
+                <span class="pp-bgal__clabel" aria-hidden="true">Discipline</span>
+                <label class="pp-bgal__chip">
                     <input type="radio" name="discipline" value=""{% if not selected_discipline %} checked{% endif %}>
-                    <span class="jobs-chip__lbl">All</span>
+                    All
                 </label>
                 {% for d in disciplines %}
-                <label class="jobs-chip{% if d.key == selected_discipline %} is-active{% endif %}" style="--disc: var(--disc-{{ d.key }});">
+                <label class="pp-bgal__chip pp-bgal__chip--disc" style="--disc: var(--disc-{{ d.key }});">
                     <input type="radio" name="discipline" value="{{ d.key }}"{% if d.key == selected_discipline %} checked{% endif %}>
                     <span class="jobs-chip__ic">{% job_icon d.icon '' %}</span>
-                    <span class="jobs-chip__lbl">{{ d.label }}</span>
+                    {{ d.label }}
                 </label>
                 {% endfor %}
             </div>
@@ -132,7 +136,7 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
         if (!PP || !results) { return; }
         var SPRING = 'cubic-bezier(.2,.9,.25,1.2)';
         var FADE = 'cubic-bezier(.2,.7,.3,1)';
-        var handle = null, before = null;
+        var handle = null;
 
         function wall() { return results.querySelector('[data-jobs-wall]'); }
 
@@ -167,41 +171,24 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
             });
         }
 
-        // FLIP, measured before the swap. With five columns over a fixed 25-tile catalogue, a discipline
+        // THE SHUFFLE, on the shared `flipGrid` primitive (utils.js) -- the same one the Collection
+        // gallery and Browse Hunters run. With five columns over a fixed 25-tile catalogue a discipline
         // chip does not replace the wall so much as REARRANGE it: most tiles survive into new slots, and
-        // animating that is the difference between "the list changed" and "these moved". Keyed on href
-        // because the tiles themselves are new nodes after the swap.
-        results.addEventListener('htmx:beforeSwap', function () {
-            before = new Map();
-            results.querySelectorAll('.jobt').forEach(function (el) {
-                before.set(el.getAttribute('href'), el.getBoundingClientRect());
-            });
-        });
+        // animating that is the difference between "the list changed" and "these moved".
+        //
+        // Keyed on href, because an HTMX swap replaces the nodes and the URL is the only identity a
+        // server-rendered tile carries across it. The helper also marks survivors `is-revealed`, which is
+        // what stops the reveal engine below from fading in a tile that was already on screen.
+        var flipper = PP.flipGrid ? PP.flipGrid({
+            container: results, itemSelector: '.jobt',
+            key: function (el) { return el.getAttribute('href'); },
+        }) : null;
+        results.addEventListener('htmx:beforeSwap', function () { if (flipper) { flipper.measure(); } });
 
-        function flipSurvivors() {
-            if (!before) { return; }
-            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            results.querySelectorAll('.jobt').forEach(function (el) {
-                var old = before.get(el.getAttribute('href'));
-                if (!old) { return; }
-                // A SURVIVOR: it was on screen a moment ago, so it must not fade in again. Marking it
-                // `is-revealed` is what makes `staggerReveal` skip it -- the engine's own once-only guard,
-                // used deliberately rather than worked around.
-                el.classList.add('is-revealed');
-                if (reduce || !el.animate) { return; }
-                var now = el.getBoundingClientRect();
-                var dx = old.left - now.left, dy = old.top - now.top;
-                if (!dx && !dy) { return; }
-                el.animate([{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'none' }],
-                           { duration: 340, easing: SPRING });
-            });
-            before = null;
-        }
-
-        // ORDER MATTERS: mark and move the survivors first, then start the reveal engine so it only
+        // ORDER MATTERS: move and mark the survivors first, then start the reveal engine so it only
         // animates tiles that are genuinely new to the wall.
         results.addEventListener('htmx:afterSwap', function () {
-            flipSurvivors();
+            if (flipper) { flipper.play(); }
             initReveal();
             syncTally(false);
         });

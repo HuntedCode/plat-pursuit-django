@@ -227,42 +227,17 @@ scroll and an outer border would grow with it forever.
         // and the new ones fade in. First (measure) -> Last (let the swap happen) -> Invert -> Play.
         //
         // Keyed on the hunter's URL, which is the only stable identity across a server-rendered swap.
-        var flipFrom = null;
-        function measureCards() {
-            var g = grid();
-            if (!g) { return null; }
-            var map = new Map();
-            g.querySelectorAll('.pp-hcard').forEach(function (card) {
+        // The shared `flipGrid` primitive (utils.js) since 2026-08. This page had its own copy, the
+        // Collection gallery had another and the jobs catalogue was about to be a third -- all doing
+        // First/Last/Invert/Play over a keyed grid, and already differing in duration and easing.
+        // Keyed on the hunter's URL, the only stable identity across a server-rendered swap.
+        var flipper = (window.PlatPursuit && PlatPursuit.flipGrid) ? PlatPursuit.flipGrid({
+            container: grid, itemSelector: '.pp-hcard',
+            key: function (card) {
                 var a = card.querySelector('.pp-hcard__link');
-                if (a) { map.set(a.getAttribute('href'), card.getBoundingClientRect()); }
-            });
-            return map;
-        }
-        function playFlip(before) {
-            var g = grid();
-            if (!before || !g || !g.animate) { return false; }
-            var moved = false;
-            g.querySelectorAll('.pp-hcard').forEach(function (card) {
-                var a = card.querySelector('.pp-hcard__link');
-                var prev = a && before.get(a.getAttribute('href'));
-                if (!prev) { return; }                       // new arrival -- the stagger reveal owns it
-                var now = card.getBoundingClientRect();
-                var dx = prev.left - now.left, dy = prev.top - now.top;
-                if (!dx && !dy) {
-                    // Stayed put: mark it revealed so the reveal pass leaves it alone. A card that did not
-                    // move must not fade in again, or the "unchanged" part of the wall flickers.
-                    card.classList.add('is-revealed', 'pp-revealing');
-                    return;
-                }
-                moved = true;
-                card.classList.add('is-revealed', 'pp-revealing');
-                card.animate(
-                    [{ transform: 'translate(' + dx + 'px, ' + dy + 'px)' }, { transform: 'none' }],
-                    { duration: 460, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
-                );
-            });
-            return moved;
-        }
+                return a ? a.getAttribute('href') : null;
+            },
+        }) : null;
 
         // ── Mini-bar proxies ──────────────────────────────────────────────────────────────────────
         // The pinned controls sit OUTSIDE the form, so they cannot be real fields: a second name="query"
@@ -378,7 +353,7 @@ scroll and an outer border would grow with it forever.
                 // positions are gone, so a FLIP that reads them afterwards has nothing to invert from.
                 document.body.addEventListener('htmx:beforeSwap', function (e) {
                     var t = e.detail && e.detail.target;
-                    if (t && t.id === 'browse-results') { flipFrom = measureCards(); }
+                    if (t && t.id === 'browse-results' && flipper) { flipper.measure(); }
                 });
                 document.body.addEventListener('htmx:afterSwap', function (e) {
                     var t = e.detail && e.detail.target;
@@ -386,8 +361,7 @@ scroll and an outer border would grow with it forever.
                     t.classList.remove('is-swapping');
                     // FLIP first: it marks the survivors revealed, so the reveal pass that follows only
                     // animates genuinely new cards instead of re-fading the whole wall.
-                    playFlip(flipFrom);
-                    flipFrom = null;
+                    if (flipper) { flipper.play(); }
                     initReveal();
                     initScroller();
                     tickCount();

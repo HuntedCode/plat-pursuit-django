@@ -123,6 +123,19 @@ There are **three legitimately different tools** here; pick by the grid's contex
 Do NOT "unify" the latter two onto `staggerReveal` — it would make the simpler cases heavier and regress
 the replay-on-switch behavior. Different requirements, different tools (a deliberate 2026-07 call).
 
+### Re-layout a grid that filters or sorts (the "shuffle")
+
+A reveal answers "these arrived". It does not answer "these MOVED", and a wall that re-fades wholesale on
+every filter reads as a new list rather than a rearranged one. **`PlatPursuit.flipGrid`** is the shared
+First/Last/Invert/Play for that, and it PAIRS with `staggerReveal` rather than replacing it: run the flip
+first (it marks survivors), then the reveal, which then only animates genuinely new cards. →
+[js-utilities](js-utilities.md).
+
+Extracted 2026-08 from three copies (Collection gallery, Browse Hunters, jobs catalogue) that had drifted
+apart in duration and easing. Unlike the three reveal tools above — which are deliberately NOT unified,
+because their requirements genuinely differ — these three were the same tool written three times, and the
+giveaway was that every difference between them was accidental.
+
 ### Draw an SVG stroke in (checkmarks, glyphs)
 A line that *draws itself* reads as craft (Reminders/Things checkboxes live on this). Class
 **`.pp-draw-in`** (`components/motion.css`) on the `<svg>` traces its shapes via `stroke-dashoffset`; the

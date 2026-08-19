@@ -111,44 +111,29 @@
 
         // FLIP: run `mutate` (which changes cell visibility and/or DOM order), then glide the surviving
         // cards from their old grid positions to their new ones and fade/scale entering cards in. Hidden
-        // cards just drop out (no exit tween -- the survivors' glide is the premium bit). The final layout
-        // is whatever `mutate` produced, so a dropped frame never leaves the grid wrong. Cancels any active
-        // reveal first (its animation-fill would otherwise override our inline transforms).
-        var flipPending = [];   // cards carrying FLIP inline styles awaiting cleanup
-        var flipTimer;
-        function flipCleanup() {   // settle any in-flight FLIP: strip inline styles (transition first, so
-            clearTimeout(flipTimer);   // clearing transform snaps rather than animating back)
-            flipPending.forEach(function (c) { c.style.transition = ''; c.style.transform = ''; c.style.opacity = ''; });
-            flipPending = [];
-        }
+        // cards just drop out -- no exit tween; the survivors' glide is the premium bit. The final layout
+        // is whatever `mutate` produced, so a dropped frame never leaves the grid wrong.
+        //
+        // The shared `flipGrid` primitive (utils.js) since 2026-08. This is where the shuffle was first
+        // built; Browse Hunters and the jobs catalogue then grew their own, so it was extracted and all
+        // three now run one implementation. Two behaviours moved with it and are worth knowing: the
+        // hand-rolled version drove inline styles + CSS transitions and therefore needed a cleanup pass
+        // and a 520ms timer to strip them (a dropped frame could strand a card mid-transform); the shared
+        // one uses WAAPI, which cancels cleanly on a re-entrant call and leaves nothing behind.
+        //
+        // `is-revealing` is still cleared HERE rather than in the helper: it is this gallery's own reveal
+        // class, and its animation-fill would otherwise override the transforms.
+        //
+        // No `key` -- this mutation toggles `display` on the SAME nodes, so each cell is its own identity.
+        // `mark: false` for the same reason: nothing re-runs a stagger reveal over these cells afterwards,
+        // and marking them would fight `is-revealing` rather than cooperate with it.
+        var flipper = (window.PlatPursuit && PlatPursuit.flipGrid) ? PlatPursuit.flipGrid({
+            container: gal, itemSelector: '[data-gallery-cell]', enter: true, mark: false,
+        }) : null;
         function flip(mutate) {
-            if (reduced()) { mutate(); return; }
-            flipCleanup();   // finish any prior FLIP before re-measuring -- no stale transforms, no mid-anim wipe
+            if (reduced() || !flipper) { mutate(); return; }
             gal.classList.remove('is-revealing');
-            var first = new Map();
-            cells.forEach(function (c) { if (isShown(c)) first.set(c, c.getBoundingClientRect()); });
-            mutate();
-            var moved = [];
-            cells.forEach(function (c) {
-                if (!isShown(c)) return;
-                var last = c.getBoundingClientRect();
-                var f = first.get(c);
-                if (f) {
-                    var dx = f.left - last.left, dy = f.top - last.top;
-                    if (dx || dy) { c.style.transition = 'none'; c.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)'; moved.push(c); }
-                } else {
-                    c.style.transition = 'none'; c.style.opacity = '0'; c.style.transform = 'scale(0.9)'; moved.push(c);
-                }
-            });
-            if (!moved.length) return;
-            flipPending = moved;
-            requestAnimationFrame(function () { requestAnimationFrame(function () {
-                moved.forEach(function (c) {
-                    c.style.transition = 'transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease';
-                    c.style.transform = ''; c.style.opacity = '';
-                });
-            }); });
-            flipTimer = setTimeout(flipCleanup, 520);
+            flipper.run(mutate);
         }
 
         var metaClear = gal.querySelector('.pp-gallery__meta [data-clear-filters]');

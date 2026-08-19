@@ -1752,6 +1752,106 @@ function syncViewParam(view, opts) {
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
 }
 
+
+/**
+ * flipGrid -- the "shuffle": survivors GLIDE to their new slots when a grid re-filters or re-sorts.
+ *
+ * First / Last / Invert / Play. Extracted 2026-08 from three hand-rolled copies that had already drifted
+ * apart -- the Collection gallery (client-side `display` toggles), Browse Hunters and the jobs catalogue
+ * (both HTMX swaps) -- which is one past the point where a shared primitive is worth its own name.
+ *
+ * TWO MECHANICS, one helper, because the difference is only WHEN the mutation happens:
+ *
+ *   synchronous   `run(mutate)`            -- the same nodes survive, so they are their own identity
+ *   asynchronous  `measure()` / `play()`   -- an HTMX swap REPLACES the nodes, so identity must come
+ *                                            from `key(el)` (a URL, in practice: the one stable thing a
+ *                                            server-rendered card carries across a swap)
+ *
+ * SURVIVORS ARE MARKED, and that is the half a re-roll usually forgets: an element that was already on
+ * screen must not also fade in, or the unchanged part of the wall flickers on every filter. `.is-revealed`
+ * + `.pp-revealing` are exactly what `staggerReveal` skips, so the two engines cooperate instead of
+ * fighting -- the reveal animates arrivals, this animates the rest.
+ *
+ * WAAPI, not inline styles + transitions: a freshly swapped node has no transition to interrupt, animations
+ * cancel cleanly on a re-entrant call, and there is no cleanup timer to leave a grid stuck mid-transform if
+ * a frame is dropped. The final layout is whatever the mutation produced, so this can only ever fail to
+ * ANIMATE -- never to arrange.
+ *
+ * @param {Object} o
+ * @param {HTMLElement|function(): HTMLElement} o.container   the grid (a function, if it is re-created by swaps)
+ * @param {string} o.itemSelector                             selects the items within it
+ * @param {function(HTMLElement): (string|null)} [o.key]      stable identity across a swap; defaults to the
+ *        element itself, which is correct ONLY for the synchronous case
+ * @param {boolean} [o.enter=false]   fade+scale ARRIVALS in. Leave false where `staggerReveal` owns them
+ * @param {boolean} [o.mark=true]     mark survivors so `staggerReveal` skips them
+ * @param {number} [o.duration=420]
+ * @returns {{ measure: function, play: function, run: function }}
+ */
+function flipGrid(o) {
+    var SPRING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    var dur = o.duration || 420;
+    var mark = o.mark !== false;
+    var first = null;
+
+    function grid() { return typeof o.container === 'function' ? o.container() : o.container; }
+    function items() {
+        var g = grid();
+        return g ? Array.prototype.slice.call(g.querySelectorAll(o.itemSelector)) : [];
+    }
+    function keyOf(el) { return o.key ? o.key(el) : el; }
+    function reduced() {
+        return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    // Only what is VISIBLE has a position worth remembering: a `display: none` cell measures 0x0, and
+    // gliding something from the origin is worse than not animating it.
+    function shown(el) { var r = el.getBoundingClientRect(); return r.width || r.height; }
+
+    function measure() {
+        if (reduced()) { first = null; return; }
+        first = new Map();
+        items().forEach(function (el) { if (shown(el)) { first.set(keyOf(el), el.getBoundingClientRect()); } });
+    }
+
+    function play() {
+        var before = first;
+        first = null;
+        if (!before) { return false; }
+        var moved = false;
+        items().forEach(function (el) {
+            if (!el.animate || !shown(el)) { return; }
+            var prev = before.get(keyOf(el));
+            if (!prev) {
+                // An ARRIVAL. Animated only where the caller has no reveal engine of its own; otherwise
+                // left alone, because two engines animating one element is how a card ends up flickering.
+                if (o.enter) {
+                    el.animate([{ opacity: 0, transform: 'scale(0.92)' }, { opacity: 1, transform: 'none' }],
+                               { duration: dur * 0.8, easing: SPRING });
+                }
+                return;
+            }
+            // A SURVIVOR -- on screen a moment ago, so it must not be revealed again whether or not it
+            // actually moved.
+            if (mark) { el.classList.add('is-revealed', 'pp-revealing'); }
+            var now = el.getBoundingClientRect();
+            var dx = prev.left - now.left, dy = prev.top - now.top;
+            if (!dx && !dy) { return; }
+            moved = true;
+            el.animate([{ transform: 'translate(' + dx + 'px, ' + dy + 'px)' }, { transform: 'none' }],
+                       { duration: dur, easing: SPRING });
+        });
+        return moved;
+    }
+
+    function run(mutate) {
+        measure();
+        mutate();
+        return play();
+    }
+
+    return { measure: measure, play: play, run: run };
+}
+
+
 /**
  * Staggered grid reveal for HTMX-swapped / infinite-scroll card grids (the Badges browse pattern; the
  * standard for any rebuilt browse grid). Hides the grid's cards, reveals those already present in ONE
@@ -2787,6 +2887,7 @@ window.PlatPursuit.igniteTab = igniteTab;
 window.PlatPursuit.wireTablist = wireTablist;
 window.PlatPursuit.syncViewParam = syncViewParam;
 window.PlatPursuit.staggerReveal = staggerReveal;
+window.PlatPursuit.flipGrid = flipGrid;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;

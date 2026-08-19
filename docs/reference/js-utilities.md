@@ -256,6 +256,37 @@ The one remaining constant is `virtualBoard`'s `|| 62` row-height fallback, for 
 
 **Do NOT use `staggerReveal` on a virtualized wall** — see below. Use `boardEntrance`.
 
+### PlatPursuit.flipGrid
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `flipGrid(opts)` | `{container, itemSelector, key?, enter?, mark?, duration?}` | The "shuffle": survivors GLIDE to their new slots when a grid re-filters or re-sorts |
+
+Returns `{measure, play, run}`. First / Last / Invert / Play, in the two shapes the site actually needs:
+
+| mechanic | call | identity |
+|---|---|---|
+| synchronous (client-side `display` toggles, same nodes) | `run(mutate)` | the element itself |
+| asynchronous (an HTMX swap REPLACES the nodes) | `measure()` on `htmx:beforeSwap`, `play()` on `htmx:afterSwap` | `key(el)` — a URL, in practice |
+
+**It marks survivors `is-revealed` + `pp-revealing`, and that is the half a hand-rolled copy forgets.**
+Those are exactly the classes `staggerReveal` skips, so the two engines cooperate: the reveal animates
+arrivals, the flip animates everything that was already there. Without the mark, the unchanged part of the
+wall fades in again on every filter. Note that a survivor which did NOT move still gets marked — the tiles
+that visibly did not change are otherwise the ones that flicker.
+
+`enter: true` fades arrivals in; leave it off wherever `staggerReveal` owns them (two engines animating one
+element is how a card flickers). `mark: false` where nothing re-reveals afterwards.
+
+Under reduced motion `measure()` no-ops, so `play()` has nothing to invert from and the layout is simply
+whatever the mutation produced — a reduced-motion reader gets no animation, never a grid that fails to
+re-filter.
+
+**Callers:** the Collection gallery (`collection.js`), Browse Hunters (`profile_list.html`), the jobs
+catalogue (`jobs_browse.html`). It was extracted from those three in 2026-08 after they had already drifted
+apart in duration and easing; `tests/engine/test_flip_grid.py` pins the contract and that all three still
+use it.
+
 ### PlatPursuit.staggerReveal
 
 | Method | Parameters | Purpose |

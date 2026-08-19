@@ -444,18 +444,29 @@ def test_the_skeletons_mirror_the_card_and_are_hidden_from_assistive_tech(client
 def test_the_flip_measures_BEFORE_the_swap():
     """First-Last-Invert-Play only works if First is taken while the old cards are still on screen. Read
     after the swap, the old positions are gone and there is nothing to invert from -- the animation would
-    silently become a no-op that still costs a frame."""
+    silently become a no-op that still costs a frame.
+
+    The mechanics moved to the shared `flipGrid` primitive in 2026-08 (this page, the Collection gallery
+    and the jobs catalogue had three hand-rolled copies), so what this page still owns -- and what this
+    test still guards -- is the WIRING: measure on the way out, play on the way back, and play before the
+    reveal pass. The survivor-marking that keeps the wall from re-fading is the helper's job now and is
+    asserted in `test_utils_flip_grid`.
+    """
     html = (ROOT / 'templates' / 'trophies' / 'profile_list.html').read_text(encoding='utf-8')
 
-    # Asserted SEMANTICALLY, not by source order: "htmx:afterSwap" is also named in a body comment far
-    # above the listeners, so comparing first-occurrence indexes compares against prose.
-    before = html[html.index("htmx:beforeSwap"):]
+    # Anchored on the LISTENER, not the event name: both names also appear in prose comments far above
+    # the handlers, so slicing from the first occurrence slices from documentation. (Walked into exactly
+    # that while moving this page onto the shared helper, which is why the anchor is now the call.)
+    before = html[html.index("addEventListener('htmx:beforeSwap'"):]
     before = before[:before.index('});')]
-    assert 'measureCards()' in before, 'the beforeSwap hook does not capture positions'
-    # FLIP runs BEFORE the reveal pass, and marks survivors, or the whole wall re-fades on every filter.
-    play = html[html.index('playFlip(flipFrom)'):html.index('initReveal();', html.index('playFlip(flipFrom)'))]
-    assert 'flipFrom = null' in play, 'the captured positions are never released'
-    assert "classList.add('is-revealed'" in html, 'survivors are not marked, so they fade in again'
+    assert 'flipper.measure()' in before, 'the beforeSwap hook does not capture positions'
+
+    after = html[html.index("addEventListener('htmx:afterSwap'"):]
+    after = after[:after.index('});')]
+    assert 'flipper.play()' in after, 'the afterSwap hook never plays the flip'
+    assert after.index('flipper.play()') < after.index('initReveal()'), (
+        'the reveal pass runs before the flip, so survivors are not yet marked and the whole wall re-fades'
+    )
 
 
 def test_the_scroll_restore_only_fires_on_the_same_wall():
