@@ -678,3 +678,48 @@ def test_the_minibar_lives_outside_the_swapped_wrapper(client):
     assert not (page_start < body.index('data-lb-minibar') < page_end), (
         'the minibar is inside the swapped wrapper, so a tab change destroys it'
     )
+
+
+def test_the_minibar_sentinel_is_inside_the_swapped_wrapper(client):
+    """REGRESSION, reported from the browser as "the bar sometimes never appears, and sometimes never
+    goes away". One stale observer, two symptoms.
+
+    The bar is deliberately OUTSIDE `[data-lb-page]` so a swap cannot tear it out mid-scroll. The
+    SENTINEL cannot be -- it marks where the chrome ends, so it sits inside and every swap replaces it.
+    `StickyReveal.init()` dropped entries whose TARGET had left the DOM and skipped any target already
+    wired, so this pairing survived the cleanup and kept observing a detached node: `.is-pinned` froze
+    wherever it was, hidden or showing.
+
+    This pins the ARRANGEMENT that makes the re-init necessary, so the two halves cannot drift apart --
+    the fix itself lives in `StickyReveal` and is asserted below.
+    """
+    _ranked('Someone', plats=5, trophies=50)
+    body = client.get(URL).content.decode()
+
+    bar = body.index('data-lb-minibar')
+    sentinel = body.index('id="lb-minibar-sentinel"')
+    page_start = body.index('<div data-lb-page>')
+    page_end = body.index('</div><!-- /lb-page -->')
+
+    assert bar < page_start, 'the bar is inside the swapped wrapper and will be destroyed by a swap'
+    assert page_start < sentinel < page_end, (
+        'the sentinel is outside the wrapper, so it no longer marks where the chrome ends'
+    )
+
+
+def test_stickyreveal_rewires_when_only_the_sentinel_is_replaced(client):
+    """The fix for the above, asserted on the helper because there is no JS runner here.
+
+    `init()` has to drop an entry whose SENTINEL left the DOM, not only one whose target did -- and clear
+    the target's wired flag, or the re-wire loop skips it and the entry never comes back.
+    """
+    import pathlib as _p
+
+    js = _p.Path('static/js/utils.js').read_text(encoding='utf-8')
+
+    assert 'document.contains(e.sentinel)' in js, (
+        'init() no longer checks the sentinel, so a swapped sentinel leaves a stale observer'
+    )
+    assert 'e.target._stickyReveal = false' in js, (
+        'the wired flag is not cleared, so the dropped entry can never be re-wired'
+    )

@@ -388,7 +388,13 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     var mb = document.querySelector('[data-lb-minibar]');
 
     function syncMinibar() {
-        if (!mb || !root) { return; }
+        if (!mb) { return; }
+        // NO BOARD, NO BAR. The bar lives outside the swapped wrapper so it survives a swap -- which also
+        // means a filter that empties the board leaves it floating there, a rank chip and a search field
+        // proxying a list that is not on the page. Hidden rather than removed, because the next swap can
+        // bring the board back and the bar's listeners are wired once.
+        mb.hidden = !root;
+        if (!root) { return; }
         var card = page.querySelector('.lb-boardcard');
         var title = mb.querySelector('[data-lb-mb-title]');
         var count = mb.querySelector('[data-lb-mb-count]');

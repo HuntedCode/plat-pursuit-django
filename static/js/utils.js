@@ -1561,8 +1561,11 @@ if (document.readyState === 'loading') {
  * of the full page header). When the sentinel scrolls above the chrome bottom (the --sticky-top offset the
  * navbar/sub-nav publish), the target gets .is-pinned; scrolling back up removes it.
  *
- * init() is idempotent + re-runnable: it skips already-wired targets and drops observers whose target has
- * left the DOM (e.g. replaced by an HTMX swap), so callers can re-init after a partial-page swap.
+ * init() is idempotent + re-runnable: it skips already-wired targets and drops observers whose target OR
+ * SENTINEL has left the DOM (e.g. replaced by an HTMX swap), re-wiring that target against the new one --
+ * so callers can re-init after a partial-page swap. Both halves matter: a bar kept outside the swapped
+ * region kills only its sentinel, and an entry rebuilt on the target check alone would keep observing a
+ * detached node and freeze the bar in whatever state it was last in.
  */
 const StickyReveal = {
     _entries: [],
@@ -1595,9 +1598,29 @@ const StickyReveal = {
     },
     init(root) {
         root = root || document;
-        // Drop entries whose target left the DOM (e.g. an HTMX swap replaced it).
+        // Drop entries whose target OR SENTINEL left the DOM (e.g. a swap replaced one of them).
+        //
+        // The sentinel half was missing, and it is the half that bites when the bar is deliberately kept
+        // OUTSIDE the swapped region -- which is the right place for it, since a bar torn out mid-scroll
+        // takes its wired-once listeners with it. Then every swap replaces the sentinel, the target is
+        // still in the DOM so the entry survives, `_stickyReveal` says "already wired" so it is skipped,
+        // and the observer spends the rest of the page's life watching a detached node.
+        //
+        // It never fires again, so `.is-pinned` freezes wherever it was: a bar that was hidden never
+        // appears again, and a bar that was showing never goes away. Two different-looking symptoms, one
+        // stale observer -- which is what made it read as intermittent.
+        //
+        // Clearing the flag is what lets the loop below re-wire the target against the FRESH sentinel.
         this._entries = this._entries.filter((e) => {
-            if (!document.contains(e.target)) { if (e.obs) e.obs.disconnect(); return false; }
+            if (!document.contains(e.target) || !document.contains(e.sentinel)) {
+                if (e.obs) { e.obs.disconnect(); }
+                e.target._stickyReveal = false;
+                // UNPIN a surviving target. If only the sentinel went, nothing will ever tell this bar to
+                // hide again -- and if it went because the content it marked is gone (an emptied filter
+                // removing the region), a bar left pinned is chrome floating over nothing.
+                if (document.contains(e.target)) { e.target.classList.remove('is-pinned'); }
+                return false;
+            }
             return true;
         });
         root.querySelectorAll('[data-sticky-reveal]').forEach((target) => {
