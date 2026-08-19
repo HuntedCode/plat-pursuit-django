@@ -52,6 +52,11 @@
         clearTimeout(radioTimer);
         const radioPage = form.querySelector('input[name="page"]');
         if (radioPage) radioPage.value = '1';
+        // The badge updates IMMEDIATELY, only the request is coalesced. It reflects the current
+        // selection, so debouncing it too would leave "3 filters active" visibly lagging the chip the
+        // reader just pressed. (This call was missing when the branch was added, which silently froze the
+        // active-filter badge on all five pages with radio filters -- Browse Games among them.)
+        updateFilterBadge();
         radioTimer = setTimeout(function () { htmx.trigger(form, 'submit'); }, 120);
         return;
       }

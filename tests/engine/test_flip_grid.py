@@ -309,3 +309,39 @@ def test_every_shared_card_helper_gates_reduced_motion():
     # `progressiveArt` is the exception and deliberately so: it STOPS an animation rather than starting
     # one, so gating it would leave the skeleton running for exactly the readers who asked for less.
     assert 'prefers-reduced-motion' not in _helper('progressiveArt')
+
+
+def test_the_radio_debounce_still_updates_the_active_filter_badge():
+    """REGRESSION from the a11y fix itself. Coalescing radio changes meant adding a branch that returns
+    early -- and the generic auto-submit path it skipped also calls `updateFilterBadge()`, so the
+    "N filters active" badge silently froze on every page with a radio filter. FIVE pages use them,
+    Browse Games among them, so this reached well past the page the fix was written for.
+
+    The badge updates IMMEDIATELY while only the REQUEST is coalesced: it reflects the current selection,
+    so debouncing it too would leave the count visibly lagging the chip just pressed.
+
+    The general shape is what to watch for: an early `return` added to a shared handler skips everything
+    below it, and "everything below it" is exactly what nobody re-reads.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    js = (root / 'static' / 'js' / 'browse-filters.js').read_text(encoding='utf-8')
+
+    branch = js[js.index("if (el.type === 'radio') {"):]
+    branch = branch[:branch.index('return;')]
+    assert 'updateFilterBadge()' in branch, 'the radio path skips the filter badge again'
+    assert 'value = ' in branch, 'the radio path no longer resets to page 1'
+    # Debounced request, immediate badge -- the badge call must not be inside the timer.
+    timer = branch[branch.index('setTimeout'):] if 'setTimeout' in branch else ''
+    assert 'updateFilterBadge' not in timer, 'the badge lags the selection by the debounce'
+
+
+def test_only_the_views_that_mean_it_send_the_scroller_its_stop_signal():
+    """`InfiniteScroller` now stops on `X-Has-Next: 0`, so a view sending that header for any other reason
+    would end its wall early. Checked because the change reached 12 callers: only the two contract
+    endpoints send it, and one of those feeds Career's own bespoke scroller rather than the shared one."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    senders = []
+    for py in (root / 'trophies').rglob('*.py'):
+        if 'X-Has-Next' in py.read_text(encoding='utf-8', errors='ignore'):
+            senders.append(py.name)
+    assert senders == ['career_views.py'], f'a new view sends the scroller stop signal: {senders}'
