@@ -1715,7 +1715,24 @@ function wireTablist(tabs, opts) {
     function select(tab) { if (opts.ignite) { igniteTab(tab); } onSelect(tab); }
     var STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
     tabs.forEach(function (tab) {
-        if (!opts.manual) { tab.addEventListener('click', function () { select(tab); }); }
+        if (!opts.manual) {
+            tab.addEventListener('click', function (e) {
+                // A TAB THAT IS A LINK still switches in place. Job detail's tabs are `<a href="?tab=...">`
+                // -- deliberately, so the strip works without JS (the server honours the param) -- and this
+                // handler used to let the navigation through afterwards. The result was a tab click that
+                // switched the panel, ignited the chip, slid the view in, AND THEN reloaded the whole page
+                // and replayed every entrance animation on it. Reported as "strange flashing, almost like
+                // there are multiple animations playing per swap", which is exactly what it was.
+                //
+                // Modifier and middle clicks are left alone: those mean "open this somewhere else", and a
+                // tab whose href is a real URL should honour that rather than swallow it.
+                if (tab.tagName === 'A' && tab.getAttribute('href')
+                    && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                    e.preventDefault();
+                }
+                select(tab);
+            });
+        }
         tab.addEventListener('keydown', function (e) {
             var i = tabs.indexOf(tab), next;
             if (Object.prototype.hasOwnProperty.call(STEP, e.key)) { next = tabs[(i + STEP[e.key] + tabs.length) % tabs.length]; }

@@ -9,6 +9,8 @@ The load-bearing constraint is that it works SIGNED OUT. A job page an anonymous
 defeats the discovery it exists for, and the board being identical for everyone is what keeps it
 cacheable.
 """
+import pathlib
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -587,6 +589,37 @@ def test_career_and_job_detail_settle_the_skeleton_the_SAME_way():
     assert 'PP.progressiveArt(scope)' in career, 'Career kept its own copy'
     # The hand-rolled body must be gone from the page, not merely unused beside the shared one.
     assert "art.dataset.plInit = '1'" not in career
+
+
+def test_the_tab_strip_switches_in_place_instead_of_navigating(client):
+    """REGRESSION, reported as "strange flashing, almost like there are multiple animations playing per
+    swap" -- which is exactly what it was.
+
+    This page's tabs are `<a href="?tab=...">` ON PURPOSE: the server honours the param, so the strip
+    works with JS off. But `wireTablist` bound click without preventing the default, so a tab click
+    switched the panel, ignited the chip, slid the view in, AND THEN followed the href -- a full page load
+    that replayed every entrance animation on top of the transition that had just run.
+
+    Both halves are asserted, because either alone is wrong: anchors WITHOUT the prevention is the bug,
+    and buttons (which is how badge and game detail dodge it) would silently drop the no-JS fallback.
+    """
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    strip = body[body.index('id="jobd-switch"'):]
+    strip = strip[:strip.index('</div>')]
+    assert strip.count('<a ') == 2, 'the tabs stopped being links, so the no-JS fallback is gone'
+    assert '?tab=contracts' in strip and '?tab=ranks' in strip
+
+    utils = (pathlib.Path(__file__).resolve().parents[2] / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    click = utils[utils.index("tab.addEventListener('click'"):]
+    click = click[:click.index('select(tab);')]
+    assert 'e.preventDefault()' in click, 'a link tab still navigates after switching in place'
+    # Modifier and middle clicks must survive: those mean "open this elsewhere", and these hrefs are real
+    # URLs that land on the right tab.
+    assert 'e.metaKey' in click and 'e.ctrlKey' in click and 'e.button === 0' in click
 
 
 def test_the_job_icon_sprite_is_on_the_page(client):
