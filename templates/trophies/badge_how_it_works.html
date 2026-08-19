@@ -270,6 +270,21 @@ reverse with a 0 placeholder the JS swaps for the real badge id. {% endcomment %
 {% block js_scripts %}
 <script>
     (function () {
+        {% comment %} The header tallies COUNT UP, like every other `.pp-tally` on the site. All three
+        carried `data-countup` and nothing on this page ever called `countUp` -- `utils.js` defines it
+        globally but each page has to invoke it, and this one loads no page JS beyond the block below.
+        So the three figures snapped in fully formed while the beats directly under them animated, which
+        reads as a stalled element rather than a style choice.
+
+        Found by a repo-wide sweep after the same bug shipped twice on the jobs pages: a `data-*` hook
+        with no caller is indistinguishable from a working one in the markup. {% endcomment %}
+        var tallies = document.querySelectorAll('.pp-hiw__tally [data-countup]');
+        if (tallies.length && window.PlatPursuit && PlatPursuit.countUp) {
+            tallies.forEach(function (el, i) {
+                setTimeout(function () { PlatPursuit.countUp(el, 900); }, i * 90);
+            });
+        }
+
         {% comment %}The beats land as you reach them, on the shared `staggerReveal` every wall on the
         site uses. The helper returns null under reduced motion, and `.pp-reveal` (which sets opacity: 0)
         is only added when it did NOT, so with JS off or motion reduced the steps are simply visible
