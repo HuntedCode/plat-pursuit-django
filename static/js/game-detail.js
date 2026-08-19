@@ -347,96 +347,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // (?suggest= -> JSON) and selecting one jumps to their rank. `panel` supplies the current options
     // (lbOptsUrl reads its toggles) and the jump target, so the minibar field drives the same board below.
     // Reuses PlatPursuit.wireSearchField (clear button + spinner) and debounce.
+    // The search behaviour is `PlatPursuit.wireBoardSearch` now -- the same typeahead the other three
+    // boards run. What stays here is this board's two injections: where a suggestion comes from (its own
+    // `?suggest=`, carrying the board param and filters) and what a pick jumps to. Game detail also has a
+    // `?at=` rank PREVIEW, which no other board offers, so it passes `rankUrl` and they do not.
     function lbWireSearch(input, drop, form, panel) {
-        if (!input || !drop || !form || !PlatPursuit.wireSearchField) return;
-        const field = PlatPursuit.wireSearchField(input, { onClear: closeDrop });
-        let items = [], active = -1, seq = 0;
-
-        function closeDrop() {
-            drop.hidden = true; drop.textContent = ''; items = []; active = -1;
-            input.setAttribute('aria-expanded', 'false');
-        }
-        function setActive(i) {
-            active = i;
-            drop.querySelectorAll('.gd-lb__sugg').forEach((o, j) => o.classList.toggle('is-active', j === i));
-        }
-        function render(players) {
-            drop.textContent = '';
-            items = players || [];
-            if (!items.length) { closeDrop(); return; }
-            items.forEach((p) => {
-                const row = document.createElement('button');
-                row.type = 'button'; row.className = 'gd-lb__sugg'; row.setAttribute('role', 'option');
-                row.dataset.rank = p.rank;
-                const av = document.createElement('span'); av.className = 'gd-lb__sugg-av';
-                if (p.avatar) { const img = document.createElement('img'); img.src = p.avatar; img.alt = ''; av.appendChild(img); }
-                row.appendChild(av);
-                const name = document.createElement('span'); name.className = 'gd-lb__sugg-name';
-                name.textContent = p.display;                  // textContent: safe against a hostile name
-                row.appendChild(name);
-                const rank = document.createElement('span'); rank.className = 'gd-lb__sugg-rank';
-                rank.textContent = '#' + Number(p.rank).toLocaleString();
-                row.appendChild(rank);
-                drop.appendChild(row);
-            });
-            drop.hidden = false;
-            input.setAttribute('aria-expanded', 'true');
-            setActive(0);
-        }
-
-        const doSuggest = PlatPursuit.debounce((q) => {
-            const mine = ++seq;
-            fetch(lbOptsUrl(panel, { suggest: q }), LB_XHR)
-                .then((r) => (r.ok ? r.json() : Promise.reject()))
-                .then((data) => { if (mine === seq) { field.setBusy(false); render(data.players); } })
-                .catch(() => { if (mine === seq) { field.setBusy(false); closeDrop(); } });
-        }, 180);
-
-        // A bare number previews the hunter at that rank (?at= -> one JSON row); selecting it, or Enter,
-        // jumps there. We hold the board total on the panel root, so a rank past the board skips the fetch.
-        const doRank = PlatPursuit.debounce((n) => {
-            const mine = ++seq;
-            // The BOARD root -- `data-lb-total` moved there too, so this read NaN and the bound below
-            // could never fire: a nine-digit rank issued a request per debounce instead of short-circuiting.
-            const root = panel.querySelector('[data-lb-board]');
-            const total = parseInt(root ? root.dataset.lbTotal : '', 10);
-            if (n < 1 || (total && n > total)) { field.setBusy(false); closeDrop(); return; }
-            fetch(lbOptsUrl(panel, { at: n }), LB_XHR)
-                .then((r) => (r.ok ? r.json() : Promise.reject()))
-                .then((data) => { if (mine === seq) { field.setBusy(false); render(data.players); } })
-                .catch(() => { if (mine === seq) { field.setBusy(false); closeDrop(); } });
-        }, 180);
-
-        input.addEventListener('input', () => {
-            const q = input.value.trim();
-            if (/^\d+$/.test(q)) { field.setBusy(true); doRank(parseInt(q, 10)); return; }
-            if (q.length < 2) { field.setBusy(false); closeDrop(); return; }
-            field.setBusy(true);
-            doSuggest(q);
+        if (!PlatPursuit.wireBoardSearch) return;
+        PlatPursuit.wireBoardSearch({
+            input: input, drop: drop, form: form,
+            suggestUrl: (q) => lbOptsUrl(panel, { suggest: q }),
+            rankUrl: (n) => lbOptsUrl(panel, { at: n }),
+            jump: (rank) => lbJumpToRank(panel, rank),
+            total: () => {
+                const root = panel.querySelector('[data-lb-board]');
+                return parseInt(root ? root.dataset.lbTotal : '', 10) || 0;
+            },
         });
-        input.addEventListener('keydown', (e) => {
-            if (drop.hidden) return;
-            const n = drop.querySelectorAll('.gd-lb__sugg').length;
-            if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(active + 1, n - 1)); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(active - 1, 0)); }
-            else if (e.key === 'Escape') { e.preventDefault(); closeDrop(); }
-        });
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const q = input.value.trim();
-            if (/^\d+$/.test(q)) { lbJumpToRank(panel, parseInt(q, 10)); closeDrop(); input.blur(); return; }
-            const pick = items[active >= 0 ? active : 0];
-            if (pick) { lbJumpToRank(panel, parseInt(pick.rank, 10)); closeDrop(); input.blur(); }
-        });
-        // mousedown (not click) so it fires before the input's blur closes the dropdown.
-        drop.addEventListener('mousedown', (e) => {
-            const row = e.target.closest('.gd-lb__sugg');
-            if (!row) return;
-            e.preventDefault();
-            lbJumpToRank(panel, parseInt(row.dataset.rank, 10));
-            closeDrop(); input.blur();
-        });
-        input.addEventListener('blur', () => setTimeout(closeDrop, 120));
     }
 
     // Observe both end markers (bottom = next page, top = previous page after a jump). unobserve THEN

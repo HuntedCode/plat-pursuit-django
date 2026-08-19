@@ -95,7 +95,7 @@ that number points at. A spacer can be jumped into directly.
     {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total standing=standing scoped=slice_applied only %}
     {% comment %} The jump bar needs a board to jump around in. {% endcomment %}
     {% if rows %}
-    {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='bd2' only %}
+    {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='bd2' extra_partial='trophies/partials/leaderboard_find.html' only %}
     {% endif %}
   </div>
 </section>

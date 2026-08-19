@@ -1,0 +1,26 @@
+{% comment %} The hunter search, filling `leaderboard_jumpbar.html`'s slot between "you're #N" and the
+rank box. Shared by every board that has one.
+
+Type a name, pick a hunter, land on their rank. PREFIX-matched and scoped to the board being read, so a
+suggestion always carries a rank that exists on the list you are looking at -- the navbar already answers
+"find any hunter anywhere", and this answers the different question.
+
+Self-contained by design: the slot is included with `only`, so this reads nothing from the jump bar.
+`wireBoard` finds these three elements by their data attributes and wires `PlatPursuit.wireBoardSearch`
+against the board's own `?suggest=`. It reuses the shared `[data-search-wrap]` chrome (clear button +
+in-flight spinner) that the browse and collection pages use.
+
+Game detail has its own copy of this markup rather than including it: its field additionally previews the
+hunter at a typed RANK (`?at=`), which no other board offers, and it is mirrored into that page's minibar.
+{% endcomment %}
+<form class="gd-lb__find" data-search-wrap data-lb-findform role="search">
+    <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="search" class="gd-lb__findinput" data-lb-find autocomplete="off" spellcheck="false"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="lb-find-suggest"
+           placeholder="Find a hunter" aria-label="Find a hunter on this board" />
+    <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    <span class="pp-search-spin" aria-hidden="true"></span>
+    <div class="gd-lb__suggest" id="lb-find-suggest" data-lb-suggest role="listbox" hidden></div>
+</form>

@@ -222,6 +222,14 @@ Ranks tab, job detail's Ranks tab); game detail joined them in 2026-08 -- all fo
 | `virtualBoard(o)` | `{list, total, rowSelector, rowHeight, fetchRows, pageSize?, rankKey?, youRank?, chromeInset?, onRender?}` | `{jump, refresh, destroy}` |
 | `wireBoard(root, o?)` | `root` = `[data-lb-board]`; `{scope?, chromeInset?, onRender?}` | `{jump, refresh, destroy}`, or **null** for an empty board |
 | `boardEntrance(root)` | `root` = `[data-lb-board]` | — |
+| `wireBoardSearch(o)` | `{input, drop, form, suggestUrl, jump, rankUrl?, total?, itemClass?}` | — |
+
+`wireBoardSearch` is the board typeahead: type a name, pick a hunter, land on their rank. `wireBoard`
+wires it automatically when the jump bar's `extra_partial` slot holds a search field, pointing it at the
+board's own `?suggest=` — so a suggestion always carries a rank on the board being read. Game detail
+calls it directly, because it also passes `rankUrl` (a `?at=` preview of the hunter at a typed rank) and
+mirrors the field into its minibar. Matching is PREFIX, server-side: nothing indexes `icontains` on
+`Profile`, and the navbar's hunter search made the same call.
 
 `fetchRows(start, count)` takes two arguments -- `from` went with `invert`, since a display position IS a
 rank once no board can be read bottom-first.

@@ -16,9 +16,11 @@ looked least like the others. It was reduced onto the shared row rather than the
 to fit it -- the per-tier trophy dots, the completion bar and the speed board's second date are gone,
 which is a real trade recorded in `test_game_leaderboard_view` rather than hidden here.
 
-What it still has that the others do not: a hunter search, three board kinds, and trophy-group scoping.
-Those are FEATURES, not drift, and the search in particular is a capability the shared jump bar has a
-slot for precisely so it can spread.
+What it still has that the others do not: three board kinds, trophy-group scoping, a minibar, and a
+`?at=` rank PREVIEW on its search field. Those are FEATURES, not drift.
+
+The hunter SEARCH did spread -- that is what the jump bar's `extra_partial` slot was built for, and all
+four boards now run `PlatPursuit.wireBoardSearch` against their own `?suggest=`.
 """
 
 import datetime as dt
@@ -130,6 +132,18 @@ def _render(surface, client, fresh=True):
     game = _game_board() if fresh else Game.objects.get()
     url = reverse('game_leaderboard', args=[game.np_communication_id])
     return client.get(url), client.get(url, {'range': 51})
+
+
+def _suggest_for(surface, q):
+    """Where each board's typeahead lives. Three share the rows/panel endpoint; game detail has its own."""
+    if surface == 'global':
+        return reverse('leaderboard_rows'), {'tab': 'trophies', 'suggest': q}
+    if surface == 'badge':
+        return reverse('badge_ranks_panel', args=['uniform']), {'suggest': q}
+    if surface == 'job':
+        return reverse('job_ranks_panel', args=['archivist']), {'suggest': q}
+    return (reverse('game_leaderboard', args=[Game.objects.get().np_communication_id]),
+            {'suggest': q})
 
 
 def _rank_me_on(surface):
@@ -376,6 +390,44 @@ def test_the_viewer_rank_points_at_the_viewers_own_row(surface, client):
         f'{surface}: the highlight would land on rank {viewer.group(1)} but the viewer is row '
         f'{row.group(1)} -- the numbering and the rank read different populations'
     )
+
+
+@pytest.mark.parametrize('surface', SURFACES)
+def test_every_board_offers_the_hunter_search(surface, client):
+    """The third way in, and the last thing game detail had alone.
+
+    It reaches the page through a template-path SLOT (`extra_partial`), which is a silent failure mode:
+    drop the kwarg or typo the path and the field simply is not there, with no error and nothing raised.
+    The `?suggest=` endpoints stay covered by their own tests, so without this the suite would be fully
+    green with the only UI that calls them gone.
+    """
+    panel, _ = _render(surface, client)
+    body = panel.content.decode()
+
+    assert 'data-lb-findform' in body, f'{surface}: the hunter search did not reach the board'
+    assert 'data-lb-find' in body and 'data-lb-suggest' in body
+    # ...and it sits INSIDE the jump bar, between the two other ways in, rather than beside the cluster.
+    bar = body[body.index('lb-jumpbar'):body.index('</div>', body.index('lb-goto'))]
+    assert 'data-lb-find' in bar, f'{surface}: the search is not in the jump bar slot'
+
+
+@pytest.mark.parametrize('surface', SURFACES)
+def test_every_board_search_is_scoped_and_ranked(surface, client):
+    """A suggestion carries the rank you would jump to ON THIS BOARD. That is the whole reason a board
+    search exists next to a navbar that already finds any hunter anywhere -- and it means the search has
+    to read the same population the rows do."""
+    me = _rank_me_on(surface)
+    name = me.display_psn_username or me.psn_username
+
+    url, params = _suggest_for(surface, name[:4])
+    data = client.get(url, params).json()
+
+    # Compared on `display`, which is the VISIBLE name in both shapes. `username` is not uniform: game
+    # detail returns the canonical `psn_username`, while the shared serializer returns what the shared ROW
+    # renders (`display_psn_username or psn_username`) so the suggestion and the row agree with each other.
+    hit = [p for p in data['players'] if p['display'] == name]
+    assert hit, f'{surface}: the search did not find a hunter who is on the board'
+    assert hit[0]['rank'] >= 1, f'{surface}: the suggestion carries no rank to jump to'
 
 
 #: The PAGE each board is mounted from. The panels above are fragments; the script that mounts them lives

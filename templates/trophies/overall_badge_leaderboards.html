@@ -184,7 +184,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         `wireBoard`'s unconditional submit guard stopped it navigating away, which is why it was inert
         rather than harmful. {% endcomment %}
         {% if board_entries %}
-        {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=ranked_total id_prefix='lb' only %}
+        {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=ranked_total id_prefix='lb' extra_partial='trophies/partials/leaderboard_find.html' only %}
         {% endif %}
       </div>
     </section>

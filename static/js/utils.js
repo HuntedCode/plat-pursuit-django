@@ -2426,6 +2426,122 @@ function virtualBoard(o) {
 }
 
 
+
+/**
+ * The board's hunter typeahead: type a name, pick a hunter, land on their rank.
+ *
+ * Extracted from game detail, which had the only one. It was already parameterized by element (the
+ * toolbar field and the minibar field both drive the same board), so what it needed to become shared was
+ * its two board-specific dependencies injected: where a suggestion comes FROM, and what a pick jumps TO.
+ *
+ * The dropdown is built with `createElement` + `textContent`, never innerHTML -- a PSN Online ID is
+ * attacker-controlled text and this renders it into a listbox.
+ *
+ * @param {Object} o
+ * @param {HTMLElement} o.input      the search field
+ * @param {HTMLElement} o.drop       the listbox it fills
+ * @param {HTMLElement} o.form       submitted by Enter
+ * @param {function(string): string} o.suggestUrl   query -> URL returning `{players: [...]}`
+ * @param {function(number)} o.jump                 rank -> land on it
+ * @param {function(number): string} [o.rankUrl]    rank -> URL previewing the hunter AT that rank. Game
+ *        detail has one (`?at=`); the other boards do not, and a bare number just jumps.
+ * @param {function(): number} [o.total]            board size, so a rank past the end skips the fetch
+ * @param {string} [o.itemClass='gd-lb__sugg']      the row class, for styling and for the arrow keys
+ */
+function wireBoardSearch(o) {
+    var input = o.input, drop = o.drop, form = o.form;
+    if (!input || !drop || !form || !PlatPursuit.wireSearchField) { return; }
+    var itemClass = o.itemClass || 'gd-lb__sugg';
+    var field = PlatPursuit.wireSearchField(input, { onClear: closeDrop });
+    var items = [], active = -1, seq = 0;
+
+    function closeDrop() {
+        drop.hidden = true; drop.textContent = ''; items = []; active = -1;
+        input.setAttribute('aria-expanded', 'false');
+    }
+    function setActive(i) {
+        active = i;
+        Array.prototype.forEach.call(drop.querySelectorAll('.' + itemClass), function (el, j) {
+            el.classList.toggle('is-active', j === i);
+        });
+    }
+    function render(players) {
+        drop.textContent = '';
+        items = players || [];
+        if (!items.length) { closeDrop(); return; }
+        items.forEach(function (p) {
+            var row = document.createElement('button');
+            row.type = 'button'; row.className = itemClass; row.setAttribute('role', 'option');
+            row.dataset.rank = p.rank;
+            var av = document.createElement('span'); av.className = itemClass + '-av';
+            if (p.avatar) {
+                var img = document.createElement('img'); img.src = p.avatar; img.alt = '';
+                av.appendChild(img);
+            }
+            row.appendChild(av);
+            var name = document.createElement('span'); name.className = itemClass + '-name';
+            name.textContent = p.display;              // textContent: safe against a hostile name
+            row.appendChild(name);
+            var rank = document.createElement('span'); rank.className = itemClass + '-rank';
+            rank.textContent = '#' + Number(p.rank).toLocaleString();
+            row.appendChild(rank);
+            drop.appendChild(row);
+        });
+        drop.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        setActive(0);
+    }
+    function load(url) {
+        var mine = ++seq;
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(function (data) { if (mine === seq) { field.setBusy(false); render(data.players); } })
+            .catch(function () { if (mine === seq) { field.setBusy(false); closeDrop(); } });
+    }
+
+    var doSuggest = PlatPursuit.debounce(function (q) { load(o.suggestUrl(q)); }, 180);
+    // A bare number previews the hunter at that rank, where the board offers that. The total is read
+    // live so a rank past the end skips the fetch entirely.
+    var doRank = PlatPursuit.debounce(function (n) {
+        var total = o.total ? o.total() : 0;
+        if (n < 1 || (total && n > total)) { field.setBusy(false); closeDrop(); return; }
+        load(o.rankUrl(n));
+    }, 180);
+
+    input.addEventListener('input', function () {
+        var q = input.value.trim();
+        if (/^\d+$/.test(q) && o.rankUrl) { field.setBusy(true); doRank(parseInt(q, 10)); return; }
+        if (/^\d+$/.test(q)) { field.setBusy(false); closeDrop(); return; }   // a number, but nothing to preview
+        if (q.length < 2) { field.setBusy(false); closeDrop(); return; }
+        field.setBusy(true);
+        doSuggest(q);
+    });
+    input.addEventListener('keydown', function (e) {
+        if (drop.hidden) { return; }
+        var n = drop.querySelectorAll('.' + itemClass).length;
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(active + 1, n - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(active - 1, 0)); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeDrop(); }
+    });
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = input.value.trim();
+        if (/^\d+$/.test(q)) { o.jump(parseInt(q, 10)); closeDrop(); input.blur(); return; }
+        var pick = items[active >= 0 ? active : 0];
+        if (pick) { o.jump(parseInt(pick.rank, 10)); closeDrop(); input.blur(); }
+    });
+    // mousedown (not click) so it fires before the input's blur closes the dropdown.
+    drop.addEventListener('mousedown', function (e) {
+        var row = e.target.closest && e.target.closest('.' + itemClass);
+        if (!row) { return; }
+        e.preventDefault();
+        o.jump(parseInt(row.dataset.rank, 10));
+        closeDrop(); input.blur();
+    });
+    input.addEventListener('blur', function () { setTimeout(closeDrop, 120); });
+}
+
+
 /**
  * Mount a virtualized board from its `[data-lb-board]` root, and wire its jump affordances.
  *
@@ -2559,6 +2675,25 @@ function wireBoard(root, o) {
     }
     scope.addEventListener('click', onClick);
 
+    // THE HUNTER SEARCH, when this board's jump bar was given one. It fills `leaderboard_jumpbar.html`'s
+    // `extra_partial` slot, so a board that does not pass one simply has no field here and this is a
+    // no-op. The URL is the rows URL with `?suggest=` -- same endpoint, same slice, so a suggestion names
+    // a rank on the board being read rather than on some other version of it.
+    if (PlatPursuit.wireBoardSearch) {
+        PlatPursuit.wireBoardSearch({
+            input: scope.querySelector('[data-lb-find]'),
+            drop: scope.querySelector('[data-lb-suggest]'),
+            form: scope.querySelector('[data-lb-findform]'),
+            suggestUrl: function (q) {
+                var qp = new URLSearchParams(root.dataset.lbParams || '');
+                qp.set('suggest', q);
+                return root.dataset.lbRowsUrl + '?' + qp.toString();
+            },
+            jump: function (rank) { jumpTo(Math.min(rank, total)); },
+            total: function () { return total; },
+        });
+    }
+
     handle = {
         total: total,
         jumpTo: jumpTo,
@@ -2622,6 +2757,7 @@ window.PlatPursuit.Lightbox = Lightbox;
 window.PlatPursuit.StickyReveal = StickyReveal;
 window.PlatPursuit.virtualBoard = virtualBoard;
 window.PlatPursuit.wireBoard = wireBoard;
+window.PlatPursuit.wireBoardSearch = wireBoardSearch;
 window.PlatPursuit.boardEntrance = boardEntrance;
 window.PlatPursuit.slideViewIn = slideViewIn;
 window.PlatPursuit.igniteTab = igniteTab;

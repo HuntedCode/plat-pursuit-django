@@ -457,6 +457,7 @@ Each step leaves the site working.
 | 8 | ~~Job Boards directory; sub-nav live with all four~~ **REMOVED in step 9** | — |
 | 9 | ✅ Directories removed (2026-08); the three boards VIRTUALIZED onto one shared shell, row, jump bar, window parser and JS engine | Every board is the same board |
 | 10 | ✅ Game detail folded in: shared row + chrome, `invert` and `registered_only` removed, country added to it and to job detail | FOUR boards, one board |
+| 11 | ✅ Board SEARCH on all four (prefix-matched, board-scoped, ranked); board descriptions rewritten in the site's voice | The last game-detail-only feature spreads |
 
 Steps 1–2 are the performance work. **Finishing the cutover *is* the optimization** — it is not a
 prerequisite to it.
@@ -481,6 +482,7 @@ scrolled. All three now run the same pieces:
 | `leaderboard_boardcard.html` | partial | The identity: name, one-line meaning, counting tally |
 | `board_helpers.window_params` | `trophies/views/` | `?range=` / `?count=`, clamped at both ends |
 | `board_helpers.PAGE_SIZE` | `trophies/views/` | 50, once. It was declared three times |
+| `board_suggest` + `wireBoardSearch` | service + `utils.js` | The hunter typeahead, on all four boards |
 
 **Every board endpoint answers two requests, told apart by the PRESENCE of `range`:** no `range` builds
 the full panel; `?range=N` returns bare rows for display positions `[N, N+count)`. The value is not what
