@@ -103,7 +103,10 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
             RADIOS, where the shared chips are usually checkboxes: discipline is single-choice, so the
             native control gives arrow-key movement and one querystring name for free -- and it means the
             active state is CSS-only, correct on click rather than after the swap returns. {% endcomment %}
-            <div class="pp-bgal__cgroup jobs-chips" role="group" aria-label="Filter by discipline">
+            {% comment %} `radiogroup`, not `group`: the shared `.pp-bgal__cgroup` is written for
+            CHECKBOX filters, where `group` is right. A single-choice set needs the stronger role so a
+            screen reader announces "1 of 6" and treats arrow keys as selection. {% endcomment %}
+            <div class="pp-bgal__cgroup jobs-chips" role="radiogroup" aria-label="Filter by discipline">
                 <span class="pp-bgal__clabel" aria-hidden="true">Discipline</span>
                 <label class="pp-bgal__chip">
                     <input type="radio" name="discipline" value=""{% if not selected_discipline %} checked{% endif %}>
@@ -121,8 +124,11 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
         <noscript><button type="submit" class="jobs-bar__go">Apply</button></noscript>
     </form>
 
-    {# ── Results (the HTMX swap target = just the wall) ── #}
-    <div id="browse-results">
+    {% comment %} Results, and the swap is ANNOUNCED. Filtering to a discipline takes the wall from 25
+    tiles to 5 with no page reload, which is silent to a screen reader without a live region -- the reader
+    operates a control and is told nothing happened. `polite` so it waits for a pause rather than cutting
+    across the chip they just chose; `aria-busy` marks the in-flight moment. {% endcomment %}
+    <div id="browse-results" aria-live="polite" aria-busy="false">
         {% include 'trophies/partials/jobs_browse/browse_results.html' %}
     </div>
 {% endblock %}

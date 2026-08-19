@@ -58,10 +58,13 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     <div class="scard__value pp-tally" data-countup="{{ contract_total }}">{{ contract_total|intcomma }}</div>
                     <div class="scard__sub">feed this job</div>
                 </div>
+                {% comment %} "Total XP", not "XP to earn": this is the job's whole SUPPLY across every
+                live contract, not what is left for the viewer. A hunter who has banked five of six
+                contracts would read the full figure under a label promising it is still earnable. {% endcomment %}
                 <div class="scard" style="--scard-accent: var(--disc);">
-                    <div class="scard__label">XP to earn</div>
+                    <div class="scard__label">Total XP</div>
                     <div class="scard__value pp-tally" data-countup="{{ xp_supply }}">{{ xp_supply|intcomma }}</div>
-                    <div class="scard__sub">across them all</div>
+                    <div class="scard__sub">across its contracts</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Pursuers</div>

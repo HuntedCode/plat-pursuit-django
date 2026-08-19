@@ -923,3 +923,89 @@
 @media (prefers-reduced-motion: reduce) {
     .lab-tab-count { animation: none; }
 }
+
+
+/* ═══ The contract card's JOB-SCOPED variant (job detail) ═══════════════════════════════════════════
+   MOVED HERE FROM `jobs.css` (2026-08 audit). Two of these rules are equal-specificity overrides of
+   `.rp-ring__seg` rules declared above, and unlayered component CSS resolves ties by SOURCE ORDER -- so
+   in the page file they only won because `input.css` happened to import `elements.css` first. Reordering
+   two import lines would have silently broken the ring cross-highlight with no error anywhere. A variant
+   of a shared component belongs beside the component.
+   ───────────────────────────────────────────────────────────────────────────────────────────────── */
+/* The shared Career card (`_contract_card.html`) renders a 5x5 map of all 25 jobs on the Contracts board
+   and these tiles on job detail, where twenty-four of those cells answer a question the page has already
+   answered. Only this block differs; everything else about the card is identical, which is why it is a
+   variant rather than a second template.
+
+   THE COLUMN COUNT FOLLOWS THE JOB COUNT. A contract levels 1 to 6 jobs -- that range is why
+   `CONTRACT_XP_TOTAL` is 6,000, a number chosen to split into clean integer shares across exactly it --
+   and a fixed 3 columns was wrong for half of it: 4 jobs became "3 and a lone tile", 2 became a pair with
+   a hole beside it. Only 3 and 6 were ever clean.
+
+   Mapped per count so the last row is always full: 1 -> 1, 2 -> 2, 4 -> 2x2, and 3/5/6 -> 3. FIVE is the
+   one that cannot be rectangular at any sensible width and takes 3 + 2; five across would put each tile
+   under 30px.
+
+   The job column is `1fr` beside the ring's fixed 84px, so a 3-wide row gives roughly 48-55px per tile --
+   more room each than Career's 5-wide map gets in the same space, and a 1- or 2-wide row is generous. */
+/* TOP-ALIGNED, and scoped so Career is untouched. `.rp-body` centres its three columns vertically, which
+   is right for the 5x5 map (a fixed 5-row block, always taller than the ring beside it) and wrong here:
+   these tiles are 1 to 2 rows, so centring floats a one-row contract's jobs into the middle of the card
+   while a two-row contract's start at the top -- the block appears to move between cards in a wall.
+   `:has(.rp-jobtiles)` matches only the job-scoped variant, so the Contracts board keeps its centring. */
+.rp-body:has(.rp-jobtiles) { align-items: start; }
+.rp-jobtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 4px; align-content: start; }
+.rp-jobtiles[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
+.rp-jobtiles[data-n="2"],
+.rp-jobtiles[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rp-jobtile {
+    display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0;
+    padding: 5px 2px 4px; border-radius: var(--pp-radius-lg); text-align: center;
+    color: var(--pp-text-mute);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 8%, transparent);
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 18%, transparent);
+    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease),
+                box-shadow var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.rp-jobtile__ico { width: 17px; height: 17px; flex: 0 0 auto; color: var(--disc, var(--pp-primary)); }
+/* TWO LINES RESERVED, wrapping rather than truncating. At this width "Cartographer" and "Card Shark" take
+   two lines and "Mage" takes one, so without a reserved height the two rows of a 6-job contract would sit
+   at different heights and the grid would read as broken. A name is also the one thing here that must not
+   be ellipsised -- the icon is already the abbreviation. */
+/* 10px, up from 8.5px. The design system sets a 12px floor for READABLE content and reserves smaller
+   sizes for decorative or supplementary elements -- and a job's NAME is the primary label of this tile,
+   not a decoration. 10px is still under the floor and is the honest compromise at ~50px of tile: the
+   alternative is truncating names, and the icon is already the abbreviation. Revisit if the tile ever
+   gets more room. */
+.rp-jobtile__name {
+    font-size: 10px; font-weight: 700; line-height: 1.15; letter-spacing: 0.01em;
+    min-height: calc(2 * 1.15em); display: flex; align-items: center; justify-content: center;
+    overflow-wrap: anywhere;
+}
+/* THE JOB YOU ARE ON. A contract splits its XP evenly across every job it names, so which of these is
+   "this one" decides whether a 6,000 XP contract pays this job 6,000 or 1,000. */
+.rp-jobtile.is-this {
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 20%, transparent);
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, transparent);
+}
+/* UNDER THE CURSOR -- paired with the ring arc of the same slug (`ringHoverLink`). A lift rather than a
+   different fill, because `is-this` and `is-linked` are different states that can land on one tile. */
+.rp-jobtile.is-linked {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 85%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, transparent);
+}
+@media (prefers-reduced-motion: reduce) { .rp-jobtile { transition: none; } }
+
+/* The ring says the same thing in the same breath: your arc holds, the rest recede. The segments already
+   carry their job slug (`_ring_segments` tags them expressly so the ring and the job display can
+   cross-highlight), so this costs a class and nothing else. */
+.rp-ring__seg.is-this { stroke-width: 4; }
+.rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg:not(.is-this) { opacity: 0.28; }
+/* ...but a HOVERED arc comes back to full, whichever job it belongs to. Without this the resting dim
+   above wins and hovering another job's tile highlights an arc the reader cannot see -- the
+   cross-highlight would be silently half-broken in exactly the case it exists for. The selector matches
+   the dim rule's specificity and is declared after it, which is what makes it win; a plain
+   `.rp-ring__seg.is-linked` loses and looks like the JS is not running. */
+.rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg.is-linked { opacity: 1; }

@@ -36,7 +36,7 @@
 /* The no-JS submit. Visible only without JS (it sits in a <noscript>), so it needs no state beyond
    looking like a button. */
 .jobs-bar__go {
-    margin-top: 10px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    margin-top: 10px; padding: 8px 16px; border-radius: var(--pp-radius-lg); font-size: 13px; font-weight: 700;
     color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); cursor: pointer;
 }
 
@@ -113,7 +113,7 @@
 
 .jobt__top { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .jobt__ic {
-    width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px;
+    width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--pp-radius-lg);
     background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
     color: var(--disc, var(--pp-primary));
 }
@@ -173,9 +173,8 @@
    shrinking to fit beside a title. */
 .jobd__head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .jobd__head > .pp-bhead__id { flex: 1 1 12rem; }
-.jobd__head > .jobd__tallies { margin-left: auto; }
 .jobd__ic {
-    width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px;
+    width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--pp-radius-lg);
     background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
     color: var(--disc, var(--pp-primary));
 }
@@ -190,106 +189,9 @@
    stack -- but the rule is explicit because a `display` set anywhere else would beat the attribute. */
 .jobd-view[hidden] { display: none; }
 
-.jobd__contracts { display: flex; flex-direction: column; gap: 6px; }
-.jobd__con {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-    padding: 10px 12px; border-radius: var(--pp-radius-md, 10px);
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
-}
-/* A contract the viewer has already banked reads quieter, not louder: the list's job is to show what
-   FEEDS this job, and the ones still open are the actionable half. */
-.jobd__con.is-earned { opacity: 0.72; }
-.jobd__con-name { font-size: 13px; font-weight: 700; color: var(--pp-text); flex: 1 1 auto; min-width: 0; }
-.jobd__con-jobs { display: flex; flex-wrap: wrap; gap: 4px; }
-.jobd__con-job {
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 6px; border-radius: 4px;
-    color: var(--pp-text-mute); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-}
-/* The job you are looking at is marked in its own row -- a contract splits its XP across every job it
-   names, so which one is "this" is the thing a reader needs to see. */
-.jobd__con-job.is-this {
-    color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
-}
-.jobd__con-state {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--pp-primary);
-}
-.jobd__more { margin-top: 10px; text-align: center; font-size: 11px; color: var(--pp-text-mute); }
-
-/* ---- Job detail: the contract card's JOB-SCOPED variant ---------------------------------------------
-   The shared Career card (`_contract_card.html`) renders a 5x5 map of all 25 jobs on the Contracts board
-   and these tiles on job detail, where twenty-four of those cells answer a question the page has already
-   answered. Only this block differs; everything else about the card is identical, which is why it is a
-   variant rather than a second template.
-
-   THE COLUMN COUNT FOLLOWS THE JOB COUNT. A contract levels 1 to 6 jobs -- that range is why
-   `CONTRACT_XP_TOTAL` is 6,000, a number chosen to split into clean integer shares across exactly it --
-   and a fixed 3 columns was wrong for half of it: 4 jobs became "3 and a lone tile", 2 became a pair with
-   a hole beside it. Only 3 and 6 were ever clean.
-
-   Mapped per count so the last row is always full: 1 -> 1, 2 -> 2, 4 -> 2x2, and 3/5/6 -> 3. FIVE is the
-   one that cannot be rectangular at any sensible width and takes 3 + 2; five across would put each tile
-   under 30px.
-
-   The job column is `1fr` beside the ring's fixed 84px, so a 3-wide row gives roughly 48-55px per tile --
-   more room each than Career's 5-wide map gets in the same space, and a 1- or 2-wide row is generous. */
-/* TOP-ALIGNED, and scoped so Career is untouched. `.rp-body` centres its three columns vertically, which
-   is right for the 5x5 map (a fixed 5-row block, always taller than the ring beside it) and wrong here:
-   these tiles are 1 to 2 rows, so centring floats a one-row contract's jobs into the middle of the card
-   while a two-row contract's start at the top -- the block appears to move between cards in a wall.
-   `:has(.rp-jobtiles)` matches only the job-scoped variant, so the Contracts board keeps its centring. */
-.rp-body:has(.rp-jobtiles) { align-items: start; }
-.rp-jobtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 4px; align-content: start; }
-.rp-jobtiles[data-n="1"] { grid-template-columns: minmax(0, 1fr); }
-.rp-jobtiles[data-n="2"],
-.rp-jobtiles[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.rp-jobtile {
-    display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0;
-    padding: 5px 2px 4px; border-radius: 7px; text-align: center;
-    color: var(--pp-text-mute);
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 8%, transparent);
-    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 18%, transparent);
-    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease),
-                box-shadow var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
-}
-.rp-jobtile__ico { width: 17px; height: 17px; flex: 0 0 auto; color: var(--disc, var(--pp-primary)); }
-/* TWO LINES RESERVED, wrapping rather than truncating. At this width "Cartographer" and "Card Shark" take
-   two lines and "Mage" takes one, so without a reserved height the two rows of a 6-job contract would sit
-   at different heights and the grid would read as broken. A name is also the one thing here that must not
-   be ellipsised -- the icon is already the abbreviation. */
-.rp-jobtile__name {
-    font-size: 8.5px; font-weight: 700; line-height: 1.15; letter-spacing: 0.01em;
-    min-height: calc(2 * 1.15em); display: flex; align-items: center; justify-content: center;
-    overflow-wrap: anywhere;
-}
-/* THE JOB YOU ARE ON. A contract splits its XP evenly across every job it names, so which of these is
-   "this one" decides whether a 6,000 XP contract pays this job 6,000 or 1,000. */
-.rp-jobtile.is-this {
-    color: var(--pp-text);
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 20%, transparent);
-    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, transparent);
-}
-/* UNDER THE CURSOR -- paired with the ring arc of the same slug (`ringHoverLink`). A lift rather than a
-   different fill, because `is-this` and `is-linked` are different states that can land on one tile. */
-.rp-jobtile.is-linked {
-    color: var(--pp-text);
-    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 85%, transparent);
-    box-shadow: 0 0 12px color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, transparent);
-}
-@media (prefers-reduced-motion: reduce) { .rp-jobtile { transition: none; } }
-
-/* The ring says the same thing in the same breath: your arc holds, the rest recede. The segments already
-   carry their job slug (`_ring_segments` tags them expressly so the ring and the job display can
-   cross-highlight), so this costs a class and nothing else. */
-.rp-ring__seg.is-this { stroke-width: 4; }
-.rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg:not(.is-this) { opacity: 0.28; }
-/* ...but a HOVERED arc comes back to full, whichever job it belongs to. Without this the resting dim
-   above wins and hovering another job's tile highlights an arc the reader cannot see -- the
-   cross-highlight would be silently half-broken in exactly the case it exists for. The selector matches
-   the dim rule's specificity and is declared after it, which is what makes it win; a plain
-   `.rp-ring__seg.is-linked` loses and looks like the JS is not running. */
-.rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg.is-linked { opacity: 1; }
+/* The `.jobd__con*` text-row list that used to live here is gone with the placeholder it styled --
+   job detail renders the shared contract card now. Roughly 25 lines describing a list no template
+   emits; left in place they read as the live styling for that tab. */
 
 /* ---- Job detail: "Your standing" ---------------------------------------------------------------------
    The authed progress block, under the objective `.scard` row -- the shape franchise detail's "Your
@@ -319,4 +221,7 @@
 .jobd__mine-fig b { font-size: 14px; color: var(--pp-text); }
 /* On the tightest phones the third read-out is the expendable one: level and XP banked are the state,
    "to next level" is the projection. */
-@media (max-width: 400px) { .jobd__mine-fig--next { display: none; } }
+/* 640px, the design system's ONE phone-only escape hatch. This was 400px -- a bespoke fourth
+   breakpoint that hid the figure on a 375px iPhone SE and showed it on a 414px Pro Max: two phones,
+   two layouts, from a cutoff nothing else on the site uses. */
+@media (max-width: 640px) { .jobd__mine-fig--next { display: none; } }

@@ -104,6 +104,17 @@ def test_the_catalogue_counts_are_grouped_not_per_card(client):
 
 # ------------------------------------------------------------------ ordering ----------------------------
 
+def _component_css():
+    """Every component stylesheet concatenated.
+
+    These assertions are about RULES, not about which file holds them. Three of them broke when the
+    `.rp-*` job variants moved from `jobs.css` to `elements.css` (beside the rules they override, to kill
+    an import-order dependency) -- a correct refactor failing tests that had encoded a filename.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+    return '\n'.join(f.read_text(encoding='utf-8') for f in sorted(root.glob('*.css')))
+
+
 def _solo():
     """Empty the catalogue so a test can assert on EXACT contents or order.
 
@@ -793,8 +804,7 @@ def test_the_tile_grid_never_leaves_a_ragged_last_row(client):
 
     5 is the documented exception: no rectangle fits it at a sensible width, so it takes 3 + 2.
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
-    css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
+    css = _component_css()
 
     def columns_for(n):
         """Read the effective column count out of the CSS the way the browser resolves it: the per-count
@@ -844,8 +854,7 @@ def test_a_job_tile_reserves_room_for_a_two_line_name(client):
     """At tile width "Cartographer" wraps to two lines and "Mage" does not, so without a reserved height
     the two rows of a six-job contract sit at different heights and the grid reads as broken. Names WRAP
     rather than truncate -- the icon is already the abbreviation."""
-    root = pathlib.Path(__file__).resolve().parents[2]
-    css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
+    css = _component_css()
     rule = css[css.index('.rp-jobtile__name {'):]
     rule = rule[:rule.index('}')]
     assert 'min-height' in rule, 'the two rows will not line up'
@@ -862,9 +871,9 @@ def test_the_tile_grid_is_top_aligned_and_career_still_is_not(client):
     an unscoped `align-items: start` would silently re-lay-out every card on the Contracts board -- a page
     this change has no business touching.
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
-    css = (root / 'static' / 'css' / 'components' / 'jobs.css').read_text(encoding='utf-8')
-    elements = (root / 'static' / 'css' / 'components' / 'elements.css').read_text(encoding='utf-8')
+    css = _component_css()
+    elements = (pathlib.Path(__file__).resolve().parents[2]
+                / 'static' / 'css' / 'components' / 'elements.css').read_text(encoding='utf-8')
 
     assert '.rp-body:has(.rp-jobtiles) { align-items: start; }' in css
     # Career's own rule is untouched: still centred, still declared where the card lives.
@@ -999,7 +1008,7 @@ def test_the_header_carries_the_jobs_three_objective_stats(client):
     # One count, not a sum: `class="scard"` is a PREFIX of `class="scard" style`, so adding the two
     # double-counts the accented cell.
     assert head.count('class="scard"') == 3, 'the header is not the three-stat row'
-    for label in ('Contracts', 'XP to earn', 'Pursuers'):
+    for label in ('Contracts', 'Total XP', 'Pursuers'):
         assert f'>{label}</div>' in head, f'the header is missing its {label} stat'
     # The XP figure is the one the catalogue tile promised, so the two pages cannot quote different totals.
     assert str(CONTRACT_XP_TOTAL) in head or f'{CONTRACT_XP_TOTAL:,}' in head

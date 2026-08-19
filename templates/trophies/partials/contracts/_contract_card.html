@@ -96,6 +96,12 @@ The map branch stays the default and is what Career renders, untouched.
                       title="{{ el.name }} &middot; +{{ p.xp_each|intcomma }} XP{% if el.slug == job.slug %} (this job){% endif %}">
                     {% job_icon_use el.icon 'rp-jobtile__ico' %}
                     <span class="rp-jobtile__name">{{ el.name }}</span>
+                    {% comment %} The SHARE, and the "this job" marker, for readers who get neither. Both
+                    live in `title=` otherwise, which is not exposed on touch and is announced
+                    inconsistently -- and the share is the whole point of this variant, while `is-this` is
+                    a colour-only distinction. Career's map cell carries the same `sr-only`; the job
+                    variant dropped it. {% endcomment %}
+                    <span class="sr-only">+{{ p.xp_each|intcomma }} XP{% if el.slug == job.slug %}, this job{% endif %}</span>
                 </span>
                 {% endfor %}
             </div>

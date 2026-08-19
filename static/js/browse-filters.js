@@ -32,6 +32,14 @@
     if (!form) return;
 
     // ── Auto-submit for non-text controls ──────────────────────────────
+    // RADIOS ARE COALESCED. A native radio group selects on ARROW, not on Enter, so a keyboard user
+    // sweeping from "All" to the last chip fires one `change` per step -- five requests and, with
+    // `hx-push-url`, five history entries, so Back then takes six presses to leave the page. Mouse users
+    // never see it. A short debounce collapses a sweep into the selection it lands on; a single click
+    // still submits within ~120ms, under the threshold where a filter feels laggy.
+    //
+    // Checkboxes and selects are NOT debounced: each of those changes is a deliberate, separate act.
+    let radioTimer = null;
     form.addEventListener('change', function (e) {
       const el = e.target;
       const isAutoSubmit =
@@ -39,6 +47,14 @@
         el.type === 'radio' ||
         el.tagName === 'SELECT' ||
         el.closest('[data-auto-submit]');
+
+      if (el.type === 'radio') {
+        clearTimeout(radioTimer);
+        const radioPage = form.querySelector('input[name="page"]');
+        if (radioPage) radioPage.value = '1';
+        radioTimer = setTimeout(function () { htmx.trigger(form, 'submit'); }, 120);
+        return;
+      }
 
       if (isAutoSubmit) {
         // Reset to page 1 on any filter change
