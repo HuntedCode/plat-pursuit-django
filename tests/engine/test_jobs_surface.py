@@ -235,7 +235,6 @@ def test_the_card_shows_the_contract_XP_that_feeds_the_job(client):
     _contract('Shared', [a, b])
     _contract('Triple', [a, b, c])
     _contract('Draft', [c], live=False)
-    Contract.objects.filter(name='Rich').delete()
     rich = _contract('Rich', [b])
     Contract.objects.filter(pk=rich.pk).update(xp_total_override=9000)
 
@@ -365,7 +364,10 @@ def test_the_empty_state_says_WHICH_filter_emptied_it(client):
     _solo()
     _job('a', 'Ranger', discipline='combat')
 
-    searched = client.get(reverse('jobs_browse'), {'q': 'zzz'}).content.decode()
+    # Scoped to the WALL. `'zzz' in body` passed whether or not the empty state existed -- the search
+    # input echoes the query back into its `value`, so the needle was always present.
+    searched = client.get(reverse('jobs_browse'), {'q': 'zzz'}, HTTP_HX_REQUEST='true').content.decode()
+    assert 'Nothing here is called' in searched, 'the empty state does not say a search emptied it'
     assert 'zzz' in searched, 'the empty state does not name the search that emptied it'
 
     filtered = client.get(reverse('jobs_browse'), {'discipline': 'mind'}).content.decode()
@@ -453,7 +455,12 @@ def test_job_detail_is_public_and_both_tabs_render_signed_out(client):
 
     contracts = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
     assert 'Some Contract' in contracts
-    assert 'Ready to claim' not in contracts, 'viewer state leaked into the anonymous view'
+    # `Ready to Claim` -- the CASING is the assertion. This read `'Ready to claim'`, a string that
+    # appears nowhere in the codebase, so the negative was vacuously true on every input: drop the
+    # `{% if user.is_authenticated %}` guard and the badge renders for anonymous readers with the test
+    # still green. Same trap as `'contract'` against `Contracts`, one letter over.
+    assert 'Ready to Claim' not in contracts, 'viewer state leaked into the anonymous view'
+    assert 'rp-accept' not in contracts, 'a claim control rendered for an anonymous viewer'
 
 
 def test_a_linked_viewer_sees_their_own_state_on_each_contract(client):
@@ -512,10 +519,15 @@ def test_career_still_renders_the_full_job_map(client):
     assert '{% if job %}' in src and 'rp-jobgrid' in src, 'the map branch is gone'
     # The roster loop must not use `job` as its variable: it would shadow the page-scope one, and the two
     # mean opposite things (one job vs all 25).
+    # Bounded by the LOOP, not by the next `{% endif %}` -- the first one is inline on the cell's own
+    # class attribute, so slicing there ends the window before the loop body it is checking. Third time
+    # today an index-to-the-next-delimiter slice has cut short of its subject.
     grid = src[src.index('rp-jobgrid'):]
-    grid = grid[:grid.index('{% endif %}')]
+    grid = grid[:grid.index('{% endfor %}{% endfor %}')]
     assert '{% for rjob in d.jobs %}' in grid, 'the map loop shadows the page-scope `job` again'
-    assert contracts_service.CONTRACTS_PER_PAGE > 0
+    # ...and the loop BODY consistently uses the renamed variable, which is what the rename was for: a
+    # half-rename leaves the branch reading the page-scope `job` for some of its values.
+    assert 'rjob.slug in p.element_slugs' in grid and '{{ rjob.name }}' in grid
 
 
 def test_the_contracts_tab_shows_legacy_and_already_banked_contracts(client):
@@ -540,8 +552,7 @@ def test_the_contracts_tab_shows_legacy_and_already_banked_contracts(client):
 
     body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
     assert 'Long Done' in body, 'a fully-banked contract is missing -- scope is still Career\'s default'
-    assert 'Legacy Only' in body
-    assert legacy is not None
+    assert 'Legacy Only' in body, 'a legacy-platform contract is missing -- platforms is still the default'
 
 
 def test_the_contracts_tab_pages_from_its_own_public_endpoint(client):
@@ -829,7 +840,12 @@ def test_the_tile_grid_never_leaves_a_ragged_last_row(client):
 def test_the_tile_grid_covers_every_job_count_a_contract_can_have(client):
     """1 to 6, and that range is not arbitrary: `CONTRACT_XP_TOTAL` is 6,000 precisely so the even split
     lands on clean integers across it. The layout rule and the economy constant are two facts in different
-    files that have to agree -- widen the range and the grid silently goes ragged again."""
+    files that have to agree.
+
+    This used to assert ONLY the arithmetic -- it read no CSS and rendered no page, so setting the grid to
+    seven columns left it green. It renders a real six-job contract now and counts the tiles, so the
+    constant and the layout are checked against each other rather than the constant against itself.
+    """
     from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 
     for n in range(1, 7):
@@ -837,6 +853,18 @@ def test_the_tile_grid_covers_every_job_count_a_contract_can_have(client):
     assert CONTRACT_XP_TOTAL % 7 != 0, (
         'seven jobs now splits evenly, so the 1-6 range the tile grid is built around has moved'
     )
+
+    _solo()
+    jobs = [_job(f'j{i}', f'Job {i}') for i in range(6)]
+    _contract('Six Ways', jobs)
+    body = client.get(reverse('job_detail', args=['j0']), {'tab': 'contracts'}).content.decode()
+
+    tiles = body[body.index('rp-jobtiles'):]
+    tiles = tiles[:tiles.index('</div>')]
+    # Counted by `data-slug`, one per tile. `class="rp-jobtile` is a PREFIX of both `rp-jobtiles` (the
+    # container) and `rp-jobtile__name` (one per tile), so counting it returns 13 for six jobs.
+    assert tiles.count('data-slug="') == 6, 'a six-job contract did not render six tiles'
+    assert 'data-n="6"' in body, 'the grid was not told how many jobs to lay out'
 
 
 def test_the_tile_grid_declares_its_job_count(client):
