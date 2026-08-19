@@ -415,3 +415,90 @@ def test_the_tabs_slide_like_every_other_switcher(client):
     body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
 
     assert 'PlatPursuit.slideViewIn' in body, 'the tab swap has no directional slide'
+
+
+# ---------------------------------------------------------------------------------------------------
+# The country filter (2026-08). `ProfileJobXP` already carried the mirrored `country_code` that all six
+# standing stores gained, so this board never joins Profile to slice itself.
+# ---------------------------------------------------------------------------------------------------
+
+def _in_country(job, name, xp, code, country):
+    p = ProfileFactory(display_psn_username=name, country_code=code, country=country, is_linked=True)
+    ProfileJobXP.objects.create(profile=p, job=job, total_xp=xp, level=2,
+                                country_code=code, is_linked=True)
+    return p
+
+
+def test_the_job_board_can_be_sliced_by_country(client):
+    job = _job('archivist', 'Archivist')
+    _in_country(job, 'Brit', 900, 'GB', 'United Kingdom')
+    _in_country(job, 'Yank', 800, 'US', 'United States')
+    _in_country(job, 'Brit2', 700, 'GB', 'United Kingdom')
+
+    whole = client.get(reverse('job_ranks_panel', args=['archivist']))
+    assert whole.context['total'] == 3
+
+    sliced = client.get(reverse('job_ranks_panel', args=['archivist']), {'country': 'GB'})
+    body = sliced.content.decode()
+    assert sliced.context['total'] == 2, 'the tally counted the whole board under a slice'
+    assert 'Brit' in body and 'Yank' not in body
+    # Renumbered WITHIN the slice, or the second GB hunter reads as #3 on a two-row board.
+    assert [e['rank'] for e in sliced.context['rows']] == [1, 2]
+
+
+def test_the_job_slice_is_carried_onto_every_later_window(client):
+    """A window that drops the filter returns hunters from everywhere with ranks that keep counting up,
+    so it reads as the board rather than as a bug. The badge board has this test; job detail shipped its
+    filter without one."""
+    job = _job('archivist', 'Archivist')
+    for i in range(60):
+        _in_country(job, f'GB{i:02d}', 10000 - i, 'GB', 'United Kingdom')
+    for i in range(60):
+        _in_country(job, f'US{i:02d}', 9000 - i, 'US', 'United States')
+
+    panel = client.get(reverse('job_ranks_panel', args=['archivist']), {'country': 'GB'})
+    assert 'data-lb-params="country=GB"' in panel.content.decode()
+
+    window = client.get(reverse('job_ranks_panel', args=['archivist']),
+                        {'range': 51, 'country': 'GB'})
+    body = window.content.decode()
+    assert body.count('<li class="lb-row') == 10
+    assert 'GB50' in body and 'US' not in body, 'the second window ignored the filter'
+
+
+def test_the_job_picker_offers_only_countries_on_THIS_board(client):
+    job = _job('archivist', 'Archivist')
+    _in_country(job, 'Brit', 900, 'GB', 'United Kingdom')
+    other = _job('curator', 'Curator')
+    _in_country(other, 'Aussie', 900, 'AU', 'Australia')
+
+    codes = {c['code'] for c in
+             client.get(reverse('job_ranks_panel', args=['archivist'])).context['countries']}
+    assert codes == {'GB'}, f'the picker offered countries with nobody on this board: {codes}'
+
+
+def test_an_unknown_job_country_falls_back_to_the_whole_board(client):
+    job = _job('archivist', 'Archivist')
+    _in_country(job, 'Brit', 900, 'GB', 'United Kingdom')
+
+    for raw in ('ZZ', 'not-a-code', ''):
+        resp = client.get(reverse('job_ranks_panel', args=['archivist']), {'country': raw})
+        assert resp.status_code == 200, f'country={raw!r} was not handled'
+        assert resp.context['total'] == 1, f'country={raw!r} emptied the board'
+        assert resp.context['selected_country'] == '', f'country={raw!r} was accepted'
+
+
+def test_the_job_rank_is_read_under_the_SAME_slice_as_the_rows(client):
+    """The viewer's rank and the row numbering are produced by different code, and the highlight lands on
+    whichever row matches. Applying a filter to one and not the other puts it on a stranger."""
+    job = _job('archivist', 'Archivist')
+    _in_country(job, 'Yank', 5000, 'US', 'United States')       # ahead overall, off the GB board
+    me = _in_country(job, 'Brit', 900, 'GB', 'United Kingdom')
+    client.force_login(me.user)
+
+    whole = client.get(reverse('job_ranks_panel', args=['archivist']))
+    assert whole.context['my_rank'] == 2
+
+    sliced = client.get(reverse('job_ranks_panel', args=['archivist']), {'country': 'GB'})
+    assert sliced.context['my_rank'] == 1
+    assert 'data-lb-viewer-rank="1"' in sliced.content.decode()

@@ -36,11 +36,17 @@ def _clear_rarity_cache():
     def _drop():
         for key in keys:
             cache.delete(key)
-        # country_options is keyed on the code set, so it has no single key to delete. LocMemCache
-        # exposes its own store; nothing else in the suite relies on those entries surviving.
+        # The rest are keyed on the thing they describe -- a code set, a series slug, a job slug, a game
+        # and its board -- so they have no single key to delete. LocMemCache exposes its own store, and
+        # nothing in the suite relies on any `lb:picker:` entry surviving.
+        #
+        # Swept by PREFIX rather than by an enumerated list, because the list was the bug: the per-board
+        # country pickers added in 2026-08 (`lb:picker:cc:*`) were not on it, so a fixture that reused a
+        # series slug with different hunters got the previous test's country list -- which fails only in
+        # a group run, never alone.
         store = getattr(cache, '_cache', None)
         if store is not None:
-            for raw in [k for k in list(store) if 'lb:picker:country_options' in k]:
+            for raw in [k for k in list(store) if 'lb:picker:' in k]:
                 store.pop(raw, None)
 
     _drop()

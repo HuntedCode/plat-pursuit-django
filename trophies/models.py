@@ -3508,7 +3508,7 @@ class SeriesBadgeStanding(models.Model):
     # This is the per-series board's TIEBREAK, and it is what lets earners and chasers be ONE board rather
     # than two. A 3-stage series stacks everyone on 1/3 or 2/3, so `progress_bp` alone leaves large ties
     # sorted by profile id -- arbitrary, and it reads as unranked. Ordering
-    # `(-progress_bp, advanced_at)` gives: earners (10000) on top by completion date, then each rung of
+    # `(-xp, advanced_at)` gives: the most badge points for this series on top, then each rung of
     # chasers with whoever got there first ahead. Same rule the earners board always used, applied the
     # whole way down.
     #
@@ -3553,12 +3553,18 @@ class SeriesBadgeStanding(models.Model):
             # deep into a popular series the scan walks the index fetching `is_linked` per candidate, the
             # exact shape 0307 measured at 49.7 ms. The `profile` tail lets a rank COUNT be index-only,
             # since it completes the board's total ordering.
-            models.Index(fields=['series_slug', '-progress_bp', 'advanced_at', 'profile'],
+            #
+            # KEYED ON `xp`, not `progress_bp`. The board ranks by BADGE POINTS for the series (summed
+            # across editions) rather than by the furthest-along edition's fraction; these two indexes
+            # existed only for that ordering, so they move with it rather than being kept alongside. The
+            # other `progress_bp` orderings in the codebase (collection_service, monthly_recap_service)
+            # are PROFILE-scoped and never used an index that leads with `series_slug`.
+            models.Index(fields=['series_slug', '-xp', 'advanced_at', 'profile'],
                          name='sbs_series_board_idx', condition=Q(is_linked=True)),
             # Country-sliced. The column order matters: series first (always filtered), then country (the
             # slice), then the sort key -- so both forms of the board are a range scan, not a filter over
             # a scan.
-            models.Index(fields=['series_slug', 'country_code', '-progress_bp', 'advanced_at', 'profile'],
+            models.Index(fields=['series_slug', 'country_code', '-xp', 'advanced_at', 'profile'],
                          name='sbs_series_cc_board_idx', condition=Q(is_linked=True)),
         ]
 

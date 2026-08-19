@@ -13,15 +13,44 @@ VIRTUALIZED. The prev/next pager that stood here is gone with it: a job board is
 board with no fuller surface to hand off to, so paging was the only way to reach row 300 at all, and it
 meant twelve clicks to get there.
 {% endcomment %}
-{% if rows %}
+{% if rows or slice_applied %}
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
   <div class="card-body p-3 md:p-4">
-    {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total standing=standing only %}
+    {% comment %} COUNTRY, the same slice every other board offers, scoped to hunters on THIS board so an
+    option cannot empty the thing it filters. `ProfileJobXP` carries the mirrored `country_code` that all
+    six standing stores gained in 2026-08, so this never joins Profile. {% endcomment %}
+    {% if countries %}
+    <form method="get" class="lb-filters" data-filter-form>
+        <div class="lb-filters__f">
+            <label class="lb-filters__lbl" for="jobd-country">Country</label>
+            <select class="pp-gallery__select" id="jobd-country" name="country">
+                <option value="">Everywhere</option>
+                {% for c in countries %}
+                <option value="{{ c.code }}"{% if c.code == selected_country %} selected{% endif %}>{{ c.flag }} {{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+    {% endif %}
+
+    {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total standing=standing scoped=slice_applied only %}
+    {% if rows %}
     {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='jobd' only %}
+    {% endif %}
   </div>
 </section>
 
-{% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url viewer_rank=my_rank primary_label='XP' secondary_label='level' only %}
+{% if rows %}
+{% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank only %}
+{% else %}
+{% comment %} Emptied BY THE FILTER. The control that did it is still on screen above, so the way out is
+the one the reader just used. {% endcomment %}
+<div class="lb-empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+    <p class="lb-empty__title">No hunters here yet</p>
+    <p class="lb-empty__sub">Nobody from this country has banked XP in this job yet. Try Everywhere.</p>
+</div>
+{% endif %}
 
 {% else %}
 <div class="lb-empty">

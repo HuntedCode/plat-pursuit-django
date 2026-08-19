@@ -7,7 +7,11 @@ they finished and everyone else follows by how close they are. The count is the 
 not Game.played_count -- that counts hidden rows and ignores filters, so it would disagree with the list.
 {% endcomment %}
 {% load humanize %}
-<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}" data-lb-total="{{ board_size }}" data-lb-invert="{% if opts.invert %}1{% else %}0{% endif %}" data-lb-page-size="{{ page_size }}" data-lb-board="{{ active_board }}" data-lb-title="{{ board_nav.title }}">
+{% comment %} The panel ROOT carries only what the panel's own controls need: where to re-fetch
+from, and which board is active. Everything the virtualizer reads -- total, page size, rows URL,
+slice, viewer rank -- moved onto the shared board root that `leaderboard_board.html` renders, so this
+board reads its numbers from the same attributes every other board does. {% endcomment %}
+<div class="gd-lb" data-lb-url="{% url 'game_leaderboard' game.np_communication_id %}" data-lb-boardparam="{{ active_board }}" data-lb-title="{{ board_nav.title }}">
 
     {% comment %} Board switcher: a segmented mode switch (Standings / Fastest / Most Played), each present
     only when it has a board. On a game with DLC a second row picks the trophy group; single-group games
@@ -17,7 +21,7 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
     <div class="gd-lb__boards" data-lb-boards>
         <div class="gd-lb__seg" role="group" aria-label="Leaderboard type">
             {% for m in board_nav.modes %}
-            <button type="button" class="gd-lb__segchip" data-lb-board="{{ m.param }}" aria-pressed="{% if board_nav.active_mode == m.key %}true{% else %}false{% endif %}">
+            <button type="button" class="gd-lb__segchip" data-lb-boardparam="{{ m.param }}" aria-pressed="{% if board_nav.active_mode == m.key %}true{% else %}false{% endif %}">
                 {% if m.key == 'progress' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><rect x="6" y="10" width="3.5" height="7" rx="1"/><rect x="14.5" y="6" width="3.5" height="11" rx="1"/></svg>
                 {% elif m.key == 'speed' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 13V9"/><path d="M9 2h6"/></svg>
                 {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{% endif %}
@@ -28,14 +32,14 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
         {% if board_nav.multi %}{% if board_nav.active_mode != 'playtime' %}
         <div class="gd-lb__seg gd-lb__seg--groups" role="group" aria-label="Trophy group">
             {% if board_nav.base %}
-            <button type="button" class="gd-lb__segchip" data-lb-board="{{ board_nav.active_mode }}:default" aria-pressed="{% if board_nav.active_group == 'default' %}true{% else %}false{% endif %}">
+            <button type="button" class="gd-lb__segchip" data-lb-boardparam="{{ board_nav.active_mode }}:default" aria-pressed="{% if board_nav.active_group == 'default' %}true{% else %}false{% endif %}">
                 <span>Base Game</span>
             </button>
             {% endif %}
             {% if board_nav.dlcs %}
             {% comment %} DLCs collapse into a dropdown -- some games have a lot of DLC, and a wall of pills
             reads worse than a menu. The button shows the active DLC's name when one is picked, else "DLC".
-            The items are board chips (data-lb-board), so selecting one re-fetches like any other chip. {% endcomment %}
+            The items are board chips (data-lb-boardparam), so selecting one re-fetches like any other chip. {% endcomment %}
             <div class="gd-lb__drop" data-lb-drop>
                 {% comment %} Static "DLC" label -- swapping it to the selected DLC's name jumped the layout
                 (the button width changed). The active DLC surfaces in the board title instead; here it just
@@ -46,7 +50,7 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
                 </button>
                 <div class="gd-lb__dropmenu" data-lb-dropmenu role="menu" hidden>
                     {% for g in board_nav.dlcs %}
-                    <button type="button" class="gd-lb__segchip gd-lb__dropitem" data-lb-board="{{ board_nav.active_mode }}:{{ g.id }}" aria-pressed="{% if board_nav.active_group == g.id %}true{% else %}false{% endif %}" role="menuitem">
+                    <button type="button" class="gd-lb__segchip gd-lb__dropitem" data-lb-boardparam="{{ board_nav.active_mode }}:{{ g.id }}" aria-pressed="{% if board_nav.active_group == g.id %}true{% else %}false{% endif %}" role="menuitem">
                         <span>{{ g.label }}</span>
                     </button>
                     {% endfor %}
@@ -54,7 +58,7 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
             </div>
             {% endif %}
             {% if board_nav.active_mode == 'progress' %}
-            <button type="button" class="gd-lb__segchip" data-lb-board="progress:all" aria-pressed="{% if board_nav.active_group == 'all' %}true{% else %}false{% endif %}">
+            <button type="button" class="gd-lb__segchip" data-lb-boardparam="progress:all" aria-pressed="{% if board_nav.active_group == 'all' %}true{% else %}false{% endif %}">
                 <span>Everything</span>
             </button>
             {% endif %}
@@ -67,111 +71,90 @@ not Game.played_count -- that counts hidden rows and ignores filters, so it woul
     </div>
     {% endif %}
 
-    {% comment %} Controls always render (even over an empty filtered board) so a too-tight filter can be
-    relaxed. Each toggle carries its state in aria-pressed; the JS reads that, rebuilds the query, and
-    re-fetches the panel. {% endcomment %}
-    <div class="gd-lb__toolbar">
-        <div class="gd-lb__filters" role="group" aria-label="Leaderboard filters">
-            {% comment %} "Started" (hide 0-trophy owners) only means something on a progress board -- speed
-            rows are all 100% complete and playtime isn't a completion metric, so it's hidden there. {% endcomment %}
+    {% comment %} THE CONTROL CARD, shared with the Global Boards, badge detail and job detail: filters,
+    the board's identity, and the ways into it, on one compact utility card with the wall free below.
+    This panel had all of those and none of them on a surface -- its own `gd-lb__toolbar` / `gd-lb__head`
+    idiom sitting bare on the page background, which is what made the most featured board on the site the
+    one that looked least like the others.
+
+    It renders even over an EMPTY filtered board, which was already this panel's instinct and is right: a
+    filter that hides its own control is a filter you cannot relax.
+
+    The FILTERS became selects. They were toggle chips with `aria-pressed`, which is a different control
+    for the same job the other boards do with `.lb-filters` selects -- and "Started" is a two-state choice
+    that reads better named than implied. `Invert` is gone entirely: it existed only here, and a board
+    that can be read bottom-first needs two answers for every ordering question. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
+      <div class="card-body p-3 md:p-4">
+        <form method="get" class="lb-filters" data-filter-form>
+            {% comment %} `board` rides along so changing a filter keeps you on the board you were reading,
+            exactly as `tab` does on the Global Boards. {% endcomment %}
+            <input type="hidden" name="board" value="{{ active_board }}">
+
+            {% comment %} "Started" only means something on a progress board -- speed rows are all 100%
+            complete and playtime is not a completion metric. {% endcomment %}
             {% if board_kind == 'progress' %}
-            <button type="button" class="gd-lb__opt" data-lb-opt="earners" aria-pressed="{% if opts.only_earners %}true{% else %}false{% endif %}" title="Hide owners who haven't earned a trophy yet">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                <span>Started</span>
-            </button>
+            <div class="lb-filters__f">
+                <label class="lb-filters__lbl" for="gdlb-earners">Players</label>
+                <select class="pp-gallery__select" id="gdlb-earners" name="earners">
+                    <option value="1"{% if opts.only_earners %} selected{% endif %}>Started it</option>
+                    <option value="0"{% if not opts.only_earners %} selected{% endif %}>Everyone who owns it</option>
+                </select>
+            </div>
             {% endif %}
-            <button type="button" class="gd-lb__opt" data-lb-opt="registered" aria-pressed="{% if opts.registered_only %}true{% else %}false{% endif %}" title="Only players with a Platinum Pursuit account">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m19 8 2 2 4-4"/></svg>
-                <span>Members</span>
-            </button>
-            <button type="button" class="gd-lb__opt" data-lb-opt="invert" aria-pressed="{% if opts.invert %}true{% else %}false{% endif %}" title="Show the board bottom-first">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h10"/><path d="M11 8h7"/><path d="M11 12h4"/></svg>
-                <span>Invert</span>
-            </button>
-        </div>
-        {% comment %} One field for both jumps: a bare number jumps to that rank, text runs a typeahead over
-        the hunters ON this board (?suggest=). Reuses the shared [data-search-wrap] chrome (clear button +
-        in-flight spinner, wired by PlatPursuit.wireSearchField) that the browse/collection pages use. {% endcomment %}
-        <form class="gd-lb__find" data-search-wrap data-lb-findform role="search">
-            <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="search" class="gd-lb__findinput" data-lb-find autocomplete="off" spellcheck="false"
-                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gd-lb-suggest"
-                   placeholder="Rank # or hunter" aria-label="Jump to a rank, or search a hunter" />
-            <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
-            <span class="pp-search-spin" aria-hidden="true"></span>
-            <div class="gd-lb__suggest" id="gd-lb-suggest" data-lb-suggest role="listbox" hidden></div>
+
+            {% comment %} The ACCOUNTS filter is gone. It was opt-in "members only" over a board that
+            otherwise ranked every scraped PSN profile -- so the behaviour every other board has by
+            default was the one you had to ask for here. The population is verified hunters now, always,
+            and a control for the site's one rule about who is on a board is a control with one setting.
+
+            COUNTRY replaces it, the same slice every other board offers, scoped to hunters on THIS board
+            so an option cannot empty the thing it filters. {% endcomment %}
+            {% if countries %}
+            <div class="lb-filters__f">
+                <label class="lb-filters__lbl" for="gdlb-country">Country</label>
+                <select class="pp-gallery__select" id="gdlb-country" name="country">
+                    <option value="">Everywhere</option>
+                    {% for c in countries %}
+                    <option value="{{ c.code }}"{% if c.code == selected_country %} selected{% endif %}>{{ c.flag }} {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
         </form>
-    </div>
+
+        {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total ranked_label=ranked_label standing=standing scoped=slice_applied only %}
+
+        {% if rows %}
+        {% comment %} The ways in: your rank, the hunter search, the rank box -- one cluster, in that
+        order. The search fills the jump bar's `extra_partial` slot rather than sitting beside it, so the
+        three read as one control and the shared bar keeps ownership of the layout. {% endcomment %}
+        {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='gdlb' extra_partial='trophies/partials/game_detail/_leaderboard_find.html' only %}
+        {% endif %}
+      </div>
+    </section>
 
     {% if rows %}
-    <div class="gd-lb__head">
-        <div class="gd-lb__heading">
-            <span class="gd-lb__title">{{ board_nav.title }}</span>
-            <span class="gd-lb__count">
-                <span class="pp-tally">{{ board_size|intcomma }}</span>
-                <span class="gd-lb__countlbl">{{ board_size|pluralize:"hunter,hunters" }} on the board</span>
-            </span>
-        </div>
-        {% if viewer_rank %}
-        <button type="button" class="gd-lb__jump" data-lb-jump>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
-            You&rsquo;re #{{ viewer_rank|intcomma }}
-        </button>
-        {% elif viewer_profile %}
-        {% comment %} A signed-in hunter who is not on this board got NOTHING here, so the slot that
-        answers "where am I" simply vanished -- indistinguishable from a feature that does not exist. It
-        stays as a plain span rather than a button because there is no row to jump to. Deliberately does
-        not guess WHY (no trophies yet, 0%, or progress hidden are all reachable) -- naming the wrong
-        reason is worse than naming none. {% endcomment %}
-        <span class="gd-lb__jump gd-lb__jump--none">Not on this board yet</span>
-        {% endif %}
-    </div>
-
-    {% comment %} Column header: labels the columns once so the rows stay label-free. Desktop only (mobile
-    rows are 2-line / headline-only); the CSS mirrors each board's row grid + inset so the labels sit over
-    their columns. h-start/center/end match each column's content alignment; h-bar is the lg-only bar slot. {% endcomment %}
-    {% if board_kind == 'speed' %}
-    <div class="gd-lb__colhead gd-lb__colhead--speed">
-        <span class="h-end">#</span><span class="h-start">Hunter</span><span class="h-start">Started</span><span class="h-center">Elapsed</span><span class="h-end">Finished</span>
-    </div>
-    {% elif board_kind == 'playtime' %}
-    <div class="gd-lb__colhead gd-lb__colhead--playtime">
-        <span class="h-end">#</span><span class="h-start">Hunter</span><span class="h-start">Play time</span><span class="h-center">Progress</span><span class="h-end">Last played</span>
-    </div>
-    {% else %}
-    <div class="gd-lb__colhead gd-lb__colhead--progress">
-        <span class="h-end">#</span><span class="h-start">Hunter</span><span class="h-start">Trophies</span><span class="h-bar"></span><span class="h-end">Progress</span><span class="h-end">Latest</span>
-    </div>
-    {% endif %}
-
-    {% comment %} Virtualized list: .gd-lb__virt is a full-height spacer (JS sizes it to board_size rows) so
-    the page scrollbar represents the WHOLE board; only the visible ~30 rows live in the DOM, absolutely
-    positioned by their rank. The first window is server-rendered for instant first paint + SEO. Your
-    standing while scrolled lives in the minibar (data-lb-mb-rank); the header shows it at the top. {% endcomment %}
-    <ol class="gd-lb__list gd-lb__virt" data-lb-list data-lb-total="{{ board_size }}">
-        {% include 'trophies/partials/game_detail/_leaderboard_rows.html' %}
-    </ol>
+    {% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank only %}
 
     {% else %}
-    <div class="gd-empty">
+    <div class="lb-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-        {% if opts.registered_only %}
-        <p class="gd-empty__title">No members here yet</p>
-        <p class="gd-empty__hint">No Platinum Pursuit members on this board. Turn off &ldquo;Members&rdquo; to see everyone.</p>
+        {% if selected_country %}
+        <p class="lb-empty__title">No hunters here yet</p>
+        <p class="lb-empty__sub">Nobody from this country is on this board yet. Try Everywhere.</p>
         {% elif board_kind == 'speed' %}
-        <p class="gd-empty__title">No finishers yet</p>
-        <p class="gd-empty__hint">Nobody tracked has completed this set. Be the first to finish and you&rsquo;ll set the time to beat.</p>
+        <p class="lb-empty__title">No finishers yet</p>
+        <p class="lb-empty__sub">Nobody tracked has completed this set. Be the first to finish and you&rsquo;ll set the time to beat.</p>
         {% elif board_kind == 'playtime' %}
-        <p class="gd-empty__title">No play time tracked</p>
-        <p class="gd-empty__hint">PSN hasn&rsquo;t reported play time for anyone here yet.</p>
+        <p class="lb-empty__title">No play time tracked</p>
+        <p class="lb-empty__sub">PSN hasn&rsquo;t reported play time for anyone here yet.</p>
         {% elif opts.only_earners %}
-        <p class="gd-empty__title">No hunters match</p>
-        <p class="gd-empty__hint">No one&rsquo;s started this yet. Turn off &ldquo;Started&rdquo; to see everyone who owns it.</p>
+        <p class="lb-empty__title">No hunters match</p>
+        <p class="lb-empty__sub">No one&rsquo;s started this yet. Turn off &ldquo;Started&rdquo; to see everyone who owns it.</p>
         {% else %}
-        <p class="gd-empty__title">No hunters yet</p>
-        <p class="gd-empty__hint">Nobody tracked on Platinum Pursuit has played this one. Be the first and you&rsquo;ll top the board.</p>
+        <p class="lb-empty__title">No hunters yet</p>
+        <p class="lb-empty__sub">Nobody tracked on Platinum Pursuit has played this one. Be the first and you&rsquo;ll top the board.</p>
         {% endif %}
     </div>
     {% endif %}

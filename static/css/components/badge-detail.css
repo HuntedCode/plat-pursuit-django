@@ -1017,5 +1017,18 @@
    which badge you are reading. This strip is content tabs beneath it, on the small shared `.pp-switch`
    chips, so the difference in weight says which one is chrome and which one is navigation. Editions do
    not apply to the board (it is per SERIES), so the Ranks tab correctly carries no edition control. */
-.bd-viewswitch { margin: 0 0 14px; }
+/* The content tabs, right-aligned from md: up -- the site-wide standard every other switcher follows
+   (career, game detail, the genre/theme list, the leaderboard strips). This was the last one on the left.
+
+   Full width on a phone rather than shrink-to-content: a small strip against one edge at 375px reads as
+   marooned, and equal-width chips are what stop a segmented control wrapping mid-strip. Same
+   base-full-width / md-right shape `.lb-bar` uses. */
+.bd-viewswitch__row { display: flex; margin: 0 0 14px; }
+.bd-viewswitch { margin: 0; width: 100%; }
+.bd-viewswitch .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+@media (min-width: 768px) {
+    .bd-viewswitch__row { justify-content: flex-end; }
+    .bd-viewswitch { width: auto; }
+    .bd-viewswitch .pp-switch__chip { flex: 0 0 auto; }
+}
 .bd-view[hidden] { display: none; }

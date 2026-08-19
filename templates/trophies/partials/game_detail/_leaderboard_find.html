@@ -1,0 +1,22 @@
+{% comment %} The hunter search, filling `leaderboard_jumpbar.html`'s slot between "you're #N" and the
+rank box.
+
+The ONE board that has this. It is not a leftover of the old panel -- it is a capability the shared jump
+bar should grow, which is why it lives in the slot rather than beside the cluster. When it propagates,
+this file moves up a directory and the slot stops being game detail's alone.
+
+Self-contained by design: the slot is included with `only`, so this reads nothing from the jump bar. It
+reuses the shared `[data-search-wrap]` chrome (clear button + in-flight spinner, wired by
+`PlatPursuit.wireSearchField`) that the browse and collection pages use.
+{% endcomment %}
+<form class="gd-lb__find" data-search-wrap data-lb-findform role="search">
+    <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="search" class="gd-lb__findinput" data-lb-find autocomplete="off" spellcheck="false"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gd-lb-suggest"
+           placeholder="Find a hunter" aria-label="Find a hunter on this board" />
+    <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    <span class="pp-search-spin" aria-hidden="true"></span>
+    <div class="gd-lb__suggest" id="gd-lb-suggest" data-lb-suggest role="listbox" hidden></div>
+</form>

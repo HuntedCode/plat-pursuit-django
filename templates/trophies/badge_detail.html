@@ -108,6 +108,16 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         </div>
     </section>
 
+    {% comment %} Rarity & Community band -- series-level, and directly under the header card.
+
+    It describes the BADGE: how rare it is and how many hold it are true whichever edition you are
+    looking at and whichever tab you are on, so it belongs above BOTH switchers rather than inside one of
+    their views. It first sat inside the Overview tab (invisible from the board it gives context to), was
+    then moved above the content tabs but still below the medallion switcher -- which reads as though the
+    rarity belonged to the edition you happen to have selected, when the band shows every edition side by
+    side. Header, then what the badge IS, then the controls for looking at it. {% endcomment %}
+    {% include 'trophies/partials/badge_detail/bd2_community.html' %}
+
     {% comment %} Platform-group switcher -- a prominent, header-SPANNING control: one substantial button per
     group carrying its mini medallion (in the group's metal), name, and platforms, tinted to match the
     medallion so picking your platform badge is a fast, recognizable, spine-level choice. A deliberate,
@@ -156,12 +166,19 @@ Collection. No extra wrapper container: a nested one would double the horizontal
     badge you are reading. These are content tabs beneath it, on the small `.pp-switch` chips, so the two
     read as different kinds of control rather than two tab strips stacked.
 
-    Editions do NOT apply to Ranks, and that is why the split is clean rather than a compromise: the board
-    is per SERIES (earning any edition counts), so the Ranks tab correctly carries no edition control. See
-    the comment on the panel itself.
+    Both tabs speak about editions, and they mean different things by it: the `.bd2-groupswitch` above
+    changes which ARTWORK you are looking at, while Ranks has its own `.lb-filters` select that changes
+    which BOARD you are reading. Two controls with one name doing one thing would be right; two doing
+    different things has to look different, which is why one is a medallion switcher and the other is a
+    filter select. See the comment on the panel itself.
 
     Real `role="tablist"` over real `role="tabpanel"`s -- in-place switching, so the markup is honest. This
     is the mechanism game detail uses; job detail was `?tab=` links and has been brought onto it too. {% endcomment %}
+    {% comment %} RIGHT-ALIGNED from md: up, like every other switcher on the site -- career, game detail,
+    the genre/theme list and the board strips. This was the last one sitting left. Full width on a phone,
+    because shrink-to-content at 375px leaves a small strip marooned against one edge and the chips lose
+    the equal widths that keep a segmented control from wrapping mid-strip. {% endcomment %}
+    <div class="bd-viewswitch__row">
     <div class="pp-switch bd-viewswitch" id="bd-switch" role="tablist" aria-label="Badge view">
         <button type="button" id="bd-tab-overview" aria-controls="bd-view-overview" role="tab"
                 aria-selected="true" class="pp-switch__chip is-active" data-view="overview">
@@ -174,12 +191,9 @@ Collection. No extra wrapper container: a nested one would double the horizontal
             <span class="pp-switch__lbl">Ranks</span>
         </button>
     </div>
+    </div>
 
     <div class="bd-view" id="bd-view-overview" role="tabpanel" aria-labelledby="bd-tab-overview" data-view="overview">
-    {% comment %} Rarity & Community band -- series-level (both groups side by side), sits between the group
-    selector and the per-group journey. Leads with rarity (the prestige signal not shown elsewhere). {% endcomment %}
-    {% include 'trophies/partials/badge_detail/bd2_community.html' %}
-
     {% comment %} Stage journey -- per group, swaps with the selector alongside the hero. Free content below
     the chrome (each stage is its own bd-card). {% endcomment %}
     <div data-bd2-journey>
@@ -308,8 +322,9 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         var body = sec.querySelector('[data-ranks-body]');
         var handle = null;      // the live board, so a retry cannot leave two mounted
 
-        function load() {
-            fetch(sec.dataset.ranksSrc, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        function load(qs) {
+            fetch(sec.dataset.ranksSrc + (qs ? '?' + qs : ''),
+                  { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
                 .then(function (html) {
                     if (handle) { handle.destroy(); handle = null; }
@@ -322,6 +337,11 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                     PlatPursuit.boardEntrance(root, sec);
                 })
                 .catch(function () {
+                    // Tear the board down before replacing the body. Only the SUCCESS path did, so a
+                    // failed re-fetch left a mounted engine holding window scroll/resize listeners on a
+                    // detached wall -- inert, but one pair per failure for the life of the page. Game
+                    // detail's loader already did this; the three surfaces disagreed.
+                    if (handle) { handle.destroy(); handle = null; }
                     // A board that fails to load must say so. Silently leaving the spinner spinning reads
                     // as "still counting" forever, which is worse than an honest failure.
                     if (sec._bdRanksFailed) { sec._bdRanksFailed(); }   // let a re-open retry
@@ -348,6 +368,27 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         // detail already did this; leaving the two opposite would mean the same mechanism recovering on
         // one page and not the other.
         sec._bdRanksFailed = function () { loaded = false; };
+
+        // The country filter re-fetches the PANEL in place rather than reloading the page. A reload
+        // would drop the reader back on the Overview tab (the default) having just asked a question
+        // about the board, and it throws away the engine's row cache too. Delegated from the section,
+        // because the form arrives with the fetched HTML and is replaced by every later fetch.
+        //
+        // The form stays a real `method="get"` form, which is what lets `FormData` serialize it the way
+        // a native submit would. It carries no <noscript> fallback, though, and should not: this whole
+        // panel is hidden until JS unhides its tab and fetched by JS once it is, so without JS there is
+        // no board here to filter.
+        sec.addEventListener('change', function (ev) {
+            var select = ev.target.closest && ev.target.closest('[data-filter-form] select');
+            if (!select) { return; }
+            // THE WHOLE FORM, not the field that changed. Sending one pair dropped the other filter on
+            // every change -- picking a country reset the edition and picking an edition reset the
+            // country, so the two could never be applied together. `FormData` over the form is also
+            // exactly what a native GET submit sends, so the JS path and the no-JS path now agree
+            // instead of the enhancement being the broken one.
+            var form = select.closest('[data-filter-form]');
+            load(new URLSearchParams(new FormData(form)).toString());
+        });
     })();
 
     // -- Content tabs: Overview | Ranks -------------------------------------------------------------

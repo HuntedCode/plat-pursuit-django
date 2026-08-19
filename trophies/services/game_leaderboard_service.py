@@ -16,12 +16,31 @@ progress; identical completion_seconds happen), and without a unique tail Postgr
 differently between calls, so a row's rank would flicker and adjacent virtual windows would skip/duplicate.
 
 Each board is backed by an index that serves its ORDER BY directly (pg_game_leaderboard_idx, ptg_progress_idx,
-ptg_speed_idx, pg_playtime_idx), so windowed reads are single-digit ms. Plain OFFSET is fine at board scale;
+ptg_speed_idx, pg_playtime_idx), so windowed reads are single-digit ms. The `is_linked` gate below adds a
+Profile join those indexes do not cover; it is a probe per returned row on a windowed read (bounded), and
+a full pass on `countries()` (which is why that one is cached). Plain OFFSET is fine at board scale;
 the millions-of-players ceilings and their fixes are documented in docs/features/game-leaderboards.md.
 
-VIEW OPTIONS (BoardOptions): invert (bottom-first, same index scanned backward), only_earners (drop 0%
-rows -- progress boards only), registered_only (linked site accounts only). Filters change the POPULATION,
-so rank / size / windows all apply them consistently.
+POPULATION: VERIFIED hunters only, always. Every other board on the site is gated on `is_linked`
+(`badge_leaderboards._linked`) and this one was not -- it ranked every scraped PSN profile, so the same
+site showed one board of ~300,000 profiles beside five of the ~50,000 people who actually claimed one.
+It WAS an opt-in "registered only" toggle, which made the consistent behaviour the one you had to ask
+for. Note the old toggle tested `profile__user__isnull=False`; the rule is `is_linked`, which is what the
+other boards mean by a hunter.
+
+VIEW OPTIONS (BoardOptions): only_earners (drop 0% rows -- progress boards only), country (one country's
+slice, like every other board). Filters change the POPULATION, so rank / size / windows all apply them
+consistently.
+
+THE PROFILE JOIN is what `is_linked` costs, and country then rides it for free. The other five boards
+denormalize both onto their standing rows so they never join Profile -- that is not available here:
+ProfileGame is one row per (profile, game), so a mirror column would be a migration across the largest
+table in the system to save a join on a set already bounded by one game's owners.
+
+`invert` (bottom-first) and `registered_only` were options and are GONE. Invert existed only here, so it
+was the last control that made this board behave unlike the other three, and a board that can be read
+upside down needs two answers for every ordering question -- display order vs canonical rank, `from` vs
+`start`, nulls-first vs nulls-last. One ordering, always forward.
 """
 import logging
 from dataclasses import dataclass
@@ -39,46 +58,51 @@ PAGE_SIZE = 50          # rows per fetched window (the client asks for ranges th
 class BoardOptions:
     """The viewer's board controls. `only_earners` defaults ON -- the common board is people who've
     actually started, not every owner."""
-    invert: bool = False
     only_earners: bool = True
-    registered_only: bool = False
+    country: str = ''
 
     @classmethod
-    def from_request(cls, request):
+    def from_request(cls, request, codes=(), unvalidated_country=None):
+        """`codes` are the countries that actually have hunters on the board being built -- the PANEL
+        path, where an option the picker offers must never empty the board.
+
+        `unvalidated_country` is the WINDOW path, which cannot afford that check: resolving the codes is a
+        DISTINCT over the whole population and the virtualizer asks for one window per screenful, so doing
+        it there turned every scroll step into a full scan. The client only echoes back the slice the
+        panel rendered, so it is validated by construction, and a crafted code selects nobody. See
+        `board_helpers.slice_country`.
+        """
         get = request.GET.get
+        if unvalidated_country is None:
+            raw = (get('country') or '').strip().upper()
+            unvalidated_country = raw if raw in set(codes) else ''
         return cls(
-            invert=get('invert') == '1',
             only_earners=get('earners', '1') != '0',   # default on; ?earners=0 shows all owners
-            registered_only=get('registered') == '1',
+            country=unvalidated_country,
         )
 
     def as_params(self):
         """The non-default flags, for building continuation/jump URLs that preserve the view."""
         params = {}
-        if self.invert:
-            params['invert'] = '1'
         if not self.only_earners:
             params['earners'] = '0'
-        if self.registered_only:
-            params['registered'] = '1'
+        if self.country:
+            params['country'] = self.country
         return params
 
 
 @dataclass(frozen=True)
 class SortKey:
-    """One key in a board's total ordering. `nulls_last` marks a nullable key whose FORWARD order is
-    ascending-nulls-last (our only nullable pattern: the tiebreak timestamps). Its inverted order is the
-    exact reverse (descending-nulls-first)."""
+    """One key in a board's total ordering. `nulls_last` marks a nullable key whose order is
+    ascending-nulls-last (our only nullable pattern: the tiebreak timestamps)."""
     field: str
     desc: bool
     nulls_last: bool = False
 
-    def order_expr(self, invert):
-        if self.nulls_last:                                   # nullable tiebreak: asc-nulls-last forward
-            f = F(self.field)
-            return f.desc(nulls_first=True) if invert else f.asc(nulls_last=True)
-        descending = self.desc ^ invert
-        return ('-' if descending else '') + self.field       # plain string; the index serves it
+    def order_expr(self):
+        if self.nulls_last:                                   # nullable tiebreak: asc-nulls-last
+            return F(self.field).asc(nulls_last=True)
+        return ('-' if self.desc else '') + self.field        # plain string; the index serves it
 
     def better(self, value):
         """Q for 'this row's field ranks strictly ahead of `value` on this key alone' (canonical order)."""
@@ -98,6 +122,36 @@ class SortKey:
 class Board:
     """A single leaderboard. Subclasses set KEYS (canonical order, unique final key) and _population()."""
 
+    def _hunters(self, qs):
+        """The population gate every board here shares: VERIFIED hunters, optionally one country's.
+
+        One place, because the four boards each built their own filter stack and the `registered_only`
+        clause was duplicated across all of them -- four chances for one to drift. `is_linked` is the same
+        rule `badge_leaderboards._linked` applies, so "who is on a board" means one thing site-wide.
+        """
+        qs = qs.filter(profile__is_linked=True)
+        return qs.filter(profile__country_code=self.opts.country) if self.opts.country else qs
+
+    def countries(self):
+        """Country codes with at least one hunter on THIS board, for its picker.
+
+        Scoped to the board rather than to the site, like every other picker: an option that empties the
+        thing it filters is a dead end, and scoping is what lets the panel skip an "emptied by the filter"
+        state for country entirely.
+        """
+        from trophies.services.badge_leaderboards import _cached
+
+        # CACHED, like every other picker on the site. This one is the most expensive of them: the
+        # DISTINCT is on a JOINED column, so no board index can serve it and it scans the game's whole
+        # population probing Profile per row. Keyed on the exact population it describes -- game, board
+        # kind and the only filter that changes who is on it.
+        key = f'lb:picker:cc:game:{self.game.pk}:{self.__class__.__name__}:{int(self.opts.only_earners)}'
+        return _cached(key, lambda: sorted(
+            self._population()
+            .exclude(profile__country_code__isnull=True).exclude(profile__country_code='')
+            .values_list('profile__country_code', flat=True).distinct()
+        ))
+
     KEYS = ()
     kind = 'progress'          # how the row renders: 'progress' | 'speed' | 'playtime'
 
@@ -113,12 +167,13 @@ class Board:
 
     # -- ordering --------------------------------------------------------
 
-    def _order(self, invert):
-        return tuple(k.order_expr(invert) for k in self.KEYS)
+    def _order(self):
+        return tuple(k.order_expr() for k in self.KEYS)
 
     def ordered(self):
-        """The board in DISPLAY order (respects invert)."""
-        return self._population().order_by(*self._order(self.opts.invert))
+        """The board in order. Display order and canonical order are the same thing now that the board
+        cannot be read bottom-first, which is what lets a display position BE a rank everywhere else."""
+        return self._population().order_by(*self._order())
 
     # -- reads -----------------------------------------------------------
 
@@ -131,14 +186,17 @@ class Board:
         ordering. Returns model instances (select_related profile) in display order; caller numbers them."""
         start = max(1, start)
         count = max(1, min(count, 500))
-        return list(self.ordered().select_related('profile')[start - 1: start - 1 + count])
+        # NO `select_related('profile')`. The rows path reads `r.profile_id` only -- `_entries` hands the
+        # ids to `badge_leaderboards.page()`, which does its own one-query `hydrate()` -- so the join was
+        # fetching 50 profiles per window that nothing then read. `row_at_rank`/`suggest` DO read
+        # `row.profile` and keep theirs.
+        return list(self.ordered()[start - 1: start - 1 + count])
 
     def row_at_rank(self, rank):
-        """The row at 1-indexed CANONICAL rank (from the best), or None past the board. Forward order, always
-        (the number a viewer types is the rank shown beside a row, counted from the top regardless of invert).
-        The rank is the fetch offset, so pass it straight through -- no COUNT, unlike the name suggest."""
+        """The row at 1-indexed rank (from the best), or None past the board. The rank is the fetch offset,
+        so pass it straight through -- no COUNT, unlike the name suggests."""
         rank = max(1, rank)
-        row = self._population().order_by(*self._order(invert=False)).select_related('profile')[rank - 1: rank].first()
+        row = self.ordered().select_related('profile')[rank - 1: rank].first()
         return self._suggestion(row, rank) if row else None
 
     def rank_for(self, profile):
@@ -147,10 +205,21 @@ class Board:
         row = self._board_row(profile)
         return None if row is None else self._rank_of_row(row)
 
+    #: Longest accepted `?suggest=`. The patterns are `%q%` `icontains`, which no index serves, so a
+    #: long query is a full scan of the game's population that returns nothing. PSN IDs are 16 characters.
+    SUGGEST_MAX = 32
+
     def suggest(self, query, limit=8):
         """Board players whose PSN name matches `query`, each with its rank -- the search typeahead. Scoped
-        to the filtered board, so a hidden/filtered-out player never appears. Returns [] below 2 chars."""
-        q = (query or '').strip()
+        to the filtered board, so a hidden/filtered-out player never appears. Returns [] below 2 chars.
+
+        BOUNDED AT BOTH ENDS. The floor was always there; the ceiling was not, and this is a public
+        endpoint whose patterns are `%q%` `icontains` -- no index serves those, so a long query that
+        matches nothing is a full scan of the game's population, probing Profile per row for the
+        `is_linked` gate, returning zero rows. Every other user-controlled param on this view is clamped
+        (`at`, `range`, `count`); this was the one that was not.
+        """
+        q = (query or '').strip()[:self.SUGGEST_MAX]
         if len(q) < 2:
             return []
         matches = list(
@@ -213,9 +282,7 @@ class EverythingBoard(Board):
         qs = ProfileGame.objects.filter(game=self.game, hidden_flag=False, user_hidden=False)
         if self.opts.only_earners:
             qs = qs.filter(progress__gt=0)
-        if self.opts.registered_only:
-            qs = qs.filter(profile__user__isnull=False)
-        return qs
+        return self._hunters(qs)
 
 
 class PlaytimeBoard(Board):
@@ -231,9 +298,7 @@ class PlaytimeBoard(Board):
         qs = ProfileGame.objects.filter(
             game=self.game, hidden_flag=False, user_hidden=False, play_duration__isnull=False
         )
-        if self.opts.registered_only:
-            qs = qs.filter(profile__user__isnull=False)
-        return qs
+        return self._hunters(qs)
 
 
 class _GroupBoard(Board):
@@ -265,9 +330,7 @@ class GroupProgressBoard(_GroupBoard):
         qs = self._group_qs()
         if self.opts.only_earners:
             qs = qs.filter(progress__gt=0)                    # hide the sub-1% who've barely started
-        if self.opts.registered_only:
-            qs = qs.filter(profile__user__isnull=False)
-        return qs
+        return self._hunters(qs)
 
 
 class GroupSpeedBoard(_GroupBoard):
@@ -281,10 +344,7 @@ class GroupSpeedBoard(_GroupBoard):
     )
 
     def _population(self):
-        qs = self._group_qs().filter(completion_seconds__isnull=False)
-        if self.opts.registered_only:
-            qs = qs.filter(profile__user__isnull=False)
-        return qs
+        return self._hunters(self._group_qs().filter(completion_seconds__isnull=False))
 
 
 # ── board resolution ─────────────────────────────────────────────────────────

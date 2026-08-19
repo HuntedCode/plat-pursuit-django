@@ -5,11 +5,10 @@ so all three answer the same kind of request: "give me display positions [start,
 module holds the parsing of that request, because the clamping is the part with teeth and three
 hand-rolled copies of it is three chances to leave one unbounded.
 
-GAME DETAIL parses its own (`game_leaderboard_views._int`) and is deliberately left alone. Its `range`
-and `count` are exactly equivalent to these, but it also takes an `at` param -- a direct offset into the
-board for its search -- which leans on `_int`'s DEFAULT upper bound. `clamped_int` defaults `hi` to None,
-i.e. unbounded, so a mechanical swap would hand `?at=<huge>` an uncapped slice. Folding it in means
-giving `at` an explicit bound first.
+GAME DETAIL uses these too, as of the 2026-08 convergence -- it was a fourth hand-rolled copy whose only
+real difference was a looser start bound. Its `at` param (a direct offset into the board, for the search
+typeahead) passes an explicit `hi=MAX_START`, because `clamped_int` leaves `hi` unbounded by default and
+`at` is the one caller that would otherwise inherit no ceiling.
 """
 
 
@@ -54,6 +53,48 @@ MAX_COUNT = 200
 #: and read back by the client, so a board whose page size disagrees with its own fetch granularity does
 #: not error: it shows GAPS in the rows a reader scrolls past.
 PAGE_SIZE = 50
+
+
+#: A country code is two ASCII letters (ISO 3166-1 alpha-2) in every row this site stores.
+_COUNTRY_MAX = 5
+
+
+def slice_country(request):
+    """`?country=` for a WINDOW fetch, normalized but NOT validated against the board's own codes.
+
+    The panel validates against the countries that actually have hunters on it, because an option the
+    picker offers must never empty the board. A window cannot afford that check: "which countries are on
+    this board" is a DISTINCT over the whole population, and the virtualizer fires one window per screen
+    -- so validating there turned a bounded index read into a full scan per scroll step, roughly 1,200 of
+    them on a 60k-row board.
+
+    It is safe to skip. The client only ever sends back the slice the panel rendered, so the value is
+    validated by construction; a crafted code simply selects nobody and returns an empty window, which is
+    what an out-of-range `range` already does. Length-capped so it cannot become a long string in an
+    indexed comparison.
+    """
+    return (request.GET.get('country') or '').strip().upper()[:_COUNTRY_MAX]
+
+
+#: A country code is two ASCII letters (ISO 3166-1 alpha-2) in every row this site stores.
+_COUNTRY_MAX = 5
+
+
+def slice_country(request):
+    """`?country=` for a WINDOW fetch, normalized but NOT validated against the board's own codes.
+
+    The panel validates against the countries that actually have hunters on it, because an option the
+    picker offers must never empty the board. A window cannot afford that check: "which countries are on
+    this board" is a DISTINCT over the whole population, and the virtualizer fires one window per screen
+    -- so validating there turned a bounded index read into a full scan per scroll step, roughly 1,200 of
+    them on a 60k-row board.
+
+    It is safe to skip. The client only ever sends back the slice the panel rendered, so the value is
+    validated by construction; a crafted code simply selects nobody and returns an empty window, which is
+    what an out-of-range `range` already does. Length-capped so it cannot become a long string in an
+    indexed comparison.
+    """
+    return (request.GET.get('country') or '').strip().upper()[:_COUNTRY_MAX]
 
 
 def window_params(request, default_count, max_count=MAX_COUNT, max_start=MAX_START):

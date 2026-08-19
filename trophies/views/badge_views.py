@@ -631,30 +631,71 @@ class BadgeRanksPanelView(View):
             if series is None:
                 raise Http404("Series not found")
 
+        # THE SLICE, resolved once and applied to the rows, the count and the viewer's rank alike. A
+        # window that ignored a filter the first window applied would return different hunters halfway
+        # down the same board, and the rows keep numbering up -- so it reads as the board, not as a bug.
+        #
+        # EDITION FIRST, because it decides which STORE is being read, and country then scopes itself to
+        # whichever board that is. Resolved in the other order, a country valid for the series board
+        # could be applied to an edition board that has nobody from it.
+        editions = self._editions(series)
+        edition = self._edition(request, editions)
+
+        codes = (lb.series_edition_countries(series_slug, edition) if edition
+                 else lb.series_board_countries(series_slug))
+        country = self._country(request, codes)
+
         if 'range' in request.GET:
             start, count = window_params(request, self.PAGE_SIZE)
-            return render(request, 'trophies/partials/leaderboard_rows.html',
-                          {'entries': self._window(series_slug, start - 1, count)})
+            return render(request, 'trophies/partials/leaderboard_rows.html', {
+                'entries': self._window(series_slug, start - 1, count, country, edition),
+            })
 
-        total = lb.series_board_count(series_slug)
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
-        my_rank = lb.series_board_rank(series_slug, profile.id) if profile else None
+        if edition:
+            total = lb.series_edition_count(series_slug, edition, country=country or None)
+            my_rank = (lb.series_edition_rank(series_slug, edition, profile.id, country=country or None)
+                       if profile else None)
+            meaning = (f"Badge points earned on the {editions[edition]['name']} edition, "
+                       f"most first.")
+        else:
+            total = lb.series_board_count(series_slug, country=country or None)
+            my_rank = (lb.series_board_rank(series_slug, profile.id, country=country or None)
+                       if profile else None)
+            # ALL editions, and it means it now. This used to rank on the furthest-along EDITION, so
+            # "All editions" showed a board that ignored every edition but your best one -- which is what
+            # made it read as broken rather than merely odd. Points are already summed across editions
+            # before they reach the standing, so the board answers the question its label asks.
+            meaning = ('Badge points earned across every edition of this series, most first.')
 
         return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
-            'rows': self._window(series_slug, 0, self.PAGE_SIZE),
+            'rows': self._window(series_slug, 0, self.PAGE_SIZE, country, edition),
             'total': total,
             'page_size': self.PAGE_SIZE,
             # The endpoint the virtualizer fetches later windows from -- this same view, reversed rather
             # than read off `request.path`, so the panel does not silently depend on having been reached
             # by its canonical URL.
             'rows_url': reverse('badge_ranks_panel', args=[series_slug]),
+            # Carried on every later window, so the rest of a filtered board stays filtered -- and for
+            # `edition` that is not a filter but the identity of the store being read, so dropping it
+            # would fetch the SERIES board's rows into an edition board's spacer.
+            'rows_params': urlencode(
+                {k: v for k, v in (('edition', edition), ('country', country)) if v}),
+            'countries': lb.country_options(codes),
+            'selected_country': country,
+            'editions': [{'key': k, 'name': v['name']} for k, v in editions.items()],
+            'selected_edition': edition,
             'my_rank': my_rank,
             'series': series,
             # The shared board card. `board_label` is the series, because on this page the board IS the
             # series -- and the meaning line moved here off the section subtitle, where it sat above a
             # panel that had not loaded yet.
             'board_label': series.name,
-            'board_meaning': 'Everyone who finished, by who got there first, then everyone still chasing.',
+            'board_meaning': meaning,
+            # "N hunters HERE" under a slice -- the figure is a claim about a population, and under a
+            # filter it is a claim about a smaller one. Edition counts: it names a different, smaller
+            # board rather than narrowing this one, which is the same thing from the reader's side.
+            'slice_applied': bool(country or edition),
             'standing': self._standing(profile, my_rank),
         })
 
@@ -672,21 +713,80 @@ class BadgeRanksPanelView(View):
         return 'Not on this board yet'
 
     @staticmethod
-    def _window(series_slug, offset, limit):
+    def _editions(series):
+        """The editions THIS series is offered in, as {key: {name}}, in the series' own display order.
+
+        Scoped to the series' LIVE group badges, not to `active_editions()` -- that is every edition on
+        the site, and offering one this badge was never released in is a board that could only be empty.
+        Same scoping rule the country picker follows.
+
+        A single-edition series gets an EMPTY map rather than one option: a picker with one choice plus
+        "all editions" is two ways to see the same hunters, which is a control that cannot do anything.
+        """
+        groups = list(
+            series.group_badges.filter(is_live=True)
+            .select_related('platform_group')
+            .order_by('platform_group__sort_order', 'platform_group__name')
+        )
+        if len(groups) < 2:
+            return {}
+        return {g.platform_group.key: {'name': g.platform_group.name} for g in groups}
+
+    @staticmethod
+    def _edition(request, editions):
+        """Validated against the editions this series HAS. An unknown key would otherwise resolve to no
+        group badge and silently fall back to the series board, which is a filter that appears to be
+        applied and is not."""
+        raw = (request.GET.get('edition') or '').strip()
+        return raw if raw in editions else ''
+
+    @staticmethod
+    def _country(request, codes):
+        """Validated against the countries that actually have hunters on THIS board.
+
+        An unknown code would return an empty window, which reads as a gap in the board rather than as a
+        bad parameter -- and this is a public fragment, so it takes whatever a URL hands it. Mirrors
+        `LeaderboardRowsView._country`, which makes the same call for the same reason."""
+        raw = (request.GET.get('country') or '').strip().upper()
+        return raw if raw in set(codes) else ''
+
+    @classmethod
+    def _window(cls, series_slug, offset, limit, country='', edition=''):
         """One window of the board, hydrated. Shared by both responses above, which is the point: a rows
         endpoint that built its own `extra` mapping would be a second definition of what this board's
         columns MEAN, and the first thing to drift would be the labels -- so the rest of a board would
         read a different figure from the screenful the reader arrived on."""
-        rows = lb.series_board_rows(series_slug, limit=limit, offset=offset)
+        if edition:
+            return cls._edition_window(series_slug, edition, offset, limit, country)
+        rows = lb.series_board_rows(series_slug, limit=limit, offset=offset, country=country or None)
         # `offset`, not 0: `page()` numbers rows by SLOT, so a window starting at 50 must number from 51.
-        # r = (profile_id, progress_bp, stages_cleared, stages_total, advanced_at).
+        # r = (profile_id, xp, advanced_at).
         return lb.page(rows, offset, extra=lambda r: {
-            'primary': r[2], 'primary_of': r[3], 'primary_label': 'stages',
+            # POINTS, not a stage tally. Points already count what was cleared and weigh what it was
+            # worth, so a stages column beside them says the same thing less precisely -- and the stage
+            # figure was the FURTHEST-ALONG EDITION's, which made it wrong on a board that sums editions.
+            # `points` is the word the Global Boards landing uses for the same quantity.
+            'primary': r[1], 'primary_label': 'points',
             'secondary': None, 'secondary_label': '',
             # `advanced_at` is the hunter's most recent advance -- their completion date if they finished,
             # the latest gating stage they cleared if they are still chasing. One column, and the label
             # stays neutral rather than claiming which, because the row does not know.
-            'when': r[4], 'when_label': 'since',
+            'when': r[2], 'when_label': 'since',
+        })
+
+    @staticmethod
+    def _edition_window(series_slug, edition, offset, limit, country=''):
+        """One window of the EDITION board -- the same columns as the series board, scoped.
+
+        That sameness is the point. The reader picked a filter, not a different page: the rank, the
+        hunter, the points and the date all mean what they meant a moment ago, with the points now
+        counting THIS edition rather than every edition summed. r = (profile_id, ed_xp, advanced_at)."""
+        rows = lb.series_edition_rows(series_slug, edition, limit=limit, offset=offset,
+                                      country=country or None)
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[1], 'primary_label': 'points',
+            'secondary': None, 'secondary_label': '',
+            'when': r[2], 'when_label': 'since',
         })
 
 

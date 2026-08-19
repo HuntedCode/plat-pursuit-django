@@ -6,7 +6,7 @@ sealed subsystem and are written by the recompute the sync/apply path already ru
   Badge Points     -> ProfileBadgeStanding.total_xp                  [db_index]
   Badge Trophies   -> ProfileBadgeStanding (-platinum, -total)        [pbs_progress_idx]
   Career XP        -> ProfileCareerStanding.total_xp                  [db_index]
-  Per-series board -> SeriesBadgeStanding (-progress_bp, advanced_at) [sbs_series_board_idx]  earners+chasers
+  Per-series board -> SeriesBadgeStanding (-xp, advanced_at) [sbs_series_board_idx]  earners+chasers
   Per-badge earners-> UserGroupBadge (group_badge, earned_at)         [ugb_badge_earned_idx]  (rank == earned order)
 
 Every board takes an optional `country` and every one of those slices is served by a
@@ -22,9 +22,11 @@ rank_of / earners_rank return a profile's LIVE position (the value shown on the 
 indexed reads, whale-safe. rows(...) returns a page of (profile_id, value) for rendering; `hydrate()` turns a
 page of ids into display rows in ONE query.
 """
-from collections import defaultdict
 
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import F, IntegerField, OuterRef, Q, Subquery
+from django.db.models.fields.json import KeyTextTransform, KeyTransform
+from django.db.models import Value
+from django.db.models.functions import Cast, Coalesce
 
 from trophies.models import (
     ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, SeriesBadgeStanding,
@@ -97,7 +99,18 @@ TROPHY_KEYS = (('total_plats', _DESC), ('total_trophies', _DESC), ('id', _ASC))
 CAREER_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 # Postgres orders ASC NULLS LAST by default, which is what `.order_by('advanced_at')` gets and what this
 # mirrors: a hunter who has not advanced sorts below one who has, within the same rung.
-SERIES_BOARD_KEYS = (('progress_bp', _DESC), ('advanced_at', _ASC_NULLS_LAST), ('profile_id', _ASC))
+#: The per-series board: BADGE POINTS for this series, first-to-arrive breaking the ties.
+#:
+#: It ordered on `progress_bp` -- the furthest-along EDITION's fraction -- which made "All editions" a
+#: board that ignored every edition but your best one. `xp` is already summed across editions by
+#: `compute_series_standings`, so it answers "who has done the most in this series" without needing a new
+#: column, and points already encode stage count and stage worth together, which is why the row shows
+#: points instead of a stage tally now.
+#:
+#: `advanced_at` ASCENDING is unchanged and still load-bearing: points tie in large groups (everyone who
+#: cleared the same stages has the same total), and without the date those ties sort by profile id and
+#: read as unranked. Earlier arrival ranks higher -- got there first.
+SERIES_BOARD_KEYS = (('xp', _DESC), ('advanced_at', _ASC_NULLS_LAST), ('profile_id', _ASC))
 JOB_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 
 
@@ -468,21 +481,129 @@ def _series_board_qs(series_slug, country):
     return _slice(_linked(SeriesBadgeStanding.objects.filter(series_slug=series_slug)), country)
 
 
+#: The per-edition series board. Same shape as `SERIES_BOARD_KEYS`, with that edition's own points in
+#: place of the series-wide total -- so the two boards sort by the same rules and a reader switching
+#: between them sees the ordering they already understand, scoped.
+SERIES_EDITION_KEYS = (('ed_xp', _DESC), ('advanced_at', _ASC_NULLS_LAST), ('profile_id', _ASC))
+
+
+def _series_edition_qs(series_slug, edition_key, country=None):
+    """One EDITION of one series' board: everyone with progress in that edition specifically.
+
+    WHY THIS EXISTS. The edition filter first read `UserGroupBadge` -- the earners store, keyed on a
+    GroupBadge and therefore genuinely per (series x edition). That was the wrong board. It answered
+    "who HOLDS this edition", so picking an edition on a badge with plenty of chasers and no finishers
+    emptied the board and said nobody was on it, which was false in the only sense a reader cares about.
+    The filter has to scope the board, not swap it for a rarer one.
+
+    `group_progress` is the per-edition read-model that makes the right board possible:
+    `{platform_group_key: [stages_cleared, gating_count]}`, materialized on every recompute for every
+    EARNABLE edition -- started or not. So the same population is here, with each hunter's progress in
+    the edition being asked about, and earners sort to the top naturally (cleared == gating).
+
+    `ed_cleared > 0` is the membership rule, and it is the one the landing's edition board already uses
+    (`total_xp__gt=0` on ProfileEditionStanding): an untouched edition is stored as `[0, gating]` so the
+    Collection can render its denominator, and without the gate every chaser of every OTHER edition would
+    pad this board with zeroes.
+
+    PERFORMANCE, stated plainly: this sorts on a JSONB expression, so it cannot use `sbs_series_board_idx`
+    beyond the `series_slug` narrowing that index already gives. One badge's chasers is a bounded set and
+    Postgres sorts it in `work_mem`, but a very popular series re-sorts on every window fetch. If that
+    shows up in `profile_render`, the fix is an expression index per edition key or a real
+    per-(series, edition) standing store -- not a Python sort.
+    """
+    return _slice(
+        _linked(SeriesBadgeStanding.objects.filter(series_slug=series_slug)), country
+    ).annotate(
+        ed_cleared=Cast(KeyTextTransform(0, KeyTransform(edition_key, 'group_progress')), IntegerField()),
+        # MEMBERSHIP is "started this edition"; ORDERING is points. They are deliberately different keys:
+        # a hunter can clear a gating stage that pays nothing, and gating them on points would drop
+        # somebody who is visibly chasing -- which is the whole failure this board was rebuilt to fix.
+        # `Coalesce` because `group_xp` omits an edition that has paid nothing, while `group_progress`
+        # carries every earnable one; a missing key must read as zero points, not as null.
+        ed_xp=Coalesce(
+            Cast(KeyTextTransform(edition_key, 'group_xp'), IntegerField()), Value(0)),
+    ).filter(ed_cleared__gt=0)
+
+
+def series_edition_rows(series_slug, edition_key, limit=50, offset=0, country=None):
+    """One window of the per-edition board: [(profile_id, ed_xp, advanced_at), ...], most points first."""
+    return list(
+        _series_edition_qs(series_slug, edition_key, country)
+        .order_by('-ed_xp', F('advanced_at').asc(nulls_last=True), 'profile_id')
+        .values_list('profile_id', 'ed_xp', 'advanced_at')[offset:offset + limit]
+    )
+
+
+def series_edition_count(series_slug, edition_key, country=None):
+    return _series_edition_qs(series_slug, edition_key, country).count()
+
+
+def series_edition_rank(series_slug, edition_key, profile_id, country=None):
+    """Position on one edition's board, or None for a hunter who has not started that edition.
+
+    Mirrors the full ORDER BY, like every other rank here: ahead means further along in THIS edition, or
+    equally far and there sooner, or tied on both and a lower profile id.
+    """
+    qs = _series_edition_qs(series_slug, edition_key, country)
+    mine = qs.filter(profile_id=profile_id).values_list('ed_xp', 'advanced_at').first()
+    if mine is None:
+        return None
+    return qs.filter(_ahead_q(SERIES_EDITION_KEYS, {
+        'ed_xp': mine[0], 'advanced_at': mine[1], 'profile_id': profile_id,
+    })).count() + 1
+
+
+def series_edition_countries(series_slug, edition_key):
+    """Country codes with at least one hunter on ONE edition's board, for that board's picker."""
+    # CACHED, like `active_countries` above and for the same reason: viewer-independent, and a
+    # DISTINCT no index serves. The panel resolves it once per load; without this it also ran on
+    # every virtual window, which is one whole-population scan per screenful scrolled.
+    return _cached(f'lb:picker:cc:edition:{series_slug}:{edition_key}', lambda: sorted(
+        _series_edition_qs(series_slug, edition_key)
+        .exclude(country_code__isnull=True).exclude(country_code='')
+        .values_list('country_code', flat=True).distinct()
+    ))
+
+
+def series_board_countries(series_slug):
+    """Country codes with at least one hunter on ONE series' board, for that board's picker.
+
+    Scoped to the series rather than reusing `active_countries()`, which is every country on ANY board.
+    A picker offering 60 countries when four of them have anybody chasing this badge is 56 dead options
+    that each answer "nobody from this country is on this board yet" -- a filter should not be able to
+    empty the thing it filters unless the reader had a reason to think otherwise.
+
+    Cheap despite being per-series: `sbs_series_board_idx` leads with `series_slug`, so this is an index
+    scan over one badge's rows rather than a table-wide DISTINCT.
+    """
+    # CACHED, like `active_countries` above and for the same reason: viewer-independent, and a
+    # DISTINCT no index serves. The panel resolves it once per load; without this it also ran on
+    # every virtual window, which is one whole-population scan per screenful scrolled.
+    return _cached(f'lb:picker:cc:series:{series_slug}', lambda: sorted(
+        _series_board_qs(series_slug, None)
+        .exclude(country_code__isnull=True).exclude(country_code='')
+        .values_list('country_code', flat=True).distinct()
+    ))
+
+
 def series_board_rows(series_slug, limit=50, offset=0, country=None):
-    """The per-series board -- earners AND chasers, one list:
-    [(profile_id, progress_bp, stages_cleared, stages_total, advanced_at), ...].
+    """The per-series board -- earners AND chasers, one list: [(profile_id, xp, advanced_at), ...].
 
-    `(-progress_bp, advanced_at)` puts earners (10000 bp) on top by completion date, then each rung of
-    chasers with whoever got there first ahead. `advanced_at` is not decoration: progress_bp is discrete
-    (cleared / gating stages), so a 3-stage series stacks everyone on 1/3 or 2/3, and without the date
-    those large ties would sort by profile id and read as unranked.
+    BADGE POINTS FOR THIS SERIES, summed across every edition by `compute_series_standings` before it ever
+    reaches this table. It ordered on `progress_bp` instead, which is the furthest-along EDITION's
+    fraction -- so the "All editions" board ranked people by their best single edition and ignored the
+    rest, which is not a thing anybody asked to see. Points also make the stage tally redundant: they
+    already count what was cleared AND weigh what it was worth, so the row carries one figure now.
 
+    `advanced_at` ASCENDING breaks the ties, and it does most of the work here: everyone who has cleared
+    the same stages has the same points, so ties are the common case rather than the edge. Earlier
+    arrival ranks higher.
     """
     return list(
         _series_board_qs(series_slug, country)
-        .order_by('-progress_bp', 'advanced_at', 'profile_id')
-        .values_list('profile_id', 'progress_bp', 'stages_cleared', 'stages_total',
-                     'advanced_at')[offset:offset + limit]
+        .order_by('-xp', 'advanced_at', 'profile_id')
+        .values_list('profile_id', 'xp', 'advanced_at')[offset:offset + limit]
     )
 
 
@@ -491,11 +612,12 @@ def series_board_rank(series_slug, profile_id, country=None):
     equally far along and there sooner, or tied on both and a lower profile id. A null `advanced_at` sorts
     last within its rung, matching the query's NULLS LAST.
 
-    The tail matters most here of all the boards: progress_bp is discrete (cleared / gating stages), so a
-    3-stage series stacks every chaser onto 1/3 or 2/3 and the date breaks only some of those ties.
+    The tail matters most here of all the boards: everyone who has cleared the same stages of a series
+    holds the same points, so ties are the common case rather than the edge, and the date is what turns a
+    rung of them into an order instead of a heap sorted by profile id.
     """
     qs = _series_board_qs(series_slug, country)   # ONE definition of the population, shared with rows/count
-    mine = qs.filter(profile_id=profile_id).values('progress_bp', 'advanced_at').first()
+    mine = qs.filter(profile_id=profile_id).values('xp', 'advanced_at').first()
     if mine is None:
         return None      # no standing in this series, or not in this country
     return qs.filter(_ahead_q(SERIES_BOARD_KEYS, {**mine, 'profile_id': profile_id})).count() + 1
@@ -515,11 +637,16 @@ def _earners_qs(group_badge_id, country=None):
 def earners_rows(group_badge_id, limit=50, offset=0, country=None):
     """First-to-complete order for one group badge: [(profile_id, earned_at), ...] earliest first.
 
-    NO PRODUCTION CALLER as of 2026-08 -- the earners board is a STAT, not a surface: `earners_rank` is
-    rendered as a number on the medallion back and in the badge stats modal, and no template lists these
-    rows. Kept rather than deleted because its tests are what pin the ordering rule that `earners_rank`
-    depends on (first-to-complete, profile id breaking the constant date ties), and because an earners
-    list is a plausible part of unifying the board surfaces. If that does not happen, delete it."""
+    NO PRODUCTION CALLER -- the earners board is a STAT, not a surface: `earners_rank` is rendered as a
+    number on the medallion back and in the badge stats modal, and no template lists these rows. Kept
+    because its tests are what pin the ordering rule `earners_rank` depends on (first-to-complete,
+    profile id breaking the constant date ties).
+
+    It was briefly badge detail's per-edition board, and that was a mistake worth leaving a note about:
+    keyed on a GroupBadge it IS per (series x edition), so it looks like the right store -- but it holds
+    only hunters who FINISHED an edition, so picking an edition on a badge with chasers and no finishers
+    emptied the board and said nobody was on it. A filter has to scope a board, not swap it for a rarer
+    one. `_series_edition_qs` is the board that replaced it."""
     return list(
         _earners_qs(group_badge_id, country).order_by('earned_at', 'profile_id')
         .values_list('profile_id', 'earned_at')[offset:offset + limit]
@@ -636,6 +763,32 @@ def job_rank(job_slug, profile_id, country=None):
     if not mine:
         return None      # no XP in this job, unlinked, or not in this country -- not ON this board
     return store.filter(_ahead_q(JOB_KEYS, {'total_xp': mine, 'profile_id': profile_id})).count() + 1
+
+
+def job_board_count(job_slug, country=None):
+    """How many hunters sit on ONE job's board, under the active slice.
+
+    `job_board_counts` (plural) exists for the batch case and takes no country -- it was written for a
+    directory page that listed every job at once. A sliced board needs its own count or the tally above it
+    describes a different population from the rows below it.
+    """
+    return _job_board_qs(job_slug, country).count()
+
+
+def job_countries(job_slug):
+    """Country codes with at least one hunter on ONE job's board, for its picker.
+
+    Scoped to the board like every other picker here -- see `series_board_countries` for why. Reads the
+    store's own mirrored `country_code`, so it never joins Profile.
+    """
+    # CACHED, like `active_countries` above and for the same reason: viewer-independent, and a
+    # DISTINCT no index serves. The panel resolves it once per load; without this it also ran on
+    # every virtual window, which is one whole-population scan per screenful scrolled.
+    return _cached(f'lb:picker:cc:job:{job_slug}', lambda: sorted(
+        _job_board_qs(job_slug, None)
+        .exclude(country_code__isnull=True).exclude(country_code='')
+        .values_list('country_code', flat=True).distinct()
+    ))
 
 
 def job_board_counts(job_slugs):

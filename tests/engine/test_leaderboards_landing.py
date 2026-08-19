@@ -306,8 +306,13 @@ def test_the_endpoint_is_public(client):
 # ------------------------------------------------------------------ the virtualized wall -----------------
 
 def test_the_wall_ships_its_first_window_and_the_engine_contract(client):
-    """The board is there on arrival and on a no-JS read: the first window is server-rendered INSIDE the
-    spacer, and the engine adopts those rows rather than re-fetching them.
+    """The board is there on arrival and on a no-JS read: the first window is server-rendered inside the
+    wall, and the engine adopts those rows rather than re-fetching them.
+
+    The wall ships as FLOW, not as a spacer. `lb-wall--virtual` absolutely positions every row and the
+    height reserving their space is set by the engine at mount, so shipping the class meant a board that
+    never mounted rendered a zero-height pile with the page drawn through it -- which is the opposite of
+    the no-JS read this test is named for. `virtualBoard` promotes the wall when it takes over.
 
     Everything the client needs rides on the root as data. A page size or rows URL hardcoded in the JS is
     the kind of thing that silently desyncs from the server that pages by it.
@@ -318,7 +323,8 @@ def test_the_wall_ships_its_first_window_and_the_engine_contract(client):
     resp = client.get(URL)
     body = resp.content.decode()
 
-    assert 'lb-wall--virtual' in body, 'the wall is not virtualized'
+    assert '<ol class="lb-wall" data-lb-wall>' in body, 'the wall is not a plain flow list on arrival'
+    assert 'lb-wall--virtual' not in body, 'the wall ships pre-virtualized and will collapse if unmounted'
     assert 'data-lb-total=' in body and 'data-lb-rows-url=' in body
     assert f'data-lb-page-size="{resp.context["page_size"]}"' in body
     assert '<li class="lb-row' in body, 'the first window was not server-rendered'
@@ -347,8 +353,13 @@ def test_the_column_header_labels_match_the_rows_beneath_it(client):
     primary, secondary = V.FIGURES['points']
     assert resp.context['primary_label'] == primary
     assert resp.context['secondary_label'] == secondary
+    # Asserted on the ROWS, which is where the labels live. There was a column-header strip too, naming
+    # the same figures a second time on desktop only; it is gone, and the labels it duplicated are the
+    # ones that survive -- they sit in the same column as the value they describe, at every width.
     body = resp.content.decode()
-    assert 'lb-colhead' in body and primary in body and secondary in body
+    assert 'lb-colhead' not in body, 'the duplicated column header is back'
+    assert body.count(f'<span class="lb-row__k">{primary}</span>') >= 1
+    assert body.count(f'<span class="lb-row__k">{secondary}</span>') >= 1
 
 
 def test_jump_to_my_rank_appears_only_for_a_ranked_viewer(client):

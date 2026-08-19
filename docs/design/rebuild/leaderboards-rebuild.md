@@ -456,13 +456,14 @@ Each step leaves the site working.
 | 7 | ✅ `/jobs/` + `/jobs/<slug>/` (Contracts + Ranks tabs, public) | New Browse surface |
 | 8 | ~~Job Boards directory; sub-nav live with all four~~ **REMOVED in step 9** | — |
 | 9 | ✅ Directories removed (2026-08); the three boards VIRTUALIZED onto one shared shell, row, jump bar, window parser and JS engine | Every board is the same board |
+| 10 | ✅ Game detail folded in: shared row + chrome, `invert` and `registered_only` removed, country added to it and to job detail | FOUR boards, one board |
 
 Steps 1–2 are the performance work. **Finishing the cutover *is* the optimization** — it is not a
 prerequisite to it.
 
 ---
 
-## 8. One board, three surfaces (2026-08)
+## 8. One board, four surfaces (2026-08)
 
 The three boards were each virtualized separately and had begun to diverge -- badge detail appended 25
 rows at a time behind a "show more", job detail had a prev/next pager, and only the Global Boards landing
@@ -473,7 +474,7 @@ scrolled. All three now run the same pieces:
 | `PlatPursuit.virtualBoard` | `static/js/utils.js` | The ENGINE: spacer, absolute placement, eviction, jump |
 | `PlatPursuit.wireBoard` | `static/js/utils.js` | The WIRING: read the data attributes, build the rows URL, hook the jump chip and rank box |
 | `PlatPursuit.boardEntrance` | `static/js/utils.js` | The first screenful's cascade, in WAAPI |
-| `leaderboard_board.html` | partial | The shell: root, data attributes, column headers, virtual wall |
+| `leaderboard_board.html` | partial | The shell: root, data attributes, the wall (shipped as FLOW; the engine promotes it) |
 | `leaderboard_row.html` | partial | One row |
 | `leaderboard_rows.html` | partial | One WINDOW: bare rows, no wrapper |
 | `leaderboard_jumpbar.html` | partial | Jump-to-me + the rank box |
@@ -493,8 +494,27 @@ wall, the row and the jump bar, and then sat all of it bare on the page backgrou
 identically and did not look like the same product, which was the entire point. `test_board_uniformity`
 now asserts the design as well as the contract.
 
-Game detail's board **does** use `window_params` and `MAX_START` (it was a fourth hand-rolled copy of
-the clamp, with a looser start bound), but **is deliberately NOT on the shared row.** It runs the same engine, but its rows carry
+**Game detail joined in step 10.** It was the holdout: same engine, but its own row, chrome and
+controls, which made the most featured board on the site the one that looked least like the others. It
+was REDUCED onto the shared row rather than the shared row being grown to fit it -- the per-tier trophy
+dots, the completion bar and the speed board's second date are gone, and the stage that mattered is that
+this was a deliberate trade, recorded in `test_game_leaderboard_view`, not a silent trim.
+
+Three things went with the convergence:
+
+| Gone | Why |
+|---|---|
+| `invert` (bottom-first) | Existed only here, and forced a second answer to every ordering question: display order vs canonical rank, `from` vs `start`, nulls-first vs nulls-last. The engine lost its `invert` and `from` with it. |
+| `registered_only` | An OPT-IN "members only" over a board that otherwise ranked every scraped PSN profile -- so the behaviour every other board has by default was the one you had to ask for. The board is `is_linked`-gated unconditionally now. |
+| Toggle chips | `aria-pressed` buttons doing the job the other boards do with `.lb-filters` selects. |
+
+And country arrived on the two boards that lacked it. Job detail reads its denormalized `country_code`;
+game detail has none (a mirror on a per-(profile, game) table is the wrong trade) so it rides the Profile
+join the `is_linked` gate already makes.
+
+What game detail still has that the others do not -- hunter search, three board kinds, trophy-group
+scoping -- are FEATURES, not drift. The search sits in `leaderboard_jumpbar.html`'s `extra_partial` slot
+precisely so it can spread when the `pg_trgm` question is answered. It runs the same engine, but its rows carry
 per-tier trophy counts, a completion bar and three board-kind variants (progress / speed / playtime) that
 the shared row has no slot for. Folding it in would mean growing the shared row four ways to serve one
 caller. Uniformity across the other three is guarded by `tests/engine/test_board_uniformity.py`.
@@ -574,6 +594,22 @@ caller. Uniformity across the other three is guarded by `tests/engine/test_board
 - **Test the second response mode against the FIRST one's gates.** The dormant-series 404 sat above the
   `?range=` branch and was only ever tested on the full-panel path, so hoisting that branch for
   performance would have served unreleased boards with the suite green.
+- **An unmounted virtual wall is a zero-height pile, so the class that virtualizes it must come from the
+  ENGINE.** `lb-wall--virtual` absolutely positions every row; the height reserving their space is set at
+  mount. Ship them together and any board that fails to mount -- JS off, a failed panel fetch, a missing
+  `data-lb-page-size`, a cached older `utils.js` -- renders its rows on top of each other with the rest of
+  the page drawn through them. The server ships a flow list; `virtualBoard` promotes it.
+- **`data-lb-board` belongs to the engine.** Game detail used the same name for its own "which board is
+  selected" param on the `.gd-lb` wrapper AND on every switcher chip. The wrapper is outermost, so
+  `querySelector('[data-lb-board]')` returned it, and it has no `data-lb-total` -- the engine read a size
+  of zero and declined to mount. Every symptom was an ABSENCE (no viewer highlight, no jump, no infinite
+  scroll), nothing threw, and once the wall shipped as flow it did not even look broken. That page's param
+  is `data-lb-boardparam` now.
+- **A test that proves the markup is not a test that proves the feature.** `data-lb-viewer-rank` reaching
+  the board root was asserted and passing throughout the collision above. It only ever proved the server's
+  half. The uniformity suite now also pins that the rank MATCHES the viewer's own row, per surface --
+  those two numbers come from different code (rows numbered by slot, rank counted by walking ahead) and
+  agree only while both reads share one population.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 

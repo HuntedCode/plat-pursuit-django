@@ -215,13 +215,20 @@ only, letting the tab's own click/Enter activate — for expensive swaps (the Ba
 
 The leaderboard stack. `virtualBoard` is the engine, `wireBoard` is the per-surface wiring, and
 `boardEntrance` is the entrance animation. Three surfaces run all three (Global Boards, badge detail's
-Ranks tab, job detail's Ranks tab); game detail runs `virtualBoard` alone, with its own row component.
+Ranks tab, job detail's Ranks tab); game detail joined them in 2026-08 -- all four run `wireBoard` on the shared row.
 
 | Function | Args | Returns |
 |---|---|---|
-| `virtualBoard(o)` | `{list, total, rowSelector, rowHeight, fetchRows, pageSize?, invert?, rankKey?, youRank?, chromeInset?, onRender?}` | `{jump, refresh, destroy}` |
+| `virtualBoard(o)` | `{list, total, rowSelector, rowHeight, fetchRows, pageSize?, rankKey?, youRank?, chromeInset?, onRender?}` | `{jump, refresh, destroy}` |
 | `wireBoard(root, o?)` | `root` = `[data-lb-board]`; `{scope?, chromeInset?, onRender?}` | `{jump, refresh, destroy}`, or **null** for an empty board |
 | `boardEntrance(root)` | `root` = `[data-lb-board]` | — |
+
+`fetchRows(start, count)` takes two arguments -- `from` went with `invert`, since a display position IS a
+rank once no board can be read bottom-first.
+
+`virtualBoard` ADDS `lb-wall--virtual` when it mounts and removes it on `destroy()`. The server ships a
+plain flow list: that class absolutely positions every row, and the height reserving their space is set at
+mount, so shipping them together made any board that failed to mount a zero-height pile.
 
 `wireBoard` reads everything else off the root as `data-lb-*` (`total`, `page-size`, `rows-url`,
 `params`, `viewer-rank`), so no caller carries a page size or a URL of its own — that constant would be

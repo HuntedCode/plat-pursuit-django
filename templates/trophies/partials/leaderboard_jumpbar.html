@@ -27,6 +27,15 @@ discovering this at that point.
         You&rsquo;re <b class="pp-tally">#{{ my_rank|intcomma }}</b>
     </button>
     {% endif %}
+    {% comment %} A SLOT between the two affordances, filled by a board that has a third way in. Game
+    detail passes its hunter search here, so the cluster reads left-to-right as "where I am" -> "find
+    someone" -> "go to a number" rather than as the house control with something bolted beside it.
+
+    A template PATH rather than a block, because `{% include %}` is what a partial can offer -- and `only`
+    on the inner include keeps the slot from quietly depending on the jump bar's own context, so whatever
+    fills it stays self-contained. {% endcomment %}
+    {% if extra_partial %}{% include extra_partial only %}{% endif %}
+
     <form class="lb-goto" data-lb-gotoform novalidate>
         <label class="lb-goto__lbl" for="{{ id_prefix|default:'lb' }}-goto-input">Go to rank</label>
         <input id="{{ id_prefix|default:'lb' }}-goto-input" type="number" inputmode="numeric" min="1" max="{{ total }}"

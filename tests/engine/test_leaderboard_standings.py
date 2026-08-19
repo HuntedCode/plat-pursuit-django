@@ -319,21 +319,41 @@ def test_the_board_index_matches_the_board_order():
 
     The `profile` tail is what makes a rank COUNT index-only: `badge_leaderboards` numbers a page by SLOT
     and computes a rank by counting everyone ahead, and those two agree only because the ordering ends in
-    a unique key. It is also a superset of the old two-column (series_slug, -progress_bp) it replaced --
-    keeping both would be dead write cost on every standing write.
+    a unique key.
+
+    KEYED ON `xp` since 0312. The board ranks by BADGE POINTS for the series -- already summed across
+    editions before the row is written -- rather than by `progress_bp`, which is the furthest-along
+    EDITION's fraction and made the default "all editions" view rank people by their best single edition.
+    The index moved WITH the ordering, which is the coupling this test exists to hold: they are two
+    statements of one decision and a board whose index disagrees with its ORDER BY silently stops
+    range-scanning.
+
+    The old `progress_bp` keying is not kept alongside. The other `progress_bp` orderings in the codebase
+    (`collection_service`, `monthly_recap_service`) are PROFILE-scoped, so they never used an index
+    leading with `series_slug`, and keeping the pair would be dead write cost on a table every badge
+    evaluation writes.
     """
     idx = {i.name: i.fields for i in SeriesBadgeStanding._meta.indexes}
+    from trophies.services.badge_leaderboards import SERIES_BOARD_KEYS
 
-    assert idx.get('sbs_series_board_idx') == ['series_slug', '-progress_bp', 'advanced_at', 'profile'], (
+    assert idx.get('sbs_series_board_idx') == ['series_slug', '-xp', 'advanced_at', 'profile'], (
         f'the combined board index no longer matches the board order: {idx.get("sbs_series_board_idx")}'
     )
+    # ...and asserted against the ORDERING ITSELF, not only against a literal. The literal above pins the
+    # column order the database needs; this pins that it is still the order the SERVICE sorts by, so the
+    # two cannot drift apart while each looks individually correct. `profile_id` is `profile` on the
+    # index -- the same column named as the service sees it and as the ORM declares it.
+    assert [k for k, _ in SERIES_BOARD_KEYS] == ['xp', 'advanced_at', 'profile_id'], (
+        f'the board ordering changed without the index following it: {SERIES_BOARD_KEYS}'
+    )
+
     assert 'sbs_series_prog_idx' not in idx, (
         'the superseded two-column progress index is back; the board index already covers that ordering'
     )
-    # The `-xp` pair served `series_xp_rows`, deleted in the 2026-08 audit for having no caller. They were
-    # pure write cost on a table every badge evaluation writes.
+    # The standalone `-xp` pair served `series_xp_rows`, deleted in the 2026-08 audit for having no
+    # caller. The board's own index now covers that ordering, so they should not come back separately.
     assert 'sbs_series_xp_idx' not in idx and 'sbs_series_cc_xp_idx' not in idx, (
-        'the per-series XP indexes are back; the board they served no longer exists'
+        'the standalone per-series XP indexes are back; the board index already covers that ordering'
     )
 
 

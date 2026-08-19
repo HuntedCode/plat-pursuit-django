@@ -166,11 +166,12 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
         }
 
-        function loadRanks(panel) {
-            if (loaded) { return; }
+        function loadRanks(panel, qs) {
+            if (loaded && !qs) { return; }
             loaded = true;
             var body = panel.querySelector('[data-ranks-body]');
-            fetch(panel.dataset.ranksSrc, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            fetch(panel.dataset.ranksSrc + (qs ? '?' + qs : ''),
+                  { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
                 .then(function (html) {
                     if (handle) { handle.destroy(); handle = null; }
@@ -183,6 +184,11 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     PlatPursuit.boardEntrance(root, panel);
                 })
                 .catch(function () {
+                    // Tear the board down before replacing the body. Only the SUCCESS path did, so a
+                    // failed re-fetch left a mounted engine holding window scroll/resize listeners on a
+                    // detached wall -- inert, but one pair per failure for the life of the page. Game
+                    // detail's loader already did this; the three surfaces disagreed.
+                    if (handle) { handle.destroy(); handle = null; }
                     // A board that fails to load must say so. A spinner left spinning reads as "still
                     // counting" forever, which is worse than an honest failure.
                     loaded = false;   // let a re-open retry
@@ -229,6 +235,20 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         // alive for links that only ever existed inside a control that no longer ships.
         var opened = document.querySelector('.jobd-view[data-view="ranks"]:not([hidden])');
         if (opened) { loadRanks(opened); }
+
+        // The country filter re-fetches the PANEL in place rather than reloading the page, which would
+        // drop the reader back on the Contracts tab having just asked a question about the board. THE
+        // WHOLE FORM is serialized, not the field that changed -- badge detail shipped the one-field
+        // version and each filter cleared the other.
+        var ranksPanel = document.querySelector('.jobd-view[data-view="ranks"]');
+        if (ranksPanel) {
+            ranksPanel.addEventListener('change', function (ev) {
+                var select = ev.target.closest && ev.target.closest('[data-filter-form] select');
+                if (!select) { return; }
+                var form = select.closest('[data-filter-form]');
+                loadRanks(ranksPanel, new URLSearchParams(new FormData(form)).toString());
+            });
+        }
     })();
 </script>
 {% endblock %}

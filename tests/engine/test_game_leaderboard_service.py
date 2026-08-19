@@ -21,7 +21,6 @@ pytestmark = pytest.mark.django_db
 
 DEFAULT = BoardOptions()                              # earners only (the default view)
 ALL = BoardOptions(only_earners=False)               # every owner, 0% included
-INVERTED = BoardOptions(only_earners=False, invert=True)
 
 
 def _ever(game, opts):
@@ -32,9 +31,17 @@ def _ids(game, opts):
     return list(_ever(game, opts).ordered().values_list('profile_id', flat=True))
 
 
-def _player(game, progress, minutes_ago=None, registered=True, **kw):
+def _player(game, progress, minutes_ago=None, linked=True, country='', **kw):
+    """One row on a game board.
+
+    `linked` is the POPULATION now, not a filter: every board here is gated on `is_linked`, the same rule
+    `badge_leaderboards._linked` applies site-wide. It used to be an opt-in "registered only" toggle over
+    a board that otherwise ranked every scraped PSN profile. `ProfileFactory` defaults it True, so the
+    interesting value here is `linked=False`.
+    """
     date = None if minutes_ago is None else timezone.now() - timedelta(minutes=minutes_ago)
-    profile = ProfileFactory() if registered else ProfileFactory(user=None)
+    profile = ProfileFactory(is_linked=linked, country_code=country,
+                             country='Country' if country else '')
     return ProfileGameFactory(game=game, profile=profile, progress=progress,
                               most_recent_trophy_date=date, **kw)
 
@@ -51,12 +58,22 @@ def test_completers_lead_ordered_by_who_finished_first():
     assert _ids(game, DEFAULT) == [early.profile_id, late.profile_id, chaser.profile_id]
 
 
-def test_invert_is_the_exact_reverse():
-    game = GameFactory()
-    for pct in (100, 80, 60, 40, 20):
-        _player(game, pct, minutes_ago=pct)
+def test_the_board_has_ONE_order(the_removal_of_invert=None):
+    """`invert` (read the board bottom-first) is gone, and this pins that it stays gone.
 
-    assert _ids(game, INVERTED) == list(reversed(_ids(game, ALL)))
+    It existed only on this board, which made it the last control that behaved unlike the other three --
+    and it forced a second answer to every ordering question: display order vs canonical rank, `from` vs
+    `start`, nulls-first vs nulls-last. `SortKey.order_expr()` takes no argument now, so a re-introduction
+    cannot be a quiet default.
+    """
+    import inspect
+
+    from trophies.services.game_leaderboard_service import BoardOptions as BO, SortKey
+
+    assert 'invert' not in {f for f in BO.__dataclass_fields__}, 'invert is back on BoardOptions'
+    assert list(inspect.signature(SortKey.order_expr).parameters) == ['self'], (
+        'order_expr takes a direction again, which is invert by another name'
+    )
 
 
 # --- EverythingBoard: filters ------------------------------------------------
@@ -72,15 +89,30 @@ def test_only_earners_drops_zero_trophy_owners():
     assert _ever(game, ALL).size() == 2
 
 
-def test_registered_only_drops_profiles_without_a_site_account():
+def test_unverified_profiles_are_off_every_board():
+    """The gate, not a filter. This board ranked every scraped PSN profile and offered "members only" as
+    an OPT-IN, so the behaviour every other board has by default was the one you had to ask for -- on the
+    board where it matters most, since scraped profiles outnumber claimed ones several times over."""
     game = GameFactory()
-    member = _player(game, 80, minutes_ago=5, registered=True)
-    _player(game, 90, minutes_ago=5, registered=False)
+    member = _player(game, 80, minutes_ago=5)
+    _player(game, 90, minutes_ago=5, linked=False)          # ahead on progress, and not a hunter
 
-    reg = BoardOptions(registered_only=True)
-    assert _ids(game, reg) == [member.profile_id]
-    assert _ever(game, reg).size() == 1
-    assert _ever(game, DEFAULT).size() == 2
+    assert _ids(game, DEFAULT) == [member.profile_id]
+    assert _ever(game, DEFAULT).size() == 1
+    assert _ever(game, ALL).size() == 1, 'the gate is not a filter and must not be opt-out'
+
+
+def test_a_board_can_be_sliced_by_country():
+    """The slice every other board offers. `ProfileGame` carries no `country_code` mirror, so it rides the
+    Profile join the `is_linked` gate already makes."""
+    game = GameFactory()
+    brit = _player(game, 80, minutes_ago=5, country='GB')
+    _player(game, 90, minutes_ago=5, country='US')
+
+    sliced = BoardOptions(country='GB')
+    assert _ids(game, sliced) == [brit.profile_id]
+    assert _ever(game, sliced).size() == 1
+    assert _ever(game, DEFAULT).countries() == ['GB', 'US']
 
 
 def test_hidden_players_are_off_every_board():
@@ -95,7 +127,7 @@ def test_hidden_players_are_off_every_board():
 # --- EverythingBoard: windowed reads -----------------------------------------
 
 
-@pytest.mark.parametrize('opts', [DEFAULT, ALL, INVERTED, BoardOptions(registered_only=True)])
+@pytest.mark.parametrize('opts', [DEFAULT, ALL, BoardOptions(country='GB')])
 def test_ranges_tile_the_board_without_gap_or_overlap(opts):
     """Adjacent windows must exactly reconstruct the board -- the virtual-scroll guarantee."""
     game = GameFactory()
@@ -112,10 +144,10 @@ def test_ranges_tile_the_board_without_gap_or_overlap(opts):
     assert len({*a, *b, *c}) == len(order)              # no overlap
 
 
-@pytest.mark.parametrize('opts', [ALL, INVERTED])
+@pytest.mark.parametrize('opts', [DEFAULT, ALL])
 def test_ranges_are_stable_over_a_tie_cluster(opts):
     """Every player identical on both sort keys -- only profile_id separates them, so tiling must be
-    deterministic and gapless forward and inverted."""
+    deterministic and gapless."""
     game = GameFactory()
     stamp = timezone.now()
     for _ in range(9):
@@ -163,22 +195,13 @@ def test_rank_matches_the_board_order_for_every_player():
         assert board.rank_for(Profile.objects.get(pk=pid)) == position
 
 
-def test_rank_is_canonical_regardless_of_invert():
-    game = GameFactory()
-    rows = [_player(game, 100 - i, minutes_ago=i + 1) for i in range(5)]
-    third = rows[2].profile
-
-    assert _ever(game, DEFAULT).rank_for(third) == 3
-    assert _ever(game, BoardOptions(invert=True)).rank_for(third) == 3
-
-
 def test_rank_reflects_the_active_filters():
     game = GameFactory()
-    _player(game, 95, minutes_ago=5, registered=False)   # ahead, but unregistered
-    me = _player(game, 80, minutes_ago=5, registered=True)
+    _player(game, 95, minutes_ago=5, country='US')      # ahead, but a different country
+    me = _player(game, 80, minutes_ago=5, country='GB')
 
     assert _ever(game, DEFAULT).rank_for(me.profile) == 2
-    assert _ever(game, BoardOptions(registered_only=True)).rank_for(me.profile) == 1
+    assert _ever(game, BoardOptions(country='GB')).rank_for(me.profile) == 1
 
 
 def test_rank_is_none_when_the_viewer_is_filtered_out():
@@ -245,14 +268,6 @@ def test_row_at_rank_returns_the_hunter_at_that_canonical_rank():
         assert row['rank'] == n
 
 
-def test_row_at_rank_is_canonical_even_when_inverted():
-    game = GameFactory()
-    leader = _player(game, 100, minutes_ago=5)
-    _player(game, 60, minutes_ago=1)
-
-    assert _ever(game, INVERTED).row_at_rank(1)['profile'].id == leader.profile_id
-
-
 def test_row_at_rank_past_the_board_is_none():
     game = GameFactory()
     _player(game, 100, minutes_ago=5)
@@ -273,11 +288,11 @@ def test_row_at_rank_is_a_single_query(django_assert_num_queries):
 
 def test_row_at_rank_respects_the_filters():
     game = GameFactory()
-    _player(game, 100, minutes_ago=5, registered=False)     # rank 1 overall, filtered out for members
-    member = _player(game, 90, minutes_ago=1, registered=True)
+    _player(game, 100, minutes_ago=5, country='US')     # rank 1 overall, off the sliced board
+    brit = _player(game, 90, minutes_ago=1, country='GB')
 
     assert _ever(game, DEFAULT).row_at_rank(1)['progress'] == 100
-    assert _ever(game, BoardOptions(registered_only=True)).row_at_rank(1)['profile'].id == member.profile_id
+    assert _ever(game, BoardOptions(country='GB')).row_at_rank(1)['profile'].id == brit.profile_id
 
 
 # --- group / speed / playtime boards -----------------------------------------

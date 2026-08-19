@@ -39,9 +39,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _standing(slug, name, *, bp, on, country=''):
+    """A series standing whose POINTS move with its progress.
+
+    `xp` was a flat 100 for everybody, which was harmless while the board ranked on `progress_bp` and is
+    not now: on a points board a constant makes every hunter tie, so the date does all the ordering and
+    "earners above chasers" stops being a thing the fixture can express. `bp // 100` keeps it simple and
+    truthful in shape -- a finisher holds more points than somebody halfway.
+    """
     p = ProfileFactory(display_psn_username=name, country_code=country)
     SeriesBadgeStanding.objects.create(
-        profile=p, series_slug=slug, xp=100, progress_bp=bp,
+        profile=p, series_slug=slug, xp=bp // 100, progress_bp=bp,
         stages_cleared=bp // 2500, stages_total=4, advanced_at=on, country_code=country,
         is_linked=True,
     )
@@ -355,13 +362,17 @@ def test_a_crafted_window_cannot_ask_for_the_whole_board(client):
     assert MAX_START < 10 ** 12, 'the start clamp no longer bounds what this asks for'
 
 
-def test_a_row_shows_its_denominator_and_its_tiebreak_date(client):
-    """Both were fetched on every row and thrown away.
+def test_a_row_shows_its_points_and_its_tiebreak_date(client):
+    """The row carries ONE figure and a date.
 
-    Without the denominator, a hunter who finished a 5-stage series rendered "5 stages" and one sitting on
-    5 of 8 rendered "5 stages" -- the top of the board and the middle of it, identical. And `advanced_at`
-    is what ORDERS rows sharing a rung (whoever got there first ranks higher), so leaving it off screen
-    made the ordering look arbitrary to the person reading it.
+    It used to carry a stage tally with a denominator, which was the right fix for the board as it stood
+    -- without it, a hunter who finished a 5-stage series and one sitting on 5 of 8 both rendered "5
+    stages". The tally is gone with the ordering it described: points already count what was cleared and
+    weigh what it was worth, and the old tally was the FURTHEST-ALONG EDITION's, which made it doubly
+    wrong on a board that sums editions. Points have no denominator, so the row must not invent one.
+
+    `advanced_at` still matters, and more than before: everyone who has cleared the same stages holds the
+    same points, so ties are the common case and the date is what turns a rung of them into an order.
     """
     _renderable('shown', 'Shown')
     _standing('shown', 'Finisher', bp=10000, on=dt.date(2024, 3, 1))
@@ -371,12 +382,13 @@ def test_a_row_shows_its_denominator_and_its_tiebreak_date(client):
     rows = resp.context['rows']
     body = resp.content.decode()
 
-    # `_standing` builds stages_cleared from bp // 2500 against a stages_total of 4.
-    assert rows[0]['primary'] == 4 and rows[0]['primary_of'] == 4, 'the denominator never reached the row'
-    assert rows[1]['primary'] == 2 and rows[1]['primary_of'] == 4
+    # `_standing` derives xp as bp // 100.
+    assert rows[0]['primary'] == 100 and rows[0]['primary_label'] == 'points'
+    assert rows[1]['primary'] == 50
+    assert rows[0].get('primary_of') is None, 'points were given a denominator they do not have'
     assert rows[0]['when'] is not None, 'the tiebreak date never reached the row'
 
-    assert '/ 4' in body, 'the denominator is not rendered'
+    assert '/ ' not in body.split('lb-row__figs')[1][:400], 'a denominator is being rendered'
     assert 'Mar 2024' in body and 'Jul 2025' in body, 'the tiebreak date is not rendered'
 
 
@@ -419,13 +431,22 @@ def test_the_board_lives_behind_its_own_tab(client):
     )
 
 
-def test_the_ranks_tab_carries_no_edition_control(client):
-    """The clean half of the split: the board is per SERIES (earning any edition counts), so an edition
-    switcher over it would be pretending to change it. Overview owns the editions; Ranks does not.
+def test_the_ranks_tab_does_not_duplicate_the_MEDALLION_switcher(client):
+    """Ranks has its own edition control now, and this is about the OTHER one.
 
-    Uses a TWO-edition series, because a single-edition one hides the switcher entirely
-    (`detail.has_multiple_groups`) and would pass without ever rendering the thing being excluded.
-    Sliced at the first `<script`, since the switcher's classes legitimately appear in the page's JS.
+    The original reasoning here was that the board is per SERIES, so any edition switcher over it would
+    be pretending to change it. That was true of the board as it stood and stopped being true when
+    picking an edition started switching the STORE (`SeriesBadgeStanding` -> `UserGroupBadge`, earners of
+    that edition) -- the same move the Global Boards landing makes for Badge Points.
+
+    What must still not appear is `bd2-groupswitch`: Overview's medallion switcher, which changes which
+    ARTWORK you are looking at. Two controls with the same name doing different things on one page is
+    worse than one, so Ranks filters with the shared `.lb-filters` select and leaves the medallion
+    switcher to the tab that owns the medallion.
+
+    Uses a TWO-edition series, because a single-edition one hides both controls entirely and would pass
+    without ever rendering the thing being excluded. Sliced at the first `<script`, since the switcher's
+    classes legitimately appear in the page's JS.
     """
     series = _renderable('noedition', 'No Edition')
     second = PlatformGroupFactory(key='noedition-legacy', name='Legacy HD', platforms=['PS3'])
@@ -471,3 +492,440 @@ def test_the_content_tabs_slide_like_every_other_switcher(client):
     assert body.count('PlatPursuit.slideViewIn') >= 2, (
         'the content tabs do not slide (the edition switcher above them does)'
     )
+
+
+# ---------------------------------------------------------------------------------------------------
+# The country filter (2026-08). The Global Boards landing has offered one since it was rebuilt; this
+# board did not, so the same question ("who from my country is chasing this?") was answerable on one
+# board and not on the badge's own.
+# ---------------------------------------------------------------------------------------------------
+
+def _in(slug, name, *, code, country, bp, on=dt.date(2025, 1, 1)):
+    """A standing sliceable by country.
+
+    `country_code` is set on the STANDING as well as the profile, because that is where the board reads
+    it (`_slice` filters the store's own mirrored column, not `profile__country_code` -- the whole point
+    of the denorm is that the board never joins Profile to filter). In production the mirror is
+    maintained by `signals.profile_mirrored_standings`; a test that creates the row directly has to set
+    it, exactly as the Global Boards fixtures do.
+    """
+    p = ProfileFactory(display_psn_username=name, country_code=code, country=country, is_linked=True)
+    SeriesBadgeStanding.objects.create(profile=p, series_slug=slug, country_code=code, progress_bp=bp,
+                                       advanced_at=on, is_linked=True)
+    return p
+
+
+def test_the_board_can_be_sliced_by_country(client):
+    _renderable('slice', 'Slice')
+    _in('slice', 'Brit', code='GB', country='United Kingdom', bp=9000)
+    _in('slice', 'Yank', code='US', country='United States', bp=8000)
+    _in('slice', 'Brit2', code='GB', country='United Kingdom', bp=7000)
+
+    whole = client.get(reverse('badge_ranks_panel', args=['slice']))
+    assert whole.context['total'] == 3
+
+    sliced = client.get(reverse('badge_ranks_panel', args=['slice']), {'country': 'GB'})
+    body = sliced.content.decode()
+    assert sliced.context['total'] == 2, 'the tally counted the whole board under a slice'
+    assert 'Brit' in body and 'Yank' not in body
+    # Ranks are renumbered WITHIN the slice, or the second GB hunter would render as #3 on a two-row
+    # board -- a rank that points at nothing the reader can see.
+    assert [e['rank'] for e in sliced.context['rows']] == [1, 2]
+
+
+def test_the_slice_is_carried_onto_every_later_window(client):
+    """The failure this prevents is not an error. A window that drops the filter returns hunters from
+    everywhere with rank numbers that keep counting up, so it reads as the board rather than as a bug --
+    the reader has no way to tell that row 51 is answering a different question from row 50."""
+    _renderable('deepslice', 'Deep Slice')
+    for i in range(60):
+        _in('deepslice', f'GB{i:02d}', code='GB', country='United Kingdom', bp=9900 - i)
+    for i in range(60):
+        _in('deepslice', f'US{i:02d}', code='US', country='United States', bp=9800 - i)
+
+    panel = client.get(reverse('badge_ranks_panel', args=['deepslice']), {'country': 'GB'})
+    assert 'data-lb-params="country=GB"' in panel.content.decode(), (
+        'the board root does not carry the slice, so the engine will fetch unfiltered windows'
+    )
+
+    window = client.get(reverse('badge_ranks_panel', args=['deepslice']), {'range': 51, 'country': 'GB'})
+    body = window.content.decode()
+    assert body.count('<li class="lb-row') == 10
+    assert 'GB50' in body and 'US' not in body, 'the second window ignored the filter'
+
+
+def test_the_picker_offers_only_countries_on_THIS_board(client):
+    """`active_countries()` is every country on ANY board. Reusing it here would offer a reader dozens of
+    options that each answer "nobody from this country is chasing this badge", which is a filter able to
+    empty the thing it filters with no warning."""
+    _renderable('narrow', 'Narrow')
+    _in('narrow', 'Brit', code='GB', country='United Kingdom', bp=9000)
+    # Ranked on a DIFFERENT series, so `active_countries()` knows about them and this board must not.
+    _renderable('elsewhere', 'Elsewhere')
+    _in('elsewhere', 'Aussie', code='AU', country='Australia', bp=9000)
+
+    codes = {c['code'] for c in client.get(reverse('badge_ranks_panel', args=['narrow'])).context['countries']}
+    assert codes == {'GB'}, f'the picker offered countries with nobody on this board: {codes}'
+
+
+def test_an_unknown_country_falls_back_to_the_whole_board(client):
+    """A public fragment takes whatever a URL hands it. An unvalidated code returns an empty window,
+    which reads as a gap in the board rather than as a bad parameter."""
+    _renderable('junkcc', 'Junk')
+    _in('junkcc', 'Brit', code='GB', country='United Kingdom', bp=9000)
+
+    for raw in ('ZZ', 'not-a-code', ''):
+        resp = client.get(reverse('badge_ranks_panel', args=['junkcc']), {'country': raw})
+        assert resp.status_code == 200, f'country={raw!r} was not handled'
+        assert resp.context['total'] == 1, f'country={raw!r} emptied the board'
+        assert resp.context['selected_country'] == '', f'country={raw!r} was accepted'
+
+
+def test_a_selectable_country_can_never_empty_the_board(client):
+    """The reason this panel needs no "emptied by the filter" state, unlike the Global Boards landing.
+
+    That page's picker is GLOBAL -- every country on any board -- so most options empty most boards and it
+    has to explain itself when they do. This picker is scoped to hunters on THIS series, so every option
+    it offers has at least one hunter behind it, and anything else is rejected by `_country()` and falls
+    back to the whole board. Written as a property over the whole picker rather than one example, because
+    the guarantee is what licenses the missing branch.
+    """
+    _renderable('everycc', 'Every CC')
+    _in('everycc', 'Brit', code='GB', country='United Kingdom', bp=9000)
+    _in('everycc', 'Yank', code='US', country='United States', bp=8000)
+    _in('everycc', 'Aussie', code='AU', country='Australia', bp=7000)
+
+    offered = client.get(reverse('badge_ranks_panel', args=['everycc'])).context['countries']
+    assert len(offered) == 3, 'the fixture no longer exercises a multi-country picker'
+
+    for c in offered:
+        resp = client.get(reverse('badge_ranks_panel', args=['everycc']), {'country': c['code']})
+        assert resp.context['rows'], f"{c['code']} is selectable and empties the board"
+        assert resp.context['selected_country'] == c['code']
+
+
+def test_the_ranks_panel_ships_its_filter_and_its_wiring(client):
+    """The form is a real GET with a <noscript> button, and the page re-fetches the panel in place. Both
+    halves have to ship: the form alone reloads the page onto the Overview tab, and the wiring alone is
+    a filter that does not exist without JS."""
+    _renderable('wired', 'Wired')
+    _in('wired', 'Brit', code='GB', country='United Kingdom', bp=9000)
+
+    panel = client.get(reverse('badge_ranks_panel', args=['wired'])).content.decode()
+    assert '<form method="get" class="lb-filters" data-filter-form>' in panel
+    assert 'id="bd2-country"' in panel
+
+    page = client.get(reverse('badge_detail', args=['wired'])).content.decode()
+    assert "closest('[data-filter-form] select')" in page, 'the panel filter is never wired up'
+
+
+# ---------------------------------------------------------------------------------------------------
+# The edition filter (2026-08). Not a filter over the series board's rows -- it SWITCHES THE STORE, the
+# way the Global Boards landing swaps `ProfileBadgeStanding` for `ProfileEditionStanding`. Here the swap
+# is `SeriesBadgeStanding` -> `UserGroupBadge`, which is keyed on a GroupBadge and therefore per
+# (series x edition).
+# ---------------------------------------------------------------------------------------------------
+
+def _two_editions(slug='dual', name='Dual'):
+    """A series offered in two editions, which is the only shape that renders the picker."""
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    series = BadgeSeriesFactory(series_slug=slug, name=name)
+    modern = GroupBadgeFactory(
+        series=series,
+        platform_group=PlatformGroupFactory(key=f'{slug}-ps5', name='PS5', sort_order=1),
+        is_live=True)
+    legacy = GroupBadgeFactory(
+        series=series,
+        platform_group=PlatformGroupFactory(key=f'{slug}-ps3', name='Legacy HD', sort_order=2),
+        is_live=True)
+    return series, modern, legacy
+
+
+def _chasing(slug, name, progress, *, xp=None, group_xp=None, on=dt.date(2025, 1, 1),
+             code='', country=''):
+    """A hunter with PER-EDITION progress on a series board.
+
+    `progress` is the `group_progress` read-model the edition board ranks on:
+    `{platform_group_key: [stages_cleared, gating_count]}`, materialized on every recompute for every
+    earnable edition -- started or not, so an untouched one still carries its denominator.
+
+    `progress_bp` and `stages_cleared` are derived here the way the engine derives them: from the
+    FURTHEST-ALONG edition, never from a sum. A badge is earned per edition, so there is no such thing as
+    being 6 of 10 through one, and a fixture that summed would be teaching the tests a rule the product
+    does not have.
+
+    POINTS are what the board ranks on, and they mirror the write seam: `group_xp` is per edition and `xp`
+    is their SUM (`badge_xp.compute_series_standings` sums XP over editions while taking the MAX for
+    progress). Defaults derive one point per cleared stage, which is not the real economy but is enough to
+    make ordering assertions mean something; a test that cares about the numbers passes them.
+
+    `country_code` is set on the standing as well as the profile, because that is the column the board
+    filters -- the denorm exists so a board never has to join Profile.
+    """
+    best_cleared, best_total = max(progress.values(), key=lambda pr: (pr[0] / pr[1]) if pr[1] else 0)
+    if group_xp is None:
+        group_xp = {k: v[0] for k, v in progress.items() if v[0]}
+    if xp is None:
+        xp = sum(group_xp.values())
+    prof = ProfileFactory(display_psn_username=name, country_code=code, country=country, is_linked=True)
+    SeriesBadgeStanding.objects.create(
+        profile=prof, series_slug=slug, country_code=code, is_linked=True,
+        xp=xp, group_xp=group_xp,
+        progress_bp=int(round(10000 * best_cleared / best_total)) if best_total else 0,
+        stages_cleared=best_cleared, stages_total=best_total,
+        group_progress=progress, advanced_at=on,
+    )
+    return prof
+
+
+def test_picking_an_edition_scopes_the_board_rather_than_swapping_it(client):
+    """REGRESSION, reported from the browser: picking an edition said "nobody is on this board" on a
+    badge with plenty of chasers.
+
+    The filter read `UserGroupBadge` -- the EARNERS store. Keyed on a GroupBadge it is genuinely per
+    (series x edition), so it looks like the right store, and it holds only hunters who FINISHED one. A
+    badge with chasers and no finishers therefore emptied under every edition. A filter has to SCOPE a
+    board, not swap it for a rarer one.
+    """
+    _two_editions()
+    # One point per cleared stage, so the per-edition points and the per-edition progress agree and the
+    # ordering assertions below read the way the fixture looks.
+    _chasing('dual', 'Ahead5', {'dual-ps5': [4, 5], 'dual-ps3': [1, 5]})
+    _chasing('dual', 'Behind5', {'dual-ps5': [2, 5], 'dual-ps3': [5, 5]})
+    _chasing('dual', 'PS3Only', {'dual-ps5': [0, 5], 'dual-ps3': [3, 5]})
+
+    ps5 = client.get(reverse('badge_ranks_panel', args=['dual']), {'edition': 'dual-ps5'})
+    body = ps5.content.decode()
+
+    # Chasers are ON it -- nobody in this fixture has finished anything on PS5.
+    assert ps5.context['total'] == 2, 'the edition board is not the same population, scoped'
+    assert 'Ahead5' in body and 'Behind5' in body
+    # ...and an untouched edition is excluded rather than padding the board with zeroes, which is the
+    # membership rule the landing's edition board already applies (`total_xp__gt=0`).
+    assert 'PS3Only' not in body, 'a hunter who has not started this edition is on its board'
+    # Ordered by THIS edition's progress, not the series-level one: Behind5 leads on PS3, trails here.
+    assert [e['psn_username'] for e in ps5.context['rows']] == ['Ahead5', 'Behind5']
+
+    ps3 = client.get(reverse('badge_ranks_panel', args=['dual']), {'edition': 'dual-ps3'})
+    assert [e['psn_username'] for e in ps3.context['rows']] == ['Behind5', 'PS3Only', 'Ahead5']
+
+
+def test_the_edition_board_counts_THAT_editions_points(client):
+    """The figure has to move with the filter, or the board reorders under a column that did not change
+    and reads as broken. On All editions it is the series total; under one, it is that edition's own."""
+    _two_editions()
+    _chasing('dual', 'Split', {'dual-ps5': [4, 5], 'dual-ps3': [1, 8]},
+             group_xp={'dual-ps5': 40, 'dual-ps3': 10}, xp=50)
+
+    whole = client.get(reverse('badge_ranks_panel', args=['dual'])).context['rows'][0]
+    assert whole['primary'] == 50, 'the default board is not showing the series total'
+
+    legacy = client.get(reverse('badge_ranks_panel', args=['dual']),
+                        {'edition': 'dual-ps3'}).context['rows'][0]
+    assert legacy['primary'] == 10, (
+        'the edition board showed the series total rather than the edition being asked about'
+    )
+
+
+def test_the_default_board_counts_EVERY_edition(client):
+    """"All editions" ranked on `progress_bp`, the furthest-along EDITION's fraction -- so it showed a
+    board that ignored every edition except each hunter's best one, and the label promised the opposite.
+
+    Points are the fix rather than a summed stage count: `xp` is already the series total across editions
+    (`compute_series_standings` sums XP while taking the MAX for progress), and points count what was
+    cleared AND weigh what it was worth, so one figure replaces the tally that was wrong anyway.
+    """
+    _two_editions()
+    both = _chasing('dual', 'Both', {'dual-ps5': [3, 5], 'dual-ps3': [3, 5]})       # 6 points
+    _chasing('dual', 'OneDeep', {'dual-ps5': [5, 5], 'dual-ps3': [0, 5]})           # 5 points
+
+    resp = client.get(reverse('badge_ranks_panel', args=['dual']))
+    rows = resp.context['rows']
+
+    # The dual-edition chaser leads on TOTAL, though the other hunter has finished an edition outright --
+    # which is exactly the ordering the old key could not produce.
+    assert [r['psn_username'] for r in rows] == ['Both', 'OneDeep']
+    assert rows[0]['primary'] == 6 and rows[0]['primary_label'] == 'points'
+    assert rows[0].get('primary_of') is None, 'points were given a denominator they do not have'
+    assert 'across every edition' in resp.context['board_meaning']
+    assert both is not None
+
+
+def test_the_edition_switch_carries_onto_every_later_window(client):
+    """`edition` decides which ORDERING the rows come back in, so a window that drops it splices
+    series-ordered rows into an edition-ordered spacer -- numbered continuously, so it reads as one list
+    that inexplicably reshuffles halfway down."""
+    _two_editions()
+    for i in range(60):
+        _chasing('dual', f'PS5-{i:02d}', {'dual-ps5': [(i % 5) + 1, 5], 'dual-ps3': [1, 5]},
+                 on=dt.date(2025, 1, 1) + dt.timedelta(days=i))
+
+    panel = client.get(reverse('badge_ranks_panel', args=['dual']), {'edition': 'dual-ps5'})
+    assert 'data-lb-params="edition=dual-ps5"' in panel.content.decode()
+
+    window = client.get(reverse('badge_ranks_panel', args=['dual']),
+                        {'edition': 'dual-ps5', 'range': 51})
+    assert window.content.decode().count('<li class="lb-row') == 10
+    assert window.context['entries'][0]['rank'] == 51
+
+
+def test_the_picker_offers_only_editions_this_series_HAS(client):
+    """`active_editions()` is every edition on the site. Offering one this badge was never released in
+    is a board that could only be empty."""
+    from tests.factories import PlatformGroupFactory
+
+    _two_editions()
+    PlatformGroupFactory(key='unrelated', name='Unrelated', sort_order=9)   # live, but not on this series
+
+    keys = {e['key'] for e in client.get(reverse('badge_ranks_panel', args=['dual'])).context['editions']}
+    assert keys == {'dual-ps5', 'dual-ps3'}, f'the picker offered editions off this series: {keys}'
+
+
+def test_a_single_edition_series_gets_no_edition_picker(client):
+    """One choice plus "all editions" is two ways to see the same hunters -- a control that cannot do
+    anything. The Overview tab hides its own switcher on the same rule."""
+    _renderable('solo', 'Solo')
+    _standing('solo', 'Someone', bp=9000, on=dt.date(2025, 1, 1))
+
+    resp = client.get(reverse('badge_ranks_panel', args=['solo']))
+    assert resp.context['editions'] == []
+    assert 'id="bd2-edition"' not in resp.content.decode()
+
+
+def test_an_unknown_edition_falls_back_to_the_series_board(client):
+    """Silently resolving to no edition would leave a filter that appears applied and is not."""
+    _two_editions()
+    _chasing('dual', 'OnlyPS3', {'dual-ps5': [0, 5], 'dual-ps3': [3, 5]})
+
+    for raw in ('nope', 'dual-ps4', ''):
+        resp = client.get(reverse('badge_ranks_panel', args=['dual']), {'edition': raw})
+        assert resp.context['selected_edition'] == '', f'edition={raw!r} was accepted'
+        # The SERIES board, which holds a hunter who has not touched PS5 at all.
+        assert 'OnlyPS3' in resp.content.decode(), f'edition={raw!r} did not fall back'
+
+
+def test_the_board_card_names_the_edition_it_is_showing(client):
+    """The population narrows under a filter -- one edition's chasers rather than the series' -- and the
+    card is the one place that says which. Without it the reader infers a scope change from a figure that
+    got smaller, which is a guess."""
+    _two_editions()
+    _chasing('dual', 'Holder', {'dual-ps5': [4, 5], 'dual-ps3': [1, 5]})
+
+    whole = client.get(reverse('badge_ranks_panel', args=['dual'])).context['board_meaning']
+    sliced = client.get(reverse('badge_ranks_panel', args=['dual']),
+                        {'edition': 'dual-ps5'}).context['board_meaning']
+
+    assert 'across every edition' in whole
+    assert sliced != whole and 'PS5' in sliced, 'the board card described the wrong board'
+
+
+def test_edition_and_country_compose(client):
+    """Both apply at once, and the country picker scopes itself to the EDITION board when one is chosen
+    -- resolved the other way round, a country valid for the series board could empty an edition."""
+    _two_editions()
+    _chasing('dual', 'Brit5', {'dual-ps5': [3, 5], 'dual-ps3': [0, 5]}, code='GB', country='United Kingdom')
+    _chasing('dual', 'Yank5', {'dual-ps5': [2, 5], 'dual-ps3': [0, 5]}, code='US', country='United States')
+    _chasing('dual', 'Brit3', {'dual-ps5': [0, 5], 'dual-ps3': [4, 5]}, code='GB', country='United Kingdom')
+
+    both = client.get(reverse('badge_ranks_panel', args=['dual']),
+                      {'edition': 'dual-ps5', 'country': 'GB'})
+    body = both.content.decode()
+    assert both.context['total'] == 1
+    assert 'Brit5' in body and 'Yank5' not in body and 'Brit3' not in body
+    assert 'edition=dual-ps5' in body and 'country=GB' in body, 'the pair is not carried onto windows'
+
+    # Only GB and US earned the PS5 edition, so the picker under it offers exactly those.
+    codes = {c['code'] for c in both.context['countries']}
+    assert codes == {'GB', 'US'}, f'the country picker was not scoped to the edition board: {codes}'
+
+
+def test_changing_one_filter_does_not_clear_the_other(client):
+    """REGRESSION, reported from the browser: picking an edition reset the country and picking a country
+    reset the edition, so the two could never be applied together.
+
+    The server was always right -- `test_edition_and_country_compose` passes and always did. The bug was
+    in the panel's own change handler, which sent ONLY the field that changed, so every change arrived as
+    a request with the other filter absent and the view correctly read that as "not applied".
+
+    Two assertions, because the fix has two halves and each fails differently:
+
+      1. The form carries BOTH selects. A handler that serializes the form cannot preserve a field the
+         form does not contain.
+      2. The handler serializes THE FORM, not the field. This is a source assertion, which this suite
+         normally avoids -- but there is no JS runner in this project, the failure is invisible to every
+         markup test (the panel renders perfectly; it is the next request that is wrong), and the thing
+         being pinned is one specific expression rather than a class name that might turn up in a
+         comment. `FormData` appears nowhere else in this template.
+    """
+    _two_editions()
+    # A row on the DEFAULT board (the series one), WITH a country. Two things have to be true for both
+    # selects to render, and each is a real rule rather than a fixture quirk: an earner is not
+    # automatically on the series board (they are two stores, which is the whole premise of the edition
+    # switch), and the country picker only offers countries someone on the board actually has.
+    _in('dual', 'Holder', code='US', country='United States', bp=10000)
+
+    panel = client.get(reverse('badge_ranks_panel', args=['dual'])).content.decode()
+    form_start = panel.index('<form method="get" class="lb-filters"')
+    form = panel[form_start:panel.index('</form>', form_start)]
+    assert 'name="edition"' in form and 'name="country"' in form, (
+        'the two filters are on separate forms, so no serialization can carry both'
+    )
+
+    page = client.get(reverse('badge_detail', args=['dual'])).content.decode()
+    assert 'new FormData(form)' in page, (
+        'the filter handler sends one field rather than the whole form, so each filter clears the other'
+    )
+    assert page.count('new FormData(form)') == 1, 'more than one handler now claims this contract'
+
+
+def test_the_ranks_filter_has_no_unreachable_noscript_fallback(client):
+    """The Global Boards landing's identical form carries a `<noscript>` submit button and should: that
+    page server-renders its board, so a JS-off reader has one to filter.
+
+    This panel is `hidden` until JS unhides its tab, and its contents arrive by fetch. Without JS there is
+    no board here at all, so a fallback button is markup that cannot be reached pretending to be a safety
+    net -- and it was making the comment beside it untrue, which is how it got noticed.
+    """
+    _two_editions()
+    _in('dual', 'Holder', code='US', country='United States', bp=10000)
+    panel = client.get(reverse('badge_ranks_panel', args=['dual'])).content.decode()
+
+    assert 'lb-filters' in panel, 'the fixture no longer renders the filter form'
+    assert '<noscript>' not in panel
+
+
+def test_a_filter_that_empties_the_board_leaves_you_able_to_undo_it(client):
+    """REGRESSION, reported from the browser: the empty state replaced the whole panel, so the control
+    that emptied the board vanished with it and browser Back was the only way out.
+
+    The branch that keeps the chrome was written and then deleted as unreachable, on the reasoning that a
+    scoped picker cannot offer an option with nobody behind it. That holds for COUNTRY and does not hold
+    for EDITION: the edition picker is scoped to the editions the SERIES has, and a badge can perfectly
+    well have an edition nobody has started. One filter's invariant was applied to both.
+    """
+    _two_editions()
+    _chasing('dual', 'OnlyPS3', {'dual-ps5': [0, 5], 'dual-ps3': [3, 5]},
+             code='GB', country='United Kingdom')
+
+    empty = client.get(reverse('badge_ranks_panel', args=['dual']), {'edition': 'dual-ps5'})
+    body = empty.content.decode()
+
+    assert empty.context['rows'] == [], 'the fixture no longer empties the board'
+    assert 'lb-filters' in body, 'the filter that emptied the board disappeared with it'
+    # THE CONTROL THAT EMPTIED IT, specifically. That is the requirement -- a filter you cannot un-apply
+    # is the dead end being fixed.
+    assert 'id="bd2-edition"' in body
+    assert f'value="dual-ps5" selected' in body, 'the select does not show what is applied'
+    # The COUNTRY select is legitimately absent: its options are scoped to the board being shown, and
+    # this board has nobody on it, so there are no countries to offer. Rendering an empty select would be
+    # a control with nothing in it. Noted here because it is a decision, not an oversight -- and it costs
+    # a reader who had a country selected before switching editions their selection, which is a real if
+    # narrow trade for not showing dead options.
+    assert 'id="bd2-country"' not in body
+    # ...and it blames the SLICE, not the badge. "Nobody is chasing this one yet" over a badge with
+    # chasers on another edition is a working board reading as a broken one.
+    assert 'Nobody is chasing this one yet' not in body
+    assert 'Nobody has started this edition yet' in body
+    # No jump bar, though -- there is nothing to jump around in.
+    assert 'lb-jumpbar' not in body

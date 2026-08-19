@@ -110,10 +110,14 @@
    a board that renders the class without the mount is a bug worth being able to see in the markup. */
 .lb-wall {
     list-style: none; margin: 0; padding: 0;
+    /* FLOW by default, and that is the fallback rather than a leftover: the server ships the wall without
+       `--virtual` so a board that never mounts (JS off, a failed fetch, a stale utils.js) is still a
+       readable list of its first window. `virtualBoard` adds the modifier when it takes over. */
+    display: flex; flex-direction: column; gap: 6px;
     --lb-row-h: 62px;
 }
 @media (min-width: 768px) { .lb-wall { --lb-row-h: 68px; } }
-.lb-wall--virtual { display: block; position: relative; }
+.lb-wall--virtual { display: block; position: relative; gap: 0; }
 .lb-wall--virtual .lb-row { position: absolute; left: 0; right: 0; }
 /* `.is-found` (the jump landing) and `.is-you` (the persistent marker) are defined together further
    down, so the way they stack on the same row is visible in one place. */
@@ -397,47 +401,6 @@
 
 
 /* ---- Pager ----------------------------------------------------------------------------------------- */
-/* Rebuilt from the legacy DaisyUI partial (2026-08 audit). The pill deliberately reuses `.lb-mine__row`'s
-   reading -- same ground, border, radius and primary-tinted active -- because the header's standing chips
-   already established what a small interactive pill looks like on this page. Touch targets are 36px at
-   base and stay comfortable on a phone; the old `btn-xs` was 24px, right on the WCAG 2.5.8 floor. */
-.lb-pager {
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
-    margin: 16px 0 4px;
-}
-.lb-pager__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
-.lb-pager__btn {
-    display: inline-flex; align-items: center; gap: 5px;
-    min-height: 36px; padding: 0 12px; border-radius: 999px;
-    font-size: 12px; font-weight: 700; text-decoration: none;
-    color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
-}
-.lb-pager__btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
-@media (hover: hover) {
-    .lb-pager__btn:hover {
-        color: var(--pp-text);
-        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    }
-}
-.lb-pager__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-/* Where you are. Tinted flat rather than a filled button -- it is a position readout, not an action. */
-.lb-pager__at {
-    display: inline-flex; align-items: baseline; gap: 5px;
-    min-height: 36px; padding: 0 14px; border-radius: 999px;
-    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
-}
-.lb-pager__at .pp-tally { font-size: 14px; color: var(--pp-primary); }
-.lb-pager__of { font-size: 11px; color: var(--pp-text-mute); }
-.lb-pager__total {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--pp-text-mute);
-}
-/* The First/Last chevrons are icon-only at base (they are the least-used controls and the row has to fit
-   343px); Prev/Next keep their words, which are the ones people actually aim for. */
-@media (max-width: 767px) { .lb-pager__btn-lbl { display: none; } }
-@media (prefers-reduced-motion: reduce) { .lb-pager__btn { transition: none; } }
 
 /* ---- The virtualized board's own chrome ------------------------------------------------------------
    Jump affordances + column headers, above a wall you cannot page through. Both exist because the wall
@@ -492,23 +455,6 @@
 .lb-goto input::-webkit-outer-spin-button,
 .lb-goto input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .lb-goto input[type=number] { -moz-appearance: textfield; appearance: textfield; }
-
-/* Column headers, desktop only. The row labels its own figures in small caps, which is right when you are
-   reading ONE row and repetitive when you are running down fifty -- so the header carries them at the top
-   and the phone layout, where the row is already tight, keeps the per-row labels instead. */
-.lb-colhead { display: none; }
-@media (min-width: 768px) {
-    .lb-colhead {
-        display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-        align-items: center; gap: 10px;
-        padding: 0 10px 6px;
-        font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-        color: var(--pp-text-mute);
-    }
-    .lb-colhead__rank { min-width: 3ch; text-align: right; }
-    .lb-colhead__figs { display: flex; gap: 22px; }
-    .lb-colhead__figs span { text-align: right; }
-}
 
 /* ---- "This one is you" ------------------------------------------------------------------------------
    PERSISTENT, and distinct from `.is-found` below it: `.is-you` says which row is yours whenever it is on

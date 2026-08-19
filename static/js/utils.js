@@ -2178,9 +2178,9 @@ window.PlatPursuit.takeover = takeover;
  * layout never depends on what is currently mounted. Rows outside the window are evicted from the DOM but
  * their HTML stays cached, so scrolling back is instant and re-fetches nothing.
  *
- * SERVER CONTRACT: `fetchRows(start, from, count)` resolves to HTML containing `rowSelector` elements for
- * display positions [start, start+count). `start` is a display POSITION and `from` is its CANONICAL rank
- * -- they differ only when inverted, and a board that numbers its own rows needs both.
+ * SERVER CONTRACT: `fetchRows(start, count)` resolves to HTML containing `rowSelector` elements for
+ * display positions [start, start+count). A display position IS a rank: the last board that could be read
+ * bottom-first (game detail's `invert`) dropped it, so the engine no longer carries a second numbering.
  *
  * @param {Object} o
  * @param {HTMLElement} o.list            the spacer; server-rendered first-window rows live inside it
@@ -2189,8 +2189,7 @@ window.PlatPursuit.takeover = takeover;
  * @param {function(): number} o.rowHeight   current row height in px; re-read on resize (breakpoints)
  * @param {function(number, number, number): Promise<string>} o.fetchRows
  * @param {number} [o.pageSize=50]        fetch granularity; must match what the server pages by
- * @param {boolean} [o.invert=false]      display order is the reverse of canonical rank
- * @param {string} [o.rankKey='lbRank']   dataset key on a row holding its CANONICAL rank
+ * @param {string} [o.rankKey='lbRank']   dataset key on a row holding its rank
  * @param {number} [o.youRank]           the viewer's rank; that row gets `.is-you` + `aria-current`
  * @param {function(): number} [o.chromeInset]  sticky-header height, so a jump lands below it
  * @param {function(number, number, function)} [o.onRender]  (localTop, localBottom, posOf) per frame
@@ -2203,7 +2202,6 @@ function virtualBoard(o) {
     if (!list || !total) { return { jump: noop, refresh: noop, destroy: noop }; }
 
     var PAGE = o.pageSize || 50;
-    var invert = !!o.invert;
     var rankKey = o.rankKey || 'lbRank';
     var youRank = o.youRank || 0;    // 0 = anonymous, or a viewer who is not on this board
     var BUFFER = 8;      // rows rendered beyond the viewport each way
@@ -2220,9 +2218,11 @@ function virtualBoard(o) {
     function scroller() { return document.scrollingElement || document.documentElement; }
     function inset() { return o.chromeInset ? o.chromeInset() : 0; }
 
-    // Canonical rank of a display position, and back. The LABEL is canonical; layout is by position.
-    function rankOf(dp) { return invert ? total - dp + 1 : dp; }
-    function posOf(rank) { return invert ? total - rank + 1 : rank; }
+    // A display position IS a rank. These stayed as functions after `invert` was removed so the call
+    // sites keep reading as "position of that rank" rather than silently trading in bare integers -- and
+    // so `onRender`'s `posOf` argument stays a stable contract for callers.
+    function rankOf(dp) { return dp; }
+    function posOf(rank) { return rank; }
 
     function clearHighlight() {
         if (!highlightDp) { return; }
@@ -2254,6 +2254,11 @@ function virtualBoard(o) {
     // reinstate, only motion to stop fighting.
     list.classList.remove('pp-reveal');
 
+    // PROMOTE the wall, then size it -- in that order, and only from here. `--virtual` absolutely
+    // positions every row, so it is only survivable once something is reserving their space, and the
+    // thing that reserves it is the line below. The server ships a flow list precisely so that a board
+    // which never mounts still renders as a list rather than as a zero-height pile.
+    list.classList.add('lb-wall--virtual');
     list.style.height = (total * H) + 'px';
 
     // Seed the cache + DOM from the server-rendered first window; convert those rows to absolute.
@@ -2312,7 +2317,7 @@ function virtualBoard(o) {
         if (fetchedPages.has(p)) { return; }
         fetchedPages.add(p);
         var start = p * PAGE + 1;
-        o.fetchRows(start, rankOf(start), PAGE)
+        o.fetchRows(start, PAGE)
             .then(function (html) {
                 if (!list.isConnected) { return; }
                 var tmp = document.createElement('template');
@@ -2413,6 +2418,9 @@ function virtualBoard(o) {
         destroy: function () {
             window.removeEventListener('scroll', onScroll);
             window.removeEventListener('resize', onResize);
+            // Back to flow, so a wall left behind by a torn-down board is a list rather than a pile.
+            list.classList.remove('lb-wall--virtual');
+            list.style.height = '';
         }
     };
 }
@@ -2506,10 +2514,9 @@ function wireBoard(root, o) {
         rowHeight: rowHeight,
         youRank: viewerRank,
         chromeInset: o.chromeInset,
-        fetchRows: function (start, from, count) {
+        fetchRows: function (start, count) {
             var qp = new URLSearchParams(root.dataset.lbParams || '');
             qp.set('range', start);
-            qp.set('from', from);
             qp.set('count', count);
             return fetch(root.dataset.lbRowsUrl + '?' + qp.toString(), XHR).then(function (r) {
                 if (!r.ok) { throw new Error(r.status); }

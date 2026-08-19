@@ -179,14 +179,20 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         -- and the selects already say what is applied by showing their value. {% endcomment %}
         {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=ranked_total ranked_label=ranked_label scoped=slice_applied only %}
 
+        {% comment %} Guarded, like the other three. An emptied slice rendered a labelled "Go to rank"
+        box with `max="0"` over a board with no rows -- a control offered for a thing that is not there.
+        `wireBoard`'s unconditional submit guard stopped it navigating away, which is why it was inert
+        rather than harmful. {% endcomment %}
+        {% if board_entries %}
         {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=ranked_total id_prefix='lb' only %}
+        {% endif %}
       </div>
     </section>
 
     {% if board_entries %}
     {% comment %} The board itself -- shell, column headers and first window, shared with badge
     detail and job detail. See `leaderboard_board.html` for why it is one file. {% endcomment %}
-    {% include 'trophies/partials/leaderboard_board.html' with entries=board_entries total=ranked_total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank primary_label=primary_label secondary_label=secondary_label only %}
+    {% include 'trophies/partials/leaderboard_board.html' with entries=board_entries total=ranked_total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank only %}
 
     {% else %}
     <div class="lb-empty">

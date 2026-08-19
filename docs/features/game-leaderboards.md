@@ -1,5 +1,30 @@
 # Game Leaderboards
 
+> **2026-08: this board joined the shared leaderboard stack.** The sections below describe the service
+> accurately; anything they say about ROWS, CHROME or VIEW OPTIONS predates the convergence unless it
+> matches this list.
+>
+> Changed: rows render `leaderboard_row.html` (one headline figure, one supporting figure, one date --
+> no tier dots, no completion bar, no second speed date, and the date is month + year); the column header
+> strip is gone site-wide and the row labels replaced it; the chrome is the shared `.lb-controls` card,
+> `leaderboard_boardcard.html` and `leaderboard_jumpbar.html` (with the hunter search in its
+> `extra_partial` slot); the wall ships as a FLOW list and `virtualBoard` promotes it; `data-lb-*` moved
+> from `.gd-lb` onto the shared board root, and this page's own board param is `data-lb-boardparam`; the
+> mount is `PlatPursuit.wireBoard`; `_leaderboard_rows.html` was deleted and `_leaderboard_find.html`
+> added.
+>
+> Removed: `invert`, `registered_only`, `from`, the `+1/-1` step, the server-rendered `--you` modifier and
+> "You" pill (the marker is applied in the browser from `data-lb-viewer-rank`), and the `aria-pressed`
+> toggle chips (now `.lb-filters` selects, read via `FormData`).
+>
+> **The population changed**: the board is `is_linked`-gated unconditionally, so it ranks verified hunters
+> rather than every scraped PSN profile. It renders `leaderboard_row.html` and the
+> shared chrome (`.lb-controls` card, `leaderboard_boardcard.html`, `leaderboard_jumpbar.html`), mounts
+> through `PlatPursuit.wireBoard`, and is `is_linked`-gated like every other board. `invert` and the
+> `registered_only` toggle are gone; a country filter arrived. Its rows lost the per-tier trophy dots, the
+> completion bar and the speed board's second date -- see
+> [leaderboards-rebuild.md](../design/rebuild/leaderboards-rebuild.md) §8 for the trade and the reasoning.
+
 The **Ranks** tab on game detail (`/games/<np_communication_id>/`): every hunter who owns a game, ranked
 by completion, with the viewer's own standing surfaced.
 
@@ -208,7 +233,7 @@ Shapes from one URL (all honour `?board=` and the view options below):
 | Query | Returns | Used by |
 |-------|---------|---------|
 | *(none)* | Full panel: board switcher, controls, header, the viewer's standing, `data-lb-total` (spacer size), and the first window | First activation of the tab / a control or board change |
-| `?range=<display-pos>&from=<canonical-rank>&count=<n>` | Rows only, positioned by the client | A virtual window as the list scrolls |
+| `?range=<position>&count=<n>` | Rows only, positioned by the client | A virtual window as the list scrolls |
 | `?suggest=<q>` | **JSON** `{players: [{display, username, avatar, rank, progress, url}]}` | Search typeahead (by name) |
 | `?at=<rank>` | **JSON**, same shape, the single hunter at that canonical rank (or `[]` past the board) | Number typeahead (rank preview) |
 
@@ -217,9 +242,9 @@ Shapes from one URL (all honour `?board=` and the view options below):
 carries the active board on every fetch (it rides on the `.gd-lb` root), so range/suggest/at always hit the
 board the viewer is looking at.
 
-`range` is a 1-indexed display position; `from` is the canonical rank of the window's first row, which the
-client derives from the position + the `total` it already holds -- so a range fetch costs no COUNT. Ranks
-stay canonical (from the top); an inverted board just counts down.
+`range` is a 1-indexed display position, and a display position IS a rank -- `from` and the +1/-1 step went
+with `invert`, which was the only reason two numberings ever existed here. A range fetch still costs no
+COUNT.
 
 The toolbar's search field is one input for both jump kinds. A bare **number previews the hunter at that
 rank** (`?at=` -> `row_at_rank`, one bounded read) so you see who you'd land on before committing; text runs
@@ -248,12 +273,16 @@ Parsed from the query string, carried by the JS on every fetch so the view stays
 | Param | Default | Effect | Cost |
 |-------|---------|--------|------|
 | `earners` | `1` (on) | `earners=0` includes 0%/zero-trophy owners | Free/faster - those rows sit at the index's bottom, so keeping them out just ends the scan sooner |
-| `registered` | off | `registered=1` shows only profiles with a site account (`Profile.user` set) | A post-join filter, not index-served, but negligible at board scale |
-| `invert` | off | `invert=1` shows the board bottom-first | Free - the same index scanned **backward** |
+| `country` | off | `country=GB` slices to one country | A Profile join -- but the `is_linked` gate already makes one, so the slice rides it |
 
-**Filters change the population**, so `rank_for` / `board_size` / windows all apply them - a rank is always
-"position within the currently-viewed board." **Invert is display-only**: rank NUMBERS stay canonical (from
-the top), so an inverted board simply counts down.
+`registered` and `invert` are GONE (2026-08). The board is `is_linked`-gated unconditionally, so "members
+only" is the population rather than a setting; `invert` existed only on this board and forced a second
+answer to every ordering question.
+
+**Filters change the population**, so `rank_for` / `size` / windows all apply them - a rank is always
+"position within the currently-viewed board." The country picker is scoped to hunters on THIS board, so an
+option it offers can never empty the thing it filters -- which is why the panel validates against that list
+and a `?range=` window does not (resolving it is a DISTINCT the virtualizer cannot afford per screenful).
 
 A jump (typed rank, searched hunter, or the "You #N" widget) resolves to a canonical rank and is a
 **client-side scroll** to that rank's offset in the virtual spacer -- no server round-trip; the row's data
@@ -275,7 +304,7 @@ kind of thing a later "just include it" refactor would quietly undo.
 ## Gotchas and Pitfalls
 
 - **`Game.played_count` is NOT the board size.** It counts hidden rows (`hidden_flag` / `user_hidden`),
-  so the header would disagree with the list. Use `board_size()`. On beta the gap is small (2 of 1,421)
+  so the header would disagree with the list. Use `Board.size()`. On beta the gap is small (2 of 1,421)
   but it is not zero.
 - **The URL sits under the Cloudflare origin guard.** `/games/<x>/<y>/` is the shape
   `CloudflareOriginGuardMiddleware` bounces when a request lacks a `CF-Ray` header. Real browser fetches

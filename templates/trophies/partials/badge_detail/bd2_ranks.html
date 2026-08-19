@@ -19,15 +19,103 @@ of a popular series, so a hunter told "you are #3,140" in this very panel still 
 that number points at. A spacer can be jumped into directly.
 {% endcomment %}
 
-{% if rows %}
+{% if rows or slice_applied %}
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 lb-controls">
   <div class="card-body p-3 md:p-4">
-    {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total standing=standing only %}
+    {% comment %} EDITION and COUNTRY, the same pair the Global Boards landing offers.
+
+    Edition is not a filter over these rows -- it SWITCHES THE STORE, which is precisely what the landing
+    does when its Badge Points board goes from `ProfileBadgeStanding` to `ProfileEditionStanding`. Here
+    the default board is per SERIES (`SeriesBadgeStanding`: earners and chasers merged, ordered on a
+    series-level `progress_bp`) and picking an edition reads `UserGroupBadge` instead, which is keyed on
+    a GroupBadge and therefore per (series x edition).
+
+    So the board MEANS something different under an edition: earners only, first to finish. That is
+    inherent rather than a shortcoming -- a chaser's per-edition progress lives in `group_progress` as
+    JSON and is not rankable -- and the board card's description says so rather than leaving the reader
+    to notice the chasers went missing.
+
+    Both pickers are scoped to the CURRENT board, which is why this panel needs no "emptied by the
+    filter" state: an option you can select has somebody behind it by construction. The edition select
+    only renders for a series offered in more than one, since one edition plus "all" is two ways to see
+    the same hunters.
+
+    THE CHROME SURVIVES AN EMPTY BOARD, but only when a filter is applied -- see the guard on the
+    section below, which takes `rows OR slice_applied`. Rendering just the empty state was a DEAD END: the control that emptied the board
+    disappeared with it, so the only ways back were browser Back or reloading the page. A filter you
+    cannot un-apply is worse than no filter.
+
+    (The branch was written, then deleted as unreachable on the reasoning that a scoped picker cannot
+    offer an option with nobody behind it. True of country, and NOT true of edition: the edition picker
+    is scoped to the editions the SERIES has, and a badge can perfectly well have an edition nobody has
+    started yet. One filter's invariant was applied to both.)
+
+    NO `<noscript>` SUBMIT BUTTON, unlike the identical form on the Global Boards landing. That page
+    server-renders its board, so a JS-off reader has one and the button is a real fallback. This panel is
+    `hidden` until JS unhides its tab and its contents arrive by fetch -- so without JS there is no board
+    here to filter, and a fallback button would be markup that cannot be reached pretending to be a
+    safety net. The form stays a real `method="get"` form because that is what makes `FormData` over it
+    serialize the way a native submit would. {% endcomment %}
+    {% if countries or editions %}
+    <form method="get" class="lb-filters" data-filter-form>
+        {% if editions %}
+        <div class="lb-filters__f">
+            {% comment %} The hint sits BESIDE the label, not inside it: a `<label for>` must not wrap
+            another interactive element, and clicking it should navigate rather than focus the select.
+            Same shape the landing and the Browse Badges gallery use. {% endcomment %}
+            <span class="lb-filters__lbl">
+                <label for="bd2-edition">Edition</label>
+                <a class="pp-edhint" href="{% url 'badge_how_it_works' %}" aria-label="What do the platform editions mean?" title="What do the platform editions mean?">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                </a>
+            </span>
+            <select class="pp-gallery__select" id="bd2-edition" name="edition">
+                <option value="">All editions</option>
+                {% for e in editions %}
+                <option value="{{ e.key }}"{% if e.key == selected_edition %} selected{% endif %}>{{ e.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        {% if countries %}
+        <div class="lb-filters__f">
+            <label class="lb-filters__lbl" for="bd2-country">Country</label>
+            <select class="pp-gallery__select" id="bd2-country" name="country">
+                <option value="">Everywhere</option>
+                {% for c in countries %}
+                <option value="{{ c.code }}"{% if c.code == selected_country %} selected{% endif %}>{{ c.flag }} {{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+    </form>
+    {% endif %}
+
+    {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=total standing=standing scoped=slice_applied only %}
+    {% comment %} The jump bar needs a board to jump around in. {% endcomment %}
+    {% if rows %}
     {% include 'trophies/partials/leaderboard_jumpbar.html' with my_rank=my_rank total=total id_prefix='bd2' only %}
+    {% endif %}
   </div>
 </section>
 
-{% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url viewer_rank=my_rank primary_label='stages' when_label='since' only %}
+{% if rows %}
+{% include 'trophies/partials/leaderboard_board.html' with entries=rows total=total page_size=page_size rows_url=rows_url rows_params=rows_params viewer_rank=my_rank only %}
+{% else %}
+{% comment %} EMPTIED BY THE FILTER, which is a different statement from "this badge has nobody on it" --
+and blaming the badge for what the slice did is how a working board reads as a broken one. The filters
+above are still on screen, so the way out is the control the reader just used. {% endcomment %}
+<div class="lb-empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+    <p class="lb-empty__title">No hunters in this slice yet</p>
+    <p class="lb-empty__sub">
+        {% if selected_edition and selected_country %}Nobody from this country has started this edition yet.
+        {% elif selected_edition %}Nobody has started this edition yet. Try another, or All editions.
+        {% else %}Nobody from this country is chasing this badge yet. Try Everywhere.{% endif %}
+    </p>
+</div>
+{% endif %}
 
 {% else %}
 <div class="lb-empty">

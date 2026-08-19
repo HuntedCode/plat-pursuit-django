@@ -27,20 +27,26 @@ Include it with `only`, so a caller's unrelated context cannot satisfy one of th
      {% if rows_params %}data-lb-params="{{ rows_params }}"{% endif %}
      data-lb-viewer-rank="{{ viewer_rank|default_if_none:'' }}">
 
-    {% comment %} Column headers, desktop only: the figures are unlabelled per row (the labels are in the
-    row's own small caps), and at 50+ rows a header is what stops the eye re-reading them. Hidden on
-    phones, where the row is already tight and the labels sit under each figure. {% endcomment %}
-    <div class="lb-colhead" aria-hidden="true">
-        <span class="lb-colhead__rank">#</span>
-        <span class="lb-colhead__who">Hunter</span>
-        <span class="lb-colhead__figs">
-            <span>{{ primary_label }}</span>
-            {% if secondary_label %}<span>{{ secondary_label }}</span>{% endif %}
-            {% if when_label %}<span>{{ when_label }}</span>{% endif %}
-        </span>
-    </div>
+    {% comment %} NO COLUMN HEADER. There was one, desktop-only, naming the same figures the rows name
+    themselves -- so on a wide screen every label appeared twice, once in the strip and once under each
+    value, and on a phone the strip was hidden and only the row labels did the work. The row labels are
+    the ones that survive: they sit in the same column as the value they describe at every width, which a
+    separate strip can only approximate (the figure columns size to their content, so a header row of
+    text can never line up with them without fixing every column's width).
 
-    <ol class="lb-wall lb-wall--virtual" data-lb-wall>
+    The labels are NOT passed here either. They reach the rows through the entry (`page()` merges them
+    in), which is where `leaderboard_row.html` reads them -- so handing them to this partial as well was
+    four callers passing three variables nothing looked at. {% endcomment %}
+    {% comment %} `lb-wall--virtual` is NOT rendered here. It is added by `PlatPursuit.virtualBoard` when
+    it mounts, and that ordering is the fix for a real failure: the class makes every row
+    `position: absolute`, and the height that then has to reserve their space is set by the ENGINE. Ship
+    them together and any board that does not mount -- JS off, a fetch that failed, a missing
+    `data-lb-page-size`, an old cached utils.js -- renders a zero-height list of stacked rows with the
+    rest of the page drawn straight through it.
+
+    Flow first, spacer second, means every one of those degrades to a plain list of the first window --
+    which is what this partial always claimed a no-JS read would get, and now actually does. {% endcomment %}
+    <ol class="lb-wall" data-lb-wall>
         {% for entry in entries %}
         {% include 'trophies/partials/leaderboard_row.html' with entry=entry only %}
         {% endfor %}

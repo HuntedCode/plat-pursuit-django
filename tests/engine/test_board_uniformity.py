@@ -10,25 +10,46 @@ own row markup or forgets a data attribute, it just quietly drifts, and the drif
 somebody who opens two boards side by side. So it is asserted here, per surface, against the contract the
 client actually depends on rather than against a screenshot.
 
-Deliberately NOT covered: game detail's board. It runs the same engine (`PlatPursuit.virtualBoard`) but
-its own row component, because its rows carry per-tier trophy counts, a completion bar and three
-board-kind variants (progress / speed / playtime) that the shared row has no slot for. Folding it in
-would mean growing the shared row four ways to serve one caller, which is the drift this file guards
-against wearing a different hat.
+FOUR surfaces now, not three. Game detail's board was the holdout: it ran the same engine but its own
+row, its own chrome and its own controls, so it was the most featured board on the site and the one that
+looked least like the others. It was reduced onto the shared row rather than the shared row being grown
+to fit it -- the per-tier trophy dots, the completion bar and the speed board's second date are gone,
+which is a real trade recorded in `test_game_leaderboard_view` rather than hidden here.
+
+What it still has that the others do not: a hunter search, three board kinds, and trophy-group scoping.
+Those are FEATURES, not drift, and the search in particular is a capability the shared jump bar has a
+slot for precisely so it can spread.
 """
 
 import datetime as dt
+import pathlib
 
 import pytest
 from django.urls import reverse
 
 from tests.engine.test_leaderboards_landing import _ranked
 from tests.factories import (
-    BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory, ProfileFactory,
+    BadgeSeriesFactory, GameFactory, GroupBadgeFactory, PlatformGroupFactory, ProfileFactory,
+    ProfileGameFactory,
 )
-from trophies.models import Job, ProfileJobXP, SeriesBadgeStanding
+from trophies.models import Game, Job, ProfileJobXP, SeriesBadgeStanding
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture
+def client(client):
+    """Model traffic that arrived through Cloudflare.
+
+    Game detail's board lives at `/games/<x>/<y>/`, the shape `CloudflareOriginGuardMiddleware` bounces
+    when a request carries no CF-Ray header -- it protects the profile-scoped detail pages from scrapers
+    that cached the origin IP. A real browser fetch for that panel comes from a page already served
+    through the proxy, so it always has the header. Setting it here keeps the guard live for every other
+    path rather than switching it off for the suite, and mirrors what `test_game_leaderboard_view` does
+    for the same reason.
+    """
+    client.defaults['HTTP_CF_RAY'] = 'test-ray'
+    return client
 
 
 # --- fixtures ----------------------------------------------------------------------------------------
@@ -44,8 +65,12 @@ def _series_board(slug='uniform', n=60):
     series = BadgeSeriesFactory(series_slug=slug, name='Uniform')
     GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(key='uni'), is_live=True)
     for i in range(n):
+        # `xp` is what the board ranks by -- `progress_bp` is the furthest-along EDITION's fraction and
+        # stopped being the ordering key when the board moved to badge points. A fixture that sets only
+        # the latter makes every row tie on the former, so the ordering falls through to the tiebreak and
+        # any assertion about position is measuring the wrong thing.
         SeriesBadgeStanding.objects.create(
-            profile=_profile(f'Hunter{i:02d}'), series_slug=slug,
+            profile=_profile(f'Hunter{i:02d}'), series_slug=slug, xp=1000 - i,
             progress_bp=9900 - i, advanced_at=dt.date(2025, 1, 1), is_linked=True)
     return series
 
@@ -65,8 +90,20 @@ def _global_board(n=60):
         _ranked(f'Global{i:02d}', plats=100 - i, trophies=1000 - i)
 
 
+def _game_board(n=60):
+    """A game board of verified hunters. The gate is not optional: this board used to rank every scraped
+    PSN profile and now applies the same `is_linked` rule as the other three, so an unlinked fixture
+    builds a board with nobody on it."""
+    game = GameFactory()
+    for i in range(n):
+        ProfileGameFactory(game=game, profile=_profile(f'Player{i:02d}'), progress=100 - i,
+                           most_recent_trophy_date=dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc)
+                           + dt.timedelta(minutes=i))
+    return game
+
+
 #: (label, how to render the board, how to render one window past the first)
-SURFACES = ['global', 'badge', 'job']
+SURFACES = ['global', 'badge', 'job', 'game']
 
 
 def _render(surface, client, fresh=True):
@@ -85,9 +122,13 @@ def _render(surface, client, fresh=True):
             _series_board()
         url = reverse('badge_ranks_panel', args=['uniform'])
         return client.get(url), client.get(url, {'range': 51})
-    if fresh:
-        _job_board()
-    url = reverse('job_ranks_panel', args=['archivist'])
+    if surface == 'job':
+        if fresh:
+            _job_board()
+        url = reverse('job_ranks_panel', args=['archivist'])
+        return client.get(url), client.get(url, {'range': 51})
+    game = _game_board() if fresh else Game.objects.get()
+    url = reverse('game_leaderboard', args=[game.np_communication_id])
     return client.get(url), client.get(url, {'range': 51})
 
 
@@ -97,17 +138,28 @@ def _rank_me_on(surface):
     engine's own seeding renders rank 1 either way."""
     if surface == 'global':
         _global_board()
-        return _ranked('Me', plats=70, trophies=700)
+        return _ranked('Zqviewer', plats=70, trophies=700)
     if surface == 'badge':
         _series_board()
-        me = _profile('Me')
+        me = _profile('Zqviewer')
         SeriesBadgeStanding.objects.create(
-            profile=me, series_slug='uniform', progress_bp=9870,
+            profile=me, series_slug='uniform', xp=970, progress_bp=9870,
             advanced_at=dt.date(2025, 1, 1), is_linked=True)
         return me
-    job = _job_board()
-    me = _profile('Me')
-    ProfileJobXP.objects.create(profile=me, job=job, total_xp=970, level=2, is_linked=True)
+    if surface == 'job':
+        job = _job_board()
+        me = _profile('Zqviewer')
+        ProfileJobXP.objects.create(profile=me, job=job, total_xp=970, level=2, is_linked=True)
+        return me
+    game = _game_board()
+    me = _profile('Zqviewer')
+    ProfileGameFactory(game=game, profile=me, progress=70,
+                       most_recent_trophy_date=dt.datetime(2025, 6, 1, tzinfo=dt.timezone.utc))
+    # An UNVERIFIED profile ranked ahead, so the `is_linked` gate has something to remove. Without one,
+    # a gate applied to the rows and not the rank (or the reverse) leaves both numbers agreeing and the
+    # rank-vs-row assertion cannot fail.
+    ProfileGameFactory(game=game, profile=ProfileFactory(is_linked=False), progress=99,
+                       most_recent_trophy_date=dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc))
     return me
 
 
@@ -129,10 +181,22 @@ def test_every_board_ships_the_shared_shell(surface, client):
     # page's own script (it is the selector `mount()` queries), so a containment check on the attribute
     # alone passed with the entire board shell deleted. Same trap this suite already documents twice.
     assert '<div class="lb-board" data-lb-board' in body, f'{surface}: no board root'
-    for attr in ('data-lb-total=', 'data-lb-page-size=', 'data-lb-rows-url='):
-        assert attr in body, f'{surface}: the shell is missing {attr}'
-    assert 'lb-wall lb-wall--virtual' in body, f'{surface}: the wall is not virtualized'
+    # NON-EMPTY VALUES, not just the attribute names. An attribute that renders as `data-lb-page-size=""`
+    # satisfies a containment check and then makes `wireBoard` DECLINE TO MOUNT -- and an unmounted board
+    # never sizes its spacer, so the rows sit absolutely-positioned in a zero-height list and the rest of
+    # the page draws straight through them. Present-but-empty is the failure this shape has.
+    import re as _re
+    for attr in ('data-lb-total', 'data-lb-page-size', 'data-lb-rows-url'):
+        m = _re.search(rf'{attr}="([^"]*)"', body)
+        assert m, f'{surface}: the shell is missing {attr}'
+        assert m.group(1).strip(), f'{surface}: {attr} rendered empty, so the board will not mount'
     assert 'data-lb-wall' in body, f'{surface}: the engine has nothing to mount on'
+    # The wall ships as FLOW. `--virtual` absolutely positions every row and is only survivable once the
+    # engine is reserving their space, so the engine adds it when it mounts -- shipping them together
+    # meant any board that failed to mount rendered a zero-height pile with the page drawn through it.
+    assert 'lb-wall--virtual' not in body, (
+        f'{surface}: the wall ships pre-virtualized, so a board that does not mount collapses'
+    )
     assert 'data-lb-total="60"' in body, f'{surface}: the spacer is sized to the window, not the board'
 
 
@@ -197,8 +261,25 @@ def test_every_window_is_bare_rows(surface, client):
 
     assert body.count('<li class="lb-row') == 10, f'{surface}: the window is not the rows asked for'
     assert '<ol' not in body, f'{surface}: the window carried a list wrapper'
-    assert 'lb-jumpbar' not in body and 'lb-colhead' not in body, f'{surface}: the window carried chrome'
+    assert 'lb-jumpbar' not in body and 'lb-boardcard' not in body, f'{surface}: the window carried chrome'
     assert 'data-lb-rank="51"' in body, f'{surface}: the window restarted its numbering'
+
+
+@pytest.mark.parametrize('surface', SURFACES)
+def test_the_engine_is_what_virtualizes_the_wall(surface, client):
+    """The promotion has to come from the engine, or it is a promise the markup cannot keep.
+
+    `lb-wall--virtual` makes every row `position: absolute`; the height that reserves their space is set
+    by `virtualBoard` at mount. Rendered together, a board that never mounts -- JS off, a failed panel
+    fetch, a missing `data-lb-page-size`, a cached older utils.js -- is a zero-height list of stacked
+    rows with the footer drawn straight through it. Rendered apart, all of those degrade to a plain list
+    of the first window, which is what the partial always claimed a no-JS read would get.
+    """
+    panel, _ = _render(surface, client)
+    assert 'lb-wall--virtual' not in panel.content.decode()
+    # ...and the engine is the one that adds it.
+    js = pathlib.Path('static/js/utils.js').read_text(encoding='utf-8')
+    assert "list.classList.add('lb-wall--virtual')" in js
 
 
 @pytest.mark.parametrize('surface', SURFACES)
@@ -255,9 +336,51 @@ def test_every_board_says_what_it_is_and_how_big_it_is(surface, client):
     assert 'data-countup="60"' in body, f'{surface}: the tally does not count the board'
 
 
+@pytest.mark.parametrize('surface', SURFACES)
+def test_the_viewer_rank_points_at_the_viewers_own_row(surface, client):
+    """The "this one is you" highlight is applied in the BROWSER: the engine reads `data-lb-viewer-rank`
+    off the board root and tags the row whose `data-lb-rank` matches.
+
+    So the two numbers must come from one ordering -- and they are produced by DIFFERENT code. The rows
+    are numbered by SLOT (`page()` counts `offset + i + 1`); the viewer's rank is computed by COUNTING
+    everyone ahead of them. They agree only while the ordering is total AND both reads share one
+    population, so any filter applied to one and not the other puts the highlight on a stranger's row --
+    silently, because both numbers still look entirely reasonable on their own.
+
+    Asserted per surface because each board computes its rank with its own function, and they have
+    diverged before: the badge board's ordering moved from `progress_bp` to `xp`, and the game board
+    gained an `is_linked` gate and a country slice, each of which is a chance for the row numbering and
+    the rank read to stop describing the same list.
+    """
+    import re
+
+    me = _rank_me_on(surface)
+    client.force_login(me.user)
+    panel, _ = _render(surface, client, fresh=False)
+    body = panel.content.decode()
+
+    viewer = re.search(r'data-lb-viewer-rank="(\d+)"', body)
+    assert viewer, f'{surface}: the engine is never told which row is the viewer'
+
+    # Scoped to the WALL. A full page carries nav, headings and empty-state copy, so a bare substring
+    # search for a username can match chrome long before it reaches a row -- and the fixture name is
+    # deliberately unlike any word the site uses for the same reason.
+    wall = body[body.index('data-lb-wall'):]
+    name = me.display_psn_username or me.psn_username
+    assert name in wall, f'{surface}: the viewer is not in the first window, so nothing can be checked'
+    li = wall.rindex('<li class="lb-row', 0, wall.index(name))
+    body = wall
+    row = re.search(r'data-lb-rank="(\d+)"', body[li:li + 500])
+    assert row, f'{surface}: the viewer row carries no rank for the engine to match'
+    assert row.group(1) == viewer.group(1), (
+        f'{surface}: the highlight would land on rank {viewer.group(1)} but the viewer is row '
+        f'{row.group(1)} -- the numbering and the rank read different populations'
+    )
+
+
 #: The PAGE each board is mounted from. The panels above are fragments; the script that mounts them lives
 #: on the page that fetches them, and a fragment test cannot see it.
-PAGES = ['global', 'badge', 'job']
+PAGES = ['global', 'badge', 'job', 'game']
 
 
 def _page_url(surface):
@@ -267,8 +390,10 @@ def _page_url(surface):
     if surface == 'badge':
         _series_board(n=3)
         return reverse('badge_detail', args=['uniform'])
-    _job_board(n=3)
-    return reverse('job_detail', args=['archivist'])
+    if surface == 'job':
+        _job_board(n=3)
+        return reverse('job_detail', args=['archivist'])
+    return reverse('game_detail', args=[_game_board(n=3).np_communication_id])
 
 
 @pytest.mark.parametrize('surface', PAGES)
@@ -287,4 +412,13 @@ def test_every_board_page_actually_ships_its_mount(surface, client):
     exactly what a mutation run showed it doing.
     """
     body = client.get(_page_url(surface)).content.decode()
-    assert 'PlatPursuit.wireBoard(root,' in body, f'{surface}: the page never mounts its board'
+
+    # Three pages inline their mount; game detail's lives in `game-detail.js`, so the guard follows it
+    # there rather than being weakened to "some script is loaded". Both halves still have to hold: the
+    # page must SHIP the file, and the file must contain the call.
+    if surface == 'game':
+        assert 'js/game-detail.js' in body, 'the page does not load the script that mounts its board'
+        js = pathlib.Path('static/js/game-detail.js').read_text(encoding='utf-8')
+        assert 'PlatPursuit.wireBoard(root,' in js, f'{surface}: the script never mounts the board'
+    else:
+        assert 'PlatPursuit.wireBoard(root,' in body, f'{surface}: the page never mounts its board'

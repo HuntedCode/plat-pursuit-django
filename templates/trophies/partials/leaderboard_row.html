@@ -65,6 +65,11 @@ renders without it is invisible to a virtualized wall. Harmless on the flow wall
     {% endif %}
 
     <span class="lb-row__figs">
+        {% comment %} Guarded like the supporting figure below it. Every board had a leading quantity
+        until the edition board, which is EARNERS -- everyone on it cleared the same thing, so the only
+        fact that differs between rows is when. Rendering `0 stages` for all of them would be a column
+        that says nothing, in the most prominent slot the row has. {% endcomment %}
+        {% if entry.primary is not None %}
         <span class="lb-row__fig">
             {% comment %} NO `data-countup` here, deliberately. A page of 50 rows would mean 50 concurrent
             rAF loops writing textContent into laid-out grid rows, fighting the staggerReveal already
@@ -77,6 +82,7 @@ renders without it is invisible to a virtualized wall. Harmless on the flow wall
             <span class="lb-row__v pp-tally">{{ entry.primary|default:0|intcomma }}{% if entry.primary_of %}<span class="lb-row__of"> / {{ entry.primary_of|intcomma }}</span>{% endif %}</span>
             <span class="lb-row__k">{{ entry.primary_label }}</span>
         </span>
+        {% endif %}
         {% comment %} The supporting figure is what gives the leading one its meaning -- 9 platinums out
         of 140 trophies is a different hunter from 9 out of 900. Omitted entirely when a board has no
         second number, rather than rendering an empty cell. {% endcomment %}

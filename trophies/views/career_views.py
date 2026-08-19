@@ -15,6 +15,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseNotFound
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
+from django.utils.http import urlencode
 from django.views import View
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
@@ -257,20 +258,25 @@ class JobRanksPanelView(View):
     def get(self, request, slug):
         job = get_object_or_404(Job, slug=slug)
 
+        # The SLICE, applied to the rows, the count and the viewer's rank alike -- a window that ignored a
+        # filter the first window applied would return different hunters halfway down the same board.
+        codes = lb.job_countries(job.slug)
+        country = self._country(request, codes)
+
         if 'range' in request.GET:
             start, count = window_params(request, self.PAGE_SIZE)
             return render(request, 'trophies/partials/leaderboard_rows.html',
-                          {'entries': self._window(job.slug, start - 1, count)})
+                          {'entries': self._window(job.slug, start - 1, count, country)})
 
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
-        my_rank = lb.job_rank(job.slug, profile.id) if profile else None
+        my_rank = lb.job_rank(job.slug, profile.id, country=country or None) if profile else None
         return render(request, 'trophies/partials/job_detail/_ranks_panel.html', {
             'job': job,
             # `rows` / `total`, matching `BadgeRanksPanelView` exactly. They were `board`/`board_total`
             # here and `rows`/`total` there, for two panels deliberately written to mirror each other --
             # which is the drift this whole change is about, in miniature.
-            'rows': self._window(job.slug, 0, self.PAGE_SIZE),
-            'total': lb.job_board_counts([job.slug]).get(job.slug, 0),
+            'rows': self._window(job.slug, 0, self.PAGE_SIZE, country),
+            'total': lb.job_board_count(job.slug, country=country or None),
             'page_size': self.PAGE_SIZE,
             'my_rank': my_rank,
             # The shared board card, same as badge detail's panel. `board_label` is the job, because on
@@ -281,6 +287,10 @@ class JobRanksPanelView(View):
             # Reversed rather than read off `request.path`, so the panel does not silently depend on
             # having been reached by its canonical URL.
             'rows_url': reverse('job_ranks_panel', args=[job.slug]),
+            'rows_params': urlencode({'country': country}) if country else '',
+            'countries': lb.country_options(codes),
+            'selected_country': country,
+            'slice_applied': bool(country),
         })
 
     @staticmethod
@@ -293,12 +303,19 @@ class JobRanksPanelView(View):
         return 'Not ranked yet'
 
     @staticmethod
-    def _window(job_slug, offset, limit):
+    def _country(request, codes):
+        """Validated against the countries that actually have hunters on THIS board -- an unknown code
+        would return an empty window, which reads as a gap in the board rather than a bad parameter."""
+        raw = (request.GET.get('country') or '').strip().upper()
+        return raw if raw in set(codes) else ''
+
+    @staticmethod
+    def _window(job_slug, offset, limit, country=''):
         """One window of the board, hydrated. Shared by both responses above: a rows endpoint that built
         its own `extra` mapping would be a second definition of what this board's columns MEAN, and the
         labels would be the first thing to drift -- so the rest of a board would read a different figure
         from the screenful the reader arrived on."""
-        rows = lb.job_rows(job_slug, limit=limit, offset=offset)
+        rows = lb.job_rows(job_slug, limit=limit, offset=offset, country=country or None)
         # `offset`, not 0: `page()` numbers rows by SLOT, so a window starting at 50 numbers from 51.
         return lb.page(rows, offset, extra=lambda r: {
             'primary': r[1], 'primary_label': 'XP',

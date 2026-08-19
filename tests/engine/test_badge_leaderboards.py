@@ -74,21 +74,34 @@ def test_series_xp_board_is_scoped_to_the_series():
     assert lb.series_board_rank('gow', top.id) == 1 and lb.series_board_rank('gow', partial.id) == 2
 
 
-def test_series_board_orders_by_furthest_along():
-    """Renamed from the chasers-only `series_progress_rows`: earners and chasers are ONE board now, so the
-    row carries `advanced_at` (the tiebreak) alongside the progress figures."""
+def test_series_board_orders_by_points():
+    """End to end through the real engine: the board ranks on BADGE POINTS for the series.
+
+    It ordered on `progress_bp` -- the furthest-along EDITION's fraction -- which meant the default "all
+    editions" view ranked people by their best single edition and ignored the rest. `xp` is already summed
+    across editions by `compute_series_standings`, so the board answers the question its label asks.
+
+    The points VALUES are read from the rows rather than hardcoded: they come from the badge economy, and
+    a literal here would pin this test to an economy tuning rather than to the ordering rule it is about.
+    """
     gb, games = _series('gow', 4)
     ahead = ProfileFactory()
     for g in games[:3]:
-        _complete(ahead, g)                        # 3 of 4 = 7500 bp
+        _complete(ahead, g)                        # 3 of 4 stages
     evaluate_and_apply(ahead, [gb])
     behind = ProfileFactory()
-    _complete(behind, games[0])                    # 1 of 4 = 2500 bp
+    _complete(behind, games[0])                    # 1 of 4 stages
     evaluate_and_apply(behind, [gb])
 
     rows = lb.series_board_rows('gow')
-    assert [r[:4] for r in rows] == [(ahead.id, 7500, 3, 4), (behind.id, 2500, 1, 4)]
-    assert all(r[4] is not None for r in rows), 'advanced_at did not reach the board rows'
+
+    assert [r[0] for r in rows] == [ahead.id, behind.id], 'the board is not ordered by points'
+    assert rows[0][1] > rows[1][1] > 0, 'three stages did not pay more than one'
+    assert all(r[2] is not None for r in rows), 'advanced_at did not reach the board rows'
+    # The row is (profile_id, xp, advanced_at) -- no stage tally. Points already count what was cleared
+    # AND weigh what it was worth, and the tally that used to sit beside them was the furthest-along
+    # EDITION's, which made it wrong on a board that sums editions.
+    assert len(rows[0]) == 3, 'the board row grew a column back'
 
 
 def test_the_series_board_puts_earners_above_chasers_and_breaks_ties_by_date():

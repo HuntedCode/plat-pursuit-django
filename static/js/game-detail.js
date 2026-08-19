@@ -145,21 +145,18 @@ document.addEventListener('DOMContentLoaded', () => {
              + '<div class="gd-lb__skel-list">' + rows + '</div></div>';
     }
 
-    // The current view's query, read from the control toggles so every fetch preserves the active
-    // filters/sort. earners is on by default, so only its OFF state is a param.
+    // The current view's query, read from the FILTER FORM so every fetch preserves the active slice.
+    // It read `aria-pressed` off toggle chips and translated each one by hand; the filters are
+    // `.lb-filters` selects now, like every other board, so serializing the form IS the query -- and the
+    // hand-translation cannot drift from what the server parses. (`invert` was one of those hands, and is
+    // gone entirely.)
     function lbOptsUrl(panel, extra) {
-        const params = new URLSearchParams();
-        panel.querySelectorAll('[data-lb-opt]').forEach((btn) => {
-            const on = btn.getAttribute('aria-pressed') === 'true';
-            const key = btn.dataset.lbOpt;
-            if (key === 'invert' && on) params.set('invert', '1');
-            if (key === 'earners' && !on) params.set('earners', '0');
-            if (key === 'registered' && on) params.set('registered', '1');
-        });
+        const form = panel.querySelector('[data-filter-form]');
+        const params = new URLSearchParams(form ? new FormData(form) : undefined);
         // Which board is active rides on the .gd-lb root, so every continuation fetch (range/suggest/at)
         // hits the SAME board the user is looking at, not the default one.
         const root = panel.querySelector('.gd-lb');
-        const board = root && root.dataset.lbBoard;
+        const board = root && root.dataset.lbBoardparam;
         if (board) params.set('board', board);
         if (extra) Object.keys(extra).forEach((k) => params.set(k, extra[k]));
         const qs = params.toString();
@@ -169,18 +166,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // Fetch the WHOLE panel (initial load or after a control change) and re-wire its observers. `isSwitch`
     // marks a board/filter change (vs the first load): the outgoing list dims during the fetch, then the
     // new content settles in (see lbEntrance) so switching reads as a deliberate transition, not a flash.
+    // Which panel fetch is the live one. Board chips and filter selects both call `lbFetchPanel`, so two
+    // in quick succession race -- and without a token whichever RESPONDS last wins the DOM, which need not
+    // be the one asked for last. It fails silently: the panel and its controls agree with each other, they
+    // just describe the wrong board. The landing has carried this guard since it was built.
+    let lbSeq = 0;
+
     function lbFetchPanel(panel, url, isSwitch) {
         if (isSwitch && !reduce) {
             const root = panel.querySelector('.gd-lb');
             if (root) root.classList.add('is-swapping');
         }
+        const seq = ++lbSeq;
         fetch(url, LB_XHR).then(lbText)
             .then((html) => {
+                if (seq !== lbSeq) return;                     // a later switch overtook this one
                 if (panel._lbTeardown) panel._lbTeardown();
                 panel.innerHTML = html;
                 lbWire(panel);
             })
             .catch(() => {
+                if (seq !== lbSeq) return;                     // a superseded fetch must not hijack it
                 lbLoaded = false;                              // let a later tab visit retry
                 if (panel._lbTeardown) panel._lbTeardown();
                 panel.innerHTML = '<div class="gd-empty"><p class="gd-empty__title">Couldn\'t load the board</p>'
@@ -207,19 +213,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             // Board switcher: select a board and re-fetch the whole panel. Match the CHIP class (not
-            // [data-lb-board]) so clicks elsewhere in .gd-lb -- which carries the active board -- don't match.
+            // the attribute) so clicks elsewhere in .gd-lb -- which carries the active board -- don't match.
+            //
+            // The attribute is `data-lb-boardparam`, NOT `data-lb-board`. That name belongs to the shared
+            // engine: `leaderboard_board.html` marks its root with it and `wireBoard` finds the root by
+            // it. This page briefly used the same name for "which board is selected" on the `.gd-lb`
+            // wrapper AND on every chip -- and since the wrapper is the outermost, a
+            // `querySelector('[data-lb-board]')` returned IT rather than the board root. That element
+            // has no `data-lb-total`, so the engine read a size of 0 and declined to mount: no viewer
+            // highlight, no jump, no infinite scroll, and (once the wall started shipping as flow) no
+            // visible breakage to point at either.
             const chip = e.target.closest('.gd-lb__segchip');
-            if (chip && chip.dataset.lbBoard) {
-                lbFetchPanel(panel, lbOptsUrl(panel, { board: chip.dataset.lbBoard }), true);
+            if (chip && chip.dataset.lbBoardparam) {
+                lbFetchPanel(panel, lbOptsUrl(panel, { board: chip.dataset.lbBoardparam }), true);
                 return;
             }
-            const opt = e.target.closest('[data-lb-opt]');
-            if (opt) {
-                opt.setAttribute('aria-pressed', opt.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-                lbFetchPanel(panel, lbOptsUrl(panel), true);   // re-render the whole board in the new view
-                return;
-            }
-            if (e.target.closest('[data-lb-jump]')) lbJumpToMe(panel);
+            // The jump chip is wired by `PlatPursuit.wireBoard`, along with the rank box, so this
+            // handler no longer owns it -- one implementation of "jump", shared with the other boards.
+        });
+        // Filters are selects now, so they fire `change` rather than `click`. Delegated from the panel,
+        // because the form arrives with every fetched panel and is replaced by the next one.
+        panel.addEventListener('change', (e) => {
+            if (!e.target.closest('[data-filter-form] select')) return;
+            lbFetchPanel(panel, lbOptsUrl(panel), true);   // re-render the whole board in the new view
         });
         // Close an open DLC dropdown on any click outside a dropdown (once; the panel element persists).
         document.addEventListener('click', (e) => {
@@ -251,63 +267,61 @@ document.addEventListener('DOMContentLoaded', () => {
         lbEntrance(panel);
     }
 
-    // Entrance motion, after the virtualizer has mounted the first window. FIRST reveal (tab open): the
-    // on-screen rows cascade in -- a one-time grand entrance. Every later load (board / filter switch): the
-    // board content settles in with a soft rise+fade (the outgoing content was dimmed via .is-swapping while
-    // the fetch was in flight). Reduced-motion skips it entirely.
+    // Entrance motion. FIRST reveal (tab open) cascades the on-screen rows in via the SHARED
+    // `PlatPursuit.boardEntrance`, which also ticks the board card's Tally. Every later load (a board or
+    // filter switch) settles the content in with a soft rise+fade instead -- the outgoing content was
+    // dimmed via .is-swapping while the fetch was in flight, so a second cascade would read as a reload
+    // rather than as a change. Reduced-motion is handled inside the shared helper.
     function lbEntrance(panel) {
-        if (reduce) return;
-        const root = panel.querySelector('.gd-lb');
-        if (!root) return;
-        const spring = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+        const root = panel.querySelector('[data-lb-board]');
         if (!panel._lbRevealed) {
             panel._lbRevealed = true;
-            panel.querySelectorAll('.gd-lb__row').forEach((row, i) => {
-                if (i > 13) return;                            // just the visible window -- keep it quick
-                row.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
-                            { duration: 340, delay: i * 26, easing: spring, fill: 'backwards' });
-            });
-            const tally = root.querySelector('.gd-lb__count .pp-tally');   // count the board size up, site-style
-            if (tally && PlatPursuit.countUp) PlatPursuit.countUp(tally, 700, { from: 0 });
-        } else {
-            [root.querySelector('.gd-lb__head'), root.querySelector('.gd-lb__list')].forEach((el) => {
-                if (el) el.animate([{ opacity: 0.5, transform: 'translateY(7px)' }, { opacity: 1, transform: 'none' }],
-                                   { duration: 240, easing: spring, fill: 'backwards' });
-            });
+            PlatPursuit.boardEntrance(root, panel);
+            return;
         }
+        // A later load (board or filter switch) settles rather than cascading -- the outgoing content was
+        // dimmed while the fetch was in flight, so a second cascade would read as a reload.
+        //
+        // The TALLY still has to tick, though, and it lives inside `boardEntrance`. Calling that helper
+        // only on first reveal reproduced the exact bug it was written to fix: the card is replaced by
+        // every switch and the new figure simply appeared. `countUp` runs before the reduced-motion
+        // return inside the helper, so this is a count-up without a cascade.
+        PlatPursuit.boardEntrance(null, panel);
+        if (reduce) return;
+        const spring = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+        // `.lb-controls` is the chrome card; the column-header strip this used to animate beside the wall
+        // was deleted site-wide.
+        [panel.querySelector('.lb-controls'), panel.querySelector('[data-lb-wall]')].forEach((el) => {
+            if (el) el.animate([{ opacity: 0.5, transform: 'translateY(7px)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 240, easing: spring, fill: 'backwards' });
+        });
     }
 
-    // The virtualized list. The .gd-lb__list is a full-height spacer (total rows x --lb-row-h), so the
-    // PAGE scrollbar spans the whole board; only the visible ~30 rows live in the DOM, absolutely positioned
-    // by rank. This is why jumping is just a scroll position and scrolling never inserts rows above the
-    // viewport -- the two things that made the old marker/prepend approach lurch.
+    // The board, on the SHARED mount. `PlatPursuit.wireBoard` reads the totals, page size, rows URL,
+    // slice and viewer rank off the `[data-lb-board]` root that `leaderboard_board.html` renders (a
+    // name this page must not reuse -- see the switcher handler above), mounts
+    // `virtualBoard`, and wires the jump chip and the rank box -- so this board runs the same code path as
+    // the Global Boards, badge detail and job detail rather than a fourth copy of the wiring.
+    //
+    // What stays here is what is genuinely this board's: the minibar chevron, which no other board has.
     function lbVirtualize(panel) {
-        const list = panel.querySelector('[data-lb-list]');
-        const root = panel.querySelector('.gd-lb');
-        if (!list || !root) return;
-        const total = parseInt(list.dataset.lbTotal || root.dataset.lbTotal || '0', 10);
-        if (!total) return;                                    // empty board -> nothing to virtualize
-
-        // The engine lives in utils.js (`PlatPursuit.virtualBoard`) so every board runs one
-        // implementation. What stays here is the game board's own wiring: where the row height comes
-        // from, how a fetch URL is built from this panel's toggles, and the minibar chevron.
-        const handle = PlatPursuit.virtualBoard({
-            list: list,
-            total: total,
-            rowSelector: '.gd-lb__row',
-            pageSize: parseInt(root.dataset.lbPageSize, 10) || 50,
-            invert: root.dataset.lbInvert === '1',
-            rowHeight: () => parseFloat(getComputedStyle(root).getPropertyValue('--lb-row-h')) || 44,
+        // GUARDED like every other shared helper this file reaches for (staggerReveal, countUp,
+        // wireSearchField). A stale cached `utils.js` should leave the board as the flow list the server
+        // shipped, not throw a TypeError inside the panel-load path and take the rest of the wiring with
+        // it -- which is exactly the failure mode a no-hash static file makes reachable.
+        if (!window.PlatPursuit || !PlatPursuit.wireBoard) return;
+        const root = panel.querySelector('[data-lb-board]');
+        const handle = PlatPursuit.wireBoard(root, {
+            scope: panel,
             chromeInset: lbChromeInset,
-            fetchRows: (start, from, count) =>
-                fetch(lbOptsUrl(panel, { range: start, from: from, count: count }), LB_XHR).then(lbText),
-            // The minibar chevron: where does the viewer's row sit relative to what is on screen?
+            // Where the viewer's row sits relative to what is on screen, for the minibar chevron.
             onRender: (localTop, localBottom, posOf) => {
                 const widget = document.querySelector('[data-lb-mb-rank]');
-                if (!widget || widget.hidden) return;
+                if (!widget || widget.hidden || !root) return;
                 const vr = parseInt(root.dataset.lbViewerRank || '', 10);
                 if (!(vr >= 1)) return;
-                const H = parseFloat(getComputedStyle(root).getPropertyValue('--lb-row-h')) || 44;
+                const wall = root.querySelector('[data-lb-wall]');
+                const H = parseFloat(getComputedStyle(wall).getPropertyValue('--lb-row-h')) || 62;
                 const vTop = (posOf(vr) - 1) * H;
                 widget.dataset.lbDir = vTop + H < localTop ? 'up' : (vTop > localBottom ? 'down' : 'here');
             },
@@ -382,7 +396,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // jumps there. We hold the board total on the panel root, so a rank past the board skips the fetch.
         const doRank = PlatPursuit.debounce((n) => {
             const mine = ++seq;
-            const root = panel.querySelector('.gd-lb');
+            // The BOARD root -- `data-lb-total` moved there too, so this read NaN and the bound below
+            // could never fire: a nine-digit rank issued a request per debounce instead of short-circuiting.
+            const root = panel.querySelector('[data-lb-board]');
             const total = parseInt(root ? root.dataset.lbTotal : '', 10);
             if (n < 1 || (total && n > total)) { field.setBusy(false); closeDrop(); return; }
             fetch(lbOptsUrl(panel, { at: n }), LB_XHR)
@@ -436,12 +452,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Fill the minibar's "You #N" widget from the freshly-loaded panel and show it only when the viewer is
-    // ranked. The rank rides on the .gd-lb root (data-lb-viewer-rank); a filter change re-ranks, so this
-    // runs on every panel load.
+    // ranked. A filter change re-ranks, so this runs on every panel load.
+    //
+    // The rank rides on the BOARD root now, not the panel root: `data-lb-viewer-rank` is part of the
+    // shared board contract (`leaderboard_board.html`) and moved there with the rest of the virtualizer's
+    // attributes. Reading it off `.gd-lb` silently produced NaN, which hid the widget rather than
+    // erroring -- so the minibar would simply have stopped showing your rank.
     function lbSyncMbRank(panel) {
         const widget = document.querySelector('[data-lb-mb-rank]');
         if (!widget) return;
-        const root = panel.querySelector('.gd-lb');
+        const root = panel.querySelector('[data-lb-board]');
         const rank = parseInt(root ? root.dataset.lbViewerRank : '', 10);
         if (rank >= 1) {
             widget.querySelector('[data-lb-mb-rank-n]').textContent = '#' + rank.toLocaleString();
@@ -475,7 +495,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (rank >= 1 && panel._lbJump) panel._lbJump(rank);
     }
     function lbJumpToMe(panel) {
-        const root = panel.querySelector('.gd-lb');
+        // The BOARD root, not `.gd-lb`. `data-lb-viewer-rank` moved onto the shared board root with the
+        // rest of the engine's contract; three readers had to follow it and only two did, so the minibar's
+        // jump button kept its label, its hover, its chevron and its `aria-label` and silently did nothing
+        // -- `undefined` parses to NaN and `lbJump`'s `rank >= 1` guard swallows it.
+        const root = panel.querySelector('[data-lb-board]');
         lbJump(panel, parseInt(root ? root.dataset.lbViewerRank : '', 10));
     }
     function lbJumpToRank(panel, n) { lbJump(panel, n); }
@@ -713,7 +737,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const mbLbFilters = document.querySelector('[data-lb-mb-filters]');
             if (mbLbFilters) {
                 mbLbFilters.addEventListener('click', () => {
-                    const target = lbPanel.querySelector('.gd-lb__toolbar') || lbPanel;
+                    // `.lb-controls` is the shared chrome card the filters now live on -- it replaced
+                    // this panel's own `.gd-lb__toolbar`, which no longer exists.
+                    const target = lbPanel.querySelector('.lb-controls') || lbPanel;
                     target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
                 });
             }

@@ -163,6 +163,10 @@ def test_rank_equals_position_under_an_edition_slice():
     (lb.TROPHY_KEYS, 'TROPHY_KEYS'),
     (lb.CAREER_KEYS, 'CAREER_KEYS'),
     (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
+    # The per-EDITION series board. Its leading key is an ANNOTATION (`ed_xp`, cast out of the
+    # `group_xp` JSON) rather than a column, which changes nothing about the property being asserted:
+    # the order still has to end in a unique key or rank and position disagree.
+    (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'),
     (lb.JOB_KEYS, 'JOB_KEYS'),
     (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
 ])
@@ -188,7 +192,8 @@ def test_every_module_level_keys_tuple_is_covered_by_the_test_above():
     declared = {name for name in dir(lb) if name.endswith('_KEYS')}
     covered = {label for _keys, label in [
         (lb.XP_KEYS, 'XP_KEYS'), (lb.TROPHY_KEYS, 'TROPHY_KEYS'), (lb.CAREER_KEYS, 'CAREER_KEYS'),
-        (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'), (lb.JOB_KEYS, 'JOB_KEYS'),
+        (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
+        (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'), (lb.JOB_KEYS, 'JOB_KEYS'),
         (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
     ]}
     assert declared == covered, (

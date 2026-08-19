@@ -931,13 +931,20 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    instead of a ranking. Fetched on first tab activation, so it needs its own loading state. */
 /* --lb-row-h is the FIXED virtual-row height the JS keys everything off (spacer height, row offsets, jump
    targets). Two-line rows on mobile are taller; the single-line table at md+ is shorter. */
-.gd-lb { display: flex; flex-direction: column; gap: 10px; --lb-row-h: 58px; }
-@media (min-width: 768px) { .gd-lb { --lb-row-h: 44px; } }
+/* NO `--lb-row-h` here. The engine's row pitch is declared on `.lb-wall` (leaderboards.css) and read
+   from there; a second declaration on the board root shadowed nothing today and was a loaded gun -- the
+   values differed by 4-24px, so anything that read the property from an ancestor other than the wall
+   would have misplaced every row by a growing offset. */
+.gd-lb { display: flex; flex-direction: column; gap: 10px; }
 /* While a board/filter switch is fetching, dim the board content and block input (the switcher stays lit so
    the change you just made reads as active). The JS removes it by swapping in the new panel, which settles
    in via lbEntrance. */
+/* The swap state. `.is-swapping` lands on `.gd-lb` (game-detail.js), while the shared rule in
+   leaderboards.css targets `.lb-board` -- a DESCENDANT -- so after the chrome moved onto the shared
+   partials nothing dimmed and a board switch blocked input with no feedback at all. */
 .gd-lb.is-swapping { pointer-events: none; }
-.gd-lb.is-swapping .gd-lb__head, .gd-lb.is-swapping .gd-lb__list { opacity: 0.4; transition: opacity 0.12s var(--pp-ease); }
+.gd-lb.is-swapping .lb-controls,
+.gd-lb.is-swapping .lb-board { opacity: 0.55; transition: opacity var(--pp-dur) var(--pp-ease); }
 
 /* Board switcher: the segmented-switcher standard (bordered pill container, transparent chips, tinted-flat
    active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row
@@ -969,18 +976,16 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-lb__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; }
 .gd-lb__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
 
-/* Controls toolbar: filter toggles (aria-pressed drives the lit state) + a jump-to-rank field. */
-.gd-lb__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.gd-lb__filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.gd-lb__opt { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
-.gd-lb__opt svg { width: 13px; height: 13px; }
-.gd-lb__opt:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
-.gd-lb__opt[aria-pressed="true"] { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 42%, var(--pp-border)); }
-.gd-lb__opt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 /* Rank-or-hunter search: reuses the shared [data-search-wrap] chrome (clear button + spinner) that the
    browse/collection toolbars use, with a leading search glyph like .pp-bgal__search. */
-.gd-lb__find { position: relative; flex: 0 1 12rem; min-width: 8.5rem; }
+/* The hunter search sits in `.lb-jumpbar`'s slot, between "you're #N" and the rank box. The bar is
+   `justify-content: space-between`, so the search takes the middle and grows into whatever the two ends
+   leave -- `flex: 1 1 12rem` rather than the `0 1` it used when it was the last item on its own row.
+   It falls to a full-width row of its own when the three no longer fit, which is what `flex-wrap` on the
+   jump bar already does for the other two. */
+.gd-lb__find { position: relative; flex: 1 1 12rem; min-width: 8.5rem; max-width: 22rem; }
+@media (max-width: 519px) { .gd-lb__find { flex-basis: 100%; max-width: none; order: 1; } }
 .gd-lb__findicon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--pp-text-mute); pointer-events: none; }
 .gd-lb__findinput { width: 100%; padding: 7px 12px 7px 32px; font-size: 0.75rem; color: var(--pp-text); background: var(--pp-bg-0); border: 1px solid var(--pp-border); border-radius: 999px; }
 .gd-lb__findinput::placeholder { color: var(--pp-text-mute); }
@@ -1014,22 +1019,10 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 @keyframes gdLbSkel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .gd-lb__skel-cell { animation: none; } }
 
-.gd-lb__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 0 2px; }
 /* The active board's title is the header; the count sits under it as a muted subtitle. */
-.gd-lb__heading { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.gd-lb__title { font-size: 1.05rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
-.gd-lb__count { display: flex; align-items: baseline; gap: 6px; }
-.gd-lb__count .pp-tally { font-size: 0.82rem; font-weight: 800; color: var(--pp-text-dim); }
-.gd-lb__countlbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
 
-.gd-lb__jump { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; cursor: pointer; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
-.gd-lb__jump svg { width: 13px; height: 13px; }
-.gd-lb__jump:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
-.gd-lb__jump:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 /* Same slot, same shape, none of the affordance: it is a statement, not a control, so it drops the accent
    and the pointer. Keeping the pill keeps the heading row from reflowing between the two states. */
-.gd-lb__jump--none { cursor: default; font-weight: 600; color: var(--pp-text-mute); background: var(--pp-bg-2); border-color: var(--pp-border); }
-.gd-lb__jump--none:hover { background: var(--pp-bg-2); border-color: var(--pp-border); }
 
 /* The list is a card: it frames the rows as one object, so they read as a ranking table rather than a
    stack of floating chips. Rows lose their own background (chip-in-card is busy) and separate by a
@@ -1037,7 +1030,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Virtual list: the card is a full-height spacer (JS sets height = board_size * --lb-row-h) so the page
    scrollbar spans the WHOLE board; rows are absolutely positioned inside by rank, only the visible ~30 in
    the DOM. overflow: hidden clips rows to the rounded card. */
-.gd-lb__list { list-style: none; margin: 0; padding: 0; position: relative; overflow: hidden; background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); }
 
 /* Each row is a fixed-height (--lb-row-h) absolutely-positioned band; the JS sets `top`. A bottom hairline
    is the divider (absolute rows have no flow adjacency).
@@ -1045,149 +1037,60 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    everything into 375px left only name + % legible. md+: a single-line table (grid-template-areas: none
    lets the cells flow in DOM order); the trophy column is fixed-width so a platinum dot can't shove % and
    date out of alignment. */
-.gd-lb__row {
-    position: absolute; left: 0; right: 0; height: var(--lb-row-h);
-    display: grid;
-    grid-template-columns: 2.25rem minmax(0, 1fr) auto;
-    grid-template-areas: "rank who  pct" "rank meta meta";
-    align-items: center; column-gap: 10px; row-gap: 2px;
-    padding: 6px 10px; border-bottom: 1px solid color-mix(in oklab, var(--pp-border) 55%, transparent);
-    transition: background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
-}
-.gd-lb__row:hover { background: var(--pp-bg-2); }
-@media (min-width: 768px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 9rem 3rem 6.5rem; grid-template-areas: none; row-gap: 0; } }
-@media (min-width: 1024px) { .gd-lb__row { grid-template-columns: 3rem minmax(0, 1fr) 9rem 7rem 3rem 6.5rem; } }
 
 /* Cell placement. On mobile the metadata line is ONE spanning area holding the trophy haul (pinned left)
    and date/time (pinned right); keeping pct in its own narrow row-1 column stops the wide date from
    coupling to pct and squeezing the name. At md+ (areas:none) the cells resolve to auto and flow in DOM
    order into the linear table. */
-.gd-lb__rank { grid-area: rank; }
-.gd-lb__who { grid-area: who; }
 /* max-width reserves the right side of the shared meta cell for the date/time, so a big trophy haul
    (a completionist on a large game, on a narrow phone) clips its tail instead of colliding with the date.
    Reset at md+ where trophies gets its own 9rem column. */
 /* Mobile: tighter dots/counts and a slightly larger date reserve so the four-tier haul, the numeric date
    AND the time all fit the two-line row -- an extreme completionist haul still clips its tail rather than
    shoving the date off. md+ gets its own 9rem column, so it relaxes back to comfortable spacing. */
-.gd-lb__trophies { grid-area: meta; justify-self: start; max-width: calc(100% - 6.5rem); display: flex; align-items: center; gap: 6px; overflow: hidden; }
-.gd-lb__trophies .gd-gcount__n { font-size: 0.68rem; }
-.gd-lb__bar { grid-area: bar; }
-.gd-lb__pct { grid-area: pct; }
-.gd-lb__when { grid-area: meta; justify-self: end; }
-@media (min-width: 768px) {
-    .gd-lb__rank, .gd-lb__who, .gd-lb__bar, .gd-lb__pct { grid-area: auto; }
-    .gd-lb__trophies { grid-area: auto; justify-self: auto; max-width: none; gap: 9px; }
-    .gd-lb__trophies .gd-gcount__n { font-size: 0.74rem; }
-    .gd-lb__when { grid-area: auto; justify-self: auto; }
-}
 
-.gd-lb__rank { font-size: 0.78rem; font-weight: 800; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; text-align: right; }
 /* Medals key off canonical rank (set in the row template), not DOM order -- virtualized rows mount in
    scroll order, so nth-child would colour the wrong rows after any scroll-away-and-back. The soft glow gives
    the podium quiet weight without a badge that would shove the tabular alignment around. */
-.gd-lb__rank--1 { color: var(--color-trophy-platinum); text-shadow: 0 0 9px color-mix(in oklab, var(--color-trophy-platinum) 45%, transparent); }
-.gd-lb__rank--2 { color: var(--color-trophy-gold); text-shadow: 0 0 8px color-mix(in oklab, var(--color-trophy-gold) 40%, transparent); }
-.gd-lb__rank--3 { color: var(--color-trophy-silver); text-shadow: 0 0 8px color-mix(in oklab, var(--color-trophy-silver) 38%, transparent); }
 
-.gd-lb__who { display: flex; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: inherit; }
-.gd-lb__av { flex: none; width: 26px; height: 26px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
-.gd-lb__av img { width: 100%; height: 100%; object-fit: cover; }
-.gd-lb__name { font-size: 0.82rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gd-lb__who:hover .gd-lb__name { color: var(--pp-primary); }
 /* A "You" pill on the viewer's own row, so it's scannable while scrolling past. */
-.gd-lb__youpill { flex: none; padding: 1px 6px; border-radius: 999px; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 18%, transparent); }
 
 /* Bar only at lg (the trophy column already carries visual weight at md); date at md. */
-.gd-lb__bar { display: none; --horizon-accent: var(--pp-primary); }
-.gd-lb__pct { font-size: 0.78rem; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; text-align: right; }
 /* The time is the visible tiebreaker. On mobile it sits inline after the date on the metadata line (with
    a middot) to keep rows to two lines; at md+ it stacks under the date in the narrow date column. */
-.gd-lb__when { display: flex; align-items: baseline; gap: 5px; text-align: right; font-variant-numeric: tabular-nums; }
-.gd-lb__date { font-size: 0.68rem; color: var(--pp-text-mute); }
 /* The timestamp is the tiebreaker between equal-progress players, so the TIME earns its place even on
    mobile -- boards are often minutes apart. To fit the two-line row it goes compact: a numeric date
    (7/24/26) with the time inline after a middot. md+ has room to stack the spelled-out date over the time. */
-.gd-lb__date--long { display: none; }
-.gd-lb__date--short { display: inline; }
-.gd-lb__time { display: inline; font-size: 0.66rem; color: var(--pp-text-dim); opacity: 0.85; }
-.gd-lb__time::before { content: "\00b7"; margin-right: 5px; color: var(--pp-text-mute); opacity: 0.6; }
-@media (min-width: 768px) {
-    .gd-lb__when { flex-direction: column; align-items: flex-end; gap: 0; line-height: 1.25; }
-    .gd-lb__date { font-size: 0.7rem; }
-    .gd-lb__date--long { display: block; }
-    .gd-lb__date--short { display: none; }
-    .gd-lb__time { display: block; font-size: 0.64rem; opacity: 0.75; }
-    .gd-lb__time::before { display: none; }
-}
-@media (min-width: 1024px) { .gd-lb__bar { display: block; } }
 
 /* Speed / playtime rows flow the cells in DOM order (no standings grid areas). MOBILE: there's only room
    for the headline number, so every context column is hidden -- rank | who | metric. md+ restores the
    context columns (Started/Finished, Progress/Last played) and anchors them (below). */
-.gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 2.25rem minmax(0, 1fr) auto; grid-template-areas: none; column-gap: 12px; }
-.gd-lb__row--speed > *, .gd-lb__row--playtime > * { grid-area: auto; justify-self: auto; }
-.gd-lb__row--speed .gd-lb__col, .gd-lb__row--playtime .gd-lb__col { display: none; }
 @media (min-width: 768px) {
     /* Anchor the metric area to the SAME left edge as the standings board's trophy section, so all three
        board types line up. Standings' metric block is 9+3+6.5 = 18.5rem at md (name column = 1fr, 10px
        gaps); matching the three metric columns to that total, with the same 1fr name column and gap, starts
        them at the same x. Values run start / center / end across the block. */
-    .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) 6rem 6.5rem 6rem; column-gap: 10px; }
-    .gd-lb__row--speed .gd-lb__col, .gd-lb__row--playtime .gd-lb__col { display: flex; }
-    .gd-lb__row--speed .gd-lb__col--start { justify-self: start; align-items: flex-start; }
-    .gd-lb__row--speed .gd-lb__metric--speed { justify-self: center; }
-    .gd-lb__row--speed .gd-lb__col--finish { justify-self: end; align-items: flex-end; }
-    .gd-lb__row--playtime .gd-lb__metric--playtime { justify-self: start; }
-    .gd-lb__row--playtime .gd-lb__col--prog { justify-self: center; align-items: center; }
-    .gd-lb__row--playtime .gd-lb__col--last { justify-self: end; align-items: flex-end; }
 }
 @media (min-width: 1024px) {
     /* lg adds the bar column to standings, growing its block to 9+7+3+6.5 = 25.5rem; grow the metric
        columns to match so the left edge stays aligned. */
-    .gd-lb__row--speed, .gd-lb__row--playtime { grid-template-columns: 3rem minmax(0, 1fr) 8.5rem 8.5rem 8.5rem; }
 }
 /* The metric (elapsed / play time) is the row's headline number. On mobile it sits at the right (its column
    is content-width after the 1fr name). md+ centers speed between the two dates / leads playtime after the
    name. */
-.gd-lb__metric { justify-self: end; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 0.9rem; color: var(--pp-text); white-space: nowrap; }
-.gd-lb__metric--speed { color: var(--pp-primary); }
 
 /* A context cell (speed dates / playtime progress + last-played). Columns are labelled once by the header
    row above, so the cells hold just values. */
-.gd-lb__col { display: flex; flex-direction: column; align-items: flex-end; justify-self: end; line-height: 1.15; min-width: 0; }
-.gd-lb__colval { font-size: 0.72rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The time under the date on the Fastest board -- a speedrun's start/finish matter to the minute. */
-.gd-lb__coltime { font-size: 0.64rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.85; }
 
 /* Column header: labels the columns once, desktop only (mobile rows are 2-line / headline-only). It mirrors
    each board's row grid, plus the row's 10px inset and the card's 1px border (11px padding), so each label
    sits over its column. The lg-only h-bar slot matches the standings progress-bar column. */
-.gd-lb__colhead { display: none; }
-@media (min-width: 768px) {
-    .gd-lb__colhead { display: grid; align-items: end; column-gap: 10px; padding: 0 11px 5px; }
-    .gd-lb__colhead > span { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gd-lb__colhead .h-start { justify-self: start; }
-    .gd-lb__colhead .h-center { justify-self: center; }
-    .gd-lb__colhead .h-end { justify-self: end; }
-    .gd-lb__colhead .h-bar { display: none; }
-    .gd-lb__colhead--progress { grid-template-columns: 3rem minmax(0, 1fr) 9rem 3rem 6.5rem; }
-    .gd-lb__colhead--speed, .gd-lb__colhead--playtime { grid-template-columns: 3rem minmax(0, 1fr) 6rem 6.5rem 6rem; }
-}
-@media (min-width: 1024px) {
-    .gd-lb__colhead--progress { grid-template-columns: 3rem minmax(0, 1fr) 9rem 7rem 3rem 6.5rem; }
-    .gd-lb__colhead--speed, .gd-lb__colhead--playtime { grid-template-columns: 3rem minmax(0, 1fr) 8.5rem 8.5rem 8.5rem; }
-    .gd-lb__colhead .h-bar { display: block; }
-}
 
 /* The viewer's own row, and the flash when they jump to it. */
-.gd-lb__row--you { background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); }
-.gd-lb__row--you .gd-lb__name { color: var(--pp-primary); }
 /* A jumped-to row stays lit (background + ring) until the user scrolls away -- the JS adds/removes
    .is-found. It transitions in so the landing reads as "here you are", and the ring sits INSIDE the row
    (inset) so a fixed-height absolutely-positioned row can't clip it. */
-.gd-lb__row.is-found { background: color-mix(in oklab, var(--pp-primary) 16%, var(--pp-bg-2)); box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
-.gd-lb__row.is-found .gd-lb__name { color: var(--pp-primary); }
 
 /* Minibar "You #N" widget: your standing while scrolled, replacing the old floating self-row. The chevron
    points toward your rank (down = below you, up = above) and springs the flip as you cross your own row;
@@ -1208,7 +1111,6 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 
 @media (prefers-reduced-motion: reduce) {
     .gd-lb__spinner { animation-duration: 1.6s; }
-    .gd-lb__row, .gd-lb__jump { transition: none; }
 }
 
 /* ============================================================
