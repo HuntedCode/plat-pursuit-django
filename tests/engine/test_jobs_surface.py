@@ -903,6 +903,61 @@ def test_the_hover_gallery_is_shared_with_career_not_copied():
     assert 'var CBEAT' not in career and "art.dataset.carInit = '1'" not in career
 
 
+def test_career_still_declares_the_observer_its_reveal_depends_on():
+    """REGRESSION, and one I caused: an extraction spliced `career.html` between two anchors and took the
+    reveal observer and its body out with the block it was aiming at. `initReveal` was left referencing an
+    undeclared `revealIO`, which THREW on every `initCards()` -- and because infinite scroll, the entrance
+    stagger and the `pp:contracts-shown` listener all run after that call, they silently never started.
+
+    A ReferenceError inside an IIFE kills the rest of the IIFE and nothing else on the page notices, which
+    is why it survived a green test run and a page that still looked correct. This asserts the identifiers
+    the block reads are ones it also defines.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    # Every identifier `initReveal` reads must be declared in the file (or be a shared helper off PP).
+    body = career[career.index('function initReveal(scope)'):]
+    body = body[:body.index('}')]
+    for name in ('cardRevealer',):
+        assert f'var {name}' in career, f'`initReveal` reads `{name}` but nothing declares it'
+        assert name in body
+
+    # And the call order that made the failure invisible: `initCards` runs before the scroller starts.
+    assert career.index('initCards(list);') < career.index('observeSentinel();')
+
+
+def test_the_contract_cards_stagger_in_and_reveal_on_job_detail(client):
+    """The two premium entrances the card has on Career: the batch rise as the page arrives, and the
+    per-card figure animation as it scrolls into view (XP counting up, tier bars filling, ring arcs
+    drawing, job tiles igniting)."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert "cardReveal({ jobSelector: '.rp-jobtile' })" in body, 'cards never reveal their figures'
+    assert 'PlatPursuit.staggerCards' in body, 'the cards never stagger in'
+    # Appended pages get both, or the wall goes flat the moment you scroll.
+    appended = body[body.index('onAppend'):]
+    appended = appended[:appended.index('},')]
+    assert 'revealer.observe(nodes)' in appended and 'staggerCards(nodes)' in appended
+
+
+def test_the_entrance_plays_once_not_on_every_tab_return(client):
+    """Career replays its stagger each time you return to Contracts. This page has two tabs a reader flips
+    between, and re-staggering 24 cards on every return is the busyness the tab-navigation fix just
+    removed -- so it plays on load, or on the FIRST activation for a reader who arrived on `?tab=ranks`."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('One', [job])
+
+    body = client.get(reverse('job_detail', args=['archivist'])).content.decode()
+    assert 'var staggered = false;' in body and 'if (staggered ' in body
+    # The panel announces itself so a reader who landed on Ranks still gets the entrance once.
+    assert "pp:jobd-contracts-shown" in body
+
+
 def test_the_job_icon_sprite_is_on_the_page(client):
     """The pills draw their glyphs with `<use href="#jobicon-...">`, which resolves to NOTHING if the
     sprite is absent -- names render with an invisible gap where the icon belongs, on a page that

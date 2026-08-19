@@ -1778,6 +1778,106 @@ function syncViewParam(view, opts) {
 
 
 
+
+/**
+ * cardReveal -- a contract card's figures animate INTO their served values as it scrolls into view: the
+ * reward XP counts up, the tier bars fill from zero, the ring's arcs draw around, and the job cells
+ * ignite in sequence.
+ *
+ * The final state is already rendered server-side, so this is pure enhancement: under reduced motion (or
+ * with no IntersectionObserver) every card simply stays as served. Each card reveals ONCE, via a
+ * `data-revealed` stamp, and is unobserved after.
+ *
+ * The job-cell selector is a parameter because the two callers draw their jobs differently -- Career's
+ * 25-cell map (`.rp-jobcell.is-lit`) and job detail's named tiles (`.rp-jobtile`) -- and everything else
+ * about the reveal is identical.
+ *
+ * @param {Object} opts
+ * @param {string} [opts.jobSelector='.rp-jobcell.is-lit']  cells to ignite in sequence
+ * @param {number} [opts.threshold=0.25]
+ * @returns {{ observe: function(NodeList|Array), reveal: function(HTMLElement) }}
+ */
+function cardReveal(opts) {
+    opts = opts || {};
+    var jobSel = opts.jobSelector || '.rp-jobcell.is-lit';
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { reveal(e.target); io.unobserve(e.target); } });
+    }, { threshold: opts.threshold != null ? opts.threshold : 0.25 }) : null;
+
+    function reveal(card) {
+        if (!card || card.dataset.revealed) { return; }
+        card.dataset.revealed = '1';
+        if (reduce) { return; }   // the served state IS the final state; nothing to restore
+        var xp = card.querySelector('.rp-reward-xp__val [data-countup]');
+        if (xp && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(xp, 900); }
+        // The reward-tier bars fill from 0 to their data-fill%.
+        card.querySelectorAll('.rp-tier__bar').forEach(function (w) {
+            var hz = w.querySelector('.pp-horizon');
+            if (!hz) { return; }
+            hz.style.setProperty('--horizon-progress', '0%');
+            void hz.offsetWidth;
+            hz.style.setProperty('--horizon-progress', (w.dataset.fill || '0') + '%');
+        });
+        // The ring's arcs draw around from nothing. `data-dash` is the served length, so this restarts
+        // the CSS transition rather than computing anything.
+        card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {
+            if (!seg.dataset.dash) { return; }
+            seg.style.strokeDasharray = '0 100';
+            void seg.getBoundingClientRect();
+            seg.style.strokeDasharray = seg.dataset.dash + ' 100';
+        });
+        card.querySelectorAll(jobSel).forEach(function (cell, i) {
+            setTimeout(function () {
+                cell.classList.remove('rp-ignite'); void cell.offsetWidth; cell.classList.add('rp-ignite');
+            }, 120 + i * 90);
+        });
+    }
+
+    return {
+        reveal: reveal,
+        observe: function (nodes) {
+            if (!io) { return; }
+            Array.prototype.forEach.call(nodes, function (c) {
+                if (c && c.dataset && !c.dataset.revObs) { c.dataset.revObs = '1'; io.observe(c); }
+            });
+        },
+    };
+}
+
+/**
+ * staggerCards -- the entrance rise for a BATCH of contract cards (first paint, an appended page, a tab
+ * opening). Distinct from `cardReveal`, which animates a card's figures as it scrolls past: this is the
+ * card itself arriving.
+ *
+ * The delay is capped so a 24-card page does not take a second to finish, and the class is stripped on
+ * `animationend` so a later re-run starts clean rather than being ignored as already-applied.
+ *
+ * @param {NodeList|Array} cards
+ * @param {Object} [opts]
+ * @param {number} [opts.step=40]  per-card delay step (ms)
+ * @param {number} [opts.cap=400]  maximum delay (ms)
+ */
+function staggerCards(cards, opts) {
+    opts = opts || {};
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    var step = opts.step || 40;
+    var cap = opts.cap != null ? opts.cap : 400;
+    Array.prototype.forEach.call(cards || [], function (row, i) {
+        row.classList.remove('rp-row--enter');
+        void row.offsetWidth;
+        row.style.animationDelay = Math.min(i * step, cap) + 'ms';
+        row.classList.add('rp-row--enter');
+        row.addEventListener('animationend', function h(e) {
+            if (e.animationName !== 'rpCardIn') { return; }
+            row.classList.remove('rp-row--enter');
+            row.style.animationDelay = '';
+            row.removeEventListener('animationend', h);
+        });
+    });
+}
+
+
 /**
  * coverCarousel -- a contract card's art cycles through its gallery while the pointer is on the card.
  *
@@ -3101,6 +3201,8 @@ window.PlatPursuit.flipGrid = flipGrid;
 window.PlatPursuit.progressiveArt = progressiveArt;
 window.PlatPursuit.ringHoverLink = ringHoverLink;
 window.PlatPursuit.coverCarousel = coverCarousel;
+window.PlatPursuit.cardReveal = cardReveal;
+window.PlatPursuit.staggerCards = staggerCards;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;

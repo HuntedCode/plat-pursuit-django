@@ -231,6 +231,29 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         // markup-without-behaviour omission as the cover skeleton above, found the same way.
         if (PlatPursuit.coverCarousel) { PlatPursuit.coverCarousel(grid); }
 
+        // The scroll-in reveal: each card's XP counts up, its tier bars fill from zero, its ring draws
+        // around and its job tiles ignite as it comes into view. Shared with Career, whose 25-cell map
+        // is the only difference -- hence the selector.
+        var revealer = PlatPursuit.cardReveal
+            ? PlatPursuit.cardReveal({ jobSelector: '.rp-jobtile' }) : null;
+        if (revealer) { revealer.observe(grid.querySelectorAll('.rp-row')); }
+
+        // The entrance rise, ONCE. Career replays it on every return to its Contracts tab; this page has
+        // two tabs a reader flips between, and re-staggering 24 cards each time you come back is the
+        // busyness the tab-flash fix just removed. So: on load if the panel is showing, else on the first
+        // activation of the tab -- which is what "on load" means for a panel that starts hidden.
+        var staggered = false;
+        function staggerOnce() {
+            if (staggered || !PlatPursuit.staggerCards) { return; }
+            staggered = true;
+            PlatPursuit.staggerCards(grid.querySelectorAll('.rp-row'));
+        }
+        var contractsPanel = document.getElementById('jobd-view-contracts');
+        if (contractsPanel && !contractsPanel.hidden) { staggerOnce(); }
+        else if (contractsPanel) {
+            document.addEventListener('pp:jobd-contracts-shown', staggerOnce);
+        }
+
         // Hovering a job pill lights its arc in that card's split ring, and hovering an arc lights its
         // pill -- the shared `ringHoverLink`, the same one Career runs over its 25-cell map. Delegated
         // from the grid, so scroll-appended cards need no re-binding. The item selector differs because
@@ -249,6 +272,9 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
                     PlatPursuit.progressiveArt(n);
                     if (PlatPursuit.coverCarousel) { PlatPursuit.coverCarousel(n); }
                 });
+                // An appended page gets the same entrance and the same scroll-in reveal as the first.
+                if (revealer) { revealer.observe(nodes); }
+                if (PlatPursuit.staggerCards) { PlatPursuit.staggerCards(nodes); }
             },
             // MUST match `CONTRACTS_PER_PAGE`, which is what the endpoint pages by: the scroller derives
             // its next page number from how many cards are already in the grid, so a mismatch here skips
@@ -337,6 +363,10 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'contracts', param: 'tab' }); }
             // LAST: the fetch is the expensive part, so tab state is fully settled before it starts.
             if (name === 'ranks' && shown) { loadRanks(shown); }
+            // Announced so the contracts wiring can play its one-time entrance for a reader who arrived
+            // on `?tab=ranks`. An event rather than a direct call because the two blocks are separate
+            // IIFEs -- the same shape Career's `pp:contracts-shown` uses.
+            if (name === 'contracts' && changed) { document.dispatchEvent(new CustomEvent('pp:jobd-contracts-shown')); }
         }
 
         tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });

@@ -1049,9 +1049,17 @@ function ppCountUp(el, dur) {
     // has to match the CSS transition on `.rp-tile__img--fx`.
     function initCarousel(scope) { PP.coverCarousel(scope, { beat: 1500, fade: 560 }); }
 
+    // The scroll-in reveal (XP count-up, tier bars filling, ring arcs drawing, job cells igniting), on
+    // the shared `cardReveal` since job detail became the second page that wants it.
+    //
+    // RESTORED here in the same change: an earlier extraction spliced this file between two anchors and
+    // took the observer and its `revealCard` body with it, leaving `initReveal` referencing an undeclared
+    // `revealIO`. That threw on every `initCards()` -- so infinite scroll, the entrance stagger and the
+    // `pp:contracts-shown` listener, all of which run AFTER it, silently never started.
+    var cardRevealer = PP.cardReveal ? PP.cardReveal() : null;
     function initReveal(scope) {
-        if (!revealIO) return;
-        scope.querySelectorAll('.rp-row').forEach(function (c) { if (!c.dataset.revObs) { c.dataset.revObs = '1'; revealIO.observe(c); } });
+        if (!cardRevealer) { return; }
+        cardRevealer.observe(scope.querySelectorAll('.rp-row'));
     }
 
     function initCards(scope) {
@@ -1061,18 +1069,8 @@ function ppCountUp(el, dur) {
         initReveal(scope);
     }
 
-    function staggerCards(cards) {   // entrance rise for a batch (chip change / appended page / tab open)
-        if (reduce) return;
-        cards.forEach(function (row, i) {
-            row.classList.remove('rp-row--enter'); void row.offsetWidth;
-            row.style.animationDelay = Math.min(i * 40, 400) + 'ms';
-            row.classList.add('rp-row--enter');
-            row.addEventListener('animationend', function h(e) {
-                if (e.animationName !== 'rpCardIn') return;
-                row.classList.remove('rp-row--enter'); row.style.animationDelay = ''; row.removeEventListener('animationend', h);
-            });
-        });
-    }
+    // The batch entrance rise (chip change / appended page / tab open), on the shared `staggerCards`.
+    function staggerCards(cards) { PP.staggerCards(cards); }
 
     // ---- icon <-> ring link: the shared `ringHoverLink` (utils.js), delegated so it survives
     // streamed-in cards. Extracted here when job detail became the second caller -- same behaviour, and
