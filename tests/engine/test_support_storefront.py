@@ -616,9 +616,9 @@ def test_the_marks_are_actually_drawn(client):
         start = block.index('sup-becomes__stars')
         return block[start:block.index('</span>', start)]
 
-    assert heading_mark('luminary').count('<svg class="sup-star') == 5, 'the top level is not wearing five stars'
-    assert heading_mark('champion').count('<svg class="sup-star') == 3
-    assert heading_mark('friend').count('sup-star is-outline') == 1
+    assert heading_mark('luminary').count('<svg class="pp-supstar') == 5, 'the top level is not wearing five stars'
+    assert heading_mark('champion').count('<svg class="pp-supstar') == 3
+    assert heading_mark('friend').count('pp-supstar is-outline') == 1
     assert heading_mark('ally').count('is-outline') == 0, 'the second level is still an outline'
 
 
@@ -749,4 +749,58 @@ def test_the_legacy_name_treatment_is_not_used_here():
 
     assert 'legendary-title' not in markup
     assert 'pp-supname' in markup
+
+
+def test_the_star_does_not_take_the_level_colour():
+    """A DELIBERATE SPLIT, and one that looks like an oversight to anyone tidying later.
+
+        the star says you support        the name's colour says at what level
+
+    The star was briefly the same hue as the name, which made the whole mark read as one flat block
+    of colour. Making the two complementary was considered and rejected: complements are maximum
+    contrast, they vibrate, and this sits beside earned rank chrome on leaderboards -- flair must
+    never outshine earned status, and the design system says pull back past four hues on a surface.
+
+    So `.pp-supstar` must never reference `--sup-t`. If it does, someone has "fixed" the mismatch and
+    quietly given every level a second hue.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
+
+    star = css[css.index('.pp-supstar {'):]
+    star = star[:star.index('.pp-supstar.is-outline')]
+    assert '--sup-t' not in star, 'the star has taken the level hue; it is meant to be constant'
+    assert '--pp-supstar-c' in star
+
+    # ...and the NAME still carries the level, or the split has collapsed the other way.
+    name = css[css.index('.pp-supname {'):]
+    assert '--sup-t' in name[:name.index('}')]
+
+
+def test_the_star_is_not_a_warm_metal():
+    """Anything golden reads as a trophy grade on this site -- the same collision that drove the
+    level names off bronze/silver/gold. The constant is a COOL off-white: blue channel highest."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
+
+    hex_value = re.search(r'--pp-supstar-c:\s*#([0-9a-fA-F]{6})', css).group(1)
+    r, g, b = (int(hex_value[i:i + 2], 16) for i in (0, 2, 4))
+    assert b >= r, f'#{hex_value} is warmer than it is cool, and will read as gold'
+    assert min(r, g, b) > 200, f'#{hex_value} is not pale enough to sit against six different hues'
+
+
+def test_the_mark_is_not_defined_in_the_storefront_stylesheet():
+    """The star and the name are site-wide primitives headed for leaderboards, comments and the
+    hunters wall. Defining either in `support.css` would make every one of those surfaces depend on
+    the storefront page's stylesheet to draw a username."""
+    root = pathlib.Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+    page = (root / 'support.css').read_text(encoding='utf-8')
+
+    # A DEFINITION is forbidden; a scoped size override is not. `.sup-becomes__stars .pp-supstar`
+    # saying "in this container the mark is 13px" is a page concern and belongs here. An unscoped
+    # `.pp-supstar { ... }` would be the page owning the primitive, which is the thing to prevent.
+    for cls in ('.pp-supstar', '.pp-supname'):
+        assert not re.search(r'^' + re.escape(cls) + r'\s*\{', page, re.M), (
+            f'{cls} is DEFINED in the page stylesheet; it belongs in components/supporter.css'
+        )
 

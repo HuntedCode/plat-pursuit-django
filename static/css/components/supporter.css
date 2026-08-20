@@ -86,3 +86,36 @@
 /* Offsets a name against its neighbours so a column of them never moves in unison, which is the one
    thing that would turn this back into a pulse. Set per row where the surface can afford it. */
 .pp-supname[style*="--sup-delay"] { animation-delay: var(--sup-delay); }
+
+/* ------------------------------------------------------------------------------ the star ---- */
+/* ONE SHAPE, ONE COLOUR, a changing count. The name carries the level's hue; the star deliberately
+   does NOT, and that split is the point:
+
+       the star says you support        the colour says at what level
+
+   It was briefly the same hue as the name, which made the whole mark read as one flat block of
+   colour. Making them complementary was considered and rejected: complements are maximum contrast,
+   they vibrate, and this sits beside earned rank chrome on leaderboards -- `visual-identity.md` is
+   explicit that flair must never outshine earned status, and the design system says to pull back
+   once a surface lights up four or more hues. A constant pale star gives the two-tone reading with
+   none of that, and needs no second palette kept in tune with the first.
+
+   Cool off-white rather than warm: anything golden would read as a trophy grade on this site, which
+   is the same collision that drove the level names off bronze/silver/gold in the first place. */
+.pp-supstar {
+    --pp-supstar-c: #dde5f4;
+    width: 11px;
+    height: 11px;
+    flex: none;
+    fill: var(--pp-supstar-c);
+    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--pp-supstar-c) 45%, transparent));
+}
+
+/* The entry level, and the only outline: it reads as the start of something rather than a lesser
+   version of it. */
+.pp-supstar.is-outline {
+    fill: none;
+    stroke: var(--pp-supstar-c);
+    stroke-width: 2;
+    filter: none;
+}

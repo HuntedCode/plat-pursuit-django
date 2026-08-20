@@ -292,30 +292,12 @@
 
 .sup-box[data-cycle="yearly"] .sup-buy__saving { display: block; }
 
-/* ------------------------------------------------------------------------------ the mark ---- */
-/* One shape at every level, repeated. Colour comes from `--sup-t`, set per level on the ancestor,
-   so the partial that draws these never needs to know which level it is. */
+/* The mark's containers. The mark itself lives in `components/supporter.css` -- it is site-wide and
+   leaderboards must not end up depending on the storefront's stylesheet to draw a username. */
 .sup-stars,
 .sup-becomes__stars { display: inline-flex; align-items: center; gap: 1px; }
 
-.sup-star {
-    width: 11px;
-    height: 11px;
-    flex: none;
-    fill: var(--sup-t);
-    filter: drop-shadow(0 0 5px color-mix(in oklab, var(--sup-t) 55%, transparent));
-}
-
-/* The entry level, and the only outline: it reads as the start of something rather than a lesser
-   version of it. */
-.sup-star.is-outline {
-    fill: none;
-    stroke: var(--sup-t);
-    stroke-width: 2;
-    filter: none;
-}
-
-.sup-becomes__stars .sup-star { width: 13px; height: 13px; }
+.sup-becomes__stars .pp-supstar { width: 13px; height: 13px; }
 
 /* --------------------------------------------------------------------- what you become ---- */
 /* All six ship; the checked amount reveals its own. Pure CSS, no JS involved. */
