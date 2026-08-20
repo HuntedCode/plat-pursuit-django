@@ -491,7 +491,7 @@ def test_placeholder_buttons_cannot_be_pressed(client):
     body = _flat(client)
 
     assert 'disabled aria-disabled="true"' in body, 'placeholder buttons are pressable'
-    assert 'not live yet' in body, 'nothing tells the reader why they cannot press'
+    assert 'Not live yet' in body, 'nothing tells the reader why they cannot press'
 
 
 def test_placeholders_can_never_reach_live_stripe(client, settings):
@@ -508,7 +508,7 @@ def test_placeholders_can_never_reach_live_stripe(client, settings):
     body = _flat(client)
 
     assert 'disabled aria-disabled="true"' not in body, 'DEAD BUY BUTTONS IN LIVE MODE'
-    assert 'not live yet' not in body
+    assert 'Not live yet' not in body
     assert 'briefly unavailable' in body, 'live mode is offering something with no price behind it'
     # Only the ask degrades. The rest of the page is unaffected.
     assert 'always will be' in body
@@ -564,3 +564,52 @@ def test_yearly_is_ten_months_at_every_level():
         assert tier['yearly'] == tier['monthly'] * 10, (
             f"{tier['slug']}: yearly is not the promised two months free"
         )
+
+
+def test_every_level_can_actually_be_revealed(client):
+    """The amount grid is CSS-only: picking an amount reveals its level through `:has(:checked)`.
+
+    That makes a new level in `SUPPORT_TIERS` silently half-broken -- its button renders and
+    highlights, but the block naming what you become never appears, because the reveal rule lives in
+    CSS and nobody remembered to add it. Exactly the dead-hook class this codebase keeps getting bitten
+    by (dangling keyframes, `data-*` attributes nothing reads).
+
+    Asserted against the BUILT stylesheet, not the source, so it also catches the rule being written
+    and then dropped by lightningcss.
+    """
+    from users.constants import SUPPORT_TIERS
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8', errors='ignore')
+
+    for tier in SUPPORT_TIERS:
+        slug = tier['slug']
+        # lightningcss strips the quotes from attribute selectors, so match unquoted.
+        assert f'sup-becomes[data-for={slug}]' in css, (
+            f'{slug} has no reveal rule: its amount is pickable but names nothing'
+        )
+        assert f'input[value={slug}]:checked' in css, f'{slug} never registers as selected'
+        assert f'sup-amt[data-tier={slug}]' in css, f'{slug} has no colour of its own'
+
+
+def test_the_grid_opens_on_a_middle_amount(client):
+    """Defaulting to the top reads as grabby and defaulting to the bottom anchors low, so the
+    preselected amount is the second rung. Also load-bearing mechanically: with no radio checked,
+    the CSS reveals no level block at all and the box opens looking broken."""
+    from users.constants import SUPPORT_TIERS
+
+    body = _flat(client)
+    checked = [t for t in SUPPORT_TIERS if f'value="{t["slug"]}" class="sr-only" checked' in body]
+
+    assert len(checked) == 1, f'{len(checked)} amounts are preselected, expected exactly one'
+    assert checked[0]['slug'] == SUPPORT_TIERS[1]['slug']
+
+
+def test_the_purchase_box_needs_no_javascript(client):
+    """Both the cycle switch and the amount grid are real radios driving `:has()` rules, so the box
+    works with JS off. The script on the page only adds the `is-active` class the shared `.pp-switch`
+    look keys on -- if the markup ever moves to buttons, this stops being true silently."""
+    body = _flat(client)
+
+    assert body.count('type="radio" name="sup-amt"') == 6, 'the amounts are not radios any more'
+    assert 'type="radio" name="sup-cycle"' in body, 'the cycle switch is not radio-backed any more'

@@ -113,19 +113,18 @@
 
 .sup-box[data-cycle="yearly"] .sup-box__saving { display: block; }
 
-/* ------------------------------------------------------------------------- the tier ladder ---- */
-.sup-box__ladder {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 12px;
-}
+/* --------------------------------------------------------------- the amount grid + tier ---- */
+/* AMOUNT FIRST, TIER DERIVED. Six rows each with their own button read as a form; a grid of amounts
+   plus one action reads as a single decision, which is what it is. Borrowed from Blender's
+   Development Fund widget, which solves exactly this problem.
 
-/* Gift has nothing to buy yet, so the ladder steps aside for its note. */
-.sup-box[data-cycle="gift"] .sup-box__ladder,
-.sup-box[data-cycle="gift"] .sup-box__foot,
-.sup-box[data-cycle="gift"] .sup-box__soon { display: none; }
+   All of it is `:has(:checked)` off real radios, so the cycle switch and the amount grid both work
+   with JavaScript off. Nothing here depends on the script at the bottom of the page. */
 
+.sup-buy { display: block; }
+
+/* Gift has nothing to buy yet, so the whole purchase column steps aside for its note. */
+.sup-box[data-cycle="gift"] .sup-buy { display: none; }
 .sup-box__gift { display: none; }
 .sup-box[data-cycle="gift"] .sup-box__gift { display: block; }
 
@@ -141,88 +140,196 @@
 .sup-box__gift p + p { margin-top: 6px; }
 .sup-box__gift b { color: var(--pp-text); }
 
-/* The whole row is the control. Six separate buttons in a column reads as a form; six rows that
-   light up reads as a menu, which is the decision actually being made here. */
-.sup-tier__row {
+/* 3 across, 2 rows. Six amounts, six levels, one to one. */
+.sup-amts {
     display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 12px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    margin-top: 14px;
+    border: 0;
+    padding: 0;
+}
+
+.sup-amt {
+    display: grid;
+    place-items: center;
+    padding: 11px 6px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid var(--pp-border);
     background: rgba(255, 255, 255, 0.02);
-    text-align: left;
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--pp-text-dim);
     cursor: pointer;
     transition: border-color var(--pp-dur-fast) var(--pp-ease),
-                background var(--pp-dur-fast) var(--pp-ease);
+                background var(--pp-dur-fast) var(--pp-ease),
+                color var(--pp-dur-fast) var(--pp-ease);
 }
 
-.sup-tier__row:hover:not(:disabled) {
-    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 55%, var(--pp-border));
-    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 10%, transparent);
-}
+.sup-amt:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--sup-t) 45%, var(--pp-border)); }
 
-.sup-tier__row:active:not(:disabled) { transform: translateY(1px); }
-
-/* Inert while the ladder is design-only. Still legible: this is the shape being reviewed, so it
-   must not be greyed into illegibility, only made obviously unpressable. */
-.sup-tier__row:disabled { cursor: default; opacity: 0.78; }
-
-.sup-tier__pip {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    background: var(--sup-t, var(--pp-primary));
-    box-shadow: 0 0 10px color-mix(in oklab, var(--sup-t, var(--pp-primary)) 55%, transparent);
-}
-
-.sup-tier__name {
-    font-size: 0.85rem;
-    font-weight: 650;
+/* The selected amount carries its own level's hue, so picking a number is visibly picking a level
+   even before the block below names it. */
+.sup-amt:has(input:checked) {
     color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--sup-t) 65%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t) 16%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--sup-t) 30%, transparent),
+                0 4px 16px color-mix(in oklab, var(--sup-t) 18%, transparent);
 }
 
-.sup-tier__price { font-family: var(--pp-font-display), sans-serif; font-weight: 800; }
-.sup-tier__price i { font-style: normal; font-size: 0.68em; font-weight: 600; color: var(--pp-text-mute); }
-.sup-tier__price b { font-size: 1.05rem; color: var(--pp-text); }
+/* Keyboard focus has to be visible on a label wrapping an `sr-only` radio. */
+.sup-amt:focus-within {
+    outline: 2px solid color-mix(in oklab, var(--sup-t) 70%, transparent);
+    outline-offset: 2px;
+}
 
-/* One face at a time, driven by the switch. Both are in the markup so swapping is a state change
-   rather than a round trip. */
-.sup-tier__y { display: none; }
-.sup-box[data-cycle="yearly"] .sup-tier__m { display: none; }
-.sup-box[data-cycle="yearly"] .sup-tier__y { display: inline; }
+/* One face at a time. Both ship in the markup so the switch is a state change, not a round trip. */
+.sup-amt__y { display: none; }
+.sup-box[data-cycle="yearly"] .sup-amt__m { display: none; }
+.sup-box[data-cycle="yearly"] .sup-amt__y { display: block; }
 
-/* THE TIER PALETTE, kept deliberately clear of the trophy metals.
-   `bronze` / `silver` / `gold` / `platinum` already mean PSN trophy grades and badge medallion
-   metals here, with their own colours (`.pgl__rung--bronze` = #cf9160 and friends). Reusing those
-   hues for money tiers would make a paid pip read as an earned grade, which the flair guardrail
-   forbids -- flair is a SEPARATE visual language, never a better one. These are cool and synthetic
-   on purpose, so nothing on this ladder can be mistaken for something a hunter earned.
-   (The tier NAMES are still unsettled for the same reason; see users/constants.py.) */
-.sup-tier[data-tier="bronze"]   { --sup-t: #6f8ea8; }
-.sup-tier[data-tier="silver"]   { --sup-t: #6fa8a0; }
-.sup-tier[data-tier="gold"]     { --sup-t: #6f9fd8; }
-.sup-tier[data-tier="platinum"] { --sup-t: #8b8fe0; }
-.sup-tier[data-tier="titanium"] { --sup-t: #b07fe0; }
-.sup-tier[data-tier="diamond"]  { --sup-t: #d97fc4; }
-
-.sup-box__foot {
-    margin-top: 12px;
-    font-size: 0.74rem;
-    line-height: 1.55;
+.sup-buy__saving {
+    margin-top: 9px;
+    font-size: 0.72rem;
     color: var(--pp-text-mute);
+    display: none;
 }
+
+.sup-box[data-cycle="yearly"] .sup-buy__saving { display: block; }
+
+/* --------------------------------------------------------------------- what you become ---- */
+/* All six ship; the checked amount reveals its own. Pure CSS, no JS involved. */
+.sup-becomes { display: none; }
+
+.sup-box:has(.sup-amt input[value="bronze"]:checked)   .sup-becomes[data-for="bronze"],
+.sup-box:has(.sup-amt input[value="silver"]:checked)   .sup-becomes[data-for="silver"],
+.sup-box:has(.sup-amt input[value="gold"]:checked)     .sup-becomes[data-for="gold"],
+.sup-box:has(.sup-amt input[value="platinum"]:checked) .sup-becomes[data-for="platinum"],
+.sup-box:has(.sup-amt input[value="titanium"]:checked) .sup-becomes[data-for="titanium"],
+.sup-box:has(.sup-amt input[value="diamond"]:checked)  .sup-becomes[data-for="diamond"] {
+    display: block;
+}
+
+.sup-becomes { margin-top: 16px; }
+
+.sup-becomes__h {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--pp-text-dim);
+}
+
+.sup-becomes__h b { color: var(--sup-t); font-weight: 800; }
+
+.sup-becomes__body {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+/* Stands in for the supporter mark until the real one is drawn. Reads as an object rather than a
+   bullet: a facetted pip carrying the level's own hue. */
+.sup-becomes__pip {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background:
+        linear-gradient(145deg,
+            color-mix(in oklab, var(--sup-t) 92%, white) 0%,
+            var(--sup-t) 45%,
+            color-mix(in oklab, var(--sup-t) 70%, black) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
+                0 4px 14px color-mix(in oklab, var(--sup-t) 45%, transparent);
+}
+
+.sup-becomes__list { display: flex; flex-direction: column; gap: 4px; }
+
+.sup-becomes__list li {
+    position: relative;
+    padding-left: 18px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+}
+
+.sup-becomes__list li::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 0.42em;
+    width: 8px;
+    height: 4px;
+    border-left: 2px solid var(--sup-t);
+    border-bottom: 2px solid var(--sup-t);
+    transform: rotate(-45deg);
+}
+
+/* ------------------------------------------------------------------------------ the CTA ---- */
+.sup-buy__go {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--sup-t) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t) 20%, transparent);
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: var(--pp-text);
+    cursor: pointer;
+    transition: background var(--pp-dur-fast) var(--pp-ease),
+                border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-buy__go:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--sup-t) 30%, transparent);
+    border-color: color-mix(in oklab, var(--sup-t) 75%, var(--pp-border));
+}
+
+.sup-buy__go:active:not(:disabled) { transform: translateY(1px); }
+
+/* Inert while the ladder is design-only. Still legible: this is the shape under review, so it must
+   be obviously unpressable without being greyed into illegibility. */
+.sup-buy__go:disabled { cursor: default; opacity: 0.6; }
+
+.sup-buy__go-y { display: none; }
+.sup-box[data-cycle="yearly"] .sup-buy__go-m { display: none; }
+.sup-box[data-cycle="yearly"] .sup-buy__go-y { display: inline; }
 
 .sup-box__soon {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border-radius: var(--pp-radius-sm);
-    border: 1px dashed color-mix(in oklab, var(--pp-warning) 40%, var(--pp-border));
-    font-size: 0.72rem;
+    margin-top: 9px;
+    text-align: center;
+    font-size: 0.71rem;
     color: var(--pp-warning);
 }
+
+/* THE LEVEL PALETTE, kept deliberately clear of the trophy metals.
+   `bronze` / `silver` / `gold` / `platinum` already mean PSN trophy grades and badge medallion
+   metals here, with their own colours (`.pgl__rung--bronze` = #cf9160 and friends). Reusing those
+   hues for money levels would make a paid pip read as an earned grade, which the flair guardrail
+   forbids -- flair is a SEPARATE visual language, never a better one. These are cool and synthetic
+   on purpose, so nothing on this ladder can be mistaken for something a hunter earned.
+   (The level NAMES are still unsettled for the same reason; see users/constants.py.)
+
+   Set on the box too, so the CTA and the "become a" heading pick up the selected level's hue. */
+.sup-box { --sup-t: #6fa8a0; }
+.sup-box:has(.sup-amt input[value="bronze"]:checked)   { --sup-t: #6f8ea8; }
+.sup-box:has(.sup-amt input[value="silver"]:checked)   { --sup-t: #6fa8a0; }
+.sup-box:has(.sup-amt input[value="gold"]:checked)     { --sup-t: #6f9fd8; }
+.sup-box:has(.sup-amt input[value="platinum"]:checked) { --sup-t: #8b8fe0; }
+.sup-box:has(.sup-amt input[value="titanium"]:checked) { --sup-t: #b07fe0; }
+.sup-box:has(.sup-amt input[value="diamond"]:checked)  { --sup-t: #d97fc4; }
+
+.sup-amt[data-tier="bronze"]   { --sup-t: #6f8ea8; }
+.sup-amt[data-tier="silver"]   { --sup-t: #6fa8a0; }
+.sup-amt[data-tier="gold"]     { --sup-t: #6f9fd8; }
+.sup-amt[data-tier="platinum"] { --sup-t: #8b8fe0; }
+.sup-amt[data-tier="titanium"] { --sup-t: #b07fe0; }
+.sup-amt[data-tier="diamond"]  { --sup-t: #d97fc4; }
 
 /* --------------------------------------------------------------------- member / off states ---- */
 .sup-box--member,

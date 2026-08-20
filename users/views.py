@@ -216,6 +216,9 @@ class SupportStorefrontView(TemplateView):
         ]
         context['tiers'] = ladder
         context['tiers_are_placeholders'] = placeholders
+        # Preselect the second rung. Defaulting to the top reads as grabby; defaulting to the bottom
+        # anchors low and quietly costs the difference. The middle is the honest ask.
+        context['default_tier'] = ladder[1]['slug'] if len(ladder) > 1 else (ladder[0]['slug'] if ladder else None)
         context['pricing_available'] = bool(ladder)
         context['is_live'] = is_live
 

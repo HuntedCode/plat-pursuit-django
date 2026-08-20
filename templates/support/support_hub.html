@@ -81,9 +81,15 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                 </div>
 
                 {% elif pricing_available %}
+                {% comment %} Amount-first, tier-derived. Six rows each carrying their own button
+                read as a form; a grid of amounts plus ONE action reads as a single decision, which
+                is what it actually is. The level you become is revealed under the grid rather than
+                being six things to compare.
+
+                Entirely CSS-driven off `:has(:checked)` -- both the cycle switch and the amount grid
+                are radios, so this works with JavaScript off. The JS below only adds the `is-active`
+                chip class the shared `.pp-switch` look keys on. {% endcomment %}
                 <div class="sup-box" data-sup-box data-cycle="monthly">
-                    {% comment %} Radio-backed so the cycle switch works with no JS at all; the
-                    `:has(input:checked)` variant is the design system's own no-JS pattern. {% endcomment %}
                     <div class="pp-switch sup-box__switch" role="radiogroup" aria-label="Billing cycle">
                         <label class="pp-switch__chip is-active">
                             <input type="radio" name="sup-cycle" value="monthly" class="sr-only" checked>
@@ -99,23 +105,51 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                         </label>
                     </div>
 
-                    <p class="sup-box__saving">Yearly works out at ten months. Two are on us.</p>
+                    <div class="sup-buy">
+                        <fieldset class="sup-amts">
+                            <legend class="sr-only">How much would you like to give?</legend>
+                            {% for tier in tiers %}
+                            <label class="sup-amt" data-tier="{{ tier.slug }}">
+                                <input type="radio" name="sup-amt" value="{{ tier.slug }}" class="sr-only"
+                                       {% if tier.slug == default_tier %}checked{% endif %}>
+                                <span class="sup-amt__m">${{ tier.monthly }}</span>
+                                <span class="sup-amt__y">${{ tier.yearly }}</span>
+                            </label>
+                            {% endfor %}
+                        </fieldset>
 
-                    <ul class="sup-box__ladder">
+                        <p class="sup-buy__saving">Yearly is priced at ten months. Two are on us.</p>
+
+                        {% comment %} One of these is revealed by the selected amount. All six ship in
+                        the markup so the swap is a state change rather than a round trip. {% endcomment %}
                         {% for tier in tiers %}
-                        <li class="sup-tier" data-tier="{{ tier.slug }}">
-                            <button type="button" class="sup-tier__row"
-                                    {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
-                                <span class="sup-tier__pip" aria-hidden="true"></span>
-                                <span class="sup-tier__name">{{ tier.name }}</span>
-                                <span class="sup-tier__price">
-                                    <b class="sup-tier__m">${{ tier.monthly }}<i>/mo</i></b>
-                                    <b class="sup-tier__y">${{ tier.yearly }}<i>/yr</i></b>
-                                </span>
-                            </button>
-                        </li>
+                        <div class="sup-becomes" data-for="{{ tier.slug }}" data-tier="{{ tier.slug }}">
+                            <p class="sup-becomes__h">Become a <b>{{ tier.name }}</b></p>
+                            <div class="sup-becomes__body">
+                                <span class="sup-becomes__pip" aria-hidden="true"></span>
+                                <ul class="sup-becomes__list">
+                                    <li>Every supporter perk, whatever you give</li>
+                                    <li>A {{ tier.name|cut:" Supporter" }} supporter mark beside your name</li>
+                                    {% if tier.recognition == 'named' %}
+                                    <li>Your name on the site</li>
+                                    {% elif tier.recognition == 'linked' %}
+                                    <li>Your name and a link on the site</li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                        </div>
                         {% endfor %}
-                    </ul>
+
+                        <button type="button" class="sup-buy__go"
+                                {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
+                            <span class="sup-buy__go-m">Support monthly</span>
+                            <span class="sup-buy__go-y">Support yearly</span>
+                        </button>
+
+                        {% if tiers_are_placeholders %}
+                        <p class="sup-box__soon">Not live yet. We are building the checkout behind it.</p>
+                        {% endif %}
+                    </div>
 
                     {% comment %} Gift is not built. The tab exists so the shape can be designed
                     against, and it says so plainly rather than pretending. {% endcomment %}
@@ -123,14 +157,6 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                         <p><b>Gifting is on the way.</b></p>
                         <p>You will be able to buy any level for someone else, or hand out a code. We are still working out how it should feel.</p>
                     </div>
-
-                    <p class="sup-box__foot">
-                        Every level gets every perk. What changes is how visible your support is.
-                    </p>
-
-                    {% if tiers_are_placeholders %}
-                    <p class="sup-box__soon">These are not live yet. We are building the checkout behind them.</p>
-                    {% endif %}
                 </div>
 
                 {% else %}
