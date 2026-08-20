@@ -1310,3 +1310,63 @@ def test_a_supporter_with_no_avatar_still_gets_a_tile(client):
     assert 'NoPicture' in wall
     assert 'sup-wall__av' in wall, 'the avatar slot vanished rather than falling back'
 
+
+def test_the_wall_is_grouped_highest_level_first(client):
+    """The GROUPS carry the hierarchy so the tiles do not have to. Ordering matters: a wall that
+    listed Patron above Cornerstone would be quietly telling people the ladder runs the other way."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='TopDog', user__premium_tier='cornerstone')
+    ProfileFactory(display_psn_username='MidOne', user__premium_tier='sponsor')
+    ProfileFactory(display_psn_username='LowOne', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    order = [wall.index('Cornerstone'), wall.index('Sponsor'), wall.index('Patron')]
+    assert order == sorted(order), 'the levels are not in descending order'
+
+
+def test_pre_ladder_supporters_come_last_under_their_own_heading(client):
+    """They hold a legacy tier, so there is no honest level to file them under. Last, named, and NOT
+    folded into the bottom rung -- which would claim they chose a level they never saw."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='OldTimer', user__premium_tier='premium_yearly')
+    ProfileFactory(display_psn_username='NewPatron', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert wall.index('Patron') < wall.index('OldTimer'), 'legacy supporters are not last'
+    assert 'OldTimer' in wall and 'NewPatron' in wall
+
+
+def test_nobody_appears_in_two_groups(client):
+    """The grouping pops from a bucket rather than filtering per level. A filter-per-level shape
+    would list anyone whose tier matched more than one predicate twice, and a duplicate on a wall of
+    names is the kind of thing a supporter notices and nobody else does."""
+    from tests.factories import ProfileFactory
+
+    for slug in ('patron', 'sponsor', 'benefactor', 'cornerstone', 'premium_monthly'):
+        ProfileFactory(display_psn_username=f'One{slug[:6].title()}', user__premium_tier=slug)
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert wall.count('sup-wall__one') == 5, 'somebody is listed more than once'
+
+
+def test_each_group_counts_its_own_people(client):
+    """The count beside a level is context, not decoration -- if it disagrees with the tiles beneath
+    it, the whole band stops being believable."""
+    from tests.factories import ProfileFactory
+
+    for i in range(3):
+        ProfileFactory(display_psn_username=f'Patron{i}', user__premium_tier='patron')
+    ProfileFactory(display_psn_username='Solo', user__premium_tier='cornerstone')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    patron = wall[wall.index('Patron'):]
+    patron = patron[:patron.index('</ul>')]
+    assert '>3<' in patron, 'the Patron group does not say it has three people'
+    assert patron.count('sup-wall__one') == 3
+

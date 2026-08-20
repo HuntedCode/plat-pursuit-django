@@ -374,9 +374,8 @@ class SupportStorefrontView(TemplateView):
             + list(ACTIVE_PREMIUM_TIERS)
         )
 
-        # Highest level first, then alphabetical. `Lower()` because a raw sort puts every lowercase
-        # name after every uppercase one, which reads as two lists stapled together.
-        rank = {slug: i for i, slug in enumerate(reversed(list(by_slug)))}
+        # `Lower()` because a raw sort puts every lowercase name after every uppercase one, which
+        # reads as two lists stapled together rather than one alphabetical run.
         rows = (
             Profile.objects
             .filter(show_on_supporter_wall=True, user__premium_tier__in=eligible)
@@ -385,17 +384,31 @@ class SupportStorefrontView(TemplateView):
             .order_by(Lower('psn_username'))[:self.WALL_CAP]
         )
 
-        wall = [
-            {
+        # GROUPED BY LEVEL, highest first, with the pre-ladder supporters last. The cap is applied
+        # to the QUERY above rather than per group, so a very large top group cannot starve the rest
+        # -- everyone in the capped set is placed, and no group is silently truncated on its own.
+        buckets = {}
+        for r in rows:
+            buckets.setdefault(r.user.premium_tier, []).append({
                 'name': r.display_psn_username or r.psn_username,
                 'avatar': r.avatar_url,
-                'tier': by_slug.get(r.user.premium_tier),
-                'rank': rank.get(r.user.premium_tier, -1),
-            }
-            for r in rows
-        ]
-        wall.sort(key=lambda w: (-w['rank'], w['name'].lower()))
-        return wall
+            })
+
+        groups = []
+        for slug in reversed(list(by_slug)):
+            people = buckets.pop(slug, None)
+            if people:
+                groups.append({'tier': by_slug[slug], 'people': people})
+
+        # Whatever is left holds a legacy tier: they subscribed before the levels existed, so there
+        # is no honest level to file them under. They go last, under their own heading, and are
+        # deliberately not styled as a leftover -- they are the people who were here first.
+        legacy = [person for people in buckets.values() for person in people]
+        if legacy:
+            legacy.sort(key=lambda person: person['name'].lower())
+            groups.append({'tier': None, 'people': legacy})
+
+        return groups
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the

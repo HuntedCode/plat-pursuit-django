@@ -333,33 +333,47 @@ substrate, and an earlier version of this page did, which is most of why it read
             <h2 class="sup-sec__h">The people paying for it</h2>
             <p class="sup-sec__p">Everyone here chose to be named. Thank you, genuinely.</p>
 
-            {% comment %} A CROWD, not a ranked list. The tiles are all one size and nothing is
-            numbered or podium'd -- the level rides the avatar's ring and the star mark, so the
-            hierarchy is legible without the wall reading as a scoreboard of who paid most.
+            {% comment %} Split by level, highest first, with the pre-ladder supporters last.
 
-            The names are NOT wearing `.pp-supname` here, deliberately. It is a continuous animation,
-            and running two hundred of them at once is exactly the wall-of-pulsing-names this design
-            has been avoiding since the sheen. The treatment belongs where a supporter appears
-            individually -- a leaderboard row, a comment -- not two hundred at a time. {% endcomment %}
-            <ul class="sup-wall" data-sup-reveal>
-                {% for person in wall %}
-                <li class="sup-wall__one{% if not person.tier %} is-legacy{% endif %}"
-                    style="--i: {{ forloop.counter0 }}{% if person.tier %}; --sup-t: {{ person.tier.colour }}{% endif %}">
-                    <span class="sup-wall__av">
-                        {% include 'partials/_avatar.html' with url=person.avatar alt='' %}
-                    </span>
-                    <span class="sup-wall__who">
-                        <span class="sup-wall__name">{{ person.name }}</span>
-                        {% if person.tier %}
-                        <span class="sup-wall__lvl">
-                            <span class="sup-wall__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>
-                            {{ person.tier.name }}
-                        </span>
+            Within a group every tile is identical -- same size, no numbering, no podium. The GROUPS
+            carry the hierarchy; the people inside one do not rank against each other, which is what
+            keeps this a thank-you rather than a scoreboard of who paid most.
+
+            The names are NOT wearing `.pp-supname`, deliberately. It is a continuous animation and
+            running two hundred at once is exactly the wall of pulsing names this treatment has been
+            avoiding since it was a sheen. It belongs where a supporter appears individually -- a
+            leaderboard row, a comment -- not two hundred at a time. {% endcomment %}
+            <div class="sup-walls">
+                {% for group in wall %}
+                {% comment %} A div rather than a nested <section>: the outer section already owns
+                the region, the h3s give the groups their outline, and nesting sections inside one
+                makes every "slice to the closing tag" -- in tests, in anything -- silently return
+                the first group instead of the wall. {% endcomment %}
+                <div class="sup-wallgrp{% if not group.tier %} is-legacy{% endif %}"
+                     {% if group.tier %}style="--sup-t: {{ group.tier.colour }}"{% endif %}>
+                    <h3 class="sup-wallgrp__k">
+                        {% if group.tier %}
+                        <span class="sup-wall__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=group.tier %}</span>
+                        {{ group.tier.name }}
+                        {% else %}
+                        Supporters
                         {% endif %}
-                    </span>
-                </li>
+                        <span class="sup-wallgrp__n">{{ group.people|length }}</span>
+                    </h3>
+
+                    <ul class="sup-wall">
+                        {% for person in group.people %}
+                        <li class="sup-wall__one" style="--i: {{ forloop.counter0 }}">
+                            <span class="sup-wall__av">
+                                {% include 'partials/_avatar.html' with url=person.avatar alt='' %}
+                            </span>
+                            <span class="sup-wall__name">{{ person.name }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
                 {% endfor %}
-            </ul>
+            </div>
         </div>
     </section>
     {% endif %}
