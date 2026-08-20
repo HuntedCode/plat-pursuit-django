@@ -1,75 +1,278 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load humanize %}
 {% block title %}Support{% endblock %}
 
 {% comment %}
-The Support hub landing (IA phase 2): the always-on badge-art fundraiser + a placeholder for the
-membership store (built in the Premium v1 lane). Public -- anyone can support. `support_fundraiser`
-(or None) comes from SupportHubView via fundraiser.models.get_active_fundraiser.
+The Support landing IS the membership storefront -- one uninterrupted pitch, not a table of contents
+pointing at one. Served by users.views.SupportStorefrontView, which also answers this page's checkout
+POST (the form carries no action, so handler and form must share a URL).
+
+Order is load-bearing, per premium-proposal.md "Includes is not the same as sells": what the page
+SELLS (the reason, the proof, the ask) is up top; what a membership INCLUDES sits low, as a
+thank-you rather than the argument. Quantity perks are the most transactional thing here, so they
+must not be the first thing read.
+
+Public. Three viewer states, three shapes: anonymous (sign-in CTA on the options), signed-in
+non-member (the real buttons), member (a thank-you where the options were).
 {% endcomment %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto">
+<div class="sup">
 
-    {# Page header #}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-5 md:p-7 text-center">
-            <h1 class="text-2xl md:text-3xl font-bold">Support Platinum Pursuit</h1>
-            <p class="text-sm md:text-base text-base-content/70 mt-2 max-w-2xl mx-auto">
-                PlatPursuit is built by a small, passionate team and kept free for every trophy hunter.
-                Here&rsquo;s how you can help keep the servers running and the badges flowing.
-            </p>
+    {% comment %} ---------------------------------------------------------------- the ask ---- {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Support Platinum Pursuit</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        Built by trophy hunters, for trophy hunters. Kept free for all of them.
+                    </p>
+                </div>
+            </div>
+
+            <div class="sup-thesis">
+                <p>
+                    We are a small team of trophy hunters who wanted better tools, so we built them.
+                    PlatPursuit is not investor-backed and it is not trying to squeeze the community
+                    it was made for. We just want to keep it running, and to build the bigger things
+                    we have planned.
+                </p>
+                <p>
+                    So there are no ads, and nothing on the site is locked behind a membership.
+                    Members are people who chip in because they want this to keep going.
+                    <strong>That is the whole pitch.</strong>
+                </p>
+            </div>
+
+            {% comment %} The proof, not the claim. "We are not in it for the money" is something
+            anyone can say; these are four facts that cannot be faked. Two are counted from real
+            rows, two are constants that state a decision we already made and cannot quietly walk
+            back while this page says otherwise. {% endcomment %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Raised so far</div>
+                    <div class="scard__value pp-tally text-primary" data-countup="{{ proof.raised }}">${{ proof.raised|intcomma }}</div>
+                    <div class="scard__sub">by hunters, for badge art</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Artworks funded</div>
+                    <div class="scard__value pp-tally" data-countup="{{ proof.artworks }}">{{ proof.artworks|intcomma }}</div>
+                    <div class="scard__sub">each credits its donor</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Ads on the site</div>
+                    <div class="scard__value pp-tally">0</div>
+                    <div class="scard__sub">removed for good</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Features locked</div>
+                    <div class="scard__value pp-tally">0</div>
+                    <div class="scard__sub">and that is the plan</div>
+                </div>
+            </div>
         </div>
     </section>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {% comment %} ------------------------------------------------------------ the options ---- {% endcomment %}
+    {% comment %} FREE content below the chrome card, per the stacked-page rule. {% endcomment %}
 
-        {# Fundraiser #}
-        <section class="card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral">
-            <div class="card-body p-5 flex flex-col">
-                <div class="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-primary font-semibold mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                    </svg>
-                    Fundraiser
+    {% if viewer_is_member %}
+    <section class="sup-member">
+        <svg class="sup-member__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+        </svg>
+        <h2>You already back this. Thank you.</h2>
+        <p>
+            Genuinely. The servers, the IGDB bills and the badge art all run on people doing what
+            you did. You are a <strong>PlatPursuit Supporter</strong>, and that sticks.
+        </p>
+        <a href="{% url 'subscription_management' %}" class="sup-member__link">Manage your membership</a>
+    </section>
+    {% else %}
+
+    <section class="sup-opts" aria-labelledby="sup-opts-h">
+        <div class="sup-opts__head">
+            <h2 id="sup-opts-h">Three ways in. They all get the same thing.</h2>
+            <p>
+                There is no better tier and no feature ladder here. The only difference is how much
+                you give and how often. Pick whichever sits right with you.
+            </p>
+        </div>
+
+        {% if pricing_available %}
+        <form method="post" class="sup-form" data-sup-form>
+            {% csrf_token %}
+            {% comment %} The server reads this hidden input, NOT the visible radios below. It is the
+            real channel; the radios are the affordance. {% endcomment %}
+            <input type="hidden" name="provider" id="sup-provider" value="stripe">
+
+            <div class="sup-tiers">
+                {% for tier in tiers %}
+                {% comment %} Deliberately NO "most popular" ribbon on any card. Every pricing page
+                has one; ours cannot, because designating a best option would contradict the
+                sentence directly above these cards. The absence is the message. {% endcomment %}
+                <div class="sup-tier">
+                    <div class="sup-tier__name">{{ tier.name }}</div>
+                    <div class="sup-tier__price">
+                        <span class="pp-tally sup-tier__amt">${{ tier.price|floatformat:"-2" }}</span>
+                        {% if tier.interval %}<span class="sup-tier__per">/ {{ tier.interval }}</span>{% endif %}
+                    </div>
+                    {% if user.is_authenticated %}
+                    <button type="submit" name="tier" value="{{ tier.slug }}" class="sup-tier__go">
+                        {{ tier.cta }}
+                    </button>
+                    {% else %}
+                    <a href="{% url 'account_login' %}?next={{ request.path }}" class="sup-tier__go sup-tier__go--anon">
+                        Sign in to continue
+                    </a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if paypal_available and user.is_authenticated %}
+            <div class="sup-prov" role="radiogroup" aria-label="Payment method">
+                <label class="sup-prov__opt is-on" data-provider="stripe">
+                    <input type="radio" name="provider_choice" value="stripe" class="sr-only" checked>
+                    <span>Card, bank, Amazon Pay or Cash App</span>
+                </label>
+                <label class="sup-prov__opt" data-provider="paypal">
+                    <input type="radio" name="provider_choice" value="paypal" class="sr-only">
+                    <span>PayPal</span>
+                </label>
+            </div>
+            {% endif %}
+
+            {% if not is_live %}
+            <p class="sup-testmode">Test mode is active. No real payment will be taken.</p>
+            {% endif %}
+        </form>
+        {% else %}
+        {% comment %} Pricing degrades on its own; it never takes the page down with it. A missing
+        Stripe Price used to redirect this entire page to the homepage. {% endcomment %}
+        <div class="sup-nopricing">
+            <p>Memberships are briefly unavailable while we sort something out on our end.</p>
+            <p>The fundraiser below still works, and nothing on the site has changed.</p>
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% comment %} ---------------------------------------------------------- the fundraiser ---- {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-primary/20 shadow-lg shadow-neutral mt-4 mb-3">
+        <div class="card-body p-4 md:p-5">
+            <div class="sup-fund">
+                <div class="min-w-0">
+                    <div class="sup-fund__eyebrow">Badge art fundraiser</div>
+                    {% if support_fundraiser %}
+                    <h2 class="sup-fund__title">{{ support_fundraiser.name }}</h2>
+                    <p class="sup-fund__body">{{ support_fundraiser.banner_text }}</p>
+                    {% else %}
+                    <h2 class="sup-fund__title">Between campaigns</h2>
+                    <p class="sup-fund__body">
+                        The badge art fundraiser runs on and off through the year. Every artwork it
+                        has paid for is still on the site, credited to the hunter who funded it.
+                    </p>
+                    {% endif %}
                 </div>
                 {% if support_fundraiser %}
-                    <h2 class="text-lg md:text-xl font-bold">{{ support_fundraiser.name }}</h2>
-                    <p class="text-sm text-base-content/70 mt-1.5 flex-1">{{ support_fundraiser.banner_text }}</p>
-                    <a href="{% url 'fundraiser' support_fundraiser.slug %}"
-                       class="btn btn-primary btn-sm md:btn-md mt-4 self-start group">
-                        View the fundraiser
-                        <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span>
-                    </a>
-                {% else %}
-                    <p class="text-sm text-base-content/60 flex-1">
-                        No campaign is running right now &mdash; but the badge-art fundraiser is always
-                        just around the corner. Check back soon.
-                    </p>
+                <a href="{% url 'fundraiser' support_fundraiser.slug %}" class="sup-fund__go">
+                    View the fundraiser
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </a>
                 {% endif %}
             </div>
-        </section>
+        </div>
+    </section>
 
-        {# Membership store (coming soon) #}
-        <section class="card bg-base-200/60 border-2 border-dashed border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body p-5 flex flex-col items-start">
-                <div class="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    Store
-                </div>
-                <h2 class="text-lg md:text-xl font-bold text-base-content/80">Membership</h2>
-                <p class="text-sm text-base-content/60 mt-1.5 flex-1">
-                    A membership to back the site and carry a bit of supporter flair &mdash; positioning,
-                    not a paywall. Coming soon.
-                </p>
-                <span class="mt-4 text-[0.7rem] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md border border-base-content/20 text-base-content/50">
-                    Coming soon
-                </span>
+    {% comment %} ------------------------------------------------------------ what you get ---- {% endcomment %}
+    {% comment %} The dial made literal. Every row fills in BOTH columns, because premium here is a
+    dial and not a door: members get more of a thing everyone already has. A row that could not fill
+    the "Everyone" column would be a wall, and would not belong on this page at all. Rendering it as
+    a comparison rather than a checklist is what keeps that honest -- a checklist can quietly hide
+    the fact that the other column is empty. {% endcomment %}
+    <section class="sup-dial" aria-labelledby="sup-dial-h">
+        <div class="sup-dial__head">
+            <h2 id="sup-dial-h">What a membership actually changes</h2>
+            <p>Not much, on purpose. Nothing here is taken away from anyone who does not pay.</p>
+        </div>
+
+        <div class="sup-dial__grid" role="table">
+            <div class="sup-dial__hrow" role="row">
+                <span role="columnheader"></span>
+                <span role="columnheader">Everyone</span>
+                <span role="columnheader" class="is-mem">Members</span>
             </div>
-        </section>
+            {% for perk in premium_perks %}
+            <div class="sup-dial__row" role="row">
+                <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
+                <span class="sup-dial__free" role="cell">
+                    <span class="sup-dial__k">Everyone</span>{{ perk.everyone }}
+                </span>
+                <span class="sup-dial__mem" role="cell">
+                    <span class="sup-dial__k">Members</span>{{ perk.member }}
+                </span>
+                {% if perk.note %}<span class="sup-dial__note">{{ perk.note }}</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
 
-    </div>
+        <p class="sup-dial__foot">
+            More will land here as we build it, and it will follow the same rule. If you ever see
+            something on PlatPursuit locked behind a payment, we got it wrong.
+        </p>
+    </section>
+
 </div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+(function () {
+    'use strict';
+    var PP = window.PlatPursuit || {};
+
+    PP.onPageReady(function (first) {
+        if (!first) return;
+
+        // Provider selector. The visible radios are the affordance; the hidden `provider` input is
+        // what the server actually reads, so the two must be kept in step here.
+        var provider = document.getElementById('sup-provider');
+        document.querySelectorAll('.sup-prov__opt').forEach(function (opt) {
+            opt.addEventListener('click', function () {
+                document.querySelectorAll('.sup-prov__opt').forEach(function (o) {
+                    o.classList.toggle('is-on', o === opt);
+                });
+                if (provider) provider.value = opt.dataset.provider || 'stripe';
+            });
+        });
+
+        // Double-submit guard. Deliberately does NOT disable the buttons: a disabled submit button
+        // contributes no name/value, which would drop the `tier` the server validates on and fail
+        // every checkout. Blocking the second submit is enough.
+        var form = document.querySelector('[data-sup-form]');
+        if (form) {
+            var sent = false;
+            form.addEventListener('submit', function (e) {
+                if (sent) { e.preventDefault(); return; }
+                sent = true;
+                form.classList.add('is-sending');
+            });
+        }
+
+        // Count the proof figures up. `.pp-tally` cells without a data-countup (the two constant
+        // zeroes) are skipped by the helper's own target lookup, which is what we want -- a zero
+        // counting up to zero is a no-op with extra steps.
+        document.querySelectorAll('.scard .pp-tally[data-countup]').forEach(function (el) {
+            PP.countUp(el);
+        });
+    });
+})();
+</script>
 {% endblock %}

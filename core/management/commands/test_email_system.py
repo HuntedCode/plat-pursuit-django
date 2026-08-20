@@ -434,7 +434,7 @@ class Command(BaseCommand):
         context = {
             'username': 'TestUser',
             'tier_name': 'Premium Monthly',
-            'subscribe_url': f'{settings.SITE_URL}/users/subscribe/',
+            'subscribe_url': f'{settings.SITE_URL}/support/',
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
         }

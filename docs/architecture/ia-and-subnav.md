@@ -85,14 +85,30 @@ redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.
 
 ## Support hub
 
-`/support/` (`core.views.SupportHubView`) is the badge-art fundraiser's permanent home plus a
-placeholder for the future membership store (the Premium-v1 lane). It is **landing-focused: no
-sub-nav items** (the strip stays hidden; the navbar/tab button just highlights). The fundraiser
-(`/fundraiser/<slug>/`) resolves here via the `/fundraiser/` prefix. Two fundraiser lookups in
+`/support/` (`users.views.SupportStorefrontView`) **is** the membership storefront, not a landing
+that links to one: one uninterrupted pitch (story → proof → three options → perks) with the badge-art
+fundraiser alongside it. `/users/subscribe/` 302s in and its template is deleted.
+
+The view lives in `users.views` rather than `core.views` because **it answers this page's checkout
+POST**. The form carries no `action`, so it self-POSTs to whatever URL rendered it; serving the form
+here while the handler stayed at `/users/subscribe/` would mean a redirect on a POST, which browsers
+turn into a GET with the body dropped. Handler and form must share a URL. For the same reason the old
+URL redirects **temporarily** (302): a cached permanent redirect on a payment URL cannot be taken back.
+
+Still **landing-focused: no sub-nav items** (the strip stays hidden; the navbar/tab button just
+highlights). `/support/roadmap/` and `/support/fundraiser/` are planned and will turn the strip on for
+the first time -- note that doing so reverses the reasoning that removed the Leaderboards rail in
+2026-08 ("a rail naming the page you're on is not navigation"), which held because that hub collapsed
+to ONE page. Support having three real destinations is the difference, and this paragraph plus the
+`LEADERBOARDS_HUB` comment block in `hub_subnav.py` should be revised together when it happens.
+
+The fundraiser (`/fundraiser/<slug>/`) resolves here via the `/fundraiser/` prefix. Two fundraiser lookups in
 `fundraiser/models.py`: `get_active_fundraiser()` (banner_active + live, for the site-wide banner)
 vs `get_live_fundraiser()` (live window only — the Support landing shows a live campaign even if
-the banner is toggled off). Both cache a PK for 60s on their own key. "Support" is a placeholder
-name.
+the banner is toggled off). Both cache a PK for 60s on their own key.
+
+The hub keeps the name **Support** (settled 2026-08-19; it was flagged as a placeholder). It covers
+both halves of what lives here, where "Membership" would name only one of them.
 
 ## Sub-nav infrastructure
 

@@ -604,3 +604,31 @@ separate entries whose ordering is implied by their times. `recompute_milestones
 dependency on `recalc_profile_counters` rather than enforcing it -- the same hazard `nightly` was built to
 remove for the badge chain. **Folding them in is a tracked follow-up** (see the FOLLOW-UP block in
 [cron-jobs.md](../../guides/cron-jobs.md)); it was left out here to keep the change to one subsystem.
+
+---
+
+## Storefront moved to `/support/` (2026-08-19)
+
+No migration, no data change. Two things to be aware of on the deploy that ships this, both because
+it is a **live payment page** rather than a display surface.
+
+### Watch the first real checkout, both providers
+
+`/users/subscribe/` no longer serves the form -- it 302s to `/support/`, which now owns both the form
+and its POST handler. That move was mandatory: the form carries no `action` and self-POSTs, so leaving
+the handler behind would have downgraded every checkout to a GET with the body dropped. It is covered
+by tests (`tests/engine/test_support_storefront.py`) but those mock the provider, so **the first live
+Stripe and PayPal checkout after deploy are worth watching**. There had been no automated coverage of
+this path at all before this change, so there is no historical signal to compare against.
+
+`/users/subscribe/success/` deliberately did **not** move: it is baked into the `success_url` /
+`return_url` of every checkout ever created, including subscriptions bought months ago that may still
+redirect through it.
+
+The redirect is **302 on purpose**. Do not "tidy" it into a 301 -- a permanent redirect on a payment
+URL is cached by the browser and cannot be withdrawn if the assumption behind it turns out wrong.
+
+### Nothing else to run
+
+The `support:proof` cache key (5 min TTL, two DB aggregates behind it) populates on first request.
+Perk copy is a Python constant, so it ships with the code.

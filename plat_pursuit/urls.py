@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, SupportHubView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, RoadmapSitemap,
@@ -40,7 +40,7 @@ sitemaps = {
 from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
-from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
+from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView
 from users.subscription_admin_views import SubscriptionAdminView
 from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView
 # Notifications are HIDDEN pending their rebuild (2026-08); every view in `notifications/views.py` is
@@ -71,7 +71,10 @@ urlpatterns = [
     # a `{% url 'community_hub' %}` cannot quietly reappear; this exists for inbound links only.
     path('community/', RedirectView.as_view(
         pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
-    path('support/', SupportHubView.as_view(), name='support_hub'),
+    # The Support landing IS the membership storefront (not a table of contents pointing at one), so
+    # it serves the checkout form and answers its POST. Lives in `users.views` because that is where
+    # the subscription services and the Stripe/PayPal knowledge already are.
+    path('support/', SupportStorefrontView.as_view(), name='support_hub'),
 
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/lucky/', RandomGameView.as_view(), name='random_game'),

@@ -261,7 +261,7 @@ class SubscriptionService:
                     notification_type='subscription_updated',
                     title="Your subscription has ended",
                     message="Your premium subscription has expired. Thank you for your support! You can resubscribe anytime.",
-                    action_url='/users/subscribe/',
+                    action_url='/support/',
                     action_text='Resubscribe',
                     priority='normal',
                     metadata={'previous_tier': original_tier},
@@ -640,7 +640,7 @@ class SubscriptionService:
         context = {
             'username': username,
             'tier_name': tier_name,
-            'subscribe_url': f"{settings.SITE_URL}/users/subscribe/",
+            'subscribe_url': f"{settings.SITE_URL}/support/",
             'site_url': settings.SITE_URL,
             'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }

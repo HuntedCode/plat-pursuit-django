@@ -1,0 +1,442 @@
+/* ============================================================================================
+   Support / membership storefront (`/support/`)
+   --------------------------------------------------------------------------------------------
+   A persuasion surface, which is rare here -- almost every other rebuilt page presents a hunter's
+   own data. So the restraint is deliberate: ONE accent (the cyan primary, already spent on the
+   header rail and the raised figure), everything else neutral. A page asking for money is exactly
+   where a wall of colour reads as a sales pitch rather than an honest ask.
+
+   Nothing here restyles a shared primitive. `.scard`, `.pp-tally` and the header card recipe are
+   used as-is; these classes are only the parts this page alone has.
+   ============================================================================================ */
+
+/* ---------------------------------------------------------------------------- the thesis ---- */
+/* Sits inside the header card-body, so it is a direct child of `.pp-head-cascade` and joins the
+   opening stagger on its own beat rather than needing its own entrance. */
+.sup-thesis {
+    margin-top: 10px;
+    max-width: 62ch;                       /* measure, not container width -- this is real prose */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sup-thesis p {
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--pp-text-dim);
+}
+
+.sup-thesis strong {
+    color: var(--pp-text);
+    font-weight: 650;
+}
+
+@media (min-width: 768px) {
+    .sup-thesis p { font-size: 0.875rem; }
+}
+
+/* ---------------------------------------------------------------------------- the options ---- */
+.sup-opts { margin-top: 4px; }
+
+.sup-opts__head { margin-bottom: 12px; }
+
+.sup-opts__head h2 {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--pp-text);
+    letter-spacing: -0.01em;
+}
+
+.sup-opts__head p {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: var(--pp-text-mute);
+    max-width: 58ch;
+}
+
+@media (min-width: 768px) {
+    .sup-opts__head h2 { font-size: 1.25rem; }
+    .sup-opts__head p { font-size: 0.83rem; }
+}
+
+/* Three equal columns at md+, stacked below. They are equal on purpose: no tier is wider, taller,
+   ringed, or badged, because the copy above them promises there is no better one. */
+.sup-tiers {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+@media (min-width: 768px) {
+    .sup-tiers { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+}
+
+.sup-tier {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: var(--pp-radius-md);
+    border: var(--pp-border-w) solid var(--pp-border);
+    background: var(--pp-bg-1);
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+
+/* Glow, never scale -- a growing card in a 3-wide row shoves its neighbours. */
+.sup-tier:hover {
+    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
+    box-shadow: 0 6px 22px color-mix(in oklab, var(--pp-primary) 12%, transparent);
+}
+
+.sup-tier__name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--pp-text-mute);
+}
+
+.sup-tier__price {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.sup-tier__amt {
+    font-size: 1.7rem;
+    line-height: 1;
+    color: var(--pp-text);
+}
+
+.sup-tier__per {
+    font-size: 0.75rem;
+    color: var(--pp-text-mute);
+}
+
+.sup-tier__go {
+    margin-top: 6px;
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    color: var(--pp-text);
+    font-size: 0.8rem;
+    font-weight: 650;
+    text-align: center;
+    cursor: pointer;
+    transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-tier__go:hover {
+    background: color-mix(in oklab, var(--pp-primary) 22%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-border));
+}
+
+.sup-tier__go:active { transform: translateY(1px); }
+
+/* The anonymous variant is a link, not a button, and reads quieter: it is a step on the way to the
+   decision rather than the decision itself. */
+.sup-tier__go--anon {
+    display: block;
+    background: transparent;
+    border-color: var(--pp-border);
+    color: var(--pp-text-dim);
+    text-decoration: none;
+}
+
+.sup-tier__go--anon:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    color: var(--pp-text);
+}
+
+/* Blocks a second press without disabling the buttons -- a disabled submit contributes no
+   name/value, which would strip the `tier` the server validates on. */
+.sup-form.is-sending .sup-tier__go {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* ------------------------------------------------------------------------ payment method ---- */
+.sup-prov {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.sup-prov__opt {
+    padding: 7px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--pp-text-mute);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-prov__opt:hover { color: var(--pp-text-dim); }
+
+.sup-prov__opt.is-on {
+    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    color: var(--pp-text);
+}
+
+/* Keyboard focus has to be visible on a label wrapping an `sr-only` radio. */
+.sup-prov__opt:focus-within {
+    outline: 2px solid color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    outline-offset: 2px;
+}
+
+.sup-testmode {
+    margin-top: 10px;
+    font-size: 0.7rem;
+    color: var(--pp-warning);
+}
+
+.sup-nopricing {
+    padding: 16px;
+    border-radius: var(--pp-radius-md);
+    border: 1px dashed var(--pp-border);
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--pp-text-mute);
+}
+
+.sup-nopricing p + p { margin-top: 4px; }
+
+/* ------------------------------------------------------------------------- member state ---- */
+.sup-member {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 18px 20px;
+    border-radius: var(--pp-radius-md);
+    border: var(--pp-border-w) solid color-mix(in oklab, var(--pp-accent) 30%, var(--pp-border));
+    /* The one place the amber supporter hue appears, matching `.pp-hcard--supporter` on the hunters
+       wall so the mark means the same thing wherever it shows up. */
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-accent) 7%, transparent) 0%, transparent 46%),
+        var(--pp-bg-1);
+}
+
+.sup-member__ic {
+    width: 22px;
+    height: 22px;
+    color: var(--pp-accent);
+}
+
+.sup-member h2 {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-member p {
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--pp-text-dim);
+    max-width: 58ch;
+}
+
+.sup-member strong { color: var(--pp-accent); font-weight: 700; }
+
+.sup-member__link {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-member__link:hover { color: var(--pp-text); }
+
+/* --------------------------------------------------------------------------- fundraiser ---- */
+.sup-fund {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.sup-fund__eyebrow {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--pp-primary);
+}
+
+.sup-fund__title {
+    margin-top: 3px;
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-fund__body {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--pp-text-dim);
+    max-width: 56ch;
+}
+
+.sup-fund__go {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 8px 14px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    color: var(--pp-text);
+    font-size: 0.78rem;
+    font-weight: 650;
+    transition: background var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-fund__go svg {
+    width: 14px;
+    height: 14px;
+    transition: transform var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-fund__go:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); }
+.sup-fund__go:hover svg { transform: translateX(2px); }
+
+/* ---------------------------------------------------------------------------- the dial ---- */
+/* A comparison, not a checklist. A checklist can quietly hide that the other column is empty;
+   two columns cannot. That is the whole reason for this shape. */
+.sup-dial { margin-top: 18px; }
+
+.sup-dial__head { margin-bottom: 12px; }
+
+.sup-dial__head h2 {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-dial__head p {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    color: var(--pp-text-mute);
+    max-width: 58ch;
+}
+
+@media (min-width: 768px) {
+    .sup-dial__head h2 { font-size: 1.25rem; }
+}
+
+.sup-dial__grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* The column header only makes sense once the row is actually three columns, so it is hidden at
+   the stacked size where each cell labels itself with `.sup-dial__k`. */
+.sup-dial__hrow { display: none; }
+
+.sup-dial__row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+}
+
+.sup-dial__name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--pp-text);
+}
+
+.sup-dial__free,
+.sup-dial__mem {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+}
+
+.sup-dial__mem { color: var(--pp-text); }
+
+/* The inline key that carries the comparison on a phone, where the header row is gone. */
+.sup-dial__k {
+    display: inline-block;
+    min-width: 68px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--pp-text-mute);
+}
+
+.sup-dial__mem .sup-dial__k { color: color-mix(in oklab, var(--pp-accent) 75%, var(--pp-text-mute)); }
+
+.sup-dial__note {
+    margin-top: 2px;
+    font-size: 0.7rem;
+    line-height: 1.5;
+    color: var(--pp-text-mute);
+    font-style: italic;
+    padding-right: 4px;                     /* italic glyphs slant past their box */
+}
+
+@media (min-width: 768px) {
+    .sup-dial__hrow {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr 1.4fr;
+        gap: 14px;
+        padding: 0 14px 2px;
+    }
+
+    .sup-dial__hrow span {
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--pp-text-mute);
+    }
+
+    .sup-dial__hrow .is-mem { color: color-mix(in oklab, var(--pp-accent) 75%, var(--pp-text-mute)); }
+
+    .sup-dial__row {
+        grid-template-columns: 1.1fr 1fr 1.4fr;
+        gap: 14px;
+        align-items: baseline;
+    }
+
+    /* The note spans the full row under the three cells rather than crowding a column. */
+    .sup-dial__note { grid-column: 1 / -1; margin-top: 6px; }
+
+    .sup-dial__k { display: none; }
+}
+
+.sup-dial__foot {
+    margin-top: 12px;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--pp-text-mute);
+    max-width: 62ch;
+}

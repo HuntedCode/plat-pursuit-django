@@ -1,6 +1,8 @@
 # Premium = Membership: Direction
 
-> Status: **DIRECTION** (aligned 2026-06-30, not yet built). Supersedes the earlier "gate flex
+> Status: **DIRECTION** (aligned 2026-06-30). The v1 **storefront is BUILT** as of 2026-08-19 --
+> `/support/`, see the playbook's Support row. The roadmap page, the fundraiser's permanent home
+> and the grant primitive (flat rate / gift codes / comps) are not. Supersedes the earlier "gate flex
 > + depth" draft of this doc. Companion to [data-intelligence.md](../data-intelligence.md) (the
 > flagship roadmap arc -- for everyone, per the amendment below) and
 > [platinum-journey.md](../platinum-journey.md). Billing plumbing

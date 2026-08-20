@@ -44,6 +44,7 @@
 @import "./components/recap-archive.css";
 @import "./components/recap-deck.css";
 @import "./components/recap-stage.css";
+@import "./components/support.css";
 @plugin "daisyui";
 
 @theme {

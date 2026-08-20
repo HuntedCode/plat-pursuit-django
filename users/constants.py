@@ -24,6 +24,65 @@ PREMIUM_TIER_DISPLAY = {
     'supporter': 'Supporter',
 }
 
+# What a membership actually gets you.
+#
+# ONE source of truth, because the two hand-written copies (13 feature cards on the storefront, 11
+# checklist rows on the management page) had already drifted apart -- and worse, SEVEN of the
+# storefront's thirteen advertised perks no longer existed at all: Dashboard Customization and the
+# 9 Premium Modules (dashboard retired), 105+ Site Themes (no premium_theme code remains), Profile
+# Showcases and Profile Customization (/profile-editor/ redirects to /), Unlimited Game Lists
+# (/lists/ redirects to /), and Full Recap History (the gate was deleted from five places -- it is
+# free for everyone now). People were paying against a list that was mostly fiction.
+#
+# THE SHAPE IS THE POINT. Every entry states what EVERYONE gets and what a MEMBER gets, because
+# premium is a dial, not a door (docs/design/rebuild/premium-proposal.md, amended 2026-08-19):
+# nothing is ever gated, members just get more of the same thing. A perk that cannot fill in
+# `everyone` is a wall, and does not belong here.
+#
+# Nothing goes on this list that cannot be pointed at in running code. Current anchors:
+#   sync       -> SyncService.PREFERRED_COOLDOWN (5m) vs STANDARD_COOLDOWN (1h)
+#   discord    -> trophies/services/discord_roles.py, granted off premium_tier
+#   mark       -> `.legendary-title` (comments, leaderboard cells) + `.pp-hcard--supporter` (hunters)
+#   early      -> trophies/mixins.py -> beta_access_required
+PREMIUM_PERKS = [
+    {
+        'slug': 'sync',
+        'name': 'Manual syncing',
+        'everyone': 'Once an hour',
+        'member': 'Every five minutes',
+        'note': 'Automatic background syncing runs for everyone either way.',
+    },
+    {
+        'slug': 'discord',
+        'name': 'Discord',
+        'everyone': 'The server is open to anyone',
+        'member': 'A supporter role, and the room where we work out what gets built next',
+        # Sold as ONE perk on purpose: the say IS the Discord perk, so the dependency on a second
+        # platform is visible before payment rather than discovered after.
+        'note': 'Steering the roadmap happens in conversation there, not as a vote on the site.',
+    },
+    {
+        'slug': 'mark',
+        'name': 'Supporter mark',
+        'everyone': 'Your name, as you earned it',
+        'member': 'A quiet supporter mark beside it, site-wide',
+        # Guardrail: flair is a SEPARATE visual language from earned status, never a better one.
+        'note': 'Deliberately understated. It says you chip in, never that you hunt better.',
+    },
+    {
+        'slug': 'early',
+        'name': 'New things',
+        'everyone': 'When they ship',
+        'member': 'Before they ship, while they can still change',
+    },
+    {
+        'slug': 'credit',
+        'name': 'Credit',
+        'everyone': 'Our thanks',
+        'member': 'A permanent PlatPursuit Supporter credit, kept even if you stop',
+    },
+]
+
 # Stripe Product ID Mappings
 # Maps subscription tiers to their Stripe product IDs for both test and live modes
 STRIPE_PRODUCTS = {

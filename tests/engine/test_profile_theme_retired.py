@@ -72,8 +72,13 @@ def test_the_colour_grid_modal_is_deleted():
 
 
 def test_themes_module_survives_for_the_features_that_still_use_it():
-    """The removal is scoped to the PROFILE theme. Share-card grounds, plat cards, the recap and the
-    subscribe page's preview swatches all still read this module."""
+    """The removal is scoped to the PROFILE theme. Share-card grounds, plat cards and the recap all
+    still read this module.
+
+    The subscribe page's preview swatches USED to be on this list; they went with the storefront
+    rebuild in 2026-08 (the page now sells a membership, not a theme picker). The readers above are
+    real and current -- see api/recap_views.py, core/services/playwright_renderer.py.
+    """
     from trophies.themes import GRADIENT_THEMES
 
     assert GRADIENT_THEMES, 'the theme catalogue was removed along with the profile feature'
@@ -82,10 +87,11 @@ def test_themes_module_survives_for_the_features_that_still_use_it():
 def test_the_settings_page_still_renders_without_its_theme_card(client):
     """It lost a whole card, a form and a POST action; the remaining sections must still stand.
 
-    `/users/subscribe/` is the other page that reads the theme catalogue, and it is deliberately NOT
-    asserted here: it redirects under test because the Stripe Price fixtures do not exist in the test
-    database, which would make this a test of the billing fixtures rather than of the theme removal. Its
-    use of GRADIENT_THEMES is covered by the module test above, and it was checked in a browser.
+    The note that used to live here -- that `/users/subscribe/` also read the theme catalogue but
+    could not be asserted, because it redirected under test without Stripe Price fixtures -- is
+    obsolete twice over. That page no longer reads GRADIENT_THEMES at all, and the storefront that
+    replaced it degrades instead of redirecting when prices are missing, so it IS assertable now
+    (tests/engine/test_support_storefront.py).
     """
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)

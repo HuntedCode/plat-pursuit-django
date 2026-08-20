@@ -5,12 +5,15 @@ from datetime import datetime
 from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
+from django.core.cache import cache
+from django.db.models import Sum
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse
+from django.contrib.auth.views import redirect_to_login
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views import View
@@ -21,6 +24,8 @@ from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
+from fundraiser.models import get_live_fundraiser
+from users.constants import PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
@@ -113,32 +118,136 @@ class SettingsView(LoginRequiredMixin, View):
         
         return redirect('settings')
     
-@login_required
-def subscribe(request):
-    is_live = settings.STRIPE_MODE == 'live'
+class SupportStorefrontView(TemplateView):
+    """`/support/` -- the Support hub landing AND the membership storefront, deliberately one page.
 
-    # Double-subscribe guard: check ALL providers
-    has_active, active_provider = SubscriptionService.has_active_subscription(request.user)
-    if has_active:
-        messages.info(request, 'You already have an active subscription. Manage it here.')
-        return redirect('subscription_management')
+    It lives here rather than in `core.views` because the checkout POST lives here: the form carries
+    no `action`, so it self-POSTs to whatever URL rendered it. Serving the form from `/support/`
+    while the handler stayed at `/users/subscribe/` would mean a redirect on a POST -- which browsers
+    turn into a GET with the body dropped, silently breaking checkout. The handler goes where the
+    form is rendered. `/users/subscribe/` is now a 302 in (302, not 301: nothing should POST there
+    any more, but a cached permanent redirect on a payment URL is unrecoverable if that assumption
+    ever breaks).
 
-    try:
-        prices = SubscriptionService.get_prices_from_stripe(is_live)
-    except Price.DoesNotExist as e:
-        messages.error(request, "Pricing not available in current mode. Contact support.")
-        logger.error(f"Price fetch error: {e} in mode {settings.STRIPE_MODE}")
-        return redirect('home')
+    PUBLIC, and it stays rendered for members. Both are changes from the old `subscribe` view:
 
-    valid_tiers = list(prices.keys())
+    - Anonymous visitors see the entire pitch. A support page you must log in to read cannot do the
+      one job it has. The buy controls become a sign-in link that returns here.
+    - Active members are no longer bounced to `subscription_management`. This page is also the hub
+      landing (and soon holds the roadmap and fundraiser), so redirecting members off it makes those
+      unreachable for exactly the people who paid for them. They get a thank-you state instead.
+    """
+    template_name = 'support/support_hub.html'
 
-    if request.method == 'POST':
+    # Tier order on the page. Monthly first (the default expectation), then yearly, then supporter --
+    # ascending commitment. `supporter` shipped purchasable but BUTTONLESS: it has Stripe products, a
+    # PayPal plan, a Discord role and bespoke styling on the management page, and `POST tier=supporter`
+    # has always worked. It simply had no UI, so nobody could choose it.
+    TIER_ORDER = ('premium_monthly', 'premium_yearly', 'supporter')
+
+    PROOF_CACHE_KEY = 'support:proof'
+    PROOF_TTL = 300
+
+    def _proof(self):
+        """The evidence the pitch stands on, since "we are not in this for the money" is a claim
+        anyone can make and these are facts nobody can fake.
+
+        Cached: identical for every visitor, and this is a public page. Both reads are DB aggregates
+        rather than Python tallies, so neither grows with the row count.
+        """
+        proof = cache.get(self.PROOF_CACHE_KEY)
+        if proof is None:
+            from fundraiser.models import Donation
+            from trophies.models import BadgeSeries
+            proof = {
+                'raised': int(
+                    Donation.objects.filter(status='completed').aggregate(t=Sum('amount'))['t'] or 0
+                ),
+                'artworks': BadgeSeries.objects.filter(funded_by__isnull=False).count(),
+            }
+            cache.set(self.PROOF_CACHE_KEY, proof, self.PROOF_TTL)
+        return proof
+
+    def _prices(self):
+        """Tier -> djstripe Price, or {} when pricing is unavailable.
+
+        `get_prices_from_stripe` does `Price.objects.get()` per tier and lets `DoesNotExist` fly. The
+        old view answered that by redirecting the WHOLE page to home, so one missing price took down
+        the pitch, the fundraiser and everything else with it. Now the page renders and only the
+        pricing block degrades. That also makes this page testable for the first time -- there are no
+        djstripe Price rows in the test DB, so previously it always redirected.
+        """
+        try:
+            return SubscriptionService.get_prices_from_stripe(settings.STRIPE_MODE == 'live')
+        except Price.DoesNotExist:
+            logger.exception("Storefront pricing unavailable in mode %s", settings.STRIPE_MODE)
+            return {}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        prices = self._prices()
+
+        # `cta` is derived here rather than branched in the template: Stripe gives us 'month'/'year'
+        # and the English for those is irregular enough ("monthly"/"yearly") that a template
+        # conditional per tier is how the third option ends up mislabelled as the first.
+        cta = {'month': 'Support monthly', 'year': 'Support yearly'}
+        context['tiers'] = [
+            {
+                'slug': slug,
+                'name': PREMIUM_TIER_DISPLAY[slug],
+                'price': (prices[slug].stripe_data or {}).get('unit_amount', 0) / 100,
+                'interval': interval,
+                'cta': cta.get(interval, 'Support PlatPursuit'),
+            }
+            for slug, interval in (
+                (s, ((prices[s].stripe_data or {}).get('recurring') or {}).get('interval'))
+                for s in self.TIER_ORDER if s in prices
+            )
+        ]
+        context['pricing_available'] = bool(context['tiers'])
+        context['is_live'] = settings.STRIPE_MODE == 'live'
+
+        paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
+        context['paypal_available'] = (
+            bool(getattr(settings, 'PAYPAL_CLIENT_ID', None))
+            and any(PAYPAL_PLANS.get(paypal_mode, {}).values())
+        )
+
+        # `has_active_subscription` reads `user.stripe_customer_id`, which AnonymousUser has not got.
+        context['viewer_is_member'] = (
+            SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
+        )
+
+        context['premium_perks'] = PREMIUM_PERKS
+        context['proof'] = self._proof()
+        context['support_fundraiser'] = get_live_fundraiser()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Start a checkout. The payload contract is unchanged from the old view: `tier` from the
+        submit button's name/value, `provider` from a hidden input, CSRF from the form."""
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+
+        # Double-subscribe guard across ALL providers. Was a page-level redirect; now it only blocks
+        # the purchase, since the page itself is legitimate for a member to be reading.
+        if SubscriptionService.has_active_subscription(request.user)[0]:
+            messages.info(request, 'You already have an active subscription. Manage it here.')
+            return redirect('subscription_management')
+
         tier = request.POST.get('tier')
         provider = request.POST.get('provider', 'stripe')
 
-        if tier not in valid_tiers:
+        if tier not in self._prices():
             messages.error(request, "Invalid tier selected.")
-            return redirect('subscribe')
+            return redirect('support_hub')
+
+        # Built with reverse() rather than the string literals these used to be, so the pair cannot
+        # drift apart from the URL conf. `{CHECKOUT_SESSION_ID}` is a Stripe-side placeholder Stripe
+        # substitutes on redirect -- it must reach them un-interpolated.
+        success_url = request.build_absolute_uri(reverse('subscribe_success'))
+        cancel_url = request.build_absolute_uri(reverse('support_hub'))
 
         if provider == 'paypal':
             from users.services.paypal_service import PayPalService
@@ -146,53 +255,32 @@ def subscribe(request):
                 approval_url = PayPalService.create_subscription(
                     user=request.user,
                     tier=tier,
-                    return_url=request.build_absolute_uri('/users/subscribe/success/?provider=paypal'),
-                    cancel_url=request.build_absolute_uri('/users/subscribe/'),
+                    return_url=f'{success_url}?provider=paypal',
+                    cancel_url=cancel_url,
                 )
                 return redirect(approval_url)
             except Exception:
                 logger.exception("PayPal subscription creation failed")
                 messages.error(request, "Error creating PayPal subscription. Please try again.")
-                return redirect('subscribe')
-        else:
-            # Stripe checkout
-            try:
-                session_url = SubscriptionService.create_checkout_session(
-                    user=request.user,
-                    tier=tier,
-                    success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
-                    cancel_url=request.build_absolute_uri('/users/subscribe/'),
-                )
-                return redirect(session_url, code=303)
-            except stripe.error.StripeError as e:
-                messages.error(request, f"Error creating checkout: {str(e)}")
-                return redirect('subscribe')
+                return redirect('support_hub')
 
-    context = {'prices': {k: (v.stripe_data or {}).get('unit_amount', 0) / 100 for k, v in prices.items()}}
-    context['is_live'] = is_live
-    paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
-    from users.constants import PAYPAL_PLANS
-    context['paypal_available'] = (
-        bool(getattr(settings, 'PAYPAL_CLIENT_ID', None))
-        and any(PAYPAL_PLANS.get(paypal_mode, {}).values())
-    )
-
-    # Hand-picked themes for the "Try it!" preview swatches
-    import re
-    from trophies.themes import GRADIENT_THEMES
-    clean = lambda css: re.sub(r'\s+', ' ', css).strip()
-    context['preview_themes'] = [
-        {'name': 'Machine Hunter', 'css': clean(GRADIENT_THEMES['machineHunter']['background'])},
-        {'name': 'Cosmic Nebula', 'css': clean(GRADIENT_THEMES['cosmicNebula']['background'])},
-        {'name': 'PlayStation Blue', 'css': clean(GRADIENT_THEMES['playstationBlue']['background'])},
-    ]
-
-    context['breadcrumb'] = [
-        {'text': 'Home', 'url': '/'},
-        {'text': 'Premium'},
-    ]
-
-    return render(request, 'users/subscribe.html', context)
+        try:
+            session_url = SubscriptionService.create_checkout_session(
+                user=request.user,
+                tier=tier,
+                success_url=success_url + "?session_id={CHECKOUT_SESSION_ID}",
+                cancel_url=cancel_url,
+            )
+            # 303, not 302: this answers a POST, and 303 is the status that unambiguously tells
+            # the client to GET the new location. It was WRITTEN as `redirect(session_url, code=303)`
+            # -- but `django.shortcuts.redirect` has no `code` parameter, so that kwarg was swallowed
+            # into `resolve_url(**kwargs)`, ignored there because the target is already an absolute
+            # URL, and every checkout has quietly been a 302. Harmless in practice (browsers downgrade
+            # a 302 POST to GET anyway) but it never did what it said.
+            return HttpResponseRedirect(session_url, status=303)
+        except stripe.error.StripeError as e:
+            messages.error(request, f"Error creating checkout: {str(e)}")
+            return redirect('support_hub')
 
 @login_required
 def subscribe_success(request):
@@ -341,6 +429,9 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         has_active, provider = SubscriptionService.has_active_subscription(user)
         context['subscription_provider'] = provider
         context['is_live'] = is_live
+        # Same source of truth as the storefront. These two pages had hand-written perk lists that
+        # had already drifted apart from each other AND from what the site actually does.
+        context['premium_perks'] = PREMIUM_PERKS
 
         if provider == 'stripe':
             sub = Subscription.objects.filter(
