@@ -317,6 +317,34 @@ substrate, and an earlier version of this page did, which is most of why it read
         </div>
     </section>
 
+    {% comment %} ======================================================== the wall =========== {% endcomment %}
+    {% comment %} Who is keeping it running, by name.
+
+    Only ever shows people who consented. A PSN name is already public everywhere on this site; the
+    fact that somebody PAYS is not, and that is new information about a person -- so the wall reads
+    `Profile.show_on_supporter_wall`, which defaults True to auto-opt-in whoever was already
+    supporting when this shipped, and which anyone can switch off from subscription management.
+
+    Omitted entirely when nobody is on it, rather than rendering an empty frame under a heading that
+    promises names. {% endcomment %}
+    {% if wall %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-wall>
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h2 class="sup-sec__h">The people paying for it</h2>
+            <p class="sup-sec__p">Everyone here chose to be named. Thank you, genuinely.</p>
+
+            <ul class="sup-wall">
+                {% for person in wall %}
+                <li class="sup-wall__one"{% if person.tier %} style="--sup-t: {{ person.tier.colour }}"{% endif %}>
+                    {% if person.tier %}<span class="sup-wall__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
+                    <span class="sup-wall__name{% if person.tier %} pp-supname{% endif %}">{{ person.name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </section>
+    {% endif %}
+
     {% comment %} ============================================================ perks modal ==== {% endcomment %}
     {% comment %} A native <dialog>, so Escape, the focus trap and the backdrop come from the browser
     rather than from us. The scrim is a SOLID dim with no backdrop-filter, per the motion docs: a

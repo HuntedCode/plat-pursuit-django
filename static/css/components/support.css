@@ -752,3 +752,42 @@
     color: var(--pp-text-mute);
     max-width: 62ch;
 }
+
+/* ------------------------------------------------------------------------- the supporter wall ---- */
+/* A flow of names, not a table or a ranked list. Everyone here chose to be named, and the point is
+   the crowd rather than the ordering -- so the levels differ by mark and hue, and nothing is
+   numbered, sized or podium'd. */
+.sup-wall {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 16px;
+}
+
+.sup-wall__one {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* Only a level carries a hue; legacy supporters sit in the neutral chip until they move across. */
+.sup-wall__one[style] {
+    border-color: color-mix(in oklab, var(--sup-t) 38%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t) 10%, transparent);
+}
+
+.sup-wall__mark { display: inline-flex; align-items: center; gap: 1px; }
+
+.sup-wall__name {
+    font-size: 0.8rem;
+    font-weight: 650;
+    color: var(--pp-text);
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

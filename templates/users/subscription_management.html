@@ -147,6 +147,7 @@
                 </div>
                 {% endfor %}
             </div>
+
             <div class="text-center mt-4">
                 <a href="{% url 'support_hub' %}" class="text-sm text-primary hover:underline">See all premium features in detail</a>
             </div>
@@ -171,6 +172,41 @@
         </div>
     </div>
     {% endif %}
+
+{% comment %}
+The supporter wall opt-out, OUTSIDE the active/inactive branch on purpose. It used to sit inside the
+perks card, which only renders for somebody with a live provider subscription -- so a supporter whose
+payment had lapsed was still listed on the wall with no way to take themselves off, and a test could
+not reach it either.
+
+Gated on having a PROFILE, since the wall lists a PSN name and there is nothing to list without one.
+
+`show_on_supporter_wall` defaults True, which auto-opts-in everyone who was already supporting when
+the wall shipped -- they never saw a checkout step to be asked at. This is how they take themselves
+off.
+{% endcomment %}
+{% if has_profile %}
+<div class="flex justify-center mt-4">
+    <form method="post" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral w-full max-w-lg">
+        {% csrf_token %}
+        <div class="card-body p-4 md:p-5">
+            <input type="hidden" name="wall_visibility" value="1">
+            <p class="text-sm font-semibold">Supporter wall</p>
+            <p class="text-xs text-base-content/60 mt-1">
+                We list the people paying for the site on
+                <a href="{% url 'support_hub' %}" class="text-primary hover:underline">the support page</a>.
+                Your name only appears if you want it to.
+            </p>
+            <label class="flex items-center gap-2 mt-3 cursor-pointer">
+                <input type="checkbox" name="on_the_wall" value="yes" class="checkbox checkbox-sm"
+                       {% if on_the_wall %}checked{% endif %}
+                       onchange="this.form.requestSubmit()">
+                <span class="text-sm">List me on the supporter wall</span>
+            </label>
+        </div>
+    </form>
+</div>
+{% endif %}
 
     {# ── Trust Footer ── #}
     <div class="text-center space-y-2 text-sm text-base-content/60 italic max-w-2xl mx-auto pr-1">

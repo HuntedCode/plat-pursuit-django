@@ -1135,3 +1135,132 @@ def test_no_level_sells_a_link(client):
         assert 'link on the site' not in block.lower(), f'{tier["slug"]} is selling a link'
         assert 'link beside' not in block.lower()
 
+
+# ---------------------------------------------------------------------------- the supporter wall ----
+
+def _wall(body):
+    """Just the wall section, found by hook and bounded at its own section."""
+    start = body.index('data-sup-wall')
+    return body[start:body.index('</section>', start)]
+
+
+def test_the_wall_only_ever_lists_people_who_consented(client):
+    """THE LOAD-BEARING TEST ON THIS WHOLE SECTION.
+
+    A PSN name is already public everywhere on this site. The fact that somebody PAYS is not, and
+    publishing it is new information about a person. So `show_on_supporter_wall` is not a preference
+    that shapes a list -- it is the gate, and a bug here exposes something a real person did not
+    agree to make public.
+    """
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='SaysYes', show_on_supporter_wall=True,
+                   user__premium_tier='patron')
+    ProfileFactory(display_psn_username='SaysNo', show_on_supporter_wall=False,
+                   user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'SaysYes' in wall
+    assert 'SaysNo' not in wall, 'the wall published somebody who opted out'
+
+
+def test_the_wall_includes_the_legacy_tiers(client):
+    """Nobody holds a ladder slug yet, so a wall that listed only ladder levels would be empty on a
+    live site. The legacy tiers have no recognition level at all, and excluding somebody by a rule
+    that did not exist when they subscribed would be arbitrary."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='OldTimer', user__premium_tier='premium_yearly')
+    _clear_support_cache()
+
+    assert 'OldTimer' in _wall(_flat(client))
+
+
+def test_the_bottom_two_levels_are_not_listed(client):
+    """Backer and Contributor are `recognition: none`. Being on the wall is the thing the middle of
+    the ladder buys, and a wall that listed everybody would remove the only difference it has."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='JustABacker', user__premium_tier='backer')
+    ProfileFactory(display_psn_username='ARealPatron', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'ARealPatron' in wall
+    assert 'JustABacker' not in wall
+
+
+def test_a_non_supporter_is_never_on_the_wall(client):
+    """`show_on_supporter_wall` defaults True on EVERY profile, supporter or not, because it is
+    inert for anyone without a tier. If the query ever stopped filtering on the tier, that default
+    would put the entire user base on the wall."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='JustAHunter')
+    ProfileFactory(display_psn_username='ARealPatron', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'ARealPatron' in wall
+    assert 'JustAHunter' not in wall, 'a non-supporter is on the supporter wall'
+
+
+def test_the_wall_is_capped(client):
+    """It grows without bound on a public page. The cap is applied in the DATABASE, so a wall of ten
+    thousand supporters is still one bounded query rather than ten thousand rows sorted in Python."""
+    from users.views import SupportStorefrontView
+    from tests.factories import ProfileFactory
+
+    for i in range(SupportStorefrontView.WALL_CAP + 5):
+        ProfileFactory(display_psn_username=f'Backer{i:04d}', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert wall.count('sup-wall__one') == SupportStorefrontView.WALL_CAP
+
+
+def test_the_wall_is_omitted_rather_than_rendered_empty(client):
+    """A heading promising names over an empty frame is worse than no section."""
+    _clear_support_cache()
+    body = _flat(client)
+
+    assert 'data-sup-wall' not in body
+    assert 'The people paying for it' not in body
+
+
+def test_the_opt_out_is_reachable_and_works(client):
+    """Consent that cannot be withdrawn is not consent. The toggle lives on subscription management,
+    which is the page somebody is already on when they think about it."""
+    from tests.factories import ProfileFactory
+
+    profile = ProfileFactory(display_psn_username='Rethinker', user__premium_tier='patron')
+    client.force_login(profile.user)
+
+    page = client.get(reverse('subscription_management')).content.decode()
+    assert 'List me on the supporter wall' in page, 'no way to get off the wall'
+
+    client.post(reverse('subscription_management'), {'wall_visibility': '1'})
+    profile.refresh_from_db()
+    assert profile.show_on_supporter_wall is False
+
+    client.post(reverse('subscription_management'), {'wall_visibility': '1', 'on_the_wall': 'yes'})
+    profile.refresh_from_db()
+    assert profile.show_on_supporter_wall is True
+
+
+def test_changing_the_toggle_clears_the_cached_wall(client):
+    """The wall is cached for five minutes. Without this, somebody who takes themselves off still
+    sees their name on the page afterwards -- which reads as the opt-out not working, on exactly the
+    control where that matters most."""
+    from django.core.cache import cache
+    from tests.factories import ProfileFactory
+
+    profile = ProfileFactory(display_psn_username='Rethinker', user__premium_tier='patron')
+    _clear_support_cache()
+    assert 'Rethinker' in _wall(_flat(client))          # warms the cache
+
+    client.force_login(profile.user)
+    client.post(reverse('subscription_management'), {'wall_visibility': '1'})
+
+    assert cache.get('support:stats') is None, 'the stale wall would still show them'

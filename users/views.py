@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
 from django.db.models import Count
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -338,9 +339,62 @@ class SupportStorefrontView(TemplateView):
             'supporter_count': sum(counts.values()),
             'supporter_monthly': round(monthly) if priced_all else None,
             'months_running': (now.year - self.LAUNCH[0]) * 12 + (now.month - self.LAUNCH[1]),
+            'wall': self._wall(),
         }
         cache.set(self.SUPPORT_CACHE_KEY, data, self.SUPPORT_TTL)
         return data
+
+    WALL_CAP = 200
+
+    def _wall(self):
+        """The public supporter wall: who is keeping the site running, by name.
+
+        CONSENT IS THE WHOLE DESIGN HERE. A PSN name is already public everywhere on this site; the
+        fact that somebody PAYS is not, and publishing it is new information about a person. So the
+        wall only ever shows profiles with `show_on_supporter_wall` set, which defaults True to
+        auto-opt-in the people who were already supporting when this shipped (they never got a
+        checkout step to be asked at) and which anyone can turn off from subscription management.
+
+        WHO IS ELIGIBLE. On the ladder, the bottom two levels are deliberately not listed. The legacy
+        tiers have no recognition level at all, so every current supporter is eligible: excluding
+        somebody by a rule that did not exist when they subscribed would be arbitrary, and they are
+        the only people on the wall today.
+
+        Capped and ordered in the DATABASE. This grows without bound and renders on a public page, so
+        it never becomes "fetch everything and sort in Python".
+        """
+        from trophies.models import Profile
+
+        # `star_range` included here too: the star partial loops it, and a tier dict taken straight
+        # from the constant has only `stars`. Without this the marks render as nothing at all --
+        # silently, since a `{% for %}` over a missing key is simply an empty loop.
+        by_slug = {t['slug']: dict(t, star_range=range(t['stars'])) for t in SUPPORT_TIERS}
+        eligible = (
+            [slug for slug, t in by_slug.items() if t['recognition'] != 'none']
+            + list(ACTIVE_PREMIUM_TIERS)
+        )
+
+        # Highest level first, then alphabetical. `Lower()` because a raw sort puts every lowercase
+        # name after every uppercase one, which reads as two lists stapled together.
+        rank = {slug: i for i, slug in enumerate(reversed(list(by_slug)))}
+        rows = (
+            Profile.objects
+            .filter(show_on_supporter_wall=True, user__premium_tier__in=eligible)
+            .select_related('user')
+            .only('display_psn_username', 'psn_username', 'avatar_url', 'user__premium_tier')
+            .order_by(Lower('psn_username'))[:self.WALL_CAP]
+        )
+
+        wall = [
+            {
+                'name': r.display_psn_username or r.psn_username,
+                'tier': by_slug.get(r.user.premium_tier),
+                'rank': rank.get(r.user.premium_tier, -1),
+            }
+            for r in rows
+        ]
+        wall.sort(key=lambda w: (-w['rank'], w['name'].lower()))
+        return wall
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the
@@ -538,6 +592,30 @@ def paypal_cancel_subscription(request):
 class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
     template_name = 'users/subscription_management.html'
 
+    def post(self, request, *args, **kwargs):
+        """The supporter wall opt-out.
+
+        It lives here rather than in general settings because it is only meaningful while you are
+        supporting, and this is the page you are already on when you think about that.
+
+        A plain form post, not an API call: it is one boolean that changes a public listing, and the
+        page reload is a useful confirmation that it took. `show_on_supporter_wall` defaults True, so
+        this is how somebody who was auto-opted-in takes themselves off.
+        """
+        profile = getattr(request.user, 'profile', None)
+        if profile is not None and 'wall_visibility' in request.POST:
+            profile.show_on_supporter_wall = request.POST.get('on_the_wall') == 'yes'
+            profile.save(update_fields=['show_on_supporter_wall'])
+            # The wall is cached on the Support page; a change nobody can see for five minutes reads
+            # as the toggle not working.
+            cache.delete(SupportStorefrontView.SUPPORT_CACHE_KEY)
+            messages.success(
+                request,
+                'You are on the supporter wall.' if profile.show_on_supporter_wall
+                else 'You have been taken off the supporter wall.'
+            )
+        return redirect('subscription_management')
+
     def get_context_data(self, **kwargs):
         is_live = settings.STRIPE_MODE == 'live'
 
@@ -550,6 +628,9 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         # Same source of truth as the storefront. These two pages had hand-written perk lists that
         # had already drifted apart from each other AND from what the site actually does.
         context['premium_perks'] = PREMIUM_PERKS
+        profile = getattr(self.request.user, 'profile', None)
+        context['on_the_wall'] = profile.show_on_supporter_wall if profile else False
+        context['has_profile'] = profile is not None
 
         if provider == 'stripe':
             sub = Subscription.objects.filter(

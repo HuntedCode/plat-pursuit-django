@@ -649,3 +649,19 @@ ladder slugs, extend `PREMIUM_TIER_CHOICES` / `ACTIVE_PREMIUM_TIERS` / the two D
 **migrate existing `premium_monthly` / `premium_yearly` / `supporter` subscribers onto the new
 levels**, then flip the flag. The checkout POST handler, `success_url`, `subscribe_success` and both
 webhooks are untouched and already serve the legacy three tiers throughout.
+
+### Migration 0314: supporter wall consent (2026-08-20)
+
+`Profile.show_on_supporter_wall`, a boolean defaulting **True**.
+
+The default is the decision, not an accident. It **auto-opts-in everyone already supporting** when
+the wall shipped, because they never saw a checkout step to be asked at. New supporters are asked
+explicitly during checkout (lane 2), and anyone can switch it off from `/users/subscription-management/`.
+
+It is inert for non-supporters: the wall query filters on an active premium tier first, so a `True`
+on a profile with no tier means nothing. Pinned by `test_a_non_supporter_is_never_on_the_wall`, which
+exists because if that tier filter were ever dropped, the default would put the entire user base on a
+public page.
+
+No backfill needed; the column default does the work. Safe to run on a live DB (one nullable-free
+boolean with a default, no table rewrite on Postgres 11+).

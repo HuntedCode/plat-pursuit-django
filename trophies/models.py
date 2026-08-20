@@ -109,6 +109,16 @@ class Profile(models.Model):
     sync_progress_value = models.IntegerField(default=0, help_text='Current sync progress value')
     sync_progress_target = models.IntegerField(default=0, help_text='Current sync progress target')
     is_linked = models.BooleanField(default=False)
+    show_on_supporter_wall = models.BooleanField(
+        default=True,
+        help_text=(
+            "Whether this hunter appears on the public supporter wall at /support/. Consulted ONLY "
+            "for a profile with an active premium tier, so it is inert for everyone else. "
+            "Defaults True on purpose: it auto-opts-in the people already supporting when the wall "
+            "shipped, who never got a checkout step to be asked at. New supporters are asked "
+            "explicitly during checkout, and anyone can flip it from subscription management."
+        ),
+    )
     psn_history_public = models.BooleanField(default=True, help_text="Flag indicating if PSN gaming history is public.")
     created_at = models.DateTimeField(auto_now_add=True)
     discord_id = models.BigIntegerField(unique=True, blank=True, null=True, help_text='Unique Discord user ID. Set on bot linking.')
