@@ -60,30 +60,29 @@ PREMIUM_TIER_DISPLAY = {
 # hue wheel (sea green -> sky -> periwinkle -> violet -> orchid -> rose): a continuous, obviously
 # synthetic ramp with no metal anywhere in it.
 #
-# `recognition` drives the public supporter wall, and it has exactly TWO states:
-#   none -> not listed          named -> name on the site
+# EVERY LEVEL IS CREDITED. There was a `recognition` field once, keeping the bottom two levels off
+# the supporter wall so that being listed was what the middle of the ladder bought. It is gone, and
+# the reasoning is worth keeping: a wall that lists only the higher levels is thin until there ARE
+# higher levels, and the obvious fix -- hide the bottom rungs once enough people are above them --
+# would take somebody's credit away after they had it. Removing recognition from a person who
+# already had it is worse than never giving it, so the rule is simply that everyone supporting is
+# credited.
 #
-# There was a third, `linked`, giving the top two levels a link beside their name. It is gone, and
-# deliberately not coming back: selling a link invites people buying the top level purely for SEO,
-# and it puts us in the business of moderating what supporters point at. Both are real costs for a
-# perk nobody asked for.
+# If it is ever gated again, that is one field and one filter, not a redesign.
 #
-# Collapsing it costs less than it looks. The star count, the colour and the level name already
-# separate all six levels EVERYWHERE a supporter's name appears -- the wall is a thank-you on top of
-# that, not the thing carrying the hierarchy.
 SUPPORT_TIERS = [
     {'slug': 'backer',      'name': 'Backer',      'monthly': 4,  'yearly': 40,
-     'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc4a3'},
+     'stars': 1, 'outline': True,  'colour': '#4fc4a3'},
     {'slug': 'contributor', 'name': 'Contributor', 'monthly': 10, 'yearly': 100,
-     'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#47b6e6'},
+     'stars': 1, 'outline': False, 'colour': '#47b6e6'},
     {'slug': 'patron',      'name': 'Patron',      'monthly': 15, 'yearly': 150,
-     'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#6875ee'},
+     'stars': 2, 'outline': False, 'colour': '#6875ee'},
     {'slug': 'sponsor',     'name': 'Sponsor',     'monthly': 20, 'yearly': 200,
-     'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a666ea'},
+     'stars': 3, 'outline': False, 'colour': '#a666ea'},
     {'slug': 'benefactor',  'name': 'Benefactor',  'monthly': 25, 'yearly': 250,
-     'recognition': 'named',  'stars': 4, 'outline': False, 'colour': '#e55dd9'},
+     'stars': 4, 'outline': False, 'colour': '#e55dd9'},
     {'slug': 'cornerstone', 'name': 'Cornerstone', 'monthly': 30, 'yearly': 300,
-     'recognition': 'named',  'stars': 5, 'outline': False, 'colour': '#fc7ea8'},
+     'stars': 5, 'outline': False, 'colour': '#f56a9e'},
 ]
 
 # THE PALETTE IS A MEASURED RAMP, not six hand-picked colours. Hue steps ~35 degrees from teal to

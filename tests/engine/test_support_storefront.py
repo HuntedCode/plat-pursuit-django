@@ -417,15 +417,10 @@ def test_every_level_gets_every_perk():
     from users.constants import SUPPORT_TIERS
 
     for tier in SUPPORT_TIERS:
-        assert set(tier) == {'slug', 'name', 'monthly', 'yearly', 'recognition',
+        assert set(tier) == {'slug', 'name', 'monthly', 'yearly',
                              'stars', 'outline', 'colour'}, (
-            f"{tier['slug']} carries something beyond price, recognition and how it looks"
-        )
-        assert tier['recognition'] in ('none', 'named'), (
-            f"{tier['slug']} has a third recognition state. There were three once -- the top two "
-            f"levels got a LINK beside their name -- and it was dropped on purpose: selling a link "
-            f"invites buying the top level for SEO and puts us in the business of moderating what "
-            f"supporters point at."
+            f"{tier['slug']} carries something beyond price and how it looks. A level is an AMOUNT "
+            f"and a mark; the moment one carries anything else, this is a feature ladder."
         )
 
 
@@ -1177,20 +1172,6 @@ def test_the_wall_includes_the_legacy_tiers(client):
     assert 'OldTimer' in _wall(_flat(client))
 
 
-def test_the_bottom_two_levels_are_not_listed(client):
-    """Backer and Contributor are `recognition: none`. Being on the wall is the thing the middle of
-    the ladder buys, and a wall that listed everybody would remove the only difference it has."""
-    from tests.factories import ProfileFactory
-
-    ProfileFactory(display_psn_username='JustABacker', user__premium_tier='backer')
-    ProfileFactory(display_psn_username='ARealPatron', user__premium_tier='patron')
-    _clear_support_cache()
-
-    wall = _wall(_flat(client))
-    assert 'ARealPatron' in wall
-    assert 'JustABacker' not in wall
-
-
 def test_a_non_supporter_is_never_on_the_wall(client):
     """`show_on_supporter_wall` defaults True on EVERY profile, supporter or not, because it is
     inert for anyone without a tier. If the query ever stopped filtering on the tier, that default
@@ -1217,7 +1198,7 @@ def test_the_wall_is_capped(client):
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert wall.count('sup-wall__one') == SupportStorefrontView.WALL_CAP
+    assert wall.count('sup-credit ') + wall.count('sup-credit"') == SupportStorefrontView.WALL_CAP
 
 
 def test_the_wall_is_omitted_rather_than_rendered_empty(client):
@@ -1277,9 +1258,9 @@ def test_the_wall_shows_faces_and_names_together(client):
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert 'https://example.test/a.png' in wall, 'the wall is not showing faces'
+    assert 'https://example.test/a.png' in wall, 'the credits are not showing faces'
     assert 'FacedHunter' in wall
-    assert 'Patron' in wall, 'the level is not named on the tile'
+    assert 'PlatPursuit Patron' in wall, 'the card does not name its own level'
 
 
 def test_the_wall_does_not_animate_two_hundred_names_at_once(client):
@@ -1308,22 +1289,7 @@ def test_a_supporter_with_no_avatar_still_gets_a_tile(client):
 
     wall = _wall(_flat(client))
     assert 'NoPicture' in wall
-    assert 'sup-wall__av' in wall, 'the avatar slot vanished rather than falling back'
-
-
-def test_the_wall_is_grouped_highest_level_first(client):
-    """The GROUPS carry the hierarchy so the tiles do not have to. Ordering matters: a wall that
-    listed Patron above Cornerstone would be quietly telling people the ladder runs the other way."""
-    from tests.factories import ProfileFactory
-
-    ProfileFactory(display_psn_username='TopDog', user__premium_tier='cornerstone')
-    ProfileFactory(display_psn_username='MidOne', user__premium_tier='sponsor')
-    ProfileFactory(display_psn_username='LowOne', user__premium_tier='patron')
-    _clear_support_cache()
-
-    wall = _wall(_flat(client))
-    order = [wall.index('Cornerstone'), wall.index('Sponsor'), wall.index('Patron')]
-    assert order == sorted(order), 'the levels are not in descending order'
+    assert 'sup-credit__av' in wall, 'the avatar slot vanished rather than falling back'
 
 
 def test_pre_ladder_supporters_come_last_under_their_own_heading(client):
@@ -1336,14 +1302,13 @@ def test_pre_ladder_supporters_come_last_under_their_own_heading(client):
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert wall.index('Patron') < wall.index('OldTimer'), 'legacy supporters are not last'
-    assert 'OldTimer' in wall and 'NewPatron' in wall
+    assert wall.index('NewPatron') < wall.index('OldTimer'), 'pre-ladder supporters are not last'
+    assert 'Supporter' in wall, 'the pre-ladder credit is unlabelled'
 
 
-def test_nobody_appears_in_two_groups(client):
-    """The grouping pops from a bucket rather than filtering per level. A filter-per-level shape
-    would list anyone whose tier matched more than one predicate twice, and a duplicate on a wall of
-    names is the kind of thing a supporter notices and nobody else does."""
+def test_nobody_is_credited_twice(client):
+    """A duplicate on a credit roll is the kind of thing the person themselves notices and nobody
+    else does."""
     from tests.factories import ProfileFactory
 
     for slug in ('patron', 'sponsor', 'benefactor', 'cornerstone', 'premium_monthly'):
@@ -1351,22 +1316,39 @@ def test_nobody_appears_in_two_groups(client):
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert wall.count('sup-wall__one') == 5, 'somebody is listed more than once'
+    assert wall.count('sup-credit__name') == 5, 'somebody is listed more than once'
 
 
-def test_each_group_counts_its_own_people(client):
-    """The count beside a level is context, not decoration -- if it disagrees with the tiles beneath
-    it, the whole band stops being believable."""
+def test_every_supporting_level_is_credited(client):
+    """Backer and Contributor were held off the credits once, so that being listed was what the
+    middle of the ladder bought. That went, and the reasoning matters more than the rule:
+
+    a credits section listing only the higher levels is thin until there ARE higher levels, and the
+    obvious fix -- hide the bottom rungs once enough people sit above them -- takes somebody's credit
+    away after they had it. Removing recognition from a person who already had it is worse than
+    never giving it.
+    """
     from tests.factories import ProfileFactory
 
-    for i in range(3):
-        ProfileFactory(display_psn_username=f'Patron{i}', user__premium_tier='patron')
-    ProfileFactory(display_psn_username='Solo', user__premium_tier='cornerstone')
+    for tier in SUPPORT_TIERS:
+        ProfileFactory(display_psn_username=f'A{tier["slug"].title()}', user__premium_tier=tier['slug'])
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    patron = wall[wall.index('Patron'):]
-    patron = patron[:patron.index('</ul>')]
-    assert '>3<' in patron, 'the Patron group does not say it has three people'
-    assert patron.count('sup-wall__one') == 3
+    for tier in SUPPORT_TIERS:
+        assert f'A{tier["slug"].title()}' in wall, f'{tier["slug"]} is not credited'
 
+
+def test_the_credits_run_highest_level_first(client):
+    """Flat, but not unordered. A roll that put Backer above Cornerstone would quietly teach the
+    ladder backwards."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='TopDog', user__premium_tier='cornerstone')
+    ProfileFactory(display_psn_username='MidOne', user__premium_tier='sponsor')
+    ProfileFactory(display_psn_username='LowOne', user__premium_tier='backer')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    order = [wall.index('TopDog'), wall.index('MidOne'), wall.index('LowOne')]
+    assert order == sorted(order), 'the credits are not in descending level order'

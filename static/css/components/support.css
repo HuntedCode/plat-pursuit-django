@@ -753,121 +753,131 @@
     max-width: 62ch;
 }
 
-/* ------------------------------------------------------------------------- the supporter wall ---- */
-/* SPLIT BY LEVEL, highest first, pre-ladder supporters last.
+/* ------------------------------------------------------------------------------- the credits ---- */
+/* A CREDIT ROLL, not a donor board. One flat run, every card identical in size and weight, ordered
+   by level but never ranked within it -- so the section reads as thanks rather than as a scoreboard
+   of who paid most, on a site where the real hierarchy is earned.
 
-   The GROUPS carry the hierarchy. Inside one, every tile is identical -- same size, no numbering, no
-   podium -- so people do not rank against each other within their level. That is what keeps this a
-   thank-you rather than a scoreboard of who paid most, on a site where the real hierarchy is earned.
-
-   The level's colour lives on the group, not on each tile: repeating it two hundred times made the
-   wall read as a heat map, and it belongs to the heading that names the level anyway. */
-.sup-walls {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin-top: 18px;
-}
-
-.sup-wallgrp {
-    padding-left: 12px;
-    border-left: 2px solid color-mix(in oklab, var(--sup-t, var(--pp-border)) 45%, var(--pp-border));
-}
-
-/* Pre-ladder supporters get a neutral rail. Explicitly not styled as lesser: they subscribed before
-   the levels existed, so there is no honest level to file them under, and they were here first. */
-.sup-wallgrp.is-legacy { border-left-color: var(--pp-border); }
-
-.sup-wallgrp__k {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 0.66rem;
+   The card borrows the preview row's geometry on purpose: avatar, name with its mark, level
+   underneath. Somebody who saw themselves in the purchase box meets the same object here. */
+.sup-credits__h {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: clamp(1.6rem, 5.5vw, 2.4rem);
     font-weight: 800;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: color-mix(in oklab, var(--sup-t, var(--pp-text-mute)) 72%, var(--pp-text-mute));
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--pp-text);
 }
 
-.sup-wallgrp.is-legacy .sup-wallgrp__k { color: var(--pp-text-mute); }
-
-/* The count sits quiet beside the level. It is context, not a score. */
-.sup-wallgrp__n {
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0;
+.sup-credits__p {
+    margin-top: 6px;
+    font-size: 0.86rem;
     color: var(--pp-text-mute);
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
+    max-width: 52ch;
 }
 
-.sup-wallgrp__k .sup-wall__mark { display: inline-flex; align-items: center; gap: 1px; }
-.sup-wallgrp__k .pp-supstar { width: 9px; height: 9px; }
-
-/* Auto-fill tracks rather than fixed columns: a group holds one person or eighty, and a fixed grid
-   looks broken at one end or the other. */
-.sup-wall {
+/* Auto-fill tracks: this has to look composed at four credits and at two hundred, and a fixed column
+   count looks broken at one end or the other. Wider than the old tiles because each card now carries
+   a second line. */
+.sup-credits {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-    gap: 7px;
-    margin-top: 9px;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 8px;
+    margin-top: 20px;
     padding: 0;
 }
 
-.sup-wall__one {
+.sup-credit {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
-    padding: 6px 12px 6px 6px;
-    border-radius: 999px;
-    border: 1px solid var(--pp-border);
-    background: var(--pp-bg-2);
+    padding: 9px 13px 9px 9px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-border)) 28%, var(--pp-border));
+    background:
+        linear-gradient(100deg,
+            color-mix(in oklab, var(--sup-t, transparent) 11%, transparent) 0%,
+            transparent 60%),
+        var(--pp-bg-2);
     transition: border-color var(--pp-dur) var(--pp-ease),
                 transform var(--pp-dur) var(--pp-ease),
                 box-shadow var(--pp-dur) var(--pp-ease);
 }
 
-/* A lift rather than a scale: these sit in a tight grid and a growing tile shoves its neighbours. */
+/* Pre-ladder supporters: neutral, and deliberately not styled as lesser. There is no honest level to
+   file them under and they were here first. */
+.sup-credit.is-legacy {
+    border-color: var(--pp-border);
+    background: var(--pp-bg-2);
+}
+
+/* Lift, not scale: these sit in a tight grid and a growing card shoves its neighbours. */
 @media (hover: hover) {
-    .sup-wall__one:hover {
+    .sup-credit:hover {
         transform: translateY(-2px);
         border-color: color-mix(in oklab, var(--sup-t, var(--pp-border)) 55%, var(--pp-border));
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
     }
 }
 
-/* The face. Ringed in the group's colour, which is the one place the level touches a tile. */
-.sup-wall__av {
+.sup-credit__av {
     flex: none;
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     overflow: hidden;
     background: var(--pp-bg-1);
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--sup-t, var(--pp-border)) 50%, var(--pp-border));
 }
 
-.sup-wall__av img,
-.sup-wall__av svg { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sup-wall__av svg { padding: 5px; color: var(--pp-text-mute); }
+.sup-credit__av img,
+.sup-credit__av svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sup-credit__av svg { padding: 6px; color: var(--pp-text-mute); }
 
-.sup-wall__name {
-    font-size: 0.81rem;
+.sup-credit__who { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+
+.sup-credit__name {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    font-size: 0.84rem;
     font-weight: 650;
     color: var(--pp-text);
-    min-width: 0;
+}
+
+/* The truncation lives on a block-level child. `text-overflow` on a flex CONTAINER does nothing for
+   its items, and a PSN id has no spaces to break on -- so a long name would hard-clip and push the
+   mark out of the card. Same trap `.lb-row__uname` documents on the leaderboard row. */
+.sup-credit__name > :first-child,
+.sup-credit__name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-/* Arrives a tile at a time. The delay is capped hard: it is per-tile, so an uncapped stagger over a
-   large group would leave the last one waiting seconds after it was already on screen. */
+.sup-credit__mark { flex: none; display: inline-flex; align-items: center; gap: 1px; }
+.sup-credit__mark .pp-supstar { width: 9px; height: 9px; }
+
+/* Matched to `.lb-row__title`, the line a leaderboard row already puts under a name. */
+.sup-credit__lvl {
+    margin-top: 1px;
+    font-size: 10.5px;
+    line-height: 1.2;
+    color: color-mix(in oklab, var(--sup-t, var(--pp-text-mute)) 62%, var(--pp-text-mute));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sup-credit.is-legacy .sup-credit__lvl { color: var(--pp-text-mute); }
+
+/* Arrives a card at a time, capped hard: the delay is per-card, so an uncapped stagger over two
+   hundred would leave the last one waiting seconds after it was already on screen. */
 @media (prefers-reduced-motion: no-preference) {
-    .sup-wall__one {
+    .sup-credit {
         animation: ppRevealIn 0.45s var(--pp-ease) backwards;
-        animation-delay: calc(min(var(--i, 0) * 20ms, 600ms));
+        animation-delay: calc(min(var(--i, 0) * 18ms, 600ms));
     }
 }

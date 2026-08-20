@@ -355,10 +355,11 @@ class SupportStorefrontView(TemplateView):
         auto-opt-in the people who were already supporting when this shipped (they never got a
         checkout step to be asked at) and which anyone can turn off from subscription management.
 
-        WHO IS ELIGIBLE. On the ladder, the bottom two levels are deliberately not listed. The legacy
-        tiers have no recognition level at all, so every current supporter is eligible: excluding
-        somebody by a rule that did not exist when they subscribed would be arbitrary, and they are
-        the only people on the wall today.
+        WHO IS ELIGIBLE: everyone supporting, ladder level or legacy tier. The bottom two levels were
+        held off once so that being credited was what the middle of the ladder bought; see the note
+        on SUPPORT_TIERS for why that went. Short version: it made the section thin until there were
+        higher levels, and the obvious fix would have taken credit away from people who already had
+        it.
 
         Capped and ordered in the DATABASE. This grows without bound and renders on a public page, so
         it never becomes "fetch everything and sort in Python".
@@ -369,10 +370,10 @@ class SupportStorefrontView(TemplateView):
         # from the constant has only `stars`. Without this the marks render as nothing at all --
         # silently, since a `{% for %}` over a missing key is simply an empty loop.
         by_slug = {t['slug']: dict(t, star_range=range(t['stars'])) for t in SUPPORT_TIERS}
-        eligible = (
-            [slug for slug, t in by_slug.items() if t['recognition'] != 'none']
-            + list(ACTIVE_PREMIUM_TIERS)
-        )
+        # Everyone supporting is credited, ladder or legacy. See the note on SUPPORT_TIERS: a wall
+        # that listed only the higher levels would be thin until there were higher levels, and the
+        # obvious fix would end up taking credit away from people who already had it.
+        eligible = list(by_slug) + list(ACTIVE_PREMIUM_TIERS)
 
         # `Lower()` because a raw sort puts every lowercase name after every uppercase one, which
         # reads as two lists stapled together rather than one alphabetical run.
@@ -384,31 +385,28 @@ class SupportStorefrontView(TemplateView):
             .order_by(Lower('psn_username'))[:self.WALL_CAP]
         )
 
-        # GROUPED BY LEVEL, highest first, with the pre-ladder supporters last. The cap is applied
-        # to the QUERY above rather than per group, so a very large top group cannot starve the rest
-        # -- everyone in the capped set is placed, and no group is silently truncated on its own.
-        buckets = {}
-        for r in rows:
-            buckets.setdefault(r.user.premium_tier, []).append({
+        # ONE FLAT LIST, ordered highest level first and alphabetically within a level. It was
+        # grouped under per-level headings once; each card names its own level now, which makes the
+        # headings redundant -- and a flat run reads as credits rather than as a tiered donor board.
+        # NOT reversed. The grouped version walked the levels backwards to emit the highest group
+        # first; here the same index feeds a SORT KEY, where reversing it inverts the whole roll.
+        # Ladder order gives cornerstone the largest index, and `-rank` ascending puts it first --
+        # while legacy (-1) becomes +1 and sorts last, which is where it belongs.
+        rank = {slug: i for i, slug in enumerate(by_slug)}
+        people = [
+            {
                 'name': r.display_psn_username or r.psn_username,
                 'avatar': r.avatar_url,
-            })
-
-        groups = []
-        for slug in reversed(list(by_slug)):
-            people = buckets.pop(slug, None)
-            if people:
-                groups.append({'tier': by_slug[slug], 'people': people})
-
-        # Whatever is left holds a legacy tier: they subscribed before the levels existed, so there
-        # is no honest level to file them under. They go last, under their own heading, and are
-        # deliberately not styled as a leftover -- they are the people who were here first.
-        legacy = [person for people in buckets.values() for person in people]
-        if legacy:
-            legacy.sort(key=lambda person: person['name'].lower())
-            groups.append({'tier': None, 'people': legacy})
-
-        return groups
+                'tier': by_slug.get(r.user.premium_tier),
+                # Pre-ladder supporters sort last: they hold a legacy tier, so there is no honest
+                # level to place them at, and they are not folded into the bottom rung because that
+                # would claim they chose a level they never saw.
+                'rank': rank.get(r.user.premium_tier, -1),
+            }
+            for r in rows
+        ]
+        people.sort(key=lambda person: (-person['rank'], person['name'].lower()))
+        return people
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the
