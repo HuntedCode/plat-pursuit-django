@@ -65,7 +65,7 @@ PREMIUM_TIER_DISPLAY = {
 SUPPORT_TIERS = [
     {'slug': 'backer',      'name': 'Backer',      'monthly': 4,  'yearly': 40,
      'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc4a3'},
-    {'slug': 'sustainer',   'name': 'Sustainer',   'monthly': 10, 'yearly': 100,
+    {'slug': 'contributor', 'name': 'Contributor', 'monthly': 10, 'yearly': 100,
      'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#47b6e6'},
     {'slug': 'patron',      'name': 'Patron',      'monthly': 15, 'yearly': 150,
      'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#6875ee'},

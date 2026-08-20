@@ -177,11 +177,18 @@ substrate, and an earlier version of this page did, which is most of why it read
                                         <span class="pp-supname">{{ viewer_name }}</span><span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
                                     </span>
                                     {% comment %} The line a leaderboard row already puts under a
-                                    name, carrying the worn title. The level joins it after a dot,
-                                    in words, so somebody reading a board can see WHAT a supporter is
-                                    rather than having to decode a star count. {% endcomment %}
+                                    name, carrying the worn title. The level joins it after a dot, in
+                                    words, so somebody reading a board can see what a supporter IS
+                                    rather than decoding a star count.
+
+                                    "PlatPursuit Patron", not "Patron Supporter": the level names now
+                                    come from the giving register, so they are already supporter-words
+                                    and appending "Supporter" said the same thing twice. Naming the
+                                    site instead removes the ambiguity on a stranger's row and matches
+                                    the "permanent PlatPursuit Supporter credit" wording in the perk
+                                    list. {% endcomment %}
                                     <span class="sup-prev__sub">
-                                        {% if viewer_title %}{{ viewer_title }} &middot; {% endif %}{{ tier.name }} Supporter
+                                        {% if viewer_title %}{{ viewer_title }} &middot; {% endif %}PlatPursuit {{ tier.name }}
                                     </span>
                                 </span>
                                 <span class="sup-prev__score">1,204</span>

@@ -629,7 +629,7 @@ def test_the_marks_are_actually_drawn(client):
     assert heading_mark('cornerstone').count('<svg class="pp-supstar') == 5, 'the top level is not wearing five stars'
     assert heading_mark('sponsor').count('<svg class="pp-supstar') == 3
     assert heading_mark('backer').count('pp-supstar is-outline') == 1
-    assert heading_mark('sustainer').count('is-outline') == 0, 'the second level is still an outline'
+    assert heading_mark('contributor').count('is-outline') == 0, 'the second level is still an outline'
 
 
 def test_the_modal_still_centres_itself():
@@ -836,8 +836,11 @@ def test_the_preview_names_the_level_in_words(client):
     for tier in SUPPORT_TIERS:
         block = body[body.index(f'data-for="{tier["slug"]}"'):]
         block = block[:block.index('</div>', block.index('sup-prev__sub'))]
-        assert f'{tier["name"]} Supporter' in block, (
+        assert f'PlatPursuit {tier["name"]}' in block, (
             f'{tier["slug"]} does not name itself under the name'
+        )
+        assert f'{tier["name"]} Supporter' not in block, (
+            'the level names are already supporter-words; appending Supporter doubles up'
         )
 
 
@@ -858,7 +861,7 @@ def test_a_worn_title_sits_before_the_level(client):
     sub = body[body.index('sup-prev__sub'):]
     sub = sub[:sub.index('</span>')]
     assert 'The Completionist' in sub
-    assert sub.index('The Completionist') < sub.index('Supporter'), 'the earned title comes first'
+    assert sub.index('The Completionist') < sub.index('PlatPursuit'), 'the earned title comes first'
 
 
 def test_the_checklist_demonstrates_the_mark_it_describes(client):
