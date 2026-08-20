@@ -77,155 +77,237 @@
     .sup-hero__lede { font-size: 1.08rem; }
 }
 
-/* -------------------------------------------------------------------------------- the arc ---- */
-/* A CHRONOLOGY on a spine, not a progress bar. Deliberately not `.pp-horizon`, which the design
-   system requires to bind to a real percentage -- there is no honest number for "how far along is
-   the roadmap", and inventing one would break the page's own rule about the future. */
-.sup-arc {
-    position: relative;
-    padding-left: 26px;
+/* ------------------------------------------------------------------------- the artifacts ---- */
+/* The commissioned subject art, which is the one genuinely beautiful object this page can put in
+   front of somebody. It replaced a sentence that DESCRIBED the badges on a site where they are one
+   click away. Live rows off `badge_subject_art`, so this never goes stale. */
+.sup-art { margin-top: 30px; }
+
+.sup-art__row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-/* The spine fades out as it enters the future, which is the same honesty gradient the copy uses. */
-.sup-arc::before {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 10px;
-    bottom: 10px;
-    width: 2px;
-    border-radius: 2px;
-    background: linear-gradient(
-        180deg,
-        color-mix(in oklab, var(--pp-primary) 55%, transparent) 0%,
-        color-mix(in oklab, var(--pp-primary) 30%, transparent) 38%,
-        var(--pp-border) 62%,
-        color-mix(in oklab, var(--pp-border) 40%, transparent) 100%
-    );
+.sup-art__cell {
+    width: clamp(58px, 15vw, 96px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
 }
 
-.sup-beat {
-    position: relative;
-    padding: 26px 0;
+/* `object-contain`: badge art is a transparent, custom-shaped drawing, never a photo to crop. */
+.sup-art__cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
 }
 
-.sup-beat__mark {
-    position: absolute;
-    left: -26px;
-    top: 32px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--pp-bg-0);
-    border: 2px solid var(--pp-border);
-}
+/* The middle piece sits proudest, the outer ones step back, so the row reads as a considered
+   arrangement rather than a filmstrip. Nothing moves on hover: these are not interactive. */
+.sup-art__cell:nth-child(even) { transform: translateY(6px); }
+.sup-art__cell:nth-child(3) { width: clamp(72px, 19vw, 118px); }
 
-/* Filled for what has happened, hollow for what has not. */
-.sup-beat--past .sup-beat__mark,
-.sup-beat--now .sup-beat__mark {
-    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-bg-0));
-}
-
-.sup-beat--now .sup-beat__mark {
-    box-shadow: 0 0 0 4px color-mix(in oklab, var(--pp-primary) 14%, transparent);
-}
-
-.sup-beat__when {
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
+.sup-art__cap {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 0.78rem;
     color: var(--pp-text-mute);
 }
 
-.sup-beat__h {
-    margin-top: 8px;
-    font-family: var(--pp-font-display), sans-serif;
-    font-size: clamp(1.25rem, 4.4vw, 1.75rem);
-    font-weight: 800;
-    line-height: 1.2;
-    letter-spacing: -0.015em;
-    color: var(--pp-text);
-    text-wrap: balance;
+@media (prefers-reduced-motion: no-preference) {
+    .sup-art__cell {
+        animation: ppRevealIn 0.6s var(--pp-ease) backwards;
+        animation-delay: calc(var(--i, 0) * 70ms + 120ms);
+    }
 }
 
-.sup-beat__h--ask { color: var(--pp-text); }
+/* ------------------------------------------------------------------------- what got built ---- */
+.sup-built { margin-top: 44px; }
 
-.sup-beat__body p {
-    margin-top: 12px;
-    font-size: 0.95rem;
-    line-height: 1.68;
-    color: var(--pp-text-dim);
-    max-width: 60ch;
+.sup-built__cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    align-items: center;
 }
 
-.sup-beat__body strong { color: var(--pp-text); font-weight: 700; }
-.sup-beat__body em { color: var(--pp-text); font-style: italic; padding-right: 2px; }
+@media (min-width: 768px) {
+    .sup-built { margin-top: 64px; }
+    .sup-built__cols { grid-template-columns: 1fr 0.85fr; gap: 28px; }
+}
 
-/* The live figures. The one place in the arc that carries numbers, which is the point. */
-.sup-beat__figs {
+.sup-built__chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 22px;
-    margin-top: 16px !important;
-    max-width: none !important;
+    gap: 6px;
+    margin-top: 14px;
 }
 
-.sup-beat__figs span {
+.sup-built__chips li {
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--pp-text-dim);
+}
+
+.sup-built__figs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    margin-top: 18px;
+}
+
+.sup-built__figs span {
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 650;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--pp-text-mute);
 }
 
-.sup-beat__figs .pp-tally {
-    font-size: 1.35rem;
+.sup-built__figs .pp-tally {
+    font-size: 1.3rem;
     line-height: 1;
     color: var(--pp-primary);
 }
 
+/* The plat card. Tilted a touch and lifted, so it reads as an object lying on the page rather than
+   a screenshot pasted into it. */
+.sup-built__card { margin: 0; }
+
+.sup-built__card img {
+    display: block;
+    width: 100%;
+    max-width: 340px;
+    margin-inline: auto;
+    border-radius: var(--pp-radius-md);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+    transform: rotate(-1.4deg);
+}
+
+.sup-built__card figcaption {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--pp-text-mute);
+}
+
 @media (min-width: 768px) {
-    .sup-arc { padding-left: 34px; }
-    .sup-arc::before { left: 6px; }
-    .sup-beat { padding: 38px 0; }
-    .sup-beat__mark { left: -34px; top: 40px; width: 14px; height: 14px; }
-    .sup-beat__body p { font-size: 1.02rem; }
-    .sup-beat__figs .pp-tally { font-size: 1.6rem; }
+    .sup-built__card img { max-width: none; }
+    .sup-built__figs .pp-tally { font-size: 1.5rem; }
 }
 
-/* Beat 3's three steps. No dates, no counts, no bars -- words only. */
-.sup-next {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    margin-top: 18px;
+/* ----------------------------------------------------------------------------- roadmap ---- */
+/* A strip you scan in seconds. No dates, no counts, no bars: the future renders in words. */
+.sup-road { margin-top: 44px; }
+
+.sup-road__strip {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 16px;
 }
 
-.sup-next__step {
-    padding-left: 14px;
-    border-left: 2px solid var(--pp-border);
+@media (min-width: 768px) {
+    .sup-road { margin-top: 64px; }
+    .sup-road__strip { grid-template-columns: repeat(3, 1fr); gap: 12px; }
 }
 
-.sup-next__k {
-    font-size: 0.7rem;
+.sup-road__step {
+    padding: 14px 16px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+}
+
+/* Confidence fades left to right, which is the same honesty gradient the copy holds to. */
+.sup-road__step:nth-child(1) { border-left: 2px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
+.sup-road__step:nth-child(2) { border-left: 2px solid color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); }
+.sup-road__step:nth-child(3) { border-left: 2px solid var(--pp-border); }
+
+.sup-road__k {
+    font-size: 0.64rem;
     font-weight: 800;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.11em;
     text-transform: uppercase;
     color: var(--pp-text-mute);
 }
 
-.sup-next__step p + p,
-.sup-next__step p:last-child { margin-top: 6px !important; }
+.sup-road__step p {
+    margin-top: 7px;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
 
-.sup-next__more {
-    font-style: italic;
-    color: var(--pp-text-mute) !important;
-    padding-right: 4px;                     /* italic glyphs slant past their box */
+/* -------------------------------------------------------------------------- signed note ---- */
+/* The Wikipedia move: a letter from a person, not marketing from an organisation. The only place on
+   the page that speaks as "I", which is exactly why it is set apart from everything around it. */
+.sup-note {
+    margin-top: 44px;
+    padding: 20px 22px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    border-left: 3px solid color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border));
+    background: var(--pp-bg-1);
+}
+
+.sup-note p {
+    font-size: 0.9rem;
+    line-height: 1.68;
+    color: var(--pp-text-dim);
+    max-width: 58ch;
+}
+
+.sup-note p + p { margin-top: 10px; }
+
+.sup-note__sig {
+    margin-top: 14px !important;
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--pp-text) !important;
+}
+
+@media (min-width: 768px) {
+    .sup-note { margin-top: 64px; padding: 26px 28px; }
+    .sup-note p { font-size: 0.95rem; }
+}
+
+/* ----------------------------------------------------------------------------- live beta ---- */
+/* Only rendered while something is in testing. The PERMANENT claim lives in the "New things" perk
+   row, so this section never goes blank between betas. */
+.sup-beta {
+    margin-top: 16px;
+    padding: 11px 14px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 9%, transparent);
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
+
+.sup-beta b { color: var(--pp-text); font-weight: 700; }
+
+.sup-beta__k {
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--pp-primary);
+    margin-bottom: 4px;
 }
 
 /* --------------------------------------------------------------------------- section heads ---- */

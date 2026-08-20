@@ -65,7 +65,6 @@ PREMIUM_PERKS = [
         'name': 'Manual syncing',
         'everyone': 'Once an hour',
         'member': 'Every five minutes',
-        'note': 'Automatic background syncing runs for everyone either way.',
     },
     {
         'slug': 'discord',
@@ -74,7 +73,7 @@ PREMIUM_PERKS = [
         'member': 'A supporter role, and the room where we work out what gets built next',
         # Sold as ONE perk on purpose: the say IS the Discord perk, so the dependency on a second
         # platform is visible before payment rather than discovered after.
-        'note': 'Steering the roadmap happens in conversation there, not as a vote on the site.',
+        'note': 'You will need to be in Discord with us for that part.',
     },
     {
         'slug': 'mark',
@@ -82,7 +81,7 @@ PREMIUM_PERKS = [
         'everyone': 'Your name, as you earned it',
         'member': 'A quiet supporter mark beside it, site-wide',
         # Guardrail: flair is a SEPARATE visual language from earned status, never a better one.
-        'note': 'Deliberately understated. It says you chip in, never that you hunt better.',
+        'note': 'Never louder than something you earned.',
     },
     {
         'slug': 'early',

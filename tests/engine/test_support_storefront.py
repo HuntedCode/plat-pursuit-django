@@ -79,11 +79,11 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     body = _flat(client)
 
     assert 'Support Platinum Pursuit' in body
-    # The whole arc, not a login wall wearing the title. One needle per beat.
-    assert 'It started with a Discord server' in body
-    assert "Where we're going" in body
-    assert 'we need your help to do it' in body.lower()
-    assert 'no investors' in body.lower()
+    # The pitch, the evidence and the roadmap, not a login wall wearing the title.
+    assert 'always will be' in body
+    assert 'What your support builds next' in body
+    # ...and the human voice, which is the page's whole emotional argument.
+    assert 'that is me' in body
     # ...and the ask degrades to a way IN rather than a dead end.
     assert 'Sign in to continue' in body
     assert 'name="tier"' not in body, 'anonymous visitors are shown a buy button they cannot use'
@@ -332,8 +332,8 @@ def test_the_future_carries_no_numbers(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    future = _slice(body, 'sup-beat--next')
-    assert 'Soon' in future, 'sliced the wrong section'
+    future = _slice(body, 'sup-road__strip')
+    assert 'Now' in future, 'sliced the wrong section'
     assert 'data-countup' not in future, 'the roadmap is quantifying itself'
     assert 'pp-tally' not in future
 
@@ -349,12 +349,12 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=None), _member(False):
         body = _get(client).content.decode()
 
-    now = _slice(body, 'sup-beat--now')
-    assert 'trophies tracked' not in now, 'the page is advertising a zero'
-    assert 'sup-beat__figs' not in now
-    # The beat itself still stands.
-    assert 'Where we are now' in now
-    assert 'just me!' in now
+    built = _slice(body, 'sup-built')
+    assert 'trophies tracked' not in built, 'the page is advertising a zero'
+    assert 'sup-built__figs' not in built
+    # The section itself still stands.
+    assert 'Built in the first eight months' in built
+    assert 'Milestones' in built
 
 
 def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
@@ -365,20 +365,23 @@ def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
     with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=half), _member(False):
         body = _get(client).content.decode()
 
-    assert 'sup-beat__figs' not in _slice(body, 'sup-beat--now')
+    assert 'sup-built__figs' not in _slice(body, 'sup-built')
 
 
 # ------------------------------------------------------------------ involvement / the beta ----
 
 def test_early_access_still_says_something_between_betas(client):
-    """`CURRENT_BETA` is None most of the time. Early access is one of the two things this page sells
-    hardest, so its section cannot go blank in the gaps -- least of all for somebody who subscribed
-    FOR it and arrived in a quiet week."""
+    """`CURRENT_BETA` is None most of the time, so the PERMANENT claim about early access cannot
+    live in the live-beta callout -- it lives in the perk table, which always renders.
+
+    Otherwise one of the two things this page sells hardest disappears for whoever visits in a quiet
+    week, including somebody who subscribed FOR it.
+    """
     with patch('users.views.CURRENT_BETA', None):
         body = _flat(client)
 
-    assert 'Early access' in body
-    assert 'Nothing is in testing at the moment' in body
+    assert 'New things' in body, 'early access vanishes entirely between betas'
+    assert 'Before they ship' in body
     assert 'In testing now' not in body, 'claiming a live beta while none is running'
 
 
@@ -390,7 +393,6 @@ def test_a_live_beta_is_named_on_the_page(client):
     assert 'In testing now' in body
     assert 'The new Challenges' in body
     assert 'Tell us what breaks.' in body
-    assert 'Nothing is in testing at the moment' not in body
 
 
 def test_the_discord_dependency_is_stated_before_payment(client):
@@ -399,7 +401,7 @@ def test_the_discord_dependency_is_stated_before_payment(client):
     body = _flat(client)
 
     assert 'Discord' in body
-    assert 'you will need to be in there with us' in body
+    assert 'You will need to be in Discord with us' in body
 
 
 def test_the_fundraiser_is_a_line_and_not_a_second_pitch(client):
@@ -425,4 +427,48 @@ def test_the_fundraiser_is_a_line_and_not_a_second_pitch(client):
     # One quiet line, not a card with its own heading.
     assert 'sup-else' in body
     assert body.count('Badge Art Drive') == 1
+
+
+# ------------------------------------------------------------------- showing, not telling ----
+
+def test_the_commissioned_artwork_is_actually_on_the_page(client):
+    """The page's central design bet. An earlier draft WROTE "badges that are genuinely worth
+    collecting" as prose, on a site where the artwork is the moat and one click away -- the same
+    mistake `badge_how_it_works` was built to correct ("if the chrome ever fights the art, the chrome
+    loses"). If this band silently stops rendering, the page reverts to describing itself.
+    """
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    group = PlatformGroupFactory()
+    series = BadgeSeriesFactory(name='Helldivers', badge_image='badges/helldivers.png')
+    GroupBadgeFactory(series=series, platform_group=group, is_live=True)
+
+    with _member(False):
+        body = _get(client).content.decode()
+
+    assert 'sup-art__row' in body, 'the artwork band is gone'
+    assert 'Helldivers badge artwork' in body, 'the art is not being rendered'
+
+
+def test_an_empty_catalogue_drops_the_art_band_rather_than_faking_it(client):
+    """No live badges with custom art means nothing to show. The band is omitted whole rather than
+    rendering empty frames or a default placeholder, which would undercut the exact claim it makes."""
+    with _member(False):
+        body = _get(client).content.decode()
+
+    assert 'sup-art__row' not in body
+    # The section that follows still carries the argument on its own.
+    assert 'Built in the first eight months' in body
+
+
+def test_the_note_is_signed_and_speaks_as_one_person(client):
+    """The Wikipedia move, and the reason that appeal works: a letter from a person rather than
+    marketing from an organisation. It is the only place on the page that says "I", and it carries
+    the emotional job that four beats of prose used to do badly."""
+    body = _flat(client)
+
+    note = body[body.index('sup-note'):]
+    note = note[:note.index('</aside>')]
+    assert 'that is me' in note
+    assert 'Jeffrey' in note, 'the note is unsigned, which is most of why it works'
 

@@ -223,6 +223,12 @@ class SupportStorefrontView(TemplateView):
 
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
+        # Show the work rather than list it. `badge_subject_art` returns the commissioned SUBJECT
+        # drawings (one per series, avatar submissions skipped, bounded scan) -- the part an artist
+        # actually drew, which is the only genuinely beautiful object this page can put in front of
+        # somebody. Empty on a fresh catalogue, and the band is omitted rather than faked.
+        from trophies.views.badge_views import badge_subject_art
+        context['badge_art'] = badge_subject_art(limit=5)
         context['current_beta'] = CURRENT_BETA
         context['support_fundraiser'] = get_live_fundraiser()
         return context
