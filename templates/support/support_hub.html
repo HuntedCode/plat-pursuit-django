@@ -170,7 +170,12 @@ substrate, and an earlier version of this page did, which is most of why it read
                                 <span class="sup-prev__rank">#12</span>
                                 <span class="sup-prev__av"></span>
                                 <span class="sup-prev__name">
-                                    {{ viewer_name }}<span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
+                                    {% comment %} The real primitive, not a mock: `.pp-supname` is
+                                    the site-wide supporter name treatment and this is the one place
+                                    it can be used today, because the level is in context here. Every
+                                    other surface that renders a username knows only the boolean
+                                    `Profile.user_is_premium`. {% endcomment %}
+                                    <span class="pp-supname">{{ viewer_name }}</span><span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
                                 </span>
                                 <span class="sup-prev__score">1,204</span>
                             </div>

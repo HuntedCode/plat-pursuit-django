@@ -70,3 +70,14 @@
  * cause and not just the symptom. `tests/engine/test_css_animations.py` now fails on any such dangling
  * reference. */
 @keyframes ppRevealIn { from { opacity: 0; transform: translateY(12px) scale(0.955); } to { opacity: 1; transform: none; } }
+
+/* The supporter name sheen. A single pass, then a long rest.
+   `motion-patterns.md`: "loop by resting at a neutral state at the wrap" -- a continuous sweep on
+   every supporter name in a leaderboard would repaint those glyphs forever and read cheap. The pass
+   occupies the first ~12% of the cycle; the remaining ~88% is perfectly still.
+   Only `background-position` moves, so nothing lays out and only the text repaints. */
+@keyframes ppSupSheen {
+    0%   { background-position: 150% 0; }
+    12%  { background-position: -60% 0; }
+    100% { background-position: -60% 0; }
+}

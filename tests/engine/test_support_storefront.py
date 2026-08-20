@@ -662,3 +662,69 @@ def test_no_star_row_is_sized_for_a_single_star():
                 f'{cls} is sized for one star and will crush the rest: {rule[:90]}'
             )
 
+
+# ------------------------------------------------------------------- the supporter name mark ----
+
+def test_the_supporter_name_treatment_never_gets_louder_with_price():
+    """ONE animation, six colours. The level changes the hue and NOTHING else.
+
+    `visual-identity.md`: flair is a separate visual language from earned status, never a better one,
+    and neon is earned by state rather than bought. A treatment that grew an extra glow or a longer
+    sweep at the top would be buying prominence next to hunters who earned their rank, which is the
+    one thing this whole model is built to avoid.
+
+    So there must be exactly one animation and no per-level rules at all -- the colour arrives inline
+    from the constant.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
+
+    assert css.count('animation:') == 1, 'more than one animation on the supporter name'
+    for tier in SUPPORT_TIERS:
+        assert tier['slug'] not in css, (
+            f"supporter.css has a rule for {tier['slug']} -- the levels must differ by hue only, "
+            f"and that hue comes inline from SUPPORT_TIERS"
+        )
+
+
+def test_the_name_is_legible_without_background_clip():
+    """`background-clip: text` needs `color: transparent` to show through, so a browser without it
+    renders an INVISIBLE username. The flat tier colour is declared first and unguarded; everything
+    that can make the name disappear sits inside an @supports."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
+
+    base = css[css.index('.pp-supname {'):]
+    base = base[:base.index('}')]
+    assert 'color: var(--sup-t' in base, 'no unguarded colour, so the name can vanish'
+    assert 'transparent' not in base
+
+    guarded = css[css.index('@supports'):]
+    assert 'color: transparent' in guarded, 'the transparent fill is not behind a support check'
+
+
+def test_the_sheen_rests_rather_than_looping():
+    """A continuous sweep on every supporter name in a leaderboard repaints those glyphs forever.
+    `motion-patterns.md` is explicit: loop by resting at a neutral state at the wrap. The pass takes
+    a small fraction of the cycle and the rest of it sits still."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    motion = (root / 'static' / 'css' / 'components' / 'motion.css').read_text(encoding='utf-8')
+
+    frames = motion[motion.index('@keyframes ppSupSheen'):]
+    frames = frames[:frames.index(chr(10) + '}')]
+    # The end position is reached early and held, which is what makes the rest a rest.
+    assert '12%' in frames and '100%' in frames
+    held = frames[frames.index('12%'):]
+    assert held.count('-60%') == 2, 'the sweep does not settle and hold'
+
+
+def test_the_legacy_name_treatment_is_not_used_here():
+    """`.legendary-title` is legacy: built to animate but never wired (`--shimmer-size` is undefined
+    anywhere), in a font the site does not use, in gold -- which on a trophy site reads as
+    achievement rather than support."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    markup = (root / 'templates' / 'support' / 'support_hub.html').read_text(encoding='utf-8')
+
+    assert 'legendary-title' not in markup
+    assert 'pp-supname' in markup
+

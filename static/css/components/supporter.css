@@ -1,0 +1,76 @@
+/* ============================================================================================
+   The supporter mark: how a supporter's name looks, anywhere it appears.
+   --------------------------------------------------------------------------------------------
+   ONE animation, six colours. The level changes the hue and nothing else -- no extra glow at the
+   top, no second shape, no escalating amplitude. That is what keeps this on the right side of the
+   guardrail in `visual-identity.md`: flair is a SEPARATE visual language from earned status, never
+   a better one, and *neon is earned by state, not bought*. A treatment that got louder with price
+   would be buying prominence next to hunters who earned their rank.
+
+   REPLACES `.legendary-title` (input.css:485), which is legacy and should not be used. That one was
+   built to animate and never wired -- `background-size: var(--shimmer-size)` referenced a custom
+   property that is not defined anywhere in the codebase, so it had no oversized track to slide
+   along. It also used Montserrat (not a site font), a four-layer text-shadow, and a gold-and-orange
+   palette, which on a trophy site reads as achievement rather than support.
+
+   COLOUR ARRIVES INLINE as `--sup-t`, straight from `SUPPORT_TIERS[*]['colour']` in
+   users/constants.py. There is deliberately no per-level rule here: the palette lived in a Python
+   list AND a CSS block once, and the two could quietly disagree. The constant is the only source.
+
+       <span class="pp-supname" style="--sup-t: {{ tier.colour }}">Hunter</span>
+
+   NOT YET WIRED SITE-WIDE. Every surface that renders a username -- leaderboard rows, comments, the
+   hunters wall -- knows only `Profile.user_is_premium`, a boolean. Colouring by level needs the
+   level denormalized onto Profile beside it (`update_profile_premium` is the single writer and
+   already saves two fields, so it would save a third). That migration is deliberately NOT done yet:
+   the ladder is still placeholders and its names may move, and a migration for a design in flux is
+   how you end up migrating twice.
+   ============================================================================================ */
+
+.pp-supname {
+    font-weight: 700;
+    /* The resting state is a flat tier-coloured name. Everything below is addition, so if any of it
+       fails to apply the name is still legible and still on-brand. */
+    color: var(--sup-t, var(--pp-accent));
+}
+
+/* `background-clip: text` needs `color: transparent` to show through, which means an unsupported
+   browser renders an INVISIBLE username. Gating on support keeps the flat colour above as the
+   fallback rather than nothing at all. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+    .pp-supname {
+        /* The sheen is a lighter band travelling through the tier colour. Mixed here rather than
+           inside the keyframe: lightningcss silently drops @keyframes stops containing color-mix,
+           which is a documented trap in this codebase. */
+        --sup-sheen: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 30%, white);
+        background-image: linear-gradient(
+            100deg,
+            var(--sup-t, var(--pp-accent)) 0%,
+            var(--sup-t, var(--pp-accent)) 40%,
+            var(--sup-sheen) 50%,
+            var(--sup-t, var(--pp-accent)) 60%,
+            var(--sup-t, var(--pp-accent)) 100%
+        );
+        background-size: 280% 100%;
+        background-position: -60% 0;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+    }
+}
+
+/* SWEEP, THEN REST. The pass takes about a second of a nine-second cycle and the rest of it sits
+   perfectly still. A continuous loop would have every supporter name on a leaderboard repainting
+   its glyphs forever, and `motion-patterns.md` is explicit that perpetual full redraws read cheap:
+   "loop by resting at a neutral state at the wrap". The stillness is what makes it feel expensive.
+
+   Only `background-position` animates, so there is no layout or paint of anything but the text. */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (background-clip: text) or (-webkit-background-clip: text) {
+        .pp-supname { animation: ppSupSheen 9s var(--pp-ease) infinite; }
+    }
+}
+
+/* Staggered so a wall of names does not pulse in unison, which is the single thing that would make
+   this read as a mobile game. Set per row where the surface can afford it. */
+.pp-supname[style*="--sup-delay"] { animation-delay: var(--sup-delay); }
