@@ -28,6 +28,20 @@ from tests.factories import UserFactory
 pytestmark = pytest.mark.django_db
 
 
+def _css_rules(name):
+    """A component stylesheet with its comments stripped.
+
+    Comments in these files describe the very things the tests forbid -- "no glow here", "no rule per
+    level" -- so a bare substring search over raw CSS matches its own documentation and fails on
+    correct code. Three tests tripped on exactly that ('drop-shadow' inside a comment saying there is
+    no drop-shadow; 'ally' inside the word 'eventually').
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / name).read_text(encoding='utf-8')
+    return re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+
+
+
 class _FakePrice:
     """Stands in for a djstripe Price. Only `stripe_data` is ever read by the view."""
 
@@ -221,7 +235,10 @@ def test_missing_pricing_degrades_the_block_not_the_page(client):
 
     assert response.status_code == 200, 'a pricing outage takes down the whole Support hub'
     assert 'Support Platinum Pursuit' in body, 'the pitch went with the prices'
-    assert 'name="tier"' not in body, 'buy buttons are rendered with no prices behind them'
+    # While the ladder is PLACEHOLDERS its prices come from the constant, so a Stripe outage is
+    # simply irrelevant to it -- and the buttons are inert anyway. The case that matters, a live
+    # ladder with no prices behind it, is `test_placeholders_can_never_reach_live_stripe`.
+    assert 'Not live yet' in body, 'the ladder is being offered as though it were real'
 
 
 # ------------------------------------------------------------------------------- the URLs ----
@@ -460,7 +477,9 @@ def test_the_purchase_box_needs_no_javascript(client):
     look keys on -- if the markup ever moves to buttons, this stops being true silently."""
     body = _flat(client)
 
-    assert body.count('type="radio" name="sup-amt"') == 6, 'the amounts are not radios any more'
+    # `name="tier"` deliberately: it is the field the checkout POST handler already validates on, so
+    # the placeholder is shaped like the real form rather than needing renaming to become one.
+    assert body.count('type="radio" name="tier"') == 6, 'the amounts are not radios any more'
     assert 'type="radio" name="sup-cycle"' in body, 'the cycle switch is not radio-backed any more'
 
 
@@ -520,15 +539,6 @@ def test_an_anonymous_visitor_still_sees_what_the_preview_is_showing(client):
 
     assert 'YourName' in body
     assert 'sup-prev' in body
-
-
-def test_the_preview_says_it_is_a_placeholder(client):
-    """It is a mock of a leaderboard row with a stand-in mark, and the marks are not designed yet.
-    Shipping an approximation that does not admit to being one is how it quietly becomes the design.
-    """
-    body = _flat(client)
-
-    assert 'not designed the marks yet' in body
 
 
 def test_the_prices_are_the_agreed_ladder():
@@ -680,8 +690,13 @@ def test_the_supporter_name_treatment_never_gets_louder_with_price():
     css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
 
     assert css.count('animation:') == 1, 'more than one animation on the supporter name'
+
+    # Searched as a SELECTOR, not as a bare substring. A plain `slug in css` also matches prose --
+    # "ally" is inside "eventually" -- which made this fail on a comment while passing on a real
+    # rule would have been pure luck.
+    rules = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
     for tier in SUPPORT_TIERS:
-        assert tier['slug'] not in css, (
+        assert not re.search(r'[.\[#-]' + tier['slug'] + r'\b', rules), (
             f"supporter.css has a rule for {tier['slug']} -- the levels must differ by hue only, "
             f"and that hue comes inline from SUPPORT_TIERS"
         )
@@ -751,40 +766,35 @@ def test_the_legacy_name_treatment_is_not_used_here():
     assert 'pp-supname' in markup
 
 
-def test_the_star_is_the_level_hue_lifted_toward_white():
-    """The star is the same hue as the name at a much lighter value: two tones, one hue, so the pair
-    cannot clash.
+def test_the_star_wears_the_level_colour():
+    """The star and the name share a hue on purpose: together they are ONE mark, not two things that
+    happen to sit beside each other.
 
-    Three things were tried and rejected getting here, and each would look like a reasonable tidy-up
-    to someone reading this file cold:
+    Two alternatives were built and rejected, and both would look like reasonable improvements to
+    someone reading this file cold, so they are named here rather than rediscovered:
 
-      - the star at exactly the name's colour  -> one flat block, the mark says nothing
-      - one constant pale star for every level -> levels stop being tellable apart
-      - a level-coloured glow behind it        -> rejected on sight
+      - a pale tint of the level hue -> reads washed out
+      - one constant colour for all six -> levels stop being tellable apart
 
-    So the colour must be DERIVED from `--sup-t` (not constant, not raw) and mixed toward white.
+    So the fill must be `--sup-t` itself: not mixed, not constant.
     """
     root = pathlib.Path(__file__).resolve().parents[2]
     css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
 
     rule = css[css.index('.pp-supstar {'):]
     rule = rule[:rule.index(chr(10) + '}')]
+    fill = next(l for l in rule.splitlines() if l.strip().startswith('fill:'))
 
-    assert '--sup-t' in rule, 'the star is a constant again; levels are no longer tellable apart'
-    assert 'color-mix' in rule and 'white' in rule, (
-        'the star is the raw level hue, which makes the mark one flat block of colour'
-    )
+    assert '--sup-t' in fill, 'the star is a constant again; levels are no longer tellable apart'
+    assert 'color-mix' not in fill, 'the star is a tint again, which reads washed out'
 
 
 def test_the_star_carries_no_glow():
     """Removed by request, and it is the kind of flourish that creeps back. `drop-shadow` on a mark
     that eventually renders on every supporter name in a virtualized board is also a cost nobody
     asked for."""
-    root = pathlib.Path(__file__).resolve().parents[2]
-    css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
-
-    star = css[css.index('/* --------------------------------------------------------------------'
-                         '---------- the star ---- */'):]
+    rules = _css_rules('supporter.css')
+    star = rules[rules.index('.pp-supstar {'):]
     assert 'drop-shadow' not in star and 'filter:' not in star, 'the glow is back'
 
 

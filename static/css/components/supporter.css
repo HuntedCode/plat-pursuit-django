@@ -88,35 +88,25 @@
 .pp-supname[style*="--sup-delay"] { animation-delay: var(--sup-delay); }
 
 /* ------------------------------------------------------------------------------ the star ---- */
-/* ONE SHAPE, a changing count, and a colour DERIVED from the level rather than picked for it.
+/* ONE SHAPE, a changing count, in the level's own colour.
 
-   The star is the same hue as the name, lifted well toward white. That reads as two tones without
-   being two colours: the pair cannot clash, because it is one hue at two values.
+   The star and the name share a hue on purpose: together they are ONE mark rather than two things
+   that happen to sit next to each other. A pale tint and a constant colour were both tried and both
+   broke that -- the tint read as washed out and the constant stopped telling levels apart.
 
-   Three things were tried and rejected on the way here, and they are worth naming so they are not
-   tried again:
-     - The star at exactly the name's colour. One flat block; the mark had nothing to read.
-     - One constant pale star for every level. Legible, but the star stopped saying anything, and a
-       reader could no longer tell levels apart without counting.
-     - A level-coloured glow behind a constant star. Rejected on sight.
-   Complementary hues were also considered and ruled out earlier: complements are maximum contrast,
-   they vibrate, and this mark sits beside earned rank chrome on leaderboards, where
-   `visual-identity.md` requires flair never to outshine earned status.
-
-   Derived with `color-mix` from the one colour already in `SUPPORT_TIERS`, so there is no second
-   palette that could drift out of tune with the first. */
+   No glow. A `drop-shadow` here eventually renders on every supporter name in a virtualized board,
+   and it was not what the mark needed anyway. */
 .pp-supstar {
-    --pp-supstar-c: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 34%, white);
     width: 11px;
     height: 11px;
     flex: none;
-    fill: var(--pp-supstar-c);
+    fill: var(--sup-t, var(--pp-accent));
 }
 
 /* The entry level, and the only outline: it reads as the start of something rather than a lesser
    version of it. */
 .pp-supstar.is-outline {
     fill: none;
-    stroke: var(--pp-supstar-c);
+    stroke: var(--sup-t, var(--pp-accent));
     stroke-width: 2;
 }

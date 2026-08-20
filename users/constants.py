@@ -53,17 +53,17 @@ PREMIUM_TIER_DISPLAY = {
 #   none  -> not listed          named -> name on the site          linked -> name + a link
 SUPPORT_TIERS = [
     {'slug': 'friend',   'name': 'Friend',   'monthly': 4,  'yearly': 40,
-     'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#6fa89a'},
+     'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc2a2'},
     {'slug': 'ally',     'name': 'Ally',     'monthly': 10, 'yearly': 100,
-     'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#5f9ed8'},
+     'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#4fa8e8'},
     {'slug': 'patron',   'name': 'Patron',   'monthly': 15, 'yearly': 150,
-     'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#7f8ee6'},
+     'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#7b8cf0'},
     {'slug': 'champion', 'name': 'Champion', 'monthly': 20, 'yearly': 200,
-     'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a87ce0'},
+     'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a86ef0'},
     {'slug': 'guardian', 'name': 'Guardian', 'monthly': 25, 'yearly': 250,
-     'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#d972b8'},
+     'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#e069c4'},
     {'slug': 'luminary', 'name': 'Luminary', 'monthly': 30, 'yearly': 300,
-     'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#ee6f97'},
+     'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#f56a9e'},
 ]
 
 # The ladder above is DESIGN ONLY until its twelve Stripe prices and twelve PayPal plans exist.

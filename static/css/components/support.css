@@ -249,11 +249,11 @@
     padding: 9px 6px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid var(--pp-border);
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.05);
     font-family: var(--pp-font-display), sans-serif;
     font-size: 1.05rem;
     font-weight: 800;
-    color: var(--pp-text-dim);
+    color: var(--pp-text);
     cursor: pointer;
     transition: border-color var(--pp-dur-fast) var(--pp-ease),
                 background var(--pp-dur-fast) var(--pp-ease),
@@ -283,14 +283,6 @@
 .sup-box[data-cycle="yearly"] .sup-amt__m { display: none; }
 .sup-box[data-cycle="yearly"] .sup-amt__y { display: block; }
 
-.sup-buy__saving {
-    margin-top: 9px;
-    font-size: 0.72rem;
-    color: var(--pp-text-mute);
-    display: none;
-}
-
-.sup-box[data-cycle="yearly"] .sup-buy__saving { display: block; }
 
 /* The mark's containers. The mark itself lives in `components/supporter.css` -- it is site-wide and
    leaderboards must not end up depending on the storefront's stylesheet to draw a username. */
@@ -316,7 +308,7 @@
 
 .sup-becomes__h {
     font-size: 0.82rem;
-    color: var(--pp-text-mute);
+    color: var(--pp-text-dim);
 }
 
 .sup-becomes__h b {
@@ -358,10 +350,15 @@
 .sup-prev__av {
     width: 22px;
     height: 22px;
+    flex: none;
     border-radius: 50%;
+    overflow: hidden;
     background: var(--pp-bg-2);
-    border: 1px solid var(--pp-border);
+    border: 1px solid color-mix(in oklab, var(--sup-t) 40%, var(--pp-border));
 }
+
+.sup-prev__av img,
+.sup-prev__av svg { width: 100%; height: 100%; object-fit: cover; }
 
 /* Name over sub-line, which is the shape a real leaderboard row already uses. */
 .sup-prev__who {
@@ -419,7 +416,7 @@
     font-family: var(--pp-font-display), sans-serif;
     font-size: 0.82rem;
     font-weight: 800;
-    color: var(--pp-text-dim);
+    color: var(--pp-text);
     font-variant-numeric: tabular-nums;
 }
 
@@ -446,7 +443,7 @@
     padding-left: 19px;
     font-size: 0.82rem;
     line-height: 1.5;
-    color: var(--pp-text-dim);
+    color: var(--pp-text);
 }
 
 .sup-gets li::before {
@@ -495,9 +492,17 @@
 .sup-buy__perks:hover { color: var(--pp-text); }
 
 /* ------------------------------------------------------------------------------ the CTA ---- */
+/* Stacked, primary first. Side by side would give PayPal equal weight, and most people are paying
+   by card -- the second option should be easy to find, not equally loud. */
+.sup-pays {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+
 .sup-buy__go {
     width: 100%;
-    margin-top: 16px;
     padding: 12px 16px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid color-mix(in oklab, var(--sup-t) 55%, var(--pp-border));
@@ -521,6 +526,21 @@
 /* Inert while the ladder is design-only. Still legible: this is the shape under review, so it must
    be obviously unpressable without being greyed into illegibility. */
 .sup-buy__go:disabled { cursor: default; opacity: 0.6; }
+
+/* Quieter than the card button: an outline rather than a fill. It is an alternative, not a
+   competitor, and the level's hue stays on the primary action. */
+.sup-buy__go--pp {
+    background: transparent;
+    border-color: var(--pp-border);
+    color: var(--pp-text-dim);
+    font-size: 0.85rem;
+}
+
+.sup-buy__go--pp:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: color-mix(in oklab, var(--sup-t) 45%, var(--pp-border));
+    color: var(--pp-text);
+}
 
 .sup-buy__go-y { display: none; }
 .sup-box[data-cycle="yearly"] .sup-buy__go-m { display: none; }

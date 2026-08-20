@@ -247,6 +247,9 @@ class SupportStorefrontView(TemplateView):
         # on a page that renders one row, so a single query is the right cost here.
         profile = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
         context['viewer_title'] = profile.displayed_title() if profile else None
+        # Their real avatar, for the same reason as their real name: the preview's promise is "this
+        # is how YOU will appear", and a stand-in silhouette beside a real name half-keeps it.
+        context['viewer_avatar'] = profile.avatar_url if profile else None
         # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- one
         # per series, avatar submissions skipped, bounded scan -- which is the part an artist actually
         # drew and the one thing on this page nobody else could show.
