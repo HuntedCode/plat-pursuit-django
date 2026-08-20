@@ -60,8 +60,17 @@ PREMIUM_TIER_DISPLAY = {
 # hue wheel (sea green -> sky -> periwinkle -> violet -> orchid -> rose): a continuous, obviously
 # synthetic ramp with no metal anywhere in it.
 #
-# `recognition` drives the public supporter wall:
-#   none  -> not listed          named -> name on the site          linked -> name + a link
+# `recognition` drives the public supporter wall, and it has exactly TWO states:
+#   none -> not listed          named -> name on the site
+#
+# There was a third, `linked`, giving the top two levels a link beside their name. It is gone, and
+# deliberately not coming back: selling a link invites people buying the top level purely for SEO,
+# and it puts us in the business of moderating what supporters point at. Both are real costs for a
+# perk nobody asked for.
+#
+# Collapsing it costs less than it looks. The star count, the colour and the level name already
+# separate all six levels EVERYWHERE a supporter's name appears -- the wall is a thank-you on top of
+# that, not the thing carrying the hierarchy.
 SUPPORT_TIERS = [
     {'slug': 'backer',      'name': 'Backer',      'monthly': 4,  'yearly': 40,
      'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc4a3'},
@@ -72,9 +81,9 @@ SUPPORT_TIERS = [
     {'slug': 'sponsor',     'name': 'Sponsor',     'monthly': 20, 'yearly': 200,
      'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a666ea'},
     {'slug': 'benefactor',  'name': 'Benefactor',  'monthly': 25, 'yearly': 250,
-     'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#e55dd9'},
+     'recognition': 'named',  'stars': 4, 'outline': False, 'colour': '#e55dd9'},
     {'slug': 'cornerstone', 'name': 'Cornerstone', 'monthly': 30, 'yearly': 300,
-     'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#fc7ea8'},
+     'recognition': 'named',  'stars': 5, 'outline': False, 'colour': '#fc7ea8'},
 ]
 
 # THE PALETTE IS A MEASURED RAMP, not six hand-picked colours. Hue steps ~35 degrees from teal to

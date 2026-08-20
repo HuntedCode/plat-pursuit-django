@@ -421,7 +421,12 @@ def test_every_level_gets_every_perk():
                              'stars', 'outline', 'colour'}, (
             f"{tier['slug']} carries something beyond price, recognition and how it looks"
         )
-        assert tier['recognition'] in ('none', 'named', 'linked')
+        assert tier['recognition'] in ('none', 'named'), (
+            f"{tier['slug']} has a third recognition state. There were three once -- the top two "
+            f"levels got a LINK beside their name -- and it was dropped on purpose: selling a link "
+            f"invites buying the top level for SEO and puts us in the business of moderating what "
+            f"supporters point at."
+        )
 
 
 def test_yearly_is_ten_months_at_every_level():
@@ -1114,4 +1119,19 @@ def test_countup_carries_a_prefix_through_the_formatter():
     assert 'countupPrefix' in fn, 'countUp ignores a prefix, so the symbol is dropped every frame'
     fmt = next(l for l in fn.splitlines() if 'const fmt' in l)
     assert 'pre' in fmt, 'the prefix is read but not used by the formatter'
+
+
+def test_no_level_sells_a_link(client):
+    """A perk that is easy to re-add and expensive to withdraw once names are live.
+
+    Checked in the RENDERED copy as well as the data, because the constant losing `linked` does not
+    stop a template from promising one.
+    """
+    body = _flat(client)
+
+    for tier in SUPPORT_TIERS:
+        block = body[body.index(f'data-for="{tier["slug"]}"'):]
+        block = block[:block.index('</ul>')]
+        assert 'link on the site' not in block.lower(), f'{tier["slug"]} is selling a link'
+        assert 'link beside' not in block.lower()
 
