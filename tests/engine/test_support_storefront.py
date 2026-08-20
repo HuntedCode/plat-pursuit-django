@@ -96,7 +96,7 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     # The statement and the ask, not a login wall wearing the title.
     assert 'Help us build' in body
     assert 'nothing locked away' in body
-    assert 'Friend' in body, 'the ladder is missing for a signed-out visitor'
+    assert 'Backer' in body, 'the ladder is missing for a signed-out visitor'
 
 
 def test_a_signed_in_non_member_sees_the_same_ladder(client):
@@ -124,7 +124,7 @@ def test_a_member_is_not_bounced_off_the_page(client):
 
     assert response.status_code == 200, 'a member cannot reach the Support hub at all'
     assert 'You already back this' in body
-    assert 'Friend' not in body, 'a member is being sold a second subscription'
+    assert 'Backer' not in body, 'a member is being sold a second subscription'
 
 
 # ------------------------------------------------------------------- the checkout contract ----
@@ -340,7 +340,7 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     assert 'sup-head__figs' not in body
     # The rest of the header still stands.
     assert 'Help us build' in body
-    assert 'Friend' in body
+    assert 'Backer' in body
 
 
 def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
@@ -628,8 +628,8 @@ def test_the_marks_are_actually_drawn(client):
 
     assert heading_mark('cornerstone').count('<svg class="pp-supstar') == 5, 'the top level is not wearing five stars'
     assert heading_mark('sponsor').count('<svg class="pp-supstar') == 3
-    assert heading_mark('friend').count('pp-supstar is-outline') == 1
-    assert heading_mark('backer').count('is-outline') == 0, 'the second level is still an outline'
+    assert heading_mark('backer').count('pp-supstar is-outline') == 1
+    assert heading_mark('sustainer').count('is-outline') == 0, 'the second level is still an outline'
 
 
 def test_the_modal_still_centres_itself():
@@ -935,3 +935,38 @@ def test_earned_titles_are_checked_by_hand_because_they_are_data():
     from trophies.models import Title
 
     assert hasattr(Title, 'name'), 'Title lost its name field; this note needs rewriting'
+
+
+def test_no_two_levels_look_alike():
+    """MEASURED, not eyeballed. Six hexes in a list can look perfectly distinct while two of them are
+    indistinguishable at 11px on a star or in a name on a leaderboard row.
+
+    That happened: Benefactor sat at hue 314 and Cornerstone at 338 -- 23 degrees apart, both
+    mid-lightness, both plainly pink -- and it was only caught by looking at the real page. The ramp
+    is even ~35 degree steps now, with lightness climbing toward the top so the last pair differs on
+    two axes rather than one.
+    """
+    import colorsys
+
+    def hls(hex_value):
+        r, g, b = (int(hex_value.lstrip('#')[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        h, l, _ = colorsys.rgb_to_hls(r, g, b)
+        return h * 360, l
+
+    read = [(t['name'], *hls(t['colour'])) for t in SUPPORT_TIERS]
+
+    for (a_name, a_h, a_l), (b_name, b_h, b_l) in zip(read, read[1:]):
+        hue_gap = abs(b_h - a_h)
+        light_gap = abs(b_l - a_l)
+        assert hue_gap >= 30 or light_gap >= 0.12, (
+            f'{a_name} and {b_name} are {hue_gap:.0f} degrees and {light_gap * 100:.0f}% lightness '
+            f'apart -- not tellable apart on an 11px star'
+        )
+
+    # ...and no PAIR anywhere in the ladder collides, not just neighbours.
+    for i, (a_name, a_h, a_l) in enumerate(read):
+        for b_name, b_h, b_l in read[i + 1:]:
+            assert abs(b_h - a_h) >= 30 or abs(b_l - a_l) >= 0.12, (
+                f'{a_name} and {b_name} read as the same colour'
+            )
+

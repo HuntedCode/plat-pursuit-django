@@ -63,19 +63,31 @@ PREMIUM_TIER_DISPLAY = {
 # `recognition` drives the public supporter wall:
 #   none  -> not listed          named -> name on the site          linked -> name + a link
 SUPPORT_TIERS = [
-    {'slug': 'friend',      'name': 'Friend',      'monthly': 4,  'yearly': 40,
-     'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc2a2'},
-    {'slug': 'backer',      'name': 'Backer',      'monthly': 10, 'yearly': 100,
-     'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#4fa8e8'},
+    {'slug': 'backer',      'name': 'Backer',      'monthly': 4,  'yearly': 40,
+     'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc4a3'},
+    {'slug': 'sustainer',   'name': 'Sustainer',   'monthly': 10, 'yearly': 100,
+     'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#47b6e6'},
     {'slug': 'patron',      'name': 'Patron',      'monthly': 15, 'yearly': 150,
-     'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#7b8cf0'},
+     'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#6875ee'},
     {'slug': 'sponsor',     'name': 'Sponsor',     'monthly': 20, 'yearly': 200,
-     'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a86ef0'},
+     'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a666ea'},
     {'slug': 'benefactor',  'name': 'Benefactor',  'monthly': 25, 'yearly': 250,
-     'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#e069c4'},
+     'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#e55dd9'},
     {'slug': 'cornerstone', 'name': 'Cornerstone', 'monthly': 30, 'yearly': 300,
-     'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#f56a9e'},
+     'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#fc7ea8'},
 ]
+
+# THE PALETTE IS A MEASURED RAMP, not six hand-picked colours. Hue steps ~35 degrees from teal to
+# rose, and lightness climbs toward the top so the last two levels differ on TWO axes.
+#
+# That last part is why: an earlier ramp put Benefactor at hue 314 and Cornerstone at 338 -- 23
+# degrees apart, both mid-lightness, both plainly "pink". At 11px on a star, or in a name on a
+# leaderboard row, they were not tellable apart. `test_no_two_levels_look_alike` measures the gaps
+# rather than trusting the hexes to look distinct in a list.
+#
+# Deliberately no warm metal anywhere in it: bronze, silver, gold and platinum are the trophy grades
+# AND the badge medallion metals here, so a warm level would put a bought mark in the same visual
+# family as an earned grade.
 
 # The ladder above is DESIGN ONLY until its twelve Stripe prices and twelve PayPal plans exist.
 #

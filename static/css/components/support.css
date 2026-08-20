@@ -295,12 +295,12 @@
 /* All six ship; the checked amount reveals its own. Pure CSS, no JS involved. */
 .sup-becomes { display: none; }
 
-.sup-box:has(.sup-amt input[value="friend"]:checked)   .sup-becomes[data-for="friend"],
-.sup-box:has(.sup-amt input[value="backer"]:checked)   .sup-becomes[data-for="backer"],
-.sup-box:has(.sup-amt input[value="patron"]:checked)     .sup-becomes[data-for="patron"],
+.sup-box:has(.sup-amt input[value="backer"]:checked) .sup-becomes[data-for="backer"],
+.sup-box:has(.sup-amt input[value="sustainer"]:checked) .sup-becomes[data-for="sustainer"],
+.sup-box:has(.sup-amt input[value="patron"]:checked) .sup-becomes[data-for="patron"],
 .sup-box:has(.sup-amt input[value="sponsor"]:checked) .sup-becomes[data-for="sponsor"],
 .sup-box:has(.sup-amt input[value="benefactor"]:checked) .sup-becomes[data-for="benefactor"],
-.sup-box:has(.sup-amt input[value="cornerstone"]:checked)  .sup-becomes[data-for="cornerstone"] {
+.sup-box:has(.sup-amt input[value="cornerstone"]:checked) .sup-becomes[data-for="cornerstone"] {
     display: block;
 }
 
