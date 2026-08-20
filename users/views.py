@@ -6,6 +6,7 @@ from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
+from django.db.models import Count
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -23,8 +24,9 @@ from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
-from users.constants import (PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY,
-                             SUPPORT_TIERS, SUPPORT_TIERS_ARE_PLACEHOLDERS)
+from users.constants import (ACTIVE_PREMIUM_TIERS, PAYPAL_PLANS, PREMIUM_PERKS,
+                             PREMIUM_TIER_DISPLAY, SUPPORT_TIERS,
+                             SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
@@ -250,6 +252,7 @@ class SupportStorefrontView(TemplateView):
         # Their real avatar, for the same reason as their real name: the preview's promise is "this
         # is how YOU will appear", and a stand-in silhouette beside a real name half-keeps it.
         context['viewer_avatar'] = profile.avatar_url if profile else None
+        context.update(self._support())
         # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- one
         # per series, avatar submissions skipped, bounded scan -- which is the part an artist actually
         # drew and the one thing on this page nobody else could show.
@@ -279,6 +282,65 @@ class SupportStorefrontView(TemplateView):
             if name:
                 return name
         return user.username or 'YourName'
+
+
+    SUPPORT_CACHE_KEY = 'support:stats'
+    SUPPORT_TTL = 300
+    LAUNCH = (2026, 1)
+
+    def _support(self):
+        """How the site is paid for: supporters, monthly support, months running, ads served.
+
+        COUNTS THE LEGACY TIERS TOO, and has to. Every real supporter today holds `premium_monthly`,
+        `premium_yearly` or `supporter`; nobody holds a ladder slug and nobody will until the twelve
+        SKUs exist and people move. A band that counted only the new ladder would read zero on a live
+        site, which is worse than not having one.
+
+        The money is a MONTHLY EQUIVALENT so one figure means one thing: a yearly pledge is divided
+        by twelve rather than counted whole. Legacy prices come from Stripe (the only place they
+        live); ladder prices come from the constant.
+
+        Returns `supporter_monthly = None` rather than 0 when Stripe prices are unavailable. Zero
+        would be a claim -- "nobody is paying" -- where None is the truth: "we cannot say right now",
+        and the template drops that one cell instead of publishing a wrong number.
+        """
+        data = cache.get(self.SUPPORT_CACHE_KEY)
+        if data is not None:
+            return data
+
+        ladder = {t['slug']: t['monthly'] for t in SUPPORT_TIERS}
+        # DB-aggregated group-by, never a Python tally over rows.
+        counts = dict(
+            CustomUser.objects
+            .filter(premium_tier__in=list(ACTIVE_PREMIUM_TIERS) + list(ladder))
+            .values_list('premium_tier')
+            .annotate(n=Count('id'))
+        )
+
+        prices = self._prices()
+        monthly, priced_all = 0, True
+        for slug, n in counts.items():
+            if slug in ladder:
+                monthly += ladder[slug] * n
+                continue
+            price = prices.get(slug)
+            if price is None:
+                priced_all = False
+                continue
+            stripe_data = price.stripe_data or {}
+            amount = (stripe_data.get('unit_amount') or 0) / 100
+            if ((stripe_data.get('recurring') or {}).get('interval')) == 'year':
+                amount /= 12
+            monthly += amount * n
+
+        now = timezone.now()
+        data = {
+            'supporter_count': sum(counts.values()),
+            'supporter_monthly': round(monthly) if priced_all else None,
+            'months_running': (now.year - self.LAUNCH[0]) * 12 + (now.month - self.LAUNCH[1]),
+        }
+        cache.set(self.SUPPORT_CACHE_KEY, data, self.SUPPORT_TTL)
+        return data
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the

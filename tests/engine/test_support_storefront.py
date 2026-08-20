@@ -973,3 +973,106 @@ def test_no_two_levels_look_alike():
                 f'{a_name} and {b_name} read as the same colour'
             )
 
+
+# ------------------------------------------------------------------ how the site is paid for ----
+
+def _band(body):
+    """Just the 'How this is paid for' section.
+
+    Bounded at its own `</section>` on purpose: slicing to the end of the document also swallows the
+    perks modal, whose comparison column is headed "Supporters" -- so an unbounded slice reports the
+    band as containing a cell it does not have.
+    """
+    start = body.index('How this is paid for')
+    return body[start:body.index('</section>', start)]
+
+def _clear_support_cache():
+    from django.core.cache import cache
+    cache.delete('support:stats')
+
+
+def test_the_band_counts_legacy_supporters_too(client):
+    """THE POINT OF THE BAND, and the thing that would quietly make it useless.
+
+    Every real supporter today holds `premium_monthly`, `premium_yearly` or `supporter`. Nobody holds
+    a ladder slug and nobody will until the twelve SKUs exist and people move across. A band that
+    counted only the new ladder would read zero on a live site while looking perfectly correct in
+    review.
+    """
+    UserFactory(premium_tier='premium_monthly')
+    UserFactory(premium_tier='premium_yearly')
+    UserFactory(premium_tier='supporter')
+    UserFactory()  # not a supporter; must not be counted
+    _clear_support_cache()
+
+    body = _flat(client)
+
+    assert 'How this is paid for' in body
+    band = _band(body)
+    assert '>3<' in band or 'data-countup="3"' in band, 'legacy supporters are not being counted'
+
+
+def test_a_yearly_pledge_counts_as_a_twelfth_of_itself(client):
+    """One figure has to mean one thing. Counting a yearly subscription whole would inflate the
+    monthly number by a factor of twelve, which on a TRANSPARENCY row is the worst possible place to
+    be wrong."""
+    yearly = _FakePrice(12000, 'year')     # $120/yr -> $10/mo
+    monthly = _FakePrice(400, 'month')     # $4/mo
+
+    UserFactory(premium_tier='premium_yearly')
+    UserFactory(premium_tier='premium_monthly')
+    _clear_support_cache()
+
+    # Deliberately NOT `_get`: that helper applies its own `_priced()` inside, which would override
+    # the prices this test exists to set up -- silently, and the assertion would then be measuring
+    # the helper's fixture rather than anything this test controls.
+    with patch('users.views.SubscriptionService.get_prices_from_stripe',
+               return_value={'premium_yearly': yearly, 'premium_monthly': monthly}), _member(False):
+        body = re.sub(r'\s+', ' ', client.get(reverse('support_hub')).content.decode())
+
+    band = _band(body)
+    assert 'data-countup="14"' in band, 'the yearly pledge was not divided by twelve'
+
+
+def test_unavailable_prices_drop_the_money_cell_rather_than_showing_zero(client):
+    """`None` means "we cannot say"; zero would be a claim that nobody is paying. On the band whose
+    whole job is transparency, publishing a wrong number is worse than publishing one fewer."""
+    UserFactory(premium_tier='premium_monthly')
+    _clear_support_cache()
+
+    from djstripe.models import Price
+    # Same reason as above: `_get` would re-patch prices back into existence.
+    with patch('users.views.SubscriptionService.get_prices_from_stripe',
+               side_effect=Price.DoesNotExist), _member(False):
+        body = re.sub(r'\s+', ' ', client.get(reverse('support_hub')).content.decode())
+
+    band = _band(body)
+    assert 'Supporters' in band, 'the count went with the prices'
+    assert 'Monthly support' not in band, 'a money figure is being shown with no prices behind it'
+
+
+def test_the_band_hides_its_supporter_cells_when_there_are_none(client):
+    """The dev case, and the launch-morning case. "$0 a month from 0 supporters" on the page asking
+    you to fund the thing is worse than a shorter band -- but months running and ads served are true
+    regardless, so the band itself stays."""
+    _clear_support_cache()
+    body = _flat(client)
+
+    band = _band(body)
+    assert 'Supporters' not in band
+    assert 'Monthly support' not in band
+    assert 'Months running' in band, 'the whole band vanished, not just the empty cells'
+    assert 'Ads served' in band
+
+
+def test_months_running_is_computed_not_typed(client):
+    """A hardcoded number goes stale silently and nobody notices for a year."""
+    from django.utils import timezone
+
+    _clear_support_cache()
+    body = _flat(client)
+    now = timezone.now()
+    expected = (now.year - 2026) * 12 + (now.month - 1)
+
+    band = _band(body)
+    assert f'data-countup="{expected}"' in band, f'months running is not {expected}'
