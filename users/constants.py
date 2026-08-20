@@ -24,6 +24,50 @@ PREMIUM_TIER_DISPLAY = {
     'supporter': 'Supporter',
 }
 
+# ---------------------------------------------------------------------------------------------
+# The supporter ladder.
+# ---------------------------------------------------------------------------------------------
+# Six levels, monthly or yearly, yearly priced at ten months (two free).
+#
+# EVERY LEVEL GETS EVERY PERK. What escalates is RECOGNITION, never capability -- that is what keeps
+# this a dial and not a door (docs/design/rebuild/premium-proposal.md). Somebody paying $50 gets a
+# more visible thank-you than somebody paying $4; neither gets a feature the other cannot reach, and
+# nobody gets one a free hunter cannot reach. `test_every_level_gets_every_perk` fails if a level
+# ever grows a key beyond price and recognition, because that is the moment this becomes a feature
+# ladder and the page's central promise turns false.
+#
+# NAMING IS UNSETTLED. `bronze` / `silver` / `gold` / `platinum` are ALREADY load-bearing words here:
+# they are the PSN trophy types (trophies/constants.py:49) and the badge medallion metals, with their
+# own colours in the design system (`.pgl__rung--bronze` = #cf9160, and friends). A "Platinum
+# Supporter" on a site where the platinum is what you grind hundreds of hours for reads as buying the
+# achievement, which the flair guardrail forbids. `titanium` and `diamond` do not collide. Kept as-is
+# pending Jeffrey's call; `slug` and `name` are separate precisely so a rename is one edit here rather
+# than a sweep through CSS, copy and colour tokens. (The tier PIP colours in support.css are already
+# deliberately clear of the trophy hues for the same reason.)
+#
+# `recognition` drives the public supporter wall:
+#   none  -> not listed          named -> name on the site          linked -> name + a link
+SUPPORT_TIERS = [
+    {'slug': 'bronze',   'name': 'Bronze Supporter',   'monthly': 4,  'yearly': 40,  'recognition': 'none'},
+    {'slug': 'silver',   'name': 'Silver Supporter',   'monthly': 10, 'yearly': 100, 'recognition': 'none'},
+    {'slug': 'gold',     'name': 'Gold Supporter',     'monthly': 20, 'yearly': 200, 'recognition': 'named'},
+    {'slug': 'platinum', 'name': 'Platinum Supporter', 'monthly': 30, 'yearly': 300, 'recognition': 'named'},
+    {'slug': 'titanium', 'name': 'Titanium Supporter', 'monthly': 40, 'yearly': 400, 'recognition': 'linked'},
+    {'slug': 'diamond',  'name': 'Diamond Supporter',  'monthly': 50, 'yearly': 500, 'recognition': 'linked'},
+]
+
+# The ladder above is DESIGN ONLY until its twelve Stripe prices and twelve PayPal plans exist.
+#
+# While this is True the storefront renders the ladder with inert buttons, so the page can be designed
+# without being blocked on billing configuration. The checkout POST handler, `success_url`,
+# `subscribe_success` and the webhooks underneath are all untouched -- switching this off is wiring a
+# button to a contract that already works, not building one.
+#
+# The view forces it False whenever `STRIPE_MODE == 'live'`, so production can never render a row of
+# dead buy buttons; it falls back to the unavailable state instead. That is a runtime guard rather
+# than a checklist item on purpose, because checklists get skipped.
+SUPPORT_TIERS_ARE_PLACEHOLDERS = True
+
 # What members are testing right now, or None between betas.
 #
 # Early access is one of the two things the Support page sells hardest ("you get a say in what this

@@ -632,3 +632,20 @@ URL is cached by the browser and cannot be withdrawn if the assumption behind it
 
 The `support:proof` cache key (5 min TTL, two DB aggregates behind it) populates on first request.
 Perk copy is a Python constant, so it ships with the code.
+
+### BLOCKER: the supporter ladder is placeholders (2026-08-20)
+
+`users.constants.SUPPORT_TIERS_ARE_PLACEHOLDERS` is **True**. Until its twelve Stripe prices and
+twelve PayPal plans exist, `/support/` renders the six-level ladder with inert buttons.
+
+**You do not need to remember this.** `SupportStorefrontView` forces the flag False whenever
+`STRIPE_MODE == 'live'`, and the ladder's own slugs have no prices behind them, so live mode falls
+back to the "memberships briefly unavailable" state rather than showing a row of dead buy buttons.
+Pinned by `test_placeholders_can_never_reach_live_stripe`. It is a runtime guard rather than a line
+on this list precisely because lines on this list get skipped.
+
+To turn the ladder on: create the SKUs, add them to `STRIPE_PRICES` / `PAYPAL_PLANS` keyed by the
+ladder slugs, extend `PREMIUM_TIER_CHOICES` / `ACTIVE_PREMIUM_TIERS` / the two Discord role lists,
+**migrate existing `premium_monthly` / `premium_yearly` / `supporter` subscribers onto the new
+levels**, then flip the flag. The checkout POST handler, `success_url`, `subscribe_success` and both
+webhooks are untouched and already serve the legacy three tiers throughout.

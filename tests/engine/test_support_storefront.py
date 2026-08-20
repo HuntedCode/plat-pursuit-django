@@ -79,25 +79,24 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     body = _flat(client)
 
     assert 'Support Platinum Pursuit' in body
-    # The pitch, the evidence and the roadmap, not a login wall wearing the title.
+    # The pitch, the ask, the evidence and the roadmap -- not a login wall wearing the title.
     assert 'always will be' in body
+    assert 'Bronze Supporter' in body, 'the ladder is missing for a signed-out visitor'
     assert 'What your support builds next' in body
     # ...and the human voice, which is the page's whole emotional argument.
     assert 'that is me' in body
-    # ...and the ask degrades to a way IN rather than a dead end.
-    assert 'Sign in to continue' in body
-    assert 'name="tier"' not in body, 'anonymous visitors are shown a buy button they cannot use'
 
 
-def test_a_signed_in_non_member_gets_the_real_buttons(client):
+def test_a_signed_in_non_member_sees_the_same_ladder(client):
+    """While the ladder is placeholders there is no form to render, so signed-in and
+    signed-out see the same thing. The difference only returns when the prices exist."""
     user = UserFactory()
     client.force_login(user)
     with _member(False):
         body = _get(client).content.decode()
 
-    assert 'Sign in to continue' not in body
-    assert 'name="tier"' in body
-    assert 'csrfmiddlewaretoken' in body, 'the checkout form would be rejected by CSRF'
+    assert 'Diamond Supporter' in body
+    assert 'Manage your membership' not in body, 'a non-member sees the member state'
 
 
 def test_a_member_is_not_bounced_off_the_page(client):
@@ -112,8 +111,8 @@ def test_a_member_is_not_bounced_off_the_page(client):
     body = response.content.decode()
 
     assert response.status_code == 200, 'a member cannot reach the Support hub at all'
-    assert 'PlatPursuit Supporter' in body
-    assert 'name="tier"' not in body, 'a member is being sold a second subscription'
+    assert 'You already back this' in body
+    assert 'Bronze Supporter' not in body, 'a member is being sold a second subscription'
 
 
 # ------------------------------------------------------------------- the checkout contract ----
@@ -332,7 +331,7 @@ def test_the_future_carries_no_numbers(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    future = _slice(body, 'sup-road__strip')
+    future = _slice(body, 'class="sup-road"')
     assert 'Now' in future, 'sliced the wrong section'
     assert 'data-countup' not in future, 'the roadmap is quantifying itself'
     assert 'pp-tally' not in future
@@ -349,12 +348,11 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=None), _member(False):
         body = _get(client).content.decode()
 
-    built = _slice(body, 'sup-built')
-    assert 'trophies tracked' not in built, 'the page is advertising a zero'
-    assert 'sup-built__figs' not in built
-    # The section itself still stands.
-    assert 'Built in the first eight months' in built
-    assert 'Milestones' in built
+    assert 'trophies tracked' not in body, 'the page is advertising a zero'
+    assert 'sup-head__figs' not in body
+    # The rest of the header still stands.
+    assert 'always will be' in body
+    assert 'Bronze Supporter' in body
 
 
 def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
@@ -365,7 +363,7 @@ def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
     with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=half), _member(False):
         body = _get(client).content.decode()
 
-    assert 'sup-built__figs' not in _slice(body, 'sup-built')
+    assert 'sup-head__figs' not in body
 
 
 # ------------------------------------------------------------------ involvement / the beta ----
@@ -446,7 +444,7 @@ def test_the_commissioned_artwork_is_actually_on_the_page(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    assert 'sup-art__row' in body, 'the artwork band is gone'
+    assert 'class="sup-art"' in body, 'the artwork band is gone'
     assert 'Helldivers badge artwork' in body, 'the art is not being rendered'
 
 
@@ -456,8 +454,8 @@ def test_an_empty_catalogue_drops_the_art_band_rather_than_faking_it(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    assert 'sup-art__row' not in body
-    # The section that follows still carries the argument on its own.
+    assert 'class="sup-art"' not in body
+    # The section it lives in still carries the argument on its own.
     assert 'Built in the first eight months' in body
 
 
@@ -468,7 +466,101 @@ def test_the_note_is_signed_and_speaks_as_one_person(client):
     body = _flat(client)
 
     note = body[body.index('sup-note'):]
-    note = note[:note.index('</aside>')]
+    note = note[:note.index('</section>')]
     assert 'that is me' in note
     assert 'Jeffrey' in note, 'the note is unsigned, which is most of why it works'
 
+
+# ------------------------------------------------------------------- the ladder, for now ----
+
+def test_every_level_of_the_ladder_is_on_the_page(client):
+    """Six levels, all of them visible. The model is "pick how visible your support is", which only
+    works if the reader can see the range."""
+    from users.constants import SUPPORT_TIERS
+
+    body = _flat(client)
+    for tier in SUPPORT_TIERS:
+        assert tier['name'] in body, f"{tier['slug']} is missing from the ladder"
+        assert f"${tier['monthly']}" in body
+        assert f"${tier['yearly']}" in body, 'the yearly face is not in the markup for the switch'
+
+
+def test_placeholder_buttons_cannot_be_pressed(client):
+    """The ladder is design-only until its twelve Stripe prices and twelve PayPal plans exist. A
+    button that looks live and does nothing is worse than one that admits it is not ready."""
+    body = _flat(client)
+
+    assert 'disabled aria-disabled="true"' in body, 'placeholder buttons are pressable'
+    assert 'not live yet' in body, 'nothing tells the reader why they cannot press'
+
+
+def test_placeholders_can_never_reach_live_stripe(client, settings):
+    """THE GUARD, and the reason it is a runtime check rather than a checklist item.
+
+    A payment page rendering dead buy buttons is worse than one saying it is unavailable. So the
+    placeholder flag is honoured in test mode only: if `SUPPORT_TIERS_ARE_PLACEHOLDERS` is still True
+    on the day this deploys, live mode falls back to the unavailable state, because the ladder's own
+    slugs have no Stripe prices behind them and nothing is offered that cannot be bought.
+
+    Checklists get skipped. This cannot be.
+    """
+    settings.STRIPE_MODE = 'live'
+    body = _flat(client)
+
+    assert 'disabled aria-disabled="true"' not in body, 'DEAD BUY BUTTONS IN LIVE MODE'
+    assert 'not live yet' not in body
+    assert 'briefly unavailable' in body, 'live mode is offering something with no price behind it'
+    # Only the ask degrades. The rest of the page is unaffected.
+    assert 'always will be' in body
+    assert 'What your support builds next' in body
+
+
+def test_the_supporter_wall_stays_hidden_until_somebody_is_on_it(client):
+    """Nobody holds one of these tiers yet, which is the normal case rather than an edge case. A
+    transparency row reading "$0 a month from 0 supporters" undercuts the exact thing it exists to
+    establish, so the whole card is omitted."""
+    body = _flat(client)
+
+    assert 'Who keeps this running' not in body
+    assert 'Monthly support' not in body
+
+
+def test_the_wall_appears_once_there_are_supporters_to_name(client):
+    from django.core.cache import cache
+    from users.constants import SUPPORT_TIERS
+
+    UserFactory(premium_tier='gold')
+    UserFactory(premium_tier='gold')
+    UserFactory(premium_tier='bronze')
+    cache.delete('support:supporters')
+
+    body = _flat(client)
+
+    assert 'Who keeps this running' in body
+    assert 'Monthly support' in body
+    assert '$44' in body, 'the monthly-equivalent total is wrong ($20 + $20 + $4)'
+    # Gold is listed by its recognition level; bronze deliberately is not.
+    gold = next(t for t in SUPPORT_TIERS if t['slug'] == 'gold')
+    assert gold['recognition'] == 'named'
+    assert 'Gold Supporter' in body
+
+
+def test_every_level_gets_every_perk():
+    """The ladder sells RECOGNITION, never capability. If a tier ever grows its own perk list the
+    model has quietly become a feature ladder and the page's central promise is false."""
+    from users.constants import SUPPORT_TIERS
+
+    for tier in SUPPORT_TIERS:
+        assert set(tier) == {'slug', 'name', 'monthly', 'yearly', 'recognition'}, (
+            f"{tier['slug']} carries something beyond price and recognition"
+        )
+        assert tier['recognition'] in ('none', 'named', 'linked')
+
+
+def test_yearly_is_ten_months_at_every_level():
+    from users.constants import SUPPORT_TIERS
+
+    for tier in SUPPORT_TIERS:
+        assert tier['yearly'] == tier['monthly'] * 10, (
+            f"{tier['slug']}: yearly is not the promised two months free"
+        )

@@ -6,7 +6,7 @@ from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -25,7 +25,8 @@ from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
 from fundraiser.models import get_live_fundraiser
-from users.constants import CURRENT_BETA, PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY
+from users.constants import (CURRENT_BETA, PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY,
+                             SUPPORT_TIERS, SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
@@ -190,25 +191,33 @@ class SupportStorefrontView(TemplateView):
         user = self.request.user
         prices = self._prices()
 
-        # `cta` is derived here rather than branched in the template: Stripe gives us 'month'/'year'
-        # and the English for those is irregular enough ("monthly"/"yearly") that a template
-        # conditional per tier is how the third option ends up mislabelled as the first.
-        cta = {'month': 'Support monthly', 'year': 'Support yearly'}
-        context['tiers'] = [
-            {
-                'slug': slug,
-                'name': PREMIUM_TIER_DISPLAY[slug],
-                'price': (prices[slug].stripe_data or {}).get('unit_amount', 0) / 100,
-                'interval': interval,
-                'cta': cta.get(interval, 'Support PlatPursuit'),
-            }
-            for slug, interval in (
-                (s, ((prices[s].stripe_data or {}).get('recurring') or {}).get('interval'))
-                for s in self.TIER_ORDER if s in prices
-            )
+        # The LADDER is design data, not billing data: it comes from the constant so the page can be
+        # built and iterated before the twelve Stripe prices and twelve PayPal plans exist. Each row
+        # carries both intervals; the template's switch picks which face to show, so swapping tabs is
+        # a CSS state change rather than a round trip.
+        is_live = settings.STRIPE_MODE == 'live'
+
+        # PLACEHOLDERS CAN NEVER REACH PRODUCTION. The flag is honoured in test mode only, so the
+        # worst a stale `SUPPORT_TIERS_ARE_PLACEHOLDERS = True` can do on a live deploy is show the
+        # unavailable state -- never a row of dead buy buttons on a page taking money. This is a
+        # runtime guard rather than a checklist item on purpose: checklists get skipped.
+        placeholders = SUPPORT_TIERS_ARE_PLACEHOLDERS and not is_live
+
+        # The LADDER is design data, not billing data: it comes from the constant so the page can be
+        # built and iterated before the twelve Stripe prices and twelve PayPal plans exist. Each row
+        # carries both intervals; the template's switch picks which face to show, so swapping tabs is
+        # a CSS state change rather than a round trip.
+        ladder = [
+            dict(tier, yearly_saving=tier['monthly'] * 12 - tier['yearly'])
+            for tier in SUPPORT_TIERS
+            # Live and un-flagged: only offer a level somebody can actually buy. Until the ladder's
+            # prices exist this filters to nothing, and the page says so rather than lying.
+            if placeholders or tier['slug'] in prices
         ]
-        context['pricing_available'] = bool(context['tiers'])
-        context['is_live'] = settings.STRIPE_MODE == 'live'
+        context['tiers'] = ladder
+        context['tiers_are_placeholders'] = placeholders
+        context['pricing_available'] = bool(ladder)
+        context['is_live'] = is_live
 
         paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
         context['paypal_available'] = (
@@ -231,7 +240,49 @@ class SupportStorefrontView(TemplateView):
         context['badge_art'] = badge_subject_art(limit=5)
         context['current_beta'] = CURRENT_BETA
         context['support_fundraiser'] = get_live_fundraiser()
+        context.update(self._supporters())
         return context
+
+    SUPPORTERS_CACHE_KEY = 'support:supporters'
+    SUPPORTERS_TTL = 300
+
+    def _supporters(self):
+        """The transparency row and the public wall.
+
+        Cached: identical for every visitor on a public page, and the wall grows without bound.
+
+        EMPTY STATES ARE THE NORMAL CASE for now, not an edge case -- the ladder is placeholders, so
+        nobody holds one of these tiers yet. A transparency row reading "$0 from 0 supporters" is
+        worse than no row, so the template omits both when there is nothing to show. Same reasoning
+        as the cold-heartbeat gate on the catalogue figures.
+
+        Monthly-equivalent divides a yearly pledge by 12 so the headline figure means one thing.
+        """
+        data = cache.get(self.SUPPORTERS_CACHE_KEY)
+        if data is not None:
+            return data
+
+        by_slug = {t['slug']: t for t in SUPPORT_TIERS}
+        # DB-aggregated: a group-by over an indexed column, never a Python tally over rows.
+        counts = dict(
+            CustomUser.objects.filter(premium_tier__in=by_slug)
+            .values_list('premium_tier')
+            .annotate(n=Count('id'))
+        )
+
+        monthly = sum(by_slug[slug]['monthly'] * n for slug, n in counts.items())
+        listed = [
+            {'tier': by_slug[slug], 'count': n}
+            for slug, n in sorted(counts.items(), key=lambda kv: -by_slug[kv[0]]['monthly'])
+            if by_slug[slug]['recognition'] != 'none'
+        ]
+        data = {
+            'supporter_count': sum(counts.values()),
+            'supporter_monthly': monthly,
+            'supporter_tiers': listed,
+        }
+        cache.set(self.SUPPORTERS_CACHE_KEY, data, self.SUPPORTERS_TTL)
+        return data
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the

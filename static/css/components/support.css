@@ -2,35 +2,37 @@
    Support / membership storefront (`/support/`)
    --------------------------------------------------------------------------------------------
    A PERSUASION surface, which is rare here: nearly every other rebuilt page presents a hunter's
-   own data. Two consequences run through this whole file.
+   own data. Three things follow from that.
 
-   DENSITY. Data pages are dense because they are scanned. This one is read, so the type is roughly
-   double a dashboard's, the measure is capped in `ch` rather than by the container, and the
-   vertical rhythm is built so one idea occupies a screen. The first version of this page was built
-   at dashboard density (0.78rem body, p-4 card padding) and read as a well-organised document
-   rather than something worth paying for.
+   IT STILL LIVES ON CARDS. An earlier version set prose directly on the page substrate and read as
+   foreign, because nothing else on this site does that. "Free content" here means page-filling
+   grids of items, never paragraphs -- a discrete prose or stats section still gets a surface. So
+   the section chrome is the standard `card bg-base-200/90 border-2 border-base-300` and only the
+   INSIDES are bespoke.
 
-   RESTRAINT. Exactly one accent (the cyan primary) plus the amber supporter hue in the two places
-   that mean "member". A page asking for money is precisely where a wall of colour starts reading
-   as a sales pitch instead of an honest ask.
+   DENSITY. Data pages are dense because they are scanned; this one is read. Type runs larger than a
+   dashboard's and the measure is capped in `ch`, but inside the normal card rhythm rather than
+   floating in space.
 
-   Nothing here restyles a shared primitive: `.pp-tally` and `.pp-head-cascade` are used as-is.
+   RESTRAINT. One accent (the cyan primary) carries the page. The tier pips below are the single
+   exception and they are deliberately NOT the trophy metals -- see the palette note there.
    ============================================================================================ */
 
-.sup {
-    max-width: 760px;                       /* measure, not container. Prose wants ~65ch. */
-    margin-inline: auto;
-    padding-inline: 4px;
+/* -------------------------------------------------------------------------- split header ---- */
+.sup-head {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 22px;
+    align-items: start;
 }
 
-/* ------------------------------------------------------------------------------- the hero ---- */
-/* No header card, following `badge_how_it_works`: a page whose job is persuading rather than
-   reporting gets a bespoke opening. `.pp-head-cascade` still supplies the shared opening beat. */
-.sup-hero {
-    padding: 26px 0 30px;
+/* The ask sits beside the statement rather than below four sections of argument. Slightly narrower
+   than the copy so the eye lands on the words first and the box second. */
+@media (min-width: 900px) {
+    .sup-head { grid-template-columns: 1.15fr 0.85fr; gap: 34px; }
 }
 
-.sup-hero__eyebrow {
+.sup-head__eyebrow {
     font-size: 10.5px;
     font-weight: 800;
     letter-spacing: 0.16em;
@@ -38,61 +40,324 @@
     color: var(--pp-primary);
 }
 
-.sup-hero__h1 {
-    margin-top: 12px;
+.sup-head__h1 {
+    margin-top: 10px;
     font-family: var(--pp-font-display), sans-serif;
-    font-size: clamp(1.9rem, 7.2vw, 3.1rem);
+    font-size: clamp(1.75rem, 5.4vw, 2.7rem);
     font-weight: 800;
-    line-height: 1.08;
+    line-height: 1.09;
     letter-spacing: -0.025em;
     color: var(--pp-text);
     text-wrap: balance;
 }
 
-.sup-hero__lede {
+.sup-head__lede {
     margin-top: 14px;
-    font-size: 1rem;
-    line-height: 1.6;
+    font-size: 0.95rem;
+    line-height: 1.65;
     color: var(--pp-text-dim);
-    max-width: 46ch;
+    max-width: 52ch;
 }
 
-.sup-hero__jump {
+.sup-head__figs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    margin-top: 18px;
+}
+
+.sup-head__figs span {
     display: inline-flex;
-    align-items: center;
+    align-items: baseline;
     gap: 6px;
-    margin-top: 20px;
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: var(--pp-text-mute);
+}
+
+.sup-head__figs .pp-tally { font-size: 1.25rem; line-height: 1; color: var(--pp-primary); }
+
+@media (min-width: 768px) {
+    .sup-head__lede { font-size: 1rem; }
+    .sup-head__figs .pp-tally { font-size: 1.45rem; }
+}
+
+/* ------------------------------------------------------------------------------- the box ---- */
+/* A nested surface, so it steps UP the depth ladder (bg-1 -> bg-2) rather than lightening toward
+   the page. Deepening is how this codebase separates nested things. */
+.sup-box {
+    padding: 16px;
+    border-radius: var(--pp-radius-lg);
+    border: var(--pp-border-w) solid color-mix(in oklab, var(--pp-primary) 22%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 6%, transparent) 0%, transparent 40%),
+        var(--pp-bg-2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+@media (min-width: 768px) { .sup-box { padding: 20px; } }
+
+.sup-box__switch { width: 100%; justify-content: center; }
+.sup-box__switch .pp-switch__chip { flex: 1; justify-content: center; cursor: pointer; }
+
+/* Only meaningful on the yearly face. */
+.sup-box__saving {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--pp-text-mute);
+    display: none;
+}
+
+.sup-box[data-cycle="yearly"] .sup-box__saving { display: block; }
+
+/* ------------------------------------------------------------------------- the tier ladder ---- */
+.sup-box__ladder {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+/* Gift has nothing to buy yet, so the ladder steps aside for its note. */
+.sup-box[data-cycle="gift"] .sup-box__ladder,
+.sup-box[data-cycle="gift"] .sup-box__foot,
+.sup-box[data-cycle="gift"] .sup-box__soon { display: none; }
+
+.sup-box__gift { display: none; }
+.sup-box[data-cycle="gift"] .sup-box__gift { display: block; }
+
+.sup-box__gift {
+    margin-top: 14px;
+    padding: 16px;
+    border-radius: var(--pp-radius-md);
+    border: 1px dashed var(--pp-border);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.sup-box__gift p { font-size: 0.85rem; line-height: 1.6; color: var(--pp-text-mute); }
+.sup-box__gift p + p { margin-top: 6px; }
+.sup-box__gift b { color: var(--pp-text); }
+
+/* The whole row is the control. Six separate buttons in a column reads as a form; six rows that
+   light up reads as a menu, which is the decision actually being made here. */
+.sup-tier__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.02);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease),
+                background var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-tier__row:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 10%, transparent);
+}
+
+.sup-tier__row:active:not(:disabled) { transform: translateY(1px); }
+
+/* Inert while the ladder is design-only. Still legible: this is the shape being reviewed, so it
+   must not be greyed into illegibility, only made obviously unpressable. */
+.sup-tier__row:disabled { cursor: default; opacity: 0.78; }
+
+.sup-tier__pip {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--sup-t, var(--pp-primary));
+    box-shadow: 0 0 10px color-mix(in oklab, var(--sup-t, var(--pp-primary)) 55%, transparent);
+}
+
+.sup-tier__name {
+    font-size: 0.85rem;
+    font-weight: 650;
+    color: var(--pp-text);
+}
+
+.sup-tier__price { font-family: var(--pp-font-display), sans-serif; font-weight: 800; }
+.sup-tier__price i { font-style: normal; font-size: 0.68em; font-weight: 600; color: var(--pp-text-mute); }
+.sup-tier__price b { font-size: 1.05rem; color: var(--pp-text); }
+
+/* One face at a time, driven by the switch. Both are in the markup so swapping is a state change
+   rather than a round trip. */
+.sup-tier__y { display: none; }
+.sup-box[data-cycle="yearly"] .sup-tier__m { display: none; }
+.sup-box[data-cycle="yearly"] .sup-tier__y { display: inline; }
+
+/* THE TIER PALETTE, kept deliberately clear of the trophy metals.
+   `bronze` / `silver` / `gold` / `platinum` already mean PSN trophy grades and badge medallion
+   metals here, with their own colours (`.pgl__rung--bronze` = #cf9160 and friends). Reusing those
+   hues for money tiers would make a paid pip read as an earned grade, which the flair guardrail
+   forbids -- flair is a SEPARATE visual language, never a better one. These are cool and synthetic
+   on purpose, so nothing on this ladder can be mistaken for something a hunter earned.
+   (The tier NAMES are still unsettled for the same reason; see users/constants.py.) */
+.sup-tier[data-tier="bronze"]   { --sup-t: #6f8ea8; }
+.sup-tier[data-tier="silver"]   { --sup-t: #6fa8a0; }
+.sup-tier[data-tier="gold"]     { --sup-t: #6f9fd8; }
+.sup-tier[data-tier="platinum"] { --sup-t: #8b8fe0; }
+.sup-tier[data-tier="titanium"] { --sup-t: #b07fe0; }
+.sup-tier[data-tier="diamond"]  { --sup-t: #d97fc4; }
+
+.sup-box__foot {
+    margin-top: 12px;
+    font-size: 0.74rem;
+    line-height: 1.55;
+    color: var(--pp-text-mute);
+}
+
+.sup-box__soon {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px dashed color-mix(in oklab, var(--pp-warning) 40%, var(--pp-border));
+    font-size: 0.72rem;
+    color: var(--pp-warning);
+}
+
+/* --------------------------------------------------------------------- member / off states ---- */
+.sup-box--member,
+.sup-box--off { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+
+.sup-box--member {
+    border-color: color-mix(in oklab, var(--pp-accent) 34%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-accent) 9%, transparent) 0%, transparent 44%),
+        var(--pp-bg-2);
+}
+
+.sup-box__ic { width: 26px; height: 26px; color: var(--pp-accent); }
+
+.sup-box__thanks {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-box__thanksub { font-size: 0.88rem; line-height: 1.6; color: var(--pp-text-dim); }
+
+.sup-box__manage {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    text-decoration: underline;
+    text-underline-offset: 3px;
     transition: color var(--pp-dur-fast) var(--pp-ease);
 }
 
-.sup-hero__jump svg { width: 14px; height: 14px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
-.sup-hero__jump:hover { color: var(--pp-text); }
-.sup-hero__jump:hover svg { transform: translateY(2px); }
+.sup-box__manage:hover { color: var(--pp-text); }
 
-@media (min-width: 768px) {
-    .sup-hero { padding: 40px 0 44px; }
-    .sup-hero__lede { font-size: 1.08rem; }
+/* ------------------------------------------------------------------------- section heads ---- */
+.sup-sec__h {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: clamp(1.05rem, 3.4vw, 1.4rem);
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    color: var(--pp-text);
+    text-wrap: balance;
 }
 
-/* ------------------------------------------------------------------------- the artifacts ---- */
-/* The commissioned subject art, which is the one genuinely beautiful object this page can put in
-   front of somebody. It replaced a sentence that DESCRIBED the badges on a site where they are one
-   click away. Live rows off `badge_subject_art`, so this never goes stale. */
-.sup-art { margin-top: 30px; }
+.sup-sec__p {
+    margin-top: 6px;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--pp-text-mute);
+    max-width: 60ch;
+}
 
-.sup-art__row {
+/* --------------------------------------------------------------------- the supporter wall ---- */
+.sup-wall {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.sup-wall__group {
+    padding: 11px 13px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    border-left: 3px solid var(--sup-t, var(--pp-border));
+    background: var(--pp-bg-2);
+}
+
+.sup-wall__group[data-tier="gold"]     { --sup-t: #6f9fd8; }
+.sup-wall__group[data-tier="platinum"] { --sup-t: #8b8fe0; }
+.sup-wall__group[data-tier="titanium"] { --sup-t: #b07fe0; }
+.sup-wall__group[data-tier="diamond"]  { --sup-t: #d97fc4; }
+
+.sup-wall__k {
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.sup-wall__n {
+    margin-top: 3px;
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-wall__note {
+    margin-top: 10px;
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: var(--pp-text-mute);
+    font-style: italic;
+    padding-right: 4px;               /* italic glyphs slant past their box */
+}
+
+/* -------------------------------------------------------------------------- the evidence ---- */
+.sup-ev {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    align-items: center;
+    margin-top: 16px;
+}
+
+@media (min-width: 768px) { .sup-ev { grid-template-columns: 1fr 0.8fr; gap: 26px; } }
+
+.sup-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sup-chips li {
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--pp-text-dim);
+}
+
+/* The commissioned subject art: the one genuinely beautiful object this page can show. It replaced
+   a sentence that DESCRIBED the badges on a site where they are one click away. */
+.sup-art {
     display: flex;
     align-items: flex-end;
-    justify-content: center;
     gap: 10px;
     flex-wrap: wrap;
+    margin-top: 20px;
 }
 
 .sup-art__cell {
-    width: clamp(58px, 15vw, 96px);
+    width: clamp(50px, 12vw, 74px);
     aspect-ratio: 1;
     display: grid;
     place-items: center;
@@ -106,17 +371,9 @@
     filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
 }
 
-/* The middle piece sits proudest, the outer ones step back, so the row reads as a considered
-   arrangement rather than a filmstrip. Nothing moves on hover: these are not interactive. */
-.sup-art__cell:nth-child(even) { transform: translateY(6px); }
-.sup-art__cell:nth-child(3) { width: clamp(72px, 19vw, 118px); }
+.sup-art__cell:nth-child(even) { transform: translateY(5px); }
 
-.sup-art__cap {
-    margin-top: 14px;
-    text-align: center;
-    font-size: 0.78rem;
-    color: var(--pp-text-mute);
-}
+.sup-art__cap { margin-top: 12px; font-size: 0.76rem; color: var(--pp-text-mute); }
 
 @media (prefers-reduced-motion: no-preference) {
     .sup-art__cell {
@@ -125,115 +382,49 @@
     }
 }
 
-/* ------------------------------------------------------------------------- what got built ---- */
-.sup-built { margin-top: 44px; }
+/* Tilted and lifted, so it reads as an object lying on the page rather than a screenshot pasted in. */
+.sup-ev__card { margin: 0; }
 
-.sup-built__cols {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px;
-    align-items: center;
-}
-
-@media (min-width: 768px) {
-    .sup-built { margin-top: 64px; }
-    .sup-built__cols { grid-template-columns: 1fr 0.85fr; gap: 28px; }
-}
-
-.sup-built__chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 14px;
-}
-
-.sup-built__chips li {
-    padding: 5px 11px;
-    border-radius: 999px;
-    border: 1px solid var(--pp-border);
-    background: rgba(255, 255, 255, 0.03);
-    font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--pp-text-dim);
-}
-
-.sup-built__figs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 20px;
-    margin-top: 18px;
-}
-
-.sup-built__figs span {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 6px;
-    font-size: 0.7rem;
-    font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--pp-text-mute);
-}
-
-.sup-built__figs .pp-tally {
-    font-size: 1.3rem;
-    line-height: 1;
-    color: var(--pp-primary);
-}
-
-/* The plat card. Tilted a touch and lifted, so it reads as an object lying on the page rather than
-   a screenshot pasted into it. */
-.sup-built__card { margin: 0; }
-
-.sup-built__card img {
+.sup-ev__card img {
     display: block;
     width: 100%;
-    max-width: 340px;
+    max-width: 320px;
     margin-inline: auto;
     border-radius: var(--pp-radius-md);
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
     transform: rotate(-1.4deg);
 }
 
-.sup-built__card figcaption {
+.sup-ev__card figcaption {
     margin-top: 14px;
     text-align: center;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--pp-text-mute);
 }
 
-@media (min-width: 768px) {
-    .sup-built__card img { max-width: none; }
-    .sup-built__figs .pp-tally { font-size: 1.5rem; }
-}
+@media (min-width: 768px) { .sup-ev__card img { max-width: none; } }
 
 /* ----------------------------------------------------------------------------- roadmap ---- */
-/* A strip you scan in seconds. No dates, no counts, no bars: the future renders in words. */
-.sup-road { margin-top: 44px; }
-
-.sup-road__strip {
+.sup-road {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
-    margin-top: 16px;
+    margin-top: 14px;
 }
 
-@media (min-width: 768px) {
-    .sup-road { margin-top: 64px; }
-    .sup-road__strip { grid-template-columns: repeat(3, 1fr); gap: 12px; }
-}
+@media (min-width: 768px) { .sup-road { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
 
 .sup-road__step {
-    padding: 14px 16px;
+    padding: 13px 15px;
     border-radius: var(--pp-radius-md);
     border: 1px solid var(--pp-border);
-    background: var(--pp-bg-1);
+    background: var(--pp-bg-2);
 }
 
-/* Confidence fades left to right, which is the same honesty gradient the copy holds to. */
-.sup-road__step:nth-child(1) { border-left: 2px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
-.sup-road__step:nth-child(2) { border-left: 2px solid color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); }
-.sup-road__step:nth-child(3) { border-left: 2px solid var(--pp-border); }
+/* Confidence fades left to right, the same honesty gradient the copy holds to. */
+.sup-road__step:nth-child(1) { border-left: 3px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
+.sup-road__step:nth-child(2) { border-left: 3px solid color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); }
+.sup-road__step:nth-child(3) { border-left: 3px solid var(--pp-border); }
 
 .sup-road__k {
     font-size: 0.64rem;
@@ -243,32 +434,22 @@
     color: var(--pp-text-mute);
 }
 
-.sup-road__step p {
-    margin-top: 7px;
-    font-size: 0.85rem;
-    line-height: 1.55;
-    color: var(--pp-text-dim);
+.sup-road__step p { margin-top: 7px; font-size: 0.85rem; line-height: 1.55; color: var(--pp-text-dim); }
+
+.sup-road__more {
+    margin-top: 12px;
+    font-size: 0.78rem;
+    color: var(--pp-text-mute);
+    font-style: italic;
+    padding-right: 4px;
 }
 
 /* -------------------------------------------------------------------------- signed note ---- */
-/* The Wikipedia move: a letter from a person, not marketing from an organisation. The only place on
-   the page that speaks as "I", which is exactly why it is set apart from everything around it. */
-.sup-note {
-    margin-top: 44px;
-    padding: 20px 22px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    border-left: 3px solid color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border));
-    background: var(--pp-bg-1);
-}
+/* The Wikipedia move: a letter from a person, not marketing from an organisation. The amber rail
+   marks it as the one place on the page that speaks as "I". */
+.sup-note { border-left: 4px solid color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border)) !important; }
 
-.sup-note p {
-    font-size: 0.9rem;
-    line-height: 1.68;
-    color: var(--pp-text-dim);
-    max-width: 58ch;
-}
-
+.sup-note p { font-size: 0.92rem; line-height: 1.68; color: var(--pp-text-dim); max-width: 62ch; }
 .sup-note p + p { margin-top: 10px; }
 
 .sup-note__sig {
@@ -279,16 +460,11 @@
     color: var(--pp-text) !important;
 }
 
-@media (min-width: 768px) {
-    .sup-note { margin-top: 64px; padding: 26px 28px; }
-    .sup-note p { font-size: 0.95rem; }
-}
-
 /* ----------------------------------------------------------------------------- live beta ---- */
 /* Only rendered while something is in testing. The PERMANENT claim lives in the "New things" perk
    row, so this section never goes blank between betas. */
 .sup-beta {
-    margin-top: 16px;
+    margin-top: 14px;
     padding: 11px 14px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
@@ -310,286 +486,8 @@
     margin-bottom: 4px;
 }
 
-/* --------------------------------------------------------------------------- section heads ---- */
-.sup-sec__h {
-    font-family: var(--pp-font-display), sans-serif;
-    font-size: clamp(1.2rem, 4.2vw, 1.65rem);
-    font-weight: 800;
-    line-height: 1.2;
-    letter-spacing: -0.015em;
-    color: var(--pp-text);
-    text-wrap: balance;
-}
-
-.sup-sec__p {
-    margin-top: 8px;
-    font-size: 0.92rem;
-    line-height: 1.65;
-    color: var(--pp-text-mute);
-    max-width: 58ch;
-}
-
-.sup-inv,
-.sup-opts,
-.sup-dial,
-.sup-member { margin-top: 44px; }
-
-@media (min-width: 768px) {
-    .sup-inv,
-    .sup-opts,
-    .sup-dial,
-    .sup-member { margin-top: 64px; }
-    .sup-sec__p { font-size: 0.97rem; }
-}
-
-/* ------------------------------------------------------------------------- involvement ---- */
-.sup-inv__grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-top: 18px;
-}
-
-@media (min-width: 768px) {
-    .sup-inv__grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-.sup-inv__card {
-    padding: 16px 18px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    background: var(--pp-bg-1);
-}
-
-.sup-inv__k {
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--pp-text-mute);
-}
-
-/* Only rendered while something is actually in testing. */
-.sup-inv__now {
-    display: inline-block;
-    margin-top: 10px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--pp-primary);
-    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
-}
-
-.sup-inv__title {
-    margin-top: 8px;
-    font-size: 1rem;
-    font-weight: 750;
-    color: var(--pp-text);
-}
-
-.sup-inv__body {
-    margin-top: 8px;
-    font-size: 0.88rem;
-    line-height: 1.62;
-    color: var(--pp-text-dim);
-}
-
-.sup-inv__body em { font-style: italic; padding-right: 2px; }
-
-.sup-inv__note {
-    margin-top: 10px;
-    font-size: 0.74rem;
-    line-height: 1.5;
-    color: var(--pp-text-mute);
-    font-style: italic;
-    padding-right: 4px;
-}
-
-/* ---------------------------------------------------------------------------- the options ---- */
-/* Three equal columns at md+. Equal on purpose: no tier is wider, ringed, or badged, because the
-   copy above promises there is no better one. */
-.sup-tiers {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-top: 18px;
-}
-
-@media (min-width: 768px) {
-    .sup-tiers { grid-template-columns: repeat(3, 1fr); gap: 12px; }
-}
-
-.sup-tier {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 18px 20px;
-    border-radius: var(--pp-radius-md);
-    border: var(--pp-border-w) solid var(--pp-border);
-    background: var(--pp-bg-1);
-    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
-}
-
-/* Glow, never scale: a growing card in a three-wide row shoves its neighbours. */
-.sup-tier:hover {
-    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
-    box-shadow: 0 6px 22px color-mix(in oklab, var(--pp-primary) 12%, transparent);
-}
-
-.sup-tier__name {
-    font-size: 0.68rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--pp-text-mute);
-}
-
-.sup-tier__price { display: flex; align-items: baseline; gap: 5px; }
-
-.sup-tier__amt {
-    font-size: 2.1rem;
-    line-height: 1;
-    color: var(--pp-text);
-}
-
-.sup-tier__per { font-size: 0.78rem; color: var(--pp-text-mute); }
-
-.sup-tier__go {
-    margin-top: 10px;
-    width: 100%;
-    padding: 10px 14px;
-    border-radius: var(--pp-radius-sm);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
-    color: var(--pp-text);
-    font-size: 0.82rem;
-    font-weight: 650;
-    text-align: center;
-    cursor: pointer;
-    transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
-}
-
-.sup-tier__go:hover {
-    background: color-mix(in oklab, var(--pp-primary) 22%, transparent);
-    border-color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-border));
-}
-
-.sup-tier__go:active { transform: translateY(1px); }
-
-.sup-tier__go--anon {
-    display: block;
-    background: transparent;
-    border-color: var(--pp-border);
-    color: var(--pp-text-dim);
-    text-decoration: none;
-}
-
-.sup-tier__go--anon:hover {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
-    color: var(--pp-text);
-}
-
-/* Blocks a second press without disabling the buttons -- a disabled submit contributes no
-   name/value, which would strip the `tier` the server validates on. */
-.sup-form.is-sending .sup-tier__go { opacity: 0.6; pointer-events: none; }
-
-.sup-prov { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-
-.sup-prov__opt {
-    padding: 7px 12px;
-    border-radius: var(--pp-radius-sm);
-    border: 1px solid var(--pp-border);
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--pp-text-mute);
-    font-size: 0.72rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
-}
-
-.sup-prov__opt:hover { color: var(--pp-text-dim); }
-
-.sup-prov__opt.is-on {
-    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
-    color: var(--pp-text);
-}
-
-/* Keyboard focus must be visible on a label wrapping an `sr-only` radio. */
-.sup-prov__opt:focus-within {
-    outline: 2px solid color-mix(in oklab, var(--pp-primary) 70%, transparent);
-    outline-offset: 2px;
-}
-
-.sup-testmode { margin-top: 12px; font-size: 0.72rem; color: var(--pp-warning); }
-
-.sup-nopricing {
-    margin-top: 18px;
-    padding: 18px;
-    border-radius: var(--pp-radius-md);
-    border: 1px dashed var(--pp-border);
-    background: rgba(255, 255, 255, 0.02);
-    font-size: 0.88rem;
-    line-height: 1.62;
-    color: var(--pp-text-mute);
-}
-
-.sup-nopricing p + p { margin-top: 4px; }
-
-/* ------------------------------------------------------------------------- member state ---- */
-.sup-member {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 7px;
-    padding: 22px 24px;
-    border-radius: var(--pp-radius-md);
-    border: var(--pp-border-w) solid color-mix(in oklab, var(--pp-accent) 30%, var(--pp-border));
-    /* The one place the amber supporter hue appears, matching `.pp-hcard--supporter` on the hunters
-       wall so the mark means the same thing wherever it turns up. */
-    background:
-        linear-gradient(180deg, color-mix(in oklab, var(--pp-accent) 7%, transparent) 0%, transparent 46%),
-        var(--pp-bg-1);
-}
-
-.sup-member__ic { width: 24px; height: 24px; color: var(--pp-accent); }
-
-.sup-member h2 {
-    font-family: var(--pp-font-display), sans-serif;
-    font-size: clamp(1.15rem, 4vw, 1.5rem);
-    font-weight: 800;
-    color: var(--pp-text);
-}
-
-.sup-member p {
-    font-size: 0.95rem;
-    line-height: 1.65;
-    color: var(--pp-text-dim);
-    max-width: 58ch;
-}
-
-.sup-member strong { color: var(--pp-accent); font-weight: 700; }
-
-.sup-member__link {
-    margin-top: 6px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--pp-text-mute);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    transition: color var(--pp-dur-fast) var(--pp-ease);
-}
-
-.sup-member__link:hover { color: var(--pp-text); }
-
-/* ----------------------------------------------------------------------------- the dial ---- */
-.sup-dial__grid { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+/* ------------------------------------------------------------------------------ the dial ---- */
+.sup-dial { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 
 /* The column header only makes sense once the row IS three columns, so it is hidden at the stacked
    size where each cell labels itself with `.sup-dial__k`. */
@@ -599,23 +497,23 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 4px;
-    padding: 13px 15px;
+    padding: 12px 14px;
     border-radius: var(--pp-radius-md);
     border: 1px solid var(--pp-border);
-    background: var(--pp-bg-1);
+    background: var(--pp-bg-2);
 }
 
-.sup-dial__name { font-size: 0.86rem; font-weight: 700; color: var(--pp-text); }
+.sup-dial__name { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
 
 .sup-dial__free,
-.sup-dial__mem { font-size: 0.84rem; line-height: 1.55; color: var(--pp-text-dim); }
+.sup-dial__mem { font-size: 0.83rem; line-height: 1.55; color: var(--pp-text-dim); }
 
 .sup-dial__mem { color: var(--pp-text); }
 
 /* The inline key that carries the comparison on a phone, where the header row is gone. */
 .sup-dial__k {
     display: inline-block;
-    min-width: 68px;
+    min-width: 74px;
     font-size: 0.62rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -639,7 +537,7 @@
         display: grid;
         grid-template-columns: 1.1fr 1fr 1.4fr;
         gap: 14px;
-        padding: 0 15px 2px;
+        padding: 0 14px 2px;
     }
 
     .sup-dial__hrow span {
@@ -662,20 +560,19 @@
 
 .sup-dial__foot {
     margin-top: 14px;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     line-height: 1.6;
     color: var(--pp-text-mute);
     max-width: 62ch;
 }
 
-/* ------------------------------------------------------------------------ the other ask ---- */
-/* One line. The fundraiser is a separate ask with its own reason and its own page coming; at
-   section weight it competes with the membership this page exists to offer. */
+/* ------------------------------------------------------------------------- the other ask ---- */
+/* One line, outside the card stack on purpose: it is a different ask with its own page coming, and
+   at section weight it competes with the membership this page exists to offer. */
 .sup-else {
-    margin-top: 40px;
-    padding-top: 20px;
-    border-top: 1px solid var(--pp-border);
-    font-size: 0.84rem;
+    margin-top: 6px;
+    padding: 14px 4px 0;
+    font-size: 0.82rem;
     line-height: 1.6;
     color: var(--pp-text-mute);
     max-width: 62ch;
@@ -686,35 +583,4 @@
     font-weight: 600;
     text-decoration: underline;
     text-underline-offset: 3px;
-}
-
-/* ------------------------------------------------------------------------------- motion ---- */
-/* Enhancement only. The resting state IS the final state, so this whole block is skipped under
-   reduced motion and the page renders exactly as served. `.is-armed` is added by JS before the
-   observer runs, so a reader with JS off never sees a hidden beat either. */
-@media (prefers-reduced-motion: no-preference) {
-    .sup-arc.is-armed .sup-beat {
-        opacity: 0;
-        transform: translateY(14px);
-    }
-
-    .sup-arc.is-armed .sup-beat.is-in {
-        opacity: 1;
-        transform: none;
-        transition: opacity 0.55s var(--pp-ease), transform 0.55s var(--pp-ease);
-    }
-
-    /* The marker lands a beat after its text, so the spine reads as filling in rather than the
-       whole row arriving at once. */
-    .sup-arc.is-armed .sup-beat .sup-beat__mark {
-        transform: scale(0.4);
-        opacity: 0;
-    }
-
-    .sup-arc.is-armed .sup-beat.is-in .sup-beat__mark {
-        transform: none;
-        opacity: 1;
-        transition: opacity 0.4s var(--pp-ease) 0.18s,
-                    transform 0.5s cubic-bezier(.16, 1, .3, 1) 0.18s;
-    }
 }

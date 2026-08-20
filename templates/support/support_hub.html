@@ -6,245 +6,310 @@
 The Support landing IS the membership storefront. Served by users.views.SupportStorefrontView, which
 also answers this page's checkout POST (the form carries no action, so handler and form share a URL).
 
-EVIDENCE-LED, NOT PROSE-LED
----------------------------
-An earlier version of this page told the story in four beats of paragraphs and read as a bombardment.
-The reference class here is Obsidian Catalyst, Blender's Development Fund, Home Assistant Cloud and
-the Wikipedia appeal: free products funded by the people who use them. What they share is that the
-page is mostly NOT text. It is a short statement plus evidence you can look at, and one human voice.
+STRUCTURE
+---------
+Stacked chrome CARDS, site convention, all the way down. An earlier version set prose directly on the
+page substrate, which nothing else here does and which read as foreign -- "free content" in this
+codebase means page-filling grids of items, never paragraphs. A discrete prose or stats section still
+gets a surface.
 
-So: the commissioned badge artwork does the persuading, the roadmap is a strip you scan rather than
-paragraphs you read, and the story is four sentences signed by a person. Everything longer belongs on
-`/support/roadmap/` or About, where someone has chosen to go deeper.
+The header is SPLIT: the statement on the left, the ask on the right in a decorated box with a
+`.pp-switch` for billing cycle. That puts the decision above the fold instead of below four sections
+of argument, and it means nothing further down has to work as hard.
 
-Two rules carried over and still load-bearing:
-  - THE PAST RENDERS IN NUMBERS, THE FUTURE RENDERS IN WORDS. The figures band and the shipped list
-    carry counts; the roadmap strip carries no date, count or percentage. Pinned by test.
-  - Every perk fills in BOTH columns, because premium is a dial and not a door. A row that could not
-    fill "Everyone" would be a wall.
+Everything after the header is evidence rather than prose: the commissioned artwork, a plat card, the
+transparency row, the supporter wall, a roadmap strip you scan, and one short signed note. The
+reference class is Obsidian Catalyst, Blender's Development Fund and the Wikipedia appeal -- free
+products funded by their users, where the page is mostly not text.
+
+THE LADDER IS PLACEHOLDERS RIGHT NOW. Buttons are inert until the twelve Stripe prices and twelve
+PayPal plans exist; the POST handler, success_url and webhooks underneath are untouched, so switching
+it on is wiring a button to a contract that already works. `tiers_are_placeholders` is forced False in
+live mode by the view, so production can never render a dead buy button.
+
+RULES THAT ARE PINNED BY TESTS
+  - Every level gets every perk; only RECOGNITION escalates. Nothing is ever gated.
+  - The perk table fills BOTH columns on every row -- a row that could not is a wall.
+  - The past renders in numbers, the future renders in words: the roadmap strip carries no date,
+    count or percentage.
+  - Figures and the supporter wall are omitted whole when empty, never rendered as zeroes.
 
 Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighten it into ad copy.
-
-Three viewer states: anonymous (sign-in CTA), signed-in non-member (real buttons), member (thanks).
 {% endcomment %}
 
 {% block content %}
 <div class="sup">
 
-    {% comment %} ============================================================ hero ============ {% endcomment %}
-    <header class="sup-hero pp-head-cascade">
-        <p class="sup-hero__eyebrow">Support Platinum Pursuit</p>
-        <h1 class="sup-hero__h1">PlatPursuit is free,<br>and always will be.</h1>
-        <p class="sup-hero__lede">
-            Built by trophy hunters, paid for by trophy hunters. Nothing here sits behind a paywall.
-            Members are simply the reason it keeps going.
-        </p>
-    </header>
+    {% comment %} ==================================================== the split header ======== {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-6 lg:p-8">
+            <div class="sup-head">
 
-    {% comment %} ======================================================== the work ============ {% endcomment %}
-    {% comment %} Shown, not listed. An earlier draft wrote "badges that are genuinely worth
-    collecting" as prose, on a site where the badges are beautiful and one click away. {% endcomment %}
-    {% if badge_art %}
-    <section class="sup-art" aria-label="Badge artwork">
-        <ul class="sup-art__row">
-            {% for art in badge_art %}
-            <li class="sup-art__cell" style="--i: {{ forloop.counter0 }}">
-                <img src="{{ art.src }}" alt="{{ art.series }} badge artwork" loading="lazy" decoding="async">
-            </li>
-            {% endfor %}
-        </ul>
-        <p class="sup-art__cap">Every badge series gets its own commissioned artwork.</p>
+                <div class="sup-head__say pp-head-cascade">
+                    <p class="sup-head__eyebrow">Support Platinum Pursuit</p>
+                    <h1 class="sup-head__h1">PlatPursuit is free,<br>and always will be.</h1>
+                    <p class="sup-head__lede">
+                        We are trophy hunters building the tools we wanted to use, and we would rather
+                        keep them open to everyone than put the good parts behind a paywall. There are
+                        no ads and nothing is locked. Supporters are simply the reason it keeps going.
+                    </p>
+
+                    {% comment %} Omitted whole on a cold heartbeat cache rather than printing zeroes.
+                    "0 trophies for 0 hunters" on the page asking you to fund the thing is worse than
+                    saying nothing at all. {% endcomment %}
+                    {% if today %}
+                    <p class="sup-head__figs">
+                        <span><b class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</b> trophies tracked</span>
+                        <span><b class="pp-tally" data-countup="{{ today.games }}">{{ today.games|intcomma }}</b> games</span>
+                        <span><b class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</b> hunters</span>
+                    </p>
+                    {% endif %}
+                </div>
+
+                {% comment %} ------------------------------------------- the ask ------------- {% endcomment %}
+                {% if viewer_is_member %}
+                <div class="sup-box sup-box--member">
+                    <svg class="sup-box__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                    </svg>
+                    <p class="sup-box__thanks">You already back this.</p>
+                    <p class="sup-box__thanksub">
+                        Genuinely, thank you. The servers, the bills and everything still to come run
+                        on people doing what you did.
+                    </p>
+                    <a href="{% url 'subscription_management' %}" class="sup-box__manage">Manage your membership</a>
+                </div>
+
+                {% elif pricing_available %}
+                <div class="sup-box" data-sup-box data-cycle="monthly">
+                    {% comment %} Radio-backed so the cycle switch works with no JS at all; the
+                    `:has(input:checked)` variant is the design system's own no-JS pattern. {% endcomment %}
+                    <div class="pp-switch sup-box__switch" role="radiogroup" aria-label="Billing cycle">
+                        <label class="pp-switch__chip is-active">
+                            <input type="radio" name="sup-cycle" value="monthly" class="sr-only" checked>
+                            <span class="pp-switch__lbl">Monthly</span>
+                        </label>
+                        <label class="pp-switch__chip">
+                            <input type="radio" name="sup-cycle" value="yearly" class="sr-only">
+                            <span class="pp-switch__lbl">Yearly</span>
+                        </label>
+                        <label class="pp-switch__chip">
+                            <input type="radio" name="sup-cycle" value="gift" class="sr-only">
+                            <span class="pp-switch__lbl">Gift</span>
+                        </label>
+                    </div>
+
+                    <p class="sup-box__saving">Yearly works out at ten months. Two are on us.</p>
+
+                    <ul class="sup-box__ladder">
+                        {% for tier in tiers %}
+                        <li class="sup-tier" data-tier="{{ tier.slug }}">
+                            <button type="button" class="sup-tier__row"
+                                    {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
+                                <span class="sup-tier__pip" aria-hidden="true"></span>
+                                <span class="sup-tier__name">{{ tier.name }}</span>
+                                <span class="sup-tier__price">
+                                    <b class="sup-tier__m">${{ tier.monthly }}<i>/mo</i></b>
+                                    <b class="sup-tier__y">${{ tier.yearly }}<i>/yr</i></b>
+                                </span>
+                            </button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    {% comment %} Gift is not built. The tab exists so the shape can be designed
+                    against, and it says so plainly rather than pretending. {% endcomment %}
+                    <div class="sup-box__gift">
+                        <p><b>Gifting is on the way.</b></p>
+                        <p>You will be able to buy any level for someone else, or hand out a code. We are still working out how it should feel.</p>
+                    </div>
+
+                    <p class="sup-box__foot">
+                        Every level gets every perk. What changes is how visible your support is.
+                    </p>
+
+                    {% if tiers_are_placeholders %}
+                    <p class="sup-box__soon">These are not live yet. We are building the checkout behind them.</p>
+                    {% endif %}
+                </div>
+
+                {% else %}
+                <div class="sup-box sup-box--off">
+                    <p class="sup-box__thanks">Memberships are briefly unavailable</p>
+                    <p class="sup-box__thanksub">We are sorting something out on our end. Nothing on the site has changed, and everything below is still happening.</p>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </section>
+
+    {% comment %} ==================================================== who is behind it ======== {% endcomment %}
+    {% comment %} Omitted whole while nobody holds a tier, which is the normal case until the ladder
+    goes live. "$0 a month from 0 supporters" is worse than saying nothing. {% endcomment %}
+    {% if supporter_count %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h2 class="sup-sec__h">Who keeps this running</h2>
+
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 mt-3">
+                <div class="scard">
+                    <div class="scard__label">Supporters</div>
+                    <div class="scard__value pp-tally text-primary" data-countup="{{ supporter_count }}">{{ supporter_count|intcomma }}</div>
+                    <div class="scard__sub">people chipping in</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Monthly support</div>
+                    <div class="scard__value pp-tally" data-countup="{{ supporter_monthly }}">${{ supporter_monthly|intcomma }}</div>
+                    <div class="scard__sub">yearly pledges counted per month</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Ads served</div>
+                    <div class="scard__value pp-tally">0</div>
+                    <div class="scard__sub">and it stays that way</div>
+                </div>
+            </div>
+
+            {% if supporter_tiers %}
+            <div class="sup-wall">
+                {% for row in supporter_tiers %}
+                <div class="sup-wall__group" data-tier="{{ row.tier.slug }}">
+                    <p class="sup-wall__k">{{ row.tier.name }}</p>
+                    <p class="sup-wall__n">{{ row.count }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="sup-wall__note">Named supporters appear here by choice. Gold and above are listed; Titanium and Diamond can add a link.</p>
+            {% endif %}
+        </div>
     </section>
     {% endif %}
 
-    <section class="sup-built" aria-labelledby="sup-built-h">
-      <div class="sup-built__cols">
-       <div class="sup-built__copy">
-        <h2 id="sup-built-h" class="sup-sec__h">Built in the first eight months.</h2>
+    {% comment %} ========================================================= evidence ========== {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h2 class="sup-sec__h">Built in the first eight months</h2>
+            <p class="sup-sec__p">Live since January 2026, and rebuilt very nearly end to end since.</p>
 
-        <ul class="sup-built__chips">
-            <li>Career</li>
-            <li>Badges</li>
-            <li>Milestones</li>
-            <li>Titles</li>
-            <li>Monthly Recap</li>
-            <li>Plat cards</li>
-            <li>Leaderboards</li>
-            <li>No ads, ever</li>
-        </ul>
+            <div class="sup-ev">
+                <div class="sup-ev__left">
+                    <ul class="sup-chips">
+                        <li>Career</li><li>Badges</li><li>Milestones</li><li>Titles</li>
+                        <li>Monthly Recap</li><li>Plat cards</li><li>Leaderboards</li><li>No ads, ever</li>
+                    </ul>
 
-        {% comment %} Omitted whole on a cold heartbeat cache rather than printing zeroes. "0 trophies
-        for 0 hunters" on the page asking you to fund the thing is worse than saying nothing. {% endcomment %}
-        {% if today %}
-        <p class="sup-built__figs">
-            <span><b class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</b> trophies tracked</span>
-            <span><b class="pp-tally" data-countup="{{ today.games }}">{{ today.games|intcomma }}</b> games</span>
-            <span><b class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</b> hunters</span>
-        </p>
-        {% endif %}
-       </div>
-
-       {% comment %} The second artifact. A plat card is a designed OUTPUT rather than a screen, so
-       unlike a UI screenshot it does not drift every time a page gets rebuilt. Same asset the
-       anonymous landing page already uses, so there is one file to keep current rather than two.
-       {% endcomment %}
-       <figure class="sup-built__card">
-           <img src="{% static 'images/showcase/plat_card_example.png' %}"
-                alt="A Platinum Pursuit plat card for a completed game" loading="lazy" decoding="async">
-           <figcaption>And your platinums get a card worth sharing.</figcaption>
-       </figure>
-      </div>
-    </section>
-
-    {% comment %} ========================================================= roadmap ============ {% endcomment %}
-    {% comment %} A strip you scan. No dates, no counts, no percentages: the future renders in words.
-    The long-form version of this belongs on /support/roadmap/. {% endcomment %}
-    <section class="sup-road" aria-labelledby="sup-road-h">
-        <h2 id="sup-road-h" class="sup-sec__h">What your support builds next.</h2>
-        <ol class="sup-road__strip">
-            <li class="sup-road__step">
-                <span class="sup-road__k">Now</span>
-                <p>The Challenges revamp, quests, streaks, and a much bigger badge library.</p>
-            </li>
-            <li class="sup-road__step">
-                <span class="sup-road__k">Next</span>
-                <p>My Stats as a real engine. Game lists, notifications and showcases, rebuilt properly.</p>
-            </li>
-            <li class="sup-road__step">
-                <span class="sup-road__k">Later</span>
-                <p>PlatPursuit in your pocket, and a PlatPursuit that is not only PlayStation.</p>
-            </li>
-        </ol>
-    </section>
-
-    {% comment %} ========================================================= options ============= {% endcomment %}
-    {% if viewer_is_member %}
-    <section class="sup-member" id="plans">
-        <svg class="sup-member__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-        </svg>
-        <h2>You already back this. Thank you.</h2>
-        <p>
-            Genuinely. The servers, the bills and everything on that list run on people doing what you
-            did. You are a <strong>PlatPursuit Supporter</strong>, and that sticks.
-        </p>
-        <a href="{% url 'subscription_management' %}" class="sup-member__link">Manage your membership</a>
-    </section>
-    {% else %}
-
-    <section class="sup-opts" id="plans" aria-labelledby="sup-opts-h">
-        <h2 id="sup-opts-h" class="sup-sec__h">Three ways in. They all get the same thing.</h2>
-        <p class="sup-sec__p">No better tier, no feature ladder. Just pick what suits you.</p>
-
-        {% if pricing_available %}
-        <form method="post" class="sup-form" data-sup-form>
-            {% csrf_token %}
-            {% comment %} The server reads this hidden input, NOT the visible radios. {% endcomment %}
-            <input type="hidden" name="provider" id="sup-provider" value="stripe">
-
-            <div class="sup-tiers">
-                {% for tier in tiers %}
-                {% comment %} No "most popular" ribbon on any card, deliberately. Every pricing page
-                has one; ours cannot, because naming a best option would contradict the line directly
-                above these. The absence IS the message. {% endcomment %}
-                <div class="sup-tier">
-                    <div class="sup-tier__name">{{ tier.name }}</div>
-                    <div class="sup-tier__price">
-                        <span class="pp-tally sup-tier__amt">${{ tier.price|floatformat:"-2" }}</span>
-                        {% if tier.interval %}<span class="sup-tier__per">/ {{ tier.interval }}</span>{% endif %}
-                    </div>
-                    {% if user.is_authenticated %}
-                    <button type="submit" name="tier" value="{{ tier.slug }}" class="sup-tier__go">{{ tier.cta }}</button>
-                    {% else %}
-                    <a href="{% url 'account_login' %}?next={{ request.path }}" class="sup-tier__go sup-tier__go--anon">Sign in to continue</a>
+                    {% comment %} Shown, not described. An earlier draft WROTE "badges genuinely worth
+                    collecting" as prose, on a site where the artwork is the moat and one click away.
+                    Omitted entirely on a catalogue with no custom art rather than faked. {% endcomment %}
+                    {% if badge_art %}
+                    <ul class="sup-art">
+                        {% for art in badge_art %}
+                        <li class="sup-art__cell" style="--i: {{ forloop.counter0 }}">
+                            <img src="{{ art.src }}" alt="{{ art.series }} badge artwork" loading="lazy" decoding="async">
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <p class="sup-art__cap">Every badge series gets its own commissioned artwork.</p>
                     {% endif %}
+                </div>
+
+                {% comment %} A plat card is a designed OUTPUT rather than a screen, so unlike a UI
+                screenshot it does not drift every time a page is rebuilt. Same asset the landing page
+                already maintains, so there is one file to keep current rather than two. {% endcomment %}
+                <figure class="sup-ev__card">
+                    <img src="{% static 'images/showcase/plat_card_example.png' %}"
+                         alt="A Platinum Pursuit plat card for a completed game" loading="lazy" decoding="async">
+                    <figcaption>And your platinums get a card worth sharing.</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} ========================================================== roadmap ========== {% endcomment %}
+    {% comment %} A strip you scan. No dates, counts or percentages: the future renders in words.
+    The long-form version belongs on /support/roadmap/. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h2 class="sup-sec__h">What your support builds next</h2>
+
+            <ol class="sup-road">
+                <li class="sup-road__step">
+                    <span class="sup-road__k">Now</span>
+                    <p>The Challenges revamp, quests, streaks, and a much bigger badge library.</p>
+                </li>
+                <li class="sup-road__step">
+                    <span class="sup-road__k">Next</span>
+                    <p>My Stats as a real engine. Game lists, notifications and showcases, rebuilt properly.</p>
+                </li>
+                <li class="sup-road__step">
+                    <span class="sup-road__k">Later</span>
+                    <p>PlatPursuit in your pocket, and a PlatPursuit that is not only PlayStation.</p>
+                </li>
+            </ol>
+
+            <p class="sup-road__more">Truthfully, we have so many more ideas and dreams that we cannot fit them all here.</p>
+        </div>
+    </section>
+
+    {% comment %} ======================================================= signed note ========== {% endcomment %}
+    {% comment %} The Wikipedia move, and the reason that appeal works: a letter from a person rather
+    than marketing from an organisation. The only place on the page that speaks as "I". {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 sup-note">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <p>
+                PlatPursuit started as two friends in a Discord server who wanted trophy hunting to add
+                up to something. It went live in January 2026, and the community team around it has
+                grown a lot since.
+            </p>
+            <p>
+                The site itself is still built by one person, though, and that is me. Every page you
+                use, I made. If it has been worth something to you, this is how you say so.
+            </p>
+            <p class="sup-note__sig">Jeffrey</p>
+        </div>
+    </section>
+
+    {% comment %} ============================================================ perks ========== {% endcomment %}
+    {% comment %} The dial made literal. Every row fills BOTH columns, because supporters get more of
+    a thing everyone already has. A comparison rather than a checklist, because a checklist can
+    quietly hide that the other column is empty and two columns cannot. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h2 class="sup-sec__h">What supporters get</h2>
+            <p class="sup-sec__p">Not much, on purpose. Nothing here is taken from anyone who does not pay.</p>
+
+            {% if current_beta %}
+            {% comment %} Only while something is in testing. The permanent claim lives in the "New
+            things" row below, so this never goes blank between betas. {% endcomment %}
+            <p class="sup-beta">
+                <span class="sup-beta__k">In testing now</span>
+                <b>{{ current_beta.name }}</b> {{ current_beta.blurb }}
+            </p>
+            {% endif %}
+
+            <div class="sup-dial" role="table">
+                <div class="sup-dial__hrow" role="row">
+                    <span role="columnheader"></span>
+                    <span role="columnheader">Everyone</span>
+                    <span role="columnheader" class="is-mem">Supporters</span>
+                </div>
+                {% for perk in premium_perks %}
+                <div class="sup-dial__row" role="row">
+                    <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
+                    <span class="sup-dial__free" role="cell"><span class="sup-dial__k">Everyone</span>{{ perk.everyone }}</span>
+                    <span class="sup-dial__mem" role="cell"><span class="sup-dial__k">Supporters</span>{{ perk.member }}</span>
+                    {% if perk.note %}<span class="sup-dial__note">{{ perk.note }}</span>{% endif %}
                 </div>
                 {% endfor %}
             </div>
 
-            {% if paypal_available and user.is_authenticated %}
-            <div class="sup-prov" role="radiogroup" aria-label="Payment method">
-                <label class="sup-prov__opt is-on" data-provider="stripe">
-                    <input type="radio" name="provider_choice" value="stripe" class="sr-only" checked>
-                    <span>Card, bank, Amazon Pay or Cash App</span>
-                </label>
-                <label class="sup-prov__opt" data-provider="paypal">
-                    <input type="radio" name="provider_choice" value="paypal" class="sr-only">
-                    <span>PayPal</span>
-                </label>
-            </div>
-            {% endif %}
-
-            {% if not is_live %}
-            <p class="sup-testmode">Test mode is active. No real payment will be taken.</p>
-            {% endif %}
-        </form>
-        {% else %}
-        {% comment %} Pricing degrades alone; it never takes the page with it. {% endcomment %}
-        <div class="sup-nopricing">
-            <p>Memberships are briefly unavailable while we sort something out on our end.</p>
-            <p>Nothing on the site has changed, and everything above is still happening.</p>
+            <p class="sup-dial__foot">
+                If you ever find something on PlatPursuit locked behind a payment, we got it wrong.
+            </p>
         </div>
-        {% endif %}
-    </section>
-    {% endif %}
-
-    {% comment %} ==================================================== the signed note ========== {% endcomment %}
-    {% comment %} The Wikipedia move, and the reason that appeal works: a letter from a person rather
-    than marketing from an organisation. It carries the emotional job the four-beat arc used to do,
-    in a fraction of the words, and it is the only place on the page that speaks as "I". {% endcomment %}
-    <aside class="sup-note">
-        <p>
-            PlatPursuit started as two friends in a Discord server who wanted trophy hunting to add up
-            to something. It went live in January 2026, and the community team around it has grown a
-            lot since.
-        </p>
-        <p>
-            The site itself is still built by one person, though, and that is me. Every page you use,
-            I made. If it has been worth something to you, this is how you say so.
-        </p>
-        <p class="sup-note__sig">Jeffrey</p>
-    </aside>
-
-    {% comment %} =========================================================== perks ============= {% endcomment %}
-    {% comment %} The dial made literal. Every row fills BOTH columns, because members get more of a
-    thing everyone already has. Rendered as a comparison rather than a checklist because a checklist
-    can quietly hide that the other column is empty; two columns cannot. {% endcomment %}
-    <section class="sup-dial" aria-labelledby="sup-dial-h">
-        <h2 id="sup-dial-h" class="sup-sec__h">What members get</h2>
-        <p class="sup-sec__p">Not much, on purpose. Nothing here is taken from anyone who does not pay.</p>
-
-        {% if current_beta %}
-        {% comment %} Only while something is actually in testing. The permanent claim lives in the
-        "New things" row below, so this section never goes blank between betas. {% endcomment %}
-        <p class="sup-beta">
-            <span class="sup-beta__k">In testing now</span>
-            <b>{{ current_beta.name }}</b> {{ current_beta.blurb }}
-        </p>
-        {% endif %}
-
-        <div class="sup-dial__grid" role="table">
-            <div class="sup-dial__hrow" role="row">
-                <span role="columnheader"></span>
-                <span role="columnheader">Everyone</span>
-                <span role="columnheader" class="is-mem">Members</span>
-            </div>
-            {% for perk in premium_perks %}
-            <div class="sup-dial__row" role="row">
-                <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
-                <span class="sup-dial__free" role="cell"><span class="sup-dial__k">Everyone</span>{{ perk.everyone }}</span>
-                <span class="sup-dial__mem" role="cell"><span class="sup-dial__k">Members</span>{{ perk.member }}</span>
-                {% if perk.note %}<span class="sup-dial__note">{{ perk.note }}</span>{% endif %}
-            </div>
-            {% endfor %}
-        </div>
-
-        <p class="sup-dial__foot">
-            If you ever find something on PlatPursuit locked behind a payment, we got it wrong.
-        </p>
     </section>
 
-    {% comment %} ====================================================== the other ask ========== {% endcomment %}
+    {% comment %} ======================================================= the other ask ======= {% endcomment %}
     {% comment %} One line. A separate ask with its own reason and its own page coming; at section
     weight it competes with the membership this page exists to offer. {% endcomment %}
     {% if support_fundraiser %}
@@ -266,29 +331,22 @@ Three viewer states: anonymous (sign-in CTA), signed-in non-member (real buttons
     PP.onPageReady(function (first) {
         if (!first) return;
 
-        // Provider selector. The visible radios are the affordance; the hidden `provider` input is
-        // what the server reads, so the two are kept in step here.
-        var provider = document.getElementById('sup-provider');
-        document.querySelectorAll('.sup-prov__opt').forEach(function (opt) {
-            opt.addEventListener('click', function () {
-                document.querySelectorAll('.sup-prov__opt').forEach(function (o) {
-                    o.classList.toggle('is-on', o === opt);
+        // The cycle switch is radio-backed and CSS-driven, so it already works with no JS. All this
+        // adds is the `is-active` chip class the shared `.pp-switch` look expects (that styling
+        // predates the `:has()` variant and keys on the class), plus a `data-cycle` hook.
+        var box = document.querySelector('[data-sup-box]');
+        if (box) {
+            var sync = function () {
+                box.querySelectorAll('.pp-switch__chip').forEach(function (chip) {
+                    var input = chip.querySelector('input');
+                    chip.classList.toggle('is-active', !!input && input.checked);
+                    if (input && input.checked) box.dataset.cycle = input.value;
                 });
-                if (provider) provider.value = opt.dataset.provider || 'stripe';
+            };
+            box.querySelectorAll('.pp-switch__chip input').forEach(function (input) {
+                input.addEventListener('change', sync);
             });
-        });
-
-        // Double-submit guard. Deliberately does NOT disable the buttons: a disabled submit
-        // contributes no name/value, which would drop the `tier` the server validates on and fail
-        // every checkout. Blocking the second submit is enough.
-        var form = document.querySelector('[data-sup-form]');
-        if (form) {
-            var sent = false;
-            form.addEventListener('submit', function (e) {
-                if (sent) { e.preventDefault(); return; }
-                sent = true;
-                form.classList.add('is-sending');
-            });
+            sync();
         }
 
         document.querySelectorAll('.pp-tally[data-countup]').forEach(function (el) {
