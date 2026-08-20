@@ -384,15 +384,19 @@
     white-space: nowrap;
 }
 
-/* Matches the leaderboard cell's title line: 0.6rem, accent, italic, clamped to one. The level
-   joins it after a dot IN WORDS, so a reader can see what a supporter is instead of decoding a star
-   count -- and, ideally, wonder what "Ally" means and go and find out.
-   `pr-1` because italic glyphs slant past their box and this is clamped. */
+/* Matched to `.lb-row__title` in `components/leaderboards.css` -- 10.5px, muted, clamped to one.
+   An earlier version copied `leaderboard_user_cell.html` instead, which LOOKS like the leaderboard
+   row and is actually orphaned legacy: nothing includes it, and its 0.6rem accent-coloured line is
+   not what a board renders. Matching the live row is the whole point of the preview, since the
+   promise it makes is "this is how you will appear".
+
+   The level joins the worn title after a dot IN WORDS, so a reader sees what a supporter is instead
+   of decoding a star count. `pr-1` because italic glyphs slant past a clamped box. */
 .sup-prev__sub {
-    font-size: 0.6rem;
+    font-size: 10.5px;
     font-style: italic;
-    color: var(--pp-accent);
-    line-height: 1.4;
+    color: var(--pp-text-mute);
+    line-height: 1.2;
     padding-right: 4px;
     overflow: hidden;
     text-overflow: ellipsis;

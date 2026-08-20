@@ -751,49 +751,54 @@ def test_the_legacy_name_treatment_is_not_used_here():
     assert 'pp-supname' in markup
 
 
-def test_the_stars_fill_is_constant_but_its_glow_carries_the_level():
-    """A PRECISE split, and the precision is the design.
+def test_the_star_is_the_level_hue_lifted_toward_white():
+    """The star is the same hue as the name at a much lighter value: two tones, one hue, so the pair
+    cannot clash.
 
-        the star's SHAPE and FILL say you support     (constant, pale, cool)
-        the star's GLOW and the name's colour say at what level
+    Three things were tried and rejected getting here, and each would look like a reasonable tidy-up
+    to someone reading this file cold:
 
-    Both were the level's hue once, which made the mark one flat block of colour. Then both were
-    constant, which was legible but inert. The glow is the resolution: it is diffuse and
-    low-contrast, so it cannot vibrate against the fill the way a second solid colour would, and it
-    cannot compete with an earned rank beside it -- which a complementary fill absolutely could.
+      - the star at exactly the name's colour  -> one flat block, the mark says nothing
+      - one constant pale star for every level -> levels stop being tellable apart
+      - a level-coloured glow behind it        -> rejected on sight
 
-    So `fill` and `stroke` must never reference `--sup-t`, and `filter` must.
+    So the colour must be DERIVED from `--sup-t` (not constant, not raw) and mixed toward white.
     """
     root = pathlib.Path(__file__).resolve().parents[2]
     css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
 
-    for block in ('.pp-supstar {', '.pp-supstar.is-outline {'):
-        rule = css[css.index(block):]
-        rule = rule[:rule.index(chr(10) + '}')]
-        for prop in ('fill', 'stroke'):
-            for line in rule.splitlines():
-                stripped = line.strip()
-                if stripped.startswith(prop + ':'):
-                    assert '--sup-t' not in stripped, (
-                        f'{block} paints its {prop} with the level hue; only the glow may carry it'
-                    )
-        assert '--sup-t' in rule[rule.index('filter:'):], f'{block} has no level in its glow'
+    rule = css[css.index('.pp-supstar {'):]
+    rule = rule[:rule.index(chr(10) + '}')]
 
-    # ...and the NAME still carries the level, or the split has collapsed the other way.
-    name = css[css.index('.pp-supname {'):]
-    assert '--sup-t' in name[:name.index('}')]
+    assert '--sup-t' in rule, 'the star is a constant again; levels are no longer tellable apart'
+    assert 'color-mix' in rule and 'white' in rule, (
+        'the star is the raw level hue, which makes the mark one flat block of colour'
+    )
 
 
-def test_the_star_is_not_a_warm_metal():
-    """Anything golden reads as a trophy grade on this site -- the same collision that drove the
-    level names off bronze/silver/gold. The constant is a COOL off-white: blue channel highest."""
+def test_the_star_carries_no_glow():
+    """Removed by request, and it is the kind of flourish that creeps back. `drop-shadow` on a mark
+    that eventually renders on every supporter name in a virtualized board is also a cost nobody
+    asked for."""
     root = pathlib.Path(__file__).resolve().parents[2]
     css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
 
-    hex_value = re.search(r'--pp-supstar-c:\s*#([0-9a-fA-F]{6})', css).group(1)
-    r, g, b = (int(hex_value[i:i + 2], 16) for i in (0, 2, 4))
-    assert b >= r, f'#{hex_value} is warmer than it is cool, and will read as gold'
-    assert min(r, g, b) > 200, f'#{hex_value} is not pale enough to sit against six different hues'
+    star = css[css.index('/* --------------------------------------------------------------------'
+                         '---------- the star ---- */'):]
+    assert 'drop-shadow' not in star and 'filter:' not in star, 'the glow is back'
+
+
+def test_no_level_colour_is_a_warm_metal():
+    """Bronze, silver, gold and platinum are the PSN trophy grades AND the badge medallion metals on
+    this site. A level whose hue drifted warm would put a bought mark in the same visual family as an
+    earned grade, which is the collision that drove the level NAMES off those words in the first
+    place. The palette is cool and synthetic on purpose."""
+    for tier in SUPPORT_TIERS:
+        hex_value = tier['colour'].lstrip('#')
+        r, g, b = (int(hex_value[i:i + 2], 16) for i in (0, 2, 4))
+        assert b > r * 0.6, (
+            f"{tier['slug']} ({tier['colour']}) has drifted warm enough to read as a metal"
+        )
 
 
 def test_the_mark_is_not_defined_in_the_storefront_stylesheet():

@@ -88,34 +88,29 @@
 .pp-supname[style*="--sup-delay"] { animation-delay: var(--sup-delay); }
 
 /* ------------------------------------------------------------------------------ the star ---- */
-/* ONE SHAPE, ONE COLOUR, a changing count. The name carries the level's hue; the star deliberately
-   does NOT, and that split is the point:
+/* ONE SHAPE, a changing count, and a colour DERIVED from the level rather than picked for it.
 
-       the star says you support        the colour says at what level
+   The star is the same hue as the name, lifted well toward white. That reads as two tones without
+   being two colours: the pair cannot clash, because it is one hue at two values.
 
-   It was briefly the same hue as the name, which made the whole mark read as one flat block of
-   colour. Making them complementary was considered and rejected: complements are maximum contrast,
-   they vibrate, and this sits beside earned rank chrome on leaderboards -- `visual-identity.md` is
-   explicit that flair must never outshine earned status, and the design system says to pull back
-   once a surface lights up four or more hues. A constant pale star gives the two-tone reading with
-   none of that, and needs no second palette kept in tune with the first.
+   Three things were tried and rejected on the way here, and they are worth naming so they are not
+   tried again:
+     - The star at exactly the name's colour. One flat block; the mark had nothing to read.
+     - One constant pale star for every level. Legible, but the star stopped saying anything, and a
+       reader could no longer tell levels apart without counting.
+     - A level-coloured glow behind a constant star. Rejected on sight.
+   Complementary hues were also considered and ruled out earlier: complements are maximum contrast,
+   they vibrate, and this mark sits beside earned rank chrome on leaderboards, where
+   `visual-identity.md` requires flair never to outshine earned status.
 
-   Cool off-white rather than warm: anything golden would read as a trophy grade on this site, which
-   is the same collision that drove the level names off bronze/silver/gold in the first place. */
+   Derived with `color-mix` from the one colour already in `SUPPORT_TIERS`, so there is no second
+   palette that could drift out of tune with the first. */
 .pp-supstar {
-    --pp-supstar-c: #dde5f4;
+    --pp-supstar-c: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 34%, white);
     width: 11px;
     height: 11px;
     flex: none;
     fill: var(--pp-supstar-c);
-    /* THE FILL IS CONSTANT, THE GLOW IS NOT. The level's hue arrives as a diffuse halo rather than
-       as a second solid colour, which is the whole reason this works: a glow is low-contrast and
-       spreads, so it cannot vibrate against the fill the way a complementary fill would, and it
-       cannot compete with an earned rank sitting beside it. The star still reads as one pale shape;
-       the level is the light coming off it.
-       Static, never transitioned, and on an 11px element -- the filter warnings in
-       `motion-patterns.md` are about animating filter on page-sized subtrees, which this is not. */
-    filter: drop-shadow(0 0 5px color-mix(in oklab, var(--sup-t, var(--pp-supstar-c)) 65%, transparent));
 }
 
 /* The entry level, and the only outline: it reads as the start of something rather than a lesser
@@ -124,6 +119,4 @@
     fill: none;
     stroke: var(--pp-supstar-c);
     stroke-width: 2;
-    /* Fainter, not absent: the entry level should still sit in its own light, just less of it. */
-    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--sup-t, var(--pp-supstar-c)) 40%, transparent));
 }
