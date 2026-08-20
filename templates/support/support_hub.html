@@ -38,12 +38,34 @@ substrate, and an earlier version of this page did, which is most of why it read
 
                 <div class="sup-head__say pp-head-cascade">
                     <p class="sup-head__eyebrow">Support Platinum Pursuit</p>
-                    <h1 class="sup-head__h1">PlatPursuit is free,<br>and always will be.</h1>
+                    <h1 class="sup-head__h1">Help us build the best home for trophy&nbsp;hunting.</h1>
+                    {% comment %} The INVITATION leads. An earlier draft opened on "PlatPursuit is
+                    free, and always will be" and then listed three more things we do not do to you --
+                    free, no paywall, no ads, nothing locked -- which is four negatives before a single
+                    positive. That reads as a disclaimer rather than an ask. The free-forever promise
+                    is reassurance and belongs here, underneath, where it lands as generosity instead
+                    of as a defence. {% endcomment %}
                     <p class="sup-head__lede">
-                        We are trophy hunters building the tools we wanted to use, and we would rather
-                        keep them open to everyone than put the good parts behind a paywall. There are
-                        no ads and nothing is locked. Supporters are simply the reason it keeps going.
+                        We are trophy hunters making the tools we always wanted to use, and there is a
+                        great deal more we want to build. PlatPursuit stays free for everyone, with no
+                        ads and nothing locked away. Supporters are the reason it keeps growing.
                     </p>
+
+                    {% comment %} The artwork the whole thing is in aid of. Live rows, so it never
+                    goes stale, and omitted entirely on a catalogue with no commissioned art rather
+                    than rendering empty frames. {% endcomment %}
+                    {% if badge_art %}
+                    <div class="sup-head__art">
+                        <ul class="sup-art">
+                            {% for art in badge_art %}
+                            <li class="sup-art__cell" style="--i: {{ forloop.counter0 }}">
+                                <img src="{{ art.src }}" alt="{{ art.series }} badge artwork" loading="lazy" decoding="async">
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        <p class="sup-art__cap">Every badge series gets artwork of its own, commissioned and paid for by hunters.</p>
+                    </div>
+                    {% endif %}
 
                     {% comment %} Omitted whole on a cold heartbeat cache rather than printing zeroes.
                     "0 trophies for 0 hunters" on the page asking you to fund the thing is worse than

@@ -234,6 +234,16 @@ class SupportStorefrontView(TemplateView):
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
         context['viewer_name'] = self._viewer_name()
+        # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- one
+        # per series, avatar submissions skipped, bounded scan -- which is the part an artist actually
+        # drew and the one thing on this page nobody else could show.
+        #
+        # It is here rather than decorative because visual-identity.md calls the badge artwork the
+        # moat: "if the chrome ever fights the art, the chrome loses". A Support page with no art on
+        # it was the only surface on the site in that state, and it read exactly as flat as that
+        # sounds. Empty on a fresh catalogue, and the row is omitted rather than faked.
+        from trophies.views.badge_views import badge_subject_art
+        context['badge_art'] = badge_subject_art(limit=5)
         return context
 
     def _viewer_name(self):

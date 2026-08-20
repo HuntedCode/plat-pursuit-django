@@ -80,8 +80,8 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
 
     assert 'Support Platinum Pursuit' in body
     # The statement and the ask, not a login wall wearing the title.
-    assert 'always will be' in body
-    assert 'nothing is locked' in body
+    assert 'Help us build' in body
+    assert 'nothing locked away' in body
     assert 'Bronze Supporter' in body, 'the ladder is missing for a signed-out visitor'
 
 
@@ -322,7 +322,7 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     assert 'trophies tracked' not in body, 'the page is advertising a zero'
     assert 'sup-head__figs' not in body
     # The rest of the header still stands.
-    assert 'always will be' in body
+    assert 'Help us build' in body
     assert 'Bronze Supporter' in body
 
 
@@ -390,7 +390,7 @@ def test_placeholders_can_never_reach_live_stripe(client, settings):
     assert 'Not live yet' not in body
     assert 'briefly unavailable' in body, 'live mode is offering something with no price behind it'
     # Only the ask degrades. The statement beside it is unaffected.
-    assert 'always will be' in body
+    assert 'Help us build' in body
     assert 'Support Platinum Pursuit' in body
 
 
@@ -534,3 +534,45 @@ def test_the_prices_are_the_agreed_ladder():
 
     assert [t['monthly'] for t in SUPPORT_TIERS] == [4, 10, 15, 20, 25, 30]
     assert [t['yearly'] for t in SUPPORT_TIERS] == [40, 100, 150, 200, 250, 300]
+
+
+def test_the_header_carries_the_artwork(client):
+    """The reason this page read as flat: it was the only surface on the site with no art on it.
+
+    `visual-identity.md` calls the commissioned badge artwork the moat and says that if the chrome
+    ever fights the art, the chrome loses. A Support page that describes what PlatPursuit makes but
+    shows none of it is arguing for the thing while hiding it.
+    """
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    group = PlatformGroupFactory()
+    series = BadgeSeriesFactory(name='Helldivers', badge_image='badges/helldivers.png')
+    GroupBadgeFactory(series=series, platform_group=group, is_live=True)
+
+    with _member(False):
+        body = _get(client).content.decode()
+
+    head = body[body.index('sup-head__say'):body.index('sup-head__figs')]         if 'sup-head__figs' in body else body[body.index('sup-head__say'):]
+    assert 'sup-art__cell' in head, 'the artwork is not in the header'
+    assert 'Helldivers badge artwork' in head
+
+
+def test_the_header_leads_with_the_invitation_not_a_disclaimer(client):
+    """An earlier draft opened on "PlatPursuit is free, and always will be" and then listed three more
+    things we do not do to you. Four negatives before a single positive reads as a disclaimer rather
+    than an ask, and it is why the header felt joyless.
+
+    The free-forever promise still has to be ON the page -- it is the whole model -- but as
+    reassurance underneath, not as the headline.
+    """
+    body = _flat(client)
+
+    head = body[body.index('sup-head__h1'):]
+    headline = head[:head.index('</h1>')]
+    assert 'free' not in headline.lower(), 'the headline leads on what we do not charge for'
+    assert 'Help us build' in headline
+
+    # ...and the promise is still made, lower down.
+    assert 'stays free for everyone' in body
+    assert 'nothing locked away' in body
+

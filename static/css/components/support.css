@@ -19,6 +19,19 @@
    ============================================================================================ */
 
 /* -------------------------------------------------------------------------- split header ---- */
+/* A WASH, not a flat panel. The first version of this page used the bare card background and every
+   piece of text on it came from `--pp-text-mute` or `--pp-text-dim`; measured, more than half the
+   colour calls in this file were the most muted token available. Grey on grey reads as calm on a
+   data page and as drab on a page with no data, which is what this one is.
+   Two cool hues laid across the card, both far too faint to read as decoration, so the surface has
+   somewhere to go rather than sitting at one value from edge to edge. */
+.sup .card-body {
+    background:
+        radial-gradient(120% 90% at 8% 0%, color-mix(in oklab, var(--pp-primary) 9%, transparent) 0%, transparent 58%),
+        radial-gradient(90% 80% at 100% 100%, color-mix(in oklab, var(--pp-secondary) 8%, transparent) 0%, transparent 62%);
+    border-radius: inherit;
+}
+
 .sup-head {
     display: grid;
     grid-template-columns: 1fr;
@@ -33,7 +46,7 @@
 }
 
 .sup-head__eyebrow {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -51,12 +64,62 @@
     text-wrap: balance;
 }
 
+/* The lede is the ASK, so it sits at full text colour rather than the dimmed body value this file
+   was using everywhere. Dimming the one paragraph that has to persuade was most of why the header
+   read as flat. */
 .sup-head__lede {
     margin-top: 14px;
-    font-size: 0.95rem;
-    line-height: 1.65;
-    color: var(--pp-text-dim);
+    font-size: 0.98rem;
+    line-height: 1.68;
+    color: var(--pp-text);
     max-width: 52ch;
+}
+
+/* ------------------------------------------------------------------------- header artwork ---- */
+/* The commissioned drawings, which are the moat and were the thing this page conspicuously lacked.
+   They also carry nearly all of its colour: the palette elsewhere is deliberately restrained, and
+   the art is what stops that restraint reading as absence. */
+.sup-head__art { margin-top: 22px; }
+
+.sup-art {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.sup-art__cell {
+    width: clamp(46px, 11vw, 66px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+}
+
+/* `object-contain`: badge art is a transparent, custom-shaped drawing, never a photo to crop. */
+.sup-art__cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.4));
+}
+
+/* Alternating lift, so the row reads as an arrangement rather than a filmstrip. Nothing moves on
+   hover: these are not interactive and should not pretend to be. */
+.sup-art__cell:nth-child(even) { transform: translateY(6px); }
+
+.sup-art__cap {
+    margin-top: 12px;
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: var(--pp-text-mute);
+    max-width: 46ch;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .sup-art__cell {
+        animation: ppRevealIn 0.6s var(--pp-ease) backwards;
+        animation-delay: calc(var(--i, 0) * 80ms + 260ms);
+    }
 }
 
 .sup-head__figs {
@@ -70,11 +133,11 @@
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 650;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--pp-text-mute);
+    color: var(--pp-text-dim);
 }
 
 .sup-head__figs .pp-tally { font-size: 1.25rem; line-height: 1; color: var(--pp-primary); }
