@@ -642,3 +642,23 @@ def test_the_modal_still_centres_itself():
         'the perks dialog will render in the top-left corner instead of centred'
     )
 
+
+def test_no_star_row_is_sized_for_a_single_star():
+    """A REGRESSION GUARD for a bug the markup could not reveal.
+
+    Every one of these holds between one and five stars. `.sup-prev__mark` used to be a single 11px
+    pip with a gradient, and when the stars replaced the pip that fixed width stayed behind: five
+    SVGs rendered correctly into a box the size of one, so the mark looked like it never escalated.
+    The template was right the whole time, which is why counting SVGs in the HTML did not catch it.
+
+    So none of the star containers may carry a fixed width. They size to their contents or they lie.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8', errors='ignore')
+
+    for cls in ('.sup-prev__mark', '.sup-stars', '.sup-becomes__stars'):
+        for rule in re.findall(re.escape(cls) + r'[,{][^}]*}', css):
+            assert 'width:' not in rule.replace('stroke-width', ''), (
+                f'{cls} is sized for one star and will crush the rest: {rule[:90]}'
+            )
+

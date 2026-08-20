@@ -394,19 +394,16 @@
     white-space: nowrap;
 }
 
-/* The stand-in mark. A facetted pip in the level's hue -- enough to show WHERE the mark sits and
-   that it changes with the level, without pretending to be the artwork. */
+/* The stand-in mark, in context beside the name.
+   It is a CONTAINER for the level's stars, not a shape of its own. It used to be a single 11px pip
+   with a gradient, and when the stars replaced the pip that fixed width stayed behind and crushed
+   all five of them into the space of one -- which looked exactly like the mark never escalating.
+   Sized by its contents now, like every other star row. */
 .sup-prev__mark {
     flex: none;
-    width: 11px;
-    height: 11px;
-    border-radius: 3px;
-    background:
-        linear-gradient(145deg,
-            color-mix(in oklab, var(--sup-t) 92%, white) 0%,
-            var(--sup-t) 48%,
-            color-mix(in oklab, var(--sup-t) 70%, black) 100%);
-    box-shadow: 0 0 8px color-mix(in oklab, var(--sup-t) 55%, transparent);
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
 }
 
 .sup-prev__score {
