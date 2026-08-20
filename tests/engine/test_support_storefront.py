@@ -977,13 +977,17 @@ def test_no_two_levels_look_alike():
 # ------------------------------------------------------------------ how the site is paid for ----
 
 def _band(body):
-    """Just the 'How this is paid for' section.
+    """Just the support band.
 
-    Bounded at its own `</section>` on purpose: slicing to the end of the document also swallows the
-    perks modal, whose comparison column is headed "Supporters" -- so an unbounded slice reports the
-    band as containing a cell it does not have.
+    Found by its `data-sup-paid` hook rather than by its copy: the band had a heading once and does
+    not now, and a slice anchored on prose breaks every time the words change while telling you
+    nothing about whether the band still works.
+
+    Bounded at its own `</section>`, because slicing to the end of the document also swallows the
+    perks modal -- whose comparison column is headed "Supporters" -- so an unbounded slice reports
+    the band as containing a cell it does not have.
     """
-    start = body.index('How this is paid for')
+    start = body.index('data-sup-paid')
     return body[start:body.index('</section>', start)]
 
 def _clear_support_cache():
@@ -1007,7 +1011,6 @@ def test_the_band_counts_legacy_supporters_too(client):
 
     body = _flat(client)
 
-    assert 'How this is paid for' in body
     band = _band(body)
     assert '>3<' in band or 'data-countup="3"' in band, 'legacy supporters are not being counted'
 
@@ -1076,3 +1079,39 @@ def test_months_running_is_computed_not_typed(client):
 
     band = _band(body)
     assert f'data-countup="{expected}"' in band, f'months running is not {expected}'
+
+
+def test_a_currency_symbol_is_never_left_beside_a_counter(client):
+    """A BUG THAT ONLY EXISTS AFTER THE FIRST ANIMATION FRAME.
+
+    `countUp` writes `el.textContent`, which replaces the element's ENTIRE contents. So a "$" typed
+    into the template next to the number renders correctly on load and then vanishes the moment the
+    count starts -- which reads as the currency symbol never having been implemented, and is
+    invisible in the markup, in a screenshot taken early, and under reduced motion.
+
+    The symbol has to travel through the formatter instead, via `data-countup-prefix`.
+    """
+    UserFactory(premium_tier='premium_monthly')
+    _clear_support_cache()
+    body = _flat(client)
+
+    for cell in re.findall(r'<div class="scard__value[^>]*data-countup="[^"]*"[^>]*>[^<]*</div>',
+                           _band(body)):
+        if '$' in cell:
+            assert 'data-countup-prefix' in cell, (
+                'a currency symbol sits beside a counter that will overwrite it: ' + cell[:120]
+            )
+
+
+def test_countup_carries_a_prefix_through_the_formatter():
+    """Asserted on the helper itself, because the template fix above is worthless if the helper
+    ignores the attribute. Both halves have to exist for the symbol to survive a frame."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    js = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+
+    fn = js[js.index('function countUp('):]
+    fn = fn[:fn.index(chr(10) + '}')]
+    assert 'countupPrefix' in fn, 'countUp ignores a prefix, so the symbol is dropped every frame'
+    fmt = next(l for l in fn.splitlines() if 'const fmt' in l)
+    assert 'pre' in fmt, 'the prefix is read but not used by the formatter'
+

@@ -626,7 +626,13 @@ function countUp(el, dur = 750, opts = {}) {
     const target = parseFloat(raw);
     if (isNaN(target)) return;
     const from = (opts.from != null && !isNaN(opts.from)) ? opts.from : 0;
-    const fmt = (v) => (dec ? v.toFixed(dec) : Math.round(v).toLocaleString());
+    // A prefix/suffix has to be part of the FORMATTER, not markup around it: every write below sets
+    // `textContent`, which replaces the element's entire contents -- so a "$" typed into the template
+    // beside the number survives until the first frame and then vanishes. That looked like the
+    // currency symbol never rendering at all.
+    const pre = el.dataset.countupPrefix || '';
+    const suf = el.dataset.countupSuffix || '';
+    const fmt = (v) => pre + (dec ? v.toFixed(dec) : Math.round(v).toLocaleString()) + suf;
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce || target === from) { el.textContent = fmt(target); return; }
     el.textContent = fmt(from);

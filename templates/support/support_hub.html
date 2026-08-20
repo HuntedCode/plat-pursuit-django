@@ -280,12 +280,11 @@ substrate, and an earlier version of this page did, which is most of why it read
     `premium_monthly`, `premium_yearly` or `supporter`, so a band counting only the new ladder would
     read zero on a live site. The money is a MONTHLY EQUIVALENT, yearly pledges divided by twelve, so
     one figure means one thing. {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3">
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-paid>
         <div class="card-body p-4 md:p-5 lg:p-6">
-            <h2 class="sup-sec__h">How this is paid for</h2>
-            <p class="sup-sec__p">No investors, no advertising. Just the people who use it.</p>
-
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4">
+            {% comment %} No heading and no lede: four labelled figures already say "here is how this
+            is paid for" without a sentence telling you so. {% endcomment %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                 {% comment %} The two supporter cells only render when there is somebody to count.
                 "$0 a month from 0 supporters" on the page asking you to fund the thing is worse than
                 a shorter band. {% endcomment %}
@@ -300,7 +299,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 {% if supporter_monthly is not None %}
                 <div class="scard">
                     <div class="scard__label">Monthly support</div>
-                    <div class="scard__value pp-tally" data-countup="{{ supporter_monthly }}">${{ supporter_monthly|intcomma }}</div>
+                    <div class="scard__value pp-tally" data-countup="{{ supporter_monthly }}" data-countup-prefix="$">${{ supporter_monthly|intcomma }}</div>
                     <div class="scard__sub">yearly pledges counted per month</div>
                 </div>
                 {% endif %}
