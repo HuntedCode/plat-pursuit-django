@@ -1264,3 +1264,49 @@ def test_changing_the_toggle_clears_the_cached_wall(client):
     client.post(reverse('subscription_management'), {'wall_visibility': '1'})
 
     assert cache.get('support:stats') is None, 'the stale wall would still show them'
+
+
+def test_the_wall_shows_faces_and_names_together(client):
+    """The wall's job is "look how many people care about this", so it needs faces for the crowd and
+    names for the credit. An avatar-only wall thanks nobody by name; a name-only wall is a credits
+    roll rather than a room full of people."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='FacedHunter', avatar_url='https://example.test/a.png',
+                   user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'https://example.test/a.png' in wall, 'the wall is not showing faces'
+    assert 'FacedHunter' in wall
+    assert 'Patron' in wall, 'the level is not named on the tile'
+
+
+def test_the_wall_does_not_animate_two_hundred_names_at_once(client):
+    """`.pp-supname` is a CONTINUOUS animation. It belongs where a supporter appears individually --
+    a leaderboard row, a comment -- not two hundred at a time on one screen, which is the
+    wall-of-pulsing-names this whole treatment has been avoiding since it was a sheen.
+
+    The tiles still arrive on scroll; that is a one-shot entrance, not a loop.
+    """
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='Quiet', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'pp-supname' not in wall, 'every name on the wall is running a continuous animation'
+
+
+def test_a_supporter_with_no_avatar_still_gets_a_tile(client):
+    """Plenty of profiles have no avatar. The shared partial falls back to a glyph, and a tile that
+    collapsed without one would leave a hole in the grid for a person who is on the wall."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='NoPicture', avatar_url=None, user__premium_tier='sponsor')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'NoPicture' in wall
+    assert 'sup-wall__av' in wall, 'the avatar slot vanished rather than falling back'
+

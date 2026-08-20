@@ -388,6 +388,7 @@ class SupportStorefrontView(TemplateView):
         wall = [
             {
                 'name': r.display_psn_username or r.psn_username,
+                'avatar': r.avatar_url,
                 'tier': by_slug.get(r.user.premium_tier),
                 'rank': rank.get(r.user.premium_tier, -1),
             }

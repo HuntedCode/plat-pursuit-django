@@ -754,40 +754,117 @@
 }
 
 /* ------------------------------------------------------------------------- the supporter wall ---- */
-/* A flow of names, not a table or a ranked list. Everyone here chose to be named, and the point is
-   the crowd rather than the ordering -- so the levels differ by mark and hue, and nothing is
-   numbered, sized or podium'd. */
+/* A CROWD, not a ranked list.
+
+   The emotional job of this section is "look how many people care about this", so it is built for
+   density and for faces: every tile is the same size, nothing is numbered, and the levels differ by
+   the avatar's ring and a small mark rather than by prominence. Sizing the top levels larger would
+   turn a thank-you into a scoreboard of who paid most, which is the one thing a supporter wall must
+   not be on a site where the actual hierarchy is earned.
+
+   Auto-fill tracks rather than fixed columns: the wall has to look composed at four supporters and
+   at two hundred, and a fixed grid looks broken at one end or the other. */
 .sup-wall {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    margin-top: 18px;
+    padding: 0;
 }
 
 .sup-wall__one {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 6px 11px;
+    gap: 9px;
+    min-width: 0;
+    padding: 7px 12px 7px 7px;
     border-radius: 999px;
-    border: 1px solid var(--pp-border);
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-border)) 30%, var(--pp-border));
+    background:
+        linear-gradient(100deg,
+            color-mix(in oklab, var(--sup-t, transparent) 13%, transparent) 0%,
+            transparent 62%),
+        var(--pp-bg-2);
+    transition: border-color var(--pp-dur) var(--pp-ease),
+                transform var(--pp-dur) var(--pp-ease),
+                box-shadow var(--pp-dur) var(--pp-ease);
 }
 
-/* Only a level carries a hue; legacy supporters sit in the neutral chip until they move across. */
-.sup-wall__one[style] {
-    border-color: color-mix(in oklab, var(--sup-t) 38%, var(--pp-border));
-    background: color-mix(in oklab, var(--sup-t) 10%, transparent);
+/* A lift rather than a scale: these sit in a tight grid and a growing tile shoves its neighbours. */
+@media (hover: hover) {
+    .sup-wall__one:hover {
+        transform: translateY(-2px);
+        border-color: color-mix(in oklab, var(--sup-t, var(--pp-border)) 60%, var(--pp-border));
+        box-shadow: 0 6px 18px color-mix(in oklab, var(--sup-t, #000) 22%, transparent);
+    }
 }
 
-.sup-wall__mark { display: inline-flex; align-items: center; gap: 1px; }
+/* Legacy supporters have no level yet, so they sit in the neutral chip until they move across.
+   Explicitly not styled as "lesser" -- they are the people who were here first. */
+.sup-wall__one.is-legacy {
+    border-color: var(--pp-border);
+    background: var(--pp-bg-2);
+}
+
+/* The face. Ringed in the level's colour, which is where the hierarchy lives on this wall. */
+.sup-wall__av {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--pp-bg-1);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--sup-t, var(--pp-border)) 55%, var(--pp-border));
+}
+
+.sup-wall__av img,
+.sup-wall__av svg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.sup-wall__av svg { padding: 5px; color: var(--pp-text-mute); }
+
+.sup-wall__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+}
 
 .sup-wall__name {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 650;
     color: var(--pp-text);
-    max-width: 22ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* The level, small and under the name -- the same shape a leaderboard row uses for a worn title, so
+   a supporter reads the same way wherever you meet them. */
+.sup-wall__lvl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 1px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--sup-t) 70%, var(--pp-text-mute));
+}
+
+.sup-wall__mark { display: inline-flex; align-items: center; gap: 1px; }
+.sup-wall__lvl .pp-supstar { width: 8px; height: 8px; }
+
+/* Arrives a tile at a time on scroll. Capped hard: the delay is per-tile, so an uncapped stagger
+   over two hundred tiles would leave the last one waiting seconds after it was already on screen. */
+@media (prefers-reduced-motion: no-preference) {
+    .sup-wall[data-sup-reveal] .sup-wall__one {
+        animation: ppRevealIn 0.45s var(--pp-ease) backwards;
+        animation-delay: calc(min(var(--i, 0) * 22ms, 700ms));
+    }
 }
