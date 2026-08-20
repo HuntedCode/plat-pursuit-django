@@ -30,30 +30,40 @@ PREMIUM_TIER_DISPLAY = {
 # Six levels, monthly or yearly, yearly priced at ten months (two free).
 #
 # EVERY LEVEL GETS EVERY PERK. What escalates is RECOGNITION, never capability -- that is what keeps
-# this a dial and not a door (docs/design/rebuild/premium-proposal.md). Somebody paying $50 gets a
+# this a dial and not a door (docs/design/rebuild/premium-proposal.md). Somebody paying $30 gets a
 # more visible thank-you than somebody paying $4; neither gets a feature the other cannot reach, and
 # nobody gets one a free hunter cannot reach. `test_every_level_gets_every_perk` fails if a level
-# ever grows a key beyond price and recognition, because that is the moment this becomes a feature
-# ladder and the page's central promise turns false.
+# ever grows a key beyond price, recognition and its own look, because that is the moment this
+# becomes a feature ladder and the page's central promise turns false.
 #
-# NAMING IS UNSETTLED. `bronze` / `silver` / `gold` / `platinum` are ALREADY load-bearing words here:
-# they are the PSN trophy types (trophies/constants.py:49) and the badge medallion metals, with their
-# own colours in the design system (`.pgl__rung--bronze` = #cf9160, and friends). A "Platinum
-# Supporter" on a site where the platinum is what you grind hundreds of hours for reads as buying the
-# achievement, which the flair guardrail forbids. `titanium` and `diamond` do not collide. Kept as-is
-# pending Jeffrey's call; `slug` and `name` are separate precisely so a rename is one edit here rather
-# than a sweep through CSS, copy and colour tokens. (The tier PIP colours in support.css are already
-# deliberately clear of the trophy hues for the same reason.)
+# NAMES DESCRIBE THE RELATIONSHIP, not a material. That is deliberate: `bronze` / `silver` / `gold` /
+# `platinum` are already load-bearing words here -- they are the PSN trophy grades AND the badge
+# medallion metals, with their own colours in the design system (`.pgl__rung--bronze` = #cf9160, and
+# friends). A "Platinum Supporter" on a site where the platinum is what you grind hundreds of hours
+# for reads as buying the achievement, which the flair guardrail forbids. Naming the relationship
+# instead sidesteps the collision completely and suits the voice better.
+#
+# THE MARK IS A STAR, and only a star, at every level. It builds an outline star -> one filled ->
+# two -> three -> four -> five, so a level is legible at a glance without ever introducing a second
+# shape that could be mistaken for something earned. `colour` is per level and rotates through the
+# hue wheel (sea green -> sky -> periwinkle -> violet -> orchid -> rose): a continuous, obviously
+# synthetic ramp with no metal anywhere in it.
 #
 # `recognition` drives the public supporter wall:
 #   none  -> not listed          named -> name on the site          linked -> name + a link
 SUPPORT_TIERS = [
-    {'slug': 'bronze',   'name': 'Bronze Supporter',   'monthly': 4,  'yearly': 40,  'recognition': 'none'},
-    {'slug': 'silver',   'name': 'Silver Supporter',   'monthly': 10, 'yearly': 100, 'recognition': 'none'},
-    {'slug': 'gold',     'name': 'Gold Supporter',     'monthly': 15, 'yearly': 150, 'recognition': 'named'},
-    {'slug': 'platinum', 'name': 'Platinum Supporter', 'monthly': 20, 'yearly': 200, 'recognition': 'named'},
-    {'slug': 'titanium', 'name': 'Titanium Supporter', 'monthly': 25, 'yearly': 250, 'recognition': 'linked'},
-    {'slug': 'diamond',  'name': 'Diamond Supporter',  'monthly': 30, 'yearly': 300, 'recognition': 'linked'},
+    {'slug': 'friend',   'name': 'Friend',   'monthly': 4,  'yearly': 40,
+     'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#6fa89a'},
+    {'slug': 'ally',     'name': 'Ally',     'monthly': 10, 'yearly': 100,
+     'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#5f9ed8'},
+    {'slug': 'patron',   'name': 'Patron',   'monthly': 15, 'yearly': 150,
+     'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#7f8ee6'},
+    {'slug': 'champion', 'name': 'Champion', 'monthly': 20, 'yearly': 200,
+     'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a87ce0'},
+    {'slug': 'guardian', 'name': 'Guardian', 'monthly': 25, 'yearly': 250,
+     'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#d972b8'},
+    {'slug': 'luminary', 'name': 'Luminary', 'monthly': 30, 'yearly': 300,
+     'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#ee6f97'},
 ]
 
 # The ladder above is DESIGN ONLY until its twelve Stripe prices and twelve PayPal plans exist.

@@ -1,0 +1,16 @@
+{% comment %}
+The supporter mark, and the only mark there is.
+
+ONE SHAPE at every level, building outline -> one filled -> two -> three -> four -> five. A single
+escalating shape is deliberate: `visual-identity.md` requires flair to be a SEPARATE visual language
+from earned status, never a better one, so introducing a second shape at higher levels would risk a
+paid mark reading as something a hunter earned. A star that simply repeats cannot.
+
+Colour comes from `--sup-t` on an ancestor, so this partial never needs to know which level it is
+drawing. Callers set it from `tier.colour`.
+
+Expects: `tier` with `.star_range` (a real range, built in the view) and `.outline` (bool, the
+first level only). A range rather than the `|rjust` iteration trick, which works but reads as a
+puzzle and breaks silently above nine.
+{% endcomment %}
+{% for _ in tier.star_range %}<svg class="sup-star{% if tier.outline %} is-outline{% endif %}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}

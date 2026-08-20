@@ -22,7 +22,7 @@ from unittest.mock import patch
 import pytest
 from django.urls import reverse
 
-from users.constants import PREMIUM_PERKS
+from users.constants import PREMIUM_PERKS, SUPPORT_TIERS
 from tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -82,7 +82,7 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     # The statement and the ask, not a login wall wearing the title.
     assert 'Help us build' in body
     assert 'nothing locked away' in body
-    assert 'Bronze Supporter' in body, 'the ladder is missing for a signed-out visitor'
+    assert 'Friend' in body, 'the ladder is missing for a signed-out visitor'
 
 
 def test_a_signed_in_non_member_sees_the_same_ladder(client):
@@ -93,7 +93,7 @@ def test_a_signed_in_non_member_sees_the_same_ladder(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    assert 'Diamond Supporter' in body
+    assert 'Luminary' in body
     assert 'Manage your membership' not in body, 'a non-member sees the member state'
 
 
@@ -110,7 +110,7 @@ def test_a_member_is_not_bounced_off_the_page(client):
 
     assert response.status_code == 200, 'a member cannot reach the Support hub at all'
     assert 'You already back this' in body
-    assert 'Bronze Supporter' not in body, 'a member is being sold a second subscription'
+    assert 'Friend' not in body, 'a member is being sold a second subscription'
 
 
 # ------------------------------------------------------------------- the checkout contract ----
@@ -323,7 +323,7 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     assert 'sup-head__figs' not in body
     # The rest of the header still stands.
     assert 'Help us build' in body
-    assert 'Bronze Supporter' in body
+    assert 'Friend' in body
 
 
 def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
@@ -400,8 +400,9 @@ def test_every_level_gets_every_perk():
     from users.constants import SUPPORT_TIERS
 
     for tier in SUPPORT_TIERS:
-        assert set(tier) == {'slug', 'name', 'monthly', 'yearly', 'recognition'}, (
-            f"{tier['slug']} carries something beyond price and recognition"
+        assert set(tier) == {'slug', 'name', 'monthly', 'yearly', 'recognition',
+                             'stars', 'outline', 'colour'}, (
+            f"{tier['slug']} carries something beyond price, recognition and how it looks"
         )
         assert tier['recognition'] in ('none', 'named', 'linked')
 
@@ -438,7 +439,6 @@ def test_every_level_can_actually_be_revealed(client):
             f'{slug} has no reveal rule: its amount is pickable but names nothing'
         )
         assert f'input[value={slug}]:checked' in css, f'{slug} never registers as selected'
-        assert f'sup-amt[data-tier={slug}]' in css, f'{slug} has no colour of its own'
 
 
 def test_the_grid_opens_on_a_middle_amount(client):
@@ -478,7 +478,10 @@ def test_the_perks_modal_is_reachable_whatever_you_pick(client):
     assert '<dialog id="sup-perks"' in body
     assert 'data-perks-open' in body, 'nothing opens the modal'
     assert 'data-perks-close' in body, 'nothing closes it but Escape'
-    assert body.count('sup-buy__perks') == 1, 'the opener moved with the selection'
+    # One per level, since it is the first line of every level's checklist -- and the text is
+    # identical in all six, which is the point: the answer does not change with the amount.
+    assert body.count('sup-gets__modal') == len(SUPPORT_TIERS)
+    assert body.count('Every supporter perk, whatever you give') == len(SUPPORT_TIERS)
 
 
 def test_the_modal_carries_both_sides_of_every_perk(client):
@@ -575,4 +578,67 @@ def test_the_header_leads_with_the_invitation_not_a_disclaimer(client):
     # ...and the promise is still made, lower down.
     assert 'stays free for everyone' in body
     assert 'nothing locked away' in body
+
+
+def test_every_level_carries_its_own_colour_from_the_constant(client):
+    """Colour used to be a block of hardcoded CSS rules keyed on slug, which meant the palette lived
+    in two places that could quietly disagree with `SUPPORT_TIERS`. It is inlined from the constant
+    now, so this checks the value actually reaches the markup rather than that a rule exists."""
+    body = _flat(client)
+
+    for tier in SUPPORT_TIERS:
+        assert f"--sup-t: {tier['colour']}" in body, (
+            f"{tier['slug']} is not painting its own colour"
+        )
+    # ...and no two levels look alike, which is the whole reason they are individually coloured.
+    assert len({t['colour'] for t in SUPPORT_TIERS}) == len(SUPPORT_TIERS)
+
+
+def test_the_mark_builds_one_star_at_a_time():
+    """Outline, then one filled, then two, three, four, five. ONE shape throughout: introducing a
+    second shape at higher levels would risk a paid mark reading as something earned, which the flair
+    guardrail forbids. A star that simply repeats cannot."""
+    counts = [t['stars'] for t in SUPPORT_TIERS]
+    assert counts == [1, 1, 2, 3, 4, 5]
+    assert [t['outline'] for t in SUPPORT_TIERS] == [True, False, False, False, False, False], (
+        'only the entry level is an outline'
+    )
+
+
+def test_the_marks_are_actually_drawn(client):
+    """The counts above are worthless if the template draws one star regardless."""
+    body = _flat(client)
+
+    def heading_mark(slug):
+        """Just the heading's star span. The preview row draws the mark too, so a slice to the end
+        of the level block counts both and reports double."""
+        block = body[body.index(f'data-for="{slug}"'):]
+        start = block.index('sup-becomes__stars')
+        return block[start:block.index('</span>', start)]
+
+    assert heading_mark('luminary').count('<svg class="sup-star') == 5, 'the top level is not wearing five stars'
+    assert heading_mark('champion').count('<svg class="sup-star') == 3
+    assert heading_mark('friend').count('sup-star is-outline') == 1
+    assert heading_mark('ally').count('is-outline') == 0, 'the second level is still an outline'
+
+
+def test_the_modal_still_centres_itself():
+    """A REGRESSION GUARD for a bug whose fix looks like a no-op.
+
+    A modal `<dialog>` centres through the UA stylesheet's `margin: auto` against `inset: 0`. Tailwind's
+    preflight sets `margin: 0` on every element, which silently removes it, and the dialog pins to the
+    top-left corner. Nothing in the markup looks wrong when this happens.
+
+    So `.sup-modal` restores `margin: auto` explicitly, and the reason that line exists is invisible
+    to anyone tidying the file later. Asserted against the BUILT stylesheet, since the preflight rule
+    it is fighting only exists after the build.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8', errors='ignore')
+
+    rule = css[css.index('.sup-modal{'):]
+    rule = rule[:rule.index('}')]
+    assert 'margin:auto' in rule.replace(' ', ''), (
+        'the perks dialog will render in the top-left corner instead of centred'
+    )
 

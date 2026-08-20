@@ -158,13 +158,17 @@ class SupportStorefrontView(TemplateView):
         """
         from core.services.site_heartbeat import get_cached_heartbeat
 
-        beat = (get_cached_heartbeat() or {}).get('always') or {}
+        beat = get_cached_heartbeat() or {}
+        # `hours_hunted` and `platinums_total` live in the expanded block, the other two in `always`,
+        # so both are merged before the lookup rather than the caller knowing which is where.
+        cells = {**(beat.get('always') or {}), **(beat.get('expanded') or {})}
         figures = {
-            key: (beat.get(source) or {}).get('value')
+            key: (cells.get(source) or {}).get('value')
             for key, source in (
-                ('trophies', 'trophies_total'),
-                ('games', 'games_total'),
                 ('hunters', 'profiles_total'),
+                ('trophies', 'trophies_total'),
+                ('platinums', 'platinums_total'),
+                ('hours', 'hours_hunted'),
             )
         }
         return figures if all(figures.values()) else None
@@ -206,7 +210,11 @@ class SupportStorefrontView(TemplateView):
         # carries both intervals; the template's switch picks which face to show, so swapping tabs is
         # a CSS state change rather than a round trip.
         ladder = [
-            dict(tier, yearly_saving=tier['monthly'] * 12 - tier['yearly'])
+            dict(tier,
+                 yearly_saving=tier['monthly'] * 12 - tier['yearly'],
+                 # A real range for the star partial to loop. Django templates cannot count, and the
+                 # `|rjust` trick that can is a puzzle to read.
+                 star_range=range(tier['stars']))
             for tier in SUPPORT_TIERS
             # Live and un-flagged: only offer a level somebody can actually buy. Until the ladder's
             # prices exist this filters to nothing, and the page says so rather than lying.

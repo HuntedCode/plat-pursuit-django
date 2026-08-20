@@ -122,25 +122,53 @@
     }
 }
 
-.sup-head__figs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 20px;
-    margin-top: 18px;
+/* --------------------------------------------------------------------- we currently serve ---- */
+/* The factual floor under the ask: people, their work, their wins, their time. Numbers lead and the
+   labels sit under them, because the figures are the point and the words only name them. */
+.sup-serve {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--pp-border);
 }
 
-.sup-head__figs span {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 6px;
-    font-size: 0.7rem;
-    font-weight: 650;
+.sup-serve__k {
+    font-size: 0.63rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--pp-text-dim);
+    color: var(--pp-text-mute);
 }
 
-.sup-head__figs .pp-tally { font-size: 1.25rem; line-height: 1; color: var(--pp-primary); }
+.sup-serve__row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px 16px;
+    margin-top: 12px;
+}
+
+@media (min-width: 560px) { .sup-serve__row { grid-template-columns: repeat(4, 1fr); } }
+
+.sup-serve__cell dd {
+    font-size: 1.35rem;
+    line-height: 1.05;
+    color: var(--pp-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.sup-serve__cell dt {
+    margin-top: 3px;
+    font-size: 0.66rem;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+/* The <dl> reads value-then-label visually while staying label-then-value in the DOM, which is the
+   order assistive tech needs. */
+.sup-serve__cell { display: flex; flex-direction: column-reverse; align-items: flex-start; }
+
+@media (min-width: 768px) { .sup-serve__cell dd { font-size: 1.6rem; } }
 
 @media (min-width: 768px) {
     .sup-head__lede { font-size: 1rem; }
@@ -214,9 +242,11 @@
 }
 
 .sup-amt {
-    display: grid;
-    place-items: center;
-    padding: 11px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 9px 6px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid var(--pp-border);
     background: rgba(255, 255, 255, 0.02);
@@ -262,16 +292,41 @@
 
 .sup-box[data-cycle="yearly"] .sup-buy__saving { display: block; }
 
+/* ------------------------------------------------------------------------------ the mark ---- */
+/* One shape at every level, repeated. Colour comes from `--sup-t`, set per level on the ancestor,
+   so the partial that draws these never needs to know which level it is. */
+.sup-stars,
+.sup-becomes__stars { display: inline-flex; align-items: center; gap: 1px; }
+
+.sup-star {
+    width: 11px;
+    height: 11px;
+    flex: none;
+    fill: var(--sup-t);
+    filter: drop-shadow(0 0 5px color-mix(in oklab, var(--sup-t) 55%, transparent));
+}
+
+/* The entry level, and the only outline: it reads as the start of something rather than a lesser
+   version of it. */
+.sup-star.is-outline {
+    fill: none;
+    stroke: var(--sup-t);
+    stroke-width: 2;
+    filter: none;
+}
+
+.sup-becomes__stars .sup-star { width: 13px; height: 13px; }
+
 /* --------------------------------------------------------------------- what you become ---- */
 /* All six ship; the checked amount reveals its own. Pure CSS, no JS involved. */
 .sup-becomes { display: none; }
 
-.sup-box:has(.sup-amt input[value="bronze"]:checked)   .sup-becomes[data-for="bronze"],
-.sup-box:has(.sup-amt input[value="silver"]:checked)   .sup-becomes[data-for="silver"],
-.sup-box:has(.sup-amt input[value="gold"]:checked)     .sup-becomes[data-for="gold"],
-.sup-box:has(.sup-amt input[value="platinum"]:checked) .sup-becomes[data-for="platinum"],
-.sup-box:has(.sup-amt input[value="titanium"]:checked) .sup-becomes[data-for="titanium"],
-.sup-box:has(.sup-amt input[value="diamond"]:checked)  .sup-becomes[data-for="diamond"] {
+.sup-box:has(.sup-amt input[value="friend"]:checked)   .sup-becomes[data-for="friend"],
+.sup-box:has(.sup-amt input[value="ally"]:checked)   .sup-becomes[data-for="ally"],
+.sup-box:has(.sup-amt input[value="patron"]:checked)     .sup-becomes[data-for="patron"],
+.sup-box:has(.sup-amt input[value="champion"]:checked) .sup-becomes[data-for="champion"],
+.sup-box:has(.sup-amt input[value="guardian"]:checked) .sup-becomes[data-for="guardian"],
+.sup-box:has(.sup-amt input[value="luminary"]:checked)  .sup-becomes[data-for="luminary"] {
     display: block;
 }
 
@@ -370,6 +425,49 @@
     padding-right: 4px;               /* italic glyphs slant past their box */
 }
 
+/* -------------------------------------------------------------------------- what you get ---- */
+/* The first line is identical at every level and opens the modal, because the answer does not change
+   with the amount. Stating that at the moment of choosing is the model made visible. */
+.sup-gets {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 14px;
+}
+
+.sup-gets li {
+    position: relative;
+    padding-left: 19px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+}
+
+.sup-gets li::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 0.4em;
+    width: 8px;
+    height: 4px;
+    border-left: 2px solid var(--sup-t);
+    border-bottom: 2px solid var(--sup-t);
+    transform: rotate(-45deg);
+}
+
+.sup-gets__modal {
+    font: inherit;
+    color: var(--pp-text);
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in oklab, var(--sup-t) 60%, transparent);
+    cursor: pointer;
+    transition: text-decoration-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-gets__modal:hover { text-decoration-color: var(--sup-t); }
+
 /* ---------------------------------------------------------------------- the perks link ---- */
 /* Reachable whichever amount is selected, because the answer is the same whichever amount is
    selected. That IS the model, so the control does not move with the choice. */
@@ -429,29 +527,11 @@
     color: var(--pp-warning);
 }
 
-/* THE LEVEL PALETTE, kept deliberately clear of the trophy metals.
-   `bronze` / `silver` / `gold` / `platinum` already mean PSN trophy grades and badge medallion
-   metals here, with their own colours (`.pgl__rung--bronze` = #cf9160 and friends). Reusing those
-   hues for money levels would make a paid pip read as an earned grade, which the flair guardrail
-   forbids -- flair is a SEPARATE visual language, never a better one. These are cool and synthetic
-   on purpose, so nothing on this ladder can be mistaken for something a hunter earned.
-   (The level NAMES are still unsettled for the same reason; see users/constants.py.)
-
-   Set on the box too, so the CTA and the "become a" heading pick up the selected level's hue. */
-.sup-box { --sup-t: #6fa8a0; }
-.sup-box:has(.sup-amt input[value="bronze"]:checked)   { --sup-t: #6f8ea8; }
-.sup-box:has(.sup-amt input[value="silver"]:checked)   { --sup-t: #6fa8a0; }
-.sup-box:has(.sup-amt input[value="gold"]:checked)     { --sup-t: #6f9fd8; }
-.sup-box:has(.sup-amt input[value="platinum"]:checked) { --sup-t: #8b8fe0; }
-.sup-box:has(.sup-amt input[value="titanium"]:checked) { --sup-t: #b07fe0; }
-.sup-box:has(.sup-amt input[value="diamond"]:checked)  { --sup-t: #d97fc4; }
-
-.sup-amt[data-tier="bronze"]   { --sup-t: #6f8ea8; }
-.sup-amt[data-tier="silver"]   { --sup-t: #6fa8a0; }
-.sup-amt[data-tier="gold"]     { --sup-t: #6f9fd8; }
-.sup-amt[data-tier="platinum"] { --sup-t: #8b8fe0; }
-.sup-amt[data-tier="titanium"] { --sup-t: #b07fe0; }
-.sup-amt[data-tier="diamond"]  { --sup-t: #d97fc4; }
+/* The level's hue arrives inline as `--sup-t`, straight from `SUPPORT_TIERS[*]['colour']`. It used
+   to be a block of hardcoded rules here, which meant the palette lived in two places that could
+   quietly disagree; the constant is the single source now. The fallback is only for the box before
+   any amount is checked. */
+.sup-box { --sup-t: #5f9ed8; }
 
 /* --------------------------------------------------------------------- member / off states ---- */
 .sup-box--member,
@@ -494,6 +574,11 @@
    re-samples on any repaint in its stacking context and is the documented cause of modal jank
    here. The depth comes from the dialog's own elevation instead. */
 .sup-modal {
+    /* WITHOUT THIS THE DIALOG PINS TO THE TOP-LEFT. A modal <dialog> centres itself through the UA
+       stylesheet's `margin: auto` against `inset: 0` -- and Tailwind's preflight sets `margin: 0` on
+       every element, which silently removes it. Nothing about the markup looks wrong when this
+       happens, which is why it survived review. */
+    margin: auto;
     width: min(680px, calc(100vw - 32px));
     max-height: min(80vh, 720px);
     overflow-y: auto;

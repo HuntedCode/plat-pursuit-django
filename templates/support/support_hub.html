@@ -70,12 +70,31 @@ substrate, and an earlier version of this page did, which is most of why it read
                     {% comment %} Omitted whole on a cold heartbeat cache rather than printing zeroes.
                     "0 trophies for 0 hunters" on the page asking you to fund the thing is worse than
                     saying nothing at all. {% endcomment %}
+                    {% comment %} The factual floor under the ask. Omitted whole on a cold heartbeat
+                    cache rather than printing zeroes -- "we currently serve 0 hunters" on the page
+                    asking you to fund the thing is worse than saying nothing at all. {% endcomment %}
                     {% if today %}
-                    <p class="sup-head__figs">
-                        <span><b class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</b> trophies tracked</span>
-                        <span><b class="pp-tally" data-countup="{{ today.games }}">{{ today.games|intcomma }}</b> games</span>
-                        <span><b class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</b> hunters</span>
-                    </p>
+                    <div class="sup-serve">
+                        <p class="sup-serve__k">We currently serve</p>
+                        <dl class="sup-serve__row">
+                            <div class="sup-serve__cell">
+                                <dt>Hunters</dt>
+                                <dd class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</dd>
+                            </div>
+                            <div class="sup-serve__cell">
+                                <dt>Trophies tracked</dt>
+                                <dd class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</dd>
+                            </div>
+                            <div class="sup-serve__cell">
+                                <dt>Platinums earned</dt>
+                                <dd class="pp-tally" data-countup="{{ today.platinums }}">{{ today.platinums|intcomma }}</dd>
+                            </div>
+                            <div class="sup-serve__cell">
+                                <dt>Hours hunted</dt>
+                                <dd class="pp-tally" data-countup="{{ today.hours }}">{{ today.hours|intcomma }}</dd>
+                            </div>
+                        </dl>
+                    </div>
                     {% endif %}
                 </div>
 
@@ -114,9 +133,10 @@ substrate, and an earlier version of this page did, which is most of why it read
                         <fieldset class="sup-amts">
                             <legend class="sr-only">How much would you like to give?</legend>
                             {% for tier in tiers %}
-                            <label class="sup-amt" data-tier="{{ tier.slug }}">
+                            <label class="sup-amt" data-tier="{{ tier.slug }}" style="--sup-t: {{ tier.colour }}">
                                 <input type="radio" name="sup-amt" value="{{ tier.slug }}" class="sr-only"
                                        {% if tier.slug == default_tier %}checked{% endif %}>
+                                <span class="sup-stars" aria-hidden="true">{% include 'support/_stars.html' with tier=tier %}</span>
                                 <span class="sup-amt__m">${{ tier.monthly }}</span>
                                 <span class="sup-amt__y">${{ tier.yearly }}</span>
                             </label>
@@ -133,27 +153,48 @@ substrate, and an earlier version of this page did, which is most of why it read
                         mark. All six ship and the checked amount reveals its own, so the swap is a
                         state change. {% endcomment %}
                         {% for tier in tiers %}
-                        <div class="sup-becomes" data-for="{{ tier.slug }}" data-tier="{{ tier.slug }}">
-                            <p class="sup-becomes__h">You would appear as a <b>{{ tier.name }}</b></p>
+                        <div class="sup-becomes" data-for="{{ tier.slug }}" data-tier="{{ tier.slug }}"
+                             style="--sup-t: {{ tier.colour }}">
+                            <p class="sup-becomes__h">
+                                You would appear as a <b>{{ tier.name }}</b>
+                                <span class="sup-becomes__stars" aria-hidden="true">{% include 'support/_stars.html' with tier=tier %}</span>
+                            </p>
 
+                            {% comment %} PLACEHOLDER, and the caption says so. What belongs here is
+                            the supporter mark shown IN CONTEXT -- your own name on a leaderboard row,
+                            wearing the level you are about to pick -- which is the most persuasive
+                            thing this box can show and the reason it is worth designing properly
+                            rather than approximating. Real geometry, real name, stand-in mark.
+                            {% endcomment %}
                             <div class="sup-prev" aria-hidden="true">
                                 <span class="sup-prev__rank">#12</span>
                                 <span class="sup-prev__av"></span>
                                 <span class="sup-prev__name">
-                                    {{ viewer_name }}<span class="sup-prev__mark"></span>
+                                    {{ viewer_name }}<span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
                                 </span>
                                 <span class="sup-prev__score">1,204</span>
                             </div>
                             <p class="sup-prev__cap">A rough idea. We have not designed the marks yet.</p>
+
+                            {% comment %} The first line is the SAME at every level and links to the
+                            modal, because the answer does not change with the amount -- that is the
+                            whole model, stated at the moment of choosing. Only the recognition line
+                            below it moves. {% endcomment %}
+                            <ul class="sup-gets">
+                                <li>
+                                    <button type="button" class="sup-gets__modal" data-perks-open>
+                                        Every supporter perk, whatever you give
+                                    </button>
+                                </li>
+                                <li>A {{ tier.name }} mark beside your name, site-wide</li>
+                                {% if tier.recognition == 'named' %}
+                                <li>Your name on the site</li>
+                                {% elif tier.recognition == 'linked' %}
+                                <li>Your name and a link on the site</li>
+                                {% endif %}
+                            </ul>
                         </div>
                         {% endfor %}
-
-                        {% comment %} Reachable whichever amount is selected, because the answer is the
-                        same whichever amount is selected -- that IS the model. {% endcomment %}
-                        <button type="button" class="sup-buy__perks" data-perks-open>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                            What every supporter gets
-                        </button>
 
                         <button type="button" class="sup-buy__go"
                                 {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
