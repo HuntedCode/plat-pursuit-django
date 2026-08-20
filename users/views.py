@@ -242,6 +242,11 @@ class SupportStorefrontView(TemplateView):
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
         context['viewer_name'] = self._viewer_name()
+        # The worn title, shown before the supporter line exactly as a leaderboard row shows it.
+        # `displayed_title` is a METHOD and was an N+1 on the hunters wall, but this is ONE profile
+        # on a page that renders one row, so a single query is the right cost here.
+        profile = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
+        context['viewer_title'] = profile.displayed_title() if profile else None
         # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- one
         # per series, avatar submissions skipped, bounded scan -- which is the part an artist actually
         # drew and the one thing on this page nobody else could show.

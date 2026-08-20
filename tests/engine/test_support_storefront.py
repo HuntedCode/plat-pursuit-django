@@ -751,26 +751,33 @@ def test_the_legacy_name_treatment_is_not_used_here():
     assert 'pp-supname' in markup
 
 
-def test_the_star_does_not_take_the_level_colour():
-    """A DELIBERATE SPLIT, and one that looks like an oversight to anyone tidying later.
+def test_the_stars_fill_is_constant_but_its_glow_carries_the_level():
+    """A PRECISE split, and the precision is the design.
 
-        the star says you support        the name's colour says at what level
+        the star's SHAPE and FILL say you support     (constant, pale, cool)
+        the star's GLOW and the name's colour say at what level
 
-    The star was briefly the same hue as the name, which made the whole mark read as one flat block
-    of colour. Making the two complementary was considered and rejected: complements are maximum
-    contrast, they vibrate, and this sits beside earned rank chrome on leaderboards -- flair must
-    never outshine earned status, and the design system says pull back past four hues on a surface.
+    Both were the level's hue once, which made the mark one flat block of colour. Then both were
+    constant, which was legible but inert. The glow is the resolution: it is diffuse and
+    low-contrast, so it cannot vibrate against the fill the way a second solid colour would, and it
+    cannot compete with an earned rank beside it -- which a complementary fill absolutely could.
 
-    So `.pp-supstar` must never reference `--sup-t`. If it does, someone has "fixed" the mismatch and
-    quietly given every level a second hue.
+    So `fill` and `stroke` must never reference `--sup-t`, and `filter` must.
     """
     root = pathlib.Path(__file__).resolve().parents[2]
     css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
 
-    star = css[css.index('.pp-supstar {'):]
-    star = star[:star.index('.pp-supstar.is-outline')]
-    assert '--sup-t' not in star, 'the star has taken the level hue; it is meant to be constant'
-    assert '--pp-supstar-c' in star
+    for block in ('.pp-supstar {', '.pp-supstar.is-outline {'):
+        rule = css[css.index(block):]
+        rule = rule[:rule.index(chr(10) + '}')]
+        for prop in ('fill', 'stroke'):
+            for line in rule.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(prop + ':'):
+                    assert '--sup-t' not in stripped, (
+                        f'{block} paints its {prop} with the level hue; only the glow may carry it'
+                    )
+        assert '--sup-t' in rule[rule.index('filter:'):], f'{block} has no level in its glow'
 
     # ...and the NAME still carries the level, or the split has collapsed the other way.
     name = css[css.index('.pp-supname {'):]
@@ -803,4 +810,38 @@ def test_the_mark_is_not_defined_in_the_storefront_stylesheet():
         assert not re.search(r'^' + re.escape(cls) + r'\s*\{', page, re.M), (
             f'{cls} is DEFINED in the page stylesheet; it belongs in components/supporter.css'
         )
+
+
+def test_the_preview_names_the_level_in_words(client):
+    """A star count tells you there IS a hierarchy; it does not tell you what rung this is or what
+    the rung is called. The level joins the leaderboard's existing title line after a dot, in words,
+    so a reader can see what a supporter is -- and, ideally, wonder what "Ally" means."""
+    body = _flat(client)
+
+    for tier in SUPPORT_TIERS:
+        block = body[body.index(f'data-for="{tier["slug"]}"'):]
+        block = block[:block.index('</div>', block.index('sup-prev__sub'))]
+        assert f'{tier["name"]} Supporter' in block, (
+            f'{tier["slug"]} does not name itself under the name'
+        )
+
+
+def test_a_worn_title_sits_before_the_level(client):
+    """Leaderboard rows already put the hunter's worn title on this line. The level joins it rather
+    than replacing it, because the title is something they EARNED and it goes first."""
+    from tests.factories import ProfileFactory
+    from trophies.models import Title, UserTitle
+
+    profile = ProfileFactory(display_psn_username='TrophyDad')
+    title = Title.objects.create(name='The Completionist')
+    UserTitle.objects.create(profile=profile, title=title, is_displayed=True)
+    client.force_login(profile.user)
+
+    with _member(False):
+        body = re.sub(r'\s+', ' ', _get(client).content.decode())
+
+    sub = body[body.index('sup-prev__sub'):]
+    sub = sub[:sub.index('</span>')]
+    assert 'The Completionist' in sub
+    assert sub.index('The Completionist') < sub.index('Supporter'), 'the earned title comes first'
 

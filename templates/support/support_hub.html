@@ -169,13 +169,22 @@ substrate, and an earlier version of this page did, which is most of why it read
                             <div class="sup-prev" aria-hidden="true">
                                 <span class="sup-prev__rank">#12</span>
                                 <span class="sup-prev__av"></span>
-                                <span class="sup-prev__name">
-                                    {% comment %} The real primitive, not a mock: `.pp-supname` is
-                                    the site-wide supporter name treatment and this is the one place
-                                    it can be used today, because the level is in context here. Every
-                                    other surface that renders a username knows only the boolean
-                                    `Profile.user_is_premium`. {% endcomment %}
-                                    <span class="pp-supname">{{ viewer_name }}</span><span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
+                                <span class="sup-prev__who">
+                                    <span class="sup-prev__name">
+                                        {% comment %} The real primitive, not a mock: `.pp-supname`
+                                        is the site-wide supporter name treatment, and this is the
+                                        one place it can be used today because the level is in
+                                        context. Every other surface that renders a username knows
+                                        only the boolean `Profile.user_is_premium`. {% endcomment %}
+                                        <span class="pp-supname">{{ viewer_name }}</span><span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
+                                    </span>
+                                    {% comment %} The line a leaderboard row already puts under a
+                                    name, carrying the worn title. The level joins it after a dot,
+                                    in words, so somebody reading a board can see WHAT a supporter is
+                                    rather than having to decode a star count. {% endcomment %}
+                                    <span class="sup-prev__sub">
+                                        {% if viewer_title %}{{ viewer_title }} &middot; {% endif %}{{ tier.name }} Supporter
+                                    </span>
                                 </span>
                                 <span class="sup-prev__score">1,204</span>
                             </div>

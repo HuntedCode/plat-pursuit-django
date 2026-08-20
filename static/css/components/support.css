@@ -363,6 +363,14 @@
     border: 1px solid var(--pp-border);
 }
 
+/* Name over sub-line, which is the shape a real leaderboard row already uses. */
+.sup-prev__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+}
+
 .sup-prev__name {
     display: inline-flex;
     align-items: center;
@@ -371,6 +379,21 @@
     font-size: 0.84rem;
     font-weight: 650;
     color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Matches the leaderboard cell's title line: 0.6rem, accent, italic, clamped to one. The level
+   joins it after a dot IN WORDS, so a reader can see what a supporter is instead of decoding a star
+   count -- and, ideally, wonder what "Ally" means and go and find out.
+   `pr-1` because italic glyphs slant past their box and this is clamped. */
+.sup-prev__sub {
+    font-size: 0.6rem;
+    font-style: italic;
+    color: var(--pp-accent);
+    line-height: 1.4;
+    padding-right: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

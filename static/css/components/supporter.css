@@ -108,7 +108,14 @@
     height: 11px;
     flex: none;
     fill: var(--pp-supstar-c);
-    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--pp-supstar-c) 45%, transparent));
+    /* THE FILL IS CONSTANT, THE GLOW IS NOT. The level's hue arrives as a diffuse halo rather than
+       as a second solid colour, which is the whole reason this works: a glow is low-contrast and
+       spreads, so it cannot vibrate against the fill the way a complementary fill would, and it
+       cannot compete with an earned rank sitting beside it. The star still reads as one pale shape;
+       the level is the light coming off it.
+       Static, never transitioned, and on an 11px element -- the filter warnings in
+       `motion-patterns.md` are about animating filter on page-sized subtrees, which this is not. */
+    filter: drop-shadow(0 0 5px color-mix(in oklab, var(--sup-t, var(--pp-supstar-c)) 65%, transparent));
 }
 
 /* The entry level, and the only outline: it reads as the start of something rather than a lesser
@@ -117,5 +124,6 @@
     fill: none;
     stroke: var(--pp-supstar-c);
     stroke-width: 2;
-    filter: none;
+    /* Fainter, not absent: the entry level should still sit in its own light, just less of it. */
+    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--sup-t, var(--pp-supstar-c)) 40%, transparent));
 }
