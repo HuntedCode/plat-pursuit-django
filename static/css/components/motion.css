@@ -71,13 +71,19 @@
  * reference. */
 @keyframes ppRevealIn { from { opacity: 0; transform: translateY(12px) scale(0.955); } to { opacity: 1; transform: none; } }
 
-/* The supporter name sheen. A single pass, then a long rest.
-   `motion-patterns.md`: "loop by resting at a neutral state at the wrap" -- a continuous sweep on
-   every supporter name in a leaderboard would repaint those glyphs forever and read cheap. The pass
-   occupies the first ~12% of the cycle; the remaining ~88% is perfectly still.
-   Only `background-position` moves, so nothing lays out and only the text repaints. */
-@keyframes ppSupSheen {
-    0%   { background-position: 150% 0; }
-    12%  { background-position: -60% 0; }
-    100% { background-position: -60% 0; }
+/* The supporter name flow.
+   Not a sheen. A single band travelling across text is mechanical -- it reads as a metronome, and
+   the eye locks onto the period immediately. This is a train of three light bands at irregular
+   widths and spacings, so the pattern never resolves into a beat: it reads as light moving over
+   water rather than a highlight sliding along a bar.
+
+   THE WRAP IS INVISIBLE by construction rather than by fading out. The gradient's first and last
+   thirds are flat tier colour, so the window at 0% and at 100% shows the same thing and the jump
+   cannot be seen. That is what lets this loop forever without a rest beat or a crossfade.
+
+   Only `background-position` moves. No filter, no background-size, nothing that re-rasterises the
+   gradient -- so a page with several of these repaints some glyphs and does nothing else. */
+@keyframes ppSupFlow {
+    from { background-position: 0% 50%; }
+    to   { background-position: 100% 50%; }
 }

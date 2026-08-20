@@ -703,19 +703,41 @@ def test_the_name_is_legible_without_background_clip():
     assert 'color: transparent' in guarded, 'the transparent fill is not behind a support check'
 
 
-def test_the_sheen_rests_rather_than_looping():
-    """A continuous sweep on every supporter name in a leaderboard repaints those glyphs forever.
-    `motion-patterns.md` is explicit: loop by resting at a neutral state at the wrap. The pass takes
-    a small fraction of the cycle and the rest of it sits still."""
+def test_the_flow_loops_without_a_visible_seam_and_costs_almost_nothing():
+    """This replaced a sweep-then-rest sheen. A single band travelling across text is mechanical --
+    the eye locks onto the period -- so it is now a train of three bands at irregular widths, which
+    reads as light over water instead.
+
+    Two things have to hold for that to be affordable and seamless:
+
+    ONLY `background-position` may animate. Not a filter, not `background-size`, nothing that
+    re-rasterises the gradient every frame. This runs continuously and eventually on every supporter
+    name in a leaderboard, so the per-frame cost has to stay a glyph repaint.
+
+    AND THE WRAP MUST BE INVISIBLE BY CONSTRUCTION. The gradient's first and last thirds are flat
+    tier colour, so the window at 0% and at 100% shows the same thing and the loop has no seam. That
+    is what removed the need for a rest beat, and it silently breaks if a band is ever moved into
+    either end.
+    """
     root = pathlib.Path(__file__).resolve().parents[2]
     motion = (root / 'static' / 'css' / 'components' / 'motion.css').read_text(encoding='utf-8')
 
-    frames = motion[motion.index('@keyframes ppSupSheen'):]
+    frames = motion[motion.index('@keyframes ppSupFlow'):]
     frames = frames[:frames.index(chr(10) + '}')]
-    # The end position is reached early and held, which is what makes the rest a rest.
-    assert '12%' in frames and '100%' in frames
-    held = frames[frames.index('12%'):]
-    assert held.count('-60%') == 2, 'the sweep does not settle and hold'
+    # EVERY property in the block, not one per line. A line-based parse reads only the first
+    # declaration, so `to { background-position: ...; background-size: ...; }` would look clean --
+    # which it did, until a mutation test caught it.
+    moved = set(re.findall(r'([a-z-]+)\s*:', frames))
+    assert moved == {'background-position'}, f'the flow animates more than a position: {moved}'
+
+    css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
+    grad = css[css.index('background-image: linear-gradient('):]
+    grad = grad[:grad.index(');')]
+    # Flat at both ends: the last stop before 52% and the first after must be the base colour.
+    assert '--pp-accent)) 30%' in grad, 'the leading third is no longer flat, so the wrap will show'
+    assert '--pp-accent)) 80%' in grad and '--pp-accent)) 100%' in grad, (
+        'the trailing third is no longer flat, so the wrap will show'
+    )
 
 
 def test_the_legacy_name_treatment_is_not_used_here():

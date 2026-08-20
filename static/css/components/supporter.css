@@ -39,38 +39,50 @@
    fallback rather than nothing at all. */
 @supports (background-clip: text) or (-webkit-background-clip: text) {
     .pp-supname {
-        /* The sheen is a lighter band travelling through the tier colour. Mixed here rather than
-           inside the keyframe: lightningcss silently drops @keyframes stops containing color-mix,
-           which is a documented trap in this codebase. */
-        --sup-sheen: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 30%, white);
+        /* Two light values rather than one, mixed here rather than inside the keyframe: lightningcss
+           silently drops @keyframes stops containing color-mix, which is a documented trap here. */
+        --sup-crest: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 26%, white);
+        --sup-swell: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 62%, white);
+
+        /* A TRAIN OF THREE BANDS at irregular widths and spacings, not one sliding highlight. The
+           irregularity is the whole point: evenly spaced bands read as a pulse and the eye locks
+           onto the beat, while uneven ones read as light moving over water.
+
+           The first and last thirds are flat, so the window at 0% and at 100% shows the same thing
+           and the loop's wrap is invisible without needing a fade or a rest beat. */
         background-image: linear-gradient(
             100deg,
             var(--sup-t, var(--pp-accent)) 0%,
-            var(--sup-t, var(--pp-accent)) 40%,
-            var(--sup-sheen) 50%,
-            var(--sup-t, var(--pp-accent)) 60%,
+            var(--sup-t, var(--pp-accent)) 30%,
+            var(--sup-swell) 37%,
+            var(--sup-crest) 41%,
+            var(--sup-swell) 45%,
+            var(--sup-t, var(--pp-accent)) 52%,
+            var(--sup-swell) 58%,
+            var(--sup-t, var(--pp-accent)) 63%,
+            var(--sup-swell) 70%,
+            var(--sup-crest) 74%,
+            var(--sup-t, var(--pp-accent)) 80%,
             var(--sup-t, var(--pp-accent)) 100%
         );
-        background-size: 280% 100%;
-        background-position: -60% 0;
+        background-size: 300% 100%;
+        background-position: 0% 50%;
         background-clip: text;
         -webkit-background-clip: text;
         color: transparent;
     }
 }
 
-/* SWEEP, THEN REST. The pass takes about a second of a nine-second cycle and the rest of it sits
-   perfectly still. A continuous loop would have every supporter name on a leaderboard repainting
-   its glyphs forever, and `motion-patterns.md` is explicit that perpetual full redraws read cheap:
-   "loop by resting at a neutral state at the wrap". The stillness is what makes it feel expensive.
-
-   Only `background-position` animates, so there is no layout or paint of anything but the text. */
+/* Slow enough to be ambient. At this rate it is something you notice on the second look rather than
+   the first, which is the difference between a supporter mark and a mobile-game nameplate.
+   `linear` on purpose: an eased loop accelerates and decelerates once per cycle, which is exactly
+   the beat the irregular bands exist to avoid. */
 @media (prefers-reduced-motion: no-preference) {
     @supports (background-clip: text) or (-webkit-background-clip: text) {
-        .pp-supname { animation: ppSupSheen 9s var(--pp-ease) infinite; }
+        .pp-supname { animation: ppSupFlow 16s linear infinite; }
     }
 }
 
-/* Staggered so a wall of names does not pulse in unison, which is the single thing that would make
-   this read as a mobile game. Set per row where the surface can afford it. */
+/* Offsets a name against its neighbours so a column of them never moves in unison, which is the one
+   thing that would turn this back into a pulse. Set per row where the surface can afford it. */
 .pp-supname[style*="--sup-delay"] { animation-delay: var(--sup-delay); }
