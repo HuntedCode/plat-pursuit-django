@@ -850,3 +850,22 @@ def test_a_worn_title_sits_before_the_level(client):
     assert 'The Completionist' in sub
     assert sub.index('The Completionist') < sub.index('Supporter'), 'the earned title comes first'
 
+
+def test_the_checklist_demonstrates_the_mark_it_describes(client):
+    """The line naming what you get wears the treatment it is naming, so the sentence shows the thing
+    instead of asking the reader to imagine it. It is also the only place on the page the name
+    animation appears in running text rather than on a mock row.
+
+    Also guards the article. Django cannot pick a/an, the level names are not all consonant-initial,
+    and "A Ally mark" shipped once already.
+    """
+    body = _flat(client)
+
+    for tier in SUPPORT_TIERS:
+        block = body[body.index(f'data-for="{tier["slug"]}"'):]
+        block = block[:block.index('</ul>')]
+        assert f'<span class="pp-supname">{tier["name"]}</span> mark' in block, (
+            f'{tier["slug"]}: the checklist names the level without wearing its treatment'
+        )
+        assert f'A {tier["name"]} mark' not in block, 'the article is back and it does not agree'
+

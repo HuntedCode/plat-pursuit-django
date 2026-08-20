@@ -200,7 +200,15 @@ substrate, and an earlier version of this page did, which is most of why it read
                                         Every supporter perk, whatever you give
                                     </button>
                                 </li>
-                                <li>A {{ tier.name }} mark beside your name, site-wide</li>
+                                {% comment %} The level's name wears the treatment it is describing,
+                                so the sentence demonstrates itself rather than asking you to imagine
+                                it. `--sup-t` comes from `.sup-becomes` above, so the word is already
+                                in the right colour.
+
+                                "The", not "A": the names are not all consonant-initial ("A Ally"),
+                                and an article that has to branch per level is worse than one the
+                                sentence does not need. {% endcomment %}
+                                <li>The <span class="pp-supname">{{ tier.name }}</span> mark beside your name, site-wide</li>
                                 {% if tier.recognition == 'named' %}
                                 <li>Your name on the site</li>
                                 {% elif tier.recognition == 'linked' %}
