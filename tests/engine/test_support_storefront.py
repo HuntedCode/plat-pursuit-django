@@ -58,19 +58,32 @@ def _get(client):
         return client.get(reverse('support_hub'))
 
 
+def _flat(client):
+    """The page with runs of whitespace collapsed.
+
+    Prose in a template wraps across source lines, so a literal needle like 'no investors' misses on
+    "no
+                    investors". Asserting against raw markup would make every one of these
+    tests hostage to where the copy happens to line-break.
+    """
+    with _member(False):
+        return re.sub(r'\s+', ' ', _get(client).content.decode())
+
+
 # ----------------------------------------------------------------- the three viewer states ----
 
 def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     """The load-bearing one. The old storefront was `@login_required`, so the site's only "here is
     why we exist" page could not be read by anyone who had not already signed up -- which is exactly
     backwards for the one page whose job is persuading strangers."""
-    with _member(False):
-        body = _get(client).content.decode()
+    body = _flat(client)
 
     assert 'Support Platinum Pursuit' in body
-    # The pitch itself, not just a login wall wearing its title.
-    assert 'no ads' in body.lower()
-    assert 'Raised so far' in body
+    # The whole arc, not a login wall wearing the title. One needle per beat.
+    assert 'It started with a Discord server' in body
+    assert "Where we're going" in body
+    assert 'we need your help to do it' in body.lower()
+    assert 'no investors' in body.lower()
     # ...and the ask degrades to a way IN rather than a dead end.
     assert 'Sign in to continue' in body
     assert 'name="tier"' not in body, 'anonymous visitors are shown a buy button they cannot use'
@@ -294,4 +307,122 @@ def test_neither_page_hand_writes_its_own_perk_list_again():
         for gone in ('premium modules', '105+ site themes', 'unlimited game lists',
                      'dashboard customization', 'profile customization'):
             assert gone not in low, f'{name} hand-wrote {gone!r}, which no longer exists'
+
+
+# --------------------------------------------------------------------- the arc's own rules ----
+
+def _slice(body, cls):
+    """The markup of one `<section class="... cls ...">`, up to the next section."""
+    start = body.index(cls)
+    rest = body[start:]
+    end = rest.find('<section')
+    return rest if end == -1 else rest[:end]
+
+
+def test_the_future_carries_no_numbers(client):
+    """The page's honesty rule, made mechanical: the past renders in FIGURES, the future renders in
+    WORDS.
+
+    Beats 1 and 2 carry a date and live counts. Beat 3 must carry neither, because a roadmap that
+    quantifies itself is making a promise -- and `docs/design/rebuild/premium-proposal.md` requires
+    public roadmap copy to stay soft, with no dates and no commitments. A `data-countup` appearing in
+    the future beat would be the first crack in that, and it would look completely reasonable in a
+    diff.
+    """
+    with _member(False):
+        body = _get(client).content.decode()
+
+    future = _slice(body, 'sup-beat--next')
+    assert 'Soon' in future, 'sliced the wrong section'
+    assert 'data-countup' not in future, 'the roadmap is quantifying itself'
+    assert 'pp-tally' not in future
+
+
+def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
+    """`get_cached_heartbeat` returns None when both hourly buckets are cold, which happens on a
+    fresh deploy and every time the cache is flushed.
+
+    "Tracking 0 trophies across 0 games for 0 hunters" on the page asking you to fund the thing is
+    considerably worse than saying nothing, so the sentence is omitted whole. Same gate
+    `badge_how_it_works` uses, and the rest of the beat has to survive it.
+    """
+    with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=None), _member(False):
+        body = _get(client).content.decode()
+
+    now = _slice(body, 'sup-beat--now')
+    assert 'trophies tracked' not in now, 'the page is advertising a zero'
+    assert 'sup-beat__figs' not in now
+    # The beat itself still stands.
+    assert 'Where we are now' in now
+    assert 'just me!' in now
+
+
+def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
+    """All three figures or none. A heartbeat missing one count would otherwise render "tracking
+    12,000 trophies across 0 games", which reads as broken rather than as partial."""
+    half = {'always': {'trophies_total': {'value': 12000}, 'games_total': {'value': 0},
+                       'profiles_total': {'value': 40}}}
+    with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=half), _member(False):
+        body = _get(client).content.decode()
+
+    assert 'sup-beat__figs' not in _slice(body, 'sup-beat--now')
+
+
+# ------------------------------------------------------------------ involvement / the beta ----
+
+def test_early_access_still_says_something_between_betas(client):
+    """`CURRENT_BETA` is None most of the time. Early access is one of the two things this page sells
+    hardest, so its section cannot go blank in the gaps -- least of all for somebody who subscribed
+    FOR it and arrived in a quiet week."""
+    with patch('users.views.CURRENT_BETA', None):
+        body = _flat(client)
+
+    assert 'Early access' in body
+    assert 'Nothing is in testing at the moment' in body
+    assert 'In testing now' not in body, 'claiming a live beta while none is running'
+
+
+def test_a_live_beta_is_named_on_the_page(client):
+    beta = {'name': 'The new Challenges', 'blurb': 'Rebuilt from scratch. Tell us what breaks.'}
+    with patch('users.views.CURRENT_BETA', beta):
+        body = _flat(client)
+
+    assert 'In testing now' in body
+    assert 'The new Challenges' in body
+    assert 'Tell us what breaks.' in body
+    assert 'Nothing is in testing at the moment' not in body
+
+
+def test_the_discord_dependency_is_stated_before_payment(client):
+    """Roadmap input runs in Discord rather than as a built voting feature. That is a dependency on a
+    second platform, and it has to be visible on the way IN rather than discovered after paying."""
+    body = _flat(client)
+
+    assert 'Discord' in body
+    assert 'you will need to be in there with us' in body
+
+
+def test_the_fundraiser_is_a_line_and_not_a_second_pitch(client):
+    """It is a SEPARATE ask with its own reason and its own page coming. At section weight it
+    competes with the membership this page exists to offer, which is exactly what the first draft
+    of this page got wrong."""
+    from fundraiser.models import Fundraiser
+    from django.utils import timezone
+    from datetime import timedelta
+
+    from django.core.cache import cache
+
+    Fundraiser.objects.create(
+        name='Badge Art Drive', slug='badge-art-drive', campaign_type='badge_artwork',
+        start_date=timezone.now() - timedelta(days=1),
+    )
+    # `get_live_fundraiser` caches a PK for 60s and caches a `0` sentinel for "none". Any earlier
+    # test in this run has already warmed that sentinel, so without this the campaign is invisible.
+    cache.delete('fundraiser:live')
+    body = _flat(client)
+
+    assert 'Badge Art Drive' in body, 'the live campaign is not mentioned at all'
+    # One quiet line, not a card with its own heading.
+    assert 'sup-else' in body
+    assert body.count('Badge Art Drive') == 1
 

@@ -3,120 +3,250 @@
 {% block title %}Support{% endblock %}
 
 {% comment %}
-The Support landing IS the membership storefront -- one uninterrupted pitch, not a table of contents
-pointing at one. Served by users.views.SupportStorefrontView, which also answers this page's checkout
-POST (the form carries no action, so handler and form must share a URL).
+The Support landing IS the membership storefront. Served by users.views.SupportStorefrontView, which
+also answers this page's checkout POST (the form carries no action, so handler and form share a URL).
 
-Order is load-bearing, per premium-proposal.md "Includes is not the same as sells": what the page
-SELLS (the reason, the proof, the ask) is up top; what a membership INCLUDES sits low, as a
-thank-you rather than the argument. Quantity perks are the most transactional thing here, so they
-must not be the first thing read.
+WHY THIS PAGE IS SHAPED LIKE A STORY AND NOT A PRICING TABLE
+------------------------------------------------------------
+What is being sold is a TRAJECTORY, not a feature set: nothing here is locked, so there is no ladder
+of capabilities to compare. That makes the roadmap the hero, told as an arc -- where we started,
+where we are, where we're going, and the ask -- with everything else in support of it.
 
-Public. Three viewer states, three shapes: anonymous (sign-in CTA on the options), signed-in
-non-member (the real buttons), member (a thank-you where the options were).
+Two rules the arc holds to, both load-bearing:
+
+  1. THE PAST RENDERS IN NUMBERS, THE FUTURE RENDERS IN WORDS. Beats 1 and 2 carry dates and live
+     figures; beat 3 carries no dates, no percentages and no counts. The credibility gradient is
+     visible in the typography itself, and the page cannot accidentally promise a timeline.
+  2. The spine's markers are filled for past and present and hollow for the future, for the same
+     reason. It is a CHRONOLOGY, not a progress bar -- deliberately not `.pp-horizon`, which the
+     design system says must always bind to a real percentage and never be decorative.
+
+This is a persuasion surface, which is rare here; almost every other rebuilt page presents a hunter's
+own data. So it is built at MARKETING density rather than dashboard density: one idea per screen,
+real measure on the prose, and a type scale roughly double what a data page uses. It also skips the
+standard header card, following `badge_how_it_works.html`, which established a bespoke hero for a
+page whose job is teaching rather than reporting.
+
+Copy is Jeffrey's, lightly edited. Do not "tighten" it into ad copy: the voice is earnest and
+ADDITIVE, never oppositional, and the softness is the voice rather than a lack of polish.
+
+Three viewer states, three shapes: anonymous (sign-in CTA on the options), signed-in non-member (the
+real buttons), member (a thank-you where the options were).
 {% endcomment %}
 
 {% block content %}
 <div class="sup">
 
-    {% comment %} ---------------------------------------------------------------- the ask ---- {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-                        </svg>
-                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Support Platinum Pursuit</h1>
+    {% comment %} ============================================================ hero ============ {% endcomment %}
+    <header class="sup-hero pp-head-cascade">
+        <p class="sup-hero__eyebrow">Support Platinum Pursuit</p>
+        <h1 class="sup-hero__h1">We wanted trophy hunting to add&nbsp;up to something.</h1>
+        <p class="sup-hero__lede">
+            Here is where that started, where it is now, and where it is going next.
+        </p>
+        {% comment %} An early way down to the plans. The ask deliberately sits after the whole arc,
+        which is right for a support-led pitch (you earn it), but somebody who has already decided
+        should not have to read four sections to hand over money. {% endcomment %}
+        {% if not viewer_is_member %}
+        <a href="#plans" class="sup-hero__jump" data-sup-jump>
+            Skip to the plans
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+        </a>
+        {% endif %}
+    </header>
+
+    {% comment %} ============================================================= arc ============= {% endcomment %}
+    <div class="sup-arc">
+
+        <section class="sup-beat sup-beat--past" data-sup-beat>
+            <div class="sup-beat__mark" aria-hidden="true"></div>
+            <div class="sup-beat__body">
+                <p class="sup-beat__when">How it started</p>
+                <h2 class="sup-beat__h">It started with a Discord server.</h2>
+                <p>
+                    Two friends with a love of trophy hunting and a desire to build a community
+                    around it. We wanted to turn our favorite hobby into something more: to take
+                    trophy hunting from disjointed grinding to a complete, coherent
+                    <em>experience</em>.
+                </p>
+                <p>
+                    In January 2026, PlatPursuit.com went live so we could start building the tools
+                    we had been dreaming about. It has been an amazing road of learning (and plenty
+                    of mistakes!), and we are proud to finally present
+                    <strong>Platinum Pursuit 1.0</strong>.
+                </p>
+            </div>
+        </section>
+
+        <section class="sup-beat sup-beat--now" data-sup-beat>
+            <div class="sup-beat__mark" aria-hidden="true"></div>
+            <div class="sup-beat__body">
+                <p class="sup-beat__when">Today</p>
+                <h2 class="sup-beat__h">Where we are now.</h2>
+
+                {% comment %} Omitted wholesale on a cold heartbeat cache rather than printing
+                zeroes. "Tracking 0 trophies for 0 hunters" on the page asking you to fund the thing
+                is worse than saying nothing. {% endcomment %}
+                {% if today %}
+                <p class="sup-beat__figs">
+                    <span><b class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</b> trophies tracked</span>
+                    <span><b class="pp-tally" data-countup="{{ today.games }}">{{ today.games|intcomma }}</b> games in the catalogue</span>
+                    <span><b class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</b> hunters</span>
+                </p>
+                {% endif %}
+
+                <p>
+                    Since January we have rebuilt very nearly the whole site, one page at a time: a
+                    Career surface to give your hunting a shape, badges that are genuinely worth
+                    collecting, milestones, titles, and an awful lot of quiet work underneath that
+                    you would never see. We also completely removed ads to ensure every hunter has
+                    the same, consistent experience no matter what.
+                </p>
+                <p>
+                    Those two friends have turned into a whole team of trophy lovers dedicated to
+                    cultivating the greatest community on the internet and delivering on our goals.
+                    While our community team grows, our development team stays small (just me!) to
+                    keep a consistent vision across every page of the site.
+                </p>
+            </div>
+        </section>
+
+        {% comment %} From here the markers go hollow and the numbers stop. Nothing below this line
+        carries a date, a count or a percentage. {% endcomment %}
+        <section class="sup-beat sup-beat--next" data-sup-beat>
+            <div class="sup-beat__mark" aria-hidden="true"></div>
+            <div class="sup-beat__body">
+                <p class="sup-beat__when">Ahead</p>
+                <h2 class="sup-beat__h">Where we're going.</h2>
+
+                <div class="sup-next">
+                    <div class="sup-next__step">
+                        <p class="sup-next__k">Soon</p>
+                        <p>
+                            More ways to play. Challenges are getting the revamp we have wanted to
+                            give them for a long time, and there is a lot more coming beside them:
+                            quests, streaks, a much bigger badge library, and things worth earning
+                            with somewhere to actually spend them.
+                        </p>
                     </div>
-                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                        Built by trophy hunters, for trophy hunters. Kept free for all of them.
-                    </p>
+                    <div class="sup-next__step">
+                        <p class="sup-next__k">After that</p>
+                        <p>
+                            My Stats returns as a proper engine rather than a page full of numbers,
+                            and the things we set aside to get 1.0 out of the door come back
+                            rebuilt: game lists, notifications and profile showcases. We would
+                            rather bring those back properly than quickly.
+                        </p>
+                    </div>
+                    <div class="sup-next__step">
+                        <p class="sup-next__k">Further out</p>
+                        <p>
+                            PlatPursuit in your pocket, with even more ways to track everything you
+                            do across the vast gaming landscape, not just on PlayStation.
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <div class="sup-thesis">
+                <p class="sup-next__more">
+                    Truthfully, we have so many more ideas and dreams that we cannot fit them all on
+                    this roadmap!
+                </p>
+            </div>
+        </section>
+
+        <section class="sup-beat sup-beat--ask" data-sup-beat>
+            <div class="sup-beat__mark" aria-hidden="true"></div>
+            <div class="sup-beat__body">
+                <h2 class="sup-beat__h sup-beat__h--ask">
+                    We have so much more to do, and we need your help to do it.
+                </h2>
                 <p>
-                    We are a small team of trophy hunters who wanted better tools, so we built them.
-                    PlatPursuit is not investor-backed and it is not trying to squeeze the community
-                    it was made for. We just want to keep it running, and to build the bigger things
-                    we have planned.
+                    PlatPursuit lives off the small community we have cultivated. We have no
+                    investors, we display no ads, and we have no dreams of corporate takeovers. We
+                    merely want to create cool tools to make your gaming experience better.
                 </p>
                 <p>
-                    So there are no ads, and nothing on the site is locked behind a membership.
-                    Members are people who chip in because they want this to keep going.
-                    <strong>That is the whole pitch.</strong>
+                    Becoming a premium subscriber helps us pay our server costs each month, funds
+                    our future projects and gives you more of what you love.
                 </p>
             </div>
+        </section>
 
-            {% comment %} The proof, not the claim. "We are not in it for the money" is something
-            anyone can say; these are four facts that cannot be faked. Two are counted from real
-            rows, two are constants that state a decision we already made and cannot quietly walk
-            back while this page says otherwise. {% endcomment %}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
-                <div class="scard">
-                    <div class="scard__label">Raised so far</div>
-                    <div class="scard__value pp-tally text-primary" data-countup="{{ proof.raised }}">${{ proof.raised|intcomma }}</div>
-                    <div class="scard__sub">by hunters, for badge art</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Artworks funded</div>
-                    <div class="scard__value pp-tally" data-countup="{{ proof.artworks }}">{{ proof.artworks|intcomma }}</div>
-                    <div class="scard__sub">each credits its donor</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Ads on the site</div>
-                    <div class="scard__value pp-tally">0</div>
-                    <div class="scard__sub">removed for good</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Features locked</div>
-                    <div class="scard__value pp-tally">0</div>
-                    <div class="scard__sub">and that is the plan</div>
-                </div>
+    </div>
+
+    {% comment %} ===================================================== involvement ============= {% endcomment %}
+    {% comment %} The permanent half always renders; `current_beta` only fills in an example when one
+    is running. Selling "you get a say" and then showing nothing for whoever visits in a quiet week
+    is how that promise stops being believed. {% endcomment %}
+    <section class="sup-inv" aria-labelledby="sup-inv-h">
+        <h2 id="sup-inv-h" class="sup-sec__h">You get a say in what comes next.</h2>
+        <p class="sup-sec__p">
+            Everything above is a plan, not a decree. Members see new things while they are still
+            rough enough to change, and the conversation about what we build next happens out in the
+            open with the people who use the site.
+        </p>
+
+        <div class="sup-inv__grid">
+            <div class="sup-inv__card">
+                <p class="sup-inv__k">Early access</p>
+                {% if current_beta %}
+                <p class="sup-inv__now">In testing now</p>
+                <p class="sup-inv__title">{{ current_beta.name }}</p>
+                <p class="sup-inv__body">{{ current_beta.blurb }}</p>
+                {% else %}
+                <p class="sup-inv__body">
+                    When something new is close to ready, members get it first and get to tell us
+                    what is wrong with it while there is still time to fix it. Nothing is in testing
+                    at the moment, so this is quiet until the next one.
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="sup-inv__card">
+                <p class="sup-inv__k">A voice in the room</p>
+                <p class="sup-inv__body">
+                    Roadmap decisions get talked through in our Discord, where members carry a
+                    supporter role. It is a conversation rather than a poll, because knowing
+                    <em>why</em> you want something is worth far more to us than a vote count.
+                </p>
+                <p class="sup-inv__note">Discord is where this one lives, so you will need to be in there with us.</p>
             </div>
         </div>
     </section>
 
-    {% comment %} ------------------------------------------------------------ the options ---- {% endcomment %}
-    {% comment %} FREE content below the chrome card, per the stacked-page rule. {% endcomment %}
-
+    {% comment %} ========================================================= options ============= {% endcomment %}
     {% if viewer_is_member %}
-    <section class="sup-member">
+    <section class="sup-member" id="plans">
         <svg class="sup-member__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
         </svg>
         <h2>You already back this. Thank you.</h2>
         <p>
-            Genuinely. The servers, the IGDB bills and the badge art all run on people doing what
-            you did. You are a <strong>PlatPursuit Supporter</strong>, and that sticks.
+            Genuinely. The servers, the bills and everything on that list up there run on people
+            doing what you did. You are a <strong>PlatPursuit Supporter</strong>, and that sticks.
         </p>
         <a href="{% url 'subscription_management' %}" class="sup-member__link">Manage your membership</a>
     </section>
     {% else %}
 
-    <section class="sup-opts" aria-labelledby="sup-opts-h">
-        <div class="sup-opts__head">
-            <h2 id="sup-opts-h">Three ways in. They all get the same thing.</h2>
-            <p>
-                There is no better tier and no feature ladder here. The only difference is how much
-                you give and how often. Pick whichever sits right with you.
-            </p>
-        </div>
+    <section class="sup-opts" id="plans" aria-labelledby="sup-opts-h">
+        <h2 id="sup-opts-h" class="sup-sec__h">Three ways in. They all get the same thing.</h2>
+        <p class="sup-sec__p">
+            There is no better tier here and no feature ladder. The only difference is how much you
+            give and how often, so pick whichever sits right with you.
+        </p>
 
         {% if pricing_available %}
         <form method="post" class="sup-form" data-sup-form>
             {% csrf_token %}
-            {% comment %} The server reads this hidden input, NOT the visible radios below. It is the
-            real channel; the radios are the affordance. {% endcomment %}
+            {% comment %} The server reads this hidden input, NOT the visible radios below. {% endcomment %}
             <input type="hidden" name="provider" id="sup-provider" value="stripe">
 
             <div class="sup-tiers">
                 {% for tier in tiers %}
-                {% comment %} Deliberately NO "most popular" ribbon on any card. Every pricing page
-                has one; ours cannot, because designating a best option would contradict the
-                sentence directly above these cards. The absence is the message. {% endcomment %}
+                {% comment %} No "most popular" ribbon on any card, deliberately. Every pricing page
+                has one; ours cannot, because naming a best option would contradict the sentence
+                directly above these. The absence IS the message. {% endcomment %}
                 <div class="sup-tier">
                     <div class="sup-tier__name">{{ tier.name }}</div>
                     <div class="sup-tier__price">
@@ -154,54 +284,26 @@ non-member (the real buttons), member (a thank-you where the options were).
             {% endif %}
         </form>
         {% else %}
-        {% comment %} Pricing degrades on its own; it never takes the page down with it. A missing
-        Stripe Price used to redirect this entire page to the homepage. {% endcomment %}
+        {% comment %} Pricing degrades on its own; it never takes the page down with it. {% endcomment %}
         <div class="sup-nopricing">
             <p>Memberships are briefly unavailable while we sort something out on our end.</p>
-            <p>The fundraiser below still works, and nothing on the site has changed.</p>
+            <p>Nothing on the site has changed, and everything above is still happening.</p>
         </div>
         {% endif %}
     </section>
     {% endif %}
 
-    {% comment %} ---------------------------------------------------------- the fundraiser ---- {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-primary/20 shadow-lg shadow-neutral mt-4 mb-3">
-        <div class="card-body p-4 md:p-5">
-            <div class="sup-fund">
-                <div class="min-w-0">
-                    <div class="sup-fund__eyebrow">Badge art fundraiser</div>
-                    {% if support_fundraiser %}
-                    <h2 class="sup-fund__title">{{ support_fundraiser.name }}</h2>
-                    <p class="sup-fund__body">{{ support_fundraiser.banner_text }}</p>
-                    {% else %}
-                    <h2 class="sup-fund__title">Between campaigns</h2>
-                    <p class="sup-fund__body">
-                        The badge art fundraiser runs on and off through the year. Every artwork it
-                        has paid for is still on the site, credited to the hunter who funded it.
-                    </p>
-                    {% endif %}
-                </div>
-                {% if support_fundraiser %}
-                <a href="{% url 'fundraiser' support_fundraiser.slug %}" class="sup-fund__go">
-                    View the fundraiser
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                </a>
-                {% endif %}
-            </div>
-        </div>
-    </section>
-
-    {% comment %} ------------------------------------------------------------ what you get ---- {% endcomment %}
+    {% comment %} =========================================================== perks ============= {% endcomment %}
     {% comment %} The dial made literal. Every row fills in BOTH columns, because premium here is a
     dial and not a door: members get more of a thing everyone already has. A row that could not fill
-    the "Everyone" column would be a wall, and would not belong on this page at all. Rendering it as
-    a comparison rather than a checklist is what keeps that honest -- a checklist can quietly hide
-    the fact that the other column is empty. {% endcomment %}
+    the "Everyone" column would be a wall. Rendered as a comparison rather than a checklist because a
+    checklist can quietly hide that the other column is empty; two columns cannot. {% endcomment %}
     <section class="sup-dial" aria-labelledby="sup-dial-h">
-        <div class="sup-dial__head">
-            <h2 id="sup-dial-h">What a membership actually changes</h2>
-            <p>Not much, on purpose. Nothing here is taken away from anyone who does not pay.</p>
-        </div>
+        <h2 id="sup-dial-h" class="sup-sec__h">What a membership actually changes</h2>
+        <p class="sup-sec__p">
+            Not a great deal, on purpose. This is a thank-you rather than a paywall, and nothing here
+            is taken away from anyone who does not pay.
+        </p>
 
         <div class="sup-dial__grid" role="table">
             <div class="sup-dial__hrow" role="row">
@@ -229,6 +331,17 @@ non-member (the real buttons), member (a thank-you where the options were).
         </p>
     </section>
 
+    {% comment %} ====================================================== fundraiser ============= {% endcomment %}
+    {% comment %} One quiet line, not a section. It is a SEPARATE ask with its own reason and its own
+    page coming; at equal weight it competes with the membership this page exists to offer. {% endcomment %}
+    {% if support_fundraiser %}
+    <p class="sup-else">
+        Not looking for a membership? The badge art fundraiser is running as well, and it pays
+        artists directly.
+        <a href="{% url 'fundraiser' support_fundraiser.slug %}">See {{ support_fundraiser.name }}</a>
+    </p>
+    {% endif %}
+
 </div>
 {% endblock %}
 
@@ -241,8 +354,10 @@ non-member (the real buttons), member (a thank-you where the options were).
     PP.onPageReady(function (first) {
         if (!first) return;
 
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
         // Provider selector. The visible radios are the affordance; the hidden `provider` input is
-        // what the server actually reads, so the two must be kept in step here.
+        // what the server reads, so the two are kept in step here.
         var provider = document.getElementById('sup-provider');
         document.querySelectorAll('.sup-prov__opt').forEach(function (opt) {
             opt.addEventListener('click', function () {
@@ -266,12 +381,28 @@ non-member (the real buttons), member (a thank-you where the options were).
             });
         }
 
-        // Count the proof figures up. `.pp-tally` cells without a data-countup (the two constant
-        // zeroes) are skipped by the helper's own target lookup, which is what we want -- a zero
-        // counting up to zero is a no-op with extra steps.
-        document.querySelectorAll('.scard .pp-tally[data-countup]').forEach(function (el) {
-            PP.countUp(el);
-        });
+        // The arc arrives a beat at a time on scroll. Pure enhancement: the resting state is the
+        // final state, so a reader with reduced motion (or no IntersectionObserver) gets the whole
+        // page exactly as served rather than a blank column.
+        var beats = document.querySelectorAll('[data-sup-beat]');
+        if (!reduce && 'IntersectionObserver' in window && beats.length) {
+            document.querySelector('.sup-arc').classList.add('is-armed');
+            var io = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (!entry.isIntersecting) return;
+                    entry.target.classList.add('is-in');
+                    io.unobserve(entry.target);
+                    entry.target.querySelectorAll('.pp-tally[data-countup]').forEach(function (el) {
+                        PP.countUp(el);
+                    });
+                });
+            }, { threshold: 0.2, rootMargin: '0px 0px -8% 0px' });
+            beats.forEach(function (b) { io.observe(b); });
+        } else {
+            document.querySelectorAll('.pp-tally[data-countup]').forEach(function (el) {
+                PP.countUp(el);
+            });
+        }
     });
 })();
 </script>

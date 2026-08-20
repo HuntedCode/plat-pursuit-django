@@ -24,6 +24,21 @@ PREMIUM_TIER_DISPLAY = {
     'supporter': 'Supporter',
 }
 
+# What members are testing right now, or None between betas.
+#
+# Early access is one of the two things the Support page sells hardest ("you get a say in what this
+# becomes"), so it needs a PERMANENT half that stands on its own -- otherwise the pitch disappears
+# for whoever visits during a quiet week, including someone who subscribed FOR it and arrives to find
+# nothing there. The template always renders what early access means; this only fills in the current
+# example when there is one.
+#
+# A constant rather than a model on purpose: betas are occasional and this is one blurb. If it ever
+# needs scheduling, per-beta signup, or non-staff editing, THAT is when it earns a table.
+#
+# Set to None when nothing is in testing. Shape when it is:
+#     {'name': 'The new Challenges', 'blurb': 'One sentence on what it is and what we want to learn.'}
+CURRENT_BETA = None
+
 # What a membership actually gets you.
 #
 # ONE source of truth, because the two hand-written copies (13 feature cards on the storefront, 11

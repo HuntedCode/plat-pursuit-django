@@ -25,7 +25,7 @@ from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
 from fundraiser.models import get_live_fundraiser
-from users.constants import PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY
+from users.constants import CURRENT_BETA, PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
@@ -145,28 +145,30 @@ class SupportStorefrontView(TemplateView):
     # has always worked. It simply had no UI, so nobody could choose it.
     TIER_ORDER = ('premium_monthly', 'premium_yearly', 'supporter')
 
-    PROOF_CACHE_KEY = 'support:proof'
-    PROOF_TTL = 300
+    def _today(self):
+        """The live catalogue figures beat 2 opens on: trophies, games, hunters.
 
-    def _proof(self):
-        """The evidence the pitch stands on, since "we are not in this for the money" is a claim
-        anyone can make and these are facts nobody can fake.
+        Read off the hourly site heartbeat rather than queried here -- these are three of the most
+        expensive counts on the site and this is a public page anyone can hammer. `get_cached_heartbeat`
+        already falls back to the previous hour's bucket.
 
-        Cached: identical for every visitor, and this is a public page. Both reads are DB aggregates
-        rather than Python tallies, so neither grows with the row count.
+        Returns None when BOTH buckets are cold, and the template omits the sentence entirely rather
+        than printing zeroes at a first-time reader. Same gate `badge_how_it_works` uses on its
+        catalogue strip, and it matters more here: "tracking 0 trophies for 0 hunters" on the page
+        asking you to fund the thing is worse than saying nothing at all.
         """
-        proof = cache.get(self.PROOF_CACHE_KEY)
-        if proof is None:
-            from fundraiser.models import Donation
-            from trophies.models import BadgeSeries
-            proof = {
-                'raised': int(
-                    Donation.objects.filter(status='completed').aggregate(t=Sum('amount'))['t'] or 0
-                ),
-                'artworks': BadgeSeries.objects.filter(funded_by__isnull=False).count(),
-            }
-            cache.set(self.PROOF_CACHE_KEY, proof, self.PROOF_TTL)
-        return proof
+        from core.services.site_heartbeat import get_cached_heartbeat
+
+        beat = (get_cached_heartbeat() or {}).get('always') or {}
+        figures = {
+            key: (beat.get(source) or {}).get('value')
+            for key, source in (
+                ('trophies', 'trophies_total'),
+                ('games', 'games_total'),
+                ('hunters', 'profiles_total'),
+            )
+        }
+        return figures if all(figures.values()) else None
 
     def _prices(self):
         """Tier -> djstripe Price, or {} when pricing is unavailable.
@@ -220,7 +222,8 @@ class SupportStorefrontView(TemplateView):
         )
 
         context['premium_perks'] = PREMIUM_PERKS
-        context['proof'] = self._proof()
+        context['today'] = self._today()
+        context['current_beta'] = CURRENT_BETA
         context['support_fundraiser'] = get_live_fundraiser()
         return context
 
