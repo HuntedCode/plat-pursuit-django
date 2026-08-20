@@ -50,10 +50,10 @@ PREMIUM_TIER_DISPLAY = {
 SUPPORT_TIERS = [
     {'slug': 'bronze',   'name': 'Bronze Supporter',   'monthly': 4,  'yearly': 40,  'recognition': 'none'},
     {'slug': 'silver',   'name': 'Silver Supporter',   'monthly': 10, 'yearly': 100, 'recognition': 'none'},
-    {'slug': 'gold',     'name': 'Gold Supporter',     'monthly': 20, 'yearly': 200, 'recognition': 'named'},
-    {'slug': 'platinum', 'name': 'Platinum Supporter', 'monthly': 30, 'yearly': 300, 'recognition': 'named'},
-    {'slug': 'titanium', 'name': 'Titanium Supporter', 'monthly': 40, 'yearly': 400, 'recognition': 'linked'},
-    {'slug': 'diamond',  'name': 'Diamond Supporter',  'monthly': 50, 'yearly': 500, 'recognition': 'linked'},
+    {'slug': 'gold',     'name': 'Gold Supporter',     'monthly': 15, 'yearly': 150, 'recognition': 'named'},
+    {'slug': 'platinum', 'name': 'Platinum Supporter', 'monthly': 20, 'yearly': 200, 'recognition': 'named'},
+    {'slug': 'titanium', 'name': 'Titanium Supporter', 'monthly': 25, 'yearly': 250, 'recognition': 'linked'},
+    {'slug': 'diamond',  'name': 'Diamond Supporter',  'monthly': 30, 'yearly': 300, 'recognition': 'linked'},
 ]
 
 # The ladder above is DESIGN ONLY until its twelve Stripe prices and twelve PayPal plans exist.

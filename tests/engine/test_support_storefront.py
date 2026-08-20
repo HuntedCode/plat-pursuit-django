@@ -79,12 +79,10 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     body = _flat(client)
 
     assert 'Support Platinum Pursuit' in body
-    # The pitch, the ask, the evidence and the roadmap -- not a login wall wearing the title.
+    # The statement and the ask, not a login wall wearing the title.
     assert 'always will be' in body
+    assert 'nothing is locked' in body
     assert 'Bronze Supporter' in body, 'the ladder is missing for a signed-out visitor'
-    assert 'What your support builds next' in body
-    # ...and the human voice, which is the page's whole emotional argument.
-    assert 'that is me' in body
 
 
 def test_a_signed_in_non_member_sees_the_same_ladder(client):
@@ -310,33 +308,6 @@ def test_neither_page_hand_writes_its_own_perk_list_again():
 
 # --------------------------------------------------------------------- the arc's own rules ----
 
-def _slice(body, cls):
-    """The markup of one `<section class="... cls ...">`, up to the next section."""
-    start = body.index(cls)
-    rest = body[start:]
-    end = rest.find('<section')
-    return rest if end == -1 else rest[:end]
-
-
-def test_the_future_carries_no_numbers(client):
-    """The page's honesty rule, made mechanical: the past renders in FIGURES, the future renders in
-    WORDS.
-
-    Beats 1 and 2 carry a date and live counts. Beat 3 must carry neither, because a roadmap that
-    quantifies itself is making a promise -- and `docs/design/rebuild/premium-proposal.md` requires
-    public roadmap copy to stay soft, with no dates and no commitments. A `data-countup` appearing in
-    the future beat would be the first crack in that, and it would look completely reasonable in a
-    diff.
-    """
-    with _member(False):
-        body = _get(client).content.decode()
-
-    future = _slice(body, 'class="sup-road"')
-    assert 'Now' in future, 'sliced the wrong section'
-    assert 'data-countup' not in future, 'the roadmap is quantifying itself'
-    assert 'pp-tally' not in future
-
-
 def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     """`get_cached_heartbeat` returns None when both hourly buckets are cold, which happens on a
     fresh deploy and every time the cache is flushed.
@@ -375,103 +346,11 @@ def test_early_access_still_says_something_between_betas(client):
     Otherwise one of the two things this page sells hardest disappears for whoever visits in a quiet
     week, including somebody who subscribed FOR it.
     """
-    with patch('users.views.CURRENT_BETA', None):
-        body = _flat(client)
+    body = _flat(client)
 
     assert 'New things' in body, 'early access vanishes entirely between betas'
     assert 'Before they ship' in body
-    assert 'In testing now' not in body, 'claiming a live beta while none is running'
 
-
-def test_a_live_beta_is_named_on_the_page(client):
-    beta = {'name': 'The new Challenges', 'blurb': 'Rebuilt from scratch. Tell us what breaks.'}
-    with patch('users.views.CURRENT_BETA', beta):
-        body = _flat(client)
-
-    assert 'In testing now' in body
-    assert 'The new Challenges' in body
-    assert 'Tell us what breaks.' in body
-
-
-def test_the_discord_dependency_is_stated_before_payment(client):
-    """Roadmap input runs in Discord rather than as a built voting feature. That is a dependency on a
-    second platform, and it has to be visible on the way IN rather than discovered after paying."""
-    body = _flat(client)
-
-    assert 'Discord' in body
-    assert 'You will need to be in Discord with us' in body
-
-
-def test_the_fundraiser_is_a_line_and_not_a_second_pitch(client):
-    """It is a SEPARATE ask with its own reason and its own page coming. At section weight it
-    competes with the membership this page exists to offer, which is exactly what the first draft
-    of this page got wrong."""
-    from fundraiser.models import Fundraiser
-    from django.utils import timezone
-    from datetime import timedelta
-
-    from django.core.cache import cache
-
-    Fundraiser.objects.create(
-        name='Badge Art Drive', slug='badge-art-drive', campaign_type='badge_artwork',
-        start_date=timezone.now() - timedelta(days=1),
-    )
-    # `get_live_fundraiser` caches a PK for 60s and caches a `0` sentinel for "none". Any earlier
-    # test in this run has already warmed that sentinel, so without this the campaign is invisible.
-    cache.delete('fundraiser:live')
-    body = _flat(client)
-
-    assert 'Badge Art Drive' in body, 'the live campaign is not mentioned at all'
-    # One quiet line, not a card with its own heading.
-    assert 'sup-else' in body
-    assert body.count('Badge Art Drive') == 1
-
-
-# ------------------------------------------------------------------- showing, not telling ----
-
-def test_the_commissioned_artwork_is_actually_on_the_page(client):
-    """The page's central design bet. An earlier draft WROTE "badges that are genuinely worth
-    collecting" as prose, on a site where the artwork is the moat and one click away -- the same
-    mistake `badge_how_it_works` was built to correct ("if the chrome ever fights the art, the chrome
-    loses"). If this band silently stops rendering, the page reverts to describing itself.
-    """
-    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
-
-    group = PlatformGroupFactory()
-    series = BadgeSeriesFactory(name='Helldivers', badge_image='badges/helldivers.png')
-    GroupBadgeFactory(series=series, platform_group=group, is_live=True)
-
-    with _member(False):
-        body = _get(client).content.decode()
-
-    assert 'class="sup-art"' in body, 'the artwork band is gone'
-    assert 'Helldivers badge artwork' in body, 'the art is not being rendered'
-
-
-def test_an_empty_catalogue_drops_the_art_band_rather_than_faking_it(client):
-    """No live badges with custom art means nothing to show. The band is omitted whole rather than
-    rendering empty frames or a default placeholder, which would undercut the exact claim it makes."""
-    with _member(False):
-        body = _get(client).content.decode()
-
-    assert 'class="sup-art"' not in body
-    # The section it lives in still carries the argument on its own.
-    assert 'Built in the first eight months' in body
-
-
-def test_the_note_is_signed_and_speaks_as_one_person(client):
-    """The Wikipedia move, and the reason that appeal works: a letter from a person rather than
-    marketing from an organisation. It is the only place on the page that says "I", and it carries
-    the emotional job that four beats of prose used to do badly."""
-    body = _flat(client)
-
-    note = body[body.index('sup-note'):]
-    note = note[:note.index('</section>')]
-    assert 'that is me' in note
-    assert 'Jeffrey' in note, 'the note is unsigned, which is most of why it works'
-
-
-# ------------------------------------------------------------------- the ladder, for now ----
 
 def test_every_level_of_the_ladder_is_on_the_page(client):
     """Six levels, all of them visible. The model is "pick how visible your support is", which only
@@ -510,39 +389,9 @@ def test_placeholders_can_never_reach_live_stripe(client, settings):
     assert 'disabled aria-disabled="true"' not in body, 'DEAD BUY BUTTONS IN LIVE MODE'
     assert 'Not live yet' not in body
     assert 'briefly unavailable' in body, 'live mode is offering something with no price behind it'
-    # Only the ask degrades. The rest of the page is unaffected.
+    # Only the ask degrades. The statement beside it is unaffected.
     assert 'always will be' in body
-    assert 'What your support builds next' in body
-
-
-def test_the_supporter_wall_stays_hidden_until_somebody_is_on_it(client):
-    """Nobody holds one of these tiers yet, which is the normal case rather than an edge case. A
-    transparency row reading "$0 a month from 0 supporters" undercuts the exact thing it exists to
-    establish, so the whole card is omitted."""
-    body = _flat(client)
-
-    assert 'Who keeps this running' not in body
-    assert 'Monthly support' not in body
-
-
-def test_the_wall_appears_once_there_are_supporters_to_name(client):
-    from django.core.cache import cache
-    from users.constants import SUPPORT_TIERS
-
-    UserFactory(premium_tier='gold')
-    UserFactory(premium_tier='gold')
-    UserFactory(premium_tier='bronze')
-    cache.delete('support:supporters')
-
-    body = _flat(client)
-
-    assert 'Who keeps this running' in body
-    assert 'Monthly support' in body
-    assert '$44' in body, 'the monthly-equivalent total is wrong ($20 + $20 + $4)'
-    # Gold is listed by its recognition level; bronze deliberately is not.
-    gold = next(t for t in SUPPORT_TIERS if t['slug'] == 'gold')
-    assert gold['recognition'] == 'named'
-    assert 'Gold Supporter' in body
+    assert 'Support Platinum Pursuit' in body
 
 
 def test_every_level_gets_every_perk():
@@ -613,3 +462,75 @@ def test_the_purchase_box_needs_no_javascript(client):
 
     assert body.count('type="radio" name="sup-amt"') == 6, 'the amounts are not radios any more'
     assert 'type="radio" name="sup-cycle"' in body, 'the cycle switch is not radio-backed any more'
+
+
+# ------------------------------------------------------------------ the perks modal + preview ----
+
+def test_the_perks_modal_is_reachable_whatever_you_pick(client):
+    """The answer is the same whichever amount you choose -- that IS the model -- so the control
+    does not move with the choice and there is exactly one of it.
+
+    A native `<dialog>` on purpose: Escape, the focus trap and the backdrop come from the browser
+    rather than from a hand-rolled modal we would then have to keep accessible.
+    """
+    body = _flat(client)
+
+    assert '<dialog id="sup-perks"' in body
+    assert 'data-perks-open' in body, 'nothing opens the modal'
+    assert 'data-perks-close' in body, 'nothing closes it but Escape'
+    assert body.count('sup-buy__perks') == 1, 'the opener moved with the selection'
+
+
+def test_the_modal_carries_both_sides_of_every_perk(client):
+    """It is the only place the dial is stated now, so if it renders one column the page has quietly
+    started claiming supporters get things free hunters cannot have."""
+    body = _flat(client)
+    dialog = body[body.index('<dialog id="sup-perks"'):]
+
+    for perk in PREMIUM_PERKS:
+        assert perk['everyone'] in dialog, f"{perk['slug']}: the free side is missing"
+        assert perk['member'] in dialog
+
+
+def test_the_preview_shows_the_viewer_their_own_name(client):
+    """Their own name wearing the mark they are about to pick is far more persuasive than a stand-in,
+    and it costs nothing -- it is a string already on the request, not a lookup."""
+    from tests.factories import ProfileFactory
+
+    profile = ProfileFactory(display_psn_username='TrophyDad')
+    client.force_login(profile.user)
+
+    with _member(False):
+        body = _get(client).content.decode()
+
+    # Scoped to the preview row. An unscoped `'TrophyDad' in body` cannot fail: the navbar prints the
+    # signed-in hunter's name on every page, so the needle matches whatever the preview renders.
+    row = body[body.index('sup-prev__name'):]
+    row = row[:row.index('</span>', row.index('sup-prev__mark'))]
+    assert 'TrophyDad' in row, 'the preview is not showing the viewer their own name'
+    assert 'sup-prev__mark' in row, 'the mark is not shown against the name'
+
+
+def test_an_anonymous_visitor_still_sees_what_the_preview_is_showing(client):
+    """A blank name would make the preview meaningless for exactly the people it has to persuade."""
+    body = _flat(client)
+
+    assert 'YourName' in body
+    assert 'sup-prev' in body
+
+
+def test_the_preview_says_it_is_a_placeholder(client):
+    """It is a mock of a leaderboard row with a stand-in mark, and the marks are not designed yet.
+    Shipping an approximation that does not admit to being one is how it quietly becomes the design.
+    """
+    body = _flat(client)
+
+    assert 'not designed the marks yet' in body
+
+
+def test_the_prices_are_the_agreed_ladder():
+    """Pinned because they have moved twice and the yearly column is derived by hand."""
+    from users.constants import SUPPORT_TIERS
+
+    assert [t['monthly'] for t in SUPPORT_TIERS] == [4, 10, 15, 20, 25, 30]
+    assert [t['yearly'] for t in SUPPORT_TIERS] == [40, 100, 150, 200, 250, 300]

@@ -6,7 +6,6 @@ from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
-from django.db.models import Count, Sum
 from django.utils import timezone
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -24,8 +23,7 @@ from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
-from fundraiser.models import get_live_fundraiser
-from users.constants import (CURRENT_BETA, PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY,
+from users.constants import (PAYPAL_PLANS, PREMIUM_PERKS, PREMIUM_TIER_DISPLAY,
                              SUPPORT_TIERS, SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
@@ -235,57 +233,26 @@ class SupportStorefrontView(TemplateView):
 
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
-        # Show the work rather than list it. `badge_subject_art` returns the commissioned SUBJECT
-        # drawings (one per series, avatar submissions skipped, bounded scan) -- the part an artist
-        # actually drew, which is the only genuinely beautiful object this page can put in front of
-        # somebody. Empty on a fresh catalogue, and the band is omitted rather than faked.
-        from trophies.views.badge_views import badge_subject_art
-        context['badge_art'] = badge_subject_art(limit=5)
-        context['current_beta'] = CURRENT_BETA
-        context['support_fundraiser'] = get_live_fundraiser()
-        context.update(self._supporters())
+        context['viewer_name'] = self._viewer_name()
         return context
 
-    SUPPORTERS_CACHE_KEY = 'support:supporters'
-    SUPPORTERS_TTL = 300
+    def _viewer_name(self):
+        """The name to show in the level preview.
 
-    def _supporters(self):
-        """The transparency row and the public wall.
-
-        Cached: identical for every visitor on a public page, and the wall grows without bound.
-
-        EMPTY STATES ARE THE NORMAL CASE for now, not an edge case -- the ladder is placeholders, so
-        nobody holds one of these tiers yet. A transparency row reading "$0 from 0 supporters" is
-        worse than no row, so the template omits both when there is nothing to show. Same reasoning
-        as the cold-heartbeat gate on the catalogue figures.
-
-        Monthly-equivalent divides a yearly pledge by 12 so the headline figure means one thing.
+        Their OWN name wearing the mark they are about to pick is far more persuasive than a stand-in,
+        and it costs nothing: it is a string already on the request, not a lookup. Falls back through
+        the display name, the PSN name, then the username, and finally to a stand-in for anonymous
+        visitors -- who still need to see what the preview is showing them.
         """
-        data = cache.get(self.SUPPORTERS_CACHE_KEY)
-        if data is not None:
-            return data
-
-        by_slug = {t['slug']: t for t in SUPPORT_TIERS}
-        # DB-aggregated: a group-by over an indexed column, never a Python tally over rows.
-        counts = dict(
-            CustomUser.objects.filter(premium_tier__in=by_slug)
-            .values_list('premium_tier')
-            .annotate(n=Count('id'))
-        )
-
-        monthly = sum(by_slug[slug]['monthly'] * n for slug, n in counts.items())
-        listed = [
-            {'tier': by_slug[slug], 'count': n}
-            for slug, n in sorted(counts.items(), key=lambda kv: -by_slug[kv[0]]['monthly'])
-            if by_slug[slug]['recognition'] != 'none'
-        ]
-        data = {
-            'supporter_count': sum(counts.values()),
-            'supporter_monthly': monthly,
-            'supporter_tiers': listed,
-        }
-        cache.set(self.SUPPORTERS_CACHE_KEY, data, self.SUPPORTERS_TTL)
-        return data
+        user = self.request.user
+        if not user.is_authenticated:
+            return 'YourName'
+        profile = getattr(user, 'profile', None)
+        if profile is not None:
+            name = profile.display_psn_username or profile.psn_username
+            if name:
+                return name
+        return user.username or 'YourName'
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the

@@ -215,58 +215,117 @@
 .sup-becomes { margin-top: 16px; }
 
 .sup-becomes__h {
+    font-size: 0.82rem;
+    color: var(--pp-text-mute);
+}
+
+.sup-becomes__h b {
     font-family: var(--pp-font-display), sans-serif;
-    font-size: 1.02rem;
-    font-weight: 700;
-    color: var(--pp-text-dim);
+    color: var(--sup-t);
+    font-weight: 800;
 }
 
-.sup-becomes__h b { color: var(--sup-t); font-weight: 800; }
+/* ------------------------------------------------------------------- the level preview ---- */
+/* PLACEHOLDER. What belongs here is the supporter mark shown IN CONTEXT -- your own name on a real
+   leaderboard row, wearing the level you are about to pick. That is the most persuasive thing this
+   box could show and the reason it is worth designing properly rather than approximating, so this
+   is deliberately a mock: real geometry, real name, stand-in mark. The caption says so.
 
-.sup-becomes__body {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-top: 10px;
+   Geometry is taken from the leaderboard row rather than invented, so replacing it later is a swap
+   rather than a redesign. */
+.sup-prev {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    margin-top: 9px;
+    padding: 9px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--sup-t) 30%, var(--pp-border));
+    background:
+        linear-gradient(90deg, color-mix(in oklab, var(--sup-t) 10%, transparent) 0%, transparent 55%),
+        var(--pp-bg-1);
 }
 
-/* Stands in for the supporter mark until the real one is drawn. Reads as an object rather than a
-   bullet: a facetted pip carrying the level's own hue. */
-.sup-becomes__pip {
+.sup-prev__rank {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+.sup-prev__av {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+}
+
+.sup-prev__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    font-size: 0.84rem;
+    font-weight: 650;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The stand-in mark. A facetted pip in the level's hue -- enough to show WHERE the mark sits and
+   that it changes with the level, without pretending to be the artwork. */
+.sup-prev__mark {
     flex: none;
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
     background:
         linear-gradient(145deg,
             color-mix(in oklab, var(--sup-t) 92%, white) 0%,
-            var(--sup-t) 45%,
+            var(--sup-t) 48%,
             color-mix(in oklab, var(--sup-t) 70%, black) 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
-                0 4px 14px color-mix(in oklab, var(--sup-t) 45%, transparent);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--sup-t) 55%, transparent);
 }
 
-.sup-becomes__list { display: flex; flex-direction: column; gap: 4px; }
-
-.sup-becomes__list li {
-    position: relative;
-    padding-left: 18px;
+.sup-prev__score {
+    font-family: var(--pp-font-display), sans-serif;
     font-size: 0.82rem;
-    line-height: 1.5;
+    font-weight: 800;
     color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums;
 }
 
-.sup-becomes__list li::before {
-    content: '';
-    position: absolute;
-    left: 2px;
-    top: 0.42em;
-    width: 8px;
-    height: 4px;
-    border-left: 2px solid var(--sup-t);
-    border-bottom: 2px solid var(--sup-t);
-    transform: rotate(-45deg);
+.sup-prev__cap {
+    margin-top: 7px;
+    font-size: 0.68rem;
+    color: var(--pp-text-mute);
+    font-style: italic;
+    padding-right: 4px;               /* italic glyphs slant past their box */
 }
+
+/* ---------------------------------------------------------------------- the perks link ---- */
+/* Reachable whichever amount is selected, because the answer is the same whichever amount is
+   selected. That IS the model, so the control does not move with the choice. */
+.sup-buy__perks {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-buy__perks svg { width: 14px; height: 14px; }
+.sup-buy__perks:hover { color: var(--pp-text); }
 
 /* ------------------------------------------------------------------------------ the CTA ---- */
 .sup-buy__go {
@@ -365,236 +424,83 @@
 
 .sup-box__manage:hover { color: var(--pp-text); }
 
-/* ------------------------------------------------------------------------- section heads ---- */
-.sup-sec__h {
-    font-family: var(--pp-font-display), sans-serif;
-    font-size: clamp(1.05rem, 3.4vw, 1.4rem);
-    font-weight: 800;
-    line-height: 1.2;
-    letter-spacing: -0.015em;
+/* -------------------------------------------------------------------------- perks modal ---- */
+/* A native <dialog>, so Escape, the focus trap and the backdrop are the browser's job.
+
+   The scrim is a SOLID dim with NO backdrop-filter, per motion-patterns.md: a blurred backdrop
+   re-samples on any repaint in its stacking context and is the documented cause of modal jank
+   here. The depth comes from the dialog's own elevation instead. */
+.sup-modal {
+    width: min(680px, calc(100vw - 32px));
+    max-height: min(80vh, 720px);
+    overflow-y: auto;
+    padding: 20px;
+    border: var(--pp-border-w) solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1);
     color: var(--pp-text);
-    text-wrap: balance;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
-.sup-sec__p {
-    margin-top: 6px;
+.sup-modal::backdrop { background: rgba(2, 4, 8, 0.8); }
+
+@media (min-width: 768px) { .sup-modal { padding: 26px 28px; } }
+
+.sup-modal__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.sup-modal__head h2 {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: clamp(1.05rem, 3.4vw, 1.35rem);
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-modal__x {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--pp-text-mute);
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-modal__x svg { width: 15px; height: 15px; }
+.sup-modal__x:hover { color: var(--pp-text); border-color: var(--pp-text-mute); }
+
+.sup-modal__lede {
+    margin-top: 8px;
     font-size: 0.88rem;
     line-height: 1.6;
     color: var(--pp-text-mute);
-    max-width: 60ch;
+    max-width: 58ch;
 }
 
-/* --------------------------------------------------------------------- the supporter wall ---- */
-.sup-wall {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 8px;
-    margin-top: 14px;
-}
-
-.sup-wall__group {
-    padding: 11px 13px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    border-left: 3px solid var(--sup-t, var(--pp-border));
-    background: var(--pp-bg-2);
-}
-
-.sup-wall__group[data-tier="gold"]     { --sup-t: #6f9fd8; }
-.sup-wall__group[data-tier="platinum"] { --sup-t: #8b8fe0; }
-.sup-wall__group[data-tier="titanium"] { --sup-t: #b07fe0; }
-.sup-wall__group[data-tier="diamond"]  { --sup-t: #d97fc4; }
-
-.sup-wall__k {
-    font-size: 0.66rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--pp-text-mute);
-}
-
-.sup-wall__n {
-    margin-top: 3px;
-    font-family: var(--pp-font-display), sans-serif;
-    font-size: 1.3rem;
-    font-weight: 800;
-    color: var(--pp-text);
-}
-
-.sup-wall__note {
-    margin-top: 10px;
-    font-size: 0.74rem;
-    line-height: 1.5;
-    color: var(--pp-text-mute);
-    font-style: italic;
-    padding-right: 4px;               /* italic glyphs slant past their box */
-}
-
-/* -------------------------------------------------------------------------- the evidence ---- */
-.sup-ev {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px;
-    align-items: center;
+.sup-modal__foot {
     margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pp-divider, var(--pp-border));
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--pp-text-mute);
 }
-
-@media (min-width: 768px) { .sup-ev { grid-template-columns: 1fr 0.8fr; gap: 26px; } }
-
-.sup-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-
-.sup-chips li {
-    padding: 5px 11px;
-    border-radius: 999px;
-    border: 1px solid var(--pp-border);
-    background: rgba(255, 255, 255, 0.03);
-    font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--pp-text-dim);
-}
-
-/* The commissioned subject art: the one genuinely beautiful object this page can show. It replaced
-   a sentence that DESCRIBED the badges on a site where they are one click away. */
-.sup-art {
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 20px;
-}
-
-.sup-art__cell {
-    width: clamp(50px, 12vw, 74px);
-    aspect-ratio: 1;
-    display: grid;
-    place-items: center;
-}
-
-/* `object-contain`: badge art is a transparent, custom-shaped drawing, never a photo to crop. */
-.sup-art__cell img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
-}
-
-.sup-art__cell:nth-child(even) { transform: translateY(5px); }
-
-.sup-art__cap { margin-top: 12px; font-size: 0.76rem; color: var(--pp-text-mute); }
 
 @media (prefers-reduced-motion: no-preference) {
-    .sup-art__cell {
-        animation: ppRevealIn 0.6s var(--pp-ease) backwards;
-        animation-delay: calc(var(--i, 0) * 70ms + 120ms);
-    }
-}
-
-/* Tilted and lifted, so it reads as an object lying on the page rather than a screenshot pasted in. */
-.sup-ev__card { margin: 0; }
-
-.sup-ev__card img {
-    display: block;
-    width: 100%;
-    max-width: 320px;
-    margin-inline: auto;
-    border-radius: var(--pp-radius-md);
-    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
-    transform: rotate(-1.4deg);
-}
-
-.sup-ev__card figcaption {
-    margin-top: 14px;
-    text-align: center;
-    font-size: 0.76rem;
-    color: var(--pp-text-mute);
-}
-
-@media (min-width: 768px) { .sup-ev__card img { max-width: none; } }
-
-/* ----------------------------------------------------------------------------- roadmap ---- */
-.sup-road {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-top: 14px;
-}
-
-@media (min-width: 768px) { .sup-road { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
-
-.sup-road__step {
-    padding: 13px 15px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    background: var(--pp-bg-2);
-}
-
-/* Confidence fades left to right, the same honesty gradient the copy holds to. */
-.sup-road__step:nth-child(1) { border-left: 3px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
-.sup-road__step:nth-child(2) { border-left: 3px solid color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); }
-.sup-road__step:nth-child(3) { border-left: 3px solid var(--pp-border); }
-
-.sup-road__k {
-    font-size: 0.64rem;
-    font-weight: 800;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: var(--pp-text-mute);
-}
-
-.sup-road__step p { margin-top: 7px; font-size: 0.85rem; line-height: 1.55; color: var(--pp-text-dim); }
-
-.sup-road__more {
-    margin-top: 12px;
-    font-size: 0.78rem;
-    color: var(--pp-text-mute);
-    font-style: italic;
-    padding-right: 4px;
-}
-
-/* -------------------------------------------------------------------------- signed note ---- */
-/* The Wikipedia move: a letter from a person, not marketing from an organisation. The amber rail
-   marks it as the one place on the page that speaks as "I". */
-.sup-note { border-left: 4px solid color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border)) !important; }
-
-.sup-note p { font-size: 0.92rem; line-height: 1.68; color: var(--pp-text-dim); max-width: 62ch; }
-.sup-note p + p { margin-top: 10px; }
-
-.sup-note__sig {
-    margin-top: 14px !important;
-    font-family: var(--pp-font-display), sans-serif;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--pp-text) !important;
-}
-
-/* ----------------------------------------------------------------------------- live beta ---- */
-/* Only rendered while something is in testing. The PERMANENT claim lives in the "New things" perk
-   row, so this section never goes blank between betas. */
-.sup-beta {
-    margin-top: 14px;
-    padding: 11px 14px;
-    border-radius: var(--pp-radius-sm);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 9%, transparent);
-    font-size: 0.82rem;
-    line-height: 1.55;
-    color: var(--pp-text-dim);
-}
-
-.sup-beta b { color: var(--pp-text); font-weight: 700; }
-
-.sup-beta__k {
-    display: block;
-    font-size: 0.6rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--pp-primary);
-    margin-bottom: 4px;
+    .sup-modal[open] { animation: ppRevealIn 0.28s var(--pp-ease); }
 }
 
 /* ------------------------------------------------------------------------------ the dial ---- */
 .sup-dial { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.sup-modal .sup-dial__row { background: var(--pp-bg-2); }
 
 /* The column header only makes sense once the row IS three columns, so it is hidden at the stacked
    size where each cell labels itself with `.sup-dial__k`. */
@@ -671,23 +577,4 @@
     line-height: 1.6;
     color: var(--pp-text-mute);
     max-width: 62ch;
-}
-
-/* ------------------------------------------------------------------------- the other ask ---- */
-/* One line, outside the card stack on purpose: it is a different ask with its own page coming, and
-   at section weight it competes with the membership this page exists to offer. */
-.sup-else {
-    margin-top: 6px;
-    padding: 14px 4px 0;
-    font-size: 0.82rem;
-    line-height: 1.6;
-    color: var(--pp-text-mute);
-    max-width: 62ch;
-}
-
-.sup-else a {
-    color: var(--pp-primary);
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 3px;
 }

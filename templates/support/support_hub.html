@@ -1,47 +1,38 @@
 {% extends 'base.html' %}
-{% load humanize static %}
+{% load humanize %}
 {% block title %}Support{% endblock %}
 
 {% comment %}
 The Support landing IS the membership storefront. Served by users.views.SupportStorefrontView, which
 also answers this page's checkout POST (the form carries no action, so handler and form share a URL).
 
-STRUCTURE
----------
-Stacked chrome CARDS, site convention, all the way down. An earlier version set prose directly on the
-page substrate, which nothing else here does and which read as foreign -- "free content" in this
-codebase means page-filling grids of items, never paragraphs. A discrete prose or stats section still
-gets a surface.
+STRIPPED BACK TO THE HEADER (2026-08-20), deliberately. Earlier versions carried the whole argument --
+an evidence band, a roadmap strip, a signed note, a perks table, a supporter wall -- and each rebuild
+kept repainting sections that had never been agreed. So the page is the header alone while the ask
+gets settled, and the rest gets built back one piece at a time. The copy for those sections is not
+lost; it is in the git history of this file and headed for /support/roadmap/ and About.
 
-The header is SPLIT: the statement on the left, the ask on the right in a decorated box with a
-`.pp-switch` for billing cycle. That puts the decision above the fold instead of below four sections
-of argument, and it means nothing further down has to work as hard.
+THE HEADER IS SPLIT: the statement on the left, the ask on the right in a decorated box. That puts the
+decision above the fold rather than below several sections of argument.
 
-Everything after the header is evidence rather than prose: the commissioned artwork, a plat card, the
-transparency row, the supporter wall, a roadmap strip you scan, and one short signed note. The
-reference class is Obsidian Catalyst, Blender's Development Fund and the Wikipedia appeal -- free
-products funded by their users, where the page is mostly not text.
+THE BOX IS AMOUNT-FIRST. You pick a number and the page tells you what that makes you, rather than
+comparing six named rows -- borrowed from Blender's Development Fund widget. Entirely CSS-driven off
+`:has(:checked)`: both the cycle switch and the amount grid are real radios, so all of it works with
+JavaScript off. The script only adds the `is-active` class the shared `.pp-switch` look keys on.
 
-THE LADDER IS PLACEHOLDERS RIGHT NOW. Buttons are inert until the twelve Stripe prices and twelve
-PayPal plans exist; the POST handler, success_url and webhooks underneath are untouched, so switching
-it on is wiring a button to a contract that already works. `tiers_are_placeholders` is forced False in
-live mode by the view, so production can never render a dead buy button.
+THE LADDER IS PLACEHOLDERS. Buttons are inert until its twelve Stripe prices and twelve PayPal plans
+exist. The POST handler, success_url, subscribe_success and both webhooks underneath are untouched, so
+switching it on is wiring a button to a contract that already works. The view forces placeholders off
+in live mode, so production can never render a dead buy button.
 
-RULES THAT ARE PINNED BY TESTS
-  - Every level gets every perk; only RECOGNITION escalates. Nothing is ever gated.
-  - The perk table fills BOTH columns on every row -- a row that could not is a wall.
-  - The past renders in numbers, the future renders in words: the roadmap strip carries no date,
-    count or percentage.
-  - Figures and the supporter wall are omitted whole when empty, never rendered as zeroes.
-
-Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighten it into ad copy.
+Everything sits on the standard card chrome. Nothing on this site sets prose directly on the page
+substrate, and an earlier version of this page did, which is most of why it read as foreign.
 {% endcomment %}
 
 {% block content %}
 <div class="sup">
 
-    {% comment %} ==================================================== the split header ======== {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
         <div class="card-body p-4 md:p-6 lg:p-8">
             <div class="sup-head">
 
@@ -81,14 +72,6 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                 </div>
 
                 {% elif pricing_available %}
-                {% comment %} Amount-first, tier-derived. Six rows each carrying their own button
-                read as a form; a grid of amounts plus ONE action reads as a single decision, which
-                is what it actually is. The level you become is revealed under the grid rather than
-                being six things to compare.
-
-                Entirely CSS-driven off `:has(:checked)` -- both the cycle switch and the amount grid
-                are radios, so this works with JavaScript off. The JS below only adds the `is-active`
-                chip class the shared `.pp-switch` look keys on. {% endcomment %}
                 <div class="sup-box" data-sup-box data-cycle="monthly">
                     <div class="pp-switch sup-box__switch" role="radiogroup" aria-label="Billing cycle">
                         <label class="pp-switch__chip is-active">
@@ -120,25 +103,35 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
 
                         <p class="sup-buy__saving">Yearly is priced at ten months. Two are on us.</p>
 
-                        {% comment %} One of these is revealed by the selected amount. All six ship in
-                        the markup so the swap is a state change rather than a round trip. {% endcomment %}
+                        {% comment %} PLACEHOLDER, and marked as one in the copy. What belongs here is
+                        the supporter mark shown IN CONTEXT -- your own name on a leaderboard row,
+                        wearing the level you are about to pick -- which is the single most persuasive
+                        thing this box could show, and the reason it is worth designing properly rather
+                        than approximating. The row below is a mock: real geometry, real name, stand-in
+                        mark. All six ship and the checked amount reveals its own, so the swap is a
+                        state change. {% endcomment %}
                         {% for tier in tiers %}
                         <div class="sup-becomes" data-for="{{ tier.slug }}" data-tier="{{ tier.slug }}">
-                            <p class="sup-becomes__h">Become a <b>{{ tier.name }}</b></p>
-                            <div class="sup-becomes__body">
-                                <span class="sup-becomes__pip" aria-hidden="true"></span>
-                                <ul class="sup-becomes__list">
-                                    <li>Every supporter perk, whatever you give</li>
-                                    <li>A {{ tier.name|cut:" Supporter" }} supporter mark beside your name</li>
-                                    {% if tier.recognition == 'named' %}
-                                    <li>Your name on the site</li>
-                                    {% elif tier.recognition == 'linked' %}
-                                    <li>Your name and a link on the site</li>
-                                    {% endif %}
-                                </ul>
+                            <p class="sup-becomes__h">You would appear as a <b>{{ tier.name }}</b></p>
+
+                            <div class="sup-prev" aria-hidden="true">
+                                <span class="sup-prev__rank">#12</span>
+                                <span class="sup-prev__av"></span>
+                                <span class="sup-prev__name">
+                                    {{ viewer_name }}<span class="sup-prev__mark"></span>
+                                </span>
+                                <span class="sup-prev__score">1,204</span>
                             </div>
+                            <p class="sup-prev__cap">A rough idea. We have not designed the marks yet.</p>
                         </div>
                         {% endfor %}
+
+                        {% comment %} Reachable whichever amount is selected, because the answer is the
+                        same whichever amount is selected -- that IS the model. {% endcomment %}
+                        <button type="button" class="sup-buy__perks" data-perks-open>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                            What every supporter gets
+                        </button>
 
                         <button type="button" class="sup-buy__go"
                                 {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
@@ -152,7 +145,7 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                     </div>
 
                     {% comment %} Gift is not built. The tab exists so the shape can be designed
-                    against, and it says so plainly rather than pretending. {% endcomment %}
+                    against, and says so plainly rather than pretending. {% endcomment %}
                     <div class="sup-box__gift">
                         <p><b>Gifting is on the way.</b></p>
                         <p>You will be able to buy any level for someone else, or hand out a code. We are still working out how it should feel.</p>
@@ -162,7 +155,7 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                 {% else %}
                 <div class="sup-box sup-box--off">
                     <p class="sup-box__thanks">Memberships are briefly unavailable</p>
-                    <p class="sup-box__thanksub">We are sorting something out on our end. Nothing on the site has changed, and everything below is still happening.</p>
+                    <p class="sup-box__thanksub">We are sorting something out on our end. Nothing on the site has changed.</p>
                 </div>
                 {% endif %}
 
@@ -170,180 +163,48 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
         </div>
     </section>
 
-    {% comment %} ==================================================== who is behind it ======== {% endcomment %}
-    {% comment %} Omitted whole while nobody holds a tier, which is the normal case until the ladder
-    goes live. "$0 a month from 0 supporters" is worse than saying nothing. {% endcomment %}
-    {% if supporter_count %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <h2 class="sup-sec__h">Who keeps this running</h2>
+    {% comment %} ============================================================ perks modal ==== {% endcomment %}
+    {% comment %} A native <dialog>, so Escape, the focus trap and the backdrop come from the browser
+    rather than from us. The scrim is a SOLID dim with no backdrop-filter, per the motion docs: a
+    blurred backdrop re-samples on any repaint in its stacking context and is the documented cause of
+    modal jank on this site.
 
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 mt-3">
-                <div class="scard">
-                    <div class="scard__label">Supporters</div>
-                    <div class="scard__value pp-tally text-primary" data-countup="{{ supporter_count }}">{{ supporter_count|intcomma }}</div>
-                    <div class="scard__sub">people chipping in</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Monthly support</div>
-                    <div class="scard__value pp-tally" data-countup="{{ supporter_monthly }}">${{ supporter_monthly|intcomma }}</div>
-                    <div class="scard__sub">yearly pledges counted per month</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Ads served</div>
-                    <div class="scard__value pp-tally">0</div>
-                    <div class="scard__sub">and it stays that way</div>
-                </div>
+    Every row fills in BOTH columns, because premium here is a dial and not a door -- supporters get
+    more of a thing everyone already has. A row that could not fill "Everyone" would be a wall, and
+    there is a test that fails on one. {% endcomment %}
+    <dialog id="sup-perks" class="sup-modal" aria-labelledby="sup-perks-h">
+        <div class="sup-modal__head">
+            <h2 id="sup-perks-h">What every supporter gets</h2>
+            <button type="button" class="sup-modal__x" data-perks-close aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+
+        <p class="sup-modal__lede">
+            The same at every level. What changes as you give more is how visible your support is,
+            never what you can do.
+        </p>
+
+        <div class="sup-dial" role="table">
+            <div class="sup-dial__hrow" role="row">
+                <span role="columnheader"></span>
+                <span role="columnheader">Everyone</span>
+                <span role="columnheader" class="is-mem">Supporters</span>
             </div>
-
-            {% if supporter_tiers %}
-            <div class="sup-wall">
-                {% for row in supporter_tiers %}
-                <div class="sup-wall__group" data-tier="{{ row.tier.slug }}">
-                    <p class="sup-wall__k">{{ row.tier.name }}</p>
-                    <p class="sup-wall__n">{{ row.count }}</p>
-                </div>
-                {% endfor %}
+            {% for perk in premium_perks %}
+            <div class="sup-dial__row" role="row">
+                <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
+                <span class="sup-dial__free" role="cell"><span class="sup-dial__k">Everyone</span>{{ perk.everyone }}</span>
+                <span class="sup-dial__mem" role="cell"><span class="sup-dial__k">Supporters</span>{{ perk.member }}</span>
+                {% if perk.note %}<span class="sup-dial__note">{{ perk.note }}</span>{% endif %}
             </div>
-            <p class="sup-wall__note">Named supporters appear here by choice. Gold and above are listed; Titanium and Diamond can add a link.</p>
-            {% endif %}
+            {% endfor %}
         </div>
-    </section>
-    {% endif %}
 
-    {% comment %} ========================================================= evidence ========== {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <h2 class="sup-sec__h">Built in the first eight months</h2>
-            <p class="sup-sec__p">Live since January 2026, and rebuilt very nearly end to end since.</p>
-
-            <div class="sup-ev">
-                <div class="sup-ev__left">
-                    <ul class="sup-chips">
-                        <li>Career</li><li>Badges</li><li>Milestones</li><li>Titles</li>
-                        <li>Monthly Recap</li><li>Plat cards</li><li>Leaderboards</li><li>No ads, ever</li>
-                    </ul>
-
-                    {% comment %} Shown, not described. An earlier draft WROTE "badges genuinely worth
-                    collecting" as prose, on a site where the artwork is the moat and one click away.
-                    Omitted entirely on a catalogue with no custom art rather than faked. {% endcomment %}
-                    {% if badge_art %}
-                    <ul class="sup-art">
-                        {% for art in badge_art %}
-                        <li class="sup-art__cell" style="--i: {{ forloop.counter0 }}">
-                            <img src="{{ art.src }}" alt="{{ art.series }} badge artwork" loading="lazy" decoding="async">
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    <p class="sup-art__cap">Every badge series gets its own commissioned artwork.</p>
-                    {% endif %}
-                </div>
-
-                {% comment %} A plat card is a designed OUTPUT rather than a screen, so unlike a UI
-                screenshot it does not drift every time a page is rebuilt. Same asset the landing page
-                already maintains, so there is one file to keep current rather than two. {% endcomment %}
-                <figure class="sup-ev__card">
-                    <img src="{% static 'images/showcase/plat_card_example.png' %}"
-                         alt="A Platinum Pursuit plat card for a completed game" loading="lazy" decoding="async">
-                    <figcaption>And your platinums get a card worth sharing.</figcaption>
-                </figure>
-            </div>
-        </div>
-    </section>
-
-    {% comment %} ========================================================== roadmap ========== {% endcomment %}
-    {% comment %} A strip you scan. No dates, counts or percentages: the future renders in words.
-    The long-form version belongs on /support/roadmap/. {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <h2 class="sup-sec__h">What your support builds next</h2>
-
-            <ol class="sup-road">
-                <li class="sup-road__step">
-                    <span class="sup-road__k">Now</span>
-                    <p>The Challenges revamp, quests, streaks, and a much bigger badge library.</p>
-                </li>
-                <li class="sup-road__step">
-                    <span class="sup-road__k">Next</span>
-                    <p>My Stats as a real engine. Game lists, notifications and showcases, rebuilt properly.</p>
-                </li>
-                <li class="sup-road__step">
-                    <span class="sup-road__k">Later</span>
-                    <p>PlatPursuit in your pocket, and a PlatPursuit that is not only PlayStation.</p>
-                </li>
-            </ol>
-
-            <p class="sup-road__more">Truthfully, we have so many more ideas and dreams that we cannot fit them all here.</p>
-        </div>
-    </section>
-
-    {% comment %} ======================================================= signed note ========== {% endcomment %}
-    {% comment %} The Wikipedia move, and the reason that appeal works: a letter from a person rather
-    than marketing from an organisation. The only place on the page that speaks as "I". {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 sup-note">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <p>
-                PlatPursuit started as two friends in a Discord server who wanted trophy hunting to add
-                up to something. It went live in January 2026, and the community team around it has
-                grown a lot since.
-            </p>
-            <p>
-                The site itself is still built by one person, though, and that is me. Every page you
-                use, I made. If it has been worth something to you, this is how you say so.
-            </p>
-            <p class="sup-note__sig">Jeffrey</p>
-        </div>
-    </section>
-
-    {% comment %} ============================================================ perks ========== {% endcomment %}
-    {% comment %} The dial made literal. Every row fills BOTH columns, because supporters get more of
-    a thing everyone already has. A comparison rather than a checklist, because a checklist can
-    quietly hide that the other column is empty and two columns cannot. {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <h2 class="sup-sec__h">What supporters get</h2>
-            <p class="sup-sec__p">Not much, on purpose. Nothing here is taken from anyone who does not pay.</p>
-
-            {% if current_beta %}
-            {% comment %} Only while something is in testing. The permanent claim lives in the "New
-            things" row below, so this never goes blank between betas. {% endcomment %}
-            <p class="sup-beta">
-                <span class="sup-beta__k">In testing now</span>
-                <b>{{ current_beta.name }}</b> {{ current_beta.blurb }}
-            </p>
-            {% endif %}
-
-            <div class="sup-dial" role="table">
-                <div class="sup-dial__hrow" role="row">
-                    <span role="columnheader"></span>
-                    <span role="columnheader">Everyone</span>
-                    <span role="columnheader" class="is-mem">Supporters</span>
-                </div>
-                {% for perk in premium_perks %}
-                <div class="sup-dial__row" role="row">
-                    <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
-                    <span class="sup-dial__free" role="cell"><span class="sup-dial__k">Everyone</span>{{ perk.everyone }}</span>
-                    <span class="sup-dial__mem" role="cell"><span class="sup-dial__k">Supporters</span>{{ perk.member }}</span>
-                    {% if perk.note %}<span class="sup-dial__note">{{ perk.note }}</span>{% endif %}
-                </div>
-                {% endfor %}
-            </div>
-
-            <p class="sup-dial__foot">
-                If you ever find something on PlatPursuit locked behind a payment, we got it wrong.
-            </p>
-        </div>
-    </section>
-
-    {% comment %} ======================================================= the other ask ======= {% endcomment %}
-    {% comment %} One line. A separate ask with its own reason and its own page coming; at section
-    weight it competes with the membership this page exists to offer. {% endcomment %}
-    {% if support_fundraiser %}
-    <p class="sup-else">
-        Not after a membership? The badge art fundraiser runs too, and it pays artists directly.
-        <a href="{% url 'fundraiser' support_fundraiser.slug %}">See {{ support_fundraiser.name }}</a>
-    </p>
-    {% endif %}
+        <p class="sup-modal__foot">
+            If you ever find something on PlatPursuit locked behind a payment, we got it wrong.
+        </p>
+    </dialog>
 
 </div>
 {% endblock %}
@@ -357,9 +218,9 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
     PP.onPageReady(function (first) {
         if (!first) return;
 
-        // The cycle switch is radio-backed and CSS-driven, so it already works with no JS. All this
-        // adds is the `is-active` chip class the shared `.pp-switch` look expects (that styling
-        // predates the `:has()` variant and keys on the class), plus a `data-cycle` hook.
+        // The cycle switch and the amount grid are radio-backed and CSS-driven, so both already work
+        // with JS off. This only adds the `is-active` chip class the shared `.pp-switch` look keys on
+        // (that styling predates the `:has()` variant), plus the `data-cycle` hook.
         var box = document.querySelector('[data-sup-box]');
         if (box) {
             var sync = function () {
@@ -373,6 +234,22 @@ Copy is Jeffrey's voice: earnest and ADDITIVE, never oppositional. Do not tighte
                 input.addEventListener('change', sync);
             });
             sync();
+        }
+
+        // Native <dialog>: Escape and the focus trap are the browser's job, not ours.
+        var perks = document.getElementById('sup-perks');
+        if (perks) {
+            document.querySelectorAll('[data-perks-open]').forEach(function (btn) {
+                btn.addEventListener('click', function () { perks.showModal(); });
+            });
+            perks.querySelectorAll('[data-perks-close]').forEach(function (btn) {
+                btn.addEventListener('click', function () { perks.close(); });
+            });
+            // Click outside to dismiss. The dialog element itself fills the viewport, so a click that
+            // lands on IT rather than on a child is a click on the backdrop.
+            perks.addEventListener('click', function (e) {
+                if (e.target === perks) perks.close();
+            });
         }
 
         document.querySelectorAll('.pp-tally[data-countup]').forEach(function (el) {
