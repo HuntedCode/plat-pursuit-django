@@ -107,7 +107,7 @@ def test_a_signed_in_non_member_sees_the_same_ladder(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    assert 'Luminary' in body
+    assert 'Cornerstone' in body
     assert 'Manage your membership' not in body, 'a non-member sees the member state'
 
 
@@ -626,10 +626,10 @@ def test_the_marks_are_actually_drawn(client):
         start = block.index('sup-becomes__stars')
         return block[start:block.index('</span>', start)]
 
-    assert heading_mark('luminary').count('<svg class="pp-supstar') == 5, 'the top level is not wearing five stars'
-    assert heading_mark('champion').count('<svg class="pp-supstar') == 3
+    assert heading_mark('cornerstone').count('<svg class="pp-supstar') == 5, 'the top level is not wearing five stars'
+    assert heading_mark('sponsor').count('<svg class="pp-supstar') == 3
     assert heading_mark('friend').count('pp-supstar is-outline') == 1
-    assert heading_mark('ally').count('is-outline') == 0, 'the second level is still an outline'
+    assert heading_mark('backer').count('is-outline') == 0, 'the second level is still an outline'
 
 
 def test_the_modal_still_centres_itself():
@@ -879,3 +879,59 @@ def test_the_checklist_demonstrates_the_mark_it_describes(client):
         )
         assert f'A {tier["name"]} mark' not in block, 'the article is back and it does not agree'
 
+
+def test_no_level_name_collides_with_something_earned():
+    """THE GUARD THAT SHOULD HAVE EXISTED TWO LADDERS AGO.
+
+    A bought marker must never read as "better hunter" (`visual-identity.md`), which means a supporter
+    level may not share a name with anything a hunter EARNS. Two ladders shipped past review before
+    this test existed, and each looked obviously fine at the time:
+
+      Bronze / Silver / Gold / Platinum  -> the PSN trophy grades AND the badge medallion metals
+      Friend / Ally / Patron / Champion / Guardian / Luminary
+                                         -> "Luminary" is the 10th PURSUER RANK (~690 games) and
+                                            "Champion" is a JOB in the heart discipline
+
+    Both were caught by eye, months apart, by someone who happened to remember the other ladder. That
+    is not a review process, so this checks against every earned vocabulary in the codebase at once.
+    """
+    from trophies.util_modules.leveling import PURSUER_RANKS
+    from trophies.models import Job
+    from trophies.constants import TROPHY_TYPE_BRONZE  # noqa: F401  (module presence, see below)
+
+    earned = set()
+
+    # Pursuer ranks: the account-wide ladder, earned by playing.
+    earned |= {name.lower() for _, _, name, _ in PURSUER_RANKS}
+
+    # The 24 Jobs. Read from the seed migration rather than the DB so this holds on an empty test
+    # database -- the point is the NAME SPACE, which exists whether or not rows do.
+    root = pathlib.Path(__file__).resolve().parents[2]
+    seed = (root / 'trophies' / 'migrations' / '0247_seed_jobs.py').read_text(encoding='utf-8')
+    earned |= {m.lower() for m in re.findall(r"'([A-Z][a-z]+)'", seed)}
+
+    # PSN trophy grades and the badge medallion metals share these four words.
+    earned |= {'bronze', 'silver', 'gold', 'platinum'}
+
+    for tier in SUPPORT_TIERS:
+        assert tier['name'].lower() not in earned, (
+            f"supporter level {tier['name']!r} is also something hunters EARN. Pick from the giving "
+            f"register (Friend, Backer, Patron, Sponsor, Benefactor...) rather than the standing one."
+        )
+        assert tier['slug'] not in earned
+
+
+def test_earned_titles_are_checked_by_hand_because_they_are_data():
+    """The one vocabulary the test above CANNOT cover, recorded so it is not mistaken for covered.
+
+    `Title` rows are seeded data and users earn them, so the set is unbounded and lives in the
+    database rather than in code. A future title called "Patron" would collide with a supporter level
+    and nothing here would fail.
+
+    The mitigation is the register itself: title names are achievements, and the giving register
+    ("Backer", "Benefactor") is not a field anyone names an achievement from. That is why the fix was
+    to change register rather than to pick safer nouns from the same one.
+    """
+    from trophies.models import Title
+
+    assert hasattr(Title, 'name'), 'Title lost its name field; this note needs rewriting'

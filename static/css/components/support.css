@@ -296,11 +296,11 @@
 .sup-becomes { display: none; }
 
 .sup-box:has(.sup-amt input[value="friend"]:checked)   .sup-becomes[data-for="friend"],
-.sup-box:has(.sup-amt input[value="ally"]:checked)   .sup-becomes[data-for="ally"],
+.sup-box:has(.sup-amt input[value="backer"]:checked)   .sup-becomes[data-for="backer"],
 .sup-box:has(.sup-amt input[value="patron"]:checked)     .sup-becomes[data-for="patron"],
-.sup-box:has(.sup-amt input[value="champion"]:checked) .sup-becomes[data-for="champion"],
-.sup-box:has(.sup-amt input[value="guardian"]:checked) .sup-becomes[data-for="guardian"],
-.sup-box:has(.sup-amt input[value="luminary"]:checked)  .sup-becomes[data-for="luminary"] {
+.sup-box:has(.sup-amt input[value="sponsor"]:checked) .sup-becomes[data-for="sponsor"],
+.sup-box:has(.sup-amt input[value="benefactor"]:checked) .sup-becomes[data-for="benefactor"],
+.sup-box:has(.sup-amt input[value="cornerstone"]:checked)  .sup-becomes[data-for="cornerstone"] {
     display: block;
 }
 

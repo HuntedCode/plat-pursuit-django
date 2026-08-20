@@ -36,12 +36,23 @@ PREMIUM_TIER_DISPLAY = {
 # ever grows a key beyond price, recognition and its own look, because that is the moment this
 # becomes a feature ladder and the page's central promise turns false.
 #
-# NAMES DESCRIBE THE RELATIONSHIP, not a material. That is deliberate: `bronze` / `silver` / `gold` /
-# `platinum` are already load-bearing words here -- they are the PSN trophy grades AND the badge
-# medallion metals, with their own colours in the design system (`.pgl__rung--bronze` = #cf9160, and
-# friends). A "Platinum Supporter" on a site where the platinum is what you grind hundreds of hours
-# for reads as buying the achievement, which the flair guardrail forbids. Naming the relationship
-# instead sidesteps the collision completely and suits the voice better.
+# NAMES COME FROM THE GIVING REGISTER, NOT THE STANDING ONE. That is a hard constraint, not a
+# preference. This site already spends "evocative single-noun standing word" on three separate EARNED
+# systems -- the 11 `PURSUER_RANKS` (Newbie ... Warden, Marshal, Vanquisher, Paragon, Luminary,
+# Ascendant), the 24 Job names (Slayer, Vanguard, Pathfinder, Cartographer, Mastermind, Champion,
+# Maestro ...) and the PSN trophy grades. Any supporter name from that field either collides outright
+# or simply reads as something a hunter earned, which the flair guardrail in `visual-identity.md`
+# forbids: a bought marker must never read as "better hunter".
+#
+# Two earlier ladders proved it. Bronze/Silver/Gold/Platinum collided with the trophy grades AND the
+# badge medallion metals. The replacement -- Friend/Ally/Patron/Champion/Guardian/Luminary -- looked
+# safe and was not: **Luminary is the 10th Pursuer rank**, earned around 690 games, and **Champion is
+# a Job** in the heart discipline. Someone paying $30 a month would have carried the name of a rank
+# somebody else ground hundreds of hours for.
+#
+# These words describe what you DO for the project. Nobody would ever name an achievement "Backer",
+# so the field is structurally safe rather than accidentally clear, and `test_no_level_name_collides
+# _with_something_earned` checks it against every ladder in the codebase rather than trusting review.
 #
 # THE MARK IS A STAR, and only a star, at every level. It builds an outline star -> one filled ->
 # two -> three -> four -> five, so a level is legible at a glance without ever introducing a second
@@ -52,17 +63,17 @@ PREMIUM_TIER_DISPLAY = {
 # `recognition` drives the public supporter wall:
 #   none  -> not listed          named -> name on the site          linked -> name + a link
 SUPPORT_TIERS = [
-    {'slug': 'friend',   'name': 'Friend',   'monthly': 4,  'yearly': 40,
+    {'slug': 'friend',      'name': 'Friend',      'monthly': 4,  'yearly': 40,
      'recognition': 'none',   'stars': 1, 'outline': True,  'colour': '#4fc2a2'},
-    {'slug': 'ally',     'name': 'Ally',     'monthly': 10, 'yearly': 100,
+    {'slug': 'backer',      'name': 'Backer',      'monthly': 10, 'yearly': 100,
      'recognition': 'none',   'stars': 1, 'outline': False, 'colour': '#4fa8e8'},
-    {'slug': 'patron',   'name': 'Patron',   'monthly': 15, 'yearly': 150,
+    {'slug': 'patron',      'name': 'Patron',      'monthly': 15, 'yearly': 150,
      'recognition': 'named',  'stars': 2, 'outline': False, 'colour': '#7b8cf0'},
-    {'slug': 'champion', 'name': 'Champion', 'monthly': 20, 'yearly': 200,
+    {'slug': 'sponsor',     'name': 'Sponsor',     'monthly': 20, 'yearly': 200,
      'recognition': 'named',  'stars': 3, 'outline': False, 'colour': '#a86ef0'},
-    {'slug': 'guardian', 'name': 'Guardian', 'monthly': 25, 'yearly': 250,
+    {'slug': 'benefactor',  'name': 'Benefactor',  'monthly': 25, 'yearly': 250,
      'recognition': 'linked', 'stars': 4, 'outline': False, 'colour': '#e069c4'},
-    {'slug': 'luminary', 'name': 'Luminary', 'monthly': 30, 'yearly': 300,
+    {'slug': 'cornerstone', 'name': 'Cornerstone', 'monthly': 30, 'yearly': 300,
      'recognition': 'linked', 'stars': 5, 'outline': False, 'colour': '#f56a9e'},
 ]
 
