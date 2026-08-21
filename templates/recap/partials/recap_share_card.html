@@ -81,9 +81,9 @@ Context: api/recap_views.RecapShareImageHTMLView._build_template_context.
             {% endif %}
 
             <div style="flex: 1; min-width: 0;">
-                {# The mark system, inline (Playwright renders this with no stylesheet): name in the mark's
+                {% comment %} The mark system, inline (Playwright renders this with no stylesheet): name in the mark's
                 colour plus its glyph -- level stars (single outlined star for Backer) or the filled staff
-                wrench / mod shield. A supporter's share card carries their mark out into the world. #}
+                wrench / mod shield. A supporter's share card carries their mark out into the world. {% endcomment %}
                 <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
                     <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
                     {% if mark %}<span style="display: flex; align-items: center; gap: 2px; flex-shrink: 0;">
