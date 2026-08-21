@@ -132,6 +132,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 <style>
                     {% for tier in tiers %}
                     .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) { --sup-t: {{ tier.colour }}; }
+                    .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) .sup-go__t--{{ tier.slug }} { display: inline; }
                     {% endfor %}
                 </style>
                 <div class="sup-box">
@@ -269,8 +270,13 @@ substrate, and an earlier version of this page did, which is most of why it read
                                 <span class="sup-go__rise" aria-hidden="true">
                                     {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
                                 </span>
-                                <span class="sup-buy__go-m">Support monthly</span>
-                                <span class="sup-buy__go-y">Support yearly</span>
+                                {% comment %} The CTA names what you become, not what you pay:
+                                "Become a Patron" / "A year as a Patron". One hidden span per
+                                level, revealed by the same :has() rules that set --sup-t, so the
+                                words and the colour change in the same instant. Both faces sit
+                                position:relative so the text paints ABOVE the rising stars. {% endcomment %}
+                                <span class="sup-buy__go-m">Become a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}</span>
+                                <span class="sup-buy__go-y">A year as a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}</span>
                             </button>
 
                             {% comment %} Gated on PayPal actually being configured for this mode --
@@ -283,8 +289,13 @@ substrate, and an earlier version of this page did, which is most of why it read
                                 {% comment %} No stars here: the PayPal button runs the CURRENT
                                 instead -- the same ppSupFlow water the supporter name wears,
                                 drifting the level's hue across the fill. Two ambient motions,
-                                two characters: the primary rises, the alternative flows. {% endcomment %}
-                                PayPal
+                                two characters: the primary rises, the alternative flows.
+
+                                The label is a TYPESET nod to the PayPal wordmark (heavy italic,
+                                two-tone Pay/Pal) in our own text colours -- recognisable without
+                                embedding brand artwork. Swap in the official monogram SVG from
+                                their brand kit if we ever want the full logo. {% endcomment %}
+                                <span class="sup-go__ppword">Pay<span>Pal</span></span>
                             </button>
                             {% endif %}
                         </div>

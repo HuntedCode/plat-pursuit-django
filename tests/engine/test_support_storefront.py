@@ -476,6 +476,26 @@ def test_the_pay_button_breathes_stars_in_the_levels_colour(client):
     assert mark_path in rise_block, 'the rising star is not the supporter-mark shape'
 
 
+def test_the_cta_names_the_selected_level(client):
+    """'Become a Patron', not 'Support monthly': one hidden span per level inside each cycle
+    face, revealed by the same emitted :has() rules that set --sup-t -- the words and the colour
+    change in the same instant, with no JS."""
+    body = _flat(client)
+
+    for tier in SUPPORT_TIERS:
+        assert body.count(f"sup-go__t--{tier['slug']}") >= 3,             f"{tier['slug']} is missing a face span or its reveal rule"
+        assert f".sup-go__t--{tier['slug']} {{ display: inline; }}" in body
+    assert 'Become a' in body and 'A year as a' in body
+
+
+def test_the_button_text_paints_above_the_stars():
+    """Positioned elements stack later than the emitter; without position:relative on the faces
+    the stars swim in FRONT of the words (user feedback 2026-08-21)."""
+    rules = _css_rules('support.css')
+    face_rule = rules[rules.index('.sup-buy__go-m,'):]
+    assert 'position: relative;' in face_rule[:120]
+
+
 def test_the_stars_stand_down_when_the_button_cannot_be_pressed():
     """Two hard offs in the CSS: a disabled button must not advertise, and prefers-reduced-motion
     kills the emitter entirely (a static stack of absolutely-positioned stars reads as a glitch,

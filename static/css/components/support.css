@@ -449,18 +449,21 @@
 
 
 /* ------------------------------------------------------------------------------ the CTA ---- */
-/* Stacked, primary first. Side by side would give PayPal equal weight, and most people are paying
-   by card -- the second option should be easy to find, not equally loud. */
+/* Side by side (decided 2026-08-21; they were stacked first), with the primary DOMINANT: most
+   people pay by card, so the alternative sits beside it at ~60/40, not equal. flex-wrap is the
+   responsive story -- when the box gets too tight for both min-widths, PayPal wraps below and the
+   pair is simply stacked again, no breakpoint needed. */
 .sup-pays {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 8px;
     margin-top: 16px;
 }
 
 .sup-buy__go {
     position: relative;   /* the floating-star emitter positions against the button */
-    width: 100%;
+    flex: 1.6 1 0;
+    min-width: 170px;
     padding: 12px 16px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid color-mix(in oklab, var(--sup-t) 55%, var(--pp-border));
@@ -552,10 +555,23 @@
     background-size: 300% 100%;
     background-position: 0% 50%;
     border-color: color-mix(in oklab, var(--sup-t) 22%, var(--pp-border));
-    color: var(--pp-text-dim);
+    color: var(--pp-text);
     font-size: 0.85rem;
+    flex: 1 1 0;
+    min-width: 104px;
     animation: ppSupFlow 24s linear infinite;
 }
+
+/* The wordmark nod: heavy italic, the back half a step quieter -- PayPal's own two-blue split,
+   translated into our monochrome. */
+.sup-go__ppword {
+    position: relative;
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+.sup-go__ppword span { opacity: 0.72; }
 
 .sup-buy__go--pp:hover:not(:disabled),
 .sup-buy__go--pp:focus-visible {
@@ -563,12 +579,20 @@
     --flow-band: color-mix(in oklab, var(--sup-t) 24%, transparent);
     --flow-crest: color-mix(in oklab, var(--sup-t) 32%, transparent);
     border-color: color-mix(in oklab, var(--sup-t) 50%, var(--pp-border));
-    color: var(--pp-text);
 }
 
 /* A still surface when it cannot be pressed; the flat first third makes the static frame a plain
    quiet tint rather than a frozen mid-swell. */
 .sup-buy__go--pp:disabled { animation: none; }
+
+/* The face text paints ABOVE the star layer: positioned elements stack later than the emitter,
+   which is earlier in source. Without this the stars swim in front of the words. */
+.sup-buy__go-m,
+.sup-buy__go-y { position: relative; }
+
+/* One span per level inside each face; the template's emitted :has() rules reveal exactly the
+   selected one, so the CTA names the level in the same instant the colours change. */
+.sup-go__t { display: none; }
 
 .sup-buy__go-y { display: none; }
 .sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-m { display: none; }
