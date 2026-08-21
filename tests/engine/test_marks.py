@@ -263,3 +263,21 @@ def test_the_extended_surfaces_carry_the_mark():
         'viewer_profile_id': None,
     })
     assert 'aria-label="Moderator"' in blurb and 'pp-supname' in blurb
+
+
+def test_the_mobile_star_collapse_survives_the_css_build():
+    """Below md, NAME-context marks collapse to a single star (colour already encodes the level);
+    read the BUILT stylesheet, not the source -- the build has silently dropped rules before."""
+    import pathlib
+    css = pathlib.Path('staticfiles/css/output.css').read_text(encoding='utf-8')
+    for rule in (
+        '.pp-markname .pp-supstar:not(:first-child)',
+        '.sup-prev--credit .sup-prev__mark .pp-supstar:not(:first-child)',
+    ):
+        at = css.find(rule)
+        assert at != -1, f'{rule} missing from the built css'
+        media_at = css.rfind('@media', 0, at)
+        assert media_at != -1 and 'max-width' in css[media_at:at], (
+            f'{rule} is not under its mobile media query in the built css'
+        )
+

@@ -148,3 +148,11 @@
 .pp-markname--sm .pp-markname__svc { width: 11px; height: 11px; }
 .pp-markname--sm .pp-supstar { width: 10px; height: 10px; }
 
+/* Mobile: in NAME contexts the mark collapses to a single star -- the ramp colour already encodes
+   the level (and the glyph's aria-label always names it), so the count is a redundant channel that
+   costs real row width at 375px. Backer stays distinct by its outline. Storefront PRODUCT surfaces
+   (tier chips, the become-preview), where the count is the content, keep all stars at every size. */
+@media (max-width: 767.98px) {
+    .pp-markname .pp-supstar:not(:first-child) { display: none; }
+}
+
