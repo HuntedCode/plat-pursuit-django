@@ -132,7 +132,7 @@
 .pp-markname__svc {
     width: 12px;
     height: 12px;
-    stroke: var(--sup-t, var(--pp-accent));
+    color: var(--sup-t, var(--pp-accent));   /* solid fill via currentColor, like the stars */
 }
 
 /* Compact context (dense rows): slightly smaller glyphs. */
