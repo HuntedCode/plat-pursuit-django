@@ -37,7 +37,7 @@
     color: var(--pp-text-dim);
 }
 
-.rm__progress { margin-top: 18px; max-width: 420px; }
+.rm__progress { margin-top: 20px; max-width: 440px; }
 
 .rm__progress-k {
     margin-top: 8px;
@@ -47,12 +47,40 @@
     color: var(--pp-text-mute);
 }
 
+/* THE IGNITION: on load the strip replays the journey -- banked pips land one by one with a
+   settle and a glow bloom, the current ring ignites last, and the caption is the follow-through,
+   arriving only after the story has been told. Anticipation, action, settle: the ~1.4s this
+   takes IS the page's one 'wow'; everything after it stays quiet on purpose.
+   opacity/transform/box-shadow only, and declared under no-preference at the source. */
+@media (prefers-reduced-motion: no-preference) {
+    .rm__pips .pp-horizon__seg { animation: rmPipIn 0.45s var(--pp-ease, ease) backwards; }
+    .rm__pips .pp-horizon__seg:nth-child(1) { animation-delay: 250ms; }
+    .rm__pips .pp-horizon__seg:nth-child(2) { animation-delay: 450ms; }
+    .rm__pips .pp-horizon__seg:nth-child(3) { animation-delay: 650ms; }
+    .rm__pips .pp-horizon__seg:nth-child(4) { animation-delay: 900ms; }
+    .rm__pips .pp-horizon__seg:nth-child(5) { animation-delay: 1050ms; }
+    .rm__pips .pp-horizon__seg:nth-child(6) { animation-delay: 1130ms; }
+    .rm__pips .pp-horizon__seg:nth-child(7) { animation-delay: 1210ms; }
+
+    .rm__progress-k { animation: ppRevealIn 0.5s var(--pp-ease) 1350ms backwards; }
+}
+
+@keyframes rmPipIn {
+    0%   { opacity: 0; transform: scaleY(0.4); }
+    60%  { opacity: 1; transform: scaleY(1.25); }
+    100% { opacity: 1; transform: scaleY(1); }
+}
+
 /* ---- the tiers ------------------------------------------------------------------------ */
 
 /* Three tiers of certainty, each a heading row + a grid of compact feature cards. Status lives
    on the TIER CHIP: works lit (and breathing -- this is 'we are here'), next solid, wishlist
    hollow-and-dashed (a dream drawn in outline). */
-.rm-tier { padding-top: 18px; }
+.rm-tier { padding-top: 26px; }
+
+@media (min-width: 768px) {
+    .rm-tier { padding-top: 34px; }
+}
 
 .rm-tier__head {
     display: flex;
@@ -81,6 +109,13 @@
     background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
     border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
     color: var(--pp-primary);
+}
+
+/* Distance as temperature, matching the pips' band ramp: next wears the Horizon's cool tone. */
+.rm-tier.is-next .rm-tier__chip {
+    background: color-mix(in oklab, rgb(110, 200, 230) 10%, transparent);
+    border-color: color-mix(in oklab, rgb(110, 200, 230) 35%, var(--pp-border));
+    color: color-mix(in oklab, rgb(110, 200, 230) 70%, var(--pp-text));
 }
 
 .rm-tier.is-wishlist .rm-tier__chip {
@@ -197,6 +232,7 @@
 
 
 .rm-step__cta {
+    position: relative;   /* hosts the storefront's star emitter (.sup-go__rise clips to this) */
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -226,6 +262,10 @@
 
 .rm-step__cta svg { width: 15px; height: 15px; }
 
+/* Label and arrow paint above the rising stars, same trick as the storefront faces. */
+.rm-step__cta-lbl,
+.rm-step__cta > svg { position: relative; }
+
 .rm-step__thanks {
     margin-top: 14px;
     font-weight: 650;
@@ -234,14 +274,23 @@
 
 /* ---- entrance ------------------------------------------------------------------------- */
 
-/* A quiet settle on load: tiers cascade, cards inside stagger off their --i index. Declared
-   under no-preference only. */
+/* Scroll choreography: cards reveal where you are actually LOOKING. The page script arms each
+   tier (.rm-armed) and flips .is-in as it enters the viewport; CSS owns the motion, staggered
+   off each card's --i index. Without JS nothing is armed and nothing is ever hidden; under
+   reduced motion the armed state must not hide anything either, so the hide lives INSIDE the
+   no-preference gate. */
 @media (prefers-reduced-motion: no-preference) {
-    .rm-feat {
+    .rm-armed .rm-feat,
+    .rm-ask.rm-armed .card-body { opacity: 0; }
+
+    .rm-tier.is-in .rm-feat {
+        opacity: 1;
         animation: ppRevealIn 0.5s var(--pp-ease) backwards;
-        animation-delay: calc(var(--tier-d, 200ms) + var(--i, 0) * 60ms);
+        animation-delay: calc(var(--i, 0) * 70ms);
     }
-    .rm-tier.is-next .rm-feat { --tier-d: 380ms; }
-    .rm-tier.is-wishlist .rm-feat { --tier-d: 560ms; }
-    .rm-ask { animation: ppRevealIn 0.5s var(--pp-ease) 700ms backwards; }
+
+    .rm-ask.is-in .card-body {
+        opacity: 1;
+        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
+    }
 }

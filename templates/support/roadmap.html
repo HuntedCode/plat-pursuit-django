@@ -40,7 +40,7 @@ happens in our Discord, which the ask card says out loud.
                      data-horizon-band="warming" style="--horizon-h: 10px;"
                      aria-valuenow="{{ stages_done }}" aria-valuemin="0" aria-valuemax="{{ stages_total }}"
                      aria-label="Roadmap progress: {{ stages_done }} of {{ stages_total }} stages complete">
-                    {% for stage in stages %}<span class="pp-horizon__seg"
+                    {% for stage in stages %}<span class="pp-horizon__seg" title="{{ stage.title }}"
                         {% if stage.status == 'shipped' %}data-state="done"{% elif stage.status == 'now' %}data-state="active"{% endif %}></span>{% endfor %}
                 </div>
                 <p class="rm__progress-k">{{ stages_done }} of {{ stages_total }} stages banked &middot; the plat's still ahead</p>
@@ -99,7 +99,13 @@ happens in our Discord, which the ask card says out loud.
             </p>
             {% if not viewer_is_member %}
             <a href="{% url 'support_hub' %}" class="rm-step__cta">
-                Come along for the ride
+                {% comment %} The storefront's star emitter, reused verbatim: the button that
+                leads there previews the motion you will find on its buy button. Falls back to
+                the accent colour since no level is selected here. {% endcomment %}
+                <span class="sup-go__rise" aria-hidden="true">
+                    {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                </span>
+                <span class="rm-step__cta-lbl">Come along for the ride</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </a>
             {% else %}
@@ -109,4 +115,25 @@ happens in our Discord, which the ask card says out loud.
     </section>
 
 </div>
+
+<script>
+    (function () {
+        /* Scroll choreography: tiers reveal where you are actually LOOKING, instead of load-time
+           delays that burn out below the fold. JS only flips classes -- CSS owns the motion and
+           its reduced-motion gate -- and without JS (or IO) nothing is ever hidden. */
+        if (!('IntersectionObserver' in window)) return;
+        var tiers = document.querySelectorAll('.rm-tier, .rm-ask');
+        if (!tiers.length) return;
+        tiers.forEach(function (t) { t.classList.add('rm-armed'); });
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-in');
+                    io.unobserve(entry.target);
+                }
+            });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+        tiers.forEach(function (t) { io.observe(t); });
+    })();
+</script>
 {% endblock %}
