@@ -263,3 +263,24 @@ def test_the_extended_surfaces_carry_the_mark():
         'viewer_profile_id': None,
     })
     assert 'aria-label="Moderator"' in blurb and 'pp-supname' in blurb
+
+
+def test_the_mobile_facepile_survives_the_css_build():
+    """Below md the star run imbricates (negative margin + a surface-colour rim via paint-order)
+    in name contexts only. Read the BUILT stylesheet -- the build has silently dropped rules
+    before -- and pin each rule under its mobile media query."""
+    import pathlib
+    css = pathlib.Path('staticfiles/css/output.css').read_text(encoding='utf-8')
+    for rule in (
+        '.pp-markname .pp-supstar:not(:first-child)',
+        '.pp-markname .pp-supstar:not(:only-child)',
+        '.sup-prev--credit .sup-prev__mark .pp-supstar:not(:only-child)',
+    ):
+        at = css.find(rule)
+        assert at != -1, f'{rule} missing from the built css'
+        media_at = css.rfind('@media', 0, at)
+        assert media_at != -1 and 'max-width' in css[media_at:at], (
+            f'{rule} is not under its mobile media query in the built css'
+        )
+    assert css.count('paint-order:stroke') >= 2, 'the facepile rim was dropped by the build'
+

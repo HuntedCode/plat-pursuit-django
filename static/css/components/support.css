@@ -1119,3 +1119,19 @@
         animation-delay: calc(min(var(--i, 0) * 18ms, 600ms));
     }
 }
+
+/* Mobile facepile on wall credit rows: a NAME context, so the star run imbricates exactly as
+   .pp-markname does (see supporter.css for the full rationale). The purchase-box become-preview
+   shares .sup-prev__mark but not .sup-prev--credit -- it is a PRODUCT surface and keeps the
+   flat run at every size. */
+@media (max-width: 767.98px) {
+    .sup-prev--credit .sup-prev__mark { gap: 0; }
+    .sup-prev--credit .sup-prev__mark .pp-supstar:not(:first-child) { margin-left: -6px; }
+    .sup-prev--credit .sup-prev__mark .pp-supstar:not(:only-child) path {
+        paint-order: stroke;
+        stroke: var(--pp-bg-1);
+        stroke-width: 3;
+        stroke-linejoin: round;
+    }
+}
+

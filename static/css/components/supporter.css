@@ -148,3 +148,23 @@
 .pp-markname--sm .pp-markname__svc { width: 11px; height: 11px; }
 .pp-markname--sm .pp-supstar { width: 10px; height: 10px; }
 
+/* Mobile facepile: in NAME contexts the star run imbricates like an avatar stack -- five stars
+   compress from ~55px to ~26px while the count stays readable as visible mass. Each overlapped
+   star wears a thin rim in the surface colour (paint-order: stroke, cheap vector work -- NOT a
+   drop-shadow, see the perf note above) so same-colour stars never merge into one silhouette.
+   :not(:only-child) keeps single stars (Backer's outline, the perk example) rimless, and product
+   surfaces (tier chips, become-preview) are outside these selectors so they keep the flat run. */
+@media (max-width: 767.98px) {
+    .pp-markname__glyph { gap: 0; }
+
+    .pp-markname .pp-supstar:not(:first-child) { margin-left: -6px; }
+    .pp-markname--sm .pp-supstar:not(:first-child) { margin-left: -5.5px; }
+
+    .pp-markname .pp-supstar:not(:only-child) path {
+        paint-order: stroke;
+        stroke: var(--pp-bg-1);
+        stroke-width: 3;
+        stroke-linejoin: round;
+    }
+}
+
