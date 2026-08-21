@@ -694,3 +694,10 @@ if a real case ever materialises.)
 anytime, LIVE only at rebuild cutover** — prod's `main` build deactivates subscribers whose product
 id it does not recognise, and webhooks fan out to every registered endpoint. `bootstrap_support_skus`
 refuses live mode without `--live-ok` for exactly this reason.
+
+**Cron: the weekly subscription-audit pair must exist after cutover.** Created on prod 2026-08-21
+(PR #58): `djstripe_sync_models Subscription` then `audit_subscription_status --fix`, in that order
+(the audit reads only djstripe's local mirror; a stale mirror is how a paying subscriber reads as
+`[NO SUB]`). Render crons live in the dashboard, not config, so at rebuild cutover VERIFY the entry
+survived the service changes and recreate it if it did not. Row + rationale:
+[cron-jobs.md](../../guides/cron-jobs.md).
