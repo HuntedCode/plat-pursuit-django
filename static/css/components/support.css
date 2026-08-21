@@ -1119,11 +1119,3 @@
         animation-delay: calc(min(var(--i, 0) * 18ms, 600ms));
     }
 }
-
-/* Mobile: wall credit rows are a NAME context, so the mark collapses to a single star exactly as
-   .pp-markname does (see supporter.css) -- colour carries the level. The become-preview and tier
-   chips are PRODUCT surfaces and keep every star. */
-@media (max-width: 767.98px) {
-    .sup-prev--credit .sup-prev__mark .pp-supstar:not(:first-child) { display: none; }
-}
-
