@@ -14,6 +14,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
+| Weekly (any quiet hour) | `djstripe_sync_models Subscription` then `audit_subscription_status --fix` | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no emails |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
