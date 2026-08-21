@@ -668,9 +668,11 @@ cutover sequence promptly in one sitting -- it is five steps and none of them ar
    already has live keys for both, nothing new to configure). Creates the 24 live objects and
    syncs the 12 Stripe prices into prod's djstripe -- the sync is what keeps checkout from 500ing
    in step 5. Idempotent; re-run on any partial failure.
-3. **Paste** the printed `STRIPE_LADDER_PRICES['live']` / `PAYPAL_LADDER_PLANS['live']` blocks
-   into `users/constants.py`, and **update `test_live_ids_stay_empty_until_cutover`** -- it now
-   fails by design; flip it to assert the live ids are PRESENT. Commit both together.
+3. **Paste all THREE printed blocks** -- `STRIPE_LADDER_PRICES['live']`,
+   `PAYPAL_LADDER_PLANS['live']`, and the `STRIPE_PRODUCTS['live']` merge block (the products
+   paste is what lets webhook tier recovery resolve a ladder purchase; missing it deactivates the
+   buyer) -- into `users/constants.py`, and **update `test_live_ids_stay_empty_until_cutover`** --
+   it now fails by design; flip it to assert the live ids are PRESENT. Commit together.
 4. **Deploy again.** Buy buttons go live.
 5. **Watch the first real checkout on each provider** (the storefront POST handler had zero live
    traffic history before this page). Then verify: supporter mark + Discord role on the buyer,

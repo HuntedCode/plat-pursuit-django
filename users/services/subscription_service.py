@@ -380,10 +380,12 @@ class SubscriptionService:
             SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
             return False
 
-        # Find active subscription
+        # Find a premium-granting subscription. `trialing` counts: Stripe grants access during a
+        # trial, and before this it fell through EVERY branch below into deactivate_subscription
+        # -- the audit command's repoint arm handed trialing rescues straight to that cliff.
         active_sub = Subscription.objects.filter(
             customer__id=user.stripe_customer_id,
-            stripe_data__status='active'
+            stripe_data__status__in=['active', 'trialing']
         ).first()
 
         if active_sub:
@@ -392,6 +394,13 @@ class SubscriptionService:
             plan = stripe_data.get('plan', {})
             product_id = plan.get('product')
             tier = SubscriptionService.get_tier_from_product_id(product_id)
+
+            if not tier:
+                # Belt for the product-map gap: the subscription is demonstrably live, so before
+                # the revoke arm, try recovering the tier from the PRICE id against the ladder
+                # maps. This is what saves a paying subscriber when a bootstrap paste missed the
+                # STRIPE_PRODUCTS block (it happened: the first paste block only printed prices).
+                tier = SubscriptionService.resolve_tier_from_ladder_price(plan.get('id'))
 
             if tier:
                 return SubscriptionService.activate_subscription(user, tier, 'stripe', event_type)
@@ -445,6 +454,20 @@ class SubscriptionService:
 
             SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
             return False
+
+    @staticmethod
+    def resolve_tier_from_ladder_price(price_id):
+        """Reverse of `resolve_ladder_price_id`: a Stripe PRICE id back to its ladder slug, both
+        modes. The webhook fallback when product-id recovery misses -- an active subscription on a
+        ladder price is a paying supporter regardless of what the product map knows."""
+        if not price_id:
+            return None
+        from users.constants import STRIPE_LADDER_PRICES
+        for mode_map in STRIPE_LADDER_PRICES.values():
+            for slug, intervals in mode_map.items():
+                if price_id in (intervals.get('monthly'), intervals.get('yearly')):
+                    return slug
+        return None
 
     @staticmethod
     def resolve_ladder_price_id(tier: str, interval: str, is_live: bool):

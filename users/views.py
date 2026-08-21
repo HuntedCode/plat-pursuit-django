@@ -368,8 +368,9 @@ class SupportStorefrontView(TemplateView):
     @staticmethod
     def _worn_level(premium_tier):
         """The ladder slug a supporter WEARS: their own level, or for a grandfathered legacy tier
-        the price-nearest level from LEGACY_TIER_LEVEL_MAP. None only for unmapped strays, which
-        render as the plain 'Supporter' fallback rather than breaking the wall."""
+        the price-nearest level from LEGACY_TIER_LEVEL_MAP. None is structurally unreachable for
+        wall rows today (the map-coverage test forbids an unmapped eligible tier); the 'Supporter'
+        fallback it feeds is defence-in-depth, not a live path."""
         if premium_tier in LADDER_SLUGS:
             return premium_tier
         return LEGACY_TIER_LEVEL_MAP.get(premium_tier)
@@ -402,13 +403,18 @@ class SupportStorefrontView(TemplateView):
         eligible = ladder_slugs + list(ACTIVE_PREMIUM_TIERS)
         # Rank by the level a supporter WEARS: legacy tiers sort alongside their mapped level
         # (grandfathered presentation, see LEGACY_TIER_LEVEL_MAP) instead of trailing the ladder.
+        # Built from a MERGED DICT so a legacy key colliding with a ladder slug is structurally
+        # impossible (a duplicate When would be silently dead); the dict makes last-write-wins
+        # explicit and keys unique by construction.
         rank_by_slug = {slug: i for i, slug in enumerate(reversed(ladder_slugs))}
+        worn_by_tier = {**{slug: slug for slug in ladder_slugs}, **LEGACY_TIER_LEVEL_MAP}
         rank_order = Case(
             *[When(user__premium_tier=tier, then=Value(rank_by_slug[worn]))
-              for tier, worn in [(s2, s2) for s2 in ladder_slugs] +
-                                [(legacy, worn) for legacy, worn in LEGACY_TIER_LEVEL_MAP.items()
-                                 if worn in rank_by_slug]],
-            default=Value(len(ladder_slugs)),        # unmapped strays: after the ladder, never lesser
+              for tier, worn in worn_by_tier.items() if worn in rank_by_slug],
+            # Structurally unreachable today -- the map-coverage test forbids an eligible tier
+            # missing from worn_by_tier -- kept as the backstop that makes that test's failure
+            # mode graceful rather than a query error.
+            default=Value(len(ladder_slugs)),
             output_field=IntegerField(),
         )
 
@@ -427,8 +433,8 @@ class SupportStorefrontView(TemplateView):
                 'name': r.display_psn_username or r.psn_username,
                 'avatar': r.avatar_url,
                 # The WORN slug, so a legacy tier hydrates into its mapped level's colour and
-                # stars (grandfathered presentation). None only for unmapped strays, which render
-                # the plain 'Supporter' fallback.
+                # stars (grandfathered presentation). The None/'Supporter' fallback is a
+                # structural backstop the map-coverage test keeps unreachable.
                 'tier_slug': self._worn_level(r.user.premium_tier),
             }
             for r in rows

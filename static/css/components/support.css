@@ -463,7 +463,11 @@
 .sup-buy__go {
     position: relative;   /* the floating-star emitter positions against the button */
     flex: 1.6 1 0;
-    min-width: 170px;
+    /* 200, not 170: at 170 the side-by-side threshold fell at ~386px viewport, so the most
+       common phones (390/393) got the pair 4-7px inside it and "Become a Cornerstone" wrapped
+       into a lopsided two-line button at the exact moment of conversion. At 200 those widths
+       wrap to the stacked layout instead, which is the intended narrow behaviour. */
+    min-width: 200px;
     padding: 12px 16px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid color-mix(in oklab, var(--sup-t) 55%, var(--pp-border));
@@ -478,11 +482,19 @@
 }
 
 .sup-buy__go:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--sup-t) 30%, transparent);
+    /* LONGHAND on purpose: the shorthand resets background-image/size/position, and this rule
+       also matches the PayPal button at higher specificity than its gradient -- the shorthand
+       version erased the flow the moment you hovered it. */
+    background-color: color-mix(in oklab, var(--sup-t) 30%, transparent);
     border-color: color-mix(in oklab, var(--sup-t) 75%, var(--pp-border));
 }
 
 .sup-buy__go:active:not(:disabled) { transform: translateY(1px); }
+
+.sup-buy__go:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
 
 /* FLOATING STARS on the primary button -- the enticement layer. Each star launches from inside
    the button and drifts up past its top edge, staggered so the emission never reads as a loop.
@@ -493,7 +505,9 @@
     position: absolute;
     inset: 0;
     overflow: hidden;         /* stars bubble up THROUGH the button, never past it */
-    border-radius: inherit;
+    border-radius: calc(var(--pp-radius-sm) - 1px);   /* the clip box sits inside the 1px border;
+                                                         inheriting the outer radius left a
+                                                         sub-pixel corner seam */
     pointer-events: none;
 }
 
@@ -520,7 +534,6 @@
 
 @media (prefers-reduced-motion: reduce) {
     .sup-go__rise { display: none; }
-    .sup-buy__go--pp { animation: none; }
 }
 
 /* Inert while the ladder is design-only. Still legible: this is the shape under review, so it must
@@ -559,25 +572,36 @@
     font-size: 0.85rem;
     flex: 1 1 0;
     min-width: 104px;
-    animation: ppSupFlow 24s linear infinite;
 }
 
-/* The wordmark nod: heavy italic, the back half a step quieter -- PayPal's own two-blue split,
-   translated into our monochrome. */
+/* The animation only EXISTS under no-preference (the .pp-supname pattern): an override in the
+   reduce block lost the cascade to this later same-specificity rule, so reduced-motion users
+   kept the flow -- gating at the source cannot lose that fight. will-change isolates the
+   per-frame gradient repaint onto its own compositor layer, per the motion-patterns gotcha
+   about animating near the nav's backdrop-filter. */
+@media (prefers-reduced-motion: no-preference) {
+    .sup-buy__go--pp {
+        animation: ppSupFlow 24s linear infinite;
+        will-change: background-position;
+    }
+}
+
+/* Deliberately PLAIN "PayPal" in the button's own type: a styled two-tone italic recreation of
+   their wordmark was tried and pulled -- recreating a registered mark in a substitute typeface
+   is the thing brand guidelines prohibit, and nominative plain text is zero-risk. The official
+   monogram SVG from their brand kit can replace it whenever we want the real logo. */
 .sup-go__ppword {
     position: relative;
-    font-style: italic;
-    font-weight: 800;
-    letter-spacing: 0.01em;
+    font-weight: 700;
 }
-
-.sup-go__ppword span { opacity: 0.72; }
 
 .sup-buy__go--pp:hover:not(:disabled),
 .sup-buy__go--pp:focus-visible {
     --flow-base: color-mix(in oklab, var(--sup-t) 12%, transparent);
     --flow-band: color-mix(in oklab, var(--sup-t) 24%, transparent);
     --flow-crest: color-mix(in oklab, var(--sup-t) 32%, transparent);
+    background-color: transparent;   /* the shared hover fill belongs to the primary; here the
+                                        deepened water IS the hover state */
     border-color: color-mix(in oklab, var(--sup-t) 50%, var(--pp-border));
 }
 

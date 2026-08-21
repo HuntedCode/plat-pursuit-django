@@ -506,11 +506,19 @@ def test_the_stars_stand_down_when_the_button_cannot_be_pressed():
     # Containment: stars bubble THROUGH the button, never past it (user feedback 2026-08-21).
     rise_rule = rules[rules.index('.sup-go__rise {'):]
     assert 'overflow: hidden;' in rise_rule[:rise_rule.index('}')]
-    # The PayPal current stops when unpressable, and under reduced motion.
+    # The PayPal current stops when unpressable.
     assert '.sup-buy__go--pp:disabled { animation: none; }' in rules
+    # Reduced motion: the emitter hides, and the flow's animation only EXISTS inside a
+    # no-preference block. The audit found an `animation: none` override in the reduce block
+    # LOSING the cascade to the later same-specificity base rule -- so this asserts the gating
+    # pattern, not an override that silently did nothing.
     reduced = rules[rules.index('prefers-reduced-motion: reduce'):]
-    assert '.sup-buy__go--pp { animation: none; }' in reduced[:300],         'reduced motion does not still the current'
-    assert '.sup-go__rise { display: none; }' in reduced[:200],         'reduced motion does not silence the emitter'
+    assert '.sup-go__rise { display: none; }' in reduced[:200], 'reduced motion does not silence the emitter'
+    flow_at = rules.index('animation: ppSupFlow')
+    assert 'prefers-reduced-motion: no-preference' in rules[max(0, flow_at - 500):flow_at], 'the flow must be DECLARED under no-preference, not overridden under reduce'
+    base_rule = rules[rules.index('--flow-base:'):]
+    base_rule = base_rule[:base_rule.index('\n}') + 2]
+    assert 'animation:' not in base_rule, 'an unconditional flow declaration would win the cascade over any reduce override'
 
 
 def test_the_paypal_button_runs_the_shared_flow_primitive():
@@ -524,9 +532,58 @@ def test_the_paypal_button_runs_the_shared_flow_primitive():
     pp = rules[rules.index('--flow-base:'):]
     pp = pp[:pp.index('\n}') + 2]
 
-    assert 'animation: ppSupFlow' in pp, 'the flow was re-rolled instead of reused'
+    assert 'ppSupFlow' in rules, 'the flow was re-rolled instead of reused'
     assert 'var(--flow-base) 0%' in pp and 'var(--flow-base) 30%' in pp, 'flat first third missing'
     assert 'var(--flow-base) 70%' in pp and 'var(--flow-base) 100%' in pp, 'flat last third missing'
+
+
+def test_the_primary_hover_cannot_erase_the_paypal_current():
+    """THE cascade bug: the shared hover rule used the `background` SHORTHAND, which resets
+    background-image at (0,3,0) -- hovering PayPal (which carries .sup-buy__go) flattened the
+    current into the primary's own fill, inverting the hierarchy. Longhand only, and the PayPal
+    hover explicitly clears the color so the deepened water IS its hover state."""
+    rules = _css_rules('support.css')
+    hover = rules[rules.index('.sup-buy__go:hover:not(:disabled)'):]
+    hover = hover[:hover.index('\n}') + 2]
+
+    assert 'background-color:' in hover
+    for line in hover.splitlines():
+        assert not line.strip().startswith('background:'), \
+            'the background SHORTHAND resets the PayPal gradient on hover'
+    pp_hover = rules[rules.index('.sup-buy__go--pp:hover:not(:disabled)'):]
+    pp_hover = pp_hover[:pp_hover.index('\n}') + 2]
+    assert 'background-color: transparent;' in pp_hover
+
+
+def test_the_pay_buttons_have_a_real_focus_indicator():
+    """The project's shared outline pair (2px --pp-primary, offset 2), which neither button had;
+    the PayPal tint shift alone fails WCAG's non-text contrast as an indicator."""
+    rules = _css_rules('support.css')
+    focus = rules[rules.index('.sup-buy__go:focus-visible'):]
+    focus = focus[:focus.index('\n}') + 2]
+
+    assert 'outline: 2px solid var(--pp-primary);' in focus
+    assert 'outline-offset: 2px;' in focus
+
+
+def test_the_cta_never_reads_as_a_dangling_article(client):
+    """Without :has() support no tier span reveals and the button said 'Become a'. The default
+    tier's name shows unconditionally; :has() browsers hide it whenever a DIFFERENT tier is
+    checked, so exactly one name is visible in every world."""
+    import re
+    body = _flat(client)
+
+    # The hide-again half names the default tier; capture it rather than hardcoding the slug.
+    m = re.search(r':checked:not\(\[value="(\w+)"\]\)\) \.sup-go__t--\1 \{ display: none; \}',
+                  body)
+    assert m, 'the no-:has() hide-again rule for the default tier is missing'
+    default = m.group(1)
+    # The default tier's reveal rule appears TWICE: once behind :has() like every tier, once
+    # unconditionally (the fallback). Every other tier appears exactly once.
+    for tier in SUPPORT_TIERS:
+        expected = 2 if tier['slug'] == default else 1
+        count = body.count(f".sup-go__t--{tier['slug']} {{ display: inline; }}")
+        assert count == expected, f"{tier['slug']} reveal-rule count {count} != {expected}"
 
 
 def test_the_rise_keyframes_stay_compositor_friendly():

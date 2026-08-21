@@ -163,6 +163,7 @@ class Command(BaseCommand):
                 prices_by_key[price.lookup_key] = price
 
         result = {}
+        products_result = {}
         for tier in SUPPORT_TIERS:
             slug = tier['slug']
             result[slug] = {}
@@ -181,8 +182,14 @@ class Command(BaseCommand):
                         f'  created product {product.id} ({slug})'))
             else:
                 self.stdout.write(f'  product exists: {product.id} ({slug})')
-            if product is not None and not dry_run:
-                DJProduct.sync_from_stripe_data(product)
+            if product is not None:
+                # The PRODUCT id is as load-bearing as the price ids: webhook tier recovery is
+                # get_tier_from_product_id over STRIPE_PRODUCTS, and its miss arm DEACTIVATES the
+                # paying subscriber. The first bootstrap printed only prices, STRIPE_PRODUCTS
+                # stayed empty, and a test-mode ladder purchase was revoked by its own webhook.
+                products_result[slug] = product.id
+                if not dry_run:
+                    DJProduct.sync_from_stripe_data(product)
 
             for interval, stripe_interval, _ in INTERVALS:
                 key = _lookup_key(slug, interval)
@@ -213,7 +220,7 @@ class Command(BaseCommand):
                     DJPrice.sync_from_stripe_data(price)
                 result[slug][interval] = price.id
 
-        return {'mode': mode, 'ids': result}
+        return {'mode': mode, 'ids': result, 'products': products_result}
 
     # ------------------------------------------------------------------------------- PayPal ----
 
@@ -278,8 +285,13 @@ class Command(BaseCommand):
                 # A fresh product with no plans yet is the normal cold-run state, so 404 means
                 # "none" -- while 401/429/5xx still raise, because THOSE misread as "none" is
                 # how duplicate live billing plans get minted.
-                if plans_response.status_code == 404:
+                if plans_response.status_code == 404 and page == 1:
                     break
+                if plans_response.status_code == 404:
+                    # Pages 2+ of a listing that already returned plans: this 404 is not "empty",
+                    # it is an error mid-walk, and reading it as empty would truncate
+                    # existing_plans and duplicate whatever fell off the tail.
+                    plans_response.raise_for_status()
                 plans_response.raise_for_status()
                 page_plans = plans_response.json().get('plans', [])
                 for plan in page_plans:
@@ -358,4 +370,15 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"    '{slug}': {{'monthly': '{intervals.get('monthly', '')}', "
                     f"'yearly': '{intervals.get('yearly', '')}'}},")
+            self.stdout.write('}')
+
+        # The ladder entries MERGE INTO the existing STRIPE_PRODUCTS[mode] dict (the legacy three
+        # stay). Skipping this paste is how a paying ladder subscriber gets deactivated by their
+        # own webhook: tier recovery is a product-id lookup and its miss arm revokes.
+        if stripe_result is not None and stripe_result.get('products'):
+            self.stdout.write(f"\n# merge into STRIPE_PRODUCTS['{stripe_result['mode']}'] "
+                              f"(keep the legacy entries):")
+            self.stdout.write('{')
+            for slug, product_id in stripe_result['products'].items():
+                self.stdout.write(f"    '{slug}': '{product_id}',")
             self.stdout.write('}')

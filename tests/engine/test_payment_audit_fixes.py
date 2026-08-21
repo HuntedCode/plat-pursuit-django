@@ -189,6 +189,49 @@ def test_a_stale_stripe_event_cannot_end_a_paypal_subscribers_premium():
     assert SubscriptionPeriod.objects.filter(user=user, ended_at__isnull=True).exists()
 
 
+def test_a_trialing_subscription_activates_instead_of_falling_off_the_cliff():
+    """`trialing` matched no branch in update_user_subscription and fell through to DEACTIVATE --
+    which the audit command's repoint arm could hand a rescued trial subscriber straight into.
+    Stripe grants access during a trial; so do we."""
+    user, profile = _subscriber(tier=None)
+    user.stripe_customer_id = 'cus_trial'
+    user.save(update_fields=['stripe_customer_id'])
+    trial_sub = MagicMock()
+    trial_sub.stripe_data = {'status': 'trialing',
+                             'plan': {'product': 'prod_ThqljWr4cvnFFF', 'id': 'price_x'}}
+
+    with patch('users.services.subscription_service.Subscription') as sub_model:
+        sub_model.objects.filter.return_value.first.return_value = trial_sub
+        result = SubscriptionService.update_user_subscription(user, 'customer.subscription.updated')
+
+    user.refresh_from_db()
+    assert result is True
+    assert user.premium_tier == 'premium_monthly', 'the trialing subscriber was not activated'
+
+
+def test_an_unknown_product_falls_back_to_the_ladder_price_map():
+    """THE beta incident: the bootstrap pasted prices but no product ids, so tier recovery missed
+    and the webhook DEACTIVATED the paying subscriber. A live subscription on a known ladder
+    PRICE now recovers its tier before the revoke arm."""
+    from users.constants import STRIPE_LADDER_PRICES
+
+    user, profile = _subscriber(tier=None)
+    user.stripe_customer_id = 'cus_ladder'
+    user.save(update_fields=['stripe_customer_id'])
+    price_id = STRIPE_LADDER_PRICES['test']['patron']['monthly']
+    sub = MagicMock()
+    sub.stripe_data = {'status': 'active',
+                       'plan': {'product': 'prod_NOT_IN_ANY_MAP', 'id': price_id}}
+
+    with patch('users.services.subscription_service.Subscription') as sub_model:
+        sub_model.objects.filter.return_value.first.return_value = sub
+        result = SubscriptionService.update_user_subscription(user, 'customer.subscription.created')
+
+    user.refresh_from_db()
+    assert result is True
+    assert user.premium_tier == 'patron', 'the ladder price did not rescue the unknown product'
+
+
 def test_verification_link_respects_ladder_tiers():
     """link_profile_to_user carried a hardcoded three-tier legacy list: a paying `patron` who
     linked their PSN profile silently lost the premium denorm (sync cadence, role reconciliation,

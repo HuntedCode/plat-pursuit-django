@@ -134,6 +134,11 @@ substrate, and an earlier version of this page did, which is most of why it read
                     .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) { --sup-t: {{ tier.colour }}; }
                     .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) .sup-go__t--{{ tier.slug }} { display: inline; }
                     {% endfor %}
+                    {% comment %} The no-:has() fallback: the default tier's name shows
+                    unconditionally so the CTA is never the dangling "Become a"; browsers WITH
+                    :has() hide it again whenever a different tier is the one checked. {% endcomment %}
+                    .sup-go__t--{{ default_tier }} { display: inline; }
+                    .sup-box:has(input[name="tier"]:checked:not([value="{{ default_tier }}"])) .sup-go__t--{{ default_tier }} { display: none; }
                 </style>
                 <div class="sup-box">
                     {% comment %} A REAL FORM, and the audit finding that mattered most on this page:
@@ -275,8 +280,8 @@ substrate, and an earlier version of this page did, which is most of why it read
                                 level, revealed by the same :has() rules that set --sup-t, so the
                                 words and the colour change in the same instant. Both faces sit
                                 position:relative so the text paints ABOVE the rising stars. {% endcomment %}
-                                <span class="sup-buy__go-m">Become a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}</span>
-                                <span class="sup-buy__go-y">A year as a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}</span>
+                                <span class="sup-buy__go-m">Become a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}<span class="sr-only">, pay by card</span></span>
+                                <span class="sup-buy__go-y">A year as a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}<span class="sr-only">, pay by card</span></span>
                             </button>
 
                             {% comment %} Gated on PayPal actually being configured for this mode --
@@ -291,11 +296,12 @@ substrate, and an earlier version of this page did, which is most of why it read
                                 drifting the level's hue across the fill. Two ambient motions,
                                 two characters: the primary rises, the alternative flows.
 
-                                The label is a TYPESET nod to the PayPal wordmark (heavy italic,
-                                two-tone Pay/Pal) in our own text colours -- recognisable without
-                                embedding brand artwork. Swap in the official monogram SVG from
-                                their brand kit if we ever want the full logo. {% endcomment %}
-                                <span class="sup-go__ppword">Pay<span>Pal</span></span>
+                                The label is deliberately PLAIN text: a styled recreation of the
+                                PayPal wordmark was tried and pulled (recreating a registered mark
+                                is what brand guidelines prohibit; plain nominative text is
+                                zero-risk). The official monogram SVG from their brand kit can
+                                slot in when wanted. {% endcomment %}
+                                <span class="sup-go__ppword">PayPal</span><span class="sr-only">, pay the selected level with PayPal</span>
                             </button>
                             {% endif %}
                         </div>

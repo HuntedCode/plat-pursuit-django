@@ -155,6 +155,11 @@ class Command(BaseCommand):
                     f'  [UNKNOWN] {user.email} ({psn}) - status={status}'
                 ))
                 results['needs_fix'] += 1
+                # Route through the resolver like every other failing row (it was the one arm
+                # that skipped it): a live sub under a sibling customer still gets repointed. The
+                # resolver only deactivates when nothing live exists anywhere, and an UNKNOWN
+                # status under the stored customer is exactly the "maybe elsewhere" case.
+                self._resolve_stripe_row(user, results, fix, dry_run)
 
         if not found_any:
             self.stdout.write('  No Stripe premium users found.')
@@ -265,6 +270,17 @@ class Command(BaseCommand):
             user.stripe_customer_id = new_id
             user.save(update_fields=['stripe_customer_id'])
             SubscriptionService.update_user_subscription(user, 'audit_subscription_status')
+            # VERIFY the outcome instead of narrating the intent: if the resync path declined to
+            # activate (an unhandled status, an unmapped product), premium is now revoked and a
+            # '[FIXED] Repointed' line would be a lie in the operator's log.
+            user.refresh_from_db()
+            if user.premium_tier is None:
+                logger.error(f"Repoint of {user.email} resynced to NO premium; investigate")
+                self.stdout.write(self.style.ERROR(
+                    f'    [ERROR] Repointed {user.email} to {new_id} but the resync REVOKED '
+                    f'premium -- not counting as fixed, investigate the subscription status'
+                ))
+                return False
             self.stdout.write(self.style.SUCCESS(
                 f'    [FIXED] Repointed {user.email} to {new_id} and resynced'
             ))

@@ -90,9 +90,9 @@
 
 /* The support storefront's floating-star rise (see .sup-go__risestar in support.css for the
    per-star custom props). Transform + opacity ONLY -- and no color-mix() in here ever; lightningcss
-   silently drops frames that use it. The star fades in low, climbs past the button's top edge with
-   a small sideways drift and settle-rotation, and dissolves before the loop point so the wrap is
-   invisible. */
+   silently drops frames that use it. The star emerges from below the clip edge, climbs INSIDE the
+   button (the emitter clips at its bounds) with a small sideways drift and settle-rotation, and
+   dissolves before the loop point so the wrap is invisible. */
 @keyframes ppStarRise {
     0% {
         opacity: 0;

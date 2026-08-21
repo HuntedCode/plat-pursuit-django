@@ -83,13 +83,15 @@ def _run(*args, **env):
             known = env.get('paypal_products', set())
             response.status_code = 200 if product_id in known else 404
         else:  # plan listing, paged
+            page = kwargs.get('params', {}).get('page', 1)
             status = env.get('plan_list_status', 200)
+            if page >= env.get('plan_list_404_from', 10**9):
+                status = 404
             response.status_code = status
             if status != 200:
                 response.raise_for_status.side_effect = requests_lib.HTTPError(f'{status} error')
                 return response
             response.raise_for_status.return_value = None
-            page = kwargs.get('params', {}).get('page', 1)
             plans = env.get('paypal_plans', [])
             response.json.return_value = {'plans': plans[(page - 1) * 20:page * 20]}
         return response
@@ -287,6 +289,38 @@ def test_a_paypal_failure_still_prints_the_stripe_paste_block():
     assert len(mocks['prices']) == 12, 'stripe half should have completed first'
     assert "# STRIPE_LADDER_PRICES['test'] =" in output
     assert 'INCOMPLETE' in output
+
+
+def test_a_mid_pagination_404_raises_rather_than_truncating():
+    """404 means "empty" only on page 1, where empty is expectable. On page 2+ the listing has
+    already returned plans, so a 404 is an error -- reading it as empty would drop the tail of
+    existing_plans and duplicate whatever fell off."""
+    graveyard = [{'id': f'P-DEAD-{i}', 'name': f'pp_ladder_dead_{i}', 'status': 'INACTIVE'}
+                 for i in range(20)]
+
+    output, mocks = _run('--provider', 'paypal',
+                         paypal_products={f'PP-LADDER-{t["slug"].upper()}' for t in SUPPORT_TIERS},
+                         paypal_plans=graveyard, plan_list_404_from=2, catch=True)
+
+    assert isinstance(mocks['error'], requests_lib.HTTPError)
+    plan_posts = [p for p in mocks['paypal_posts'] if '/v1/billing/plans' in p[0]]
+    assert plan_posts == [], 'plans were created on top of a truncated listing'
+
+
+def test_the_paste_block_includes_the_stripe_products():
+    """THE incident this exists for: the paste block only ever printed prices, STRIPE_PRODUCTS
+    stayed empty, and webhook tier recovery (a product-id lookup whose miss arm DEACTIVATES)
+    revoked a paying test-mode subscriber. The products block must print on create AND on a
+    find-only re-run, so a missed paste is recoverable by re-running."""
+    output, mocks = _run('--provider', 'stripe')
+    assert "# merge into STRIPE_PRODUCTS['test']" in output
+    for tier in SUPPORT_TIERS:
+        assert f"'{tier['slug']}': 'prod_new_{tier['slug']}'" in output
+
+    rerun_out, _ = _run('--provider', 'stripe',
+                        existing={'products': mocks['products'], 'prices': mocks['prices']})
+    assert "# merge into STRIPE_PRODUCTS['test']" in rerun_out, \
+        'a find-only re-run must still print the products block (recovery path)'
 
 
 def test_the_paypal_plan_listing_walks_pages():

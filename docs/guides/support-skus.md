@@ -34,9 +34,14 @@ but not in djstripe 500s the moment the placeholder flag flips.
 
 ## After it runs: the paste
 
-The command ends with ready-to-paste literal dicts for `STRIPE_LADDER_PRICES[mode]` and
-`PAYPAL_LADDER_PLANS[mode]` in [`users/constants.py`](../../users/constants.py). It **never edits
-source**: the ids differ per environment and the paste diff is the review. Then:
+The command ends with THREE ready-to-paste blocks for [`users/constants.py`](../../users/constants.py):
+`STRIPE_LADDER_PRICES[mode]`, `PAYPAL_LADDER_PLANS[mode]`, and a merge block for
+`STRIPE_PRODUCTS[mode]` (merge it in, keeping the legacy entries). **The products block is not
+optional**: webhook tier recovery is a product-id lookup whose miss arm deactivates the paying
+subscriber -- the first bootstrap printed only prices and a test-mode purchase was revoked by its
+own webhook. (A price-id fallback now backstops that path, but the product map is the primary.)
+The command **never edits source**: the ids differ per environment and the paste diff is the
+review. Then:
 
 1. Paste the block(s), replacing the empty-string comprehension for that mode.
 2. Once **both** providers are filled for the mode you sell in, flip
