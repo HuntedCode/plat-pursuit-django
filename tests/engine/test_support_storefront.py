@@ -1334,14 +1334,14 @@ def test_legacy_supporters_rank_with_their_worn_level(client):
     from tests.factories import ProfileFactory
     from users.constants import LEGACY_TIER_LEVEL_MAP
 
-    assert LEGACY_TIER_LEVEL_MAP['supporter'] == 'contributor', 'test premise moved with the map'
+    assert LEGACY_TIER_LEVEL_MAP['supporter'] == 'sponsor', 'test premise moved with the map'
     ProfileFactory(display_psn_username='LegacyPlus', user__premium_tier='supporter')
     ProfileFactory(display_psn_username='NewBacker', user__premium_tier='backer')
     ProfileFactory(display_psn_username='NewPatron', user__premium_tier='patron')
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert wall.index('NewPatron') < wall.index('LegacyPlus') < wall.index('NewBacker'),         'the worn level did not place the legacy supporter between patron and backer'
+    assert wall.index('LegacyPlus') < wall.index('NewPatron') < wall.index('NewBacker'),         'the worn Sponsor level did not place the legacy supporter above patron'
 
 
 def test_a_non_supporter_is_never_on_the_wall(client):

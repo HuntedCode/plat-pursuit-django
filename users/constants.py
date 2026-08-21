@@ -326,5 +326,5 @@ LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 LEGACY_TIER_LEVEL_MAP = {
     'premium_monthly': 'backer',
     'premium_yearly': 'backer',
-    'supporter': 'contributor',
+    'supporter': 'sponsor',   # legacy Supporter was $20/mo, an exact match on Sponsor
 }
