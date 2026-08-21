@@ -633,34 +633,58 @@ URL is cached by the browser and cannot be withdrawn if the assumption behind it
 The `support:stats` cache key (5 min TTL; supporter counts, monthly total, the wall) populates on first request. (An earlier draft of this note named `support:proof`, a key that never shipped — wrong cache keys in a runbook get flushed at 3am.)
 Perk copy is a Python constant, so it ships with the code.
 
-### BLOCKER: the supporter ladder is placeholders (2026-08-20)
+### The ladder is ARMED in test mode; live ids are the last remaining step (2026-08-21)
 
-`users.constants.SUPPORT_TIERS_ARE_PLACEHOLDERS` is **True**. Until its twelve Stripe prices and
-twelve PayPal plans exist, `/support/` renders the six-level ladder with inert buttons.
+`SUPPORT_TIERS_ARE_PLACEHOLDERS` is now **False**: the 24 test/sandbox SKUs exist (bootstrapped
+2026-08-21), their ids live in `STRIPE_LADDER_PRICES['test']` / `PAYPAL_LADDER_PLANS['sandbox']`,
+and the full purchase loop passed e2e on beta (both providers, both cycles, cancellation webhook).
 
-**You do not need to remember this.** `SupportStorefrontView` forces the flag False whenever
-`STRIPE_MODE == 'live'`, and the ladder's own slugs have no prices behind them, so live mode falls
-back to the "memberships briefly unavailable" state rather than showing a row of dead buy buttons.
-Pinned by `test_placeholders_can_never_reach_live_stripe`. It is a runtime guard rather than a line
-on this list precisely because lines on this list get skipped.
+**The only thing still empty is the LIVE half of both maps**, and that is deliberate (the fan-out
+hazard below) and test-pinned by `test_live_ids_stay_empty_until_cutover` -- a test whose FAILING
+on cutover day is the intended signal to update it. Until the live paste lands, prod renders the
+"memberships briefly unavailable" state: the runtime guard filters the ladder to the levels that
+actually have live prices, which is currently none. No dead buttons, ever
+(`test_placeholders_can_never_reach_live_stripe`).
 
-To turn the ladder on: create the SKUs, add them to `STRIPE_PRICES` / `PAYPAL_PLANS` keyed by the
-ladder slugs, extend `PREMIUM_TIER_CHOICES` / `ACTIVE_PREMIUM_TIERS` / the two Discord role lists,
-**migrate existing `premium_monthly` / `premium_yearly` / `supporter` subscribers onto the new
-levels**, then flip the flag. The checkout POST handler, `success_url`, `subscribe_success` and both
-webhooks are untouched and already serve the legacy three tiers throughout.
+Existing subscribers need NO migration: legacy tiers stay renewable through the untouched webhook
+paths and are simply no longer purchasable. On the Credits wall they wear the price-nearest ladder
+level via `LEGACY_TIER_LEVEL_MAP` (premium tiers -> Backer; legacy Supporter, $20/mo -> Sponsor)
+-- presentation only, nothing reads that map for billing or roles, no deploy action attached.
 
-### The revenue-off window (2026-08-20) — go in eyes-open
+### The revenue-off window (re-scoped 2026-08-21) — now just the cutover gap
 
-**From the moment this lane deploys until the ladder's SKUs exist and the placeholder flag flips,
-no membership is purchasable from the UI.** Live mode filters the ladder to empty (the six slugs
-have no Stripe prices), so `/support/` shows the "memberships are briefly unavailable" box — and
-`/users/subscribe/` redirects there. The legacy tiers stay technically purchasable only by a
-hand-crafted POST. This is deliberate and test-pinned (`test_placeholders_can_never_reach_live_
-stripe`); the point of this note is that the window is a product decision, not an accident, and
-shortening it means creating the twelve SKUs promptly.
+The window has shrunk to exactly this: **from the cutover deploy until the live-ids deploy (steps
+1-5 below), no NEW membership is purchasable from the UI.** Existing subscriptions renew fine
+throughout (webhooks untouched); `/support/` shows the "memberships briefly unavailable" box;
+`/users/subscribe/` 302s there. Deliberate and test-pinned. Shortening it means running the
+cutover sequence promptly in one sitting -- it is five steps and none of them are long.
 
-At go-live, the checkout markup is already real — a `<form method="post">` with CSRF wrapping the
+### Cutover-day sequence for the ladder (do these IN ORDER, same day)
+
+1. **Deploy `rebuild` to prod** (migrations 0314 + users/0021 ride along; both are safe-any-order
+   DB no-ops/additive). Prod is now ladder-aware: it can RECOGNISE ladder product ids, which is
+   what makes step 2 safe.
+2. **Prod shell**: `python manage.py bootstrap_support_skus --live-ok` (both providers; prod env
+   already has live keys for both, nothing new to configure). Creates the 24 live objects and
+   syncs the 12 Stripe prices into prod's djstripe -- the sync is what keeps checkout from 500ing
+   in step 5. Idempotent; re-run on any partial failure.
+3. **Paste** the printed `STRIPE_LADDER_PRICES['live']` / `PAYPAL_LADDER_PLANS['live']` blocks
+   into `users/constants.py`, and **update `test_live_ids_stay_empty_until_cutover`** -- it now
+   fails by design; flip it to assert the live ids are PRESENT. Commit both together.
+4. **Deploy again.** Buy buttons go live.
+5. **Watch the first real checkout on each provider** (the storefront POST handler had zero live
+   traffic history before this page). Then verify: supporter mark + Discord role on the buyer,
+   an open `SubscriptionPeriod`, the support band ticking, webhook deliveries showing 200s in
+   both provider dashboards.
+
+**Post-cutover verifications (same day):**
+- The weekly audit cron pair survived the service changes (see the cron note below).
+- A legacy subscriber's page still shows premium, and the Credits wall shows them wearing their
+  mapped level.
+- No new webhook events or endpoints are needed on either provider -- everything the ladder emits
+  is already subscribed for the legacy tiers.
+
+At go-live, the checkout markup is already real -- a `<form method="post">` with CSRF wrapping the
 tier radios and both provider buttons, pinned by `test_the_checkout_is_a_real_form` (an audit found
 the buttons had shipped formless, which would have made them inert exactly at go-live).
 
