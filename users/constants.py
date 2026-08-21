@@ -147,15 +147,17 @@ SUPPORT_TIERS_ARE_PLACEHOLDERS = False
 #   mark       -> `.pp-supname`/`.pp-supstar` (the successor pair; site-wide wiring pending the
 #                 Profile tier denorm) -- `.legendary-title` is LEGACY and being removed
 #   early      -> trophies/mixins.py -> beta_access_required
+# Each perk's icon tint is a stop from the SUPPORT_TIERS ramp above -- the perks ARE the giving
+# register, so they wear the giving register's own palette rather than inventing hues.
 PREMIUM_PERKS = [
     {
-        'slug': 'sync',
+        'slug': 'sync', 'colour': '#4fc4a3',
         'name': 'Manual syncing',
         'everyone': 'Once an hour',
         'member': 'Every five minutes',
     },
     {
-        'slug': 'discord',
+        'slug': 'discord', 'colour': '#47b6e6',
         'name': 'Discord',
         'everyone': 'The server is open to anyone',
         'member': 'A supporter role, and the room where we work out what gets built next',
@@ -164,21 +166,21 @@ PREMIUM_PERKS = [
         'note': 'You will need to be in Discord with us for that part.',
     },
     {
-        'slug': 'mark',
+        'slug': 'mark', 'colour': '#6875ee',
         'name': 'Supporter mark',
         'everyone': 'Your name, as you earned it',
         'member': 'A quiet supporter mark beside it, site-wide',
         # Guardrail: flair is a SEPARATE visual language from earned status, never a better one.
-        'note': 'Never louder than something you earned.',
+        'note': 'It will never outshine what you earned.',
     },
     {
-        'slug': 'early',
+        'slug': 'early', 'colour': '#a666ea',
         'name': 'New things',
         'everyone': 'When they ship',
         'member': 'Before they ship, while they can still change',
     },
     {
-        'slug': 'credit',
+        'slug': 'credit', 'colour': '#e55dd9',
         'name': 'Credit',
         'everyone': 'Our thanks',
         'member': 'A permanent PlatPursuit Supporter credit, kept even if you stop',

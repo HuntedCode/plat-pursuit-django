@@ -911,7 +911,14 @@
     background: rgba(255, 255, 255, 0.02);
 }
 
-.sup-perk__icon { margin-top: 2px; }
+/* The icon wears its perk's stop from the giving ramp: tinted stroke, whisper fill, tinted
+   border -- colour without the tiles shouting. */
+.sup-perk__icon {
+    margin-top: 2px;
+    color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text));
+    border-color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 35%, var(--pp-border));
+    background: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 10%, transparent);
+}
 
 .sup-perk__name {
     font-family: var(--pp-font-display), sans-serif;

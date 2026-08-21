@@ -504,8 +504,7 @@ substrate, and an earlier version of this page did, which is most of why it read
         </div>
 
         <p class="sup-modal__lede">
-            The same at every level. Giving more changes how visible your support is, never what
-            you can do.
+            Every level gets all of this. Higher levels are simply seen more.
         </p>
 
         {% comment %} Icon tiles in the roadmap's card language (one tile per perk, keyed icon
@@ -513,7 +512,7 @@ substrate, and an earlier version of this page did, which is most of why it read
         member line leads; what everyone gets rides underneath so the dial framing survives. {% endcomment %}
         <div class="sup-perks-grid">
             {% for perk in premium_perks %}
-            <div class="sup-perk">
+            <div class="sup-perk" style="--perk-c: {{ perk.colour }}">
                 <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
                 <div class="sup-perk__body">
                     <h3 class="sup-perk__name">{{ perk.name }}</h3>

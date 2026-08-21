@@ -652,10 +652,13 @@ def test_the_perks_modal_is_icon_tiles(client):
     body = _flat(client)
     modal = body[body.index('id="sup-perks"'):]
 
-    assert modal.count('class="sup-perk"') == len(PREMIUM_PERKS)
+    assert modal.count('"sup-perk"') == len(PREMIUM_PERKS)
     for perk in PREMIUM_PERKS:
         assert perk['name'] in modal
         assert f"Everyone: {perk['everyone']}" in modal
+        # Each tile wears its perk's stop from the giving ramp (SUPPORT_TIERS hues).
+        assert f"--perk-c: {perk['colour']}" in modal, f"{perk['slug']} lost its tint"
+        assert any(perk['colour'] == t['colour'] for t in SUPPORT_TIERS), f"{perk['slug']} tint is not a giving-ramp stop"
     # Every slug renders its own icon, loudly (same contract as the roadmap partial).
     fallback = render_to_string('support/_perk_icon.html', {'key': '__nope__'})
     for perk in PREMIUM_PERKS:
