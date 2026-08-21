@@ -320,6 +320,18 @@ for _mode_plans in PAYPAL_LADDER_PLANS.values():
 # Derived conveniences for the checkout path.
 LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 
+# THE SERVICE MARKS (decided 2026-08-22): staff and moderators carry a mark in exactly the way
+# supporters do -- name in the mark's colour plus a glyph -- but from a THIRD register. Giving is
+# stars on the cool ramp; earning is the trophy metals; SERVICE is these two: the wrench for the
+# people who build the site (crimson -- no other surface uses a red) and the shield for the
+# people who guard it (spring green, pushed yellow-ward so it can never blur with Backer's teal
+# at 11px). PRECEDENCE: staff > mod > supporter level -- one mark per name, the highest wins.
+# The colour-distance test covers these against the whole giving ramp.
+SERVICE_MARKS = {
+    'staff': {'label': 'Staff', 'colour': '#e0564f'},
+    'mod': {'label': 'Moderator', 'colour': '#59c96f'},
+}
+
 # GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their billing and their
 # tier slugs untouched, but WEAR the ladder level nearest their price -- colour, stars, level name
 # -- on the Credits wall and anywhere else supporter identity renders. Presentation only: nothing

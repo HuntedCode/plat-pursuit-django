@@ -347,13 +347,15 @@ def test_the_default_sort_is_alphabetical(client):
 
 
 def test_a_supporter_card_is_marked(client):
-    """Supporters get warmer material rather than a badge of importance -- the styling is on the CARD, so
-    the modifier has to reach it."""
-    ProfileFactory(is_linked=True, user_is_premium=True)
+    """The mark system (2026-08-22) replaced the flat card modifier: a supporter's name renders
+    through the name_mark partial with their level's colour and stars, read off display_mark."""
+    ProfileFactory(is_linked=True, user_is_premium=True, display_mark='patron')
 
     body = client.get(URL).content.decode()
 
-    assert 'pp-hcard--supporter' in body
+    assert 'pp-hcard--supporter' not in body, 'the retired card modifier came back'
+    assert 'pp-supname' in body and 'pp-supstar' in body, 'the mark did not reach the card'
+    assert 'PlatPursuit Patron' in body
 
 
 def test_a_plain_card_is_not_marked_as_a_supporter(client):

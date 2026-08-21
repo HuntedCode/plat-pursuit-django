@@ -1105,6 +1105,11 @@
     color: var(--sup-t, var(--pp-text));
 }
 
+/* The service override on the wall: staff/mod NAMES wear their service colour while the stars
+   and level sub-line stay the paid level's -- the wall is about who pays, the name about who
+   they are. --svc-t is set per card by the view when the payer holds a service role. */
+.sup-prev--credit[style*="--svc-t"] .sup-prev__cname { color: var(--svc-t); }
+
 /* Arrives a row at a time, capped hard: the delay is per-card, so an uncapped stagger over two
    hundred would leave the last one waiting seconds after it was already on screen. */
 @media (prefers-reduced-motion: no-preference) {

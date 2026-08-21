@@ -110,3 +110,32 @@
     stroke: var(--sup-t, var(--pp-accent));
     stroke-width: 2;
 }
+
+/* ---- the mark, composed (components/name_mark.html) --------------------------------------
+   Name + glyph as ONE inline object, everywhere a marked name renders. The name rides the
+   existing .pp-supname (flat colour, flow under no-preference); the glyph slot holds stars for
+   supporter levels or a service glyph (staff wrench / mod shield) stroked in the mark colour. */
+.pp-markname {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.pp-markname__glyph {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex: none;
+}
+
+.pp-markname__svc {
+    width: 12px;
+    height: 12px;
+    stroke: var(--sup-t, var(--pp-accent));
+}
+
+/* Compact context (dense rows): slightly smaller glyphs. */
+.pp-markname--sm .pp-markname__svc { width: 11px; height: 11px; }
+.pp-markname--sm .pp-supstar { width: 10px; height: 10px; }
+

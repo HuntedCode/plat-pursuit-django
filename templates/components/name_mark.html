@@ -1,0 +1,9 @@
+{% comment %}
+THE MARK, anywhere a name renders. One object across the whole site: the name in the mark's
+colour (the pp-supname primitive) plus the mark's glyph -- stars for supporter levels exactly as
+the storefront previews them, the wrench for staff, the shield for moderators. Precedence was
+decided at WRITE time (users/services/marks.py -> Profile.display_mark); this template never
+chooses, it only renders what it is handed.
+
+Unmarked names render as a plain span so callers can use this unconditionally.
+{% endcomment %}{% if mark %}<span class="pp-markname{% if size %} pp-markname--{{ size }}{% endif %}" style="--sup-t: {{ mark.colour }}"><span class="pp-supname">{{ name }}</span><span class="pp-markname__glyph" role="img" aria-label="{{ mark.label }}" title="{{ mark.label }}">{% if mark.kind == 'supporter' %}{% for _ in ''|center:mark.stars %}<svg class="pp-supstar{% if mark.outline %} is-outline{% endif %}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}{% elif mark.key == 'staff' %}<svg class="pp-markname__svc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>{% elif mark.key == 'mod' %}<svg class="pp-markname__svc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>{% endif %}</span></span>{% else %}<span class="pp-markname">{{ name }}</span>{% endif %}

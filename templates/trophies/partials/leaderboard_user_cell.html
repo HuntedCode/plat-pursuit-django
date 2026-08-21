@@ -8,7 +8,7 @@
     </div>
     <div class="flex flex-col min-w-0">
         <div class="flex items-center gap-1">
-            <span class="{% if entry.is_premium %}legendary-title{% endif %} line-clamp-1 pr-1 italic text-sm">{{ entry.psn_username }}</span>
+            {% load mark_tags %}<span class="line-clamp-1 pr-1 italic text-sm">{% name_mark name=entry.psn_username mark=entry.display_mark size='sm' %}</span>
             <span class="text-sm shrink-0">{{ entry.flag }}</span>
         </div>
         {% if entry.displayed_title %}

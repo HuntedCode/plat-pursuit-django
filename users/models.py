@@ -66,6 +66,17 @@ class CustomUser(AbstractUser):
     authentication field and includes Stripe subscription integration.
     """
     email = models.EmailField(_("email address"), unique=True, blank=False, null=False)
+    # THE ROLE SPLIT (2026-08-22): 'admin' is what is_staff used to mean loosely; 'moderator' is
+    # the community team, split out so is_staff can go back to meaning exactly "Django admin
+    # access". save() keeps is_staff in lockstep (role=='admin' or superuser). Mods currently
+    # unlock ONE extra thing (unpublished badge preview) -- the wider mod toolset is a planned
+    # rebuild, so no other gate reads this yet. Both roles wear a service mark site-wide.
+    role = models.CharField(
+        max_length=10, blank=True, default='',
+        choices=[('admin', 'Admin'), ('moderator', 'Moderator')],
+        help_text="Service role. Admins keep Django-admin access (is_staff syncs to this); "
+                  "moderators get the mod mark and mod-level access only.",
+    )
     user_timezone = models.CharField(max_length=63, choices=[(tz, tz) for tz in pytz.common_timezones], default='UTC', help_text="User's preferred timezone. UTC default.")
     # The field above cannot answer "did they choose this?" -- it defaults to UTC and is non-null, so a
     # London hunter who never touched it is indistinguishable from one who deliberately picked UTC. That
@@ -111,6 +122,37 @@ class CustomUser(AbstractUser):
             return SubscriptionService.is_tier_premium(self.premium_tier) if self.premium_tier else False
         return False
     
+    @property
+    def is_moderator(self):
+        return self.role == 'moderator'
+
+    def save(self, *args, **kwargs):
+        # The lockstep enforces exactly two directions: an admin role guarantees Django-admin
+        # access, and a demotion to moderator cannot leave admin access behind by accident.
+        # A bare is_staff with NO role is left alone -- forcing it off would silently demote
+        # every user flagged directly (tests, createsuperuser flows, the admin checkbox).
+        desired = None
+        if self.role == 'admin' and not self.is_staff:
+            desired = True
+        elif self.role == 'moderator' and self.is_staff and not self.is_superuser:
+            desired = False
+        elif self.role == '' and self.is_staff and not self.is_superuser and self.pk:
+            # Clearing an ADMIN role takes the admin access it granted (one cheap lookup, only
+            # for staff-flagged users saving with no role). A user who was never role-admin
+            # keeps their directly-set flag.
+            old_role = type(self).objects.filter(pk=self.pk).values_list('role', flat=True).first()
+            if old_role == 'admin':
+                desired = False
+        if desired is not None:
+            self.is_staff = desired
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'is_staff' not in update_fields:
+                kwargs['update_fields'] = list(update_fields) + ['is_staff']
+        super().save(*args, **kwargs)
+        # The service mark follows the role. Imported here to avoid an import cycle at load.
+        from users.services.marks import refresh_display_mark
+        refresh_display_mark(self)
+
     def get_premium_tier(self):
         """
         Get the human-readable display name for user's premium tier.

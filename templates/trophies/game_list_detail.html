@@ -36,7 +36,7 @@
                         <span class="pp-lauthor__av">
                             {% include 'partials/_avatar.html' with url=game_list.profile.avatar_url alt=game_list.profile.psn_username %}
                         </span>
-                        <span class="pp-lauthor__name {% if game_list.profile.user_is_premium %}legendary-title{% endif %}">
+                        <span class="pp-lauthor__name">
                             {{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}
                         </span>
                         {% if game_list.profile.flag %}<span aria-hidden="true">{{ game_list.profile.flag }}</span>{% endif %}

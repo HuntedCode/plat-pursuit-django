@@ -40,20 +40,7 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
 }
 /* ---- Supporter ---------------------------------------------------------------------------------- */
-/* A supporter's card is made of warmer MATERIAL, not given a badge of importance. The signal is carried by
-   the edge and a faint bloom off the top -- the same amber their mark already uses, so this spends no new
-   hue -- over a ground lifted a hair toward the accent. Nothing here moves or shimmers: the old wall
-   animated the whole border, which at thirty cards reads as "featured", an emphasis a directory cannot
-   back up and which would put a running animation on every supporter row of an infinite scroll.
-   Declared BEFORE the hover rule so hovering a supporter still resolves to the hover treatment. */
-.pp-hcard--supporter {
-    background:
-        linear-gradient(180deg, color-mix(in oklab, var(--pp-accent) 7%, transparent) 0%, transparent 42%),
-        var(--pp-bg-1);
-    border-color: color-mix(in oklab, var(--pp-accent) 34%, var(--pp-border));
-    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-accent) 22%, rgba(255, 255, 255, 0.07)),
-                0 6px 20px rgba(0, 0, 0, 0.30);
-}
+
 
 /* Hover GLOW, never scale (a wall of 30 cards each nudging its neighbours reads as instability, and a
    transform on a paginated grid is the cheapest way to make a page feel busy). The whole card is a
@@ -114,8 +101,8 @@
 /* The supporter mark -- the surface's ONE other hue, and semantic rather than decorative (it says what
    someone IS, not how big their numbers are). Small on purpose: the old wall gave supporters a shimmering
    border, which at 30 cards read as "featured". */
-.pp-hcard__supp { flex: none; display: inline-grid; place-items: center; color: var(--pp-accent); }
-.pp-hcard__supp svg { width: 12px; height: 12px; }
+/* .pp-hcard--supporter / .pp-hcard__supp retired 2026-08-22 for the mark system
+   (components/name_mark.html) rendered inside the card's name link. */
 /* The title the hunter chose to wear -- something EARNED, so it carries the secondary rather than sitting
    in the mute grey it started in. Held a step back from the raw token (`--pp-secondary` is bright at 0.74L
    and titles appear on a great many cards at once): mixed toward the text colour it reads as a tint on the

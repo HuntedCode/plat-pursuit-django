@@ -95,6 +95,11 @@ class Profile(models.Model):
     extra_data = models.JSONField(default=dict, blank=True)
     last_synced = models.DateTimeField(default=timezone.now)
     user_is_premium = models.BooleanField(default=False)
+    # THE WORN MARK, denormalised: 'staff' | 'mod' | a supporter-ladder slug | ''. Precedence
+    # (staff > mod > supporter) is baked at write time in users/services/marks.py -- surfaces
+    # that render hundreds of names read this one field and never re-derive it. Writers:
+    # reconcile_premium and CustomUser.save.
+    display_mark = models.CharField(max_length=16, blank=True, default='')
     sync_tier = models.CharField(
         max_length=10,
         choices=[("basic", "Basic"), ("preferred", "Preferred")],
@@ -264,6 +269,10 @@ class Profile(models.Model):
         self.sync_tier = 'preferred' if is_premium else 'basic'
         self.user_is_premium = is_premium
         self.save(update_fields=['sync_tier', 'user_is_premium'])
+        # The worn mark can change with premium (unless a service role outranks it).
+        if self.user_id:
+            from users.services.marks import refresh_display_mark
+            refresh_display_mark(self.user, is_premium=is_premium)
     
     def get_time_since_last_sync(self) -> timedelta:
         """

@@ -538,7 +538,9 @@ class BadgeDetailView(DetailView):
             series_slug=self.kwargs[self.slug_url_kwarg],
         )
         # Staff preview gate: a series with no LIVE group badge is dormant (pre-cutover) -> staff-only.
-        if not self.request.user.is_staff and not series.group_badges.filter(is_live=True).exists():
+        user = self.request.user
+        can_preview = user.is_authenticated and (user.is_staff or user.is_moderator)
+        if not can_preview and not series.group_badges.filter(is_live=True).exists():
             raise Http404("Series not found")
         return series
 
@@ -621,7 +623,7 @@ class BadgeRanksPanelView(View):
         #
         # ONE query for the public path. It was a fetch plus an `.exists()`, which is two round trips
         # before every window a reader scrolls past; the row itself is only needed for the full panel.
-        if request.user.is_staff:
+        if request.user.is_authenticated and (request.user.is_staff or request.user.is_moderator):
             series = BadgeSeries.objects.filter(series_slug=series_slug).first()
             if series is None:
                 raise Http404("Series not found")

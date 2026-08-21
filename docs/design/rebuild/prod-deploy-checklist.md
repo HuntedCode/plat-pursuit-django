@@ -727,3 +727,12 @@ refuses live mode without `--live-ok` for exactly this reason.
 `[NO SUB]`). Render crons live in the dashboard, not config, so at rebuild cutover VERIFY the entry
 survived the service changes and recreate it if it did not. Row + rationale:
 [cron-jobs.md](../../guides/cron-jobs.md).
+
+### Marks & Roles (2026-08-22) — migrations users/0022, users/0023, trophies/0315
+
+Additive fields (`CustomUser.role`, `Profile.display_mark`) plus a data backfill: every
+`is_staff` user becomes role `admin`, and every profile's worn mark is computed once. Safe on a
+live DB. **After deploy: demote the moderators by hand in the Django admin** (they were all
+backfilled as admin, the pre-split meaning); each demotion syncs `is_staff` off and flips their
+mark to the green shield automatically. The supporter marks appear site-wide in the same deploy
+-- the intended splash.

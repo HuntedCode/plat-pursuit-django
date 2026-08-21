@@ -61,7 +61,7 @@
                 {% include 'partials/_avatar.html' with url=game_list.profile.avatar_url alt=game_list.profile.psn_username %}
             </div>
             <span class="truncate">
-                <span class="font-medium {% if game_list.profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %}">{{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}</span>
+                <span class="font-medium text-secondary">{{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}</span>
             </span>
         </div>
         {% endif %}

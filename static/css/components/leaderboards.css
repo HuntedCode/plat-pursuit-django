@@ -182,8 +182,8 @@
 /* A star, matching Browse Hunters -- one status, one glyph, wherever you meet it. It was a bare `&#9670;`
    diamond here and a Lucide star there, and the diamond is not a Lucide glyph at all (design-system:
    every UI glyph is an inlined Lucide stroke icon, brand marks and the rating star excepted). */
-.lb-row__prem { color: var(--pp-accent); flex: 0 0 auto; display: inline-flex; align-items: center; }
-.lb-row__prem svg { width: 11px; height: 11px; }
+/* .lb-row__prem retired 2026-08-22: the flat amber supporter star predates the ladder; rows now
+   render the mark system (components/name_mark.html) inside .lb-row__uname. */
 /* A row whose profile could not be hydrated. It keeps its slot so the numbering stays honest, and reads
    as absent rather than as a hunter with a blank name. */
 .lb-row__who--gone { color: var(--pp-text-mute); font-style: italic; }

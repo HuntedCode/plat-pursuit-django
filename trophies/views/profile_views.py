@@ -114,6 +114,8 @@ class ProfilesListView(HtmxListMixin, ListView):
             # a miss is a per-row deferred fetch, i.e. an N+1 wearing a different hat.
             'psn_username', 'display_psn_username', 'avatar_url', 'flag',
             'trophy_level', 'total_trophies', 'total_plats', 'total_games', 'user_is_premium',
+            'display_mark',   # the name-mark partial reads it per card; a miss here is the
+                              # exact per-row deferred fetch the comment above warns about
             'last_synced', 'created_at',
         )
 

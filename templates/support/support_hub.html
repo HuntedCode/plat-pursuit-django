@@ -470,7 +470,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 tier colour STATICALLY via `.sup-prev__cname`. {% endcomment %}
                 {% for person in wall %}
                 <li class="sup-prev sup-prev--credit{% if not person.tier %} is-legacy{% endif %}"
-                    style="--i: {{ forloop.counter0 }}{% if person.tier %}; --sup-t: {{ person.tier.colour }}{% endif %}">
+                    style="--i: {{ forloop.counter0 }}{% if person.tier %}; --sup-t: {{ person.tier.colour }}{% endif %}{% if person.service_colour %}; --svc-t: {{ person.service_colour }}{% endif %}">
                     <span class="sup-prev__av">
                         {% include 'partials/_avatar.html' with url=person.avatar alt='' %}
                     </span>

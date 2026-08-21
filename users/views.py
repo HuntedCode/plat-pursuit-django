@@ -384,13 +384,10 @@ class SupportStorefrontView(TemplateView):
 
     @staticmethod
     def _worn_level(premium_tier):
-        """The ladder slug a supporter WEARS: their own level, or for a grandfathered legacy tier
-        the price-nearest level from LEGACY_TIER_LEVEL_MAP. None is structurally unreachable for
-        wall rows today (the map-coverage test forbids an unmapped eligible tier); the 'Supporter'
-        fallback it feeds is defence-in-depth, not a live path."""
-        if premium_tier in LADDER_SLUGS:
-            return premium_tier
-        return LEGACY_TIER_LEVEL_MAP.get(premium_tier)
+        """Delegates to the marks service -- the wall, the display_mark denorm and every marked
+        surface must resolve a worn level identically, so there is exactly one resolver."""
+        from users.services.marks import worn_supporter_level
+        return worn_supporter_level(premium_tier)
 
     WALL_CAP = 200
 
@@ -439,12 +436,14 @@ class SupportStorefrontView(TemplateView):
             Profile.objects
             .filter(show_on_supporter_wall=True, user__premium_tier__in=eligible)
             .select_related('user')
-            .only('display_psn_username', 'psn_username', 'avatar_url', 'user__premium_tier')
+            .only('display_psn_username', 'psn_username', 'avatar_url', 'user__premium_tier',
+                  'user__role')
             # `Lower()` because a raw sort puts every lowercase name after every uppercase one,
             # which reads as two lists stapled together rather than one alphabetical run.
             .order_by(rank_order, Lower('psn_username'))[:self.WALL_CAP]
         )
 
+        from users.constants import SERVICE_MARKS
         return [
             {
                 'name': r.display_psn_username or r.psn_username,
@@ -453,6 +452,12 @@ class SupportStorefrontView(TemplateView):
                 # stars (grandfathered presentation). The None/'Supporter' fallback is a
                 # structural backstop the map-coverage test keeps unreachable.
                 'tier_slug': self._worn_level(r.user.premium_tier),
+                # The service override, name-colour only: a paying staff member's NAME wears
+                # crimson (the site-wide precedence rule) but the stars and the level sub-line
+                # stay their paid level's -- the wall is specifically about who pays.
+                'service_colour': (SERVICE_MARKS['staff']['colour'] if r.user.role == 'admin'
+                                   else SERVICE_MARKS['mod']['colour'] if r.user.role == 'moderator'
+                                   else None),
             }
             for r in rows
         ]

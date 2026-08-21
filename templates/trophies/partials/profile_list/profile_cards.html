@@ -15,7 +15,7 @@ grid N+1s on a deferred load. {% endcomment %}
 {% comment %} Supporters get a warmer card, not a louder one: the same amber their mark already carries,
 spent on the EDGE rather than on a shimmer. The old wall shimmered the whole border, which at this density
 read as "featured" rather than "supporter" -- an emphasis the card cannot back up. {% endcomment %}
-<article class="pp-hcard{% if profile.user_is_premium %} pp-hcard--supporter{% endif %}">
+<article class="pp-hcard">
     <div class="pp-hcard__id">
         <div class="pp-hcard__avatar{% if not profile.avatar_url %} pp-hcard__avatar--none{% endif %}">
             <img src="{{ profile.avatar_url|default:'' }}" alt="" loading="lazy" decoding="async">
@@ -29,12 +29,13 @@ read as "featured" rather than "supporter" -- an emphasis the card cannot back u
                 {% comment %} Under Alphabetical the NAME is the sort axis, so it takes the accent the
                 stat cells take under every other ordering -- the one sort that previously highlighted
                 nothing, because no stat explains it. {% endcomment %}
-                <a class="pp-hcard__link pp-hcard__name{% if active_sort == 'alpha' %} pp-hcard__name--sorted{% endif %}" href="{% url 'profile_detail' profile.psn_username %}">{{ profile.display_psn_username|default:profile.psn_username }}</a>
+                {% load mark_tags %}<a class="pp-hcard__link pp-hcard__name{% if active_sort == 'alpha' %} pp-hcard__name--sorted{% endif %}" href="{% url 'profile_detail' profile.psn_username %}">{% name_mark name=profile.display_psn_username|default:profile.psn_username mark=profile.display_mark size='sm' %}</a>
                 {% comment %} Supporters kept a mark. The old wall gave them a shimmering border, which at
                 this density would be the loudest thing on the page and would read as "featured" rather
                 than "supporter" -- so it is one small glyph instead, carrying the site's one other
                 semantic hue. {% endcomment %}
-                {% if profile.user_is_premium %}<span class="pp-hcard__supp" title="Platinum Pursuit supporter" aria-label="Supporter"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></span>{% endif %}
+{% comment %} The mark replaces the flat supporter star: level stars in the level's colour, or
+                the staff wrench / mod shield. Name colouring comes with it via the partial. {% endcomment %}
                 {% comment %} NOT aria-hidden. `Profile.flag` holds a country CODE ("US"), which is real
                 content and the card's only statement of where someone is -- hiding it would be right for a
                 decorative emoji flag and wrong for this. {% endcomment %}

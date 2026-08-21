@@ -1,0 +1,203 @@
+"""The mark system and the role split.
+
+One denorm (`Profile.display_mark`), one precedence (staff > mod > supporter level), two writers
+(reconcile through the profile, CustomUser.save on role changes) -- and the perk it makes true:
+the storefront sells 'a supporter mark beside your name, everywhere your name appears', so the
+resolution and the surfaces are pinned here.
+"""
+import colorsys
+
+import pytest
+from django.template.loader import render_to_string
+
+from users.constants import SERVICE_MARKS, SUPPORT_TIERS
+from users.services.marks import mark_style, resolve_display_mark, worn_supporter_level
+from users.services.subscription_service import SubscriptionService
+from tests.factories import ProfileFactory, UserFactory
+
+pytestmark = pytest.mark.django_db
+
+
+# ------------------------------------------------------------------------- the role split ----
+
+def test_admin_role_carries_django_admin_access_and_moderator_does_not():
+    """is_staff goes back to meaning exactly 'can log into the Django admin': admins keep it in
+    lockstep, a demotion to moderator cannot leave it behind by accident."""
+    user = UserFactory()
+    user.role = 'admin'
+    user.save()
+    assert user.is_staff is True
+
+    user.role = 'moderator'
+    user.save()
+    user.refresh_from_db()
+    assert user.is_staff is False
+    assert user.is_moderator is True
+
+
+def test_superusers_keep_staff_regardless_of_role():
+    user = UserFactory(is_superuser=True, is_staff=True)
+    user.role = 'moderator'
+    user.save()
+    assert user.is_staff is True
+
+
+def test_moderators_can_preview_dormant_badge_series(client):
+    """The ONE gate the split widens: unpublished badge preview. Everything else stays
+    admin-only by his call (the mod toolset is a planned rebuild)."""
+    from tests.factories import BadgeSeriesFactory
+
+    series = BadgeSeriesFactory()  # no live group badges -> dormant -> hidden from the public
+    mod = UserFactory()
+    mod.role = 'moderator'
+    mod.save()
+
+    from django.urls import reverse
+    url = reverse('badge_detail', kwargs={'series_slug': series.series_slug})
+
+    client.force_login(mod)
+    response = client.get(url)
+    assert response.status_code == 200, 'a moderator could not preview a dormant series'
+
+    client.force_login(UserFactory())
+    assert client.get(url).status_code == 404
+
+
+# ------------------------------------------------------------------------- the resolution ----
+
+def test_precedence_is_staff_then_mod_then_supporter():
+    user = UserFactory(premium_tier='patron')
+
+    user.role = 'admin'
+    assert resolve_display_mark(user, is_premium=True) == 'staff'
+    user.role = 'moderator'
+    assert resolve_display_mark(user, is_premium=True) == 'mod'
+    user.role = ''
+    assert resolve_display_mark(user, is_premium=True) == 'patron'
+    assert resolve_display_mark(user, is_premium=False) == ''
+
+
+def test_legacy_tiers_resolve_through_the_grandfathered_map():
+    user = UserFactory(premium_tier='supporter')
+    assert resolve_display_mark(user, is_premium=True) == worn_supporter_level('supporter')
+    assert worn_supporter_level('supporter') == 'sponsor'
+
+
+def test_the_denorm_follows_activation_and_deactivation():
+    profile = ProfileFactory()
+    user = profile.user
+
+    SubscriptionService.activate_subscription(user, 'benefactor', 'stripe')
+    profile.refresh_from_db()
+    assert profile.display_mark == 'benefactor'
+
+    SubscriptionService.deactivate_subscription(user, 'stripe')
+    profile.refresh_from_db()
+    assert profile.display_mark == ''
+
+
+def test_a_role_outranks_premium_and_a_demotion_restores_the_level():
+    """His rule: many staff also pay; the service mark overrides while held, and taking the role
+    away must fall back to the paid level, not to nothing."""
+    profile = ProfileFactory()
+    user = profile.user
+    SubscriptionService.activate_subscription(user, 'patron', 'stripe')
+
+    user.refresh_from_db()
+    user.role = 'admin'
+    user.save()
+    profile.refresh_from_db()
+    assert profile.display_mark == 'staff'
+
+    user.role = ''
+    user.save()
+    profile.refresh_from_db()
+    assert profile.display_mark == 'patron', 'losing the role lost the paid mark too'
+
+
+# ------------------------------------------------------------------------- the styling -------
+
+def test_mark_style_answers_every_key():
+    assert mark_style('staff')['kind'] == 'service'
+    assert mark_style('mod')['label'] == 'Moderator'
+    patron = mark_style('patron')
+    assert patron['kind'] == 'supporter' and patron['stars'] == 2
+    assert mark_style('') is None and mark_style(None) is None
+    assert mark_style('nonsense') is None
+
+
+def test_service_colours_keep_their_distance_from_the_giving_ramp():
+    """Crimson and spring green must never blur with a ladder hue at 11px -- the same measured
+    standard the ramp itself is held to."""
+    def hls(hex_value):
+        r, g, b = (int(hex_value.lstrip('#')[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        h, l, _ = colorsys.rgb_to_hls(r, g, b)
+        return h * 360, l
+
+    for key, mark in SERVICE_MARKS.items():
+        mh, ml = hls(mark['colour'])
+        for tier in SUPPORT_TIERS:
+            th, tl = hls(tier['colour'])
+            hue_gap = min(abs(mh - th), 360 - abs(mh - th))
+            assert hue_gap > 25 or abs(ml - tl) > 0.12, (
+                f"{key} sits too close to {tier['slug']} ({hue_gap:.0f} deg apart)"
+            )
+
+
+# ------------------------------------------------------------------------- the rendering ----
+
+def _render(name, mark, size=None):
+    return render_to_string('components/name_mark.html',
+                            {'name': name, 'mark': mark_style(mark), 'size': size})
+
+
+def test_the_partial_renders_each_register():
+    staff = _render('Jeff', 'staff')
+    assert '#e0564f' in staff and 'aria-label="Staff"' in staff
+    assert 'pp-supname' in staff
+
+    mod = _render('Mo', 'mod')
+    assert '#59c96f' in mod and 'aria-label="Moderator"' in mod
+
+    patron = _render('Pat', 'patron')
+    assert patron.count('pp-supstar') == 2
+    assert 'PlatPursuit Patron' in patron
+
+    backer = _render('Bea', 'backer')
+    assert 'is-outline' in backer, "Backer's single star lost its outline state"
+
+    plain = _render('Nobody', '')
+    assert 'pp-supname' not in plain and 'Nobody' in plain
+
+
+def test_marked_surfaces_read_the_denorm():
+    """The three main templates render the mark from entry/profile.display_mark -- the whole
+    point of the denorm is that surfaces never re-derive it."""
+    row = render_to_string('trophies/partials/leaderboard_row.html', {
+        'entry': {'psn_username': 'Hunter', 'display_mark': 'staff', 'rank': 1,
+                  'avatar_url': '', 'flag': '', 'displayed_title': '', 'value': 1},
+        'board': {'slug': 'x'},
+    })
+    assert 'aria-label="Staff"' in row
+    assert 'lb-row__prem' not in row, 'the legacy amber star survived'
+
+
+def test_the_wall_carries_the_service_override(client):
+    """A paying staff member's NAME wears crimson on the credits; the stars and level sub-line
+    stay the paid level's (the wall is about who pays)."""
+    from unittest.mock import patch
+    from django.core.cache import cache
+    cache.delete('support:stats')
+
+    profile = ProfileFactory(display_psn_username='StaffPayer')
+    user = profile.user
+    SubscriptionService.activate_subscription(user, 'patron', 'stripe')
+    user.refresh_from_db()
+    user.role = 'admin'
+    user.save()
+
+    with patch('users.views.SubscriptionService.get_prices_from_stripe', return_value={}):
+        body = ' '.join(client.get('/support/').content.decode().split())
+    card = body[body.index('StaffPayer') - 1200:body.index('StaffPayer') + 900]
+    assert f"--svc-t: {SERVICE_MARKS['staff']['colour']}" in card
+    assert 'PlatPursuit Patron' in card, 'the paid level left the wall sub-line'

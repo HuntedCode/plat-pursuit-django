@@ -44,15 +44,10 @@ renders without it is invisible to a virtualized wall. Harmless on the flow wall
                 becomes an anonymous flex item at min-content width, and a PSN ID has no spaces to break on,
                 so a long name was hard-clipped with no ellipsis and pushed the supporter mark out of the
                 row entirely. The truncation has to live on a block-level child. {% endcomment %}
-                <span class="lb-row__uname">{{ entry.psn_username }}</span>
-                {% comment %} The same status is a star on Browse Hunters; matching it here is the point --
-                one object, one glyph, wherever you meet it. Labelled rather than `title`-only, which
-                screen readers do not reliably announce and touch never surfaces. {% endcomment %}
-                {% if entry.is_premium %}
-                <span class="lb-row__prem" role="img" aria-label="Supporter" title="Supporter">
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.35 6.19 20.4 7.3 13.93 2.6 9.35l6.5-.95L12 2.5z"/></svg>
-                </span>
-                {% endif %}
+                {% comment %} The mark system (components/name_mark.html): supporter level,
+                staff wrench or mod shield, one object wherever you meet a name. Replaced the
+                legacy amber star, which predated the ladder and knew one flat state. {% endcomment %}
+                {% load mark_tags %}<span class="lb-row__uname">{% name_mark name=entry.psn_username mark=entry.display_mark size='sm' %}</span>
             </span>
             {% comment %} The worn title, when there is one. `pr-1` because it is italic inside a clamped
             box and italic glyphs slant past their box. {% endcomment %}

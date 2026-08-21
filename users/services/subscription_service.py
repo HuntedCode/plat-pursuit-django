@@ -125,6 +125,9 @@ class SubscriptionService:
 
         if hasattr(user, 'profile'):
             user.profile.update_profile_premium(is_premium)
+            # update_profile_premium refreshes the worn mark itself (users/services/marks.py);
+            # nothing further to write here -- the denorm has exactly two writers, this path
+            # (through the profile) and CustomUser.save on role changes.
 
         from users.models import SubscriptionPeriod
         if provider_hint is not None and is_premium:

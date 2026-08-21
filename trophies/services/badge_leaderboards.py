@@ -246,7 +246,7 @@ def hydrate(profile_ids):
         # (api/platinum_grid_views.py, api/recap_views.py, api/roadmap_note_views.py, ...); the boards were
         # the one place that skipped it.
         .values('id', 'display_psn_username', 'psn_username', 'avatar_url', 'flag', 'user_is_premium',
-                'country_code', 'display_title')
+                'display_mark', 'country_code', 'display_title')
     )
     return {r['id']: r for r in rows}
 
@@ -700,6 +700,7 @@ def entry(hydrated, profile_id, rank):
         'avatar_url': p.get('avatar_url') or '',
         'flag': p.get('flag') or '',
         'is_premium': p.get('user_is_premium', False),
+        'display_mark': p.get('display_mark') or '',
         'displayed_title': p.get('display_title') or '',
     }
 

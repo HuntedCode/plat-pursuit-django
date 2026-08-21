@@ -1,4 +1,4 @@
-{% load static humanize custom_filters %}
+{% load mark_tags %}{% load static humanize custom_filters %}
 {# Reusable comment partial - displays a single comment with nested replies #}
 <div class="comment-item border-l-4 {% if comment.depth == 0 %}border-base-300 md:ml-6{% else %}border-primary/40{% endif %} pl-4 mb-4 ml-0 md:ml-[{{ comment.depth }}rem] relative"
      data-comment-id="{{ comment.id }}"
@@ -40,7 +40,7 @@
             <div class="flex flex-wrap items-center gap-2 mb-2">
                 {# Username #}
                 <a href="{% url 'profile_detail' comment.author.username %}"
-                   class="font-semibold {% if comment.author.user_is_premium %}legendary-title{% else %}text-primary{% endif %} hover:underline hover:text-primary-focus transition-colors">
+                   class="font-semibold {% if not comment.author.display_mark %}text-primary{% endif %} hover:underline hover:text-primary-focus transition-colors"{% if comment.author.display_mark %} style="color: {{ comment.author.display_mark|mark_colour }}"{% endif %}>
                     {{ comment.author.username }}
                 </a>
 
