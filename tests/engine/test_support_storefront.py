@@ -809,6 +809,15 @@ def test_the_modal_carries_every_perks_member_line(client):
     wides = [p for p in PREMIUM_PERKS if p.get('wide')]
     assert len(wides) == 1 and wides[0]['slug'] == 'beta'
     assert dialog.count('sup-perk--wide') == 1, 'the beta closer lost its full-width span'
+    # The flavour beat: every tile carries an example -- text in the perk's tint, except the
+    # mark, whose example IS the rendered object (name + the star).
+    for perk in PREMIUM_PERKS:
+        if perk['slug'] == 'mark':
+            mark_ex = dialog[dialog.index('sup-perk__ex--mark'):]
+            assert 'pp-supstar' in mark_ex[:400], 'the mark example lost its star'
+        else:
+            from django.utils.html import escape
+            assert escape(perk['example']) in dialog, f"{perk['slug']} example missing" 
 
 
 def test_the_preview_shows_the_viewer_their_own_name(client):

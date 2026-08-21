@@ -517,6 +517,14 @@ substrate, and an earlier version of this page did, which is most of why it read
                 <div class="sup-perk__body">
                     <h3 class="sup-perk__name">{{ perk.name }}</h3>
                     <p class="sup-perk__mem">{{ perk.member }}</p>
+                    {% comment %} The flavour beat: a coloured example of the perk in use. The
+                    mark's example is not described, it is RENDERED -- your own name wearing the
+                    star, the same object the purchase box previews. {% endcomment %}
+                    {% if perk.slug == 'mark' %}
+                    <p class="sup-perk__ex sup-perk__ex--mark">{{ viewer_name }} <svg class="pp-supstar" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></p>
+                    {% elif perk.example %}
+                    <p class="sup-perk__ex">{{ perk.example }}</p>
+                    {% endif %}
                     {% if perk.note %}<p class="sup-perk__note">{{ perk.note }}</p>{% endif %}
                 </div>
             </div>

@@ -943,6 +943,26 @@
 }
 
 
+/* The flavour line: the perk in use, spoken in the perk's own colour off a thin tinted rail.
+   The mark's example renders the actual object -- name plus star -- in the tile's tint. */
+.sup-perk__ex {
+    margin-top: 8px;
+    padding-left: 8px;
+    border-left: 2px solid color-mix(in oklab, var(--perk-c, var(--pp-primary)) 55%, transparent);
+    font-size: 0.73rem;
+    line-height: 1.5;
+    color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 70%, var(--pp-text));
+}
+
+.sup-perk__ex--mark {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 700;
+}
+
+.sup-perk__ex--mark .pp-supstar { fill: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text)); }
+
 .sup-perk__note {
     margin-top: 4px;
     font-size: 0.7rem;
