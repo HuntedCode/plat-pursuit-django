@@ -32,19 +32,6 @@ happens in our Discord, which the ask card says out loud.
                 a site-wide rebuild and 1.0 itself. Everything below is what comes next, sorted
                 honestly by how real it is.
             </p>
-
-            {% comment %} The Horizon, segmented: one pip per stage, REAL progress (stages banked
-            over stages planned). This strip IS the history section now. {% endcomment %}
-            <div class="rm__progress">
-                <div class="pp-horizon pp-horizon--segmented rm__pips" role="progressbar"
-                     data-horizon-band="warming" style="--horizon-h: 10px;"
-                     aria-valuenow="{{ stages_done }}" aria-valuemin="0" aria-valuemax="{{ stages_total }}"
-                     aria-label="Roadmap progress: {{ stages_done }} of {{ stages_total }} stages complete">
-                    {% for stage in stages %}<span class="pp-horizon__seg" title="{{ stage.title }}"
-                        {% if stage.status == 'shipped' %}data-state="done"{% elif stage.status == 'now' %}data-state="active"{% endif %}></span>{% endfor %}
-                </div>
-                <p class="rm__progress-k">{{ stages_done }} of {{ stages_total }} stages banked &middot; the plat's still ahead</p>
-            </div>
         </div>
     </section>
 

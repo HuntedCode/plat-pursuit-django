@@ -248,9 +248,15 @@ class SupportStorefrontView(TemplateView):
             SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
         )
 
-        from users.constants import ROADMAP_STAGES
-        context['roadmap_stages'] = ROADMAP_STAGES
-        context['roadmap_done'] = sum(1 for st in ROADMAP_STAGES if st['status'] == 'shipped')
+        from users.constants import ROADMAP_FEATURES
+        # The band teaser: each certainty tier with its first few feature names, the same
+        # vocabulary the roadmap page uses -- one story across both surfaces.
+        context['roadmap_teaser'] = [
+            {'name': name,
+             'names': [f['name'] for f in ROADMAP_FEATURES if f['tier'] == key][:3]}
+            for key, name in (('works', 'In the works'), ('next', 'Up next'),
+                              ('wishlist', 'The wishlist'))
+        ]
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
         context['viewer_name'] = self._viewer_name()
@@ -563,16 +569,9 @@ class SupportRoadmapView(TemplateView):
     template_name = 'support/roadmap.html'
 
     def get_context_data(self, **kwargs):
-        from users.constants import ROADMAP_FEATURES, ROADMAP_STAGES
+        from users.constants import ROADMAP_FEATURES
 
         context = super().get_context_data(**kwargs)
-        stages = ROADMAP_STAGES
-        done = sum(1 for st in stages if st['status'] == 'shipped')
-        context['stages'] = stages
-        context['stages_done'] = done
-        # The Horizon must pair with REAL progress, never decorate: this is stages banked over
-        # stages planned, counting the current one as in-flight (not banked).
-        context['stages_total'] = len(stages)
         context['features'] = ROADMAP_FEATURES
         # (key, heading, subline) per certainty tier; the template walks these in order.
         context['tier_defs'] = [

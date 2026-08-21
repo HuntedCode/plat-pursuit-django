@@ -339,22 +339,15 @@ substrate, and an earlier version of this page did, which is most of why it read
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                 </a>
             </div>
-            <div class="pp-horizon pp-horizon--segmented sup-road__pips" role="progressbar"
-                 data-horizon-band="warming" style="--horizon-h: 8px;"
-                 aria-valuenow="{{ roadmap_done }}" aria-valuemin="0" aria-valuemax="{{ roadmap_stages|length }}"
-                 aria-label="Roadmap progress: {{ roadmap_done }} of {{ roadmap_stages|length }} stages complete">
-                {% for stage in roadmap_stages %}<span class="pp-horizon__seg"
-                    {% if stage.status == 'shipped' %}data-state="done"{% elif stage.status == 'now' %}data-state="active"{% endif %}></span>{% endfor %}
-            </div>
-            {% comment %} Only the stages AHEAD get named here: the band sells what support builds
-            next, not what already shipped (the serve band above already brags for the past). {% endcomment %}
+            {% comment %} The page's own tier vocabulary, compressed: each certainty tier and a
+            few of its feature names. One story across both surfaces, no separate skeleton. {% endcomment %}
             <dl class="sup-road__next">
-                {% for stage in roadmap_stages %}{% if stage.status == 'next' or stage.status == 'later' %}
+                {% for tier in roadmap_teaser %}
                 <div class="sup-road__cell">
-                    <dt>{{ stage.when }}</dt>
-                    <dd>{{ stage.blurb }}</dd>
+                    <dt>{{ tier.name }}</dt>
+                    <dd>{{ tier.names|join:' &middot; ' }}</dd>
                 </div>
-                {% endif %}{% endfor %}
+                {% endfor %}
             </dl>
         </div>
     </section>

@@ -1,11 +1,8 @@
-/* /support/roadmap/ -- the site's own platinum roadmap.
+/* /support/roadmap/ -- the forward list in the platinum-roadmap frame.
  *
- * One rail, four mark states: banked (solid), current (lit ring, gentle Horizon-style pulse),
- * ahead (hollow), and the final stop's DIAMOND (Frame's corner-notch language) standing in for
- * the plat -- deliberately not a trophy shape, which belongs to the earned register.
- *
- * Rebuild restraint: neutral surfaces, ONE accent (--pp-primary on the current stage). The rail
- * fades out past the last stop rather than terminating: the horizon stays open. */
+ * Feature cards in three certainty tiers; status and temperature live on the tier chips (works
+ * warm-lit and breathing, next cool, wishlist outline-dashed). Rebuild restraint: neutral
+ * surfaces, one accent, scroll-gated reveals, no hover theatrics on static cards. */
 
 .rm {
     display: flex;
@@ -35,40 +32,6 @@
     font-size: 0.92rem;
     line-height: 1.65;
     color: var(--pp-text-dim);
-}
-
-.rm__progress { margin-top: 20px; max-width: 440px; }
-
-.rm__progress-k {
-    margin-top: 8px;
-    font-size: 0.72rem;
-    font-weight: 650;
-    letter-spacing: 0.04em;
-    color: var(--pp-text-mute);
-}
-
-/* THE IGNITION: on load the strip replays the journey -- banked pips land one by one with a
-   settle and a glow bloom, the current ring ignites last, and the caption is the follow-through,
-   arriving only after the story has been told. Anticipation, action, settle: the ~1.4s this
-   takes IS the page's one 'wow'; everything after it stays quiet on purpose.
-   opacity/transform/box-shadow only, and declared under no-preference at the source. */
-@media (prefers-reduced-motion: no-preference) {
-    .rm__pips .pp-horizon__seg { animation: rmPipIn 0.45s var(--pp-ease, ease) backwards; }
-    .rm__pips .pp-horizon__seg:nth-child(1) { animation-delay: 250ms; }
-    .rm__pips .pp-horizon__seg:nth-child(2) { animation-delay: 450ms; }
-    .rm__pips .pp-horizon__seg:nth-child(3) { animation-delay: 650ms; }
-    .rm__pips .pp-horizon__seg:nth-child(4) { animation-delay: 900ms; }
-    .rm__pips .pp-horizon__seg:nth-child(5) { animation-delay: 1050ms; }
-    .rm__pips .pp-horizon__seg:nth-child(6) { animation-delay: 1130ms; }
-    .rm__pips .pp-horizon__seg:nth-child(7) { animation-delay: 1210ms; }
-
-    .rm__progress-k { animation: ppRevealIn 0.5s var(--pp-ease) 1350ms backwards; }
-}
-
-@keyframes rmPipIn {
-    0%   { opacity: 0; transform: scaleY(0.4); }
-    60%  { opacity: 1; transform: scaleY(1.25); }
-    100% { opacity: 1; transform: scaleY(1); }
 }
 
 /* ---- the tiers ------------------------------------------------------------------------ */

@@ -1,8 +1,8 @@
 """/support/roadmap/ -- the forward list in the platinum-roadmap frame -- and the storefront band.
 
 The content rules are the tests that matter: the forward content carries no dates, months,
-quarters, counts or percentages (tier is the only promise; the wishlist is dreams labelled as
-dreams), and the Horizon strip always pairs with real stage progress, never decoration.
+quarters, counts or percentages -- tier is the only promise, and the wishlist is dreams labelled
+as dreams.
 """
 import re
 
@@ -10,7 +10,7 @@ import pytest
 from django.template.loader import render_to_string
 from django.urls import reverse
 
-from users.constants import ROADMAP_FEATURES, ROADMAP_STAGES
+from users.constants import ROADMAP_FEATURES
 
 pytestmark = pytest.mark.django_db
 
@@ -23,17 +23,6 @@ def _flat(client, url_name='support_roadmap'):
 
 
 # ------------------------------------------------------------------------- the skeletons ----
-
-def test_the_stage_skeleton_is_well_formed():
-    """The pips and the storefront band walk this constant blind."""
-    statuses = [st['status'] for st in ROADMAP_STAGES]
-
-    assert statuses.count('now') == 1, 'exactly one stage is where we are'
-    assert all(s in ('shipped', 'now', 'next', 'later') for s in statuses)
-    assert statuses == sorted(statuses, key=('shipped', 'now', 'next', 'later').index)
-    for stage in ROADMAP_STAGES:
-        assert stage['key'] and stage['when'] and stage['title'] and stage['blurb']
-
 
 def test_the_feature_list_is_well_formed():
     """The page's tier sections walk this constant blind; every tier must have members."""
@@ -51,9 +40,7 @@ def test_the_forward_content_promises_no_dates():
     a promise ledger. Applies to the ahead stages AND every feature at every tier."""
     months = ('january february march april may june july august september '
               'october november december').split()
-    forward = [st['when'] + ' ' + st['blurb'] for st in ROADMAP_STAGES
-               if st['status'] in ('next', 'later')]
-    forward += [f['name'] + ' ' + f['blurb'] for f in ROADMAP_FEATURES]
+    forward = [f['name'] + ' ' + f['blurb'] for f in ROADMAP_FEATURES]
 
     for text in forward:
         low = text.lower()
@@ -90,19 +77,6 @@ def test_the_wishlist_says_it_makes_no_promises(client):
     dreams. The label is load-bearing copy, not decoration."""
     body = _flat(client)
     assert 'Dreams, labelled as dreams. No promises here, just direction.' in body
-
-
-def test_the_horizon_strip_carries_real_stage_progress(client):
-    """The primitive's own anti-pattern rule: never decorative, always a real fraction."""
-    body = _flat(client)
-    shipped = sum(1 for st in ROADMAP_STAGES if st['status'] == 'shipped')
-
-    strip = body[body.index('rm__pips'):body.index('rm__progress-k')]
-    assert strip.count('pp-horizon__seg') == len(ROADMAP_STAGES)
-    assert strip.count('data-state="done"') == shipped
-    assert strip.count('data-state="active"') == 1
-    assert f'aria-valuenow="{shipped}"' in strip
-    assert f'{shipped} of {len(ROADMAP_STAGES)} stages banked' in body
 
 
 def test_no_counts_anywhere_in_the_forward_body(client):
@@ -167,25 +141,6 @@ def test_the_cta_previews_the_storefronts_stars(client):
     assert cta.count('sup-go__risestar') == 5
 
 
-def test_the_pip_ignition_is_reduced_motion_safe_and_compositor_friendly():
-    """The load-time journey replay: declared under no-preference at the source, and its
-    keyframes touch opacity/transform only (box-shadow would also be doc-legal; these do not
-    even need it)."""
-    import pathlib
-    css = pathlib.Path('static/css/components/support-roadmap.css').read_text(encoding='utf-8')
-    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
-
-    pip_at = css.index('animation: rmPipIn')
-    assert 'prefers-reduced-motion: no-preference' in css[max(0, pip_at - 500):pip_at]
-    block = css[css.index('@keyframes rmPipIn'):]
-    block = block[:block.index('\n}') + 2]
-    for line in block.splitlines():
-        line = line.strip()
-        if ':' in line and not line.startswith(('@', '0%', '60%', '100%')):
-            prop = line.split(':')[0].strip()
-            assert prop in ('opacity', 'transform'), f'{prop} animates off-compositor'
-
-
 def test_nothing_is_hidden_without_javascript(client):
     """The scroll choreography's contract: hiding happens only via the JS-added .rm-armed class
     (inside the no-preference gate). Server markup must never ship a hidden card."""
@@ -203,19 +158,18 @@ def test_the_storefront_carries_the_roadmap_band(client):
     assert 'Where this is going' in body
     band = body[body.index('data-sup-road'):body.index('data-sup-paid')]
     assert reverse('support_roadmap') in band, 'the band does not link to the full roadmap'
-    assert band.count('pp-horizon__seg') == len(ROADMAP_STAGES)
 
 
-def test_the_band_names_only_the_stages_ahead(client):
-    """The band sells what support BUILDS next; the serve band already brags for the past."""
+def test_the_band_speaks_the_pages_tier_vocabulary(client):
+    """One story across both surfaces: the band compresses the SAME tiers and feature names the
+    page walks in full -- no separate skeleton to drift."""
     body = _flat(client, 'support_hub')
     band = body[body.index('data-sup-road'):body.index('data-sup-paid')]
 
-    for stage in ROADMAP_STAGES:
-        if stage['status'] in ('next', 'later'):
-            assert stage['blurb'] in band, f"{stage['key']} missing from the band"
-        else:
-            assert stage['blurb'] not in band, f"{stage['key']} (not ahead) leaked into the band"
+    for tier_name in ('In the works', 'Up next', 'The wishlist'):
+        assert tier_name in band, f'{tier_name} missing from the band'
+    first_works = next(f for f in ROADMAP_FEATURES if f['tier'] == 'works')
+    assert first_works['name'] in band
 
 
 def test_the_band_sits_inside_the_pitch(client):
