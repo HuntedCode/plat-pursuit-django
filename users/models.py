@@ -105,7 +105,10 @@ class CustomUser(AbstractUser):
         elif self.subscription_provider == 'paypal' and self.paypal_subscription_id:
             if self.paypal_cancel_at and self.paypal_cancel_at < timezone.now():
                 return False
-            return self.premium_tier is not None
+            # The feature-tier check, not bare truthiness: a paid-but-non-feature tier (the
+            # retired 'ad_free' was one) must not report premium here when nothing else does.
+            from users.services.subscription_service import SubscriptionService
+            return SubscriptionService.is_tier_premium(self.premium_tier) if self.premium_tier else False
         return False
     
     def get_premium_tier(self):

@@ -14,7 +14,7 @@ from typing import Optional, Dict, Tuple
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from djstripe.models import Subscription, Customer, Price
 from users.constants import (
     STRIPE_PRODUCTS,
@@ -141,11 +141,17 @@ class SubscriptionService:
                     recent_closed.ended_at = None
                     recent_closed.save(update_fields=['ended_at'])
                 else:
-                    SubscriptionPeriod.objects.create(
-                        user=user,
-                        started_at=timezone.now(),
-                        provider=provider_hint,
-                    )
+                    try:
+                        SubscriptionPeriod.objects.create(
+                            user=user,
+                            started_at=timezone.now(),
+                            provider=provider_hint,
+                        )
+                    except IntegrityError:
+                        # Concurrent webhook won the race against `one_open_period_per_user`
+                        # between our exists() and this insert. A period is open, which is all
+                        # this branch wanted -- not worth a 500 and a provider retry.
+                        logger.info(f"Open period already created concurrently for {user.email}")
         elif provider_hint is None and not is_premium:
             SubscriptionPeriod.objects.filter(
                 user=user, ended_at__isnull=True
@@ -357,6 +363,19 @@ class SubscriptionService:
         Returns:
             bool: True if user has active premium subscription
         """
+        # A Stripe event must never end a PAYPAL subscriber's premium. `stripe_customer_id` is
+        # kept forever, so somebody who once paid via Stripe and now pays via PayPal still routes
+        # here on a late event for the long-dead Stripe subscription -- and every fall-through
+        # below is a deactivation. Only proceed for such a user when an ACTIVE Stripe sub exists
+        # (a genuine provider switch); otherwise the event is stale by definition.
+        if user.subscription_provider == 'paypal' and user.paypal_subscription_id:
+            stripe_active = user.stripe_customer_id and Subscription.objects.filter(
+                customer__id=user.stripe_customer_id, stripe_data__status='active'
+            ).exists()
+            if not stripe_active:
+                logger.info(f"Stripe event {event_type} ignored for PayPal subscriber {user.email}")
+                return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
+
         if not user.stripe_customer_id:
             SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
             return False

@@ -55,7 +55,10 @@ revoke the very premium they just paid for.
 Hard rule, enforced by the `--live-ok` flag rather than by memory:
 
 - **Test/sandbox bootstrap: anytime.** Test keys → test webhooks → beta endpoint only.
-- **Live bootstrap: only at the rebuild cutover**, never before.
+- **Live bootstrap: only at the rebuild cutover**, never before. The gate checks the api key
+  too (an `sk_live` secret in a test env var still trips it). `--dry-run` deliberately
+  bypasses the gate: a read-only report against live is how you check state before cutover.
+  Note the dry run still exchanges live PayPal OAuth credentials to make its GETs.
 - Optional belt before cutover: backport the six-entry `STRIPE_PRODUCTS` /
   `PAYPAL_PLAN_TO_TIER` additions to `main` via the usual main-PR lane, so prod can *recognise*
   ladder products even while it cannot sell them.
@@ -72,7 +75,9 @@ Hard rule, enforced by the `--live-ok` flag rather than by memory:
   the right key; don't "fix" the asymmetry, it mirrors the settings.
 - **Deactivating a plan on PayPal's dashboard does not free its name.** The bootstrap skips
   `INACTIVE` plans when matching, so a re-run after a manual deactivation creates a fresh plan
-  rather than resurrecting the dead one. Intentional.
+  rather than resurrecting the dead one. Intentional. Stripe's mirror image: an ARCHIVED price
+  still holds its lookup key, so the price listing filters `active=True` and creates pass
+  `transfer_lookup_key=True`, which atomically moves the key onto the replacement price.
 - **Changing a ladder price later**: Stripe prices are immutable. Create a new price (new lookup
   key suffix or transfer the lookup key), paste the new id, and leave the old price attached to
   existing subscriptions — same story as the legacy tiers. PayPal plans support price updates via

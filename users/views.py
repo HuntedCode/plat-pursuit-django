@@ -26,8 +26,8 @@ from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
-from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS, PAYPAL_PLANS,
-                             PREMIUM_PERKS, SUPPORT_TIERS,
+from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
+                             PAYPAL_LADDER_PLANS, PREMIUM_PERKS, SUPPORT_TIERS,
                              SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
@@ -231,10 +231,14 @@ class SupportStorefrontView(TemplateView):
         context['pricing_available'] = bool(ladder)
         context['is_live'] = is_live
 
+        # The LADDER map, not the legacy PAYPAL_PLANS: this button sells ladder levels, so its
+        # availability must track the plans it would actually charge against. (With the legacy map
+        # the button showed in live mode on the strength of grandfathered plan ids alone.)
         paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
         context['paypal_available'] = (
             bool(getattr(settings, 'PAYPAL_CLIENT_ID', None))
-            and any(PAYPAL_PLANS.get(paypal_mode, {}).values())
+            and any(v for plans in PAYPAL_LADDER_PLANS.get(paypal_mode, {}).values()
+                    for v in plans.values())
         )
 
         # `has_active_subscription` reads `user.stripe_customer_id`, which AnonymousUser has not got.
@@ -454,13 +458,24 @@ class SupportStorefrontView(TemplateView):
             messages.error(request, "Invalid tier selected.")
             return redirect('support_hub')
 
-        # Availability: in live mode a level is only offered when BOTH its interval prices exist
-        # (mirrors get_context_data). Test/placeholder mode admits any ladder slug so the whole
-        # flow stays exercisable against mocks.
-        if not SUPPORT_TIERS_ARE_PLACEHOLDERS and not SubscriptionService.resolve_ladder_price_id(
-                tier, cycle, settings.STRIPE_MODE == 'live'):
-            messages.error(request, "That option is not available right now.")
-            return redirect('support_hub')
+        # Availability. THE SAME live-mode override as get_context_data: the placeholder flag is
+        # honoured in test mode only, so a stale True on a live deploy shows the unavailable state
+        # on GET -- and must equally refuse the POST, or the guard would render dead buttons while
+        # accepting direct posts against unconfigured tiers. And the check is per-PROVIDER: a
+        # PayPal purchase admitted because a *Stripe* price existed would send somebody to a
+        # processor with nothing configured behind it (or worse, with a different mode's plans --
+        # STRIPE_MODE and PAYPAL_MODE are independent settings).
+        placeholders = SUPPORT_TIERS_ARE_PLACEHOLDERS and settings.STRIPE_MODE != 'live'
+        if not placeholders:
+            if provider == 'paypal':
+                paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
+                configured = (PAYPAL_LADDER_PLANS.get(paypal_mode, {}).get(tier) or {}).get(cycle)
+            else:
+                configured = SubscriptionService.resolve_ladder_price_id(
+                    tier, cycle, settings.STRIPE_MODE == 'live')
+            if not configured:
+                messages.error(request, "That option is not available right now.")
+                return redirect('support_hub')
 
         # Built with reverse() rather than the string literals these used to be, so the pair cannot
         # drift apart from the URL conf. `{CHECKOUT_SESSION_ID}` is a Stripe-side placeholder Stripe
@@ -501,6 +516,12 @@ class SupportStorefrontView(TemplateView):
             return HttpResponseRedirect(session_url, status=303)
         except stripe.error.StripeError as e:
             messages.error(request, f"Error creating checkout: {str(e)}")
+            return redirect('support_hub')
+        except Exception:
+            # ValueError (tier unconfigured) and Price.DoesNotExist (id not yet synced into
+            # djstripe) both live on this path; neither deserves a 500 on a page taking money.
+            logger.exception("Stripe checkout creation failed")
+            messages.error(request, "Could not start checkout. Please try again.")
             return redirect('support_hub')
 
 @login_required
@@ -543,7 +564,13 @@ def stripe_webhook(request):
         logger.error(f"Webhook signature verification failed: {e}")
         return HttpResponse(status=400)
     
-    dj_event = DJStripeEvent.process(event)
+    # Replay guard. Stripe delivers at-least-once; djstripe's Event table is the durable record
+    # of what we have already processed. Without this, a redelivered subscription event re-fired
+    # the welcome email and notification (send_html_email has no dedupe of its own).
+    if DJStripeEvent.objects.filter(id=event.id).exists():
+        logger.info(f"Stripe webhook duplicate skipped: {event.id}")
+        return HttpResponse(status=200)
+    DJStripeEvent.process(event)
 
     # Route one-time donation payments before subscription handling
     if event.type == 'checkout.session.completed':
@@ -559,8 +586,13 @@ def stripe_webhook(request):
                 logger.exception("Error processing fundraiser donation webhook")
             return HttpResponse(status=200)
 
-    # Delegate all subscription-related events to SubscriptionService
-    SubscriptionService.handle_webhook_event(event.type, event.data.object)
+    # Delegate all subscription-related events to SubscriptionService. Logged, not raised: with
+    # the replay guard above, a retry would be skipped anyway (the Event row already exists), so a
+    # 500 here buys nothing but noise -- same at-most-once semantics as the PayPal handler below.
+    try:
+        SubscriptionService.handle_webhook_event(event.type, event.data.object)
+    except Exception:
+        logger.exception(f"Error processing Stripe webhook event {event.type}")
 
     return HttpResponse(status=200)
 
@@ -586,10 +618,11 @@ def paypal_webhook(request):
     transmission_id = request.META.get('HTTP_PAYPAL_TRANSMISSION_ID', '')
     if transmission_id:
         cache_key = f'paypal_webhook:{transmission_id}'
-        if cache.get(cache_key):
+        # cache.add is an atomic set-if-absent, so two concurrent redeliveries cannot both pass
+        # the way the old get-then-set pair could. 7 day TTL.
+        if not cache.add(cache_key, True, timeout=60 * 60 * 24 * 7):
             logger.info(f"PayPal webhook duplicate skipped: {transmission_id}")
             return HttpResponse(status=200)
-        cache.set(cache_key, True, timeout=60 * 60 * 24 * 7)  # 7 day TTL
 
     event_type = event_data.get('event_type', '')
     resource = event_data.get('resource', {})

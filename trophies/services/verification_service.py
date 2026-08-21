@@ -117,8 +117,12 @@ class VerificationService:
             profile.is_linked = True
             profile.save(update_fields=['user', 'is_linked'])
 
-            # Update premium status based on user's tier
-            is_premium = user.premium_tier in ['premium_monthly', 'premium_yearly', 'supporter']
+            # Update premium status from the shared tier list, NOT a hardcoded copy: the old
+            # inline three-tier list silently excluded the supporter ladder, so a paying `patron`
+            # who then linked their PSN profile lost the premium denorm (sync cadence, Discord
+            # role reconciliation, wall eligibility) until the next reconcile.
+            from users.services.subscription_service import SubscriptionService
+            is_premium = SubscriptionService.is_tier_premium(user.premium_tier)
             profile.update_profile_premium(is_premium)
 
             # Send one-time welcome email (idempotent, guards via EmailLog)
