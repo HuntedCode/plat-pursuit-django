@@ -52,7 +52,7 @@
 .rm-trail {
     display: flex;
     flex-direction: column;
-    padding: 10px 4px 0;
+    padding: 14px 0 0;
 }
 
 .rm-step {
@@ -94,7 +94,7 @@
     display: block;
     width: 14px;
     height: 14px;
-    margin-top: 6px;
+    margin-top: 26px;   /* level with the card's icon chip, not the card's top edge */
     border-radius: 50%;
     background: var(--pp-bg-2);
     border: 2px solid var(--pp-border);
@@ -132,17 +132,51 @@
     border-color: var(--pp-text-mute);
 }
 
-.rm-step__body {
-    padding: 0 0 34px;
-    max-width: 68ch;
+/* Every stage is a CARD on the rail (the rebuild's carded-content rule; the first cut shipped
+   bare prose and was rightly corrected). Card chrome comes from the shared utility classes in
+   the template; this styles the interior. */
+.rm-step__card {
+    margin-bottom: 14px;
+    max-width: 760px;
 }
 
-.rm-step__body > p {
+.rm-step__card p {
     margin-top: 10px;
     font-size: 0.9rem;
     line-height: 1.7;
     color: var(--pp-text-dim);
 }
+
+.rm-step__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.rm-step__head p { margin-top: 0; }
+
+/* The icon chip: the Jobs icon language -- a bordered tile, stroke inherits text colour so the
+   now-card's accent carries into its icon. */
+.rm-step__icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-3);
+    color: var(--pp-text-mute);
+}
+
+.rm-step__icon svg { width: 20px; height: 20px; }
+
+.rm-step.is-now .rm-step__icon {
+    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    color: var(--pp-primary);
+}
+
+.rm-step.is-ask .rm-step__icon { color: var(--pp-text-dim); }
 
 .rm-step__when {
     font-size: 0.68rem;
@@ -175,7 +209,7 @@
 @media (min-width: 768px) {
     .rm__h1 { font-size: 1.8rem; }
     .rm-step__h { font-size: 1.3rem; }
-    .rm-step__body > p { font-size: 0.95rem; }
+    .rm-step__card p { font-size: 0.95rem; }
 }
 
 /* The Today figures: tallies in a row, wrapping on narrow screens. */
@@ -248,4 +282,6 @@
     .rm-step:nth-child(4) { animation-delay: 460ms; }
     .rm-step:nth-child(5) { animation-delay: 540ms; }
     .rm-step:nth-child(6) { animation-delay: 620ms; }
+    .rm-step:nth-child(7) { animation-delay: 690ms; }
+    .rm-step:nth-child(8) { animation-delay: 750ms; }
 }
