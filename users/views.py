@@ -26,8 +26,9 @@ from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
-from users.constants import (ACTIVE_PREMIUM_TIERS, PAYPAL_PLANS, PREMIUM_PERKS,
-                             SUPPORT_TIERS, SUPPORT_TIERS_ARE_PLACEHOLDERS)
+from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS, PAYPAL_PLANS,
+                             PREMIUM_PERKS, SUPPORT_TIERS,
+                             SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
@@ -215,9 +216,12 @@ class SupportStorefrontView(TemplateView):
                  # `|rjust` trick that can is a puzzle to read.
                  star_range=range(tier['stars']))
             for tier in SUPPORT_TIERS
-            # Live and un-flagged: only offer a level somebody can actually buy. Until the ladder's
-            # prices exist this filters to nothing, and the page says so rather than lying.
-            if placeholders or tier['slug'] in prices
+            # Live and un-flagged: only offer a level somebody can actually buy -- BOTH intervals
+            # must be configured, or the cycle switch would sell a face with nothing behind it.
+            if placeholders or (
+                SubscriptionService.resolve_ladder_price_id(tier['slug'], 'monthly', is_live)
+                and SubscriptionService.resolve_ladder_price_id(tier['slug'], 'yearly', is_live)
+            )
         ]
         context['tiers'] = ladder
         context['tiers_are_placeholders'] = placeholders
@@ -431,6 +435,9 @@ class SupportStorefrontView(TemplateView):
 
         tier = request.POST.get('tier')
         provider = request.POST.get('provider', 'stripe')
+        # The cycle radio, finally read. It always rode along in the payload; the server priced
+        # everything as monthly regardless, which would have billed a Yearly pick monthly.
+        cycle = request.POST.get('sup-cycle', 'monthly')
 
         # An unknown provider used to FALL THROUGH to Stripe (only `paypal` was branched on), which
         # would quietly charge somebody through a processor they did not pick. Reject instead.
@@ -438,8 +445,27 @@ class SupportStorefrontView(TemplateView):
             messages.error(request, "Unknown payment provider.")
             return redirect('support_hub')
 
-        if tier not in self._prices():
+        if cycle not in ('monthly', 'yearly', 'gift'):
+            messages.error(request, "Unknown billing cycle.")
+            return redirect('support_hub')
+
+        if cycle == 'gift':
+            # The gift flow is its own lane (one-time payment -> code); built in the gifts commit.
+            messages.info(request, "Gifting is almost ready -- not quite yet.")
+            return redirect('support_hub')
+
+        # LADDER-ONLY. Grandfathering means the three legacy tiers stay renewable through webhooks
+        # but are no longer purchasable: this validation deliberately stopped admitting them.
+        if tier not in LADDER_SLUGS:
             messages.error(request, "Invalid tier selected.")
+            return redirect('support_hub')
+
+        # Availability: in live mode a level is only offered when BOTH its interval prices exist
+        # (mirrors get_context_data). Test/placeholder mode admits any ladder slug so the whole
+        # flow stays exercisable against mocks.
+        if not SUPPORT_TIERS_ARE_PLACEHOLDERS and not SubscriptionService.resolve_ladder_price_id(
+                tier, cycle, settings.STRIPE_MODE == 'live'):
+            messages.error(request, "That option is not available right now.")
             return redirect('support_hub')
 
         # Built with reverse() rather than the string literals these used to be, so the pair cannot
@@ -456,6 +482,7 @@ class SupportStorefrontView(TemplateView):
                     tier=tier,
                     return_url=f'{success_url}?provider=paypal',
                     cancel_url=cancel_url,
+                    interval=cycle,
                 )
                 return redirect(approval_url)
             except Exception:
@@ -469,6 +496,7 @@ class SupportStorefrontView(TemplateView):
                 tier=tier,
                 success_url=success_url + "?session_id={CHECKOUT_SESSION_ID}",
                 cancel_url=cancel_url,
+                interval=cycle,
             )
             # 303, not 302: this answers a POST, and 303 is the status that unambiguously tells
             # the client to GET the new location. It was WRITTEN as `redirect(session_url, code=303)`

@@ -68,7 +68,8 @@ class PayPalService:
         return PAYPAL_PLAN_TO_TIER.get(plan_id)
 
     @staticmethod
-    def create_subscription(user, tier: str, return_url: str, cancel_url: str) -> str:
+    def create_subscription(user, tier: str, return_url: str, cancel_url: str,
+                            interval: str = 'monthly') -> str:
         """
         Create a PayPal subscription and return the approval URL.
 
@@ -88,12 +89,16 @@ class PayPalService:
             requests.HTTPError: If PayPal API call fails
         """
         mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
-        plans = PAYPAL_PLANS.get(mode, {})
-
-        if tier not in plans or not plans[tier]:
-            raise ValueError(f"Invalid or unconfigured PayPal tier: {tier}")
-
-        plan_id = plans[tier]
+        from users.constants import LADDER_SLUGS, PAYPAL_LADDER_PLANS
+        if tier in LADDER_SLUGS:
+            # Ladder branch: PayPal plans are per-interval, so the (slug, interval) pair picks one
+            # of twelve. The legacy flat map below keeps the grandfathered tiers renewable.
+            plan_id = (PAYPAL_LADDER_PLANS.get(mode, {}).get(tier) or {}).get(interval)
+        else:
+            plans = PAYPAL_PLANS.get(mode, {})
+            plan_id = plans.get(tier) or None
+        if not plan_id:
+            raise ValueError(f"Invalid or unconfigured PayPal tier: {tier} ({interval})")
 
         payload = {
             'plan_id': plan_id,

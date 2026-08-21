@@ -11,10 +11,20 @@ configurations for better maintainability.
 # so it had nothing left to sell. It had already been withdrawn from the storefront and never had a
 # subscriber, hence no migration of existing members. Its Stripe products/prices and PayPal plan are
 # archived on those platforms rather than referenced here.
+# The first three are the LEGACY tiers, grandfathered 2026-08: their billing never changes and the
+# webhooks renew them forever, but the storefront no longer offers them. The six ladder slugs are
+# what it sells. `premium_tier` stores a SLUG only -- monthly vs yearly is a billing detail that
+# lives on the processor, never on the user.
 PREMIUM_TIER_CHOICES = [
     ('premium_monthly', 'Premium Monthly'),
     ('premium_yearly', 'Premium Yearly'),
     ('supporter', 'Supporter'),
+    ('backer', 'Backer'),
+    ('contributor', 'Contributor'),
+    ('patron', 'Patron'),
+    ('sponsor', 'Sponsor'),
+    ('benefactor', 'Benefactor'),
+    ('cornerstone', 'Cornerstone'),
 ]
 
 # Premium tier display names mapping
@@ -22,6 +32,12 @@ PREMIUM_TIER_DISPLAY = {
     'premium_monthly': 'Premium Monthly',
     'premium_yearly': 'Premium Yearly',
     'supporter': 'Supporter',
+    'backer': 'Backer',
+    'contributor': 'Contributor',
+    'patron': 'Patron',
+    'sponsor': 'Sponsor',
+    'benefactor': 'Benefactor',
+    'cornerstone': 'Cornerstone',
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -171,21 +187,43 @@ PREMIUM_PERKS = [
 
 # Stripe Product ID Mappings
 # Maps subscription tiers to their Stripe product IDs for both test and live modes
+# ONE product per ladder level with TWO prices hanging off it. That shape is load-bearing: webhook
+# tier recovery is a PRODUCT-id reverse lookup (`get_tier_from_product_id` scans this map), so a
+# product-per-level keeps recovery interval-free -- six new entries here and zero code change there.
+# Ladder ids are EMPTY until `bootstrap_support_skus` creates them and prints the block to paste.
+#
+# ⚠ LIVE ladder ids must not exist before the rebuild cutover: webhooks fan out to every registered
+# endpoint, and prod's `main` build treats an unknown product as deactivate-worthy. See the plan's
+# prod-safety note and docs/guides/support-skus.md.
 STRIPE_PRODUCTS = {
     'test': {
         'premium_monthly': 'prod_ThqljWr4cvnFFF',
         'premium_yearly': 'prod_ThqpPjDyERnoaF',
         'supporter': 'prod_ThquYbJOcBn65m',
+        'backer': '',
+        'contributor': '',
+        'patron': '',
+        'sponsor': '',
+        'benefactor': '',
+        'cornerstone': '',
     },
     'live': {
         'premium_monthly': 'prod_ThsI3EuCssYlTT',
         'premium_yearly': 'prod_ThsIi3Xd8fY2Hk',
         'supporter': 'prod_ThtYQAPoY5pSCN',
+        'backer': '',
+        'contributor': '',
+        'patron': '',
+        'sponsor': '',
+        'benefactor': '',
+        'cornerstone': '',
     }
 }
 
-# Stripe Price ID Mappings
-# Maps subscription tiers to their Stripe price IDs for both test and live modes
+# Stripe Price ID Mappings -- LEGACY TIERS ONLY, deliberately.
+# `get_prices_from_stripe` raises on ONE missing id and `_prices()` then returns {} for everything,
+# which would blank the legacy support band the moment a ladder price was unsynced. Ladder prices
+# live in STRIPE_LADDER_PRICES below and resolve through their own helper.
 STRIPE_PRICES = {
     'test': {
         'premium_monthly': 'price_1SkSXpR5jhcbjB32BA08Bv0o',
@@ -199,14 +237,38 @@ STRIPE_PRICES = {
     }
 }
 
-# Premium tiers that grant Discord roles
-PREMIUM_DISCORD_ROLE_TIERS = ['premium_monthly', 'premium_yearly']
+# The ladder's twelve Stripe prices: {mode: {slug: {interval: price_id}}}. Filled by
+# `bootstrap_support_skus` (which also syncs them into djstripe -- checkout does
+# `Price.objects.get`, so an unsynced id 500s the moment the placeholder flag flips).
+STRIPE_LADDER_PRICES = {
+    'test': {slug: {'monthly': '', 'yearly': ''} for slug in
+             ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+    'live': {slug: {'monthly': '', 'yearly': ''} for slug in
+             ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+}
+
+# The ladder's twelve PayPal plans, same shape (PayPal plans are per-interval, so twelve of them;
+# the flat reverse map below collapses the interval back out, which is fine -- the tier IS the slug).
+PAYPAL_LADDER_PLANS = {
+    'sandbox': {slug: {'monthly': '', 'yearly': ''} for slug in
+                ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+    'live': {slug: {'monthly': '', 'yearly': ''} for slug in
+             ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+}
+
+# Premium tiers that grant Discord roles. All six ladder levels grant the PREMIUM role (decided
+# 2026-08-20); the PLUS role stays with the legacy `supporter` tier only, until it dies out.
+PREMIUM_DISCORD_ROLE_TIERS = ['premium_monthly', 'premium_yearly',
+                              'backer', 'contributor', 'patron',
+                              'sponsor', 'benefactor', 'cornerstone']
 SUPPORTER_DISCORD_ROLE_TIERS = ['supporter']
 
 # Premium tiers that actually grant premium features. Every live tier does; the list is kept separate
 # from PREMIUM_TIER_CHOICES because the two answer different questions (what can be bought vs. what
 # unlocks features), and a future non-feature tier would diverge them again.
-ACTIVE_PREMIUM_TIERS = ['premium_monthly', 'premium_yearly', 'supporter']
+ACTIVE_PREMIUM_TIERS = ['premium_monthly', 'premium_yearly', 'supporter',
+                        'backer', 'contributor', 'patron',
+                        'sponsor', 'benefactor', 'cornerstone']
 
 # PayPal Plan ID Mappings
 # Maps subscription tiers to their PayPal plan IDs for both sandbox and live modes.
@@ -224,9 +286,21 @@ PAYPAL_PLANS = {
     }
 }
 
-# Reverse lookup: PayPal plan ID -> tier name (built at import time for O(1) webhooks)
+# Reverse lookup: PayPal plan ID -> tier name (built at import time for O(1) webhooks).
+# Walks the legacy flat map AND the nested ladder map; the ladder's two intervals collapse to one
+# slug, which is exactly right -- `premium_tier` stores the slug and the interval stays a billing
+# detail on the processor.
 PAYPAL_PLAN_TO_TIER = {}
 for _mode_plans in PAYPAL_PLANS.values():
     for _tier, _plan_id in _mode_plans.items():
         if _plan_id:
             PAYPAL_PLAN_TO_TIER[_plan_id] = _tier
+for _mode_plans in PAYPAL_LADDER_PLANS.values():
+    for _tier, _intervals in _mode_plans.items():
+        for _plan_id in _intervals.values():
+            if _plan_id:
+                PAYPAL_PLAN_TO_TIER[_plan_id] = _tier
+
+# Derived conveniences for the checkout path.
+LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
+GIFT_MONTHS = {'monthly': 1, 'yearly': 12}

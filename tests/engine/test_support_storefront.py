@@ -129,14 +129,12 @@ def test_a_member_is_not_bounced_off_the_page(client):
 
 # ------------------------------------------------------------------- the checkout contract ----
 
-@pytest.mark.parametrize('tier', ['premium_monthly', 'premium_yearly', 'supporter'])
-def test_each_tier_reaches_stripe_as_itself(client, tier):
-    """THE test this codebase never had. Asserts the tier the button carries is the tier the service
-    is asked for -- a mix-up here charges the wrong amount, and nothing else would catch it.
-
-    Parametrized over all three deliberately: `supporter` was live and purchasable for months with
-    no button anywhere, so it is the one most likely to be wired up wrong now that it has one.
-    """
+@pytest.mark.parametrize('tier', ['backer', 'contributor', 'patron',
+                                  'sponsor', 'benefactor', 'cornerstone'])
+def test_each_ladder_level_reaches_stripe_as_itself(client, tier):
+    """Asserts the level the button carries is the level the service is asked for -- a mix-up here
+    charges the wrong amount, and nothing else would catch it. All six, because the storefront now
+    sells the LADDER only; the legacy tiers have their own rejection test below."""
     user = UserFactory()
     client.force_login(user)
 
@@ -151,6 +149,50 @@ def test_each_tier_reaches_stripe_as_itself(client, tier):
     assert response.status_code == 303
 
 
+def test_a_legacy_tier_can_no_longer_be_bought_from_the_storefront(client):
+    """GRANDFATHERED means renewable, not purchasable. The webhooks renew premium_monthly /
+    premium_yearly / supporter forever; the storefront stopped admitting them, or the ladder and
+    the legacy price list would both be on sale at once."""
+    user = UserFactory()
+    client.force_login(user)
+
+    for legacy in ('premium_monthly', 'premium_yearly', 'supporter'):
+        with _priced(), _member(False), \
+                patch('users.views.SubscriptionService.create_checkout_session') as checkout:
+            response = client.post(reverse('support_hub'), {'tier': legacy, 'provider': 'stripe'})
+
+        assert not checkout.called, f'{legacy} is still purchasable from the storefront'
+        assert response.status_code == 302
+
+
+def test_the_cycle_radio_finally_reaches_the_service(client):
+    """The radio always rode along in the payload; the server ignored it and priced everything
+    monthly -- which would have BILLED a Yearly pick monthly the day the SKUs went live."""
+    user = UserFactory()
+    client.force_login(user)
+
+    with _priced(), _member(False), \
+            patch('users.views.SubscriptionService.create_checkout_session',
+                  return_value='https://checkout.stripe.com/x') as checkout:
+        client.post(reverse('support_hub'),
+                    {'tier': 'patron', 'provider': 'stripe', 'sup-cycle': 'yearly'})
+
+    assert checkout.call_args.kwargs['interval'] == 'yearly'
+
+
+def test_an_unknown_cycle_is_rejected(client):
+    user = UserFactory()
+    client.force_login(user)
+
+    with _priced(), _member(False), \
+            patch('users.views.SubscriptionService.create_checkout_session') as checkout:
+        response = client.post(reverse('support_hub'),
+                               {'tier': 'patron', 'sup-cycle': 'weekly'})
+
+    assert not checkout.called
+    assert response.status_code == 302
+
+
 def test_the_stripe_urls_keep_their_placeholder_and_come_back_here():
     """`{CHECKOUT_SESSION_ID}` is substituted by STRIPE, not by us, so it has to leave our process
     un-interpolated or `subscribe_success` gets no session to verify. And the success path must stay
@@ -158,7 +200,7 @@ def test_the_stripe_urls_keep_their_placeholder_and_come_back_here():
     including subscriptions bought months ago."""
     from django.test import RequestFactory
     user = UserFactory()
-    request = RequestFactory().post('/support/', {'tier': 'supporter', 'provider': 'stripe'})
+    request = RequestFactory().post('/support/', {'tier': 'cornerstone', 'provider': 'stripe'})
     request.user = user
 
     from users.views import SupportStorefrontView
@@ -180,9 +222,10 @@ def test_paypal_goes_to_paypal(client):
             patch('users.services.paypal_service.PayPalService.create_subscription',
                   return_value='https://paypal.com/approve') as paypal:
         response = client.post(reverse('support_hub'),
-                               {'tier': 'premium_yearly', 'provider': 'paypal'})
+                               {'tier': 'benefactor', 'provider': 'paypal', 'sup-cycle': 'yearly'})
 
-    assert paypal.call_args.kwargs['tier'] == 'premium_yearly'
+    assert paypal.call_args.kwargs['tier'] == 'benefactor'
+    assert paypal.call_args.kwargs['interval'] == 'yearly'
     assert response.status_code == 302
     assert response['Location'] == 'https://paypal.com/approve'
 
@@ -203,7 +246,7 @@ def test_an_anonymous_post_is_sent_to_log_in_rather_than_crashing(client):
     """The page is public now, so a POST can arrive with AnonymousUser attached. Every path below
     this guard touches `user.stripe_customer_id`, which AnonymousUser has not got."""
     with _priced():
-        response = client.post(reverse('support_hub'), {'tier': 'premium_monthly'})
+        response = client.post(reverse('support_hub'), {'tier': 'patron'})
 
     assert response.status_code == 302
     assert '/accounts/login/' in response['Location']
@@ -215,7 +258,7 @@ def test_a_member_cannot_buy_a_second_subscription(client):
 
     with _priced(), _member(True), \
             patch('users.views.SubscriptionService.create_checkout_session') as checkout:
-        response = client.post(reverse('support_hub'), {'tier': 'premium_monthly'})
+        response = client.post(reverse('support_hub'), {'tier': 'patron'})
 
     assert not checkout.called, 'double-subscribe guard is gone'
     assert response.status_code == 302
@@ -1573,7 +1616,7 @@ def test_a_stripe_error_lands_back_on_the_page_with_a_message(client):
     with _priced(), _member(False), \
             patch('users.views.SubscriptionService.create_checkout_session',
                   side_effect=stripe_lib.error.StripeError('boom')):
-        response = client.post(reverse('support_hub'), {'tier': 'premium_monthly'})
+        response = client.post(reverse('support_hub'), {'tier': 'patron'})
 
     assert response.status_code == 302
     assert response['Location'] == reverse('support_hub')
@@ -1587,7 +1630,7 @@ def test_a_paypal_failure_lands_back_on_the_page_with_a_message(client):
             patch('users.services.paypal_service.PayPalService.create_subscription',
                   side_effect=RuntimeError('paypal down')):
         response = client.post(reverse('support_hub'),
-                               {'tier': 'premium_monthly', 'provider': 'paypal'})
+                               {'tier': 'patron', 'provider': 'paypal'})
 
     assert response.status_code == 302
     assert response['Location'] == reverse('support_hub')
@@ -1597,7 +1640,7 @@ def test_an_anonymous_checkout_carries_next_back_to_support(client):
     """`redirect_to_login(request.get_full_path())` -- the half that was untested is the `next=`,
     which is what brings somebody back to finish what they started after signing in."""
     with _priced():
-        response = client.post(reverse('support_hub'), {'tier': 'premium_monthly'})
+        response = client.post(reverse('support_hub'), {'tier': 'patron'})
 
     assert 'next=/support/' in response['Location']
 

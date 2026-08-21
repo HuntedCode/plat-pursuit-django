@@ -244,6 +244,14 @@ ACTIVE_PREMIUM_TIERS = [
     PREMIUM_TIER_MONTHLY,
     PREMIUM_TIER_YEARLY,
     PREMIUM_TIER_SUPPORTER,
+    # The six ladder levels (2026-08). Kept in lockstep with users/constants.py by the cross-check
+    # in test_ads_removed.py, which is the whole reason this duplicate is safe to have.
+    'backer',
+    'contributor',
+    'patron',
+    'sponsor',
+    'benefactor',
+    'cornerstone',
 ]
 
 # Tab Identifiers for ProfileDetailView

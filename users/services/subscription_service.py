@@ -401,6 +401,19 @@ class SubscriptionService:
             return False
 
     @staticmethod
+    def resolve_ladder_price_id(tier: str, interval: str, is_live: bool):
+        """Ladder (slug, interval) -> Stripe price id, or None when unconfigured.
+
+        Deliberately SEPARATE from `get_price_ids`/`get_prices_from_stripe`: those raise on one
+        missing id and their caller degrades EVERYTHING on a miss, which is the right shape for the
+        three legacy tiers that must all exist together and the wrong shape for a ladder that fills
+        in one bootstrap run at a time.
+        """
+        from users.constants import STRIPE_LADDER_PRICES
+        mode = 'live' if is_live else 'test'
+        return (STRIPE_LADDER_PRICES.get(mode, {}).get(tier) or {}).get(interval) or None
+
+    @staticmethod
     def get_price_ids(is_live: bool) -> Dict[str, str]:
         """
         Get Stripe price IDs for the current mode.
@@ -437,7 +450,8 @@ class SubscriptionService:
         return prices
 
     @staticmethod
-    def create_checkout_session(user, tier: str, success_url: str, cancel_url: str) -> str:
+    def create_checkout_session(user, tier: str, success_url: str, cancel_url: str,
+                                interval: str = 'monthly') -> str:
         """
         Create a Stripe checkout session for a subscription.
 
@@ -455,12 +469,20 @@ class SubscriptionService:
             stripe.error.StripeError: If Stripe API call fails
         """
         is_live = settings.STRIPE_MODE == 'live'
-        prices = SubscriptionService.get_prices_from_stripe(is_live)
 
-        if tier not in prices:
-            raise ValueError(f"Invalid tier: {tier}")
-
-        price = prices[tier]
+        from users.constants import LADDER_SLUGS
+        if tier in LADDER_SLUGS:
+            # Ladder branch: (slug, interval) -> its own price. The legacy branch below is untouched
+            # so the three grandfathered tiers keep renewing forever; they simply are not offered.
+            price_id = SubscriptionService.resolve_ladder_price_id(tier, interval, is_live)
+            if not price_id:
+                raise ValueError(f"Ladder tier not configured: {tier}/{interval}")
+            price = Price.objects.get(id=price_id)
+        else:
+            prices = SubscriptionService.get_prices_from_stripe(is_live)
+            if tier not in prices:
+                raise ValueError(f"Invalid tier: {tier}")
+            price = prices[tier]
 
         # Get or create Stripe customer
         customer, created = Customer.get_or_create(subscriber=user)
@@ -480,7 +502,7 @@ class SubscriptionService:
             mode='subscription',
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={'tier': tier},
+            metadata={'tier': tier, 'interval': interval},
         )
 
         return session.url
