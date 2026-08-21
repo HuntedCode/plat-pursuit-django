@@ -515,7 +515,7 @@ substrate, and an earlier version of this page did, which is most of why it read
             <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %}" style="--perk-c: {{ perk.colour }}">
                 <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
                 <div class="sup-perk__body">
-                    <h3 class="sup-perk__name">{{ perk.name }}</h3>
+                    <h3 class="sup-perk__name">{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
                     <p class="sup-perk__mem">{{ perk.member }}</p>
                     {% comment %} The flavour beat: a coloured example of the perk in use. The
                     mark's example is not described, it is RENDERED -- your own name wearing the
@@ -525,11 +525,12 @@ substrate, and an earlier version of this page did, which is most of why it read
                     {% elif perk.example %}
                     <p class="sup-perk__ex">{{ perk.example }}</p>
                     {% endif %}
-                    {% if perk.note %}<p class="sup-perk__note">{{ perk.note }}</p>{% endif %}
                 </div>
             </div>
             {% endfor %}
         </div>
+
+        <p class="sup-modal__fn">* Must be in Discord to participate.</p>
 
         <p class="sup-modal__foot">
             If you ever find something on PlatPursuit locked behind a payment, we got it wrong.

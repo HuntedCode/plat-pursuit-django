@@ -197,7 +197,6 @@
 .sup-box__switch { width: 100%; justify-content: center; }
 .sup-box__switch .pp-switch__chip { flex: 1; justify-content: center; cursor: pointer; }
 
-
 /* --------------------------------------------------------------- the amount grid + tier ---- */
 /* AMOUNT FIRST, TIER DERIVED. Six rows each with their own button read as a form; a grid of amounts
    plus one action reads as a single decision, which is what it is. Borrowed from Blender's
@@ -963,13 +962,19 @@
 
 .sup-perk__ex--mark .pp-supstar { fill: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text)); }
 
-.sup-perk__note {
-    margin-top: 4px;
-    font-size: 0.7rem;
-    font-style: italic;
-    padding-right: 4px;
+.sup-perk__ast {
+    margin-left: 2px;
+    color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text));
+}
+
+/* The footnote the asterisk points at, quieter than the accountability line below it. */
+.sup-modal__fn {
+    margin-top: 12px;
+    font-size: 0.72rem;
     color: var(--pp-text-mute);
 }
+
+
 
 /* ------------------------------------------------------------------------------- the credits ---- */
 /* A CREDIT ROLL, not a donor board. One flat run, every card identical in size and weight, ordered

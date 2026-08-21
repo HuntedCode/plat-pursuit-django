@@ -166,14 +166,14 @@ PREMIUM_PERKS = [
     {'slug': 'mark', 'colour': '#6875ee',
      'name': 'Site-wide marker',
      'everyone': 'Your name, as you earned it',
-     'member': 'A supporter mark beside your name, everywhere your name appears.',
-     'note': 'It will never outshine what you earned.'},
-    {'slug': 'polls', 'colour': '#a666ea',
+     'member': 'A supporter mark beside your name, everywhere your name appears.'},
+    # asterisk -> the modal renders a * on the name and explains it once in the footer
+    # ("Must be in Discord to participate").
+    {'slug': 'polls', 'colour': '#a666ea', 'asterisk': True,
      'name': 'Vote in polls',
      'everyone': 'A voice in the Discord, any day',
      'member': 'A counted vote in what gets built next, and in the badge polls.',
-     'example': 'Recently: which badge series gets artwork next.',
-     'note': 'You will need to be in the Discord with us for this one.'},
+     'example': 'Recently: which badge series gets artwork next.'},
     # The wide closer: spans the modal's full width (perk.wide -> .sup-perk--wide).
     {'slug': 'beta', 'colour': '#e55dd9',
      'name': 'Beta access',
