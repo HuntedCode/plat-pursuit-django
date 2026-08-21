@@ -213,6 +213,39 @@
    the page (and a test) claimed the box was CSS-driven: a user who picked Yearly saw monthly prices
    and would have submitted a cycle they were never shown. */
 
+/* The yearly chip's bonus pill: always rendered (the box must not resize between tabs), tinted
+   by the selected level through --sup-t like everything else in the box. */
+.sup-cycle__bonus {
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 40%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 12%, transparent);
+    color: var(--pp-text);
+    white-space: nowrap;
+}
+
+/* The beta-only store preview toggle (display escape hatch; POST guard untouched). */
+.sup-box__betapeek {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: var(--pp-text-mute);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.sup-box__betapeek-note {
+    margin-bottom: 10px;
+    font-size: 0.74rem;
+    color: var(--pp-text-mute);
+}
+
+.sup-box__betapeek-note a { color: var(--pp-primary); text-decoration: underline; text-underline-offset: 3px; }
+
 /* THE ROADMAP BAND (data-sup-road): the pitch's forward look. Head row, then three tier cells,
    each wearing the roadmap page's chip primitive and up to three feature miniatures. */
 .sup-road__head {
@@ -854,77 +887,58 @@
     .sup-modal[open] { animation: ppRevealIn 0.28s var(--pp-ease); }
 }
 
-/* ------------------------------------------------------------------------------ the dial ---- */
-.sup-dial { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-.sup-modal .sup-dial__row { background: var(--pp-bg-2); }
-
-/* The column header only makes sense once the row IS three columns, so it is hidden at the stacked
-   size where each cell labels itself with `.sup-dial__k`. */
-.sup-dial__hrow { display: none; }
-
-.sup-dial__row {
+/* Perk tiles: the roadmap's icon-card language inside the modal. The member line leads (it is
+   the thing being bought); what everyone gets rides underneath, so the more-not-different frame
+   survives the table it replaced. */
+.sup-perks-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 4px;
-    padding: 12px 14px;
-    border-radius: var(--pp-radius-md);
+    gap: 8px;
+    margin-top: 14px;
+}
+
+@media (min-width: 640px) {
+    .sup-perks-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.sup-perk {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--pp-radius-sm);
     border: 1px solid var(--pp-border);
-    background: var(--pp-bg-2);
+    background: rgba(255, 255, 255, 0.02);
 }
 
-.sup-dial__name { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
+.sup-perk__icon { margin-top: 2px; }
 
-.sup-dial__free,
-.sup-dial__mem { font-size: 0.83rem; line-height: 1.55; color: var(--pp-text-dim); }
-
-.sup-dial__mem { color: var(--pp-text); }
-
-/* The inline key that carries the comparison on a phone, where the header row is gone. */
-.sup-dial__k {
-    display: inline-block;
-    min-width: 74px;
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--pp-text-mute);
+.sup-perk__name {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.85rem;
+    font-weight: 800;
 }
 
-.sup-dial__mem .sup-dial__k { color: color-mix(in oklab, var(--pp-accent) 75%, var(--pp-text-mute)); }
+.sup-perk__mem {
+    margin-top: 3px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--pp-text);
+}
 
-.sup-dial__note {
-    margin-top: 2px;
-    font-size: 0.74rem;
+.sup-perk__free {
+    margin-top: 4px;
+    font-size: 0.72rem;
     line-height: 1.5;
     color: var(--pp-text-mute);
-    font-style: italic;
-    padding-right: 4px;
 }
 
-@media (min-width: 768px) {
-    .sup-dial__hrow {
-        display: grid;
-        grid-template-columns: 1.1fr 1fr 1.4fr;
-        gap: 14px;
-        padding: 0 14px 2px;
-    }
-
-    .sup-dial__hrow span {
-        font-size: 0.62rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--pp-text-mute);
-    }
-
-    .sup-dial__hrow .is-mem { color: color-mix(in oklab, var(--pp-accent) 75%, var(--pp-text-mute)); }
-
-    .sup-dial__row { grid-template-columns: 1.1fr 1fr 1.4fr; gap: 14px; align-items: baseline; }
-
-    /* The note spans the row under the three cells rather than crowding a column. */
-    .sup-dial__note { grid-column: 1 / -1; margin-top: 6px; }
-
-    .sup-dial__k { display: none; }
+.sup-perk__note {
+    margin-top: 4px;
+    font-size: 0.7rem;
+    font-style: italic;
+    padding-right: 4px;
+    color: var(--pp-text-mute);
 }
 
 /* ------------------------------------------------------------------------------- the credits ---- */

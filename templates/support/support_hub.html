@@ -109,7 +109,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 </div>
 
                 {% comment %} ------------------------------------------- the ask ------------- {% endcomment %}
-                {% if viewer_is_member %}
+                {% if viewer_is_member and not store_preview %}
                 <div class="sup-box sup-box--member">
                     <svg class="sup-box__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
@@ -120,9 +120,18 @@ substrate, and an earlier version of this page did, which is most of why it read
                         on people doing what you did.
                     </p>
                     <a href="{% url 'subscription_management' %}" class="sup-box__manage">Manage your membership</a>
+                    {% if beta_store_preview %}
+                    <a href="?preview=store" class="sup-box__betapeek">Preview the store card (beta)</a>
+                    {% endif %}
                 </div>
 
                 {% elif pricing_available %}
+                {% if store_preview and viewer_is_member %}
+                <p class="sup-box__betapeek-note">
+                    Beta preview: you are seeing the store as a non-member.
+                    <a href="{{ request.path }}">Back to your card</a>
+                </p>
+                {% endif %}
                 {% comment %} The box's per-level hue, emitted from the ONE source (SUPPORT_TIERS)
                 rather than a parallel CSS block that could drift. The selected amount's radio drives
                 `--sup-t` on the whole box, which is what lets the CTA and the level block wear the
@@ -163,6 +172,10 @@ substrate, and an earlier version of this page did, which is most of why it read
                         <label class="pp-switch__chip">
                             <input type="radio" name="sup-cycle" value="yearly" class="sr-only">
                             <span class="pp-switch__lbl">Yearly</span>
+                            {% comment %} Static on the chip, not inside the box: the pitch is
+                            visible before you switch, and the box never resizes between tabs.
+                            Yearly is priced at ten months, so the claim is exactly true. {% endcomment %}
+                            <span class="sup-cycle__bonus">2 months free</span>
                         </label>
                     </div>
 
@@ -495,18 +508,19 @@ substrate, and an earlier version of this page did, which is most of why it read
             you can do.
         </p>
 
-        <div class="sup-dial" role="table">
-            <div class="sup-dial__hrow" role="row">
-                <span role="columnheader"></span>
-                <span role="columnheader">Everyone</span>
-                <span role="columnheader" class="is-mem">Supporters</span>
-            </div>
+        {% comment %} Icon tiles in the roadmap's card language (one tile per perk, keyed icon
+        partial like _roadmap_icon.html) -- the comparison table read as a spreadsheet. The
+        member line leads; what everyone gets rides underneath so the dial framing survives. {% endcomment %}
+        <div class="sup-perks-grid">
             {% for perk in premium_perks %}
-            <div class="sup-dial__row" role="row">
-                <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
-                <span class="sup-dial__free" role="cell"><span class="sup-dial__k">Everyone</span>{{ perk.everyone }}</span>
-                <span class="sup-dial__mem" role="cell"><span class="sup-dial__k">Supporters</span>{{ perk.member }}</span>
-                {% if perk.note %}<span class="sup-dial__note" role="cell">{{ perk.note }}</span>{% endif %}
+            <div class="sup-perk">
+                <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
+                <div class="sup-perk__body">
+                    <h3 class="sup-perk__name">{{ perk.name }}</h3>
+                    <p class="sup-perk__mem">{{ perk.member }}</p>
+                    <p class="sup-perk__free">Everyone: {{ perk.everyone }}</p>
+                    {% if perk.note %}<p class="sup-perk__note">{{ perk.note }}</p>{% endif %}
+                </div>
             </div>
             {% endfor %}
         </div>

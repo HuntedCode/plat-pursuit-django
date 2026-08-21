@@ -602,6 +602,67 @@ def test_the_rise_keyframes_stay_compositor_friendly():
             assert prop in ('opacity', 'transform'), f'{prop} animates off-compositor'
 
 
+def test_the_yearly_chip_advertises_its_two_free_months(client):
+    """'2 months free' rides the yearly CHIP, always rendered -- the pitch is visible before you
+    switch, and the box never resizes between tabs (the pill exists in both states). Priced at
+    ten months, so the claim is exactly true."""
+    body = _flat(client)
+
+    assert body.count('2 months free') == 1
+    chip = body[body.index('value="yearly"'):body.index('value="yearly"') + 300]
+    assert 'sup-cycle__bonus' in chip, 'the pill left the yearly chip'
+
+
+def test_the_beta_store_preview_is_beta_only(client, settings):
+    """?preview=store shows a MEMBER the purchase box on beta (testing without a second account);
+    everywhere else it is inert. Display only -- the POST double-subscribe guard is untouched."""
+    from unittest.mock import patch
+    from tests.factories import UserFactory
+
+    # Staff, because IS_BETA also arms BetaStaffGateMiddleware and would gate the whole page.
+    # Raw gets, not _flat: _flat force-patches the viewer to non-member internally.
+    client.force_login(UserFactory(is_staff=True))
+
+    def flat(url):
+        with _priced():
+            return ' '.join(client.get(url).content.decode().split())
+
+    with _member(True):
+        settings.IS_BETA = True
+        normal = flat(reverse('support_hub'))
+        preview = flat(reverse('support_hub') + '?preview=store')
+        settings.IS_BETA = False
+        prod_preview = flat(reverse('support_hub') + '?preview=store')
+
+    assert 'You already back this.' in normal
+    assert 'Preview the store card (beta)' in normal
+    assert 'You already back this.' not in preview, 'preview did not reveal the store'
+    assert 'seeing the store as a non-member' in preview
+    assert 'You already back this.' in prod_preview, 'the preview escape hatch leaked to production'
+    assert 'Preview the store card (beta)' not in prod_preview
+
+
+def test_the_perks_modal_is_icon_tiles(client):
+    """One tile per perk in the roadmap's icon-card language, each with its keyed icon; the
+    member line leads and the everyone line rides underneath (the dial frame survives the table
+    it replaced)."""
+    from django.template.loader import render_to_string
+    from users.constants import PREMIUM_PERKS
+
+    body = _flat(client)
+    modal = body[body.index('id="sup-perks"'):]
+
+    assert modal.count('class="sup-perk"') == len(PREMIUM_PERKS)
+    for perk in PREMIUM_PERKS:
+        assert perk['name'] in modal
+        assert f"Everyone: {perk['everyone']}" in modal
+    # Every slug renders its own icon, loudly (same contract as the roadmap partial).
+    fallback = render_to_string('support/_perk_icon.html', {'key': '__nope__'})
+    for perk in PREMIUM_PERKS:
+        icon = render_to_string('support/_perk_icon.html', {'key': perk['slug']})
+        assert icon.strip() != fallback.strip(), f"{perk['slug']} renders the fallback heart"
+
+
 def test_the_armed_ladder_sells_live_buttons(client):
     """The flip side, the state actually shipping: flag off + ids filled = pressable buttons,
     no unavailable copy."""

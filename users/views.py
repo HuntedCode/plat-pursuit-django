@@ -246,6 +246,14 @@ class SupportStorefrontView(TemplateView):
         context['viewer_is_member'] = (
             SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
         )
+        # BETA-ONLY testing escape hatch: ?preview=store shows a member the purchase box instead
+        # of the thank-you card, so store states are checkable without a second account. Display
+        # only -- the POST's double-subscribe guard is untouched, so a member still cannot
+        # actually double-buy. Inert everywhere IS_BETA is unset (i.e. production).
+        context['beta_store_preview'] = settings.IS_BETA
+        context['store_preview'] = (
+            settings.IS_BETA and self.request.GET.get('preview') == 'store'
+        )
 
         from users.constants import ROADMAP_FEATURES, ROADMAP_TIERS
         # The band teaser: each certainty tier with its first few feature names -- derived from
