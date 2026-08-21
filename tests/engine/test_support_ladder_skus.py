@@ -24,6 +24,10 @@ def test_every_ladder_slug_is_a_real_tier_everywhere():
         for mode in ('test', 'live'):
             assert slug in STRIPE_PRODUCTS[mode], f'{slug} unrecoverable from a {mode} webhook'
             assert set(STRIPE_LADDER_PRICES[mode][slug]) == {'monthly', 'yearly'}
+        # NON-EMPTY, not merely present: the presence-only version passed on '' while test-mode
+        # webhooks deactivated real ladder purchases (the beta incident). Live stays empty by
+        # design until cutover -- that half lives in test_live_ids_stay_empty_until_cutover.
+        assert STRIPE_PRODUCTS['test'][slug], f'{slug} has no test product id; its webhook deactivates the buyer'
         for mode in ('sandbox', 'live'):
             assert set(PAYPAL_LADDER_PLANS[mode][slug]) == {'monthly', 'yearly'}
 
@@ -65,6 +69,8 @@ def test_live_ids_stay_empty_until_cutover():
         assert not any(intervals.values()), f'live Stripe id for {slug} before cutover'
     for slug, intervals in PAYPAL_LADDER_PLANS['live'].items():
         assert not any(intervals.values()), f'live PayPal id for {slug} before cutover'
+    for slug in LADDER_SLUGS:
+        assert not STRIPE_PRODUCTS['live'][slug], f'live product id for {slug} before cutover'
 
 
 def test_discord_roles_ladder_gets_premium_and_plus_stays_legacy():
