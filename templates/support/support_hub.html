@@ -120,6 +120,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                         on people doing what you did.
                     </p>
                     <a href="{% url 'subscription_management' %}" class="sup-box__manage">Manage your membership</a>
+                    <button type="button" class="sup-box__perklink" data-perks-open>What your membership includes</button>
                     {% if beta_store_preview %}
                     <a href="?preview=store" class="sup-box__betapeek">Preview the store card (beta)</a>
                     {% endif %}
@@ -487,14 +488,9 @@ substrate, and an earlier version of this page did, which is most of why it read
     {% endif %}
 
     {% comment %} ============================================================ perks modal ==== {% endcomment %}
-    {% comment %} A native <dialog>, so Escape, the focus trap and the backdrop come from the browser
-    rather than from us. The scrim is a SOLID dim with no backdrop-filter, per the motion docs: a
-    blurred backdrop re-samples on any repaint in its stacking context and is the documented cause of
-    modal jank on this site.
-
-    Every row fills in BOTH columns, because premium here is a dial and not a door -- supporters get
-    more of a thing everyone already has. A row that could not fill "Everyone" would be a wall, and
-    there is a test that fails on one. {% endcomment %}
+    {% comment %} The dial invariant lives in the DATA now: every perk keeps an
+        'everyone' side in PREMIUM_PERKS (test_every_perk_names_what_a_free_user_gets fails on a
+        wall), and the member lines fold the free side into their own copy. {% endcomment %}
     <dialog id="sup-perks" class="sup-modal" aria-labelledby="sup-perks-h">
         <div class="sup-modal__head">
             <h2 id="sup-perks-h">What every supporter gets</h2>
@@ -504,7 +500,8 @@ substrate, and an earlier version of this page did, which is most of why it read
         </div>
 
         <p class="sup-modal__lede">
-            Every level gets all of this. Higher levels are simply seen more.
+            It all builds on what everyone already gets. Every level carries every perk;
+            higher levels are simply seen more.
         </p>
 
         {% comment %} Icon tiles in the roadmap's card language (one tile per perk, keyed icon
@@ -515,13 +512,15 @@ substrate, and an earlier version of this page did, which is most of why it read
             <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %}" style="--perk-c: {{ perk.colour }}">
                 <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
                 <div class="sup-perk__body">
-                    <h3 class="sup-perk__name">{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
+                    <h3 class="sup-perk__name"{% if perk.asterisk %} aria-describedby="sup-perks-fn"{% endif %}>{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
                     <p class="sup-perk__mem">{{ perk.member }}</p>
                     {% comment %} The flavour beat: a coloured example of the perk in use. The
                     mark's example is not described, it is RENDERED -- your own name wearing the
                     star, the same object the purchase box previews. {% endcomment %}
                     {% if perk.slug == 'mark' %}
-                    <p class="sup-perk__ex sup-perk__ex--mark">{{ viewer_name }} <svg class="pp-supstar" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></p>
+                    {% comment %} THE primitive, not a re-description: pp-supname + the star,
+                    sharing one hue through --sup-t exactly as every real supporter mark does. {% endcomment %}
+                    <p class="sup-perk__ex sup-perk__ex--mark" style="--sup-t: {{ perk.colour }}"><span class="pp-supname">{{ viewer_name }}</span> <svg class="pp-supstar" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></p>
                     {% elif perk.example %}
                     <p class="sup-perk__ex">{{ perk.example }}</p>
                     {% endif %}
@@ -530,7 +529,9 @@ substrate, and an earlier version of this page did, which is most of why it read
             {% endfor %}
         </div>
 
-        <p class="sup-modal__fn">* Must be in Discord to participate.</p>
+        {% for perk in premium_perks %}{% if perk.footnote %}
+        <p class="sup-modal__fn" id="sup-perks-fn">* {{ perk.footnote }}</p>
+        {% endif %}{% endfor %}
 
         <p class="sup-modal__foot">
             If you ever find something on PlatPursuit locked behind a payment, we got it wrong.

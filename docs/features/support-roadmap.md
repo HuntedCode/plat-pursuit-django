@@ -31,8 +31,9 @@ teaser and the test-suite's tier list all derive from the constant, so nothing e
   roadmap becomes a promise ledger. `test_the_forward_content_promises_no_dates` sweeps every
   feature's name and blurb.
 - **No counts or percentages anywhere on the page** (`test_no_counts_anywhere_in_the_forward_body`).
-- **The wishlist labels itself as dreams** ("Dreams. No promises here, just direction.") — that subline is load-bearing copy, pinned by test. It is what lets ambitious
-  items live on the page without becoming commitments.
+- **The wishlist labels itself as dreams** ("Dreams. No promises here, just direction.") —
+  load-bearing copy, pinned by test. It lets ambitious items live on the page without becoming
+  commitments.
 - **Tier is the only promise.** Certainty, not time.
 
 ## The presentation vocabulary

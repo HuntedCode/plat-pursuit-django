@@ -215,7 +215,8 @@
 /* The yearly chip's bonus pill: always rendered (the box must not resize between tabs), tinted
    by the selected level through --sup-t like everything else in the box. */
 .sup-cycle__bonus {
-    font-size: 0.56rem;
+    font-size: 0.65rem;   /* it is a pricing promise, not a chart legend -- the 12px-floor rule's
+                             micro-label carve-out does not cover it */
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -223,8 +224,40 @@
     border-radius: 999px;
     border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 40%, var(--pp-border));
     background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 12%, transparent);
-    color: var(--pp-text);
+    color: var(--pp-text-mute);   /* the CHECKED chip owns the brightness hierarchy... */
     white-space: nowrap;
+}
+
+/* ...and the pill brightens with its chip. */
+.pp-switch__chip:has(input:checked) .sup-cycle__bonus { color: var(--pp-text); }
+
+/* Narrow phones: chips may shrink below min-content (min-width: 0 re-arms wrapping, which
+   flex-basis: 0 otherwise disables) and the pill drops under its label instead of spilling
+   past the switcher's border. */
+.sup-box__switch .pp-switch__chip { min-width: 0; }
+
+@media (max-width: 420px) {
+    .sup-box__switch .pp-switch__chip { flex-wrap: wrap; row-gap: 2px; }
+    .sup-cycle__bonus { flex-basis: 100%; justify-content: center; display: inline-flex; }
+}
+
+.sup-box__perklink {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.76rem;
+    color: var(--pp-text-dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.sup-box__perklink:hover { color: var(--pp-text); }
+
+.sup-box__perklink:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
 }
 
 /* The beta-only store preview toggle (display escape hatch; POST guard untouched). */
@@ -835,6 +868,11 @@
 @media (min-width: 768px) { .sup-modal { padding: 26px 28px; } }
 
 .sup-modal__head {
+    position: sticky;   /* the Close button must not scroll away inside a modal taller than the
+                           viewport (at 375x667 most of the tile stack sits below the fold) */
+    top: -20px;
+    z-index: 1;
+    background: inherit;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -907,14 +945,19 @@
     padding: 12px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid var(--pp-border);
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.03);
 }
 
-/* The wide closer (beta access): full row, a touch more presence. */
+@media (max-width: 639px) {
+    .sup-perk { padding: 10px; }
+}
+
+/* The wide closer (beta access): full row. Border deliberately NEUTRAL -- a magenta-tinted
+   border on the emphasis tile made the top ramp hue read as a top-tier perk, on a page whose
+   lede says levels change nothing. */
 .sup-perk--wide {
     grid-column: 1 / -1;
     padding: 14px;
-    border-color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 28%, var(--pp-border));
 }
 
 /* The icon wears its perk's stop from the giving ramp: tinted stroke, whisper fill, tinted
@@ -959,8 +1002,6 @@
     gap: 5px;
     font-weight: 700;
 }
-
-.sup-perk__ex--mark .pp-supstar { fill: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text)); }
 
 .sup-perk__ast {
     margin-left: 2px;

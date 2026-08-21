@@ -250,7 +250,7 @@ class SupportStorefrontView(TemplateView):
         # of the thank-you card, so store states are checkable without a second account. Display
         # only -- the POST's double-subscribe guard is untouched, so a member still cannot
         # actually double-buy. Inert everywhere IS_BETA is unset (i.e. production).
-        context['beta_store_preview'] = settings.IS_BETA
+        context['beta_store_preview'] = settings.IS_BETA and user.is_authenticated and user.is_staff
         context['store_preview'] = (
             settings.IS_BETA and self.request.GET.get('preview') == 'store'
         )

@@ -84,7 +84,7 @@ and deliver the big features with care over time. We enter v1 knowing its job is
 not a feature drop. The deferred features become the visible roadmap: the reasons people keep
 supporting and new people join.
 
-**The v1 perk lineup (decided 2026-08-19):**
+**The v1 perk lineup (decided 2026-08-19):** *(superseded 2026-08-22: the shipped five are sync / discord / mark / polls / beta -- polls are Discord-NATIVE polls, which keeps the no-built-ballots decision below intact; the permanent credit moved to the purchase box's checklist)*
 
 | Perk | State |
 |---|---|

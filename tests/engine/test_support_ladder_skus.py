@@ -30,6 +30,8 @@ def test_every_ladder_slug_is_a_real_tier_everywhere():
         assert STRIPE_PRODUCTS['test'][slug], f'{slug} has no test product id; its webhook deactivates the buyer'
         for mode in ('sandbox', 'live'):
             assert set(PAYPAL_LADDER_PLANS[mode][slug]) == {'monthly', 'yearly'}
+    # And no copy-paste duplicates at the next paste: every product id maps ONE tier.
+    assert len(set(STRIPE_PRODUCTS['test'].values())) == len(STRIPE_PRODUCTS['test'])
 
 
 def test_the_legacy_tiers_survive_in_every_recovery_map():

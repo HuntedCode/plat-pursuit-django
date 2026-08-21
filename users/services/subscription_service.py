@@ -61,7 +61,7 @@ class SubscriptionService:
         """Helper to find tier in a specific mode."""
         products = STRIPE_PRODUCTS.get(mode, {})
         for tier, pid in products.items():
-            if pid == product_id:
+            if pid and pid == product_id:
                 return tier
         return None
 
@@ -623,6 +623,7 @@ class SubscriptionService:
 
         preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
+        from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'is_final_warning': is_final_warning,
@@ -630,6 +631,9 @@ class SubscriptionService:
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
             'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            # From the shared constant: the hand-written what-you-lose list threatened retired
+            # perks (themes, premium checklists) on a dunning email.
+            'premium_perks': PREMIUM_PERKS,
         }
 
         try:
@@ -728,12 +732,14 @@ class SubscriptionService:
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
         preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
+        from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'tier_name': tier_name,
             'subscribe_url': f"{settings.SITE_URL}/support/",
             'site_url': settings.SITE_URL,
             'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            'premium_perks': PREMIUM_PERKS,
         }
 
         try:
@@ -929,12 +935,16 @@ class SubscriptionService:
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
         preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
+        from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
             'profile_url': f"{settings.SITE_URL}/profiles/{user.profile.psn_username}/" if hasattr(user, 'profile') else settings.SITE_URL,
             'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            # The perk list renders from the shared constant (the hand-written copy sold four
+            # retired perks on the first email a member ever read).
+            'premium_perks': PREMIUM_PERKS,
         }
 
         try:

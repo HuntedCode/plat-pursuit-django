@@ -101,13 +101,12 @@
 
     <div class="features-had">
         <h3>Premium features that are now inactive:</h3>
+        {% comment %} Rendered from PREMIUM_PERKS, never hand-written: a prior version of this
+        list sold themes and premium checklists long after both were retired. {% endcomment %}
         <ul>
-            {% comment %} Only claims that exist in PREMIUM_PERKS -- this list sold themes
-            and premium checklists long after both were retired. {% endcomment %}
-            <li>Five-minute manual syncing (back to hourly)</li>
-            <li>The supporter mark beside your name</li>
-            <li>Early access to new things</li>
-            <li>Discord premium role</li>
+            {% for perk in premium_perks %}
+            <li>{{ perk.name }}</li>
+            {% endfor %}
         </ul>
     </div>
 

@@ -136,13 +136,14 @@
             method only takes a minute and will keep everything running smoothly.
         </p>
 
+        {% comment %} From PREMIUM_PERKS, never hand-written -- the old list threatened the loss
+        of themes and premium checklists, neither of which existed, on a dunning email. {% endcomment %}
         <div class="features-list">
             <h3>What you'll lose without an active subscription:</h3>
             <ul>
-                <li>Priority sync scheduling and faster profile updates</li>
-                <li>Premium badges, themes, and customization options</li>
-                <li>Access to premium checklists and advanced features</li>
-                <li>Your Discord premium role</li>
+                {% for perk in premium_perks %}
+                <li>{{ perk.name }}</li>
+                {% endfor %}
             </ul>
         </div>
 

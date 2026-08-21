@@ -312,7 +312,7 @@ def test_no_perk_promises_something_that_no_longer_exists():
     shipping the claim.
     """
     text = ' '.join(
-        f"{p['name']} {p['everyone']} {p['member']} {p.get('note', '')}" for p in PREMIUM_PERKS
+        f"{p['name']} {p['everyone']} {p['member']} {p.get('example', '')}" for p in PREMIUM_PERKS
     ).lower()
 
     for gone in ('dashboard', 'theme', 'game list', 'showcase', 'profile customization',
@@ -363,7 +363,9 @@ def test_neither_page_hand_writes_its_own_perk_list_again():
     members with a list of things they did not have. So this checks the templates themselves.
     """
     root = pathlib.Path(__file__).resolve().parents[2]
-    for name in ('support/support_hub.html', 'users/subscription_management.html'):
+    for name in ('support/support_hub.html', 'users/subscription_management.html',
+                 'emails/subscription_welcome.html', 'emails/payment_failed.html',
+                 'emails/subscription_cancelled.html'):
         markup = (root / 'templates' / name).read_text(encoding='utf-8')
         assert 'premium_perks' in markup, f'{name} is no longer reading the shared perk list'
         # Strip {% comment %} blocks first. Both templates EXPLAIN which dead perks they stopped
@@ -656,6 +658,9 @@ def test_the_perks_modal_is_icon_tiles(client):
     modal = body[body.index('id="sup-perks"'):]
 
     assert modal.count('--perk-c:') == len(PREMIUM_PERKS)
+    # The icons must reach the MODAL (rendering the partial standalone proves nothing about
+    # the tiles); one tile, one icon span.
+    assert modal.count('sup-perk__icon') == len(PREMIUM_PERKS)
     for perk in PREMIUM_PERKS:
         assert perk['name'] in modal
         # Each tile wears its perk's stop from the giving ramp (SUPPORT_TIERS hues).

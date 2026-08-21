@@ -103,15 +103,16 @@
         Your {{ tier_name }} subscription is live. Here's what you've unlocked:
     </p>
 
+    {% comment %} Rendered from PREMIUM_PERKS, never hand-written: the old list here sold four
+    perks that no longer existed (themes, premium checklists, the Challenge Hub, gated recaps) --
+    on the FIRST email a paying member reads. The storefront guard test now scans this template
+    too. {% endcomment %}
     <div class="features-unlocked">
-        <h3>Your premium perks:</h3>
+        <h3>Your membership:</h3>
         <ul>
-            <li><strong>Priority sync scheduling</strong> and faster profile updates</li>
-            <li><strong>Premium badges, themes,</strong> and customization options</li>
-            <li><strong>Premium checklists</strong> and advanced features</li>
-            <li><strong>Discord premium role</strong> (if verified)</li>
-            <li><strong>Challenge Hub</strong> with access to exclusive premium challenges</li>
-            <li><strong>Shareable trophy cards</strong> and monthly recaps</li>
+            {% for perk in premium_perks %}
+            <li><strong>{{ perk.name }}</strong> &mdash; {{ perk.member }}</li>
+            {% endfor %}
         </ul>
     </div>
 

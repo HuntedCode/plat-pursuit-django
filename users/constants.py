@@ -146,7 +146,10 @@ SUPPORT_TIERS_ARE_PLACEHOLDERS = False
 #   discord    -> trophies/services/discord_roles.py, granted off premium_tier
 #   mark       -> `.pp-supname`/`.pp-supstar` (the successor pair; site-wide wiring pending the
 #                 Profile tier denorm) -- `.legendary-title` is LEGACY and being removed
-#   early      -> trophies/mixins.py -> beta_access_required
+#   beta       -> trophies/mixins.py -> beta_access_required
+#   polls      -> Discord-side, like the channel: run as native Discord polls in #supporter-chat
+#                 (NOT built ballots -- premium-proposal.md's no-ballot-features decision stands;
+#                 a rename of the channel in Discord must rename the example here too)
 # Each perk's icon tint is a stop from the SUPPORT_TIERS ramp above -- the perks ARE the giving
 # register, so they wear the giving register's own palette rather than inventing hues.
 # The 'everyone' side is DATA-ONLY since 2026-08-22 (the modal stopped rendering it) but it is
@@ -161,7 +164,7 @@ PREMIUM_PERKS = [
     {'slug': 'discord', 'colour': '#47b6e6',
      'name': 'Discord role and channel',
      'everyone': 'The server is open to anyone',
-     'member': 'A supporter role, and a channel of the Discord that is yours.',
+     'member': 'The server is open to anyone; supporters get a role and a channel of their own.',
      'example': 'See you in #supporter-chat.'},
     {'slug': 'mark', 'colour': '#6875ee',
      'name': 'Site-wide marker',
@@ -170,10 +173,11 @@ PREMIUM_PERKS = [
     # asterisk -> the modal renders a * on the name and explains it once in the footer
     # ("Must be in Discord to participate").
     {'slug': 'polls', 'colour': '#a666ea', 'asterisk': True,
+     'footnote': 'Must be in Discord to participate.',
      'name': 'Vote in polls',
      'everyone': 'A voice in the Discord, any day',
-     'member': 'A counted vote in what gets built next, and in the badge polls.',
-     'example': 'Recently: which badge series gets artwork next.'},
+     'member': 'Everyone has a voice in the Discord; your vote is the counted one, in what gets built next and in the badge polls.',
+     'example': 'Which badge series gets artwork next.'},
     # The wide closer: spans the modal's full width (perk.wide -> .sup-perk--wide).
     {'slug': 'beta', 'colour': '#e55dd9',
      'name': 'Beta access',
