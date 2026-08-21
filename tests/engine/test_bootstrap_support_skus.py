@@ -265,6 +265,19 @@ def test_a_failed_plan_listing_must_not_cause_duplicate_plans():
     assert plan_posts == [], 'plans were created on top of an unreadable listing'
 
 
+def test_a_404_plan_listing_means_empty_not_error():
+    """PayPal answers an empty plan query with 404 rather than 200+[] (seen on the first real
+    dry-run against a fresh sandbox). It must read as 'no plans yet' and the cold run must
+    proceed -- while genuine errors (the test above) still refuse to create anything."""
+    output, mocks = _run('--provider', 'paypal',
+                         paypal_products={f'PP-LADDER-{t["slug"].upper()}' for t in SUPPORT_TIERS},
+                         plan_list_status=404)
+
+    assert mocks['error'] is None
+    plan_posts = [p for p in mocks['paypal_posts'] if '/v1/billing/plans' in p[0]]
+    assert len(plan_posts) == 12, 'the empty-result 404 was treated as an error'
+
+
 def test_a_paypal_failure_still_prints_the_stripe_paste_block():
     """By the time PayPal fails, the Stripe objects exist; the operator needs those ids even
     though the run errors. The failure itself stays loud (re-raised after printing)."""

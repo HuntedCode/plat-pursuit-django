@@ -274,6 +274,12 @@ class Command(BaseCommand):
                     headers={**headers, 'Prefer': 'return=representation'},
                     timeout=30,
                 )
+                # PayPal quirk: this endpoint answers an EMPTY result with 404, not 200+[].
+                # A fresh product with no plans yet is the normal cold-run state, so 404 means
+                # "none" -- while 401/429/5xx still raise, because THOSE misread as "none" is
+                # how duplicate live billing plans get minted.
+                if plans_response.status_code == 404:
+                    break
                 plans_response.raise_for_status()
                 page_plans = plans_response.json().get('plans', [])
                 for plan in page_plans:
