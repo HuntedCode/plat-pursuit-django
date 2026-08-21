@@ -478,8 +478,11 @@ substrate, and an earlier version of this page did, which is most of why it read
                         <span class="sup-prev__name">
                             <span class="sup-prev__cname">{{ person.name }}</span>{% if person.tier %}<span class="sup-prev__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
                         </span>
+                        {% comment %} Service roles say so, plainly, in their colour ("Staff" /
+                        "Moderator") -- more obvious than a crimson name alone. Everyone else
+                        keeps their level line. {% endcomment %}
                         <span class="sup-prev__sub">
-                            {% if person.tier %}PlatPursuit {{ person.tier.name }}{% else %}Supporter{% endif %}
+                            {% if person.service_label %}{{ person.service_label }}{% elif person.tier %}PlatPursuit {{ person.tier.name }}{% else %}Supporter{% endif %}
                         </span>
                     </span>
                 </li>

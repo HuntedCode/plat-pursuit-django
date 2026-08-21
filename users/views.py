@@ -458,6 +458,9 @@ class SupportStorefrontView(TemplateView):
                 'service_colour': (SERVICE_MARKS['staff']['colour'] if r.user.role == 'admin'
                                    else SERVICE_MARKS['mod']['colour'] if r.user.role == 'moderator'
                                    else None),
+                'service_label': (SERVICE_MARKS['staff']['label'] if r.user.role == 'admin'
+                                  else SERVICE_MARKS['mod']['label'] if r.user.role == 'moderator'
+                                  else None),
             }
             for r in rows
         ]

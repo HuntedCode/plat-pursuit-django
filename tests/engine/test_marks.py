@@ -183,8 +183,8 @@ def test_marked_surfaces_read_the_denorm():
 
 
 def test_the_wall_carries_the_service_override(client):
-    """A paying staff member's NAME wears crimson on the credits; the stars and level sub-line
-    stay the paid level's (the wall is about who pays)."""
+    """A paying staff member's name AND sub-line wear the service colour on the credits, the
+    sub-line saying so plainly ("Staff"); the stars stay their paid level's."""
     from unittest.mock import patch
     from django.core.cache import cache
     cache.delete('support:stats')
@@ -200,4 +200,5 @@ def test_the_wall_carries_the_service_override(client):
         body = ' '.join(client.get('/support/').content.decode().split())
     card = body[body.index('StaffPayer') - 1200:body.index('StaffPayer') + 900]
     assert f"--svc-t: {SERVICE_MARKS['staff']['colour']}" in card
-    assert 'PlatPursuit Patron' in card, 'the paid level left the wall sub-line'
+    assert 'Staff' in card, 'the service label did not reach the wall sub-line'
+    assert 'PlatPursuit Patron' not in card, 'the level line should yield to the service label'
