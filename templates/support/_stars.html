@@ -6,9 +6,9 @@ escalating shape is deliberate: `visual-identity.md` requires flair to be a SEPA
 from earned status, never a better one, so introducing a second shape at higher levels would risk a
 paid mark reading as something a hunter earned. A star that simply repeats cannot.
 
-The star's colour is CONSTANT across levels and lives with the class in
-`components/supporter.css` -- the level is carried by the star COUNT here and by the name's hue
-beside it, never by the star's own colour.
+The star wears the LEVEL'S OWN COLOUR (`--sup-t` from an ancestor, set from `tier.colour`) --
+the star and the name are one mark, and both a constant pale star and a lightened tint were tried
+and rejected (`test_the_star_wears_the_level_colour` pins the decision and names why).
 
 Expects: `tier` with `.star_range` (a real range, built in the view) and `.outline` (bool, the
 first level only). A range rather than the `|rjust` iteration trick, which works but reads as a

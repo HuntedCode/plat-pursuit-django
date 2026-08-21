@@ -14,8 +14,9 @@
    dashboard's and the measure is capped in `ch`, but inside the normal card rhythm rather than
    floating in space.
 
-   RESTRAINT. One accent (the cyan primary) carries the page. The tier pips below are the single
-   exception and they are deliberately NOT the trophy metals -- see the palette note there.
+   RESTRAINT. One accent (the cyan primary) carries the page. The six level hues are the single
+   exception; they live in `users/constants.py` (the palette note is there) and are deliberately
+   not the trophy metals.
    ============================================================================================ */
 
 /* -------------------------------------------------------------------------- split header ---- */
@@ -175,7 +176,7 @@
 
 @media (min-width: 768px) {
     .sup-head__lede { font-size: 1rem; }
-    .sup-head__figs .pp-tally { font-size: 1.45rem; }
+
 }
 
 /* ------------------------------------------------------------------------------- the box ---- */
@@ -196,16 +197,6 @@
 .sup-box__switch { width: 100%; justify-content: center; }
 .sup-box__switch .pp-switch__chip { flex: 1; justify-content: center; cursor: pointer; }
 
-/* Only meaningful on the yearly face. */
-.sup-box__saving {
-    margin-top: 10px;
-    text-align: center;
-    font-size: 0.72rem;
-    color: var(--pp-text-mute);
-    display: none;
-}
-
-.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-box__saving { display: block; }
 
 /* --------------------------------------------------------------- the amount grid + tier ---- */
 /* AMOUNT FIRST, TIER DERIVED. Six rows each with their own button read as a form; a grid of amounts
@@ -428,14 +419,6 @@
     font-variant-numeric: tabular-nums;
 }
 
-.sup-prev__cap {
-    margin-top: 7px;
-    font-size: 0.68rem;
-    color: var(--pp-text-mute);
-    font-style: italic;
-    padding-right: 4px;               /* italic glyphs slant past their box */
-}
-
 /* -------------------------------------------------------------------------- what you get ---- */
 /* The first line is identical at every level and opens the modal, because the answer does not change
    with the amount. Stating that at the moment of choosing is the model made visible. */
@@ -480,24 +463,7 @@
 .sup-gets__modal:hover { text-decoration-color: var(--sup-t); }
 
 /* ---------------------------------------------------------------------- the perks link ---- */
-/* Reachable whichever amount is selected, because the answer is the same whichever amount is
-   selected. That IS the model, so the control does not move with the choice. */
-.sup-buy__perks {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 14px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--pp-text-mute);
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    transition: color var(--pp-dur-fast) var(--pp-ease);
-}
 
-.sup-buy__perks svg { width: 14px; height: 14px; }
-.sup-buy__perks:hover { color: var(--pp-text); }
 
 /* ------------------------------------------------------------------------------ the CTA ---- */
 /* Stacked, primary first. Side by side would give PayPal equal weight, and most people are paying
@@ -752,14 +718,6 @@
     .sup-dial__note { grid-column: 1 / -1; margin-top: 6px; }
 
     .sup-dial__k { display: none; }
-}
-
-.sup-dial__foot {
-    margin-top: 14px;
-    font-size: 0.78rem;
-    line-height: 1.6;
-    color: var(--pp-text-mute);
-    max-width: 62ch;
 }
 
 /* ------------------------------------------------------------------------------- the credits ---- */

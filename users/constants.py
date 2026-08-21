@@ -109,20 +109,6 @@ SUPPORT_TIERS = [
 # than a checklist item on purpose, because checklists get skipped.
 SUPPORT_TIERS_ARE_PLACEHOLDERS = True
 
-# What members are testing right now, or None between betas.
-#
-# Early access is one of the two things the Support page sells hardest ("you get a say in what this
-# becomes"), so it needs a PERMANENT half that stands on its own -- otherwise the pitch disappears
-# for whoever visits during a quiet week, including someone who subscribed FOR it and arrives to find
-# nothing there. The template always renders what early access means; this only fills in the current
-# example when there is one.
-#
-# A constant rather than a model on purpose: betas are occasional and this is one blurb. If it ever
-# needs scheduling, per-beta signup, or non-staff editing, THAT is when it earns a table.
-#
-# Set to None when nothing is in testing. Shape when it is:
-#     {'name': 'The new Challenges', 'blurb': 'One sentence on what it is and what we want to learn.'}
-CURRENT_BETA = None
 
 # What a membership actually gets you.
 #
@@ -142,7 +128,8 @@ CURRENT_BETA = None
 # Nothing goes on this list that cannot be pointed at in running code. Current anchors:
 #   sync       -> SyncService.PREFERRED_COOLDOWN (5m) vs STANDARD_COOLDOWN (1h)
 #   discord    -> trophies/services/discord_roles.py, granted off premium_tier
-#   mark       -> `.legendary-title` (comments, leaderboard cells) + `.pp-hcard--supporter` (hunters)
+#   mark       -> `.pp-supname`/`.pp-supstar` (the successor pair; site-wide wiring pending the
+#                 Profile tier denorm) -- `.legendary-title` is LEGACY and being removed
 #   early      -> trophies/mixins.py -> beta_access_required
 PREMIUM_PERKS = [
     {

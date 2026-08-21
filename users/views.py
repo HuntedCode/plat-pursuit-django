@@ -26,8 +26,7 @@ from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
 from users.constants import (ACTIVE_PREMIUM_TIERS, PAYPAL_PLANS, PREMIUM_PERKS,
-                             PREMIUM_TIER_DISPLAY, SUPPORT_TIERS,
-                             SUPPORT_TIERS_ARE_PLACEHOLDERS)
+                             SUPPORT_TIERS, SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
@@ -141,11 +140,6 @@ class SupportStorefrontView(TemplateView):
     """
     template_name = 'support/support_hub.html'
 
-    # Tier order on the page. Monthly first (the default expectation), then yearly, then supporter --
-    # ascending commitment. `supporter` shipped purchasable but BUTTONLESS: it has Stripe products, a
-    # PayPal plan, a Discord role and bespoke styling on the management page, and `POST tier=supporter`
-    # has always worked. It simply had no UI, so nobody could choose it.
-    TIER_ORDER = ('premium_monthly', 'premium_yearly', 'supporter')
 
     def _today(self):
         """The live catalogue figures beat 2 opens on: trophies, games, hunters.
@@ -214,13 +208,8 @@ class SupportStorefrontView(TemplateView):
         # runtime guard rather than a checklist item on purpose: checklists get skipped.
         placeholders = SUPPORT_TIERS_ARE_PLACEHOLDERS and not is_live
 
-        # The LADDER is design data, not billing data: it comes from the constant so the page can be
-        # built and iterated before the twelve Stripe prices and twelve PayPal plans exist. Each row
-        # carries both intervals; the template's switch picks which face to show, so swapping tabs is
-        # a CSS state change rather than a round trip.
         ladder = [
             dict(tier,
-                 yearly_saving=tier['monthly'] * 12 - tier['yearly'],
                  # A real range for the star partial to loop. Django templates cannot count, and the
                  # `|rjust` trick that can is a puzzle to read.
                  star_range=range(tier['stars']))

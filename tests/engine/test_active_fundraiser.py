@@ -44,7 +44,7 @@ def _req(user=None):
     return r
 
 
-# --- get_active_fundraiser (ungated; the Support landing uses this) ---
+# --- get_active_fundraiser (ungated; kept for the coming /support/fundraiser/ page; the storefront itself no longer calls it) ---
 
 def test_get_active_returns_live_banner_fundraiser():
     f = _live()
@@ -67,7 +67,7 @@ def test_get_active_none_when_ended():
     assert get_active_fundraiser() is None
 
 
-# --- get_live_fundraiser (ungated + banner-independent; the Support landing uses this) ---
+# --- get_live_fundraiser (ungated + banner-independent; kept for the coming /support/fundraiser/ page; the storefront itself no longer calls it) ---
 
 def test_get_live_shows_campaign_even_with_banner_off():
     """The decoupling: the Support hub shows a LIVE campaign even when the site banner is off,

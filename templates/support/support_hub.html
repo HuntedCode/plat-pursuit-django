@@ -6,11 +6,11 @@
 The Support landing IS the membership storefront. Served by users.views.SupportStorefrontView, which
 also answers this page's checkout POST (the form carries no action, so handler and form share a URL).
 
-STRIPPED BACK TO THE HEADER (2026-08-20), deliberately. Earlier versions carried the whole argument --
-an evidence band, a roadmap strip, a signed note, a perks table, a supporter wall -- and each rebuild
-kept repainting sections that had never been agreed. So the page is the header alone while the ask
-gets settled, and the rest gets built back one piece at a time. The copy for those sections is not
-lost; it is in the git history of this file and headed for /support/roadmap/ and About.
+THE PAGE IS THREE SECTIONS: the split header (the ask), the paid band (how it is funded), and the
+Credits (who funds it), plus the perks modal. It was stripped to the header alone mid-rebuild and
+built back one agreed piece at a time -- earlier sections (a four-beat prose arc, an evidence band,
+a roadmap strip, a signed note) live in this file's git history and are headed for /support/roadmap/
+and About.
 
 THE HEADER IS SPLIT: the statement on the left, the ask on the right in a decorated box. That puts the
 decision above the fold rather than below several sections of argument.
@@ -67,9 +67,6 @@ substrate, and an earlier version of this page did, which is most of why it read
                     </div>
                     {% endif %}
 
-                    {% comment %} Omitted whole on a cold heartbeat cache rather than printing zeroes.
-                    "0 trophies for 0 hunters" on the page asking you to fund the thing is worse than
-                    saying nothing at all. {% endcomment %}
                     {% comment %} The factual floor under the ask. Omitted whole on a cold heartbeat
                     cache rather than printing zeroes -- "we currently serve 0 hunters" on the page
                     asking you to fund the thing is worse than saying nothing at all. {% endcomment %}
@@ -183,12 +180,10 @@ substrate, and an earlier version of this page did, which is most of why it read
                                 <span class="sup-becomes__stars" aria-hidden="true">{% include 'support/_stars.html' with tier=tier %}</span>
                             </p>
 
-                            {% comment %} PLACEHOLDER, and the caption says so. What belongs here is
-                            the supporter mark shown IN CONTEXT -- your own name on a leaderboard row,
-                            wearing the level you are about to pick -- which is the most persuasive
-                            thing this box can show and the reason it is worth designing properly
-                            rather than approximating. Real geometry, real name, stand-in mark.
-                            {% endcomment %}
+                            {% comment %} The preview: your own name on a leaderboard row, wearing
+                            the level you are about to pick -- the most persuasive thing this box can
+                            show. Geometry matches the LIVE row (.lb-row__title), so wiring the mark
+                            site-wide later is a swap, not a redesign. {% endcomment %}
                             <div class="sup-prev" aria-hidden="true">
                                 <span class="sup-prev__rank">#12</span>
                                 <span class="sup-prev__av">{% include 'partials/_avatar.html' with url=viewer_avatar alt='' %}</span>
