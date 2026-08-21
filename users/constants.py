@@ -162,7 +162,7 @@ PREMIUM_PERKS = [
      'name': 'Discord role and channel',
      'everyone': 'The server is open to anyone',
      'member': 'A supporter role, and a channel of the Discord that is yours.',
-     'example': 'See you in #supporters.'},
+     'example': 'See you in #supporter-chat.'},
     {'slug': 'mark', 'colour': '#6875ee',
      'name': 'Site-wide marker',
      'everyone': 'Your name, as you earned it',
