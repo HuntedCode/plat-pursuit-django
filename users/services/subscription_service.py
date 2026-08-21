@@ -98,29 +98,14 @@ class SubscriptionService:
     # ── Provider-agnostic subscription lifecycle ──────────────────────────
 
     @staticmethod
-    def has_active_gift_grant(user, now=None) -> bool:
-        """A redeemed, unexpired PremiumGrant. Constantly False until the grant model lands (the
-        gifts commit); wired here first so `reconcile_premium` is complete from birth and the
-        refactor around it is provably behaviour-preserving."""
-        try:
-            from users.models import PremiumGrant
-        except ImportError:
-            return False
-        return PremiumGrant.objects.filter(
-            redeemed_by=user, status='redeemed',
-            expires_at__gt=now or timezone.now(),
-        ).exists()
-
-    @staticmethod
     def reconcile_premium(user, *, provider_hint: str = None) -> bool:
-        """THE one premium truth-writer. Activation, deactivation, gift redemption and gift expiry
-        all converge here instead of each carrying its own copy of "what makes this user premium".
+        """THE one premium truth-writer. Activation and deactivation both converge here instead
+        of each carrying its own copy of "what makes this user premium" -- so a second premium
+        source, if one ever exists again, gets added to the truth expression below and nowhere
+        else. (Gift grants briefly were that second source; they were cut in Aug 2026 because a
+        giftable supporter mark dilutes what every paying supporter's mark means.)
 
-        The bug this exists to kill: deactivation used to flip the Profile denorm False and close
-        every open SubscriptionPeriod UNCONDITIONALLY -- so a lapsing subscription would clobber a
-        still-active gift, and a gift expiring would have done the same to a live subscription.
-
-        Truth: a feature-granting `premium_tier` OR an active gift grant.
+        Truth: a feature-granting `premium_tier`.
 
         Periods: with a `provider_hint`, a source just activated for that provider -- ensure an open
         period exists, reopening one closed within 14 days for the SAME provider (Stripe's retry
@@ -135,8 +120,7 @@ class SubscriptionService:
         refuse to close a premium user's period, so that path stays direct -- see the comment there.
         """
         is_premium = (
-            (user.premium_tier is not None and SubscriptionService.is_tier_premium(user.premium_tier))
-            or SubscriptionService.has_active_gift_grant(user)
+            user.premium_tier is not None and SubscriptionService.is_tier_premium(user.premium_tier)
         )
 
         if hasattr(user, 'profile'):
@@ -263,11 +247,10 @@ class SubscriptionService:
 
         with transaction.atomic():
             user.save(update_fields=update_fields)
-            # The truth-writer, not an unconditional flip. With the tier cleared, premium survives
-            # only if an active gift grant exists -- in which case the denorm stays True and the
-            # grant's open period is left alone. (A post_save signal on Profile handles cascading
-            # side effects of a real premium transition, e.g. deactivating premium-only showcases.)
-            still_premium = SubscriptionService.reconcile_premium(user)
+            # The truth-writer, not an unconditional flip. (A post_save signal on Profile handles
+            # cascading side effects of a real premium transition, e.g. deactivating premium-only
+            # showcases.)
+            SubscriptionService.reconcile_premium(user)
 
         logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
 
@@ -276,11 +259,7 @@ class SubscriptionService:
         if hasattr(user, 'profile') and user.profile.is_discord_verified and user.profile.discord_id:
             from trophies.services.discord_roles import notify_bot_role_removed
             profile = user.profile
-            # Grant-aware: an active gift confers the same Premium role, so a lapsing subscription
-            # must not strip it while the gift lives. Plus stays subscription-only, so its removal
-            # needs no grant check.
-            if (original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE
-                    and not still_premium):
+            if original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
                 role_id = settings.DISCORD_PREMIUM_ROLE
                 transaction.on_commit(lambda p=profile, r=role_id: notify_bot_role_removed(p, r))
             elif original_tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:

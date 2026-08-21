@@ -87,7 +87,7 @@ redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.
 
 `/support/` (`users.views.SupportStorefrontView`) **is** the membership storefront, not a landing
 that links to one. Three sections: a **split header** (the statement left; an amount-first purchase
-box right — six supporter levels, Backer → Cornerstone, monthly/yearly/gift cycle radios, a mock
+box right — six supporter levels, Backer → Cornerstone, monthly/yearly cycle radios, a mock
 leaderboard-row preview showing the viewer's own name wearing the level, and a perks `<dialog>`), a
 four-cell **paid band** (supporters / monthly support / months running / ads served), and the
 **Credits** (the consent-gated supporter wall, `Profile.show_on_supporter_wall`). The ladder is

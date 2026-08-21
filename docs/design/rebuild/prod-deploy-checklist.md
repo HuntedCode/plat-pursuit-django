@@ -680,18 +680,17 @@ public page.
 No backfill needed; the column default does the work. Safe to run on a live DB (one nullable-free
 boolean with a default, no table rewrite on Postgres 11+).
 
-### The gift/grant lane (2026-08-20) — migrations users/0021, users/0022, core/0023
+### The supporter-ladder lane (2026-08-20) — migration users/0021
 
-Three migrations, all additive or DB no-ops (choices changes + one new table, `PremiumGrant`).
-Safe on a live DB in any order relative to the code deploy.
+One migration: the ladder slugs join `premium_tier`'s choices (a DB no-op on Postgres). Safe on a
+live DB in any order relative to the code deploy.
 
-**A new DAILY cron entry is required**: `python manage.py expire_premium_gifts`. It is the only
-thing that ever ends a gift grant — there is no webhook for time passing — and it reconciles
-per-user, so a grant-holder with a live subscription keeps premium when their gift lapses.
-
-**Comps**: `python manage.py mint_gift_code --tier patron --duration year --note "why"` prints a
-code redeemable at `/support/redeem/`. No payment, no email; identical to a paid gift from there on.
+(Gifting and comps were built in this lane and then deliberately cut — a giftable supporter mark
+dilutes what every paying supporter's mark means, and contest rewards belong in the earned register:
+badges, not bought flair. The `PremiumGrant` machinery lives in git history at `b71fec59`/`f65438a9`
+if a real case ever materialises.)
 
 **⚠ SKU bootstrap remains gated by the prod-safety rule recorded in the payments plan: test-mode
 anytime, LIVE only at rebuild cutover** — prod's `main` build deactivates subscribers whose product
-id it does not recognise, and webhooks fan out to every registered endpoint.
+id it does not recognise, and webhooks fan out to every registered endpoint. `bootstrap_support_skus`
+refuses live mode without `--live-ok` for exactly this reason.

@@ -1,17 +1,14 @@
 """`SubscriptionService.reconcile_premium` -- the one premium truth-writer.
 
-Activation, deactivation, gift redemption and gift expiry all converge on this function instead of
-each carrying its own copy of "what makes this user premium". These tests pin the CURRENT
-subscription semantics through the refactor (this file predates the grant model on purpose: green
-here proves the convergence changed nothing), and the grant interplay tests join in the gifts
-commit.
+Activation and deactivation both converge on this function instead of each carrying its own copy
+of "what makes this user premium". These tests pin the CURRENT subscription semantics through the
+refactor: green here proves the convergence changed nothing.
 
 Direct coverage matters here because none existed: the old activate/deactivate logic shipped with
 only indirect coverage, which is how its unconditional denorm-flip -- the bug reconcile kills --
 survived from the beginning.
 """
 from datetime import timedelta
-from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
@@ -97,43 +94,3 @@ def test_reconcile_with_no_hint_and_premium_true_touches_no_period():
 
     assert result is True
     assert SubscriptionPeriod.objects.filter(user=user, ended_at__isnull=True).count() == 1
-
-
-def test_the_gift_probe_is_wired_but_dormant():
-    """`has_active_gift_grant` participates in reconcile from birth, so the gifts commit changes
-    behaviour only where a grant actually exists. Until the model lands it must be constantly
-    False, never an ImportError."""
-    user, profile = _subscriber()
-
-    assert SubscriptionService.has_active_gift_grant(user) is False
-
-    with patch.object(SubscriptionService, 'has_active_gift_grant', return_value=True):
-        result = SubscriptionService.reconcile_premium(user)   # no tier set, grant "active"
-
-    profile.refresh_from_db()
-    assert result is True, 'a grant alone does not make premium true'
-    assert profile.user_is_premium is True
-
-
-def test_deactivation_does_not_clobber_another_premium_source():
-    """THE BUG RECONCILE EXISTS TO KILL, pinned before the grant model lands via a mocked probe.
-
-    The old deactivate flipped the denorm False and closed every open period UNCONDITIONALLY. With
-    a second premium source alive (here: the probe forced True; from the gifts commit onward: a real
-    redeemed grant), the denorm must stay True, the survivor's period must stay open, and the
-    Premium Discord role must not be stripped.
-    """
-    user, profile = _subscriber()
-    SubscriptionService.activate_subscription(user, 'patron', 'stripe')
-
-    with patch.object(SubscriptionService, 'has_active_gift_grant', return_value=True):
-        SubscriptionService.deactivate_subscription(user, 'stripe')
-
-    profile.refresh_from_db()
-    user.refresh_from_db()
-    assert user.premium_tier is None, 'the subscription itself must still end'
-    assert profile.user_is_premium is True, 'deactivation clobbered the other premium source'
-    assert SubscriptionPeriod.objects.filter(user=user, ended_at__isnull=True).exists(), (
-        'the surviving source lost its open period'
-    )
-

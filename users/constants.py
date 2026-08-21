@@ -303,4 +303,3 @@ for _mode_plans in PAYPAL_LADDER_PLANS.values():
 
 # Derived conveniences for the checkout path.
 LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
-GIFT_MONTHS = {'monthly': 1, 'yearly': 12}

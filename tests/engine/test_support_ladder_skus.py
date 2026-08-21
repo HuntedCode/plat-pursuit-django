@@ -7,7 +7,7 @@ interval back out, which is correct: `premium_tier` stores the slug, the interva
 """
 import pytest
 
-from users.constants import (ACTIVE_PREMIUM_TIERS, GIFT_MONTHS, LADDER_SLUGS,
+from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
                              PAYPAL_LADDER_PLANS, PREMIUM_DISCORD_ROLE_TIERS,
                              PREMIUM_TIER_CHOICES, PREMIUM_TIER_DISPLAY, STRIPE_LADDER_PRICES,
                              STRIPE_PRODUCTS, SUPPORT_TIERS, SUPPORTER_DISCORD_ROLE_TIERS)
@@ -61,10 +61,6 @@ def test_discord_roles_ladder_gets_premium_and_plus_stays_legacy():
         assert slug in PREMIUM_DISCORD_ROLE_TIERS, f'{slug} grants no Discord role'
         assert slug not in SUPPORTER_DISCORD_ROLE_TIERS, f'{slug} grants the Plus role'
     assert SUPPORTER_DISCORD_ROLE_TIERS == ['supporter']
-
-
-def test_gift_months_mirror_the_cycle():
-    assert GIFT_MONTHS == {'monthly': 1, 'yearly': 12}
 
 
 def test_ladder_prices_in_the_constant_match_the_design():

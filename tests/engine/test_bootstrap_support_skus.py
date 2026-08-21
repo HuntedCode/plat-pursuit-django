@@ -193,7 +193,7 @@ def test_live_paypal_mode_is_gated_independently(settings):
         _run('--provider', 'paypal')
 
 
-def test_the_gift_prefix_never_appears_in_plan_names():
+def test_plan_names_use_the_shared_pp_ladder_convention():
     """Plan names anchor idempotent matching; they share the pp_ladder_ namespace with Stripe
     lookup_keys deliberately, one convention across both processors."""
     output, mocks = _run('--provider', 'paypal')
