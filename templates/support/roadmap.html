@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Roadmap{% endblock %}
+
+{% comment %}
+/support/roadmap/ -- the site's own platinum roadmap.
+
+THE FRAMING IS THE PAGE. On this site a "Roadmap" is a staff trophy guide: numbered steps, banked
+progress, the plat at the end. So the product roadmap presents itself as the roadmap for platting
+PlatPursuit itself -- shipped stages solid and banked, the current stage lit and marked "we are
+here", future stages hollow. The name collision with the guides feature becomes the charm instead
+of a confusion.
+
+CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
+- Real counts appear only on shipped/now stages, from the heartbeat, omitted wholesale when cold.
+- Below the current stage the markers go hollow and the numbers stop: no dates, counts or
+  percentages on future work. Order is the only promise. (Pinned by tests.)
+- Voice: earnest and additive. We are not selling against anyone; we are inviting people along.
+{% endcomment %}
+
+{% block content %}
+<div class="rm">
+
+    {% comment %} ============================================== header card =============== {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+        <div class="card-body p-5 md:p-7 pp-head-cascade">
+            <p class="rm__eyebrow">Support &middot; Roadmap</p>
+            <h1 class="rm__h1">The platinum roadmap for PlatPursuit itself.</h1>
+            <p class="rm__lede">
+                Around here a roadmap tells you how to plat a game: the steps, the order, what is
+                banked and what is left. This one is ours. Here is where PlatPursuit started, where
+                it is now, and every stage still between us and the plat.
+            </p>
+
+            {% comment %} The Horizon, segmented: one pip per stage, REAL progress (stages banked
+            over stages planned, the current one in-flight). Never decorative, per the primitive's
+            own anti-pattern rule. {% endcomment %}
+            <div class="rm__progress">
+                {% comment %} Band tone at 'warming': roughly the mid-journey colour on the
+                Horizon's cool-to-warm completion ramp, which is honestly where we are. The
+                current stage takes the segmented form's 'active' ring state. {% endcomment %}
+                <div class="pp-horizon pp-horizon--segmented rm__pips" role="progressbar"
+                     data-horizon-band="warming" style="--horizon-h: 10px;"
+                     aria-valuenow="{{ stages_done }}" aria-valuemin="0" aria-valuemax="{{ stages_total }}"
+                     aria-label="Roadmap progress: {{ stages_done }} of {{ stages_total }} stages complete">
+                    {% for stage in stages %}<span class="pp-horizon__seg"
+                        {% if stage.status == 'shipped' %}data-state="done"{% elif stage.status == 'now' %}data-state="active"{% endif %}></span>{% endfor %}
+                </div>
+                <p class="rm__progress-k">{{ stages_done }} of {{ stages_total }} stages banked &middot; the plat's still ahead</p>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} ============================================== the trail ================= {% endcomment %}
+    <div class="rm-trail">
+
+        <section class="rm-step is-shipped">
+            <div class="rm-step__rail" aria-hidden="true">
+                <span class="rm-step__mark"></span>
+            </div>
+            <div class="rm-step__body">
+                <p class="rm-step__when">How it started</p>
+                <h2 class="rm-step__h">It started with a Discord server.</h2>
+                <p>
+                    Two friends with a love of trophy hunting and a desire to build a community
+                    around it. We wanted to turn our favorite hobby into something more: to take
+                    trophy hunting from disjointed grinding to a complete, coherent
+                    <em>experience</em>.
+                </p>
+                <p>
+                    In January 2026, PlatPursuit.com went live so we could start building the tools
+                    we had been dreaming about. It has been an amazing road of learning (and plenty
+                    of mistakes!), and we are proud to finally present
+                    <strong>Platinum Pursuit 1.0</strong>.
+                </p>
+            </div>
+        </section>
+
+        <section class="rm-step is-now">
+            <div class="rm-step__rail" aria-hidden="true">
+                <span class="rm-step__mark"></span>
+            </div>
+            <div class="rm-step__body">
+                <p class="rm-step__when">Today <span class="rm-step__here">we are here</span></p>
+                <h2 class="rm-step__h">Where we are now.</h2>
+
+                {% comment %} Omitted wholesale on a cold heartbeat cache rather than printing
+                zeroes. "Tracking 0 trophies for 0 hunters" on the page asking you to come along
+                is worse than saying nothing. {% endcomment %}
+                {% if today %}
+                <p class="rm-step__figs">
+                    <span><b class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</b> trophies tracked</span>
+                    <span><b class="pp-tally" data-countup="{{ today.games }}">{{ today.games|intcomma }}</b> games in the catalogue</span>
+                    <span><b class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</b> hunters</span>
+                </p>
+                {% endif %}
+
+                <p>
+                    Since January we have rebuilt very nearly the whole site, one page at a time: a
+                    Career surface to give your hunting a shape, badges that are genuinely worth
+                    collecting, milestones, titles, and an awful lot of quiet work underneath that
+                    you would never see. We also completely removed ads to ensure every hunter has
+                    the same, consistent experience no matter what.
+                </p>
+                <p>
+                    Those two friends have turned into a whole team of trophy lovers dedicated to
+                    cultivating the greatest community on the internet and delivering on our goals.
+                    While our community team grows, our development team stays small (just me!) to
+                    keep a consistent vision across every page of the site.
+                </p>
+            </div>
+        </section>
+
+        {% comment %} From here the markers go hollow and the numbers stop. Nothing below this
+        line carries a date, a count or a percentage -- order is the only promise. {% endcomment %}
+        <section class="rm-step is-ahead">
+            <div class="rm-step__rail" aria-hidden="true">
+                <span class="rm-step__mark"></span>
+            </div>
+            <div class="rm-step__body">
+                <p class="rm-step__when">Soon</p>
+                <h2 class="rm-step__h">More ways to play.</h2>
+                <p>
+                    Challenges are getting the revamp we have wanted to give them for a long time,
+                    and there is a lot more coming beside them: quests, streaks, a much bigger
+                    badge library, and things worth earning with somewhere to actually spend them.
+                </p>
+            </div>
+        </section>
+
+        <section class="rm-step is-ahead">
+            <div class="rm-step__rail" aria-hidden="true">
+                <span class="rm-step__mark"></span>
+            </div>
+            <div class="rm-step__body">
+                <p class="rm-step__when">After that</p>
+                <h2 class="rm-step__h">The returns.</h2>
+                <p>
+                    My Stats returns as a proper engine rather than a page full of numbers, and the
+                    things we set aside to get 1.0 out of the door come back rebuilt: game lists,
+                    notifications and profile showcases. We would rather bring those back properly
+                    than quickly.
+                </p>
+            </div>
+        </section>
+
+        <section class="rm-step is-ahead">
+            <div class="rm-step__rail" aria-hidden="true">
+                <span class="rm-step__mark"></span>
+            </div>
+            <div class="rm-step__body">
+                <p class="rm-step__when">Further out</p>
+                <h2 class="rm-step__h">Beyond the console.</h2>
+                <p>
+                    PlatPursuit in your pocket, with even more ways to track everything you do
+                    across the vast gaming landscape, not just on PlayStation.
+                </p>
+                <p class="rm-step__more">
+                    Truthfully, we have so many more ideas and dreams that we cannot fit them all
+                    on this roadmap!
+                </p>
+            </div>
+        </section>
+
+        {% comment %} The ask: the trail's last stop points at the storefront, not at a paywall.
+        The rail ends OPEN here (no terminal mark) -- the plat is not earned yet. {% endcomment %}
+        <section class="rm-step is-ask">
+            <div class="rm-step__rail" aria-hidden="true">
+                <span class="rm-step__mark"></span>
+            </div>
+            <div class="rm-step__body">
+                <h2 class="rm-step__h">We have so much more to do, and we need your help to do it.</h2>
+                <p>
+                    PlatPursuit lives off the small community we have cultivated. We have no
+                    investors, we display no ads, and we have no dreams of corporate takeovers. We
+                    merely want to create cool tools to make your gaming experience better.
+                </p>
+                <p>
+                    Becoming a member helps us pay our server costs each month, funds our future
+                    projects and gives you more of what you love.
+                </p>
+                {% if not viewer_is_member %}
+                <a href="{% url 'support_hub' %}" class="rm-step__cta">
+                    Come along for the ride
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </a>
+                {% else %}
+                <p class="rm-step__thanks">You already are. Genuinely: thank you.</p>
+                {% endif %}
+            </div>
+        </section>
+
+    </div>
+</div>
+{% endblock %}

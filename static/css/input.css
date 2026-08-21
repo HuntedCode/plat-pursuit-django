@@ -46,6 +46,7 @@
 @import "./components/recap-stage.css";
 @import "./components/supporter.css";
 @import "./components/support.css";
+@import "./components/support-roadmap.css";
 @plugin "daisyui";
 
 @theme {

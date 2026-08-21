@@ -323,6 +323,30 @@ LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 # -- on the Credits wall and anywhere else supporter identity renders. Presentation only: nothing
 # reads this map for billing, availability, or role decisions. The mapping is by price proximity,
 # so if a legacy price ever changes on the processor side, revisit the target here.
+# THE ROADMAP'S STAGE SKELETON, shared by /support/roadmap/ (the full trail) and the storefront's
+# roadmap band (the teaser). Statuses: shipped / now / next / later. Exactly ONE stage is 'now'.
+# The page's prose lives in its template; blurbs here are the band-length compressions.
+#
+# DELIBERATELY NO DATES ANYWHERE. Public copy stays humble (conviction in docs, humility in
+# public): future stages carry no month, quarter, count or percentage -- the moment one slips,
+# the roadmap becomes a promise ledger. Order IS the promise, and it is the only one.
+ROADMAP_STAGES = [
+    {'key': 'server',   'when': 'How it started', 'title': 'It started with a Discord server',
+     'status': 'shipped', 'blurb': 'Two friends, one hobby, a community worth building.'},
+    {'key': 'live',     'when': 'January 2026',   'title': 'PlatPursuit.com goes live',
+     'status': 'shipped', 'blurb': 'The site ships and the learning begins.'},
+    {'key': 'rebuild',  'when': 'This year',      'title': 'The whole site, rebuilt',
+     'status': 'shipped', 'blurb': 'Nearly every page remade, and the ads removed for good.'},
+    {'key': 'onepoint', 'when': 'Today',          'title': 'Platinum Pursuit 1.0',
+     'status': 'now',     'blurb': 'The launch. Where we are right now.'},
+    {'key': 'play',     'when': 'Soon',           'title': 'More ways to play',
+     'status': 'next',    'blurb': 'Challenges revamped, quests, streaks, a bigger badge library.'},
+    {'key': 'returns',  'when': 'After that',     'title': 'The returns',
+     'status': 'later',   'blurb': 'Stats as a proper engine; game lists, notifications and showcases back, rebuilt.'},
+    {'key': 'beyond',   'when': 'Further out',    'title': 'Beyond the console',
+     'status': 'later',   'blurb': 'PlatPursuit in your pocket, and past PlayStation.'},
+]
+
 LEGACY_TIER_LEVEL_MAP = {
     'premium_monthly': 'backer',
     'premium_yearly': 'backer',

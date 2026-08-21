@@ -144,7 +144,8 @@ class SupportStorefrontView(TemplateView):
     template_name = 'support/support_hub.html'
 
 
-    def _today(self):
+    @staticmethod
+    def _today():
         """The live catalogue figures beat 2 opens on: trophies, games, hunters.
 
         Read off the hourly site heartbeat rather than queried here -- these are three of the most
@@ -247,6 +248,9 @@ class SupportStorefrontView(TemplateView):
             SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
         )
 
+        from users.constants import ROADMAP_STAGES
+        context['roadmap_stages'] = ROADMAP_STAGES
+        context['roadmap_done'] = sum(1 for st in ROADMAP_STAGES if st['status'] == 'shipped')
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
         context['viewer_name'] = self._viewer_name()
@@ -544,6 +548,38 @@ class SupportStorefrontView(TemplateView):
             logger.exception("Stripe checkout creation failed")
             messages.error(request, "Could not start checkout. Please try again.")
             return redirect('support_hub')
+
+class SupportRoadmapView(TemplateView):
+    """`/support/roadmap/` -- the site's own platinum roadmap.
+
+    The framing IS the joke and the charm: this site's beloved Roadmaps are staff trophy guides,
+    so the product roadmap presents itself as the roadmap for platting PlatPursuit itself --
+    shipped stages banked like earned trophies, the current stage marked, future stages hollow.
+
+    Content rules inherited from the storefront arc this page revived: real counts appear ONLY on
+    shipped/now stages (from the heartbeat, omitted wholesale when cold), and nothing below the
+    current stage carries a date, count or percentage. Order is the only promise.
+    """
+    template_name = 'support/roadmap.html'
+
+    def get_context_data(self, **kwargs):
+        from users.constants import ROADMAP_STAGES
+
+        context = super().get_context_data(**kwargs)
+        stages = ROADMAP_STAGES
+        done = sum(1 for st in stages if st['status'] == 'shipped')
+        context['stages'] = stages
+        context['stages_done'] = done
+        # The Horizon must pair with REAL progress, never decorate: this is stages banked over
+        # stages planned, counting the current one as in-flight (not banked).
+        context['stages_total'] = len(stages)
+        context['today'] = SupportStorefrontView._today()
+        user = self.request.user
+        context['viewer_is_member'] = (
+            SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
+        )
+        return context
+
 
 @login_required
 def subscribe_success(request):

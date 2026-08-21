@@ -1,0 +1,251 @@
+/* /support/roadmap/ -- the site's own platinum roadmap.
+ *
+ * One rail, four mark states: banked (solid), current (lit ring, gentle Horizon-style pulse),
+ * ahead (hollow), and the final stop's DIAMOND (Frame's corner-notch language) standing in for
+ * the plat -- deliberately not a trophy shape, which belongs to the earned register.
+ *
+ * Rebuild restraint: neutral surfaces, ONE accent (--pp-primary on the current stage). The rail
+ * fades out past the last stop rather than terminating: the horizon stays open. */
+
+.rm {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rm__eyebrow {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.rm__h1 {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-top: 6px;
+}
+
+.rm__lede {
+    margin-top: 10px;
+    max-width: 62ch;
+    font-size: 0.92rem;
+    line-height: 1.65;
+    color: var(--pp-text-dim);
+}
+
+.rm__progress { margin-top: 18px; max-width: 420px; }
+
+.rm__progress-k {
+    margin-top: 8px;
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    color: var(--pp-text-mute);
+}
+
+/* ---- the trail ------------------------------------------------------------------------ */
+
+.rm-trail {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 4px 0;
+}
+
+.rm-step {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 0 14px;
+}
+
+@media (min-width: 768px) {
+    .rm-step { grid-template-columns: 44px 1fr; gap: 0 20px; }
+}
+
+/* The rail: each step draws its own segment so the line breaks naturally at the top and fades
+   past the final stop. */
+.rm-step__rail {
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+
+.rm-step__rail::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--pp-border);
+}
+
+.rm-step:first-child .rm-step__rail::before { top: 6px; }
+
+.rm-step:last-child .rm-step__rail::before {
+    background: linear-gradient(180deg, var(--pp-border), transparent 85%);
+}
+
+.rm-step__mark {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin-top: 6px;
+    border-radius: 50%;
+    background: var(--pp-bg-2);
+    border: 2px solid var(--pp-border);
+}
+
+.rm-step.is-shipped .rm-step__mark {
+    background: var(--pp-text-dim);
+    border-color: var(--pp-text-dim);
+}
+
+.rm-step.is-now .rm-step__mark {
+    background: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-bg-2));
+    border-color: var(--pp-primary);
+    box-shadow: 0 0 10px -2px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+}
+
+/* The Horizon's near-completion nudge, borrowed at whisper volume: the current mark breathes.
+   Declared only under no-preference so reduced motion cannot lose a cascade fight. */
+@media (prefers-reduced-motion: no-preference) {
+    .rm-step.is-now .rm-step__mark {
+        animation: rmHere 3.2s var(--pp-ease, ease) infinite;
+    }
+}
+
+@keyframes rmHere {
+    0%, 100% { box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
+    50%      { box-shadow: 0 0 14px -2px color-mix(in oklab, var(--pp-primary) 85%, transparent); }
+}
+
+/* The last stop: Frame's diamond, hollow -- the plat, not yet earned. */
+.rm-step.is-ask .rm-step__mark {
+    border-radius: 2px;
+    transform: rotate(45deg);
+    background: transparent;
+    border-color: var(--pp-text-mute);
+}
+
+.rm-step__body {
+    padding: 0 0 34px;
+    max-width: 68ch;
+}
+
+.rm-step__body > p {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--pp-text-dim);
+}
+
+.rm-step__when {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rm-step__here {
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    color: var(--pp-primary);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.rm-step__h {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1.25;
+    margin-top: 6px;
+}
+
+@media (min-width: 768px) {
+    .rm__h1 { font-size: 1.8rem; }
+    .rm-step__h { font-size: 1.3rem; }
+    .rm-step__body > p { font-size: 0.95rem; }
+}
+
+/* The Today figures: tallies in a row, wrapping on narrow screens. */
+.rm-step__figs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--pp-text-dim);
+}
+
+.rm-step__figs b {
+    font-family: var(--pp-font-display), sans-serif;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.rm-step__more { font-style: italic; padding-right: 4px; }
+
+/* ---- the ask -------------------------------------------------------------------------- */
+
+.rm-step__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 10px 18px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 18%, transparent);
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: var(--pp-text);
+    text-decoration: none;
+    transition: background var(--pp-dur-fast) var(--pp-ease),
+                border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.rm-step__cta:hover {
+    background: color-mix(in oklab, var(--pp-primary) 28%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-border));
+}
+
+.rm-step__cta:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+.rm-step__cta svg { width: 15px; height: 15px; }
+
+.rm-step__thanks {
+    margin-top: 14px;
+    font-weight: 650;
+    color: var(--pp-text);
+}
+
+/* ---- entrance ------------------------------------------------------------------------- */
+
+/* A quiet top-down settle on load; below-the-fold steps simply finish before they are seen.
+   Declared under no-preference only. */
+@media (prefers-reduced-motion: no-preference) {
+    .rm-step {
+        animation: ppRevealIn 0.55s var(--pp-ease) backwards;
+    }
+    .rm-step:nth-child(1) { animation-delay: 180ms; }
+    .rm-step:nth-child(2) { animation-delay: 280ms; }
+    .rm-step:nth-child(3) { animation-delay: 380ms; }
+    .rm-step:nth-child(4) { animation-delay: 460ms; }
+    .rm-step:nth-child(5) { animation-delay: 540ms; }
+    .rm-step:nth-child(6) { animation-delay: 620ms; }
+}

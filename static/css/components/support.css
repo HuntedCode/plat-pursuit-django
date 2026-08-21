@@ -213,6 +213,70 @@
    the page (and a test) claimed the box was CSS-driven: a user who picked Yearly saw monthly prices
    and would have submitted a cycle they were never shown. */
 
+/* THE ROADMAP BAND (data-sup-road): the pitch's forward look. Head row, the shared segmented
+   Horizon, then only the AHEAD stages named -- the serve band already brags for the past. */
+.sup-road__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sup-road__k {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.sup-road__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--pp-primary);
+    text-decoration: none;
+}
+
+.sup-road__link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.sup-road__link:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+.sup-road__link svg { width: 13px; height: 13px; }
+
+.sup-road__pips { margin-top: 12px; max-width: 460px; }
+
+.sup-road__next {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px 18px;
+    margin-top: 14px;
+}
+
+@media (min-width: 768px) {
+    .sup-road__next { grid-template-columns: repeat(3, 1fr); }
+}
+
+.sup-road__cell dt {
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.sup-road__cell dd {
+    margin-top: 3px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
+
 /* 3 across, 2 rows. Six amounts, six levels, one to one. */
 .sup-amts {
     display: grid;
