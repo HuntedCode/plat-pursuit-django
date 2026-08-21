@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.services.share_image_cache import ShareImageCache
+from users.services.marks import mark_style
 from trophies.mixins import LoginRequiredAPIMixin
 from trophies.models import EarnedTrophy
 
@@ -160,6 +161,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
         'padding': PADDING,
         'section_gap': SECTION_GAP,
         'username': profile.display_psn_username or profile.psn_username,
+        'mark': mark_style(profile.display_mark),
         'total_plats': len(ordered),
         'icon_type': icon_type,
         'theme_key': theme_key or 'default',

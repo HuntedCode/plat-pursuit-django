@@ -85,7 +85,12 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
             {% endif %}
 
             <div style="flex: 1; min-width: 0;">
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ username }}</div>
+                {% comment %} The mark system, inline (Playwright renders this with no stylesheet): name in the
+                mark's colour plus its glyph, exactly as the recap share card wears it. {% endcomment %}
+                <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
+                    {% if mark %}<span style="display: flex; align-items: center; gap: 2px; flex-shrink: 0;">{% if mark.kind == 'supporter' %}{% for _ in ''|center:mark.stars %}<svg width="15" height="15" viewBox="0 0 24 24" {% if mark.outline %}fill="none" stroke="{{ mark.colour }}" stroke-width="2" stroke-linejoin="round"{% else %}fill="{{ mark.colour }}"{% endif %}><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}{% elif mark.key == 'staff' %}<svg width="16" height="16" viewBox="0 0 24 24" fill="{{ mark.colour }}"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>{% elif mark.key == 'mod' %}<svg width="16" height="16" viewBox="0 0 24 24" fill="{{ mark.colour }}"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>{% endif %}</span>{% endif %}
+                </div>
                 <div style="line-height: 1.35; font-size: 15px; font-weight: 500; color: #9da5b1; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     {% comment %}Platinum count only. The non-plat completion total used to sit here as "N at 100%",
                     which read as though it should INCLUDE the platinums -- two numbers apparently arguing with each

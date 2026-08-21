@@ -33,6 +33,7 @@ from trophies.models import (
     BadgeSeries, EarnedTrophy, ProfileGame, ProfileTrophyGroup, SeriesBadgeStanding, Stage,
     TrophyGroup, UserConceptRating, UserTitle,
 )
+from users.services.marks import mark_style
 from trophies.constants import badge_attribution_rank
 from trophies.templatetags.job_icons import _ICONS as _JOB_ICONS
 
@@ -582,6 +583,7 @@ def get_card_data(profile, standing):
         'ordinal': ordinal,
 
         'username': profile.display_psn_username or profile.psn_username,
+        'mark': mark_style(profile.display_mark),
         'user_avatar_url': profile.avatar_url or '',
         # The title they're WEARING, not one this game granted -- the card's identity strip is the
         # hunter, and the worn title is how they present themselves everywhere else on the site.
