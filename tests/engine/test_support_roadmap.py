@@ -170,6 +170,11 @@ def test_the_band_speaks_the_pages_tier_vocabulary(client):
         assert tier_name in band, f'{tier_name} missing from the band'
     first_works = next(f for f in ROADMAP_FEATURES if f['tier'] == 'works')
     assert first_works['name'] in band
+    # The miniature: each cell wears the page's chip primitive and its tier class, so the band
+    # inherits the temperature semantics instead of restyling them.
+    for key in ('works', 'next', 'wishlist'):
+        assert f'sup-road__cell is-{key}' in band, f'the {key} cell lost its tier class'
+    assert band.count('rm-tier__chip') == 3
 
 
 def test_the_band_sits_inside_the_pitch(client):

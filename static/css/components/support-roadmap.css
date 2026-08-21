@@ -68,20 +68,23 @@
     color: var(--pp-text);
 }
 
-.rm-tier.is-works .rm-tier__chip {
+/* Variants keyed on the CONTAINER's is-* class, not .rm-tier specifically, so the storefront
+   band's cells can wear the same chips (the band previews this page). The breathe below stays
+   .rm-tier-scoped: the storefront already carries its two ambient motions. */
+.is-works .rm-tier__chip {
     background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
     border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
     color: var(--pp-primary);
 }
 
 /* Distance as temperature, matching the pips' band ramp: next wears the Horizon's cool tone. */
-.rm-tier.is-next .rm-tier__chip {
+.is-next .rm-tier__chip {
     background: color-mix(in oklab, rgb(110, 200, 230) 10%, transparent);
     border-color: color-mix(in oklab, rgb(110, 200, 230) 35%, var(--pp-border));
     color: color-mix(in oklab, rgb(110, 200, 230) 70%, var(--pp-text));
 }
 
-.rm-tier.is-wishlist .rm-tier__chip {
+.is-wishlist .rm-tier__chip {
     background: transparent;
     border-style: dashed;
     color: var(--pp-text-dim);

@@ -261,17 +261,16 @@
     .sup-road__next { grid-template-columns: repeat(3, 1fr); }
 }
 
-.sup-road__cell dt {
-    font-size: 0.66rem;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--pp-text-mute);
+/* The chip is the roadmap page's primitive at band scale; variants come from
+   support-roadmap.css via the cell's is-* class. */
+.sup-road__cell .rm-tier__chip {
+    font-size: 0.62rem;
+    padding: 3px 9px;
 }
 
 .sup-road__cell dd {
-    margin-top: 3px;
-    font-size: 0.8rem;
+    margin-top: 7px;
+    font-size: 0.78rem;
     line-height: 1.55;
     color: var(--pp-text-dim);
 }

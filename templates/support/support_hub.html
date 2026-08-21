@@ -340,10 +340,13 @@ substrate, and an earlier version of this page did, which is most of why it read
             </div>
             {% comment %} The page's own tier vocabulary, compressed: each certainty tier and a
             few of its feature names. One story across both surfaces, no separate skeleton. {% endcomment %}
+            {% comment %} Each cell is the roadmap page's tier presentation in miniature: the
+            same chip primitive, the same temperature semantics (works lit, next cool, wishlist
+            dashed outline) -- the band previews the page it links to. {% endcomment %}
             <dl class="sup-road__next">
                 {% for tier in roadmap_teaser %}
-                <div class="sup-road__cell">
-                    <dt>{{ tier.name }}</dt>
+                <div class="sup-road__cell is-{{ tier.key }}">
+                    <dt><span class="rm-tier__chip">{{ tier.name }}</span></dt>
                     <dd>{{ tier.names|join:' &middot; ' }}</dd>
                 </div>
                 {% endfor %}

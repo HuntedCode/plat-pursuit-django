@@ -252,7 +252,7 @@ class SupportStorefrontView(TemplateView):
         # The band teaser: each certainty tier with its first few feature names, the same
         # vocabulary the roadmap page uses -- one story across both surfaces.
         context['roadmap_teaser'] = [
-            {'name': name,
+            {'key': key, 'name': name,
              'names': [f['name'] for f in ROADMAP_FEATURES if f['tier'] == key][:3]}
             for key, name in (('works', 'In the works'), ('next', 'Up next'),
                               ('wishlist', 'The wishlist'))
