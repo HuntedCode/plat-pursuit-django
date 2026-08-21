@@ -101,11 +101,11 @@
     14% {
         opacity: 0.85;
     }
-    72% {
-        opacity: 0.4;
+    78% {
+        opacity: 0.5;
     }
     100% {
         opacity: 0;
-        transform: translate(var(--rise-x, 0px), -46px) scale(1) rotate(var(--rise-r, 15deg));
+        transform: translate(var(--rise-x, 0px), -40px) scale(1) rotate(var(--rise-r, 15deg));
     }
 }

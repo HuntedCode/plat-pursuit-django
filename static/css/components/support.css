@@ -489,14 +489,16 @@
 .sup-go__rise {
     position: absolute;
     inset: 0;
+    overflow: hidden;         /* stars bubble up THROUGH the button, never past it */
+    border-radius: inherit;
     pointer-events: none;
 }
 
 .sup-go__risestar {
     position: absolute;
-    bottom: 6px;
-    width: 10px;
-    height: 10px;
+    bottom: -12px;            /* below the clip edge: each star EMERGES rather than appears */
+    width: 14px;
+    height: 14px;
     fill: var(--sup-t, var(--pp-accent));
     opacity: 0;
     animation: ppStarRise var(--rise-t, 5s) ease-out var(--rise-d, 0s) infinite;
@@ -505,9 +507,9 @@
 /* Five launch lanes: positions, tempos and drifts co-prime enough that the pattern takes ~half a
    minute to visibly repeat. The two smaller stars read as further away. */
 .sup-go__risestar:nth-child(1) { left: 10%; --rise-t: 5.3s; --rise-d: 0s;    --rise-x: -7px; --rise-r: -16deg; }
-.sup-go__risestar:nth-child(2) { left: 29%; --rise-t: 6.1s; --rise-d: 2.3s;  --rise-x: 5px;  --rise-r: 20deg; width: 8px; height: 8px; }
+.sup-go__risestar:nth-child(2) { left: 29%; --rise-t: 6.1s; --rise-d: 2.3s;  --rise-x: 5px;  --rise-r: 20deg; width: 11px; height: 11px; }
 .sup-go__risestar:nth-child(3) { left: 51%; --rise-t: 4.7s; --rise-d: 1.2s;  --rise-x: -4px; --rise-r: 12deg; }
-.sup-go__risestar:nth-child(4) { left: 72%; --rise-t: 5.9s; --rise-d: 3.6s;  --rise-x: 8px;  --rise-r: -22deg; width: 8px; height: 8px; }
+.sup-go__risestar:nth-child(4) { left: 72%; --rise-t: 5.9s; --rise-d: 3.6s;  --rise-x: 8px;  --rise-r: -22deg; width: 11px; height: 11px; }
 .sup-go__risestar:nth-child(5) { left: 89%; --rise-t: 4.9s; --rise-d: 2.9s;  --rise-x: -6px; --rise-r: 15deg; }
 
 /* An unpressable button must not advertise. */
@@ -521,20 +523,33 @@
    be obviously unpressable without being greyed into illegibility. */
 .sup-buy__go:disabled { cursor: default; opacity: 0.6; }
 
-/* Quieter than the card button: an outline rather than a fill. It is an alternative, not a
-   competitor, and the level's hue stays on the primary action. */
+/* Quieter than the card button: an alternative, not a competitor. It carries a WHISPER of the
+   level hue at rest (it read as unstyled next to the animated primary) and its emitter is gated
+   below to hover/keyboard-focus -- it earns its stars when you show intent, so at rest the
+   boldness still lives in one place. */
 .sup-buy__go--pp {
-    background: transparent;
-    border-color: var(--pp-border);
+    background: color-mix(in oklab, var(--sup-t) 6%, transparent);
+    border-color: color-mix(in oklab, var(--sup-t) 22%, var(--pp-border));
     color: var(--pp-text-dim);
     font-size: 0.85rem;
 }
 
-.sup-buy__go--pp:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: color-mix(in oklab, var(--sup-t) 45%, var(--pp-border));
+.sup-buy__go--pp:hover:not(:disabled),
+.sup-buy__go--pp:focus-visible {
+    background: color-mix(in oklab, var(--sup-t) 14%, transparent);
+    border-color: color-mix(in oklab, var(--sup-t) 50%, var(--pp-border));
     color: var(--pp-text);
 }
+
+/* The intent gate. display flips restart the lane delays, so the first star (delay 0) appears the
+   moment the cursor arrives. Keyboard focus counts as intent too. */
+.sup-buy__go--pp .sup-go__rise { display: none; }
+
+.sup-buy__go--pp:hover:not(:disabled) .sup-go__rise,
+.sup-buy__go--pp:focus-visible .sup-go__rise { display: block; }
+
+/* The label sits above the stars in paint order. */
+.sup-go__lbl { position: relative; }
 
 .sup-buy__go-y { display: none; }
 .sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-m { display: none; }

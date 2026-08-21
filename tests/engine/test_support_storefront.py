@@ -468,8 +468,8 @@ def test_the_pay_button_breathes_stars_in_the_levels_colour(client):
 
     emitter_count = body.count('sup-go__rise"')
     assert 'class="sup-go__rise" aria-hidden="true"' in body, 'the emitter is missing or audible'
-    assert emitter_count == 1, 'the emitter belongs on the PRIMARY button only (PayPal stays quiet)'
-    assert body.count('sup-go__risestar') == 5
+    assert emitter_count == 2, 'both pay buttons carry the emitter (PayPal gated to intent in CSS)'
+    assert body.count('sup-go__risestar') == 10
     # The one-shape rule, enforced by construction: the rising star IS the mark's path.
     mark_path = 'M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z'
     rise_block = body[body.index('sup-go__rise"'):body.index('sup-buy__go-m')]
@@ -483,6 +483,12 @@ def test_the_stars_stand_down_when_the_button_cannot_be_pressed():
     rules = _css_rules('support.css')
 
     assert '.sup-buy__go:disabled .sup-go__rise { display: none; }' in rules
+    # Containment: stars bubble THROUGH the button, never past it (user feedback 2026-08-21).
+    rise_rule = rules[rules.index('.sup-go__rise {'):]
+    assert 'overflow: hidden;' in rise_rule[:rise_rule.index('}')]
+    # The PayPal emitter rests dark and wakes on intent -- hover or keyboard focus, both.
+    assert '.sup-buy__go--pp .sup-go__rise { display: none; }' in rules
+    assert ':focus-visible .sup-go__rise { display: block; }' in rules
     reduced = rules[rules.index('prefers-reduced-motion: reduce'):]
     assert '.sup-go__rise { display: none; }' in reduced[:200],         'reduced motion does not silence the emitter'
 
