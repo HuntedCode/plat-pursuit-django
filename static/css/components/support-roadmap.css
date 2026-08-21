@@ -47,85 +47,73 @@
     color: var(--pp-text-mute);
 }
 
-/* ---- the trail ------------------------------------------------------------------------ */
+/* ---- the grid ------------------------------------------------------------------------- */
 
-.rm-trail {
-    display: flex;
-    flex-direction: column;
-    padding: 14px 0 0;
-}
-
-.rm-step {
+/* A GRID, not a ladder (2026-08-22), and no arrows: in a wrapping grid connectors break at every
+   row edge. Sequence rides the trophy-guide stage chips + the header pips instead. The ask card
+   spans the full row -- the destination, not a stop. */
+.rm-grid {
     display: grid;
-    grid-template-columns: 34px 1fr;
-    gap: 0 14px;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding-top: 14px;
 }
 
 @media (min-width: 768px) {
-    .rm-step { grid-template-columns: 44px 1fr; gap: 0 20px; }
+    .rm-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* The rail: each step draws its own segment so the line breaks naturally at the top and fades
-   past the final stop. */
-.rm-step__rail {
-    position: relative;
-    display: flex;
-    justify-content: center;
+@media (min-width: 1024px) {
+    .rm-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
-.rm-step__rail::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--pp-border);
+.rm-step.is-ask { grid-column: 1 / -1; }
+
+/* ---- stage chips: the sequence carrier ------------------------------------------------ */
+
+.rm-step__stage {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-3);
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: var(--pp-text-dim);
 }
 
-.rm-step:first-child .rm-step__rail::before { top: 6px; }
-
-.rm-step:last-child .rm-step__rail::before {
-    background: linear-gradient(180deg, var(--pp-border), transparent 85%);
+/* Status carries on the chip: banked solid, now lit, ahead hollow. */
+.rm-step.is-ahead .rm-step__stage {
+    background: transparent;
+    color: var(--pp-text-mute);
 }
 
-.rm-step__mark {
-    position: relative;
-    z-index: 1;
-    display: block;
-    width: 14px;
-    height: 14px;
-    margin-top: 26px;   /* level with the card's icon chip, not the card's top edge */
-    border-radius: 50%;
-    background: var(--pp-bg-2);
-    border: 2px solid var(--pp-border);
+.rm-step.is-now .rm-step__stage {
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+    color: var(--pp-primary);
 }
 
-.rm-step.is-shipped .rm-step__mark {
-    background: var(--pp-text-dim);
-    border-color: var(--pp-text-dim);
-}
-
-.rm-step.is-now .rm-step__mark {
-    background: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-bg-2));
-    border-color: var(--pp-primary);
-    box-shadow: 0 0 10px -2px color-mix(in oklab, var(--pp-primary) 70%, transparent);
-}
-
-/* The Horizon's near-completion nudge, borrowed at whisper volume: the current mark breathes.
-   Declared only under no-preference so reduced motion cannot lose a cascade fight. */
+/* The Horizon's near-completion nudge at whisper volume: the now-chip breathes. Declared only
+   under no-preference so reduced motion cannot lose a cascade fight. */
 @media (prefers-reduced-motion: no-preference) {
-    .rm-step.is-now .rm-step__mark {
+    .rm-step.is-now .rm-step__stage {
         animation: rmHere 3.2s var(--pp-ease, ease) infinite;
     }
 }
 
 @keyframes rmHere {
-    0%, 100% { box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
-    50%      { box-shadow: 0 0 14px -2px color-mix(in oklab, var(--pp-primary) 85%, transparent); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--pp-primary) 40%, transparent); }
+    50%      { box-shadow: 0 0 10px 0 color-mix(in oklab, var(--pp-primary) 55%, transparent); }
 }
 
-/* The last stop: Frame's diamond, hollow -- the plat, not yet earned. */
-.rm-step.is-ask .rm-step__mark {
+/* The last stop's chip is Frame's DIAMOND, hollow -- the plat, not yet earned (deliberately not
+   a trophy shape, which belongs to the earned register). */
+.rm-step__stage--plat {
+    width: 11px;
+    height: 11px;
+    padding: 0;
     border-radius: 2px;
     transform: rotate(45deg);
     background: transparent;
@@ -135,10 +123,7 @@
 /* Every stage is a CARD on the rail (the rebuild's carded-content rule; the first cut shipped
    bare prose and was rightly corrected). Card chrome comes from the shared utility classes in
    the template; this styles the interior. */
-.rm-step__card {
-    margin-bottom: 14px;
-    max-width: 760px;
-}
+.rm-step__card { height: 100%; }
 
 .rm-step__card p {
     margin-top: 10px;

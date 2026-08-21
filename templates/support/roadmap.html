@@ -10,10 +10,11 @@ progress, the plat at the end. So the product roadmap presents itself as the roa
 PlatPursuit itself -- shipped stages banked, the current stage lit and marked "we are here",
 future stages hollow. The name collision with the guides feature becomes the charm.
 
-EVERY STAGE IS A CARD on the rail (corrected 2026-08-22: the first cut shipped the trail as bare
-prose on the page background, against the rebuild's own carded-content rule). Each card carries a
-Lucide-style icon chip -- the Jobs icon language -- to break the text up; the now-card alone wears
-the accent left border.
+EVERY STAGE IS A CARD in a GRID (corrected twice on 2026-08-22: bare prose first, then ladder ->
+grid). Each card carries a Lucide-style icon chip -- the Jobs icon language -- and a trophy-guide
+stage chip that carries SEQUENCE (deliberately no arrows: in a wrapping grid connectors break at
+every row edge). Status rides the chips: banked solid, now lit (accent border on the card too),
+ahead hollow, and the plat a hollow Frame diamond on the full-width ask card.
 
 CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
 - Real counts appear only on shipped/now stages, from the heartbeat, omitted wholesale when cold.
@@ -51,11 +52,15 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         </div>
     </section>
 
-    {% comment %} ============================================== the trail ================= {% endcomment %}
-    <div class="rm-trail">
+    {% comment %} ============================================== the grid ================== {% endcomment %}
+    {% comment %} A GRID, not a ladder (decided 2026-08-22), and deliberately NO arrows between
+    cards: in a wrapping grid the reading order breaks at every row edge, so connectors point at
+    nothing. Sequence is carried the way this site already numbers things -- trophy-guide style
+    stage chips -- plus the header's pips. The ask card spans the full row: the destination, not
+    a stop. {% endcomment %}
+    <div class="rm-grid">
 
         <section class="rm-step is-shipped">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -63,7 +68,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">How it started</p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 1</span> How it started</p>
                             <h2 class="rm-step__h">It started with a Discord server.</h2>
                         </div>
                     </div>
@@ -78,7 +83,6 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         </section>
 
         <section class="rm-step is-shipped">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -86,7 +90,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">January 2026</p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 2</span> January 2026</p>
                             <h2 class="rm-step__h">PlatPursuit.com goes live.</h2>
                         </div>
                     </div>
@@ -100,7 +104,6 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         </section>
 
         <section class="rm-step is-shipped">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -108,7 +111,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">This year</p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 3</span> This year</p>
                             <h2 class="rm-step__h">The whole site, rebuilt.</h2>
                         </div>
                     </div>
@@ -123,7 +126,6 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         </section>
 
         <section class="rm-step is-now">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -131,7 +133,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">Today <span class="rm-step__here">we are here</span></p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 4</span> Today <span class="rm-step__here">we are here</span></p>
                             <h2 class="rm-step__h">Platinum Pursuit 1.0.</h2>
                         </div>
                     </div>
@@ -159,7 +161,6 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         {% comment %} From here the markers go hollow and the numbers stop. Nothing below this
         line carries a date, a count or a percentage -- order is the only promise. {% endcomment %}
         <section class="rm-step is-ahead">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -167,7 +168,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">Soon</p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 5</span> Soon</p>
                             <h2 class="rm-step__h">More ways to play.</h2>
                         </div>
                     </div>
@@ -182,7 +183,6 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         </section>
 
         <section class="rm-step is-ahead">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -190,7 +190,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">After that</p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 6</span> After that</p>
                             <h2 class="rm-step__h">The returns.</h2>
                         </div>
                     </div>
@@ -205,7 +205,6 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         </section>
 
         <section class="rm-step is-ahead">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
                     <div class="rm-step__head">
@@ -213,7 +212,7 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
                         </span>
                         <div>
-                            <p class="rm-step__when">Further out</p>
+                            <p class="rm-step__when"><span class="rm-step__stage">Stage 7</span> Further out</p>
                             <h2 class="rm-step__h">Beyond the console.</h2>
                         </div>
                     </div>
@@ -232,9 +231,9 @@ CONTENT RULES (inherited from the storefront arc this revives, commit 3565a381):
         {% comment %} The ask: the trail's last stop points at the storefront. The rail ends OPEN
         here (fades past a hollow Frame diamond) -- the plat is not earned yet. {% endcomment %}
         <section class="rm-step is-ask">
-            <div class="rm-step__rail" aria-hidden="true"><span class="rm-step__mark"></span></div>
             <div class="rm-step__card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                 <div class="card-body p-4 md:p-5">
+                    <p class="rm-step__when"><span class="rm-step__stage rm-step__stage--plat" aria-hidden="true"></span> The plat</p>
                     <div class="rm-step__head">
                         <span class="rm-step__icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
