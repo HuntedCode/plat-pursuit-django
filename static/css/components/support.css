@@ -25,7 +25,7 @@
    data page and as drab on a page with no data, which is what this one is.
    Two cool hues laid across the card, both far too faint to read as decoration, so the surface has
    somewhere to go rather than sitting at one value from edge to edge. */
-.sup .card-body {
+.sup-headcard .card-body {
     background:
         radial-gradient(120% 90% at 8% 0%, color-mix(in oklab, var(--pp-primary) 9%, transparent) 0%, transparent 58%),
         radial-gradient(90% 80% at 100% 100%, color-mix(in oklab, var(--pp-secondary) 8%, transparent) 0%, transparent 62%);
@@ -105,7 +105,10 @@
 
 /* Alternating lift, so the row reads as an arrangement rather than a filmstrip. Nothing moves on
    hover: these are not interactive and should not pretend to be. */
-.sup-art__cell:nth-child(even) { transform: translateY(6px); }
+/* On the IMG, not the cell: the cell runs ppRevealIn, whose last frame is `transform: none` -- an
+   offset on the animated element is wiped the instant the entrance ends, which read as the row
+   snapping 6px at settle. */
+.sup-art__cell:nth-child(even) img { transform: translateY(6px); }
 
 .sup-art__cap {
     margin-top: 12px;
@@ -202,7 +205,7 @@
     display: none;
 }
 
-.sup-box[data-cycle="yearly"] .sup-box__saving { display: block; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-box__saving { display: block; }
 
 /* --------------------------------------------------------------- the amount grid + tier ---- */
 /* AMOUNT FIRST, TIER DERIVED. Six rows each with their own button read as a form; a grid of amounts
@@ -214,10 +217,15 @@
 
 .sup-buy { display: block; }
 
-/* Gift has nothing to buy yet, so the whole purchase column steps aside for its note. */
-.sup-box[data-cycle="gift"] .sup-buy { display: none; }
+/* THE CYCLE FLIPS ON THE RADIOS THEMSELVES, like the tier reveal -- not on a data-cycle
+   attribute. The attribute was set only by JS, which made the switch dead with scripts off while
+   the page (and a test) claimed the box was CSS-driven: a user who picked Yearly saw monthly prices
+   and would have submitted a cycle they were never shown.
+
+   Gift has nothing to buy yet, so the whole purchase column steps aside for its note. */
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-buy { display: none; }
 .sup-box__gift { display: none; }
-.sup-box[data-cycle="gift"] .sup-box__gift { display: block; }
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-box__gift { display: block; }
 
 .sup-box__gift {
     margin-top: 14px;
@@ -280,8 +288,8 @@
 
 /* One face at a time. Both ship in the markup so the switch is a state change, not a round trip. */
 .sup-amt__y { display: none; }
-.sup-box[data-cycle="yearly"] .sup-amt__m { display: none; }
-.sup-box[data-cycle="yearly"] .sup-amt__y { display: block; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-amt__m { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-amt__y { display: block; }
 
 
 /* The mark's containers. The mark itself lives in `components/supporter.css` -- it is site-wide and
@@ -543,8 +551,8 @@
 }
 
 .sup-buy__go-y { display: none; }
-.sup-box[data-cycle="yearly"] .sup-buy__go-m { display: none; }
-.sup-box[data-cycle="yearly"] .sup-buy__go-y { display: inline; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-m { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-y { display: inline; }
 
 .sup-box__soon {
     margin-top: 9px;
@@ -553,11 +561,12 @@
     color: var(--pp-warning);
 }
 
-/* The level's hue arrives inline as `--sup-t`, straight from `SUPPORT_TIERS[*]['colour']`. It used
-   to be a block of hardcoded rules here, which meant the palette lived in two places that could
-   quietly disagree; the constant is the single source now. The fallback is only for the box before
-   any amount is checked. */
-.sup-box { --sup-t: #5f9ed8; }
+/* The box-level hue is emitted as six inline `:has(input[name="tier"]...)` rules by the TEMPLATE,
+   straight from `SUPPORT_TIERS[*]['colour']` -- one source, and it reaches the CTA and the level
+   block, which inline styles on sibling elements never could. This fallback exists only for the
+   impossible nothing-checked state (an amount is preselected server-side); it deliberately matches
+   the second rung rather than introducing a seventh colour. */
+.sup-box { --sup-t: #47b6e6; }
 
 /* --------------------------------------------------------------------- member / off states ---- */
 .sup-box--member,
@@ -822,6 +831,16 @@
    name takes the colour without the animation. The truncation lives on this block-level child
    because `text-overflow` on the flex container does nothing for its items (the `.lb-row__uname`
    trap), and a PSN id has no spaces to break on. */
+/* The box's mock row renders its name through `.pp-supname` (the animated treatment), which has no
+   width of its own -- same flex-item truncation trap as everywhere else, so the ellipsis lives on a
+   scoped rule rather than on the shared class. */
+.sup-prev__name .pp-supname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .sup-prev__cname {
     min-width: 0;
     overflow: hidden;

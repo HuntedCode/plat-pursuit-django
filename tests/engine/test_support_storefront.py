@@ -481,6 +481,14 @@ def test_the_purchase_box_needs_no_javascript(client):
     # the placeholder is shaped like the real form rather than needing renaming to become one.
     assert body.count('type="radio" name="tier"') == 6, 'the amounts are not radios any more'
     assert 'type="radio" name="sup-cycle"' in body, 'the cycle switch is not radio-backed any more'
+    # ...and the cycle genuinely flips in CSS. It used to key on a data-cycle attribute only JS
+    # set, which made this test's own claim false: with scripts off, Yearly showed monthly prices.
+    assert 'data-cycle' not in body, 'the cycle switch depends on JS again'
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8', errors='ignore')
+    assert 'input[name=sup-cycle][value=yearly]:checked' in css, (
+        'nothing in the built CSS flips the yearly face'
+    )
 
 
 # ------------------------------------------------------------------ the perks modal + preview ----
@@ -1447,3 +1455,41 @@ def test_an_unknown_provider_is_rejected_not_defaulted(client):
     assert not checkout.called, 'an unknown provider reached Stripe anyway'
     assert response.status_code == 302
 
+
+def test_the_checkout_is_a_real_form(client):
+    """THE AUDIT FINDING ALL THREE AGENTS CONVERGED ON.
+
+    The tier radios and both submit buttons floated in plain divs -- a submit button outside a form
+    is inert, so at ladder go-live the enabled buttons would have silently done nothing, and the
+    missing CSRF token would have 403'd every submission once a form was added. CI stayed green
+    through all of it because every checkout test POSTs via the test client, which talks straight to
+    the view and never exercises the markup. This test is the tie between the two: the page must
+    contain a real POST form, with the token, ENCLOSING the tier radios and both provider buttons.
+    """
+    body = _flat(client)
+
+    assert '<form method="post">' in body, 'the checkout has no form; the buy buttons are inert'
+    form = body[body.index('<form method="post">'):]
+    form = form[:form.index('</form>')]
+    assert 'csrfmiddlewaretoken' in form, 'no CSRF token; every submission would 403'
+    assert form.count('type="radio" name="tier"') == 6, 'the tier radios are outside the form'
+    assert form.count('name="provider"') == 2, 'a provider button is outside the form'
+
+
+def test_the_cta_wears_the_selected_levels_colour(client):
+    """'Picking a number is visibly picking a level' stopped one element short of the money button:
+    a stylesheet block claimed to put the level's hue on the box, but --sup-t lived inline on
+    SIBLING elements the button does not inherit from, so the CTA sat on the fallback forever.
+
+    The six rules are emitted by the template from SUPPORT_TIERS -- one source -- and this checks
+    each is actually on the page with its own colour.
+    """
+    body = _flat(client)
+
+    for tier in SUPPORT_TIERS:
+        rule = f'.sup-box:has(input[name="tier"][value="{tier["slug"]}"]:checked)'
+        assert rule in body, f'{tier["slug"]} never colours the box'
+        i = body.index(rule)
+        assert tier['colour'] in body[i:i + len(rule) + 60], (
+            f'{tier["slug"]} colours the box with the wrong hue'
+        )

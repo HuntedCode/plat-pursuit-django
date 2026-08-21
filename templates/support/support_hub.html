@@ -32,7 +32,7 @@ substrate, and an earlier version of this page did, which is most of why it read
 {% block content %}
 <div class="sup">
 
-    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral sup-headcard">
         <div class="card-body p-4 md:p-6 lg:p-8">
             <div class="sup-head">
 
@@ -113,9 +113,34 @@ substrate, and an earlier version of this page did, which is most of why it read
                 </div>
 
                 {% elif pricing_available %}
-                <div class="sup-box" data-sup-box data-cycle="monthly">
+                {% comment %} The box's per-level hue, emitted from the ONE source (SUPPORT_TIERS)
+                rather than a parallel CSS block that could drift. The selected amount's radio drives
+                `--sup-t` on the whole box, which is what lets the CTA and the level block wear the
+                level's colour -- a stylesheet copy of these six rules once claimed to do this and
+                never could, because the inline `--sup-t` lived on sibling elements the button does
+                not inherit from. {% endcomment %}
+                <style>
+                    {% for tier in tiers %}
+                    .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) { --sup-t: {{ tier.colour }}; }
+                    {% endfor %}
+                </style>
+                <div class="sup-box">
+                    {% comment %} A REAL FORM, and the audit finding that mattered most on this page:
+                    the tier radios and both submit buttons floated in plain divs, and a submit
+                    button outside a form is inert -- so at ladder go-live the enabled buttons would
+                    have silently done nothing, with CI green forever because every checkout test
+                    POSTs via the test client and never exercises the markup. The missing
+                    `{% templatetag openvariable %}csrf{% templatetag closevariable %}` would then
+                    have 403'd every submission anyway. `test_the_checkout_is_a_real_form` now ties
+                    the contract tests to the page.
+
+                    No `action`, deliberately: it self-POSTs to /support/, which is why the handler
+                    lives on this view. The cycle radios ride along in the payload; the server reads
+                    only `tier` and `provider`. {% endcomment %}
+                    <form method="post">
+                    {% csrf_token %}
                     <div class="pp-switch sup-box__switch" role="radiogroup" aria-label="Billing cycle">
-                        <label class="pp-switch__chip is-active">
+                        <label class="pp-switch__chip">
                             <input type="radio" name="sup-cycle" value="monthly" class="sr-only" checked>
                             <span class="pp-switch__lbl">Monthly</span>
                         </label>
@@ -133,7 +158,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                         <fieldset class="sup-amts">
                             <legend class="sr-only">How much would you like to give?</legend>
                             {% for tier in tiers %}
-                            <label class="sup-amt" data-tier="{{ tier.slug }}" style="--sup-t: {{ tier.colour }}">
+                            <label class="sup-amt" style="--sup-t: {{ tier.colour }}">
                                 <input type="radio" name="tier" value="{{ tier.slug }}" class="sr-only"
                                        {% if tier.slug == default_tier %}checked{% endif %}>
                                 <span class="sup-stars" aria-hidden="true">{% include 'support/_stars.html' with tier=tier %}</span>
@@ -151,7 +176,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                         mark. All six ship and the checked amount reveals its own, so the swap is a
                         state change. {% endcomment %}
                         {% for tier in tiers %}
-                        <div class="sup-becomes" data-for="{{ tier.slug }}" data-tier="{{ tier.slug }}"
+                        <div class="sup-becomes" data-for="{{ tier.slug }}"
                              style="--sup-t: {{ tier.colour }}">
                             <p class="sup-becomes__h">
                                 You would appear as a <b>{{ tier.name }}</b>
@@ -256,6 +281,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                         <p><b>Gifting is on the way.</b></p>
                         <p>You will be able to buy any level for someone else, or hand out a code. We are still working out how it should feel.</p>
                     </div>
+                    </form>
                 </div>
 
                 {% else %}
@@ -408,7 +434,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 <span class="sup-dial__name" role="rowheader">{{ perk.name }}</span>
                 <span class="sup-dial__free" role="cell"><span class="sup-dial__k">Everyone</span>{{ perk.everyone }}</span>
                 <span class="sup-dial__mem" role="cell"><span class="sup-dial__k">Supporters</span>{{ perk.member }}</span>
-                {% if perk.note %}<span class="sup-dial__note">{{ perk.note }}</span>{% endif %}
+                {% if perk.note %}<span class="sup-dial__note" role="cell">{{ perk.note }}</span>{% endif %}
             </div>
             {% endfor %}
         </div>
@@ -430,23 +456,11 @@ substrate, and an earlier version of this page did, which is most of why it read
     PP.onPageReady(function (first) {
         if (!first) return;
 
-        // The cycle switch and the amount grid are radio-backed and CSS-driven, so both already work
-        // with JS off. This only adds the `is-active` chip class the shared `.pp-switch` look keys on
-        // (that styling predates the `:has()` variant), plus the `data-cycle` hook.
-        var box = document.querySelector('[data-sup-box]');
-        if (box) {
-            var sync = function () {
-                box.querySelectorAll('.pp-switch__chip').forEach(function (chip) {
-                    var input = chip.querySelector('input');
-                    chip.classList.toggle('is-active', !!input && input.checked);
-                    if (input && input.checked) box.dataset.cycle = input.value;
-                });
-            };
-            box.querySelectorAll('.pp-switch__chip input').forEach(function (input) {
-                input.addEventListener('change', sync);
-            });
-            sync();
-        }
+        // The purchase box needs no JS at all: the cycle switch and the amount grid are radios
+        // driving :has() rules, and the shared switcher.css styles the chips off :has(input:checked)
+        // -- including the keyboard focus ring. A sync block used to mirror the checked state into
+        // an .is-active class and a state attribute; both were redundant with CSS that already
+        // existed, and the attribute made the no-JS story false.
 
         // Native <dialog>: Escape and the focus trap are the browser's job, not ours.
         var perks = document.getElementById('sup-perks');

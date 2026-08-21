@@ -423,8 +423,13 @@ class SupportStorefrontView(TemplateView):
         ]
 
     def post(self, request, *args, **kwargs):
-        """Start a checkout. The payload contract is unchanged from the old view: `tier` from the
-        submit button's name/value, `provider` from a hidden input, CSRF from the form."""
+        """Start a checkout.
+
+        The payload: `tier` from the amount RADIOS, `provider` from whichever SUBMIT BUTTON was
+        pressed (each button carries its own name/value), CSRF from the form -- which exists and
+        wraps the whole box. An earlier version of this docstring described that form while the
+        template did not have one; `test_the_checkout_is_a_real_form` now keeps the two honest.
+        """
         if not request.user.is_authenticated:
             return redirect_to_login(request.get_full_path())
 
