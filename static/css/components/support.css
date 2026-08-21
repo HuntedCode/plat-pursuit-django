@@ -911,9 +911,18 @@
     background: rgba(255, 255, 255, 0.02);
 }
 
+/* The wide closer (beta access): full row, a touch more presence. */
+.sup-perk--wide {
+    grid-column: 1 / -1;
+    padding: 14px;
+    border-color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 28%, var(--pp-border));
+}
+
 /* The icon wears its perk's stop from the giving ramp: tinted stroke, whisper fill, tinted
-   border -- colour without the tiles shouting. */
-.sup-perk__icon {
+   border -- colour without the tiles shouting. COMPOUND selector on purpose: the base
+   .rm-feat__icon rule lives in support-roadmap.css, which loads AFTER this file, so a bare
+   .sup-perk__icon at equal specificity loses the tie and the tint never shows (the bug). */
+.sup-perk .sup-perk__icon {
     margin-top: 2px;
     color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text));
     border-color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 35%, var(--pp-border));
@@ -933,12 +942,6 @@
     color: var(--pp-text);
 }
 
-.sup-perk__free {
-    margin-top: 4px;
-    font-size: 0.72rem;
-    line-height: 1.5;
-    color: var(--pp-text-mute);
-}
 
 .sup-perk__note {
     margin-top: 4px;

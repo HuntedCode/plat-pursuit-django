@@ -323,7 +323,9 @@ def test_no_perk_promises_something_that_no_longer_exists():
 def test_the_perk_list_is_the_decided_lineup():
     """Every perk-table test iterates PREMIUM_PERKS, so a shrunk or emptied list passes them all
     vacuously. Pinning the slugs is what gives those loops a floor."""
-    assert [p['slug'] for p in PREMIUM_PERKS] == ['sync', 'discord', 'mark', 'early', 'credit']
+    # The 2026-08-22 lineup: polls split out of discord, beta replaces early as the wide closer,
+    # credit moved to the purchase box's checklist alone.
+    assert [p['slug'] for p in PREMIUM_PERKS] == ['sync', 'discord', 'mark', 'polls', 'beta']
 
 
 def test_every_perk_names_what_a_free_user_gets():
@@ -341,13 +343,14 @@ def test_every_perk_names_what_a_free_user_gets():
         assert perk['everyone'].strip().lower() not in ('none', 'no', 'nothing', '-')
 
 
-def test_the_page_renders_both_sides_of_every_perk(client):
-    """The constant having two columns is worthless if the template only prints one of them."""
+def test_the_page_renders_every_perks_member_line(client):
+    """The member side must reach the page. The 'everyone' side became data-only on 2026-08-22
+    (the tiles stopped rendering it; the dial-invariant test above still enforces it exists) --
+    the modal lede's one sentence now carries the more-not-different frame."""
     with _member(False):
         body = _get(client).content.decode()
 
     for perk in PREMIUM_PERKS:
-        assert perk['everyone'] in body, f"{perk['slug']}: the free side is not on the page"
         assert perk['member'] in body
 
 
@@ -418,15 +421,15 @@ def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
 
 def test_early_access_still_says_something_between_betas(client):
     """`CURRENT_BETA` is None most of the time, so the PERMANENT claim about early access cannot
-    live in the live-beta callout -- it lives in the perk table, which always renders.
+    live in a live-beta callout -- it lives in the beta perk tile, which always renders.
 
     Otherwise one of the two things this page sells hardest disappears for whoever visits in a quiet
     week, including somebody who subscribed FOR it.
     """
     body = _flat(client)
 
-    assert 'New things' in body, 'early access vanishes entirely between betas'
-    assert 'Before they ship' in body
+    assert 'Beta access' in body, 'early access vanishes entirely between betas'
+    assert 'still taking shape' in body
 
 
 def test_every_level_of_the_ladder_is_on_the_page(client):
@@ -652,10 +655,9 @@ def test_the_perks_modal_is_icon_tiles(client):
     body = _flat(client)
     modal = body[body.index('id="sup-perks"'):]
 
-    assert modal.count('"sup-perk"') == len(PREMIUM_PERKS)
+    assert modal.count('--perk-c:') == len(PREMIUM_PERKS)
     for perk in PREMIUM_PERKS:
         assert perk['name'] in modal
-        assert f"Everyone: {perk['everyone']}" in modal
         # Each tile wears its perk's stop from the giving ramp (SUPPORT_TIERS hues).
         assert f"--perk-c: {perk['colour']}" in modal, f"{perk['slug']} lost its tint"
         assert any(perk['colour'] == t['colour'] for t in SUPPORT_TIERS), f"{perk['slug']} tint is not a giving-ramp stop"
@@ -796,15 +798,17 @@ def test_the_perks_modal_is_reachable_whatever_you_pick(client):
     assert body.count('Every supporter perk, whatever you give') == len(SUPPORT_TIERS)
 
 
-def test_the_modal_carries_both_sides_of_every_perk(client):
-    """It is the only place the dial is stated now, so if it renders one column the page has quietly
-    started claiming supporters get things free hunters cannot have."""
+def test_the_modal_carries_every_perks_member_line(client):
+    """Five tiles, member line each; the wide beta closer spans the grid (perk.wide). The dial's
+    'everyone' column retired 2026-08-22 -- the lede's one sentence now carries that frame."""
     body = _flat(client)
     dialog = body[body.index('<dialog id="sup-perks"'):]
 
     for perk in PREMIUM_PERKS:
-        assert perk['everyone'] in dialog, f"{perk['slug']}: the free side is missing"
-        assert perk['member'] in dialog
+        assert perk['member'] in dialog, f"{perk['slug']}: member line missing"
+    wides = [p for p in PREMIUM_PERKS if p.get('wide')]
+    assert len(wides) == 1 and wides[0]['slug'] == 'beta'
+    assert dialog.count('sup-perk--wide') == 1, 'the beta closer lost its full-width span'
 
 
 def test_the_preview_shows_the_viewer_their_own_name(client):

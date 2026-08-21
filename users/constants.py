@@ -149,42 +149,34 @@ SUPPORT_TIERS_ARE_PLACEHOLDERS = False
 #   early      -> trophies/mixins.py -> beta_access_required
 # Each perk's icon tint is a stop from the SUPPORT_TIERS ramp above -- the perks ARE the giving
 # register, so they wear the giving register's own palette rather than inventing hues.
+# The 'everyone' side is DATA-ONLY since 2026-08-22 (the modal stopped rendering it) but it is
+# NOT dead weight: the dial-invariant test reads it, and a perk whose everyone side is empty is
+# a gate wearing a perk's clothes. Fill it honestly or the suite says no.
 PREMIUM_PERKS = [
-    {
-        'slug': 'sync', 'colour': '#4fc4a3',
-        'name': 'Manual syncing',
-        'everyone': 'Once an hour',
-        'member': 'Every five minutes',
-    },
-    {
-        'slug': 'discord', 'colour': '#47b6e6',
-        'name': 'Discord',
-        'everyone': 'The server is open to anyone',
-        'member': 'A supporter role, and the room where we work out what gets built next',
-        # Sold as ONE perk on purpose: the say IS the Discord perk, so the dependency on a second
-        # platform is visible before payment rather than discovered after.
-        'note': 'You will need to be in Discord with us for that part.',
-    },
-    {
-        'slug': 'mark', 'colour': '#6875ee',
-        'name': 'Supporter mark',
-        'everyone': 'Your name, as you earned it',
-        'member': 'A quiet supporter mark beside it, site-wide',
-        # Guardrail: flair is a SEPARATE visual language from earned status, never a better one.
-        'note': 'It will never outshine what you earned.',
-    },
-    {
-        'slug': 'early', 'colour': '#a666ea',
-        'name': 'New things',
-        'everyone': 'When they ship',
-        'member': 'Before they ship, while they can still change',
-    },
-    {
-        'slug': 'credit', 'colour': '#e55dd9',
-        'name': 'Credit',
-        'everyone': 'Our thanks',
-        'member': 'A permanent PlatPursuit Supporter credit, kept even if you stop',
-    },
+    {'slug': 'sync', 'colour': '#4fc4a3',
+     'name': 'Faster syncing',
+     'everyone': 'Manual syncs every hour',
+     'member': 'Manual syncs every five minutes instead of every hour.'},
+    {'slug': 'discord', 'colour': '#47b6e6',
+     'name': 'Discord role and channel',
+     'everyone': 'The server is open to anyone',
+     'member': 'A supporter role, and a channel of the Discord that is yours.'},
+    {'slug': 'mark', 'colour': '#6875ee',
+     'name': 'Site-wide marker',
+     'everyone': 'Your name, as you earned it',
+     'member': 'A quiet supporter mark beside your name, everywhere your name appears.',
+     'note': 'It will never outshine what you earned.'},
+    {'slug': 'polls', 'colour': '#a666ea',
+     'name': 'Vote in polls',
+     'everyone': 'A voice in the Discord, any day',
+     'member': 'A counted vote in what gets built next.',
+     'note': 'You will need to be in the Discord with us for this one.'},
+    # The wide closer: spans the modal's full width (perk.wide -> .sup-perk--wide).
+    {'slug': 'beta', 'colour': '#e55dd9',
+     'name': 'Beta access',
+     'everyone': 'Everything, when it ships',
+     'member': 'Try upcoming features while they are still taking shape, before anyone else.',
+     'wide': True},
 ]
 
 # Stripe Product ID Mappings
