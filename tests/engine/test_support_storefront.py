@@ -1198,7 +1198,7 @@ def test_the_wall_is_capped(client):
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert wall.count('sup-credit ') + wall.count('sup-credit"') == SupportStorefrontView.WALL_CAP
+    assert wall.count('sup-prev--credit') == SupportStorefrontView.WALL_CAP
 
 
 def test_the_wall_is_omitted_rather_than_rendered_empty(client):
@@ -1289,7 +1289,7 @@ def test_a_supporter_with_no_avatar_still_gets_a_tile(client):
 
     wall = _wall(_flat(client))
     assert 'NoPicture' in wall
-    assert 'sup-credit__av' in wall, 'the avatar slot vanished rather than falling back'
+    assert 'sup-prev__av' in wall, 'the avatar slot vanished rather than falling back'
 
 
 def test_pre_ladder_supporters_come_last_under_their_own_heading(client):
@@ -1316,7 +1316,7 @@ def test_nobody_is_credited_twice(client):
     _clear_support_cache()
 
     wall = _wall(_flat(client))
-    assert wall.count('sup-credit__name') == 5, 'somebody is listed more than once'
+    assert wall.count('sup-prev--credit') == 5, 'somebody is listed more than once'
 
 
 def test_every_supporting_level_is_credited(client):
@@ -1352,3 +1352,21 @@ def test_the_credits_run_highest_level_first(client):
     wall = _wall(_flat(client))
     order = [wall.index('TopDog'), wall.index('MidOne'), wall.index('LowOne')]
     assert order == sorted(order), 'the credits are not in descending level order'
+
+
+def test_the_credits_and_the_preview_are_the_same_object(client):
+    """The purchase box promises "this is how you will appear"; the credits are that promise kept.
+    They share `.sup-prev` classes OUTRIGHT rather than imitating each other, so a restyle of one is
+    a restyle of both and the two can never drift apart. A credit card growing its own class family
+    again is the first step of that drift."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='SameShape', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'sup-prev sup-prev--credit' in wall, 'the credits stopped sharing the preview row'
+    assert 'sup-prev__sub' in wall, 'the level line is not the preview sub-line'
+    # `(?!s)` because the section WRAPPER is legitimately `.sup-credits` (heading, grid) -- the
+    # thing being forbidden is the per-card family (`sup-credit__av`, `sup-credit `), not the plural.
+    assert not re.search(r'sup-credit(?!s)', wall), 'a parallel credit-card class family is back'

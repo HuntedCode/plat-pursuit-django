@@ -344,18 +344,27 @@ substrate, and an earlier version of this page did, which is most of why it read
             <p class="sup-credits__p">The people paying for PlatPursuit, who chose to be named.</p>
 
             <ul class="sup-credits">
+                {% comment %} THE SAME CLASSES AS THE PURCHASE BOX'S PREVIEW ROW, not a lookalike.
+                The preview's promise is "this is how you will appear", and the credits are that
+                promise kept -- so they share `.sup-prev` markup and styling outright, and the two
+                surfaces cannot drift apart. The `--credit` modifier only drops the mock rank/score
+                columns and adds the grid entrance.
+
+                One deliberate difference: the preview's name wears `.pp-supname`, the continuous
+                flow. Two hundred of those at once is the pulsing wall this treatment has avoided
+                since it was a sheen (and a test forbids it here), so the credit name takes the same
+                tier colour STATICALLY via `.sup-prev__cname`. {% endcomment %}
                 {% for person in wall %}
-                <li class="sup-credit{% if not person.tier %} is-legacy{% endif %}"
+                <li class="sup-prev sup-prev--credit{% if not person.tier %} is-legacy{% endif %}"
                     style="--i: {{ forloop.counter0 }}{% if person.tier %}; --sup-t: {{ person.tier.colour }}{% endif %}">
-                    <span class="sup-credit__av">
+                    <span class="sup-prev__av">
                         {% include 'partials/_avatar.html' with url=person.avatar alt='' %}
                     </span>
-                    <span class="sup-credit__who">
-                        <span class="sup-credit__name">
-                            {{ person.name }}
-                            {% if person.tier %}<span class="sup-credit__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
+                    <span class="sup-prev__who">
+                        <span class="sup-prev__name">
+                            <span class="sup-prev__cname">{{ person.name }}</span>{% if person.tier %}<span class="sup-prev__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
                         </span>
-                        <span class="sup-credit__lvl">
+                        <span class="sup-prev__sub">
                             {% if person.tier %}PlatPursuit {{ person.tier.name }}{% else %}Supporter{% endif %}
                         </span>
                     </span>

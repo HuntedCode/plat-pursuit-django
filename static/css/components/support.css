@@ -787,96 +787,54 @@
     padding: 0;
 }
 
-.sup-credit {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    padding: 9px 13px 9px 9px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-border)) 28%, var(--pp-border));
-    background:
-        linear-gradient(100deg,
-            color-mix(in oklab, var(--sup-t, transparent) 11%, transparent) 0%,
-            transparent 60%),
-        var(--pp-bg-2);
+/* Each credit IS the purchase box's preview row -- same classes, so the "this is how you will
+   appear" promise and the place it is kept cannot drift apart. The modifier drops the mock rank and
+   score columns and adds what a grid of real rows needs: an entrance, a hover, and a top margin of
+   zero because the grid gap owns the spacing here. */
+.sup-prev--credit {
+    grid-template-columns: auto 1fr;
+    margin-top: 0;
     transition: border-color var(--pp-dur) var(--pp-ease),
                 transform var(--pp-dur) var(--pp-ease),
                 box-shadow var(--pp-dur) var(--pp-ease);
 }
 
-/* Pre-ladder supporters: neutral, and deliberately not styled as lesser. There is no honest level to
-   file them under and they were here first. */
-.sup-credit.is-legacy {
+/* Pre-ladder supporters have no `--sup-t`, and `.sup-prev`'s border/background color-mix the raw
+   variable with NO fallback -- an unset var there invalidates the whole declaration, not just the
+   colour. So the legacy state restates both explicitly. Neutral, and deliberately not lesser: they
+   were here first. */
+.sup-prev--credit.is-legacy {
     border-color: var(--pp-border);
-    background: var(--pp-bg-2);
+    background: var(--pp-bg-1);
 }
 
-/* Lift, not scale: these sit in a tight grid and a growing card shoves its neighbours. */
+/* Lift, not scale: a tight grid, and a growing row shoves its neighbours. */
 @media (hover: hover) {
-    .sup-credit:hover {
+    .sup-prev--credit:hover {
         transform: translateY(-2px);
         border-color: color-mix(in oklab, var(--sup-t, var(--pp-border)) 55%, var(--pp-border));
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
     }
 }
 
-.sup-credit__av {
-    flex: none;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    overflow: hidden;
-    background: var(--pp-bg-1);
-    box-shadow: 0 0 0 2px color-mix(in oklab, var(--sup-t, var(--pp-border)) 50%, var(--pp-border));
-}
-
-.sup-credit__av img,
-.sup-credit__av svg { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sup-credit__av svg { padding: 6px; color: var(--pp-text-mute); }
-
-.sup-credit__who { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-
-.sup-credit__name {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+/* The preview's name treatment, HELD STILL. `.pp-supname` is base-colour `var(--sup-t)` plus a
+   continuous flow; two hundred looping names is the pulsing wall a test here forbids, so the credit
+   name takes the colour without the animation. The truncation lives on this block-level child
+   because `text-overflow` on the flex container does nothing for its items (the `.lb-row__uname`
+   trap), and a PSN id has no spaces to break on. */
+.sup-prev__cname {
     min-width: 0;
-    font-size: 0.84rem;
-    font-weight: 650;
-    color: var(--pp-text);
-}
-
-/* The truncation lives on a block-level child. `text-overflow` on a flex CONTAINER does nothing for
-   its items, and a PSN id has no spaces to break on -- so a long name would hard-clip and push the
-   mark out of the card. Same trap `.lb-row__uname` documents on the leaderboard row. */
-.sup-credit__name > :first-child,
-.sup-credit__name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 700;
+    color: var(--sup-t, var(--pp-text));
 }
 
-.sup-credit__mark { flex: none; display: inline-flex; align-items: center; gap: 1px; }
-.sup-credit__mark .pp-supstar { width: 9px; height: 9px; }
-
-/* Matched to `.lb-row__title`, the line a leaderboard row already puts under a name. */
-.sup-credit__lvl {
-    margin-top: 1px;
-    font-size: 10.5px;
-    line-height: 1.2;
-    color: color-mix(in oklab, var(--sup-t, var(--pp-text-mute)) 62%, var(--pp-text-mute));
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sup-credit.is-legacy .sup-credit__lvl { color: var(--pp-text-mute); }
-
-/* Arrives a card at a time, capped hard: the delay is per-card, so an uncapped stagger over two
+/* Arrives a row at a time, capped hard: the delay is per-card, so an uncapped stagger over two
    hundred would leave the last one waiting seconds after it was already on screen. */
 @media (prefers-reduced-motion: no-preference) {
-    .sup-credit {
+    .sup-prev--credit {
         animation: ppRevealIn 0.45s var(--pp-ease) backwards;
         animation-delay: calc(min(var(--i, 0) * 18ms, 600ms));
     }
