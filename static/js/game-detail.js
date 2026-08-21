@@ -1456,7 +1456,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 '</div><p class="gd-blurb__text"></p>' +
                 '<div class="gd-blurb__foot"><time class="gd-blurb__time">just now</time></div></div>';
             const img = li.querySelector('.gd-blurb__av img'); if (img) img.src = av;
-            li.querySelector('.gd-blurb__name').textContent = root.dataset.viewerName || 'You';
+            const nameEl = li.querySelector('.gd-blurb__name');
+            nameEl.textContent = root.dataset.viewerName || 'You';
+            // The mark system colours the viewer's name to match the server-rendered cards; the
+            // glyph itself waits for a reload (this node is transient).
+            if (root.dataset.viewerMarkColour) nameEl.style.color = root.dataset.viewerMarkColour;
             li.querySelector('.gd-blurb__text').textContent = text;
             return li;
         }

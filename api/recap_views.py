@@ -15,6 +15,7 @@ from django.template.loader import render_to_string
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from core.services.tracking import track_site_event
+from users.services.marks import mark_style
 from django_ratelimit.decorators import ratelimit
 
 from trophies.models import MonthlyRecap
@@ -533,6 +534,7 @@ class RecapShareImageHTMLView(APIView):
             'month': recap.month,
             'month_name': month_name,
             'username': profile.display_psn_username or profile.psn_username,
+            'mark': mark_style(profile.display_mark),
             'avatar_url': avatar_data,
             # Trophy counts
             'total_trophies': recap.total_trophies_earned,

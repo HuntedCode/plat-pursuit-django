@@ -202,3 +202,45 @@ def test_the_wall_carries_the_service_override(client):
     assert f"--svc-t: {SERVICE_MARKS['staff']['colour']}" in card
     assert 'Staff' in card, 'the service label did not reach the wall sub-line'
     assert 'PlatPursuit Patron' not in card, 'the level line should yield to the service label'
+
+
+def test_the_extended_surfaces_carry_the_mark():
+    """The perk says 'everywhere your name appears' -- Career hero, Pursuer Card, the recap
+    share image and the game-detail quick takes each keep that word, from the denorm."""
+    import types
+    from django.utils import timezone
+    from users.constants import SUPPORT_TIERS
+
+    # Career hero: the service dict hands the denorm to the template unchanged.
+    from trophies.services.career_service import build_career_context
+    profile = ProfileFactory(display_mark='patron')
+    assert build_career_context(profile)['hero']['display_mark'] == 'patron'
+
+    # Pursuer Card: the name line renders through the shared partial.
+    card = render_to_string('partials/components/_pursuer_card.html', {'card': {
+        'name': 'Marked', 'display_mark': 'staff',
+        'rank': {'key': 'wanderer', 'label': 'Wanderer'},
+        'platinums': 0, 'showcase': {'recent': [], 'rarest': []},
+    }})
+    assert 'aria-label="Staff"' in card and 'pp-supname' in card
+
+    # Recap share card: Playwright renders with no stylesheet, so the mark is inline --
+    # the name in the mark colour, the glyph filled in it.
+    cornerstone = next(t['colour'] for t in SUPPORT_TIERS if t['slug'] == 'cornerstone')
+    share = render_to_string('recap/partials/recap_share_card.html', {
+        'username': 'Star', 'mark': mark_style('cornerstone'), 'format_type': 'landscape',
+    })
+    name_zone = share[share.index('Star') - 400:share.index('Star') + 900]
+    assert f'color: {cornerstone}' in name_zone
+    assert f'fill="{cornerstone}"' in name_zone
+    assert name_zone.count('<svg') >= 5, 'cornerstone wears five stars'
+
+    # Quick-take blurb: the author's name link renders the mark from profile.display_mark.
+    author = types.SimpleNamespace(psn_username='mo', display_psn_username='Mo',
+                                   avatar_url='', display_mark='mod')
+    blurb = render_to_string('trophies/partials/game_detail/_blurb_card.html', {
+        'b': types.SimpleNamespace(id=1, profile_id=1, profile=author, overall_rating=4,
+                                   blurb='Tidy platinum.', updated_at=timezone.now()),
+        'viewer_profile_id': None,
+    })
+    assert 'aria-label="Moderator"' in blurb and 'pp-supname' in blurb

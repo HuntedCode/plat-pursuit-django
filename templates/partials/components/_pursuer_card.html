@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize %}{% load mark_tags %}
 {% comment %}
 Pursuer Card -- the identity signature. Expects `card` from
 trophies/services/pursuer_card_service.build_pursuer_card:
@@ -14,7 +14,7 @@ profile header, and share images alike.
             {% if card.avatar_url %}<img src="{{ card.avatar_url }}" alt="{{ card.name }}">{% else %}<div class="pursuer-card__avatar-fb">{{ card.name|default:'?'|first|upper }}</div>{% endif %}
         </div>
         <div class="pursuer-card__id">
-            <div class="pursuer-card__name">{{ card.name }}</div>
+            <div class="pursuer-card__name">{% name_mark name=card.name mark=card.display_mark %}</div>
             <div class="pursuer-card__rank">{{ card.rank.label }}</div>
             {% if card.active_title %}<div class="pursuer-card__title">{{ card.active_title }}</div>{% endif %}
         </div>

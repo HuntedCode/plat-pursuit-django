@@ -91,6 +91,7 @@ def build_pursuer_card(profile, *, career_ctx=None, showcase_limit=6):
         families = [{**f, 'bar_pct': round((f.get('avg') or 0) / strongest * 100)} for f in families]
     return {
         'name': hero.get('pursuer_name'),
+        'display_mark': hero.get('display_mark') or '',
         'avatar_url': hero.get('avatar_url'),
         'rank': hero.get('pursuer_rank'),          # {key, label, ...} -- key drives the chrome
         'level': hero.get('pursuer_level'),

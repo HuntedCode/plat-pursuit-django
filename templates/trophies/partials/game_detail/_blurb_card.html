@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize %}{% load mark_tags %}
 {% comment %} One public "quick take" blurb. The viewer's own row (b.profile_id == viewer_profile_id) shows a
 You pill and drops the report affordance -- you can't report yourself. The blurb renders as plain, auto-escaped
 text ({{ b.blurb }}) per the visible_blurbs() security note: the stored value is UNESCAPED, HTML-text-context
@@ -10,7 +10,7 @@ hooks (gd-blurb, data-blurb-id, data-blurb-own, gd-blurb__*) in sync with buildB
     </a>
     <div class="gd-blurb__body">
         <div class="gd-blurb__head">
-            <a class="gd-blurb__name" href="{% url 'profile_detail' b.profile.psn_username %}">{{ b.profile.display_psn_username|default:b.profile.psn_username }}</a>
+            <a class="gd-blurb__name" href="{% url 'profile_detail' b.profile.psn_username %}">{% name_mark name=b.profile.display_psn_username|default:b.profile.psn_username mark=b.profile.display_mark size='sm' %}</a>
             {% if viewer_profile_id and b.profile_id == viewer_profile_id %}<span class="gd-blurb__you">You</span>{% endif %}
             <span class="gd-blurb__stars" style="--fill: {% widthratio b.overall_rating 5 100 %}%;" role="img" aria-label="{{ b.overall_rating|floatformat:1 }} out of 5"><span class="gd-blurb__stars-on"></span></span>
         </div>

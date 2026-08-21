@@ -110,6 +110,7 @@ def _build_hero(profile, jobs):
         dominant = {'slug': d['slug'], 'label': d['label']}
     return {
         'pursuer_name': profile.display_psn_username,
+        'display_mark': profile.display_mark,
         'avatar_url': profile.avatar_url,
         'pursuer_level': pursuer_level,
         'pursuer_rank': rank_ladder['current'],

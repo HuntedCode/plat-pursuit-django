@@ -122,6 +122,15 @@
     min-width: 0;
 }
 
+/* Inside the composed mark the NAME is the flexible part: it ellipsizes, the glyph never does.
+   Scoped here so bare .pp-supname uses elsewhere (storefront examples) keep their natural flow. */
+.pp-markname .pp-supname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .pp-markname__glyph {
     display: inline-flex;
     align-items: center;

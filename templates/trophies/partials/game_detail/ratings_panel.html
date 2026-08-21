@@ -1,10 +1,10 @@
-{% load humanize custom_filters %}
+{% load humanize custom_filters mark_tags %}
 {% comment %} The Ratings tab. A community-stats context strip (all four numbers denormalized on Game -> zero
 queries, whale-safe) over the per-group community ratings. DLC selector is ADAPTIVE: pills when a game has few
 trophy groups, a Base Game pill + "DLC" dropdown once there are many (some games have a TON of DLC sets). One
 `.gd-rate__panel` per group is server-rendered; game-detail.js toggles which shows (data-rate-ctg / -panel) and
 runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; written reviews are deferred. {% endcomment %}
-<section class="gd-rate" data-gd-rate{% if viewer_profile_id and request.user.profile %} data-viewer-name="{{ request.user.profile.display_psn_username|default:request.user.profile.psn_username }}" data-viewer-avatar="{{ request.user.profile.avatar_url|default:'' }}" data-viewer-url="{% url 'profile_detail' request.user.profile.psn_username %}"{% endif %}>
+<section class="gd-rate" data-gd-rate{% if viewer_profile_id and request.user.profile %} data-viewer-name="{{ request.user.profile.display_psn_username|default:request.user.profile.psn_username }}" data-viewer-avatar="{{ request.user.profile.avatar_url|default:'' }}" data-viewer-url="{% url 'profile_detail' request.user.profile.psn_username %}"{% if request.user.profile.display_mark %} data-viewer-mark-colour="{{ request.user.profile.display_mark|mark_colour }}"{% endif %}{% endif %}>
 
     {# ── Community stats band: per-game context (players / plats / 100% / avg). Framed like About's sections. ── #}
     <section class="gd-acard gd-rate__snapshot">
