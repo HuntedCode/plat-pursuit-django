@@ -98,6 +98,79 @@ class SubscriptionService:
     # ── Provider-agnostic subscription lifecycle ──────────────────────────
 
     @staticmethod
+    def has_active_gift_grant(user, now=None) -> bool:
+        """A redeemed, unexpired PremiumGrant. Constantly False until the grant model lands (the
+        gifts commit); wired here first so `reconcile_premium` is complete from birth and the
+        refactor around it is provably behaviour-preserving."""
+        try:
+            from users.models import PremiumGrant
+        except ImportError:
+            return False
+        return PremiumGrant.objects.filter(
+            redeemed_by=user, status='redeemed',
+            expires_at__gt=now or timezone.now(),
+        ).exists()
+
+    @staticmethod
+    def reconcile_premium(user, *, provider_hint: str = None) -> bool:
+        """THE one premium truth-writer. Activation, deactivation, gift redemption and gift expiry
+        all converge here instead of each carrying its own copy of "what makes this user premium".
+
+        The bug this exists to kill: deactivation used to flip the Profile denorm False and close
+        every open SubscriptionPeriod UNCONDITIONALLY -- so a lapsing subscription would clobber a
+        still-active gift, and a gift expiring would have done the same to a live subscription.
+
+        Truth: a feature-granting `premium_tier` OR an active gift grant.
+
+        Periods: with a `provider_hint`, a source just activated for that provider -- ensure an open
+        period exists, reopening one closed within 14 days for the SAME provider (Stripe's retry
+        window; the reopen keeps milestone tenure honest across payment recovery). With no hint and
+        no premium, close everything open. With no hint and premium still true, TOUCH NOTHING --
+        that is what protects the surviving source's period.
+
+        Must run inside the caller's transaction. Returns the computed truth.
+
+        NOTE the one deliberate exception: the `past_due` path in `update_user_subscription` keeps
+        premium while closing the period (tenure pauses during failed payment). Reconcile would
+        refuse to close a premium user's period, so that path stays direct -- see the comment there.
+        """
+        is_premium = (
+            (user.premium_tier is not None and SubscriptionService.is_tier_premium(user.premium_tier))
+            or SubscriptionService.has_active_gift_grant(user)
+        )
+
+        if hasattr(user, 'profile'):
+            user.profile.update_profile_premium(is_premium)
+
+        from users.models import SubscriptionPeriod
+        if provider_hint is not None and is_premium:
+            open_period = SubscriptionPeriod.objects.filter(
+                user=user, ended_at__isnull=True
+            ).exists()
+            if not open_period:
+                recent_threshold = timezone.now() - timedelta(days=14)
+                recent_closed = SubscriptionPeriod.objects.filter(
+                    user=user, provider=provider_hint, ended_at__isnull=False,
+                    ended_at__gte=recent_threshold,
+                ).order_by('-ended_at').first()
+                if recent_closed:
+                    recent_closed.ended_at = None
+                    recent_closed.save(update_fields=['ended_at'])
+                else:
+                    SubscriptionPeriod.objects.create(
+                        user=user,
+                        started_at=timezone.now(),
+                        provider=provider_hint,
+                    )
+        elif provider_hint is None and not is_premium:
+            SubscriptionPeriod.objects.filter(
+                user=user, ended_at__isnull=True
+            ).update(ended_at=timezone.now())
+        # provider_hint None + still premium: deliberately nothing.
+
+        return is_premium
+
+    @staticmethod
     def activate_subscription(user, tier: str, provider: str, event_type: str = None) -> bool:
         """
         Activate a subscription for a user, regardless of payment provider.
@@ -126,38 +199,12 @@ class SubscriptionService:
 
         with transaction.atomic():
             user.save(update_fields=update_fields)
-            if hasattr(user, 'profile'):
-                user.profile.update_profile_premium(is_premium)
-
-            # Ensure a SubscriptionPeriod is open (inside transaction to prevent
-            # duplicate periods from concurrent webhooks; DB partial unique
-            # constraint is the ultimate guard).
-            # On payment recovery (past_due -> active), re-open the most recently
-            # closed period rather than creating a new one.
-            if is_premium:
-                from users.models import SubscriptionPeriod
-                open_period = SubscriptionPeriod.objects.filter(
-                    user=user, ended_at__isnull=True
-                ).exists()
-                if not open_period:
-                    # Try to re-open the most recently closed period (payment recovery).
-                    # Only reopen if closed within last 14 days (covers Stripe's retry
-                    # window). Older periods get a fresh start to keep milestone
-                    # calculations accurate.
-                    recent_threshold = timezone.now() - timedelta(days=14)
-                    recent_closed = SubscriptionPeriod.objects.filter(
-                        user=user, provider=provider, ended_at__isnull=False,
-                        ended_at__gte=recent_threshold,
-                    ).order_by('-ended_at').first()
-                    if recent_closed:
-                        recent_closed.ended_at = None
-                        recent_closed.save(update_fields=['ended_at'])
-                    else:
-                        SubscriptionPeriod.objects.create(
-                            user=user,
-                            started_at=timezone.now(),
-                            provider=provider,
-                        )
+            # Denorm + period management converge on the one truth-writer. The hint is only passed
+            # when this tier actually grants features -- a non-feature tier activating must not
+            # open a period, and reconcile's no-hint path handles the denorm either way.
+            SubscriptionService.reconcile_premium(
+                user, provider_hint=provider if is_premium else None
+            )
 
         # Discord notification embed for new subscriptions only (side effects after commit)
         activation_events = [
@@ -216,17 +263,11 @@ class SubscriptionService:
 
         with transaction.atomic():
             user.save(update_fields=update_fields)
-            if hasattr(user, 'profile'):
-                # A post_save signal on Profile handles cascading side effects
-                # of the premium transition (deactivates premium-only showcases).
-                user.profile.update_profile_premium(False)
-
-            # Close any open SubscriptionPeriod (inside transaction so
-            # deactivation and period close are atomic)
-            from users.models import SubscriptionPeriod
-            SubscriptionPeriod.objects.filter(
-                user=user, ended_at__isnull=True
-            ).update(ended_at=timezone.now())
+            # The truth-writer, not an unconditional flip. With the tier cleared, premium survives
+            # only if an active gift grant exists -- in which case the denorm stays True and the
+            # grant's open period is left alone. (A post_save signal on Profile handles cascading
+            # side effects of a real premium transition, e.g. deactivating premium-only showcases.)
+            still_premium = SubscriptionService.reconcile_premium(user)
 
         logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
 
@@ -235,7 +276,11 @@ class SubscriptionService:
         if hasattr(user, 'profile') and user.profile.is_discord_verified and user.profile.discord_id:
             from trophies.services.discord_roles import notify_bot_role_removed
             profile = user.profile
-            if original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
+            # Grant-aware: an active gift confers the same Premium role, so a lapsing subscription
+            # must not strip it while the gift lives. Plus stays subscription-only, so its removal
+            # needs no grant check.
+            if (original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE
+                    and not still_premium):
                 role_id = settings.DISCORD_PREMIUM_ROLE
                 transaction.on_commit(lambda p=profile, r=role_id: notify_bot_role_removed(p, r))
             elif original_tier in SUPPORTER_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_PLUS_ROLE:
@@ -360,6 +405,9 @@ class SubscriptionService:
             # Check for past_due (payment failing, Stripe still retrying).
             # Keep premium features active but close SubscriptionPeriod
             # to stop milestone time accumulation during unpaid window.
+            # DELIBERATELY DIRECT, not through reconcile_premium: this is the one state where
+            # premium stays TRUE while the period closes (tenure pauses during failed payment),
+            # and reconcile refuses to close a premium user's period by design.
             past_due_sub = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
                 stripe_data__status='past_due'
