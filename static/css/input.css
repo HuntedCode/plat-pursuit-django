@@ -218,6 +218,9 @@
   --pp-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   /* Shape */
   --pp-border-w: 2px;
+    /* The Horizon band ramp's cool stop, tokenised (it was a copy-pasted rgb in two files;
+       a Horizon recolour would have silently desynced the roadmap's temperature chips). */
+    --pp-horizon-cool: rgb(110, 200, 230);
   --pp-radius-sm: 0.25rem;
   --pp-radius-md: 0.375rem;
   --pp-radius-lg: 0.5rem;

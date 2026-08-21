@@ -332,7 +332,9 @@ substrate, and an earlier version of this page did, which is most of why it read
     <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-road>
         <div class="card-body p-4 md:p-5 lg:p-6">
             <div class="sup-road__head">
-                <p class="sup-road__k">Where this is going</p>
+                {% comment %} A real heading: the band was invisible to the page outline and the
+                dl had no accessible name. {% endcomment %}
+                <h2 class="sup-road__k" id="sup-road-heading">Where this is going</h2>
                 <a href="{% url 'support_roadmap' %}" class="sup-road__link">
                     The full roadmap
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
@@ -343,17 +345,21 @@ substrate, and an earlier version of this page did, which is most of why it read
             {% comment %} Each cell is the roadmap page's tier presentation in miniature: the
             same chip primitive, the same temperature semantics (works lit, next cool, wishlist
             dashed outline) -- the band previews the page it links to. {% endcomment %}
-            <dl class="sup-road__next">
+            <dl class="sup-road__tiers" aria-labelledby="sup-road-heading">
                 {% for tier in roadmap_teaser %}
                 <div class="sup-road__cell is-{{ tier.key }}">
                     <dt><span class="rm-tier__chip">{{ tier.name }}</span></dt>
+                    {% comment %} A real list inside the dd, so each feature is an audible item
+                    rather than three names run together as one string. {% endcomment %}
                     <dd>
-                        {% for feat in tier.feats %}
-                        <span class="sup-road__feat">
-                            <span class="rm-feat__icon" aria-hidden="true">{% include 'support/_roadmap_icon.html' with key=feat.key %}</span>
-                            {{ feat.name }}
-                        </span>
-                        {% endfor %}
+                        <ul>
+                            {% for feat in tier.feats %}
+                            <li class="sup-road__feat">
+                                <span class="rm-feat__icon" aria-hidden="true">{% include 'support/_roadmap_icon.html' with key=feat.key %}</span>
+                                {{ feat.name }}
+                            </li>
+                            {% endfor %}
+                        </ul>
                     </dd>
                 </div>
                 {% endfor %}

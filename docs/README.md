@@ -51,6 +51,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 
 | Doc | Description |
 |-----|-------------|
+| [Support Roadmap](features/support-roadmap.md) | The public roadmap: certainty tiers, content constants, no-dates rules, the storefront band |
 | [Badge Art Reveal](features/badge-art-reveal.md) | Community platinum-driven badge-artwork reveal event: site-wide progress banner + event page (carousel + grid), art auto-released as the community earns badge platinums |
 | [Challenge Systems](features/challenge-systems.md) | **RETIRED 2026-08** (design reference for the planned rewrite): A-Z, Calendar, and Genre platinum challenges |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |

@@ -144,9 +144,8 @@ class SupportStorefrontView(TemplateView):
     template_name = 'support/support_hub.html'
 
 
-    @staticmethod
-    def _today():
-        """The live catalogue figures beat 2 opens on: trophies, games, hunters.
+    def _today(self):
+        """The serve band's live figures: hunters, trophies, platinums, hours.
 
         Read off the hourly site heartbeat rather than queried here -- these are three of the most
         expensive counts on the site and this is a public page anyone can hammer. `get_cached_heartbeat`
@@ -248,15 +247,14 @@ class SupportStorefrontView(TemplateView):
             SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
         )
 
-        from users.constants import ROADMAP_FEATURES
-        # The band teaser: each certainty tier with its first few feature names, the same
-        # vocabulary the roadmap page uses -- one story across both surfaces.
+        from users.constants import ROADMAP_FEATURES, ROADMAP_TIERS
+        # The band teaser: each certainty tier with its first few feature names -- derived from
+        # the SAME constant as the page's sections, so a new tier cannot silently miss the band.
         context['roadmap_teaser'] = [
             {'key': key, 'name': name,
              'feats': [{'key': f['key'], 'name': f['name']}
                        for f in ROADMAP_FEATURES if f['tier'] == key][:3]}
-            for key, name in (('works', 'In the works'), ('next', 'Up next'),
-                              ('wishlist', 'The wishlist'))
+            for key, name, _sub in ROADMAP_TIERS
         ]
         context['premium_perks'] = PREMIUM_PERKS
         context['today'] = self._today()
@@ -557,28 +555,28 @@ class SupportStorefrontView(TemplateView):
             return redirect('support_hub')
 
 class SupportRoadmapView(TemplateView):
-    """`/support/roadmap/` -- the site's own platinum roadmap.
+    """`/support/roadmap/` -- the forward list in the platinum-roadmap frame.
 
-    The framing IS the joke and the charm: this site's beloved Roadmaps are staff trophy guides,
-    so the product roadmap presents itself as the roadmap for platting PlatPursuit itself --
-    shipped stages banked like earned trophies, the current stage marked, future stages hollow.
+    Upcoming features as compact icon cards in three certainty tiers (ROADMAP_TIERS: in the
+    works / up next / the wishlist), nothing backward-looking -- the header's lede sentence
+    carries the whole history. Pure constants, zero queries for anonymous visitors.
 
-    Content rules inherited from the storefront arc this page revived: real counts appear ONLY on
-    shipped/now stages (from the heartbeat, omitted wholesale when cold), and nothing below the
-    current stage carries a date, count or percentage. Order is the only promise.
+    Content rules, test-enforced: no dates, months, quarters, counts or percentages anywhere in
+    the forward content. TIER is the only promise, and the wishlist's own subline says so.
     """
     template_name = 'support/roadmap.html'
 
     def get_context_data(self, **kwargs):
-        from users.constants import ROADMAP_FEATURES
+        from users.constants import ROADMAP_FEATURES, ROADMAP_TIERS
 
         context = super().get_context_data(**kwargs)
-        context['features'] = ROADMAP_FEATURES
-        # (key, heading, subline) per certainty tier; the template walks these in order.
-        context['tier_defs'] = [
-            ('works', 'In the works', 'Actively being built, right now.'),
-            ('next', 'Up next', 'Committed. We would rather do these properly than quickly.'),
-            ('wishlist', 'The wishlist', 'Dreams, labelled as dreams. No promises here, just direction.'),
+        # Features grouped per tier HERE rather than filtered in the template: the reveal stagger
+        # indexes forloop.counter0, and an outer-loop index made the wishlist's first card wait
+        # ~560ms after scrolling into view (the audit's catch) -- per-tier lists restart it at 0.
+        context['tiers'] = [
+            {'key': key, 'name': name, 'sub': sub,
+             'feats': [f for f in ROADMAP_FEATURES if f['tier'] == key]}
+            for key, name, sub in ROADMAP_TIERS
         ]
         user = self.request.user
         context['viewer_is_member'] = (

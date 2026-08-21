@@ -27,7 +27,7 @@ URL-matched.
 > reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
-| **Support** | `/support/` | the membership storefront (live) + the coming roadmap/fundraiser sub-pages | "ways to support us" |
+| **Support** | `/support/` | the membership storefront (live) + `/support/roadmap/` (live) + the coming fundraiser sub-page | "ways to support us" |
 
 **Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
 that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
@@ -88,12 +88,17 @@ redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.
 `/support/` (`users.views.SupportStorefrontView`) **is** the membership storefront, not a landing
 that links to one. Three sections: a **split header** (the statement left; an amount-first purchase
 box right — six supporter levels, Backer → Cornerstone, monthly/yearly cycle radios, a mock
-- `/support/roadmap/` (2026-08-22): the site's own platinum roadmap -- shipped stages banked, current lit, future hollow; storefront carries a roadmap band linking to it. The Support sub-nav RAIL stays deferred until `/support/fundraiser/` exists too.
 leaderboard-row preview showing the viewer's own name wearing the level, and a perks `<dialog>`), a
 four-cell **paid band** (supporters / monthly support / months running / ads served), and the
 **Credits** (the consent-gated supporter wall, `Profile.show_on_supporter_wall`). The ladder is
 PLACEHOLDERS until its Stripe/PayPal SKUs exist (`SUPPORT_TIERS_ARE_PLACEHOLDERS`, forced off in
 live mode). `/users/subscribe/` 302s in and its template is deleted.
+
+`/support/roadmap/` shipped 2026-08-22 (`SupportRoadmapView`): forward-only — upcoming features as
+icon cards in three certainty tiers (in the works / up next / the wishlist, `ROADMAP_TIERS` +
+`ROADMAP_FEATURES` in `users/constants.py`), no dates or counts anywhere, test-enforced. The
+storefront carries a roadmap band teasing three features per tier in the same vocabulary. The
+Support sub-nav RAIL stays deferred until `/support/fundraiser/` exists too.
 
 The view lives in `users.views` rather than `core.views` because **it answers this page's checkout
 POST**. The form carries no `action`, so it self-POSTs to whatever URL rendered it; serving the form
@@ -102,7 +107,8 @@ turn into a GET with the body dropped. Handler and form must share a URL. For th
 URL redirects **temporarily** (302): a cached permanent redirect on a payment URL cannot be taken back.
 
 Still **landing-focused: no sub-nav items** (the strip stays hidden; the navbar/tab button just
-highlights). `/support/roadmap/` and `/support/fundraiser/` are planned and will turn the strip on for
+highlights). `/support/roadmap/` is live but reachable from the storefront's band rather than a rail;
+`/support/fundraiser/` is planned, and the pair will turn the strip on for
 the first time -- note that doing so reverses the reasoning that removed the Leaderboards rail in
 2026-08 ("a rail naming the page you're on is not navigation"), which held because that hub collapsed
 to ONE page. Support having three real destinations is the difference, and this paragraph plus the

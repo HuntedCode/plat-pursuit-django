@@ -26,7 +26,7 @@
 }
 
 /* ---- Band tone: cool (far) -> hot (nearly done). Locked palette. ---- */
-.pp-horizon[data-horizon-band="cool"]    { --horizon-from: rgb(70, 165, 200);  --horizon-to: rgb(110, 200, 230); }
+.pp-horizon[data-horizon-band="cool"]    { --horizon-from: rgb(70, 165, 200);  --horizon-to: var(--pp-horizon-cool); }
 .pp-horizon[data-horizon-band="warming"] { --horizon-from: rgb(140, 200, 200); --horizon-to: rgb(200, 195, 145); }
 .pp-horizon[data-horizon-band="warm"]    { --horizon-from: rgb(220, 180, 110); --horizon-to: rgb(255, 200, 100); }
 .pp-horizon[data-horizon-band="hot"]     { --horizon-from: rgb(255, 200, 110); --horizon-to: rgb(255, 230, 170); }

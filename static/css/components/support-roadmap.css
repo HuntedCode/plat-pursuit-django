@@ -26,6 +26,10 @@
     margin-top: 6px;
 }
 
+@media (min-width: 1024px) {
+    .rm__h1 { font-size: 1.75rem; }
+}
+
 .rm__lede {
     margin-top: 10px;
     max-width: 62ch;
@@ -79,14 +83,15 @@
 
 /* Distance as temperature, matching the pips' band ramp: next wears the Horizon's cool tone. */
 .is-next .rm-tier__chip {
-    background: color-mix(in oklab, rgb(110, 200, 230) 10%, transparent);
-    border-color: color-mix(in oklab, rgb(110, 200, 230) 35%, var(--pp-border));
-    color: color-mix(in oklab, rgb(110, 200, 230) 70%, var(--pp-text));
+    background: color-mix(in oklab, var(--pp-horizon-cool) 10%, transparent);
+    border-color: color-mix(in oklab, var(--pp-horizon-cool) 35%, var(--pp-border));
+    color: color-mix(in oklab, var(--pp-horizon-cool) 70%, var(--pp-text));
 }
 
 .is-wishlist .rm-tier__chip {
     background: transparent;
     border-style: dashed;
+    border-color: color-mix(in oklab, var(--pp-text-mute) 45%, var(--pp-border));
     color: var(--pp-text-dim);
 }
 
@@ -96,16 +101,22 @@
 }
 
 /* The works-chip breathes: the Horizon's near-completion nudge at whisper volume, and the page's
-   'we are here'. Declared only under no-preference so reduced motion cannot lose a cascade fight. */
+   'we are here'. Declared only under no-preference so reduced motion cannot lose a cascade fight.
+   The two glow colours are MIXED HERE, never in the keyframes: lightningcss silently drops
+   @keyframes stops containing color-mix (the documented trap -- and it was hit here anyway: the
+   first build shipped `@keyframes rmHere{}` and the chip never breathed. A build-output test now
+   guards it). */
 @media (prefers-reduced-motion: no-preference) {
     .rm-tier.is-works .rm-tier__chip {
+        --rm-here-rest: color-mix(in oklab, var(--pp-primary) 40%, transparent);
+        --rm-here-peak: color-mix(in oklab, var(--pp-primary) 55%, transparent);
         animation: rmHere 3.2s var(--pp-ease, ease) infinite;
     }
 }
 
 @keyframes rmHere {
-    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--pp-primary) 40%, transparent); }
-    50%      { box-shadow: 0 0 10px 0 color-mix(in oklab, var(--pp-primary) 55%, transparent); }
+    0%, 100% { box-shadow: 0 0 0 0 var(--rm-here-rest); }
+    50%      { box-shadow: 0 0 10px 0 var(--rm-here-peak); }
 }
 
 /* ---- feature cards --------------------------------------------------------------------- */
@@ -152,9 +163,20 @@
     color: var(--pp-primary);
 }
 
-/* Wishlist dreams are drawn in outline: dashed icon tiles. (Un-scoped from .rm-tier so the
-   storefront band's miniatures inherit the same temperature, like the chips.) */
-.is-wishlist .rm-feat__icon { border-style: dashed; background: transparent; }
+/* The middle distance: next-tier tiles take the Horizon cool tone, completing the ramp the
+   chips already walk (works lit / next cool / wishlist outline). */
+.is-next .rm-feat__icon {
+    border-color: color-mix(in oklab, var(--pp-horizon-cool) 30%, var(--pp-border));
+}
+
+/* Wishlist dreams are drawn in outline: dashed icon tiles, the dash lifted enough to actually
+   read as an outline. (Un-scoped from .rm-tier so the storefront band's miniatures inherit the
+   same temperature, like the chips.) */
+.is-wishlist .rm-feat__icon {
+    border-style: dashed;
+    border-color: color-mix(in oklab, var(--pp-text-mute) 45%, var(--pp-border));
+    background: transparent;
+}
 
 .rm-feat__name {
     font-family: var(--pp-font-display), sans-serif;
@@ -172,13 +194,16 @@
 
 /* ---- the ask -------------------------------------------------------------------------- */
 
-.rm-ask { margin-top: 18px; }
+.rm-ask { margin-top: 12px; }
 
 .rm-ask__head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;   /* the heading wraps to several lines at 375px; the icon anchors
+                                  to the first line rather than floating mid-block */
     gap: 12px;
 }
+
+.rm-ask__head .rm-feat__icon--ask { margin-top: 2px; }
 
 .rm-ask__h {
     font-family: var(--pp-font-display), sans-serif;
@@ -187,7 +212,7 @@
     line-height: 1.3;
 }
 
-.rm-ask p:not(.rm-step__thanks) {
+.rm-ask p:not(.rm-ask__thanks) {
     margin-top: 10px;
     font-size: 0.9rem;
     line-height: 1.7;
@@ -198,7 +223,9 @@
 .rm-feat__icon--ask { width: 40px; height: 40px; color: var(--pp-text-dim); }
 
 
-.rm-step__cta {
+.rm-ask__cta {
+    --sup-t: var(--pp-primary);   /* the borrowed emitter's stars wear the button's own accent,
+                                     not the forge-orange fallback -- one accent per control */
     position: relative;   /* hosts the storefront's star emitter (.sup-go__rise clips to this) */
     display: inline-flex;
     align-items: center;
@@ -217,23 +244,23 @@
                 border-color var(--pp-dur-fast) var(--pp-ease);
 }
 
-.rm-step__cta:hover {
+.rm-ask__cta:hover {
     background: color-mix(in oklab, var(--pp-primary) 28%, transparent);
     border-color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-border));
 }
 
-.rm-step__cta:focus-visible {
+.rm-ask__cta:focus-visible {
     outline: 2px solid var(--pp-primary);
     outline-offset: 2px;
 }
 
-.rm-step__cta svg { width: 15px; height: 15px; }
+.rm-ask__cta > svg { width: 15px; height: 15px; }
 
 /* Label and arrow paint above the rising stars, same trick as the storefront faces. */
-.rm-step__cta-lbl,
-.rm-step__cta > svg { position: relative; }
+.rm-ask__cta-lbl,
+.rm-ask__cta > svg { position: relative; }
 
-.rm-step__thanks {
+.rm-ask__thanks {
     margin-top: 14px;
     font-weight: 650;
     color: var(--pp-text);
@@ -242,13 +269,14 @@
 /* ---- entrance ------------------------------------------------------------------------- */
 
 /* Scroll choreography: cards reveal where you are actually LOOKING. The page script arms each
-   tier (.rm-armed) and flips .is-in as it enters the viewport; CSS owns the motion, staggered
+   page (html.rm-arm, set pre-paint in extra_head) and flips .is-in per tier on viewport entry;
+   CSS owns the motion, staggered
    off each card's --i index. Without JS nothing is armed and nothing is ever hidden; under
    reduced motion the armed state must not hide anything either, so the hide lives INSIDE the
    no-preference gate. */
 @media (prefers-reduced-motion: no-preference) {
-    .rm-armed .rm-feat,
-    .rm-ask.rm-armed .card-body { opacity: 0; }
+    html.rm-arm .rm-tier:not(.is-in) .rm-feat,
+    html.rm-arm .rm-ask:not(.is-in) .card-body { opacity: 0; }
 
     .rm-tier.is-in .rm-feat {
         opacity: 1;

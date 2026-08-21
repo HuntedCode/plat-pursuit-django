@@ -40,14 +40,17 @@ happens in our Discord, which the ask card says out loud.
     the status vocabulary now: works lit (and breathing -- this is 'we are here'), next solid,
     wishlist hollow-and-dashed (a dream drawn in outline). {% endcomment %}
 
-    {% for tier_key, tier_name, tier_sub in tier_defs %}
-    <section class="rm-tier is-{{ tier_key }}" aria-labelledby="rm-tier-{{ tier_key }}">
+    {% for tier in tiers %}
+    <section class="rm-tier is-{{ tier.key }}" aria-labelledby="rm-tier-{{ tier.key }}">
         <div class="rm-tier__head">
-            <h2 class="rm-tier__h" id="rm-tier-{{ tier_key }}"><span class="rm-tier__chip">{{ tier_name }}</span></h2>
-            <p class="rm-tier__sub">{{ tier_sub }}</p>
+            <h2 id="rm-tier-{{ tier.key }}"><span class="rm-tier__chip">{{ tier.name }}</span></h2>
+            <p class="rm-tier__sub">{{ tier.sub }}</p>
         </div>
         <div class="rm-feats">
-            {% for feat in features %}{% if feat.tier == tier_key %}
+            {% comment %} Grouped in the view so forloop.counter0 restarts per tier -- the reveal
+            stagger indexes it, and a global index left later tiers' first cards invisible for
+            half a second after they had scrolled into view. {% endcomment %}
+            {% for feat in tier.feats %}
             <div class="rm-feat card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral" style="--i: {{ forloop.counter0 }}">
                 <div class="card-body p-4">
                     <div class="rm-feat__head">
@@ -57,7 +60,7 @@ happens in our Discord, which the ask card says out loud.
                     <p class="rm-feat__blurb">{{ feat.blurb }}</p>
                 </div>
             </div>
-            {% endif %}{% endfor %}
+            {% endfor %}
         </div>
     </section>
     {% endfor %}
@@ -85,18 +88,18 @@ happens in our Discord, which the ask card says out loud.
                 Discord, where the roadmap conversation actually happens.
             </p>
             {% if not viewer_is_member %}
-            <a href="{% url 'support_hub' %}" class="rm-step__cta">
+            <a href="{% url 'support_hub' %}" class="rm-ask__cta">
                 {% comment %} The storefront's star emitter, reused verbatim: the button that
                 leads there previews the motion you will find on its buy button. Falls back to
                 the accent colour since no level is selected here. {% endcomment %}
                 <span class="sup-go__rise" aria-hidden="true">
                     {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
                 </span>
-                <span class="rm-step__cta-lbl">Come along for the ride</span>
+                <span class="rm-ask__cta-lbl">Come along for the ride</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </a>
             {% else %}
-            <p class="rm-step__thanks">You already are. Genuinely: thank you.</p>
+            <p class="rm-ask__thanks">You already are. Genuinely: thank you.</p>
             {% endif %}
         </div>
     </section>
@@ -105,13 +108,16 @@ happens in our Discord, which the ask card says out loud.
 
 <script>
     (function () {
-        /* Scroll choreography: tiers reveal where you are actually LOOKING, instead of load-time
-           delays that burn out below the fold. JS only flips classes -- CSS owns the motion and
-           its reduced-motion gate -- and without JS (or IO) nothing is ever hidden. */
-        if (!('IntersectionObserver' in window)) return;
+        /* Scroll choreography, wired at end-of-body: the ARMING happened before paint (the
+           extra_head script put .rm-arm on <html>), this only reveals. Every path shows the
+           cards: no JS -> never armed; JS without IO -> reveal everything right here; JS + IO ->
+           the choreography. */
         var tiers = document.querySelectorAll('.rm-tier, .rm-ask');
         if (!tiers.length) return;
-        tiers.forEach(function (t) { t.classList.add('rm-armed'); });
+        if (!('IntersectionObserver' in window)) {
+            tiers.forEach(function (t) { t.classList.add('is-in'); });
+            return;
+        }
         var io = new IntersectionObserver(function (entries) {
             entries.forEach(function (entry) {
                 if (entry.isIntersecting) {
@@ -122,5 +128,14 @@ happens in our Discord, which the ask card says out loud.
         }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
         tiers.forEach(function (t) { io.observe(t); });
     })();
+</script>
+{% endblock %}
+
+{% block extra_head %}
+<script>
+    /* Arms the scroll choreography BEFORE first paint (the motion-patterns pattern): the hidden
+       state gates on html.rm-arm, so incremental painting can never flash a card visible before
+       the end-of-body observer hides it. Without JS this never runs and nothing is hidden. */
+    document.documentElement.classList.add('rm-arm');
 </script>
 {% endblock %}

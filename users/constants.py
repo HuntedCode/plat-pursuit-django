@@ -323,6 +323,22 @@ LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 # -- on the Credits wall and anywhere else supporter identity renders. Presentation only: nothing
 # reads this map for billing, availability, or role decisions. The mapping is by price proximity,
 # so if a legacy price ever changes on the processor side, revisit the target here.
+LEGACY_TIER_LEVEL_MAP = {
+    'premium_monthly': 'backer',
+    'premium_yearly': 'backer',
+    'supporter': 'sponsor',   # legacy Supporter was $20/mo, an exact match on Sponsor
+}
+
+# The certainty tiers themselves: (key, display name, subline). ONE source -- the page's
+# sections, the storefront band's teaser and the tests all derive from this, so adding a tier is
+# one edit here plus its features below (a tier missing from this list simply cannot render,
+# and the well-formed test fails on any feature pointing at an unknown tier).
+ROADMAP_TIERS = [
+    ('works', 'In the works', 'Actively being built, right now.'),
+    ('next', 'Up next', 'Committed. We would rather do these properly than quickly.'),
+    ('wishlist', 'The wishlist', 'Dreams, labelled as dreams. No promises here, just direction.'),
+]
+
 # THE FORWARD LIST for /support/roadmap/: individual upcoming features, tiered by CERTAINTY,
 # not time -- 'works' is actively being built, 'next' is committed direction, 'wishlist' is
 # openly-labelled dreams (the no-promises rule turned into UX: dreams get to be on the page
@@ -365,8 +381,3 @@ ROADMAP_FEATURES = [
      'blurb': 'More ways to make your corner of the site feel like yours.'},
 ]
 
-LEGACY_TIER_LEVEL_MAP = {
-    'premium_monthly': 'backer',
-    'premium_yearly': 'backer',
-    'supporter': 'sponsor',   # legacy Supporter was $20/mo, an exact match on Sponsor
-}

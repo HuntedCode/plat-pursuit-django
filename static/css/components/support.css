@@ -213,8 +213,8 @@
    the page (and a test) claimed the box was CSS-driven: a user who picked Yearly saw monthly prices
    and would have submitted a cycle they were never shown. */
 
-/* THE ROADMAP BAND (data-sup-road): the pitch's forward look. Head row, the shared segmented
-   Horizon, then only the AHEAD stages named -- the serve band already brags for the past. */
+/* THE ROADMAP BAND (data-sup-road): the pitch's forward look. Head row, then three tier cells,
+   each wearing the roadmap page's chip primitive and up to three feature miniatures. */
 .sup-road__head {
     display: flex;
     align-items: baseline;
@@ -250,7 +250,7 @@
 .sup-road__link svg { width: 13px; height: 13px; }
 
 
-.sup-road__next {
+.sup-road__tiers {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px 18px;
@@ -258,7 +258,7 @@
 }
 
 @media (min-width: 768px) {
-    .sup-road__next { grid-template-columns: repeat(3, 1fr); }
+    .sup-road__tiers { grid-template-columns: repeat(3, 1fr); }
 }
 
 /* The chip is the roadmap page's primitive at band scale; variants come from
@@ -271,11 +271,15 @@
 /* Each feature is the page's rm-feat card in MINIATURE: its own little surface + icon tile,
    stacked under the tier chip. Icon tier-tints come from support-roadmap.css via the cell's
    is-* class, same as the chips. */
-.sup-road__cell dd {
+.sup-road__cell dd { margin-top: 8px; }
+
+.sup-road__cell dd ul {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    margin-top: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
 }
 
 .sup-road__feat {
@@ -295,10 +299,17 @@
 .sup-road__feat .rm-feat__icon {
     width: 24px;
     height: 24px;
-    border-radius: 6px;
+    border-radius: var(--pp-radius-sm);
 }
 
 .sup-road__feat .rm-feat__icon svg { width: 13px; height: 13px; }
+
+/* Mobile fit: at base width the band stacks to a single column, and three miniatures per tier
+   ran it to ~535px -- four-fifths of an iPhone SE viewport sitting between the ask and the
+   supporter-count proof. Two per tier below md keeps the tease and returns ~110px. */
+@media (max-width: 767px) {
+    .sup-road__cell .sup-road__feat:nth-child(3) { display: none; }
+}
 
 /* 3 across, 2 rows. Six amounts, six levels, one to one. */
 .sup-amts {
@@ -605,7 +616,14 @@
     height: 14px;
     fill: var(--sup-t, var(--pp-accent));
     opacity: 0;
-    animation: ppStarRise var(--rise-t, 5s) ease-out var(--rise-d, 0s) infinite;
+}
+
+/* Declared under no-preference like every other ambient motion (the reduce-block display:none
+   on .sup-go__rise stays as the belt -- a static stack of stars reads as a glitch). */
+@media (prefers-reduced-motion: no-preference) {
+    .sup-go__risestar {
+        animation: ppStarRise var(--rise-t, 5s) ease-out var(--rise-d, 0s) infinite;
+    }
 }
 
 /* Five launch lanes: positions, tempos and drifts co-prime enough that the pattern takes ~half a
