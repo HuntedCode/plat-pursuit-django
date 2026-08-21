@@ -277,6 +277,12 @@ def test_no_perk_promises_something_that_no_longer_exists():
         assert gone not in text, f'the storefront is advertising {gone!r}, which no longer exists'
 
 
+def test_the_perk_list_is_the_decided_lineup():
+    """Every perk-table test iterates PREMIUM_PERKS, so a shrunk or emptied list passes them all
+    vacuously. Pinning the slugs is what gives those loops a floor."""
+    assert [p['slug'] for p in PREMIUM_PERKS] == ['sync', 'discord', 'mark', 'early', 'credit']
+
+
 def test_every_perk_names_what_a_free_user_gets():
     """The dial invariant, enforced on the data rather than trusted to review.
 
@@ -336,8 +342,13 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
     with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=None), _member(False):
         body = _get(client).content.decode()
 
-    assert 'trophies tracked' not in body, 'the page is advertising a zero'
-    assert 'sup-head__figs' not in body
+    # `sup-serve` and the EXACT rendered case. Both old needles were dead: `sup-head__figs` was
+    # renamed to `sup-serve` and the assertion could never fail against a class that no longer
+    # exists in any state, and 'trophies tracked' (lowercase) never matched the rendered
+    # 'Trophies tracked'. The audit proved the gate was uncovered: flipping all() to any() rendered
+    # 'None platinums' with this test green.
+    assert 'sup-serve' not in body, 'the serve band rendered on a cold heartbeat'
+    assert 'Trophies tracked' not in body, 'the page is advertising a zero'
     # The rest of the header still stands.
     assert 'Help us build' in body
     assert 'Backer' in body
@@ -346,12 +357,18 @@ def test_cold_heartbeat_drops_the_figures_instead_of_printing_zeroes(client):
 def test_a_partial_heartbeat_is_treated_as_no_heartbeat(client):
     """All three figures or none. A heartbeat missing one count would otherwise render "tracking
     12,000 trophies across 0 games", which reads as broken rather than as partial."""
-    half = {'always': {'trophies_total': {'value': 12000}, 'games_total': {'value': 0},
-                       'profiles_total': {'value': 40}}}
+    # The fixture supplies the fields the view ACTUALLY reads (hunters/trophies/platinums/hours;
+    # an earlier version fed `games_total`, which the serve band dropped) with one of them missing,
+    # and the assertion targets the live class -- `sup-head__figs` was a rename victim that could
+    # never match anything.
+    half = {
+        'always': {'trophies_total': {'value': 12000}, 'profiles_total': {'value': 40}},
+        'expanded': {'platinums_total': {'value': 900}},   # hours_hunted missing
+    }
     with patch('core.services.site_heartbeat.get_cached_heartbeat', return_value=half), _member(False):
         body = _get(client).content.decode()
 
-    assert 'sup-head__figs' not in body
+    assert 'sup-serve' not in body, 'a partial heartbeat rendered the band with a hole in it'
 
 
 # ------------------------------------------------------------------ involvement / the beta ----
@@ -377,8 +394,15 @@ def test_every_level_of_the_ladder_is_on_the_page(client):
     body = _flat(client)
     for tier in SUPPORT_TIERS:
         assert tier['name'] in body, f"{tier['slug']} is missing from the ladder"
-        assert f"${tier['monthly']}" in body
-        assert f"${tier['yearly']}" in body, 'the yearly face is not in the markup for the switch'
+        # Scoped to the class, because unscoped these cannot fail: every monthly price is a string
+        # prefix of its own yearly price ($4/$40 ... $30/$300), so the yearly face satisfied the
+        # monthly needle even with the monthly span deleted from the template.
+        assert f'sup-amt__m">${tier["monthly"]}<' in body, (
+            f"{tier['slug']}'s monthly price is not on the monthly face"
+        )
+        assert f'sup-amt__y">${tier["yearly"]}<' in body, (
+            f"{tier['slug']}'s yearly price is not on the yearly face"
+        )
 
 
 def test_placeholder_buttons_cannot_be_pressed(client):
@@ -573,7 +597,10 @@ def test_the_header_carries_the_artwork(client):
     with _member(False):
         body = _get(client).content.decode()
 
-    head = body[body.index('sup-head__say'):body.index('sup-head__figs')]         if 'sup-head__figs' in body else body[body.index('sup-head__say'):]
+    # Bounded at the purchase box, which always follows the header copy. The old end anchor was
+    # `sup-head__figs`, a renamed class that never matched -- so the slice silently became the
+    # whole document and 'in the header' was untested.
+    head = body[body.index('sup-head__say'):body.index('sup-box')]
     assert 'sup-art__cell' in head, 'the artwork is not in the header'
     assert 'Helldivers badge artwork' in head
 
@@ -675,7 +702,9 @@ def test_no_star_row_is_sized_for_a_single_star():
     css = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8', errors='ignore')
 
     for cls in ('.sup-prev__mark', '.sup-stars', '.sup-becomes__stars'):
-        for rule in re.findall(re.escape(cls) + r'[,{][^}]*}', css):
+        found = re.findall(re.escape(cls) + r'[,{][^}]*}', css)
+        assert found, f'{cls} not found in output.css -- renamed, so this guard checks nothing'
+        for rule in found:
             assert 'width:' not in rule.replace('stroke-width', ''), (
                 f'{cls} is sized for one star and will crush the rest: {rule[:90]}'
             )
@@ -703,8 +732,17 @@ def test_the_supporter_name_treatment_never_gets_louder_with_price():
     # "ally" is inside "eventually" -- which made this fail on a comment while passing on a real
     # rule would have been pure luck.
     rules = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    # `"` and `=` in the prefix class: an ATTRIBUTE selector ([data-tier="cornerstone"]) puts a
+    # quote before the slug, which the original class missed -- the audit proved a per-level rule
+    # written that way sailed through. And longhand animation-* properties dodge the animation:
+    # count above, so they are forbidden outright.
+    # `animation-delay` is exempt: it offsets PHASE (the neighbour stagger) and cannot make any
+    # level louder. Duration, name, iteration-count and timing-function absolutely can.
+    assert not re.search(r'animation-(?!delay)[a-z-]+\s*:', rules), (
+        'longhand animation-* dodges the one-animation count; use the shorthand'
+    )
     for tier in SUPPORT_TIERS:
-        assert not re.search(r'[.\[#-]' + tier['slug'] + r'\b', rules), (
+        assert not re.search(r'[.\[#="\'-]' + tier['slug'] + r'\b', rules), (
             f"supporter.css has a rule for {tier['slug']} -- the levels must differ by hue only, "
             f"and that hue comes inline from SUPPORT_TIERS"
         )
@@ -998,6 +1036,22 @@ def _band(body):
     start = body.index('data-sup-paid')
     return body[start:body.index('</section>', start)]
 
+@pytest.fixture(autouse=True)
+def _fresh_support_cache():
+    """Every test in this module starts with a cold support cache.
+
+    The view caches under `support:stats` for 300s and the run shares one LocMemCache, so without
+    this the file was ORDER-DEPENDENT: a test that rendered without clearing consumed whatever the
+    previous test cached (a 205-name wall, mocked prices), which passed in file order and broke
+    under `pytest --ff` or random ordering. The explicit `_clear_support_cache()` calls in
+    individual tests are retained -- they document which tests depend on freshness mid-test.
+    """
+    from django.core.cache import cache
+    cache.delete('support:stats')
+    yield
+    cache.delete('support:stats')
+
+
 def _clear_support_cache():
     from django.core.cache import cache
     cache.delete('support:stats')
@@ -1020,7 +1074,11 @@ def test_the_band_counts_legacy_supporters_too(client):
     body = _flat(client)
 
     band = _band(body)
-    assert '>3<' in band or 'data-countup="3"' in band, 'legacy supporters are not being counted'
+    # Scoped to the Supporters cell: an unscoped countup="3" also matches the Months-running cell
+    # in any month where the site is three months old, which made this assertion date-dependent.
+    sup_cell = band[band.index('Supporters'):]
+    sup_cell = sup_cell[:sup_cell.index('</div>', sup_cell.index('data-countup'))]
+    assert 'data-countup="3"' in sup_cell, 'legacy supporters are not being counted'
 
 
 def test_a_yearly_pledge_counts_as_a_twelfth_of_itself(client):
@@ -1103,8 +1161,10 @@ def test_a_currency_symbol_is_never_left_beside_a_counter(client):
     _clear_support_cache()
     body = _flat(client)
 
-    for cell in re.findall(r'<div class="scard__value[^>]*data-countup="[^"]*"[^>]*>[^<]*</div>',
-                           _band(body)):
+    cells = re.findall(r'<div class="scard__value[^>]*data-countup="[^"]*"[^>]*>[^<]*</div>',
+                       _band(body))
+    assert cells, 'no counter cells found in the band -- the pattern drifted, guard checks nothing'
+    for cell in cells:
         if '$' in cell:
             assert 'data-countup-prefix' in cell, (
                 'a currency symbol sits beside a counter that will overwrite it: ' + cell[:120]
@@ -1140,6 +1200,11 @@ def test_no_level_sells_a_link(client):
 
 
 # ---------------------------------------------------------------------------- the supporter wall ----
+
+def _flat_headings(body):
+    """Just the h1/h2 text, so a heading assertion cannot be satisfied by prose or a class name."""
+    return ' '.join(re.findall(r'<h[12][^>]*>(.*?)</h[12]>', body))
+
 
 def _wall(body):
     """Just the wall section, found by hook and bounded at its own section."""
@@ -1215,7 +1280,7 @@ def test_the_wall_is_omitted_rather_than_rendered_empty(client):
     body = _flat(client)
 
     assert 'data-sup-wall' not in body
-    assert 'The people paying for it' not in body
+    assert 'Credits' not in _flat_headings(body)
 
 
 def test_the_opt_out_is_reachable_and_works(client):
@@ -1493,3 +1558,102 @@ def test_the_cta_wears_the_selected_levels_colour(client):
         assert tier['colour'] in body[i:i + len(rule) + 60], (
             f'{tier["slug"]} colours the box with the wrong hue'
         )
+
+
+# --------------------------------------------------------------- POST edges the audit found bare ----
+
+def test_a_stripe_error_lands_back_on_the_page_with_a_message(client):
+    """The provider failing must degrade to a message, never a 500 -- this is the path a real
+    payment outage takes."""
+    import stripe as stripe_lib
+
+    user = UserFactory()
+    client.force_login(user)
+
+    with _priced(), _member(False), \
+            patch('users.views.SubscriptionService.create_checkout_session',
+                  side_effect=stripe_lib.error.StripeError('boom')):
+        response = client.post(reverse('support_hub'), {'tier': 'premium_monthly'})
+
+    assert response.status_code == 302
+    assert response['Location'] == reverse('support_hub')
+
+
+def test_a_paypal_failure_lands_back_on_the_page_with_a_message(client):
+    user = UserFactory()
+    client.force_login(user)
+
+    with _priced(), _member(False), \
+            patch('users.services.paypal_service.PayPalService.create_subscription',
+                  side_effect=RuntimeError('paypal down')):
+        response = client.post(reverse('support_hub'),
+                               {'tier': 'premium_monthly', 'provider': 'paypal'})
+
+    assert response.status_code == 302
+    assert response['Location'] == reverse('support_hub')
+
+
+def test_an_anonymous_checkout_carries_next_back_to_support(client):
+    """`redirect_to_login(request.get_full_path())` -- the half that was untested is the `next=`,
+    which is what brings somebody back to finish what they started after signing in."""
+    with _priced():
+        response = client.post(reverse('support_hub'), {'tier': 'premium_monthly'})
+
+    assert 'next=/support/' in response['Location']
+
+
+def test_the_old_url_redirect_preserves_a_querystring(client):
+    """`query_string=True` is set deliberately on the subscribe redirect and was never exercised.
+    Old marketing links with UTM tags should survive the hop."""
+    response = client.get(reverse('subscribe') + '?utm_source=discord')
+
+    assert response.status_code == 302
+    assert response['Location'] == reverse('support_hub') + '?utm_source=discord'
+
+
+def test_the_wall_toggle_ignores_an_unrelated_post(client):
+    """The handler only acts when `wall_visibility` is in the payload, so an unrelated POST to the
+    management page must not silently flip somebody's listing."""
+    from tests.factories import ProfileFactory
+
+    profile = ProfileFactory(user__premium_tier='patron')
+    assert profile.show_on_supporter_wall is True
+    client.force_login(profile.user)
+
+    client.post(reverse('subscription_management'), {'something_else': '1'})
+    profile.refresh_from_db()
+    assert profile.show_on_supporter_wall is True, 'an unrelated POST flipped the wall consent'
+
+
+def test_the_wall_toggle_requires_login(client):
+    response = client.post(reverse('subscription_management'), {'wall_visibility': '1'})
+
+    assert response.status_code == 302
+    assert '/accounts/login/' in response['Location'] or '/login/' in response['Location']
+
+
+def test_the_wall_toggle_survives_a_user_with_no_profile(client):
+    """Signed in, never linked PSN: `request.user.profile` does not exist. The guard must no-op
+    rather than 500."""
+    user = UserFactory()
+    client.force_login(user)
+
+    response = client.post(reverse('subscription_management'), {'wall_visibility': '1'})
+    assert response.status_code == 302
+
+
+def test_ladder_and_legacy_money_add_up_together(client):
+    """The band's arithmetic has two arms -- ladder slugs price from the constant, legacy tiers from
+    Stripe -- and only the legacy arm was ever exercised. A hunter on each: $15 (patron, constant)
+    + $10/mo (legacy yearly $120/12, Stripe) = $25."""
+    UserFactory(premium_tier='patron')
+    UserFactory(premium_tier='premium_yearly')
+    _clear_support_cache()
+
+    yearly = _FakePrice(12000, 'year')
+    with patch('users.views.SubscriptionService.get_prices_from_stripe',
+               return_value={'premium_yearly': yearly}), _member(False):
+        body = re.sub(r'\s+', ' ', client.get(reverse('support_hub')).content.decode())
+
+    band = _band(body)
+    assert 'data-countup="25"' in band, 'the two pricing arms do not add up'
