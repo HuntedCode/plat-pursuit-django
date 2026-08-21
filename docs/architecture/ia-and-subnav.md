@@ -27,7 +27,7 @@ URL-matched.
 > reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
-| **Support** | `/support/` | the fundraiser + (coming) membership store | "ways to support us" |
+| **Support** | `/support/` | the membership storefront (live) + the coming roadmap/fundraiser sub-pages | "ways to support us" |
 
 **Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
 that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
@@ -86,8 +86,13 @@ redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.
 ## Support hub
 
 `/support/` (`users.views.SupportStorefrontView`) **is** the membership storefront, not a landing
-that links to one: one uninterrupted pitch (story → proof → three options → perks) with the badge-art
-fundraiser alongside it. `/users/subscribe/` 302s in and its template is deleted.
+that links to one. Three sections: a **split header** (the statement left; an amount-first purchase
+box right — six supporter levels, Backer → Cornerstone, monthly/yearly/gift cycle radios, a mock
+leaderboard-row preview showing the viewer's own name wearing the level, and a perks `<dialog>`), a
+four-cell **paid band** (supporters / monthly support / months running / ads served), and the
+**Credits** (the consent-gated supporter wall, `Profile.show_on_supporter_wall`). The ladder is
+PLACEHOLDERS until its Stripe/PayPal SKUs exist (`SUPPORT_TIERS_ARE_PLACEHOLDERS`, forced off in
+live mode). `/users/subscribe/` 302s in and its template is deleted.
 
 The view lives in `users.views` rather than `core.views` because **it answers this page's checkout
 POST**. The form carries no `action`, so it self-POSTs to whatever URL rendered it; serving the form
@@ -104,8 +109,8 @@ to ONE page. Support having three real destinations is the difference, and this 
 
 The fundraiser (`/fundraiser/<slug>/`) resolves here via the `/fundraiser/` prefix. Two fundraiser lookups in
 `fundraiser/models.py`: `get_active_fundraiser()` (banner_active + live, for the site-wide banner)
-vs `get_live_fundraiser()` (live window only — the Support landing shows a live campaign even if
-the banner is toggled off). Both cache a PK for 60s on their own key.
+vs `get_live_fundraiser()` (live window only — kept for the coming `/support/fundraiser/` page;
+the storefront itself no longer renders a fundraiser line). Both cache a PK for 60s on their own key.
 
 The hub keeps the name **Support** (settled 2026-08-19; it was flagged as a placeholder). It covers
 both halves of what lives here, where "Membership" would name only one of them.

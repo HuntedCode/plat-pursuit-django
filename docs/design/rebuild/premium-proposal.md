@@ -90,7 +90,7 @@ supporting and new people join.
 |---|---|
 | Anytime syncing | Exists (a rate-limit dial) |
 | Discord: the supporter role **and the room where we work out what's next** | Role sync already ships -- `trophies/services/discord_roles.py` grants off `premium_tier`, with a downgrade hook. Sold as **one** perk rather than two, so the Discord dependency is visible before payment instead of discovered after: the say *is* the Discord perk |
-| Supporter flair | Built on the star that already exists (`.pp-hcard--supporter` + `.pp-hcard__supp`, shipped in the Browse Hunters pass). Promoting an existing treatment site-wide, not inventing a visual language |
+| Supporter flair | **Superseded in the build (2026-08-20):** the shipped mark is the `.pp-supname` / `.pp-supstar` pair — one star shape building 1→5 with the level's own hue, a flowing name treatment, guardrail-tested so it can never escalate beyond hue or read as an earned grade. The plan here was to promote `.pp-hcard--supporter`; consolidating that older star (and the leaderboard's `.lb-row__prem`) onto the new pair is part of the site-wide wiring, which waits on the Profile tier denorm |
 | Early access / beta lane | The gate is already wired (`trophies/mixins.py` -> `beta_access_required`) and currently unused for this |
 | Permanent supporter credit | "PlatPursuit Supporter". Doubles as the graceful answer to what *lapsing* feels like |
 
@@ -193,7 +193,11 @@ on them rather than owning them:
 
 ## Tiers
 
-Keep the existing 3 tiers (`premium_monthly` / `premium_yearly` / `supporter`); **no new tier.** The
+**Superseded (2026-08-20): the build ships a six-level supporter ladder** (`SUPPORT_TIERS`: Backer
+$4 → Cornerstone $30, monthly or yearly at ten months) in place of "no new tier". Every level gets
+every perk — only the mark escalates, so the dial holds. The three legacy tiers below remain
+purchasable and counted until their holders migrate. Original text, for the record: keep the
+existing 3 tiers (`premium_monthly` / `premium_yearly` / `supporter`); no new tier. The
 membership framing sits on top of the existing plumbing. (There were 4: `ad_free` was retired in
 2026-08 with advertising itself. Its removal *strengthens* this proposal rather than thinning it —
 "premium removes ads" sold the removal of something we inflicted, which is the opposite of the
@@ -220,7 +224,7 @@ top-level **Support** hub, sharing it with the always-on badge-art **fundraiser*
 us" asks are one coherent story.
 
 The **storefront IS the Support landing**: `/support/` is one uninterrupted pitch (story -> three
-options -> perks), not a table of contents pointing at the real page. `/users/subscribe/` 301s in. Two
+options -> perks), not a table of contents pointing at the real page. `/users/subscribe/` 302s in (302, NOT 301: a cached permanent redirect on a payment URL cannot be withdrawn). Two
 sub-pages get their own addresses and turn the hub's sub-nav strip on for the first time:
 `/support/roadmap/` (what comes after 1.0) and `/support/fundraiser/` (the campaign's permanent home,
 plus the gallery of already-funded art with its donor credits -- the best proof of the thesis on the

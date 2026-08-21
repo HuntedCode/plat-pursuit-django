@@ -630,7 +630,7 @@ URL is cached by the browser and cannot be withdrawn if the assumption behind it
 
 ### Nothing else to run
 
-The `support:proof` cache key (5 min TTL, two DB aggregates behind it) populates on first request.
+The `support:stats` cache key (5 min TTL; supporter counts, monthly total, the wall) populates on first request. (An earlier draft of this note named `support:proof`, a key that never shipped — wrong cache keys in a runbook get flushed at 3am.)
 Perk copy is a Python constant, so it ships with the code.
 
 ### BLOCKER: the supporter ladder is placeholders (2026-08-20)
@@ -649,6 +649,20 @@ ladder slugs, extend `PREMIUM_TIER_CHOICES` / `ACTIVE_PREMIUM_TIERS` / the two D
 **migrate existing `premium_monthly` / `premium_yearly` / `supporter` subscribers onto the new
 levels**, then flip the flag. The checkout POST handler, `success_url`, `subscribe_success` and both
 webhooks are untouched and already serve the legacy three tiers throughout.
+
+### The revenue-off window (2026-08-20) — go in eyes-open
+
+**From the moment this lane deploys until the ladder's SKUs exist and the placeholder flag flips,
+no membership is purchasable from the UI.** Live mode filters the ladder to empty (the six slugs
+have no Stripe prices), so `/support/` shows the "memberships are briefly unavailable" box — and
+`/users/subscribe/` redirects there. The legacy tiers stay technically purchasable only by a
+hand-crafted POST. This is deliberate and test-pinned (`test_placeholders_can_never_reach_live_
+stripe`); the point of this note is that the window is a product decision, not an accident, and
+shortening it means creating the twelve SKUs promptly.
+
+At go-live, the checkout markup is already real — a `<form method="post">` with CSRF wrapping the
+tier radios and both provider buttons, pinned by `test_the_checkout_is_a_real_form` (an audit found
+the buttons had shipped formless, which would have made them inert exactly at go-live).
 
 ### Migration 0314: supporter wall consent (2026-08-20)
 
