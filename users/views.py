@@ -563,7 +563,7 @@ class SupportRoadmapView(TemplateView):
     template_name = 'support/roadmap.html'
 
     def get_context_data(self, **kwargs):
-        from users.constants import ROADMAP_STAGES
+        from users.constants import ROADMAP_FEATURES, ROADMAP_STAGES
 
         context = super().get_context_data(**kwargs)
         stages = ROADMAP_STAGES
@@ -573,7 +573,13 @@ class SupportRoadmapView(TemplateView):
         # The Horizon must pair with REAL progress, never decorate: this is stages banked over
         # stages planned, counting the current one as in-flight (not banked).
         context['stages_total'] = len(stages)
-        context['today'] = SupportStorefrontView._today()
+        context['features'] = ROADMAP_FEATURES
+        # (key, heading, subline) per certainty tier; the template walks these in order.
+        context['tier_defs'] = [
+            ('works', 'In the works', 'Actively being built, right now.'),
+            ('next', 'Up next', 'Committed. We would rather do these properly than quickly.'),
+            ('wishlist', 'The wishlist', 'Dreams, labelled as dreams. No promises here, just direction.'),
+        ]
         user = self.request.user
         context['viewer_is_member'] = (
             SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False

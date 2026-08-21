@@ -347,6 +347,48 @@ ROADMAP_STAGES = [
      'status': 'later',   'blurb': 'PlatPursuit in your pocket, and past PlayStation.'},
 ]
 
+# THE FORWARD LIST for /support/roadmap/: individual upcoming features, tiered by CERTAINTY,
+# not time -- 'works' is actively being built, 'next' is committed direction, 'wishlist' is
+# openly-labelled dreams (the no-promises rule turned into UX: dreams get to be on the page
+# BECAUSE they are marked as dreams). Same content rules as ROADMAP_STAGES: no dates, no counts.
+# The three tiers map onto the three ahead stages above (play -> works, returns -> next,
+# beyond -> wishlist), so the storefront band and this list stay one story.
+ROADMAP_FEATURES = [
+    {'key': 'challenges', 'tier': 'works',
+     'name': 'Challenges, revamped',
+     'blurb': 'The revamp we have long wanted to give them: better formats, better rewards.'},
+    {'key': 'quests', 'tier': 'works',
+     'name': 'Quests and streaks',
+     'blurb': 'New reasons to hunt today, and tomorrow, and the day after.'},
+    {'key': 'badges', 'tier': 'works',
+     'name': 'A much bigger badge library',
+     'blurb': 'More series, more art, more things genuinely worth collecting.'},
+    {'key': 'economy', 'tier': 'works',
+     'name': 'Somewhere to spend it',
+     'blurb': 'Things worth earning, and a place where earning them pays off.'},
+    {'key': 'stats', 'tier': 'next',
+     'name': 'My Stats, as an engine',
+     'blurb': 'A proper insight engine rather than a page full of numbers.'},
+    {'key': 'lists', 'tier': 'next',
+     'name': 'Game lists return',
+     'blurb': 'Set aside to get 1.0 out of the door; coming back rebuilt, not rushed.'},
+    {'key': 'notifications', 'tier': 'next',
+     'name': 'Notifications return',
+     'blurb': 'Quieter, smarter, and actually worth opening.'},
+    {'key': 'showcases', 'tier': 'next',
+     'name': 'Profile showcases',
+     'blurb': 'Your profile, arranged your way, showing off what you choose.'},
+    {'key': 'mobile', 'tier': 'wishlist',
+     'name': 'PlatPursuit in your pocket',
+     'blurb': 'The hunt should not stop when you stand up.'},
+    {'key': 'platforms', 'tier': 'wishlist',
+     'name': 'Beyond PlayStation',
+     'blurb': 'Xbox, Steam, RetroAchievements -- the whole landscape, one pursuit.'},
+    {'key': 'customization', 'tier': 'wishlist',
+     'name': 'Deeper customization',
+     'blurb': 'More ways to make your corner of the site feel like yours.'},
+]
+
 LEGACY_TIER_LEVEL_MAP = {
     'premium_monthly': 'backer',
     'premium_yearly': 'backer',

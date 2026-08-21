@@ -1,17 +1,20 @@
-"""/support/roadmap/ -- the site's own platinum roadmap -- and the storefront's roadmap band.
+"""/support/roadmap/ -- the forward list in the platinum-roadmap frame -- and the storefront band.
 
-The content rules are the tests that matter: future stages carry no dates, counts or
-percentages (order is the only promise), the heartbeat figures vanish wholesale when cold, and
-the Horizon strip always pairs with real stage progress, never decoration.
+The content rules are the tests that matter: the forward content carries no dates, months,
+quarters, counts or percentages (tier is the only promise; the wishlist is dreams labelled as
+dreams), and the Horizon strip always pairs with real stage progress, never decoration.
 """
 import re
 
 import pytest
+from django.template.loader import render_to_string
 from django.urls import reverse
 
-from users.constants import ROADMAP_STAGES
+from users.constants import ROADMAP_FEATURES, ROADMAP_STAGES
 
 pytestmark = pytest.mark.django_db
+
+TIERS = ('works', 'next', 'wishlist')
 
 
 def _flat(client, url_name='support_roadmap'):
@@ -19,32 +22,44 @@ def _flat(client, url_name='support_roadmap'):
     return ' '.join(body.split())
 
 
-# ------------------------------------------------------------------------- the skeleton ----
+# ------------------------------------------------------------------------- the skeletons ----
 
 def test_the_stage_skeleton_is_well_formed():
-    """Both surfaces walk this constant blind; a malformed stage breaks them together."""
+    """The pips and the storefront band walk this constant blind."""
     statuses = [st['status'] for st in ROADMAP_STAGES]
 
     assert statuses.count('now') == 1, 'exactly one stage is where we are'
     assert all(s in ('shipped', 'now', 'next', 'later') for s in statuses)
-    # The trail is ordered: everything shipped precedes now, which precedes everything ahead.
     assert statuses == sorted(statuses, key=('shipped', 'now', 'next', 'later').index)
     for stage in ROADMAP_STAGES:
         assert stage['key'] and stage['when'] and stage['title'] and stage['blurb']
 
 
-def test_future_stages_promise_no_dates():
-    """DELIBERATELY NO DATES on unshipped work: the moment one slips, the roadmap becomes a
-    promise ledger. 'when' labels ahead of now must be relative words, never months/quarters."""
-    ahead = [st for st in ROADMAP_STAGES if st['status'] in ('next', 'later')]
+def test_the_feature_list_is_well_formed():
+    """The page's tier sections walk this constant blind; every tier must have members."""
+    tiers = [f['tier'] for f in ROADMAP_FEATURES]
+
+    assert set(tiers) == set(TIERS)
+    for feat in ROADMAP_FEATURES:
+        assert feat['key'] and feat['name'] and feat['blurb']
+    # Tier order in the constant mirrors display order: works, then next, then wishlist.
+    assert tiers == sorted(tiers, key=TIERS.index)
+
+
+def test_the_forward_content_promises_no_dates():
+    """DELIBERATELY NO DATES anywhere forward-looking: the moment one slips, the roadmap becomes
+    a promise ledger. Applies to the ahead stages AND every feature at every tier."""
     months = ('january february march april may june july august september '
               'october november december').split()
+    forward = [st['when'] + ' ' + st['blurb'] for st in ROADMAP_STAGES
+               if st['status'] in ('next', 'later')]
+    forward += [f['name'] + ' ' + f['blurb'] for f in ROADMAP_FEATURES]
 
-    for stage in ahead:
-        label = (stage['when'] + ' ' + stage['blurb']).lower()
-        assert not re.search(r'\b(19|20)\d\d\b', label), f"{stage['key']} promises a year"
-        assert not re.search(r'\bq[1-4]\b', label), f"{stage['key']} promises a quarter"
-        assert not any(m in label for m in months), f"{stage['key']} promises a month"
+    for text in forward:
+        low = text.lower()
+        assert not re.search(r'\b(19|20)\d\d\b', low), f'a year slipped into: {text[:40]}'
+        assert not re.search(r'\bq[1-4]\b', low), f'a quarter slipped into: {text[:40]}'
+        assert not any(m in low for m in months), f'a month slipped into: {text[:40]}'
 
 
 # ------------------------------------------------------------------------- the page --------
@@ -54,13 +69,31 @@ def test_the_roadmap_page_renders_for_everyone(client):
     assert response.status_code == 200
     body = ' '.join(response.content.decode().split())
     assert 'The platinum roadmap for PlatPursuit itself.' in body
-    assert 'It started with a Discord server.' in body
+    assert 'In the works' in body and 'Up next' in body and 'The wishlist' in body
     assert 'just me!' in body
 
 
+def test_every_feature_appears_in_its_own_tier(client):
+    body = _flat(client)
+
+    for tier in TIERS:
+        section = body[body.index(f'is-{tier}'):]
+        nxt = [body.index(f'is-{t2}') for t2 in TIERS if body.index(f'is-{t2}') > body.index(f'is-{tier}')]
+        section = section[:min(nxt) - body.index(f'is-{tier}')] if nxt else section
+        for feat in ROADMAP_FEATURES:
+            if feat['tier'] == tier:
+                assert feat['name'] in section, f"{feat['key']} missing from its {tier} section"
+
+
+def test_the_wishlist_says_it_makes_no_promises(client):
+    """The no-promises rule as UX: dreams get to be on the page BECAUSE they are marked as
+    dreams. The label is load-bearing copy, not decoration."""
+    body = _flat(client)
+    assert 'Dreams, labelled as dreams. No promises here, just direction.' in body
+
+
 def test_the_horizon_strip_carries_real_stage_progress(client):
-    """The primitive's own anti-pattern rule: never decorative, always a real fraction. One pip
-    per stage; done pips = shipped stages; the current stage takes the active ring."""
+    """The primitive's own anti-pattern rule: never decorative, always a real fraction."""
     body = _flat(client)
     shipped = sum(1 for st in ROADMAP_STAGES if st['status'] == 'shipped')
 
@@ -72,27 +105,24 @@ def test_the_horizon_strip_carries_real_stage_progress(client):
     assert f'{shipped} of {len(ROADMAP_STAGES)} stages banked' in body
 
 
-def test_the_numbers_stop_below_the_current_stage(client):
-    """The markers go hollow and the numbers stop: no tally, count or percentage anywhere in the
-    ahead sections. Order is the only promise."""
+def test_no_counts_anywhere_in_the_forward_body(client):
+    """The old page put live tallies on its history cards; the pivot removed history, so now the
+    rule is total: no tally and no percentage anywhere outside the header's banked line."""
     body = client.get(reverse('support_roadmap')).content.decode()
-    ahead_start = body.index('is-ahead')
 
-    assert 'pp-tally' not in body[ahead_start:], 'a count leaked below the current stage'
-    ahead_text = ' '.join(re.sub(r'<[^>]+>', ' ', body[ahead_start:]).split())
-    assert not re.search(r'\d+%', ahead_text), 'a percentage leaked into the future'
+    assert 'pp-tally' not in body, 'a live count crept back onto a forward-only page'
+    text = ' '.join(re.sub(r'<[^>]+>', ' ', body).split())
+    assert not re.search(r'\d+%', text), 'a percentage leaked into the roadmap'
 
 
-def test_cold_heartbeat_omits_the_figures_wholesale(client):
-    """'Tracking 0 trophies for 0 hunters' on the page asking you to come along is worse than
-    saying nothing."""
-    from unittest.mock import patch
+def test_every_feature_key_has_its_own_icon():
+    """A new feature added with a typo'd or missing icon key silently falls back to the compass;
+    this makes that a loud failure instead of a quiet shrug."""
+    fallback = render_to_string('support/_roadmap_icon.html', {'key': '__nope__'})
 
-    with patch('users.views.SupportStorefrontView._today', return_value=None):
-        body = _flat(client)
-
-    assert 'rm-step__figs' not in body
-    assert 'trophies tracked' not in body
+    for feat in ROADMAP_FEATURES:
+        icon = render_to_string('support/_roadmap_icon.html', {'key': feat['key']})
+        assert icon.strip() != fallback.strip(), f"{feat['key']} renders the fallback compass"
 
 
 def test_the_ask_swaps_for_members(client):
@@ -110,9 +140,9 @@ def test_the_ask_swaps_for_members(client):
     assert 'You already are.' in member_body
 
 
-def test_the_current_stage_breathing_is_reduced_motion_safe():
-    """The 'we are here' pulse exists only under no-preference -- declared at the source, the
-    pattern that cannot lose a cascade fight (the audit's PayPal-flow lesson)."""
+def test_the_motion_is_reduced_motion_safe():
+    """Both animations declared at the source under no-preference -- the pattern that cannot
+    lose a cascade fight."""
     import pathlib
     css = pathlib.Path('static/css/components/support-roadmap.css').read_text(encoding='utf-8')
     css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
@@ -136,8 +166,7 @@ def test_the_storefront_carries_the_roadmap_band(client):
 
 
 def test_the_band_names_only_the_stages_ahead(client):
-    """The band sells what support BUILDS next; the serve band above already brags for the past.
-    Shipped and current stages stay off it."""
+    """The band sells what support BUILDS next; the serve band already brags for the past."""
     body = _flat(client, 'support_hub')
     band = body[body.index('data-sup-road'):body.index('data-sup-paid')]
 
@@ -149,8 +178,6 @@ def test_the_band_names_only_the_stages_ahead(client):
 
 
 def test_the_band_sits_inside_the_pitch(client):
-    """Placement is the decision: directly below the header, before the money bands -- part of
-    the sell, not a footer afterthought."""
     body = _flat(client, 'support_hub')
 
     assert body.index('data-sup-road') < body.index('data-sup-paid')

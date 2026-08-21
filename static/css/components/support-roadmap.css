@@ -47,58 +47,57 @@
     color: var(--pp-text-mute);
 }
 
-/* ---- the grid ------------------------------------------------------------------------- */
+/* ---- the tiers ------------------------------------------------------------------------ */
 
-/* A GRID, not a ladder (2026-08-22), and no arrows: in a wrapping grid connectors break at every
-   row edge. Sequence rides the trophy-guide stage chips + the header pips instead. The ask card
-   spans the full row -- the destination, not a stop. */
-.rm-grid {
-    display: grid;
-    grid-template-columns: 1fr;
+/* Three tiers of certainty, each a heading row + a grid of compact feature cards. Status lives
+   on the TIER CHIP: works lit (and breathing -- this is 'we are here'), next solid, wishlist
+   hollow-and-dashed (a dream drawn in outline). */
+.rm-tier { padding-top: 18px; }
+
+.rm-tier__head {
+    display: flex;
+    align-items: baseline;
     gap: 12px;
-    padding-top: 14px;
+    flex-wrap: wrap;
+    padding: 0 2px 10px;
 }
 
-@media (min-width: 768px) {
-    .rm-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (min-width: 1024px) {
-    .rm-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-.rm-step.is-ask { grid-column: 1 / -1; }
-
-/* ---- stage chips: the sequence carrier ------------------------------------------------ */
-
-.rm-step__stage {
+.rm-tier__chip {
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
+    padding: 4px 12px;
     border-radius: 999px;
     border: 1px solid var(--pp-border);
     background: var(--pp-bg-3);
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
-    color: var(--pp-text-dim);
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pp-text);
 }
 
-/* Status carries on the chip: banked solid, now lit, ahead hollow. */
-.rm-step.is-ahead .rm-step__stage {
-    background: transparent;
-    color: var(--pp-text-mute);
-}
-
-.rm-step.is-now .rm-step__stage {
+.rm-tier.is-works .rm-tier__chip {
     background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
     border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
     color: var(--pp-primary);
 }
 
-/* The Horizon's near-completion nudge at whisper volume: the now-chip breathes. Declared only
-   under no-preference so reduced motion cannot lose a cascade fight. */
+.rm-tier.is-wishlist .rm-tier__chip {
+    background: transparent;
+    border-style: dashed;
+    color: var(--pp-text-dim);
+}
+
+.rm-tier__sub {
+    font-size: 0.78rem;
+    color: var(--pp-text-mute);
+}
+
+/* The works-chip breathes: the Horizon's near-completion nudge at whisper volume, and the page's
+   'we are here'. Declared only under no-preference so reduced motion cannot lose a cascade fight. */
 @media (prefers-reduced-motion: no-preference) {
-    .rm-step.is-now .rm-step__stage {
+    .rm-tier.is-works .rm-tier__chip {
         animation: rmHere 3.2s var(--pp-ease, ease) infinite;
     }
 }
@@ -108,114 +107,94 @@
     50%      { box-shadow: 0 0 10px 0 color-mix(in oklab, var(--pp-primary) 55%, transparent); }
 }
 
-/* The last stop's chip is Frame's DIAMOND, hollow -- the plat, not yet earned (deliberately not
-   a trophy shape, which belongs to the earned register). */
-.rm-step__stage--plat {
-    width: 11px;
-    height: 11px;
-    padding: 0;
-    border-radius: 2px;
-    transform: rotate(45deg);
-    background: transparent;
-    border-color: var(--pp-text-mute);
+/* ---- feature cards --------------------------------------------------------------------- */
+
+.rm-feats {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
 }
 
-/* Every stage is a CARD on the rail (the rebuild's carded-content rule; the first cut shipped
-   bare prose and was rightly corrected). Card chrome comes from the shared utility classes in
-   the template; this styles the interior. */
-.rm-step__card { height: 100%; }
-
-.rm-step__card p {
-    margin-top: 10px;
-    font-size: 0.9rem;
-    line-height: 1.7;
-    color: var(--pp-text-dim);
+@media (min-width: 768px) {
+    .rm-feats { grid-template-columns: repeat(2, 1fr); }
 }
 
-.rm-step__head {
+@media (min-width: 1024px) {
+    .rm-feats { grid-template-columns: repeat(4, 1fr); }
+    .rm-tier.is-wishlist .rm-feats { grid-template-columns: repeat(3, 1fr); }
+}
+
+.rm-feat { height: 100%; }
+
+.rm-feat__head {
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    gap: 10px;
 }
 
-.rm-step__head p { margin-top: 0; }
-
-/* The icon chip: the Jobs icon language -- a bordered tile, stroke inherits text colour so the
-   now-card's accent carries into its icon. */
-.rm-step__icon {
+.rm-feat__icon {
     flex: none;
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: var(--pp-radius-sm);
     border: 1px solid var(--pp-border);
     background: var(--pp-bg-3);
     color: var(--pp-text-mute);
 }
 
-.rm-step__icon svg { width: 20px; height: 20px; }
+.rm-feat__icon svg { width: 18px; height: 18px; }
 
-.rm-step.is-now .rm-step__icon {
-    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+.rm-tier.is-works .rm-feat__icon {
+    border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border));
     color: var(--pp-primary);
 }
 
-.rm-step.is-ask .rm-step__icon { color: var(--pp-text-dim); }
+/* Wishlist dreams are drawn in outline: dashed icon tiles. */
+.rm-tier.is-wishlist .rm-feat__icon { border-style: dashed; background: transparent; }
 
-.rm-step__when {
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    color: var(--pp-text-mute);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.rm-step__here {
-    font-size: 0.62rem;
-    letter-spacing: 0.1em;
-    color: var(--pp-primary);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
-    border-radius: 999px;
-    padding: 2px 8px;
-}
-
-.rm-step__h {
+.rm-feat__name {
     font-family: var(--pp-font-display), sans-serif;
-    font-size: 1.15rem;
+    font-size: 0.92rem;
     font-weight: 800;
     line-height: 1.25;
-    margin-top: 6px;
 }
 
-@media (min-width: 768px) {
-    .rm__h1 { font-size: 1.8rem; }
-    .rm-step__h { font-size: 1.3rem; }
-    .rm-step__card p { font-size: 0.95rem; }
-}
-
-/* The Today figures: tallies in a row, wrapping on narrow screens. */
-.rm-step__figs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 22px;
-    margin-top: 12px;
-    font-size: 0.85rem;
+.rm-feat__blurb {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    line-height: 1.6;
     color: var(--pp-text-dim);
 }
 
-.rm-step__figs b {
-    font-family: var(--pp-font-display), sans-serif;
-    font-weight: 800;
-    color: var(--pp-text);
+/* ---- the ask -------------------------------------------------------------------------- */
+
+.rm-ask { margin-top: 18px; }
+
+.rm-ask__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.rm-step__more { font-style: italic; padding-right: 4px; }
+.rm-ask__h {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1.3;
+}
 
-/* ---- the ask -------------------------------------------------------------------------- */
+.rm-ask p:not(.rm-step__thanks) {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--pp-text-dim);
+    max-width: 75ch;
+}
+
+.rm-feat__icon--ask { width: 40px; height: 40px; color: var(--pp-text-dim); }
+
 
 .rm-step__cta {
     display: inline-flex;
@@ -255,18 +234,14 @@
 
 /* ---- entrance ------------------------------------------------------------------------- */
 
-/* A quiet top-down settle on load; below-the-fold steps simply finish before they are seen.
-   Declared under no-preference only. */
+/* A quiet settle on load: tiers cascade, cards inside stagger off their --i index. Declared
+   under no-preference only. */
 @media (prefers-reduced-motion: no-preference) {
-    .rm-step {
-        animation: ppRevealIn 0.55s var(--pp-ease) backwards;
+    .rm-feat {
+        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
+        animation-delay: calc(var(--tier-d, 200ms) + var(--i, 0) * 60ms);
     }
-    .rm-step:nth-child(1) { animation-delay: 180ms; }
-    .rm-step:nth-child(2) { animation-delay: 280ms; }
-    .rm-step:nth-child(3) { animation-delay: 380ms; }
-    .rm-step:nth-child(4) { animation-delay: 460ms; }
-    .rm-step:nth-child(5) { animation-delay: 540ms; }
-    .rm-step:nth-child(6) { animation-delay: 620ms; }
-    .rm-step:nth-child(7) { animation-delay: 690ms; }
-    .rm-step:nth-child(8) { animation-delay: 750ms; }
+    .rm-tier.is-next .rm-feat { --tier-d: 380ms; }
+    .rm-tier.is-wishlist .rm-feat { --tier-d: 560ms; }
+    .rm-ask { animation: ppRevealIn 0.5s var(--pp-ease) 700ms backwards; }
 }
