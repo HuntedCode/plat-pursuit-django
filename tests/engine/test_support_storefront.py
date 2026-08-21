@@ -1657,3 +1657,33 @@ def test_ladder_and_legacy_money_add_up_together(client):
 
     band = _band(body)
     assert 'data-countup="25"' in band, 'the two pricing arms do not add up'
+
+
+def test_an_active_stripe_member_can_load_the_management_page(client):
+    """PRE-EXISTING CRASHER, found by the audit outside this lane's diff and fixed with it because
+    the lane links every member here.
+
+    The next-billing line used `timezone.utc` where `timezone` is django.utils.timezone -- an alias
+    REMOVED in Django 5.0. Every active Stripe member got an AttributeError on the one page that
+    manages their money, and nothing noticed because no test ever exercised the active-subscription
+    branch (it needs a Subscription row, a Stripe portal call, and a customer id all mocked at once,
+    so nobody had).
+    """
+    user = UserFactory()
+    user.subscription_provider = 'stripe'
+    user.stripe_customer_id = 'cus_test123'
+    user.premium_tier = 'premium_monthly'
+    user.save()
+    client.force_login(user)
+
+    fake_sub = type('S', (), {'stripe_data': {'status': 'active', 'current_period_end': 1767225600}})()
+    fake_portal = type('P', (), {'url': 'https://billing.stripe.com/x'})()
+
+    with patch('users.views.SubscriptionService.has_active_subscription',
+               return_value=(True, 'stripe')),             patch('users.views.Subscription.objects') as sub_mgr,             patch('users.views.stripe.billing_portal.Session.create', return_value=fake_portal):
+        sub_mgr.filter.return_value.first.return_value = fake_sub
+        response = client.get(reverse('subscription_management'))
+
+    assert response.status_code == 200, 'an active Stripe member cannot open their own billing page'
+    assert b'billing.stripe.com' in response.content
+

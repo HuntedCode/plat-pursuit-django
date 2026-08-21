@@ -1,6 +1,7 @@
 # users/views.py
 import json
 from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from allauth.account.views import ConfirmEmailView
 from django.conf import settings
@@ -679,7 +680,11 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
                 context['status'] = str(stripe_data.get('status', 'unknown')).capitalize()
                 period_end_ts = stripe_data.get('current_period_end')
                 if period_end_ts:
-                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=timezone.utc)
+                    # `dt_timezone.utc`, NOT `timezone.utc`: `timezone` here is
+                    # django.utils.timezone, whose `utc` alias was REMOVED in Django 5.0 -- this
+                    # line raised AttributeError for every active Stripe member since the 5.x
+                    # upgrade, and no test covered the active-subscription branch to notice.
+                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)
                 else:
                     context['next_billing'] = 'N/A'
 
