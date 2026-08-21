@@ -123,7 +123,7 @@ SUPPORT_TIERS = [
 # The view forces it False whenever `STRIPE_MODE == 'live'`, so production can never render a row of
 # dead buy buttons; it falls back to the unavailable state instead. That is a runtime guard rather
 # than a checklist item on purpose, because checklists get skipped.
-SUPPORT_TIERS_ARE_PLACEHOLDERS = True
+SUPPORT_TIERS_ARE_PLACEHOLDERS = False
 
 
 # What a membership actually gets you.
@@ -241,8 +241,16 @@ STRIPE_PRICES = {
 # `bootstrap_support_skus` (which also syncs them into djstripe -- checkout does
 # `Price.objects.get`, so an unsynced id 500s the moment the placeholder flag flips).
 STRIPE_LADDER_PRICES = {
-    'test': {slug: {'monthly': '', 'yearly': ''} for slug in
-             ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+    'test': {
+        'backer': {'monthly': 'price_1U6ozjR5jhcbjB32vStaZGFu', 'yearly': 'price_1U6ozjR5jhcbjB32OrSMYweY'},
+        'contributor': {'monthly': 'price_1U6ozjR5jhcbjB32pGR5QfTE', 'yearly': 'price_1U6ozjR5jhcbjB32Sl7gZ63E'},
+        'patron': {'monthly': 'price_1U6ozkR5jhcbjB32SG0QxrP5', 'yearly': 'price_1U6ozkR5jhcbjB32rstksVZ5'},
+        'sponsor': {'monthly': 'price_1U6ozkR5jhcbjB32ifOJlGei', 'yearly': 'price_1U6ozkR5jhcbjB3205hXP412'},
+        'benefactor': {'monthly': 'price_1U6ozlR5jhcbjB320zizoLjt', 'yearly': 'price_1U6ozlR5jhcbjB32b9FE2O1Q'},
+        'cornerstone': {'monthly': 'price_1U6ozlR5jhcbjB32MBfED7X1', 'yearly': 'price_1U6ozlR5jhcbjB32RimP8LHD'},
+    },
+    # LIVE stays empty until rebuild cutover -- see the fan-out hazard note above and
+    # docs/guides/support-skus.md. bootstrap_support_skus --live-ok fills it, nothing else.
     'live': {slug: {'monthly': '', 'yearly': ''} for slug in
              ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
 }
@@ -250,8 +258,14 @@ STRIPE_LADDER_PRICES = {
 # The ladder's twelve PayPal plans, same shape (PayPal plans are per-interval, so twelve of them;
 # the flat reverse map below collapses the interval back out, which is fine -- the tier IS the slug).
 PAYPAL_LADDER_PLANS = {
-    'sandbox': {slug: {'monthly': '', 'yearly': ''} for slug in
-                ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+    'sandbox': {
+        'backer': {'monthly': 'P-23W906671W757821JNKEB34Y', 'yearly': 'P-76U879239G148313LNKEB34Y'},
+        'contributor': {'monthly': 'P-4PN39583R75130028NKEB35I', 'yearly': 'P-1PB32711DL985164FNKEB35I'},
+        'patron': {'monthly': 'P-20E18527BJ007815VNKEB35Y', 'yearly': 'P-08S10938GY144830XNKEB35Y'},
+        'sponsor': {'monthly': 'P-59391312V9169962DNKEB36I', 'yearly': 'P-0J052628DY755845BNKEB36I'},
+        'benefactor': {'monthly': 'P-7AF02996PT9535847NKEB36Q', 'yearly': 'P-28D98899V0798471PNKEB36Y'},
+        'cornerstone': {'monthly': 'P-6MD3335322577564ANKEB37I', 'yearly': 'P-3KL63947BR196261BNKEB37I'},
+    },
     'live': {slug: {'monthly': '', 'yearly': ''} for slug in
              ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
 }

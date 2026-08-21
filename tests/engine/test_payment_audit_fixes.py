@@ -58,6 +58,7 @@ def test_the_availability_check_is_per_provider(client, settings):
     with patch('users.views.SubscriptionService.has_active_subscription',
                return_value=(False, None)), \
             patch.dict('users.constants.STRIPE_LADDER_PRICES', stripe_only), \
+            patch.dict('users.views.PAYPAL_LADDER_PLANS', {'sandbox': {}}), \
             patch('users.services.paypal_service.PayPalService.create_subscription') as paypal_create:
         response = client.post(reverse('support_hub'),
                                {'tier': 'patron', 'provider': 'paypal', 'sup-cycle': 'monthly'})

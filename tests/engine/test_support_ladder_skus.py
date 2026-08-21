@@ -45,13 +45,26 @@ def test_ladder_price_resolution_is_isolated_from_the_legacy_path():
     """`resolve_ladder_price_id` returns None for an unconfigured pair rather than raising -- the
     legacy resolver raises on ONE miss and its caller degrades everything, which is the right shape
     for three tiers that exist together and the wrong one for a ladder that fills in per bootstrap
-    run."""
+    run. Since the 2026-08-21 test-mode bootstrap, TEST resolves and LIVE is the unconfigured
+    side (empty until rebuild cutover, deliberately)."""
     from users.services.subscription_service import SubscriptionService
 
-    # Unconfigured (ids are empty until bootstrap) -> None, never an exception.
-    assert SubscriptionService.resolve_ladder_price_id('patron', 'monthly', False) is None
+    # Test mode: configured by the bootstrap paste.
+    assert SubscriptionService.resolve_ladder_price_id('patron', 'monthly', False) ==         STRIPE_LADDER_PRICES['test']['patron']['monthly']
+    # Unconfigured -> None, never an exception. Live emptiness IS the pre-cutover safety state.
+    assert SubscriptionService.resolve_ladder_price_id('patron', 'monthly', True) is None
     assert SubscriptionService.resolve_ladder_price_id('nonsense', 'monthly', False) is None
     assert SubscriptionService.resolve_ladder_price_id('patron', 'weekly', False) is None
+
+
+def test_live_ids_stay_empty_until_cutover():
+    """THE fan-out hazard pin: live SKU ids existing before prod runs ladder-aware code would
+    have prod deactivating the subscribers who buy them. When the cutover paste lands, this test
+    is UPDATED deliberately -- it failing is the point."""
+    for slug, intervals in STRIPE_LADDER_PRICES['live'].items():
+        assert not any(intervals.values()), f'live Stripe id for {slug} before cutover'
+    for slug, intervals in PAYPAL_LADDER_PLANS['live'].items():
+        assert not any(intervals.values()), f'live PayPal id for {slug} before cutover'
 
 
 def test_discord_roles_ladder_gets_premium_and_plus_stays_legacy():

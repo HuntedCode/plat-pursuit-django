@@ -278,10 +278,10 @@ def test_missing_pricing_degrades_the_block_not_the_page(client):
 
     assert response.status_code == 200, 'a pricing outage takes down the whole Support hub'
     assert 'Support Platinum Pursuit' in body, 'the pitch went with the prices'
-    # While the ladder is PLACEHOLDERS its prices come from the constant, so a Stripe outage is
-    # simply irrelevant to it -- and the buttons are inert anyway. The case that matters, a live
-    # ladder with no prices behind it, is `test_placeholders_can_never_reach_live_stripe`.
-    assert 'Not live yet' in body, 'the ladder is being offered as though it were real'
+    # The LADDER's prices come from the constant, so a legacy-band Stripe outage is simply
+    # irrelevant to it: the buy buttons stay live. (The live-ladder-without-prices case is
+    # `test_placeholders_can_never_reach_live_stripe`.)
+    assert 'Not live yet' not in body, 'a legacy pricing outage knocked out the armed ladder'
 
 
 # ------------------------------------------------------------------------------- the URLs ----
@@ -449,12 +449,23 @@ def test_every_level_of_the_ladder_is_on_the_page(client):
 
 
 def test_placeholder_buttons_cannot_be_pressed(client):
-    """The ladder is design-only until its twelve Stripe prices and twelve PayPal plans exist. A
-    button that looks live and does nothing is worse than one that admits it is not ready."""
-    body = _flat(client)
+    """The placeholder state is HISTORY on this branch (the flag flipped False when the 24 SKUs
+    were minted, 2026-08-21) but the guard is not dead code: it is what makes the flag safe to
+    flip BACK during an incident. Pinned with the flag forced on."""
+    with patch('users.views.SUPPORT_TIERS_ARE_PLACEHOLDERS', True):
+        body = _flat(client)
 
     assert 'disabled aria-disabled="true"' in body, 'placeholder buttons are pressable'
     assert 'Not live yet' in body, 'nothing tells the reader why they cannot press'
+
+
+def test_the_armed_ladder_sells_live_buttons(client):
+    """The flip side, the state actually shipping: flag off + ids filled = pressable buttons,
+    no unavailable copy."""
+    body = _flat(client)
+
+    assert 'disabled aria-disabled="true"' not in body, 'the armed ladder rendered dead buttons'
+    assert 'Not live yet' not in body
 
 
 def test_placeholders_can_never_reach_live_stripe(client, settings):
