@@ -459,6 +459,50 @@ def test_placeholder_buttons_cannot_be_pressed(client):
     assert 'Not live yet' in body, 'nothing tells the reader why they cannot press'
 
 
+def test_the_pay_button_breathes_stars_in_the_levels_colour(client):
+    """The enticement layer (the Blender-hearts move, in our vocabulary): the PRIMARY button
+    carries a decorative emitter of five stars. They must be the SAME star path as the supporter
+    mark -- visual-identity allows exactly one flair shape, and a second shape here would be a
+    second mark -- and they must be aria-hidden, since they say nothing."""
+    body = _flat(client)
+
+    emitter_count = body.count('sup-go__rise"')
+    assert 'class="sup-go__rise" aria-hidden="true"' in body, 'the emitter is missing or audible'
+    assert emitter_count == 1, 'the emitter belongs on the PRIMARY button only (PayPal stays quiet)'
+    assert body.count('sup-go__risestar') == 5
+    # The one-shape rule, enforced by construction: the rising star IS the mark's path.
+    mark_path = 'M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z'
+    rise_block = body[body.index('sup-go__rise"'):body.index('sup-buy__go-m')]
+    assert mark_path in rise_block, 'the rising star is not the supporter-mark shape'
+
+
+def test_the_stars_stand_down_when_the_button_cannot_be_pressed():
+    """Two hard offs in the CSS: a disabled button must not advertise, and prefers-reduced-motion
+    kills the emitter entirely (a static stack of absolutely-positioned stars reads as a glitch,
+    so it hides rather than freezes)."""
+    rules = _css_rules('support.css')
+
+    assert '.sup-buy__go:disabled .sup-go__rise { display: none; }' in rules
+    reduced = rules[rules.index('prefers-reduced-motion: reduce'):]
+    assert '.sup-go__rise { display: none; }' in reduced[:200],         'reduced motion does not silence the emitter'
+
+
+def test_the_rise_keyframes_stay_compositor_friendly():
+    """ppStarRise may touch transform and opacity ONLY -- and never color-mix(), which
+    lightningcss silently drops from keyframes (the colour rides the element fill, not the
+    animation)."""
+    rules = _css_rules('motion.css')
+    block = rules[rules.index('@keyframes ppStarRise'):]
+    block = block[:block.index('\n}') + 2]
+
+    assert 'color-mix' not in block
+    for line in block.splitlines():
+        line = line.strip()
+        if ':' in line and not line.startswith(('@', '0%', '14%', '72%', '100%')):
+            prop = line.split(':')[0].strip()
+            assert prop in ('opacity', 'transform'), f'{prop} animates off-compositor'
+
+
 def test_the_armed_ladder_sells_live_buttons(client):
     """The flip side, the state actually shipping: flag off + ids filled = pressable buttons,
     no unavailable copy."""

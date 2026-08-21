@@ -87,3 +87,25 @@
     from { background-position: 0% 50%; }
     to   { background-position: 100% 50%; }
 }
+
+/* The support storefront's floating-star rise (see .sup-go__risestar in support.css for the
+   per-star custom props). Transform + opacity ONLY -- and no color-mix() in here ever; lightningcss
+   silently drops frames that use it. The star fades in low, climbs past the button's top edge with
+   a small sideways drift and settle-rotation, and dissolves before the loop point so the wrap is
+   invisible. */
+@keyframes ppStarRise {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(0.5) rotate(0deg);
+    }
+    14% {
+        opacity: 0.85;
+    }
+    72% {
+        opacity: 0.4;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--rise-x, 0px), -46px) scale(1) rotate(var(--rise-r, 15deg));
+    }
+}
