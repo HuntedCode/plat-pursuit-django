@@ -6,7 +6,7 @@ from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
-from django.db.models import Count
+from django.db.models import Case, Count, IntegerField, Value, When
 from django.db.models.functions import Lower
 from django.utils import timezone
 from django.contrib import messages
@@ -177,7 +177,9 @@ class SupportStorefrontView(TemplateView):
         return figures if all(figures.values()) else None
 
     def _prices(self):
-        """Tier -> djstripe Price, or {} when pricing is unavailable.
+        """Tier -> djstripe Price, or {} when pricing is unavailable. Memoized per request: a cold
+        GET consulted this three times (context, `_support`, and POST validation each fetch three
+        `Price.objects.get()`s), which is six redundant queries on a public page.
 
         `get_prices_from_stripe` does `Price.objects.get()` per tier and lets `DoesNotExist` fly. The
         old view answered that by redirecting the WHOLE page to home, so one missing price took down
@@ -185,11 +187,15 @@ class SupportStorefrontView(TemplateView):
         pricing block degrades. That also makes this page testable for the first time -- there are no
         djstripe Price rows in the test DB, so previously it always redirected.
         """
-        try:
-            return SubscriptionService.get_prices_from_stripe(settings.STRIPE_MODE == 'live')
-        except Price.DoesNotExist:
-            logger.exception("Storefront pricing unavailable in mode %s", settings.STRIPE_MODE)
-            return {}
+        if not hasattr(self, '_prices_memo'):
+            try:
+                self._prices_memo = SubscriptionService.get_prices_from_stripe(
+                    settings.STRIPE_MODE == 'live'
+                )
+            except Price.DoesNotExist:
+                logger.exception("Storefront pricing unavailable in mode %s", settings.STRIPE_MODE)
+                self._prices_memo = {}
+        return self._prices_memo
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -307,7 +313,7 @@ class SupportStorefrontView(TemplateView):
         """
         data = cache.get(self.SUPPORT_CACHE_KEY)
         if data is not None:
-            return data
+            return self._hydrate(data)
 
         ladder = {t['slug']: t['monthly'] for t in SUPPORT_TIERS}
         # DB-aggregated group-by, never a Python tally over rows.
@@ -342,71 +348,79 @@ class SupportStorefrontView(TemplateView):
             'wall': self._wall(),
         }
         cache.set(self.SUPPORT_CACHE_KEY, data, self.SUPPORT_TTL)
-        return data
+        return self._hydrate(data)
+
+    @staticmethod
+    def _hydrate(data):
+        """Rebuild the rich tier dicts on the wall AFTER every cache read.
+
+        The cached payload must hold JSON primitives only. It once carried the full tier dict
+        including `star_range=range(...)` -- and production's Redis cache serializes with
+        `JSONSerializer`, which cannot encode a `range`. Every request then raised on `cache.set`,
+        so the payment landing 500'd permanently the moment the wall had anyone on it. Nothing
+        pre-production could see it: the test cache is LocMem (pickle swallows ranges) and dev has
+        no supporters, so the payload never contained one. `test_the_cached_support_payload_is_json_
+        serializable` now locks the boundary.
+        """
+        by_slug = {t['slug']: dict(t, star_range=range(t['stars'])) for t in SUPPORT_TIERS}
+        return dict(data, wall=[
+            dict(person, tier=by_slug.get(person['tier_slug'])) for person in data['wall']
+        ])
 
     WALL_CAP = 200
 
     def _wall(self):
-        """The public supporter wall: who is keeping the site running, by name.
+        """The credits: who is keeping the site running, by name. Returns JSON PRIMITIVES ONLY
+        (name / avatar / tier_slug) -- this goes straight into the cache, and the serializability
+        boundary is documented on `_hydrate`, which rebuilds the rich tier dicts on the way out.
 
         CONSENT IS THE WHOLE DESIGN HERE. A PSN name is already public everywhere on this site; the
         fact that somebody PAYS is not, and publishing it is new information about a person. So the
-        wall only ever shows profiles with `show_on_supporter_wall` set, which defaults True to
-        auto-opt-in the people who were already supporting when this shipped (they never got a
-        checkout step to be asked at) and which anyone can turn off from subscription management.
+        credits only ever show profiles with `show_on_supporter_wall` set, which defaults True to
+        auto-opt-in the people who were already supporting when this shipped, and which anyone can
+        turn off from subscription management.
 
-        WHO IS ELIGIBLE: everyone supporting, ladder level or legacy tier. The bottom two levels were
-        held off once so that being credited was what the middle of the ladder bought; see the note
-        on SUPPORT_TIERS for why that went. Short version: it made the section thin until there were
-        higher levels, and the obvious fix would have taken credit away from people who already had
-        it.
+        WHO IS ELIGIBLE: everyone supporting, ladder level or legacy tier. See the note on
+        SUPPORT_TIERS for why the bottom rungs are included.
 
-        Capped and ordered in the DATABASE. This grows without bound and renders on a public page, so
-        it never becomes "fetch everything and sort in Python".
+        ORDERED AND CAPPED IN THE DATABASE, rank first. The cap used to slice the first 200 by
+        alphabet BEFORE the Python rank sort, so past 200 supporters a Cornerstone named "zed" was
+        cut while a Backer named "aaa" stayed -- quietly breaking "credits run highest level first".
+        The Case/When puts the top level at 0 and everything pre-ladder after the ladder, so the cap
+        can never cut a higher level in favour of a lower one.
         """
         from trophies.models import Profile
 
-        # `star_range` included here too: the star partial loops it, and a tier dict taken straight
-        # from the constant has only `stars`. Without this the marks render as nothing at all --
-        # silently, since a `{% for %}` over a missing key is simply an empty loop.
-        by_slug = {t['slug']: dict(t, star_range=range(t['stars'])) for t in SUPPORT_TIERS}
-        # Everyone supporting is credited, ladder or legacy. See the note on SUPPORT_TIERS: a wall
-        # that listed only the higher levels would be thin until there were higher levels, and the
-        # obvious fix would end up taking credit away from people who already had it.
-        eligible = list(by_slug) + list(ACTIVE_PREMIUM_TIERS)
+        ladder_slugs = [t['slug'] for t in SUPPORT_TIERS]
+        eligible = ladder_slugs + list(ACTIVE_PREMIUM_TIERS)
+        rank_order = Case(
+            *[When(user__premium_tier=slug, then=Value(i))
+              for i, slug in enumerate(reversed(ladder_slugs))],
+            default=Value(len(ladder_slugs)),        # legacy tiers: after the ladder, never lesser
+            output_field=IntegerField(),
+        )
 
-        # `Lower()` because a raw sort puts every lowercase name after every uppercase one, which
-        # reads as two lists stapled together rather than one alphabetical run.
         rows = (
             Profile.objects
             .filter(show_on_supporter_wall=True, user__premium_tier__in=eligible)
             .select_related('user')
             .only('display_psn_username', 'psn_username', 'avatar_url', 'user__premium_tier')
-            .order_by(Lower('psn_username'))[:self.WALL_CAP]
+            # `Lower()` because a raw sort puts every lowercase name after every uppercase one,
+            # which reads as two lists stapled together rather than one alphabetical run.
+            .order_by(rank_order, Lower('psn_username'))[:self.WALL_CAP]
         )
 
-        # ONE FLAT LIST, ordered highest level first and alphabetically within a level. It was
-        # grouped under per-level headings once; each card names its own level now, which makes the
-        # headings redundant -- and a flat run reads as credits rather than as a tiered donor board.
-        # NOT reversed. The grouped version walked the levels backwards to emit the highest group
-        # first; here the same index feeds a SORT KEY, where reversing it inverts the whole roll.
-        # Ladder order gives cornerstone the largest index, and `-rank` ascending puts it first --
-        # while legacy (-1) becomes +1 and sorts last, which is where it belongs.
-        rank = {slug: i for i, slug in enumerate(by_slug)}
-        people = [
+        ladder = set(ladder_slugs)
+        return [
             {
                 'name': r.display_psn_username or r.psn_username,
                 'avatar': r.avatar_url,
-                'tier': by_slug.get(r.user.premium_tier),
-                # Pre-ladder supporters sort last: they hold a legacy tier, so there is no honest
-                # level to place them at, and they are not folded into the bottom rung because that
-                # would claim they chose a level they never saw.
-                'rank': rank.get(r.user.premium_tier, -1),
+                # Legacy tiers map to None on hydrate: there is no honest level to file them under,
+                # and they are deliberately not folded into the bottom rung.
+                'tier_slug': r.user.premium_tier if r.user.premium_tier in ladder else None,
             }
             for r in rows
         ]
-        people.sort(key=lambda person: (-person['rank'], person['name'].lower()))
-        return people
 
     def post(self, request, *args, **kwargs):
         """Start a checkout. The payload contract is unchanged from the old view: `tier` from the
@@ -422,6 +436,12 @@ class SupportStorefrontView(TemplateView):
 
         tier = request.POST.get('tier')
         provider = request.POST.get('provider', 'stripe')
+
+        # An unknown provider used to FALL THROUGH to Stripe (only `paypal` was branched on), which
+        # would quietly charge somebody through a processor they did not pick. Reject instead.
+        if provider not in ('stripe', 'paypal'):
+            messages.error(request, "Unknown payment provider.")
+            return redirect('support_hub')
 
         if tier not in self._prices():
             messages.error(request, "Invalid tier selected.")

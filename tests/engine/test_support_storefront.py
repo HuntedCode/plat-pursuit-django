@@ -1370,3 +1370,80 @@ def test_the_credits_and_the_preview_are_the_same_object(client):
     # `(?!s)` because the section WRAPPER is legitimately `.sup-credits` (heading, grid) -- the
     # thing being forbidden is the per-card family (`sup-credit__av`, `sup-credit `), not the plural.
     assert not re.search(r'sup-credit(?!s)', wall), 'a parallel credit-card class family is back'
+
+
+def test_the_cached_support_payload_is_json_serializable(client):
+    """THE PROD-500 GUARD, and the reason it asserts on the RAW cache payload.
+
+    Production's Redis cache serializes with JSONSerializer; the test cache is LocMem, which pickles
+    anything. So a payload that JSON cannot encode -- the wall once carried
+    `star_range=range(...)` -- passes every rendering test here and then 500s every request in
+    production from the moment the wall has anyone on it, because the failing `cache.set` runs on
+    the request path and never warms.
+
+    Serializing the raw payload with DjangoJSONEncoder is the closest this suite can get to the
+    production serializer without Redis.
+    """
+    import json
+    from django.core.cache import cache
+    from django.core.serializers.json import DjangoJSONEncoder
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='CachedOne', user__premium_tier='patron')
+    ProfileFactory(display_psn_username='LegacyOne', user__premium_tier='premium_monthly')
+    _clear_support_cache()
+    _flat(client)                                    # warms the cache through the real view
+
+    raw = cache.get('support:stats')
+    assert raw is not None, 'the view stopped caching, so this guard is checking nothing'
+    json.dumps(raw, cls=DjangoJSONEncoder)           # raises on any non-primitive
+
+
+def test_the_wall_survives_a_cache_round_trip(client):
+    """The payload is primitives and the rich tier dicts are rebuilt on every read -- so the SECOND
+    request (cache hit) must render identically to the first. A hydration bug shows up only on the
+    hit path, which no other test takes deliberately."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='RoundTrip', user__premium_tier='sponsor')
+    _clear_support_cache()
+
+    first = _wall(_flat(client))
+    second = _wall(_flat(client))                    # served from cache
+
+    assert 'RoundTrip' in second
+    assert 'PlatPursuit Sponsor' in second, 'the tier did not survive hydration on the cache hit'
+    assert second.count('<svg class="pp-supstar') == first.count('<svg class="pp-supstar')
+
+
+def test_the_cap_cannot_cut_a_higher_level_for_a_lower_one(client):
+    """The cap used to slice the first 200 ALPHABETICALLY before the rank sort, so past 200
+    supporters a Cornerstone named 'zed' was cut while a Backer named 'aaa' stayed. The ordering is
+    rank-first in the database now, so the cap eats from the bottom of the ladder only."""
+    from users.views import SupportStorefrontView
+    from tests.factories import ProfileFactory
+
+    cap = SupportStorefrontView.WALL_CAP
+    for i in range(cap):
+        ProfileFactory(display_psn_username=f'Aaa{i:04d}', user__premium_tier='backer')
+    # Alphabetically last, highest level. The old code cut them; rank-first keeps them.
+    ProfileFactory(display_psn_username='ZedCornerstone', user__premium_tier='cornerstone')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert 'ZedCornerstone' in wall, 'the cap cut the top of the ladder to keep the bottom'
+
+
+def test_an_unknown_provider_is_rejected_not_defaulted(client):
+    """`provider=venmo` used to FALL THROUGH to Stripe, silently charging through a processor the
+    user did not pick. On a payment form that is the wrong kind of forgiving."""
+    user = UserFactory()
+    client.force_login(user)
+
+    with _priced(), _member(False),             patch('users.views.SubscriptionService.create_checkout_session') as checkout:
+        response = client.post(reverse('support_hub'),
+                               {'tier': 'premium_monthly', 'provider': 'venmo'})
+
+    assert not checkout.called, 'an unknown provider reached Stripe anyway'
+    assert response.status_code == 302
+
