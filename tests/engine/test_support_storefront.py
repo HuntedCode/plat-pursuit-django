@@ -468,8 +468,8 @@ def test_the_pay_button_breathes_stars_in_the_levels_colour(client):
 
     emitter_count = body.count('sup-go__rise"')
     assert 'class="sup-go__rise" aria-hidden="true"' in body, 'the emitter is missing or audible'
-    assert emitter_count == 2, 'both pay buttons carry the emitter (PayPal gated to intent in CSS)'
-    assert body.count('sup-go__risestar') == 10
+    assert emitter_count == 1, 'stars belong to the PRIMARY button; the PayPal button runs the flow'
+    assert body.count('sup-go__risestar') == 5
     # The one-shape rule, enforced by construction: the rising star IS the mark's path.
     mark_path = 'M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z'
     rise_block = body[body.index('sup-go__rise"'):body.index('sup-buy__go-m')]
@@ -486,11 +486,27 @@ def test_the_stars_stand_down_when_the_button_cannot_be_pressed():
     # Containment: stars bubble THROUGH the button, never past it (user feedback 2026-08-21).
     rise_rule = rules[rules.index('.sup-go__rise {'):]
     assert 'overflow: hidden;' in rise_rule[:rise_rule.index('}')]
-    # The PayPal emitter rests dark and wakes on intent -- hover or keyboard focus, both.
-    assert '.sup-buy__go--pp .sup-go__rise { display: none; }' in rules
-    assert ':focus-visible .sup-go__rise { display: block; }' in rules
+    # The PayPal current stops when unpressable, and under reduced motion.
+    assert '.sup-buy__go--pp:disabled { animation: none; }' in rules
     reduced = rules[rules.index('prefers-reduced-motion: reduce'):]
+    assert '.sup-buy__go--pp { animation: none; }' in reduced[:300],         'reduced motion does not still the current'
     assert '.sup-go__rise { display: none; }' in reduced[:200],         'reduced motion does not silence the emitter'
+
+
+def test_the_paypal_button_runs_the_shared_flow_primitive():
+    """The PayPal button's ambient motion is ppSupFlow -- the SAME keyframes as the supporter
+    name, reused rather than re-rolled, at a slower surface tempo. Its gradient follows the
+    invisible-wrap recipe: flat first and last thirds, so the loop never shows a seam and the
+    reduced-motion/disabled static frame is a plain tint rather than a frozen mid-swell."""
+    rules = _css_rules('support.css')
+    # Anchored on the rule's own custom prop: bare '.sup-buy__go--pp {' first matches the
+    # reduced-motion override, which sits earlier in the file.
+    pp = rules[rules.index('--flow-base:'):]
+    pp = pp[:pp.index('\n}') + 2]
+
+    assert 'animation: ppSupFlow' in pp, 'the flow was re-rolled instead of reused'
+    assert 'var(--flow-base) 0%' in pp and 'var(--flow-base) 30%' in pp, 'flat first third missing'
+    assert 'var(--flow-base) 70%' in pp and 'var(--flow-base) 100%' in pp, 'flat last third missing'
 
 
 def test_the_rise_keyframes_stay_compositor_friendly():

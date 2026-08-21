@@ -517,39 +517,58 @@
 
 @media (prefers-reduced-motion: reduce) {
     .sup-go__rise { display: none; }
+    .sup-buy__go--pp { animation: none; }
 }
 
 /* Inert while the ladder is design-only. Still legible: this is the shape under review, so it must
    be obviously unpressable without being greyed into illegibility. */
 .sup-buy__go:disabled { cursor: default; opacity: 0.6; }
 
-/* Quieter than the card button: an alternative, not a competitor. It carries a WHISPER of the
-   level hue at rest (it read as unstyled next to the animated primary) and its emitter is gated
-   below to hover/keyboard-focus -- it earns its stars when you show intent, so at rest the
-   boldness still lives in one place. */
+/* Quieter than the card button: an alternative, not a competitor -- but not bland. It runs THE
+   CURRENT: the same ppSupFlow water the supporter name wears (shared keyframes, shared invisible-
+   wrap gradient recipe: flat first and last thirds, an irregular train of bands between), drifting
+   the selected level's hue across the fill. Slower than the name's 16s because this is a surface,
+   not a headline. Two ambient motions, two characters: the primary RISES, the alternative FLOWS.
+
+   The band strengths live in custom props so hover can deepen the water without swapping the
+   gradient; color-mix stays out here in the rule, never in keyframes (the lightningcss trap). */
 .sup-buy__go--pp {
-    background: color-mix(in oklab, var(--sup-t) 6%, transparent);
+    --flow-base: color-mix(in oklab, var(--sup-t) 6%, transparent);
+    --flow-band: color-mix(in oklab, var(--sup-t) 15%, transparent);
+    --flow-crest: color-mix(in oklab, var(--sup-t) 22%, transparent);
+    background-color: transparent;
+    background-image: linear-gradient(
+        100deg,
+        var(--flow-base) 0%,
+        var(--flow-base) 30%,
+        var(--flow-band) 37%,
+        var(--flow-base) 45%,
+        var(--flow-crest) 54%,
+        var(--flow-base) 59%,
+        var(--flow-band) 65%,
+        var(--flow-base) 70%,
+        var(--flow-base) 100%
+    );
+    background-size: 300% 100%;
+    background-position: 0% 50%;
     border-color: color-mix(in oklab, var(--sup-t) 22%, var(--pp-border));
     color: var(--pp-text-dim);
     font-size: 0.85rem;
+    animation: ppSupFlow 24s linear infinite;
 }
 
 .sup-buy__go--pp:hover:not(:disabled),
 .sup-buy__go--pp:focus-visible {
-    background: color-mix(in oklab, var(--sup-t) 14%, transparent);
+    --flow-base: color-mix(in oklab, var(--sup-t) 12%, transparent);
+    --flow-band: color-mix(in oklab, var(--sup-t) 24%, transparent);
+    --flow-crest: color-mix(in oklab, var(--sup-t) 32%, transparent);
     border-color: color-mix(in oklab, var(--sup-t) 50%, var(--pp-border));
     color: var(--pp-text);
 }
 
-/* The intent gate. display flips restart the lane delays, so the first star (delay 0) appears the
-   moment the cursor arrives. Keyboard focus counts as intent too. */
-.sup-buy__go--pp .sup-go__rise { display: none; }
-
-.sup-buy__go--pp:hover:not(:disabled) .sup-go__rise,
-.sup-buy__go--pp:focus-visible .sup-go__rise { display: block; }
-
-/* The label sits above the stars in paint order. */
-.sup-go__lbl { position: relative; }
+/* A still surface when it cannot be pressed; the flat first third makes the static frame a plain
+   quiet tint rather than a frozen mid-swell. */
+.sup-buy__go--pp:disabled { animation: none; }
 
 .sup-buy__go-y { display: none; }
 .sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-m { display: none; }
