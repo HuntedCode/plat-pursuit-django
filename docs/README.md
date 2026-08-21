@@ -87,6 +87,7 @@ How-to and operational documentation.
 | [Local Setup](guides/local-setup.md) | Docker, environment variables, development workflow |
 | [Management Commands](guides/management-commands.md) | All 55+ commands across 4 apps |
 | [Cron Jobs](guides/cron-jobs.md) | Scheduled tasks: what runs when, dependencies |
+| [Supporter Ladder SKUs](guides/support-skus.md) | Bootstrapping the 12 Stripe/PayPal SKUs, the paste step, and the live-mode gate |
 | [Email Setup](guides/email-setup.md) | SendGrid configuration, Cloudflare email routing |
 | [Mobile App](guides/mobile-app.md) | Why the mobile API was removed, and what to know when rebuilding it |
 | [Social Media Strategy](guides/social-media-strategy.md) | Platform strategy, content pillars, calendar, growth tactics |
