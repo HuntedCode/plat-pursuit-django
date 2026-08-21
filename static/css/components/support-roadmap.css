@@ -147,13 +147,14 @@
 
 .rm-feat__icon svg { width: 18px; height: 18px; }
 
-.rm-tier.is-works .rm-feat__icon {
+.is-works .rm-feat__icon {
     border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border));
     color: var(--pp-primary);
 }
 
-/* Wishlist dreams are drawn in outline: dashed icon tiles. */
-.rm-tier.is-wishlist .rm-feat__icon { border-style: dashed; background: transparent; }
+/* Wishlist dreams are drawn in outline: dashed icon tiles. (Un-scoped from .rm-tier so the
+   storefront band's miniatures inherit the same temperature, like the chips.) */
+.is-wishlist .rm-feat__icon { border-style: dashed; background: transparent; }
 
 .rm-feat__name {
     font-family: var(--pp-font-display), sans-serif;

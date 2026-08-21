@@ -175,6 +175,10 @@ def test_the_band_speaks_the_pages_tier_vocabulary(client):
     for key in ('works', 'next', 'wishlist'):
         assert f'sup-road__cell is-{key}' in band, f'the {key} cell lost its tier class'
     assert band.count('rm-tier__chip') == 3
+    # ...and every teased feature is its own tiny icon card (three per tier, capped).
+    assert band.count('sup-road__feat') == 9, 'the band should tease three icon cards per tier'
+    feat_block = band[band.index('sup-road__feat'):]
+    assert 'rm-feat__icon' in feat_block and '<svg' in feat_block
 
 
 def test_the_band_sits_inside_the_pitch(client):

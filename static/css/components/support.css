@@ -268,12 +268,37 @@
     padding: 3px 9px;
 }
 
+/* Each feature is the page's rm-feat card in MINIATURE: its own little surface + icon tile,
+   stacked under the tier chip. Icon tier-tints come from support-roadmap.css via the cell's
+   is-* class, same as the chips. */
 .sup-road__cell dd {
-    margin-top: 7px;
-    font-size: 0.78rem;
-    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 8px;
+}
+
+.sup-road__feat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 0.76rem;
+    font-weight: 650;
+    line-height: 1.3;
     color: var(--pp-text-dim);
 }
+
+.sup-road__feat .rm-feat__icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+}
+
+.sup-road__feat .rm-feat__icon svg { width: 13px; height: 13px; }
 
 /* 3 across, 2 rows. Six amounts, six levels, one to one. */
 .sup-amts {

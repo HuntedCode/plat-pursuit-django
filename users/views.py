@@ -253,7 +253,8 @@ class SupportStorefrontView(TemplateView):
         # vocabulary the roadmap page uses -- one story across both surfaces.
         context['roadmap_teaser'] = [
             {'key': key, 'name': name,
-             'names': [f['name'] for f in ROADMAP_FEATURES if f['tier'] == key][:3]}
+             'feats': [{'key': f['key'], 'name': f['name']}
+                       for f in ROADMAP_FEATURES if f['tier'] == key][:3]}
             for key, name in (('works', 'In the works'), ('next', 'Up next'),
                               ('wishlist', 'The wishlist'))
         ]

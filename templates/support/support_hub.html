@@ -347,7 +347,14 @@ substrate, and an earlier version of this page did, which is most of why it read
                 {% for tier in roadmap_teaser %}
                 <div class="sup-road__cell is-{{ tier.key }}">
                     <dt><span class="rm-tier__chip">{{ tier.name }}</span></dt>
-                    <dd>{{ tier.names|join:' &middot; ' }}</dd>
+                    <dd>
+                        {% for feat in tier.feats %}
+                        <span class="sup-road__feat">
+                            <span class="rm-feat__icon" aria-hidden="true">{% include 'support/_roadmap_icon.html' with key=feat.key %}</span>
+                            {{ feat.name }}
+                        </span>
+                        {% endfor %}
+                    </dd>
                 </div>
                 {% endfor %}
             </dl>
