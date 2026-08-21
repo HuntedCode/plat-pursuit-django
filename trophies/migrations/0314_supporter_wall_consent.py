@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             name="show_on_supporter_wall",
             field=models.BooleanField(
                 default=True,
-                help_text="Whether this hunter appears on the public supporter wall at /support/. Consulted ONLY for a profile with an active premium tier, so it is inert for everyone else. Defaults True on purpose: it auto-opts-in the people already supporting when the wall shipped, who never got a checkout step to be asked at. New supporters are asked explicitly during checkout, and anyone can flip it from subscription management.",
+                help_text="Whether this hunter appears on the public supporter wall at /support/. Consulted ONLY for a profile with an active premium tier, so it is inert for everyone else. Defaults True on purpose: it auto-opts-in the people already supporting when the wall shipped, who never got a checkout step to be asked at. New supporters will be asked explicitly during checkout once the ladder's own checkout exists (lane 2) -- until then they are auto-opted-in too -- and anyone can flip it from subscription management.",
             ),
         ),
     ]

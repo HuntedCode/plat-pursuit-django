@@ -8,8 +8,11 @@
                 <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
             </svg>
             <p class="text-xs md:text-sm font-medium">
-                <span class="font-bold">Unlock the full Platinum Pursuit experience.</span>
-                Custom themes, exclusive badges, and more.
+                {% comment %} Audit fix: this sold "custom themes, exclusive badges" -- themes are
+                retired, exclusive badges never existed, and "Unlock" is door language on a site
+                whose model is a dial. Every claim here must exist in PREMIUM_PERKS. {% endcomment %}
+                <span class="font-bold">Help keep Platinum Pursuit running.</span>
+                Faster syncing, a supporter mark, and our thanks &mdash; nothing locked either way.
                 <a href="{% url 'support_hub' %}"
                    class="underline font-semibold hover:text-purple-300 transition-colors ml-1">
                     Explore PP Premium

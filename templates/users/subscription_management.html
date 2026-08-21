@@ -59,7 +59,7 @@
     {% endif %}
 
     <div class="flex justify-center">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral w-full max-w-lg {% if premium_tier_slug == 'supporter' %}shimmer{% endif %}">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral w-full max-w-lg">
             <div class="card-body items-center text-center gap-4">
                 {# Tier icon #}
                 {% if premium_tier_slug == 'premium_monthly' or premium_tier_slug == 'premium_yearly' %}
@@ -71,7 +71,11 @@
                 {% endif %}
 
                 <h2 class="card-title text-2xl {% if premium_tier_slug == 'premium_monthly' %}text-secondary{% elif premium_tier_slug == 'premium_yearly' %}text-accent{% elif premium_tier_slug == 'supporter' %}text-warning{% else %}text-primary{% endif %}">
-                    {% if premium_tier_slug == 'supporter' %}<span class="legendary-title">{{ tier }}</span>{% else %}{{ tier }}{% endif %}
+                    {% comment %} `.legendary-title` came off here: it is declared legacy in supporter.css (built to
+                    animate, never wired; gold reads as achievement on a trophy site). Its site-wide
+                    replacement is `.pp-supname`, which needs the level colour that legacy tiers do
+                    not have -- so the tier name sits in the same warning tone as its icon until the
+                    holder moves onto the ladder. {% endcomment %}{{ tier }}
                 </h2>
 
                 <div class="flex flex-wrap items-center justify-center gap-3">
