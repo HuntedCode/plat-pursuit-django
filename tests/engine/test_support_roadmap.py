@@ -77,7 +77,7 @@ def test_the_wishlist_says_it_makes_no_promises(client):
     """The no-promises rule as UX: dreams get to be on the page BECAUSE they are marked as
     dreams. The label is load-bearing copy, not decoration."""
     body = _flat(client)
-    assert 'Dreams, labelled as dreams. No promises here, just direction.' in body
+    assert 'Dreams. No promises here, just direction.' in body
 
 
 def test_no_counts_anywhere_in_the_forward_body(client):

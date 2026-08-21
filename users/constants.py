@@ -336,7 +336,7 @@ LEGACY_TIER_LEVEL_MAP = {
 ROADMAP_TIERS = [
     ('works', 'In the works', 'Actively being built, right now.'),
     ('next', 'Up next', 'Committed. We would rather do these properly than quickly.'),
-    ('wishlist', 'The wishlist', 'Dreams, labelled as dreams. No promises here, just direction.'),
+    ('wishlist', 'The wishlist', 'Dreams. No promises here, just direction.'),
 ]
 
 # THE FORWARD LIST for /support/roadmap/: individual upcoming features, tiered by CERTAINTY,
