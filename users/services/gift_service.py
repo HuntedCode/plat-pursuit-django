@@ -54,6 +54,142 @@ def gift_price(tier_slug: str, months: int):
 
 class GiftService:
     @staticmethod
+    def create_stripe_checkout(purchaser, tier_slug: str, months: int,
+                               success_url: str, cancel_url: str) -> str:
+        """One-time Stripe checkout for a gift. The donation pattern verbatim: pending row first
+        (unique placeholder id), mode='payment' with ad-hoc price_data -- a one-time session cannot
+        reference the recurring SKU prices, which conveniently means gifts work before the SKU
+        bootstrap has ever run."""
+        import stripe
+
+        price = gift_price(tier_slug, months)
+        grant = PremiumGrant.objects.create(
+            tier_slug=tier_slug,
+            months=months,
+            amount=price,
+            provider='stripe',
+            provider_transaction_id=f'pending_{uuid.uuid4().hex}',
+            purchaser=purchaser,
+        )
+
+        duration = 'One year' if months == 12 else 'One month'
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card', 'us_bank_account', 'amazon_pay', 'cashapp', 'link'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {
+                        'name': f'PlatPursuit Gift: {tier_slug.title()}',
+                        'description': f'{duration} of supporter access, as a redeemable code',
+                    },
+                    'unit_amount': int(price * 100),
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=success_url + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=cancel_url,
+            customer_email=purchaser.email,
+            metadata={
+                'grant_id': str(grant.id),
+                'type': 'premium_gift',
+            },
+        )
+        grant.provider_transaction_id = session.id
+        grant.save(update_fields=['provider_transaction_id'])
+        return session.url
+
+    @staticmethod
+    def create_paypal_order(purchaser, tier_slug: str, months: int,
+                            return_url: str, cancel_url: str) -> str:
+        """One-time PayPal order (Orders API v2).
+
+        ⚠ THE `gift:` PREFIX ON custom_id IS LOAD-BEARING. Donations put a BARE integer in
+        custom_id, and both handlers hang off the same PAYMENT.CAPTURE.COMPLETED event -- an
+        unprefixed gift with id 5 would complete *Donation 5*. The prefix is what makes the two
+        streams unmistakable, and a regression test pins both directions.
+        """
+        import requests
+        from users.services.paypal_service import PayPalService
+
+        price = gift_price(tier_slug, months)
+        grant = PremiumGrant.objects.create(
+            tier_slug=tier_slug,
+            months=months,
+            amount=price,
+            provider='paypal',
+            provider_transaction_id=f'pending_{uuid.uuid4().hex}',
+            purchaser=purchaser,
+        )
+
+        payload = {
+            'intent': 'CAPTURE',
+            'purchase_units': [{
+                'amount': {'currency_code': 'USD', 'value': str(price)},
+                'description': f'PlatPursuit Gift: {tier_slug.title()}',
+                'custom_id': f'gift:{grant.id}',
+            }],
+            'application_context': {
+                'brand_name': 'PlatPursuit',
+                'shipping_preference': 'NO_SHIPPING',
+                'user_action': 'PAY_NOW',
+                'return_url': return_url,
+                'cancel_url': cancel_url,
+            },
+        }
+        response = requests.post(
+            f"{settings.PAYPAL_API_BASE}/v2/checkout/orders",
+            json=payload,
+            headers=PayPalService._api_headers(),
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        grant.provider_transaction_id = data['id']
+        grant.save(update_fields=['provider_transaction_id'])
+
+        for link in data.get('links', []):
+            if link['rel'] == 'approve':
+                return link['href']
+        logger.error("No approval URL in PayPal order response for grant %s", grant.id)
+        raise ValueError('No approval URL in PayPal order response')
+
+    @staticmethod
+    def handle_stripe_payment_completed(session_data) -> None:
+        """Webhook side. metadata.grant_id -> the pending grant -> complete. The status filter is
+        the idempotency guard against redirect + webhook both firing."""
+        grant_id = (session_data.get('metadata') or {}).get('grant_id')
+        if not grant_id:
+            return
+        grant = PremiumGrant.objects.filter(id=grant_id, status='pending').first()
+        if grant is not None:
+            GiftService.complete_grant(grant)
+
+    @staticmethod
+    def handle_paypal_capture_completed(resource) -> bool:
+        """Returns True iff this capture was a gift, so the webhook view knows whether to keep
+        trying donations and then subscriptions. Prefix-matched: a bare-integer custom_id is a
+        donation's and is NEVER touched here."""
+        custom_id = resource.get('custom_id')
+        if not custom_id:
+            for unit in resource.get('purchase_units', []):
+                for capture in (unit.get('payments') or {}).get('captures', []):
+                    if capture.get('custom_id'):
+                        custom_id = capture['custom_id']
+                        break
+        if not custom_id or not str(custom_id).startswith('gift:'):
+            return False
+        try:
+            grant_id = int(str(custom_id)[5:])
+        except ValueError:
+            return False
+        grant = PremiumGrant.objects.filter(id=grant_id, status='pending').first()
+        if grant is not None:
+            GiftService.complete_grant(grant)
+        return True
+
+    @staticmethod
     def complete_grant(grant: PremiumGrant) -> PremiumGrant:
         """Payment (or comp) confirmed: mint the code, email it to the purchaser.
 

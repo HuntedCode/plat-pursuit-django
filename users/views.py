@@ -285,6 +285,41 @@ class SupportStorefrontView(TemplateView):
         return user.username or 'YourName'
 
 
+    def _start_gift_checkout(self, request, tier, provider):
+        """One-time purchase of a redeemable code. No double-subscribe guard on purpose: members
+        may buy gifts, that is half the point. Duration rides the `gift-duration` radio
+        (month|year), separate from the cycle switch that routed here."""
+        from users.constants import GIFT_MONTHS
+        from users.services.gift_service import GiftService
+
+        if tier not in LADDER_SLUGS:
+            messages.error(request, "Invalid tier selected.")
+            return redirect('support_hub')
+        duration = request.POST.get('gift-duration', 'monthly')
+        months = GIFT_MONTHS.get(duration)
+        if months is None:
+            messages.error(request, "Gifts are one month or one year.")
+            return redirect('support_hub')
+
+        success_url = request.build_absolute_uri(reverse('gift_success'))
+        cancel_url = request.build_absolute_uri(reverse('support_hub'))
+        try:
+            if provider == 'paypal':
+                url = GiftService.create_paypal_order(
+                    request.user, tier, months,
+                    return_url=f'{success_url}?provider=paypal', cancel_url=cancel_url,
+                )
+                return redirect(url)
+            url = GiftService.create_stripe_checkout(
+                request.user, tier, months,
+                success_url=success_url, cancel_url=cancel_url,
+            )
+            return HttpResponseRedirect(url, status=303)
+        except Exception:
+            logger.exception("Gift checkout failed")
+            messages.error(request, "Could not start the gift checkout. Please try again.")
+            return redirect('support_hub')
+
     SUPPORT_CACHE_KEY = 'support:stats'
     SUPPORT_TTL = 300
     LAUNCH = (2026, 1)
@@ -450,9 +485,7 @@ class SupportStorefrontView(TemplateView):
             return redirect('support_hub')
 
         if cycle == 'gift':
-            # The gift flow is its own lane (one-time payment -> code); built in the gifts commit.
-            messages.info(request, "Gifting is almost ready -- not quite yet.")
-            return redirect('support_hub')
+            return self._start_gift_checkout(request, tier, provider)
 
         # LADDER-ONLY. Grandfathering means the three legacy tiers stay renewable through webhooks
         # but are no longer purchasable: this validation deliberately stopped admitting them.
@@ -564,6 +597,18 @@ def stripe_webhook(request):
             except Exception:
                 logger.exception("Error processing fundraiser donation webhook")
             return HttpResponse(status=200)
+        # Gifts route here too, and BOTH one-time types must return before the subscription
+        # handler: a mode='payment' checkout.session.completed reaching update_user_subscription
+        # would find no active subscription for the customer and could deactivate a real one.
+        if metadata.get('type') == 'premium_gift':
+            from users.services.gift_service import GiftService
+            try:
+                GiftService.handle_stripe_payment_completed(
+                    session_data if isinstance(session_data, dict) else session_data.to_dict()
+                )
+            except Exception:
+                logger.exception("Error processing premium gift webhook")
+            return HttpResponse(status=200)
 
     # Delegate all subscription-related events to SubscriptionService
     SubscriptionService.handle_webhook_event(event.type, event.data.object)
@@ -608,13 +653,22 @@ def paypal_webhook(request):
         return HttpResponse(status=200)
 
     if event_type == 'PAYMENT.CAPTURE.COMPLETED':
+        # Gifts first, PREFIX-MATCHED on custom_id ('gift:{id}'), so this can never steal a
+        # donation -- donations use a bare integer, and an unprefixed gift id 5 would have
+        # completed Donation 5. Then donations, then fall through to subscriptions.
+        from users.services.gift_service import GiftService
+        try:
+            if GiftService.handle_paypal_capture_completed(resource):
+                return HttpResponse(status=200)
+        except Exception:
+            logger.exception("Error processing gift PayPal capture event")
         from fundraiser.services.donation_service import DonationService
         try:
             if DonationService.handle_paypal_capture_completed(resource):
                 return HttpResponse(status=200)
         except Exception:
             logger.exception("Error processing fundraiser PayPal capture event")
-        # Fall through to subscription handler if not a donation capture
+        # Fall through to subscription handler if neither one-time type claimed it
 
     try:
         PayPalService.handle_webhook_event(event_type, resource)
@@ -642,6 +696,40 @@ def paypal_cancel_subscription(request):
         messages.error(request, "Error cancelling subscription. Please try through PayPal directly.")
 
     return redirect('subscription_management')
+
+
+@login_required
+def gift_success(request):
+    """The redirect landing after a gift payment, mirroring DonationSuccessView: verify with the
+    provider, and in DEBUG complete inline because webhooks cannot reach localhost. Idempotent
+    either way -- complete_grant no-ops on anything past `pending`."""
+    from users.services.gift_service import GiftService
+
+    provider = request.GET.get('provider', 'stripe')
+    try:
+        if provider == 'paypal':
+            order_id = request.GET.get('token')
+            if order_id:
+                capture = GiftService.capture_paypal_order(order_id)
+                if capture.get('status') == 'COMPLETED':
+                    # The capture response carries purchase_units at root, which the handler's
+                    # nested custom_id walk already covers.
+                    GiftService.handle_paypal_capture_completed(capture)
+        else:
+            session_id = request.GET.get('session_id')
+            if session_id:
+                session = stripe.checkout.Session.retrieve(session_id)
+                if settings.DEBUG and session.payment_status == 'paid':
+                    GiftService.handle_stripe_payment_completed(session.to_dict())
+    except Exception:
+        logger.exception("Gift success verification failed")
+
+    messages.success(
+        request,
+        "Gift paid for -- thank you! The code is on its way to your email. "
+        "Whoever you give it to redeems it at /support/redeem/."
+    )
+    return redirect('support_hub')
 
 
 class GiftRedeemView(LoginRequiredMixin, TemplateView):

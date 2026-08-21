@@ -213,13 +213,9 @@
    the page (and a test) claimed the box was CSS-driven: a user who picked Yearly saw monthly prices
    and would have submitted a cycle they were never shown.
 
-   Gift has nothing to buy yet, so the whole purchase column steps aside for its note. */
-.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-buy { display: none; }
-.sup-box__gift { display: none; }
-.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-box__gift { display: block; }
+   The gift tab's visibility rules live further down with the rest of the gift styling. */
 
 .sup-box__gift {
-    margin-top: 14px;
     padding: 16px;
     border-radius: var(--pp-radius-md);
     border: 1px dashed var(--pp-border);
@@ -229,6 +225,50 @@
 .sup-box__gift p { font-size: 0.85rem; line-height: 1.6; color: var(--pp-text-mute); }
 .sup-box__gift p + p { margin-top: 6px; }
 .sup-box__gift b { color: var(--pp-text); }
+
+/* The gift tab keeps the ladder + provider buttons (shared with the subscription faces) and swaps
+   the "you would appear as" block for the gift explainer + duration pair, which sit INSIDE
+   .sup-buy between the amounts and the buttons. */
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-buy { display: block; }
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-becomes { display: none; }
+.sup-box__gift { display: none; margin-top: 14px; }  /* hidden until the gift tab; shown below */
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-box__gift { display: block; }
+
+/* The CTA's three faces: monthly / yearly / gift, one visible per tab. */
+.sup-buy__go-g { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-buy__go-m,
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-buy__go-y { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="gift"]:checked) .sup-buy__go-g { display: inline; }
+
+.sup-gift__dur { display: flex; gap: 8px; margin-top: 12px; }
+
+.sup-gift__opt {
+    flex: 1;
+    text-align: center;
+    padding: 8px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 0.78rem;
+    font-weight: 650;
+    color: var(--pp-text-mute);
+    cursor: pointer;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-gift__opt:has(input:checked) {
+    border-color: color-mix(in oklab, var(--sup-t) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t) 12%, transparent);
+    color: var(--pp-text);
+}
+
+.sup-gift__opt:focus-within {
+    outline: 2px solid color-mix(in oklab, var(--sup-t) 70%, transparent);
+    outline-offset: 2px;
+}
+
+.sup-gift__redeem { margin-top: 12px; font-size: 0.76rem; }
+.sup-gift__redeem a { color: var(--pp-primary); text-decoration: underline; text-underline-offset: 3px; }
 
 /* 3 across, 2 rows. Six amounts, six levels, one to one. */
 .sup-amts {
