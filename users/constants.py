@@ -317,3 +317,14 @@ for _mode_plans in PAYPAL_LADDER_PLANS.values():
 
 # Derived conveniences for the checkout path.
 LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
+
+# GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their billing and their
+# tier slugs untouched, but WEAR the ladder level nearest their price -- colour, stars, level name
+# -- on the Credits wall and anywhere else supporter identity renders. Presentation only: nothing
+# reads this map for billing, availability, or role decisions. The mapping is by price proximity,
+# so if a legacy price ever changes on the processor side, revisit the target here.
+LEGACY_TIER_LEVEL_MAP = {
+    'premium_monthly': 'backer',
+    'premium_yearly': 'backer',
+    'supporter': 'contributor',
+}

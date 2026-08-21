@@ -1289,14 +1289,59 @@ def test_the_wall_only_ever_lists_people_who_consented(client):
 
 def test_the_wall_includes_the_legacy_tiers(client):
     """Nobody holds a ladder slug yet, so a wall that listed only ladder levels would be empty on a
-    live site. The legacy tiers have no recognition level at all, and excluding somebody by a rule
-    that did not exist when they subscribed would be arbitrary."""
+    live site. And excluding somebody by a rule that did not exist when they subscribed would be
+    arbitrary."""
     from tests.factories import ProfileFactory
 
     ProfileFactory(display_psn_username='OldTimer', user__premium_tier='premium_yearly')
     _clear_support_cache()
 
     assert 'OldTimer' in _wall(_flat(client))
+
+
+def test_a_legacy_supporter_wears_their_mapped_level(client):
+    """Grandfathered presentation (2026-08-21): billing stays on the legacy tier, but the credit
+    card wears the price-nearest ladder level -- colour, stars, level name -- via
+    LEGACY_TIER_LEVEL_MAP. The 'Supporter' fallback is reserved for unmapped strays."""
+    from tests.factories import ProfileFactory
+    from users.constants import LEGACY_TIER_LEVEL_MAP, SUPPORT_TIERS
+
+    ProfileFactory(display_psn_username='OldTimer', user__premium_tier='premium_yearly')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    worn = next(t for t in SUPPORT_TIERS
+                if t['slug'] == LEGACY_TIER_LEVEL_MAP['premium_yearly'])
+    assert f"PlatPursuit {worn['name']}" in wall, 'the legacy card fell back to plain Supporter'
+    assert 'is-legacy' not in wall
+
+
+def test_every_legacy_tier_maps_to_a_real_level():
+    """The map is presentation-load-bearing: a typo here silently demotes every grandfathered
+    subscriber to the unstyled fallback."""
+    from users.constants import LADDER_SLUGS, LEGACY_TIER_LEVEL_MAP
+    from users.constants import PREMIUM_TIER_CHOICES
+
+    legacy = {slug for slug, _ in PREMIUM_TIER_CHOICES} - set(LADDER_SLUGS)
+    assert set(LEGACY_TIER_LEVEL_MAP) == legacy, 'a legacy tier is missing from the map'
+    for target in LEGACY_TIER_LEVEL_MAP.values():
+        assert target in LADDER_SLUGS
+
+
+def test_legacy_supporters_rank_with_their_worn_level(client):
+    """The credits run highest level first; a mapped legacy supporter sorts WITH the level they
+    wear, not in a separate after-the-ladder block."""
+    from tests.factories import ProfileFactory
+    from users.constants import LEGACY_TIER_LEVEL_MAP
+
+    assert LEGACY_TIER_LEVEL_MAP['supporter'] == 'contributor', 'test premise moved with the map'
+    ProfileFactory(display_psn_username='LegacyPlus', user__premium_tier='supporter')
+    ProfileFactory(display_psn_username='NewBacker', user__premium_tier='backer')
+    ProfileFactory(display_psn_username='NewPatron', user__premium_tier='patron')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+    assert wall.index('NewPatron') < wall.index('LegacyPlus') < wall.index('NewBacker'),         'the worn level did not place the legacy supporter between patron and backer'
 
 
 def test_a_non_supporter_is_never_on_the_wall(client):
@@ -1417,20 +1462,6 @@ def test_a_supporter_with_no_avatar_still_gets_a_tile(client):
     wall = _wall(_flat(client))
     assert 'NoPicture' in wall
     assert 'sup-prev__av' in wall, 'the avatar slot vanished rather than falling back'
-
-
-def test_pre_ladder_supporters_come_last_under_their_own_heading(client):
-    """They hold a legacy tier, so there is no honest level to file them under. Last, named, and NOT
-    folded into the bottom rung -- which would claim they chose a level they never saw."""
-    from tests.factories import ProfileFactory
-
-    ProfileFactory(display_psn_username='OldTimer', user__premium_tier='premium_yearly')
-    ProfileFactory(display_psn_username='NewPatron', user__premium_tier='patron')
-    _clear_support_cache()
-
-    wall = _wall(_flat(client))
-    assert wall.index('NewPatron') < wall.index('OldTimer'), 'pre-ladder supporters are not last'
-    assert 'Supporter' in wall, 'the pre-ladder credit is unlabelled'
 
 
 def test_nobody_is_credited_twice(client):

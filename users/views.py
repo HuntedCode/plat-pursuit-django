@@ -27,7 +27,8 @@ from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
 from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
-                             PAYPAL_LADDER_PLANS, PREMIUM_PERKS, SUPPORT_TIERS,
+                             LEGACY_TIER_LEVEL_MAP, PAYPAL_LADDER_PLANS,
+                             PREMIUM_PERKS, SUPPORT_TIERS,
                              SUPPORT_TIERS_ARE_PLACEHOLDERS)
 from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
@@ -364,6 +365,15 @@ class SupportStorefrontView(TemplateView):
             dict(person, tier=by_slug.get(person['tier_slug'])) for person in data['wall']
         ])
 
+    @staticmethod
+    def _worn_level(premium_tier):
+        """The ladder slug a supporter WEARS: their own level, or for a grandfathered legacy tier
+        the price-nearest level from LEGACY_TIER_LEVEL_MAP. None only for unmapped strays, which
+        render as the plain 'Supporter' fallback rather than breaking the wall."""
+        if premium_tier in LADDER_SLUGS:
+            return premium_tier
+        return LEGACY_TIER_LEVEL_MAP.get(premium_tier)
+
     WALL_CAP = 200
 
     def _wall(self):
@@ -390,10 +400,15 @@ class SupportStorefrontView(TemplateView):
 
         ladder_slugs = [t['slug'] for t in SUPPORT_TIERS]
         eligible = ladder_slugs + list(ACTIVE_PREMIUM_TIERS)
+        # Rank by the level a supporter WEARS: legacy tiers sort alongside their mapped level
+        # (grandfathered presentation, see LEGACY_TIER_LEVEL_MAP) instead of trailing the ladder.
+        rank_by_slug = {slug: i for i, slug in enumerate(reversed(ladder_slugs))}
         rank_order = Case(
-            *[When(user__premium_tier=slug, then=Value(i))
-              for i, slug in enumerate(reversed(ladder_slugs))],
-            default=Value(len(ladder_slugs)),        # legacy tiers: after the ladder, never lesser
+            *[When(user__premium_tier=tier, then=Value(rank_by_slug[worn]))
+              for tier, worn in [(s2, s2) for s2 in ladder_slugs] +
+                                [(legacy, worn) for legacy, worn in LEGACY_TIER_LEVEL_MAP.items()
+                                 if worn in rank_by_slug]],
+            default=Value(len(ladder_slugs)),        # unmapped strays: after the ladder, never lesser
             output_field=IntegerField(),
         )
 
@@ -407,14 +422,14 @@ class SupportStorefrontView(TemplateView):
             .order_by(rank_order, Lower('psn_username'))[:self.WALL_CAP]
         )
 
-        ladder = set(ladder_slugs)
         return [
             {
                 'name': r.display_psn_username or r.psn_username,
                 'avatar': r.avatar_url,
-                # Legacy tiers map to None on hydrate: there is no honest level to file them under,
-                # and they are deliberately not folded into the bottom rung.
-                'tier_slug': r.user.premium_tier if r.user.premium_tier in ladder else None,
+                # The WORN slug, so a legacy tier hydrates into its mapped level's colour and
+                # stars (grandfathered presentation). None only for unmapped strays, which render
+                # the plain 'Supporter' fallback.
+                'tier_slug': self._worn_level(r.user.premium_tier),
             }
             for r in rows
         ]
