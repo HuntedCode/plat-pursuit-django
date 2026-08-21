@@ -127,12 +127,6 @@ substrate, and an earlier version of this page did, which is most of why it read
                 </div>
 
                 {% elif pricing_available %}
-                {% if store_preview and viewer_is_member %}
-                <p class="sup-box__betapeek-note">
-                    Beta preview: you are seeing the store as a non-member.
-                    <a href="{{ request.path }}">Back to your card</a>
-                </p>
-                {% endif %}
                 {% comment %} The box's per-level hue, emitted from the ONE source (SUPPORT_TIERS)
                 rather than a parallel CSS block that could drift. The selected amount's radio drives
                 `--sup-t` on the whole box, which is what lets the CTA and the level block wear the
@@ -151,6 +145,14 @@ substrate, and an earlier version of this page did, which is most of why it read
                     .sup-box:has(input[name="tier"]:checked:not([value="{{ default_tier }}"])) .sup-go__t--{{ default_tier }} { display: none; }
                 </style>
                 <div class="sup-box">
+                    {% comment %} Inside the box, not a grid sibling: as a sibling it claimed the
+                    header grid's second column and wrapped the box itself to the next row. {% endcomment %}
+                    {% if store_preview and viewer_is_member %}
+                    <p class="sup-box__betapeek-note">
+                        Beta preview: you are seeing the store as a non-member.
+                        <a href="{{ request.path }}">Back to your card</a>
+                    </p>
+                    {% endif %}
                     {% comment %} A REAL FORM, and the audit finding that mattered most on this page:
                     the tier radios and both submit buttons floated in plain divs, and a submit
                     button outside a form is inert -- so at ladder go-live the enabled buttons would
