@@ -1,0 +1,38 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}Your PlatPursuit gift code{% endblock %}
+
+{% block header_content %}
+    <h1>Your gift is ready</h1>
+    <p>{{ tier_name }} &middot; {{ duration }}</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <p class="intro">
+        Thank you &mdash; genuinely. Here is your gift code for {{ duration }} of PlatPursuit
+        at the {{ tier_name }} level:
+    </p>
+
+    {# The code is the whole email. Big, monospaced, selectable. #}
+    <div style="text-align: center; margin: 28px 0;">
+        <span style="display: inline-block; font-family: 'Courier New', monospace; font-size: 28px;
+                     font-weight: bold; letter-spacing: 3px; padding: 16px 28px;
+                     border: 2px dashed #8888aa; border-radius: 10px;">{{ code }}</span>
+    </div>
+
+    <p>
+        Send it to whoever it is for (or keep it &mdash; redeeming your own code is allowed).
+        Whoever holds it redeems it here:
+    </p>
+
+    <div style="text-align: center; margin: 20px 0;">
+        <a href="{{ redeem_url }}" class="button">Redeem this code</a>
+    </div>
+
+    <p style="font-size: 13px; color: #888;">
+        The clock only starts when the code is redeemed, not when it was bought. Codes do not
+        expire while unredeemed.
+    </p>
+{% endblock %}

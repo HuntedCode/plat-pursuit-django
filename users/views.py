@@ -644,6 +644,39 @@ def paypal_cancel_subscription(request):
     return redirect('subscription_management')
 
 
+class GiftRedeemView(LoginRequiredMixin, TemplateView):
+    """`/support/redeem/` -- turn a gift code into premium.
+
+    Login required, and the LoginRequired round-trip preserves `?code=` through `next=`, so a
+    recipient can click the emailed link signed out and land back here with the code prefilled.
+    """
+    template_name = 'support/gift_redeem.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['prefill_code'] = self.request.GET.get('code', '')[:12]
+        return context
+
+    def post(self, request, *args, **kwargs):
+        from users.services.gift_service import GiftService
+        try:
+            grant = GiftService.redeem(request.POST.get('code', ''), request.user)
+        except ValueError as e:
+            # Inline, not a redirect+message: the site renders Django messages only inside the
+            # breadcrumb partial, which this page does not carry -- and re-rendering keeps the
+            # typed code in the field instead of losing it to a bounce.
+            context = self.get_context_data(**kwargs)
+            context['error'] = str(e)
+            context['prefill_code'] = request.POST.get('code', '')[:12]
+            return self.render_to_response(context)
+        duration = 'a year' if grant.months == 12 else 'a month'
+        messages.success(
+            request,
+            f'Redeemed! You have {duration} of premium. Genuinely: thank you.'
+        )
+        return redirect('support_hub')
+
+
 class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
     template_name = 'users/subscription_management.html'
 

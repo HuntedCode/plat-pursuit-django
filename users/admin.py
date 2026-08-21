@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 from allauth.account.models import EmailAddress
 from allauth.account.admin import EmailAddressAdmin as BaseEmailAddressAdmin
-from .models import CustomUser, SubscriptionPeriod
+from .models import CustomUser, PremiumGrant, SubscriptionPeriod
 from .forms import CustomUserCreationForm
 
 class PSNLinkedFilter(admin.SimpleListFilter):
@@ -158,3 +158,16 @@ class CustomEmailAddressAdmin(BaseEmailAddressAdmin):
             self.message_user(request, f"Skipped {skipped} already verified email(s).", level=messages.WARNING)
         if not sent and not skipped and not failed:
             self.message_user(request, "No email addresses selected.", level=messages.WARNING)
+
+
+@admin.register(PremiumGrant)
+class PremiumGrantAdmin(admin.ModelAdmin):
+    """Read-mostly. Codes are minted by payment completion or the mint_gift_code command; the one
+    hands-on lever here is flipping a grant to `void` (refunds, abuse)."""
+    list_display = ('code', 'tier_slug', 'months', 'status', 'provider', 'amount',
+                    'purchaser', 'redeemed_by', 'expires_at', 'created_at')
+    list_filter = ('status', 'provider', 'tier_slug')
+    search_fields = ('code', 'purchaser__email', 'redeemed_by__email', 'notes')
+    readonly_fields = ('code', 'provider_transaction_id', 'created_at', 'completed_at',
+                       'redeemed_at')
+

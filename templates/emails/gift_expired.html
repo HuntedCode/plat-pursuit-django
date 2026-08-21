@@ -1,0 +1,26 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}Your gift access has ended{% endblock %}
+
+{% block header_content %}
+    <h1>Your gift time is up</h1>
+    <p>{{ tier_name }} access has ended</p>
+{% endblock %}
+
+{% block content %}
+    <p class="greeting">Hey {{ username }},</p>
+
+    <p class="intro">
+        The gifted {{ tier_name }} access you redeemed has run its course. Nothing on the site is
+        locked away from you &mdash; nothing ever is &mdash; you simply go back to the everyone
+        pace on things like manual syncing.
+    </p>
+
+    <p>
+        If PlatPursuit has been worth something to you, the ladder is always there:
+    </p>
+
+    <div style="text-align: center; margin: 20px 0;">
+        <a href="{{ site_url }}/support/" class="button">Support PlatPursuit</a>
+    </div>
+{% endblock %}

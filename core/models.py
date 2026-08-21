@@ -64,6 +64,8 @@ class EmailLog(models.Model):
         ('subscription_welcome', 'Subscription Welcome'),
         ('payment_succeeded', 'Payment Succeeded'),
         ('payment_action_required', 'Payment Action Required'),
+        ('gift_code', 'Gift Code Issued'),
+        ('gift_expired', 'Gift Access Ended'),
         # Account
         ('email_verification', 'Email Verification'),
         ('password_reset', 'Password Reset'),

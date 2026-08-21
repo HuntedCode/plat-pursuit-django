@@ -10,6 +10,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 |------------|---------|-----------|--------------|
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
+| Daily (any quiet hour) | `expire_premium_gifts` | Daily | The ONLY thing that ends a gift grant -- no webhook exists for time passing. Reconciles per-user, so a holder with a live subscription keeps premium. Also voids week-old abandoned checkouts |
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
 | 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs the badge chain: `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `audit_badge_coverage` |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |

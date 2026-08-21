@@ -32,6 +32,19 @@ substrate, and an earlier version of this page did, which is most of why it read
 {% block content %}
 <div class="sup">
 
+    {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
+    page does not carry -- so without this block every checkout rejection ("invalid tier", "already
+    subscribed") and the redeem success notice was SILENTLY swallowed. {% endcomment %}
+    {% if messages %}
+    <div class="sup-msgs" role="status">
+        {% for message in messages %}
+        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral sup-headcard">
         <div class="card-body p-4 md:p-6 lg:p-8">
             <div class="sup-head">

@@ -106,7 +106,11 @@ class CustomUser(AbstractUser):
             if self.paypal_cancel_at and self.paypal_cancel_at < timezone.now():
                 return False
             return self.premium_tier is not None
-        return False
+        # Third source: a redeemed, unexpired gift grant. Neither provider branch fires for a
+        # grant-holder (no subscription_provider is set), so this is the fall-through, not an
+        # override -- a real subscription still answers first.
+        from users.services.subscription_service import SubscriptionService
+        return SubscriptionService.has_active_gift_grant(self)
     
     def get_premium_tier(self):
         """
@@ -154,7 +158,9 @@ class SubscriptionPeriod(models.Model):
     )
     provider = models.CharField(
         max_length=10,
-        choices=[('stripe', 'Stripe'), ('paypal', 'PayPal')],
+        # 'gift': a redeemed PremiumGrant period. Milestone tenure sums ALL periods regardless of
+        # provider, so gift time counts toward the premium-months ladder automatically.
+        choices=[('stripe', 'Stripe'), ('paypal', 'PayPal'), ('gift', 'Gift')],
         help_text="Which payment provider for this period.",
     )
     notes = models.CharField(
@@ -188,4 +194,68 @@ class SubscriptionPeriod(models.Model):
             return 0
         end = self.ended_at or timezone.now()
         return (end - self.started_at).days
+class PremiumGrant(models.Model):
+    """A redeemable code granting timed premium: gifts, and staff comps through the same door.
 
+    THE LIFECYCLE: `pending` (checkout started, nothing granted) -> `issued` (paid or comped; the
+    code exists and was emailed to the purchaser) -> `redeemed` (somebody entered it; premium runs
+    until `expires_at`) -> `expired` (the daily sweep closed it). `void` is the manual lever for
+    refunds/abuse -- there is no automated refund handling, deliberately, same as donations.
+
+    WHAT A GRANT DOES AND DOES NOT DO. Redemption flows through
+    `SubscriptionService.reconcile_premium`, so the Profile denorm and a `provider='gift'`
+    SubscriptionPeriod (milestone tenure) are handled by the same truth-writer as subscriptions.
+    A grant deliberately does NOT write `premium_tier`: that field records what somebody PAYS FOR,
+    and the wall/credits key off it -- credit follows the giver, not the recipient. Recipients get
+    every feature via the denorm.
+
+    The `pending_{uuid}` placeholder in `provider_transaction_id` is the fundraiser-donation
+    pattern: the field is unique, the row must exist before the checkout session does, and the real
+    session/order id replaces the placeholder once known.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending payment'),
+        ('issued', 'Issued'),
+        ('redeemed', 'Redeemed'),
+        ('expired', 'Expired'),
+        ('void', 'Void'),
+    ]
+    PROVIDER_CHOICES = [('stripe', 'Stripe'), ('paypal', 'PayPal'), ('comp', 'Comp')]
+
+    # Minted at completion (null while pending). Format PP-XXXX-XXXX from an alphabet that excludes
+    # 0/O/1/I, because this gets read aloud and retyped.
+    code = models.CharField(max_length=12, unique=True, null=True, blank=True)
+    tier_slug = models.CharField(max_length=50, help_text="Ladder slug; display and records only.")
+    months = models.PositiveSmallIntegerField(help_text="1 or 12.")
+    amount = models.DecimalField(max_digits=8, decimal_places=2, default=0,
+                                 help_text="What was paid. 0 for comps.")
+    purchaser = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='gifts_purchased',
+    )
+    redeemed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='gifts_redeemed',
+    )
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    provider = models.CharField(max_length=10, choices=PROVIDER_CHOICES)
+    provider_transaction_id = models.CharField(max_length=255, unique=True)
+    notes = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            # The hot query: has_active_gift_grant runs on every reconcile and on is_premium's
+            # fall-through branch.
+            models.Index(fields=['redeemed_by', 'status', 'expires_at'],
+                         name='grant_active_lookup_idx'),
+        ]
+        verbose_name = 'Premium Grant'
+        verbose_name_plural = 'Premium Grants'
+
+    def __str__(self):
+        return f"{self.code or '(pending)'} - {self.tier_slug} x{self.months}mo [{self.status}]"
