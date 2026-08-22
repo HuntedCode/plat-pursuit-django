@@ -97,8 +97,7 @@ live mode). `/users/subscribe/` 302s in and its template is deleted.
 `/support/roadmap/` shipped 2026-08-22 (`SupportRoadmapView`): forward-only — upcoming features as
 icon cards in three certainty tiers (in the works / up next / the wishlist, `ROADMAP_TIERS` +
 `ROADMAP_FEATURES` in `users/constants.py`), no dates or counts anywhere, test-enforced. The
-storefront carries a roadmap band teasing three features per tier in the same vocabulary. The
-Support sub-nav RAIL stays deferred until `/support/fundraiser/` exists too.
+storefront carries a roadmap band teasing three features per tier in the same vocabulary.
 
 `/support/membership/` shipped 2026-08 (`SubscriptionManagementView`, moved from
 `/users/subscription-management/`): the manage side of the hub -- level-tinted status card
@@ -116,18 +115,23 @@ here while the handler stayed at `/users/subscribe/` would mean a redirect on a 
 turn into a GET with the body dropped. Handler and form must share a URL. For the same reason the old
 URL redirects **temporarily** (302): a cached permanent redirect on a payment URL cannot be taken back.
 
-Still **landing-focused: no sub-nav items** (the strip stays hidden; the navbar/tab button just
-highlights). `/support/roadmap/` is live but reachable from the storefront's band rather than a rail;
-`/support/fundraiser/` is planned, and the pair will turn the strip on for
-the first time -- note that doing so reverses the reasoning that removed the Leaderboards rail in
-2026-08 ("a rail naming the page you're on is not navigation"), which held because that hub collapsed
-to ONE page. Support having three real destinations is the difference, and this paragraph plus the
-`LEADERBOARDS_HUB` comment block in `hub_subnav.py` should be revised together when it happens.
+**The Support RAIL is ON (2026-08-22):** Support / Roadmap / Membership / Fundraiser, four real
+destinations, which is what makes the reversal of the Leaderboards-rail removal principled
+("a rail naming the page you're on is not navigation" held because that hub collapsed to ONE
+page; Support grew to four). Membership is `auth_required`, so anon viewers see three items.
+The slugged campaign pages (`fundraiser` / `fundraiser_success` URL names) light the Fundraiser
+item via `_URL_NAME_TO_SLUG_OVERRIDES`. The paired `LEADERBOARDS_HUB` comment block in
+`hub_subnav.py` was revised with this flip, as both blocks required.
 
-The fundraiser (`/fundraiser/<slug>/`) resolves here via the `/fundraiser/` prefix. Two fundraiser lookups in
-`fundraiser/models.py`: `get_active_fundraiser()` (banner_active + live, for the site-wide banner)
-vs `get_live_fundraiser()` (live window only — kept for the coming `/support/fundraiser/` page;
-the storefront itself no longer renders a fundraiser line). Both cache a PK for 60s on their own key.
+`/support/fundraiser/` (`FundraiserLandingView`, name `support_fundraiser`) is the rail item's
+no-args target: a pure resolver that 302s to the latest STARTED campaign's slug page (live
+first, else most recent by start date, which covers the ended celebration; a drafted upcoming
+campaign is skipped so the public is never bounced home), with a quiet card when no campaign has
+ever run. The campaign itself stays at `/fundraiser/<slug>/` -- the one payment-adjacent surface
+(processor cancel URLs + sent emails land there), which is why the landing redirects instead of
+rendering. Two fundraiser lookups in `fundraiser/models.py`: `get_active_fundraiser()`
+(banner_active + live, for the site-wide banner) vs `get_live_fundraiser()` (live window only,
+the landing's first choice). Both cache a PK for 60s on their own key.
 
 The hub keeps the name **Support** (settled 2026-08-19; it was flagged as a placeholder). It covers
 both halves of what lives here, where "Membership" would name only one of them.

@@ -163,10 +163,6 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 )
 
 
-# The Support hub: the always-on badge-art fundraiser + (coming) the membership store. It's
-# landing-focused, so it carries NO sub-nav items -- the /support/ page features the fundraiser +
-# store instead. The /fundraiser/ prefix maps the campaign page here too. ("Support" is a
-# placeholder name, room for PlatPursuit charm.)
 # The Leaderboards hub. NO items, which is where it started and where it has returned to: a rail would be
 # a single pill naming the page you are already on.
 #
@@ -177,8 +173,10 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 # which existed because they did; the justification was circular, and it collapsed the moment either half
 # was examined. Boards live on the thing they rank, so the full board is on game, badge and job detail.
 #
-# `items=()` is the shape the Support hub also runs in: the hub is a single destination, and the nav item
-# goes straight to it.
+# The Support hub ran in this same items=() shape until 2026-08 and then grew a rail -- the
+# difference is not taste but destination count: Leaderboards collapsed to ONE page, Support grew
+# to FOUR real ones. The removal reasoning above still holds here exactly because a single pill
+# naming the page you are on is not navigation.
 LEADERBOARDS_HUB = HubSubnavConfig(
     key='leaderboards',
     label='Leaderboards',
@@ -188,12 +186,22 @@ LEADERBOARDS_HUB = HubSubnavConfig(
 )
 
 
+# The Support hub: four real destinations as of 2026-08 (storefront, roadmap, membership,
+# fundraiser), which is what turned the rail on -- the reversal of the Leaderboards removal is
+# principled, see the comment above. The /fundraiser/ prefix keeps the campaign slug pages in
+# this hub; their active-item highlighting rides the overrides map below. Membership is
+# login-only, so its item drops for anon via auth_required.
 SUPPORT_HUB = HubSubnavConfig(
     key='support',
     label='Support',
     icon='heart',
     prefixes=('/support/', '/fundraiser/'),
-    items=(),
+    items=(
+        HubSubnavItem('support', 'Support', 'support_hub', 'heart'),
+        HubSubnavItem('roadmap', 'Roadmap', 'support_roadmap', 'map'),
+        HubSubnavItem('membership', 'Membership', 'subscription_management', 'star', auth_required=True),
+        HubSubnavItem('fundraiser', 'Fundraiser', 'support_fundraiser', 'palette'),
+    ),
 )
 
 
@@ -246,8 +254,11 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'my_shareables_platinums': ('my_pursuit', 'shareables'),
     'recap_view': ('my_pursuit', 'recap'),
     'rate_my_games': ('my_pursuit', 'rate_my_games'),
-    # (The fundraiser + fundraiser_success pages resolve to the Support hub via its /fundraiser/
-    # prefix -- no override needed. Support has no sub-nav items, so no active slug.)
+    # Support: the slugged campaign pages carry a different URL name than the rail item
+    # (`fundraiser` vs the landing's `support_fundraiser`), so without these lines the strip
+    # renders with nothing lit -- the exact job_detail failure documented above.
+    'fundraiser': ('support', 'fundraiser'),
+    'fundraiser_success': ('support', 'fundraiser'),
 }
 
 

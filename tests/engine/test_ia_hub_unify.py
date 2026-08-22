@@ -103,13 +103,25 @@ def test_public_hubs_still_render_for_anon():
 def test_support_hub_resolves_incl_fundraiser():
     assert resolve_hub_subnav(_req('/support/'))['hub'].key == 'support'
     m = resolve_hub_subnav(_req('/fundraiser/spring-drive/'))   # re-homed to Support
-    assert m['hub'].key == 'support' and m['active_slug'] is None
+    # The slugged campaign page lights the rail's Fundraiser item via the overrides map --
+    # the strip rendering with nothing lit is the documented job_detail failure mode.
+    assert m['hub'].key == 'support' and m['active_slug'] == 'fundraiser'
 
 
-def test_support_hub_has_no_strip_items():
-    # Support is landing-focused: hub_section set (navbar highlights) but no strip.
+def test_support_hub_rail_is_on():
+    """2026-08: Support grew to four real destinations (storefront / roadmap / membership /
+    fundraiser), which is what turned the rail on. Membership is login-only, so anon sees
+    three items; the reversal-of-the-Leaderboards-removal reasoning lives in hub_subnav.py."""
     ctx = hub_subnav(_req('/support/'))
-    assert ctx['hub_section'] == 'support' and ctx['hub_subnav_items'] == ()
+    assert ctx['hub_section'] == 'support'
+    slugs = [i.slug for i in ctx['hub_subnav_items']]
+    assert slugs == ['support', 'roadmap', 'fundraiser'], 'anon sees three (membership is auth-gated)'
+
+    from tests.factories import UserFactory
+    authed = _req('/support/')
+    authed.user = UserFactory()
+    slugs = [i.slug for i in hub_subnav(authed)['hub_subnav_items']]
+    assert slugs == ['support', 'roadmap', 'membership', 'fundraiser']
 
 
 def test_support_landing_renders(client):
