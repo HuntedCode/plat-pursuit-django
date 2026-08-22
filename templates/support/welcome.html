@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block title %}Welcome - PlatPursuit{% endblock %}
+
+{% block content %}
+<div class="supw">
+
+    {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
+    page does not carry; nothing may arrive silently on a payment-adjacent page. {% endcomment %}
+    {% if messages %}
+    <div class="sup-msgs" role="status">
+        {% for message in messages %}
+        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if preview_active %}
+    <div class="supm-preview" role="note">
+        <span class="supm-preview__label">Previewing state:</span>
+        {% for s in preview_states %}
+        <a href="?preview={{ s }}" class="supm-preview__chip{% if s == preview_active %} is-on{% endif %}">{{ s }}</a>
+        {% endfor %}
+        <a href="{% url 'subscribe_success' %}" class="supm-preview__exit">exit</a>
+    </div>
+    {% endif %}
+
+    {% comment %} ============================================== the hero ==================
+    The storefront preview's promise ("this is how you will appear"), fulfilled: the one
+    .pp-supname flow on the page, at hero scale, wearing the level's stars. When the webhook
+    has not landed yet the hero renders from what was PURCHASED (display-only) and a quiet
+    line says so; refreshing is always safe. {% endcomment %}
+    <section aria-label="Welcome" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral supw-hero"
+             {% if level %}style="--sup-t: {{ level.colour }}"{% endif %}>
+        <div class="card-body p-5 md:p-8 pp-head-cascade">
+            <p class="supw__eyebrow">Support &middot; Welcome
+                <span class="supw-new"{% if level %} style="--sup-t: {{ level.colour }}"{% endif %}>New member</span>
+            </p>
+
+            <div class="supw-id">
+                <span class="supw-id__av">{% include 'partials/_avatar.html' with url=viewer_avatar alt='' %}</span>
+                <span class="supw-id__who">
+                    <span class="supw-id__name">
+                        <span class="pp-supname">{{ viewer_name }}</span>{% if level %}<span class="supw-id__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=level %}</span>{% endif %}
+                    </span>
+                    <span class="supw-id__sub">
+                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}PlatPursuit {{ level.name }}{% endif %}{% if interval %} &middot; {{ interval }}{% endif %}{% else %}PlatPursuit member{% endif %}
+                    </span>
+                </span>
+            </div>
+
+            <p class="supw__lede">
+                Genuinely: thank you. The servers, the bills and everything still to come run on
+                people doing what you just did.
+            </p>
+
+            {% if state == 'settling' %}
+            <p class="supw__settling">Your membership is settling in. Everything below unlocks in the next minute or two.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} ============================================== the perks =================
+    Free content: the storefront's tiles, reading as "what you now hold". {% endcomment %}
+    <div class="supw-perks">
+        <h2 class="supw__h2">What you now hold</h2>
+        <div class="sup-perks-grid">
+            {% for perk in premium_perks %}
+            <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %} pp-arrive__it" style="--perk-c: {{ perk.colour }}; --i: {{ forloop.counter0 }}">
+                <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
+                <div class="sup-perk__body">
+                    <h3 class="sup-perk__name"{% if perk.asterisk %} aria-describedby="supw-perks-fn"{% endif %}>{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
+                    <p class="sup-perk__mem">{{ perk.member }}</p>
+                    {% if perk.slug == 'mark' %}
+                    <p class="sup-perk__ex sup-perk__ex--mark" style="--sup-t: {% if level %}{{ level.colour }}{% else %}{{ perk.colour }}{% endif %}"><span class="pp-supname">{{ viewer_name }}</span> <svg class="pp-supstar" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></p>
+                    {% elif perk.example %}
+                    <p class="sup-perk__ex">{{ perk.example }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% for perk in premium_perks %}{% if perk.footnote %}
+        <p class="supw-perks__fn" id="supw-perks-fn">* {{ perk.footnote }}</p>
+        {% endif %}{% endfor %}
+    </div>
+
+    {% comment %} ============================================== next steps ================ {% endcomment %}
+    <section aria-label="Next steps" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-4 md:p-6 supw-next">
+            <div>
+                <h2 class="supw__h2">Come say hello</h2>
+                <p class="supw__sub">Your Discord role and #supporter-chat are ready when you are.</p>
+            </div>
+            <div class="supw-next__row">
+                <a href="{{ discord_invite_url }}" target="_blank" rel="noopener noreferrer"
+                   class="fnd-cta fnd-cta--rise"{% if level %} style="--sup-t: {{ level.colour }}"{% endif %}>
+                    <span class="sup-go__rise" aria-hidden="true">
+                        {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                    </span>
+                    <span class="fnd-cta__lbl">Join the Discord</span>
+                </a>
+                <a href="{% url 'subscription_management' %}" class="fnd-cta fnd-cta--ghost">My Membership</a>
+            </div>
+            <p class="supw__flavour"><a href="{% url 'support_hub' %}">Back to the support page</a></p>
+        </div>
+    </section>
+
+</div>
+{% endblock %}

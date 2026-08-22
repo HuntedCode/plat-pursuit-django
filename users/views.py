@@ -600,27 +600,123 @@ class SupportRoadmapView(TemplateView):
         return context
 
 
+#: Staff/DEBUG preview states for the welcome page (?preview=<key>): fabricated display data,
+#: no provider calls, the membership page's preview rule.
+WELCOME_PREVIEW_STATES = ('active', 'settling', 'settling-blind')
+
+
+def _welcome_context(request, state, level, interval=None):
+    """The welcome page's render context. Display-only by construction: everything here is a
+    constant, a resolver output, or the viewer's own profile fields."""
+    from users.constants import PREMIUM_PERKS
+
+    profile = getattr(request.user, 'profile', None)
+    return {
+        'state': state,
+        'level': level,
+        'interval': interval,
+        'viewer_name': ((profile.display_psn_username or profile.psn_username)
+                        if profile else request.user.email.split('@')[0]),
+        'viewer_avatar': profile.avatar_url if profile else '',
+        'premium_perks': PREMIUM_PERKS,
+        'discord_invite_url': settings.DISCORD_INVITE_URL,
+    }
+
+
 @login_required
 def subscribe_success(request):
+    """The membership WELCOME page, rendered at the frozen success URL.
+
+    /users/subscribe/success/ is baked into every processor session ever created, so the
+    ceremony renders IN PLACE -- no new route, no redirect. The webhook race is the design
+    center: on arrival the user's premium fields are usually not yet written, so the page
+    renders OPTIMISTICALLY from what the processor can tell us about the purchase (Stripe
+    session metadata / PayPal subscription details, both ownership-guarded), and the real
+    state catches up via webhook. A refresh is always safe; a bare or stale hit lands on the
+    storefront, never a broken page.
+    """
+    from users.services.marks import worn_level_dict
+
+    user = request.user
+
+    # Staff/DEBUG state preview, the membership page's pattern: fabricated, never the data layer.
+    preview = request.GET.get('preview')
+    if preview in WELCOME_PREVIEW_STATES and (settings.DEBUG or user.is_staff):
+        level = worn_level_dict('patron') if preview != 'settling-blind' else None
+        ctx = _welcome_context(request, 'active' if preview == 'active' else 'settling',
+                               level, interval='monthly')
+        ctx['preview_active'] = preview
+        ctx['preview_states'] = WELCOME_PREVIEW_STATES
+        return render(request, 'support/welcome.html', ctx)
+
+    def already_active():
+        profile = getattr(user, 'profile', None)
+        return bool(user.premium_tier and profile and profile.user_is_premium)
+
+    # ACTIVATED: the webhook already landed (or this is a refresh) -- render from the denorm.
+    if already_active():
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'active', worn_level_dict(user.premium_tier)))
+
     provider = request.GET.get('provider', 'stripe')
 
     if provider == 'paypal':
-        # PayPal redirects here after user approves. Activation happens via webhook.
-        messages.success(request, "PayPal subscription initiated! Your premium features will activate shortly.")
-    else:
-        # Stripe checkout session verification
-        session_id = request.GET.get('session_id')
-        if session_id:
+        # PayPal appends ?subscription_id to the return URL; activation stays webhook-owned,
+        # this read is display-only. Ownership guard: custom_id was set to the buyer's user id
+        # at creation -- a foreign subscription id must never leak a tier.
+        from users.services.paypal_service import PayPalService
+        subscription_id = request.GET.get('subscription_id')
+        level = None
+        if subscription_id:
             try:
-                session = stripe.checkout.Session.retrieve(session_id)
-                if session.payment_status == 'paid':
-                    messages.success(request, "Subscription activated! Enjoy premium features.")
-                else:
-                    messages.warning(request, "Your payment is still being processed. Premium features will activate shortly.")
-            except stripe.error.StripeError as e:
-                messages.error(request, f"Error verifying subscription: {str(e)}")
+                details = PayPalService.get_subscription_details(subscription_id)
+                if details.get('custom_id') == str(user.id):
+                    tier = PayPalService.get_tier_from_plan_id(details.get('plan_id'))
+                    if tier:
+                        level = worn_level_dict(tier)
+            except Exception:
+                logger.exception("Welcome page could not verify PayPal subscription")
+        # Blind settling when anything above fell through: name + generic member line.
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'settling', level))
 
-    return redirect('home')
+    session_id = request.GET.get('session_id')
+    if session_id:
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+        except stripe.error.StripeError:
+            logger.exception("Welcome page could not retrieve checkout session")
+            messages.info(request, "We couldn't verify that checkout just now. If you completed a purchase, it will activate shortly.")
+            return redirect('support_hub')
+
+        # Ownership guard: session ids are user-controlled query params.
+        if user.stripe_customer_id and session.customer != user.stripe_customer_id:
+            return redirect('support_hub')
+
+        tier = (session.metadata or {}).get('tier')
+        interval = (session.metadata or {}).get('interval')
+        level = worn_level_dict(tier) if tier else None
+        if level is None:
+            # Unknown/legacy-stale session: nothing to celebrate confidently.
+            messages.info(request, "Your membership is activating. It will be ready in a minute or two.")
+            return redirect('support_hub')
+
+        # DEBUG inline activation (the fundraiser's model: webhooks can't reach localhost).
+        # No event_type on purpose -- activation EVENTS are what announce (welcome email,
+        # Discord embed), and the real webhook must stay the only announcer.
+        if settings.DEBUG and session.payment_status == 'paid':
+            SubscriptionService.activate_subscription(user, tier, 'stripe')
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active',
+                                           worn_level_dict(user.premium_tier), interval))
+
+        # 'paid' or an async payment method still processing: both are SETTLING -- the page
+        # celebrates from the purchased tier while the webhook does the writing.
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'settling', level, interval))
+
+    # Bare/stale hit with nothing to show: the storefront, never a broken page.
+    return redirect('support_hub')
 
 @csrf_exempt
 @require_POST
@@ -885,22 +981,12 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         membership = SubscriptionService.membership_status(user)
         context['membership'] = membership
 
-        # The worn LEVEL: ladder members wear their own level; grandfathered legacy tiers wear
-        # the price-nearest level's colour and stars but display their REAL tier name -- they
-        # were here first, and the name they bought is the name they keep.
+        # The worn LEVEL, via the one shared shape (the welcome page renders the identical
+        # dict; see users/services/marks.worn_level_dict for the legacy-name rule).
+        from users.services.marks import worn_level_dict
         level = None
         if membership.state != 'none' and user.premium_tier:
-            slug = worn_supporter_level(user.premium_tier)
-            tier = next((t for t in SUPPORT_TIERS if t['slug'] == slug), None)
-            if tier:
-                is_legacy = user.premium_tier in LEGACY_TIER_LEVEL_MAP
-                level = dict(
-                    tier,
-                    star_range=range(tier['stars']),
-                    is_legacy=is_legacy,
-                    display_name=(SubscriptionService.get_tier_display_name(user.premium_tier)
-                                  if is_legacy else tier['name']),
-                )
+            level = worn_level_dict(user.premium_tier)
         context['level'] = level
 
         if membership.state != 'none':

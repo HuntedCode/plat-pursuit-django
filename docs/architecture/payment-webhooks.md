@@ -63,13 +63,13 @@ General-purpose audit trail for all platform emails. Every email sent or suppres
 
 ### Subscription Checkout Flow (Stripe)
 
-1. User visits `/users/subscribe/` (the `subscribe()` view).
-2. `has_active_subscription()` checks for existing active subscriptions across both providers. If active, user is redirected to subscription management.
+1. User visits `/support/` (`SupportStorefrontView`, which serves the checkout form and answers its POST; the old `/users/subscribe/` 302s there).
+2. `has_active_subscription()` checks for existing active subscriptions across both providers. If active, user is redirected to the membership page.
 3. User selects a tier and clicks subscribe. POST handler calls `SubscriptionService.create_checkout_session()`.
 4. Checkout session is created with `mode='subscription'`, accepted payment methods (`card`, `us_bank_account`, `amazon_pay`, `cashapp`, `link`), and tier metadata.
 5. If user has no Stripe customer, one is created via `Customer.get_or_create()` (djstripe). The `stripe_customer_id` is saved on the user.
 6. User is redirected (303) to the Stripe-hosted checkout page.
-7. On success, Stripe redirects to `/users/subscribe/success/?session_id={id}`. The view verifies payment status and shows a success message.
+7. On success, Stripe redirects to `/users/subscribe/success/?session_id={id}` (FROZEN URL). The view renders the membership WELCOME page: from the real denorm when the webhook already landed, else optimistically from the session's tier metadata with a settling note (ownership-guarded; in DEBUG it inline-activates with no event type so dev sees the real state without announcing).
 8. Stripe fires `checkout.session.completed` and `customer.subscription.created` webhooks. The webhook handler calls `update_user_subscription()`, which maps the product ID to a tier and delegates to `activate_subscription()`.
 
 ### Subscription Checkout Flow (PayPal)
@@ -77,7 +77,7 @@ General-purpose audit trail for all platform emails. Every email sent or suppres
 1. Same subscribe page, but user selects PayPal as provider.
 2. POST handler calls `PayPalService.create_subscription()`, which creates a subscription via `/v1/billing/subscriptions` with the user's `custom_id` set to their user ID.
 3. User is redirected to PayPal's approval URL.
-4. After approval, PayPal redirects to `/users/subscribe/success/?provider=paypal`. A success message is shown, but activation happens asynchronously via webhook.
+4. After approval, PayPal redirects to `/users/subscribe/success/?provider=paypal&subscription_id=...`. The view renders the welcome page, recovering the tier display-only from the subscription details (custom_id ownership check); activation stays asynchronous via webhook.
 5. PayPal fires `BILLING.SUBSCRIPTION.ACTIVATED`. The handler looks up the user by `custom_id` (since `paypal_subscription_id` is not yet stored), sets it on the user object, maps `plan_id` to tier, and delegates to `activate_subscription()`.
 
 ### Donation Checkout Flow (Stripe)

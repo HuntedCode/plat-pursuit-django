@@ -48,6 +48,7 @@
 @import "./components/support.css";
 @import "./components/support-roadmap.css";
 @import "./components/support-manage.css";
+@import "./components/support-welcome.css";
 @import "./components/fundraiser.css";
 @plugin "daisyui";
 

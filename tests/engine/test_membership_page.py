@@ -610,7 +610,7 @@ def test_the_section_arrival_reaches_both_pages_and_the_bundle(client, settings)
     assert at != -1, 'the arrival primitive is missing from the built bundle'
     # One selector per recently-touched component file: the stale-bundle miss has now happened
     # twice, and a guard that pins only one file is blind to the others.
-    for sel in ('.pp-marktitle', '.lb-row__title-earned', '.fnd-input', '.supm-status'):
+    for sel in ('.pp-marktitle', '.lb-row__title-earned', '.fnd-input', '.supm-status', '.supw-new'):
         assert sel in built, f'{sel} missing from the built bundle (stale output.css)'
     media_at = built.rfind('@media', 0, at)
     assert media_at != -1 and 'prefers-reduced-motion:no-preference' in built[media_at:at].replace(' ', ''),         'the hidden state must live inside the no-preference gate'

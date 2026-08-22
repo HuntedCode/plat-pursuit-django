@@ -3,6 +3,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def site_links(request):
+    """Site-wide external links. One source: the Discord invite used to be hardcoded in seven
+    templates (with casing drift), while the setting the emails read was never defined."""
+    from django.conf import settings
+    return {'discord_invite_url': settings.DISCORD_INVITE_URL}
+
+
 def moderation(request):
     """
     Provide pending reports count for staff members.

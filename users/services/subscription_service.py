@@ -1108,6 +1108,8 @@ class SubscriptionService:
             # The perk list renders from the shared constant (the hand-written copy sold four
             # retired perks on the first email a member ever read).
             'premium_perks': PREMIUM_PERKS,
+            # The email sold the Discord perk with no way to get there.
+            'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
         }
 
         try:

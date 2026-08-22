@@ -62,6 +62,9 @@ BOT_API_KEY = os.getenv('BOT_API_KEY')
 
 DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
 DISCORD_TEST_WEBHOOK_URL = os.getenv('DISCORD_TEST_WEBHOOK_URL')
+# The public invite. Defaulted to the real one so prod works with no env change -- this was
+# never configured anywhere, which left the welcome email's Discord CTA dead in production.
+DISCORD_INVITE_URL = os.getenv('DISCORD_INVITE_URL', 'https://discord.gg/platpursuit')
 PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
 PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
 
@@ -306,6 +309,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "plat_pursuit.context_processors.site_links",
                 "plat_pursuit.context_processors.moderation",
                 "plat_pursuit.context_processors.high_sync_volume",
                 "plat_pursuit.context_processors.psn_outage",

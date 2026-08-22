@@ -53,6 +53,28 @@ def refresh_display_mark(user, is_premium=None):
         profile.save(update_fields=['display_mark'])
 
 
+def worn_level_dict(premium_tier):
+    """The display shape a LEVEL-tinted surface consumes (membership page, welcome page): the
+    worn ladder tier's dict plus star_range / is_legacy / display_name. Ladder members wear
+    their own level; grandfathered legacy tiers wear the price-nearest level's colour and stars
+    but display their REAL tier name -- they were here first, and the name they bought is the
+    name they keep. None for unmapped tiers (callers must fall back gracefully)."""
+    from users.constants import LEGACY_TIER_LEVEL_MAP, SUPPORT_TIERS
+
+    slug = worn_supporter_level(premium_tier)
+    tier = next((t for t in SUPPORT_TIERS if t['slug'] == slug), None)
+    if tier is None:
+        return None
+    is_legacy = premium_tier in LEGACY_TIER_LEVEL_MAP
+    if is_legacy:
+        from users.services.subscription_service import SubscriptionService
+        display_name = SubscriptionService.get_tier_display_name(premium_tier)
+    else:
+        display_name = tier['name']
+    return dict(tier, star_range=range(tier['stars']), is_legacy=is_legacy,
+                display_name=display_name)
+
+
 def mark_style(mark):
     """(colour, label, kind) for a mark key; kind is 'service' or 'supporter'. None for ''."""
     if not mark:
