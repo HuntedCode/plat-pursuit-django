@@ -436,3 +436,16 @@ def test_sync_status_endpoint_returns_live_stats(client, monkeypatch):
 def test_sync_status_endpoint_requires_login(client):
     resp = client.get(reverse('profile_sync_status'))
     assert resp.status_code in (302, 403)      # LoginRequiredMixin gate
+
+
+def test_light_mode_stays_removed_until_rebuilt(client):
+    """Light mode was removed 2026-08-22 (the --pp-* foundation is dark-first; the old toggle
+    produced a broken hybrid). Until the light-mode rebuild happens deliberately, no toggle and
+    no light theme may creep back."""
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[2]
+    assert 'plat-pursuit-light' not in (root / 'static' / 'css' / 'input.css').read_text(encoding='utf-8')
+    body = client.get('/').content.decode()
+    assert 'theme-toggle-item' not in body
+    assert 'data-theme="plat-pursuit-dark"' in body
+

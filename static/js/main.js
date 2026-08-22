@@ -88,63 +88,9 @@ document.addEventListener('DOMContentLoaded', function() {
         handleScroll();
     }
 
-    // ===== Theme Toggle (shared logic for all theme toggle elements) =====
-    function getCurrentTheme() {
-        return localStorage.getItem('theme') || 'plat-pursuit-dark';
-    }
-
-    function setTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-        updateAllThemeIcons();
-    }
-
-    function toggleTheme() {
-        const current = getCurrentTheme();
-        const newTheme = current === 'plat-pursuit-dark' ? 'plat-pursuit-light' : 'plat-pursuit-dark';
-        setTheme(newTheme);
-    }
-
-    function updateAllThemeIcons() {
-        const isDark = getCurrentTheme() === 'plat-pursuit-dark';
-
-        // Dropdown theme toggle (desktop user menu)
-        const dropdownSun = document.getElementById('dropdown-theme-icon-sun');
-        const dropdownMoon = document.getElementById('dropdown-theme-icon-moon');
-        const dropdownLabel = document.getElementById('theme-toggle-label');
-        if (dropdownSun) dropdownSun.classList.toggle('hidden', !isDark);
-        if (dropdownMoon) dropdownMoon.classList.toggle('hidden', isDark);
-        if (dropdownLabel) dropdownLabel.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-
-        // More drawer theme toggle (mobile - authenticated)
-        const drawerSun = document.getElementById('drawer-theme-icon-sun');
-        const drawerMoon = document.getElementById('drawer-theme-icon-moon');
-        const drawerLabel = document.getElementById('drawer-theme-toggle-label');
-        if (drawerSun) drawerSun.classList.toggle('hidden', !isDark);
-        if (drawerMoon) drawerMoon.classList.toggle('hidden', isDark);
-        if (drawerLabel) drawerLabel.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-
-        // More drawer theme toggle (mobile - guest)
-        const drawerSunGuest = document.getElementById('drawer-theme-icon-sun-guest');
-        const drawerMoonGuest = document.getElementById('drawer-theme-icon-moon-guest');
-        const drawerLabelGuest = document.getElementById('drawer-theme-toggle-label-guest');
-        if (drawerSunGuest) drawerSunGuest.classList.toggle('hidden', !isDark);
-        if (drawerMoonGuest) drawerMoonGuest.classList.toggle('hidden', isDark);
-        if (drawerLabelGuest) drawerLabelGuest.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-    }
-
-    // Bind theme toggle to user dropdown item
-    const themeToggleItem = document.getElementById('theme-toggle-item');
-    if (themeToggleItem) {
-        themeToggleItem.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleTheme();
-        });
-    }
-
-    // Initialize theme icons on load
-    updateAllThemeIcons();
+    // Light mode was removed 2026-08-22: the rebuild's --pp-* token foundation is dark-first
+    // (every rebuilt surface reads dark values), so the old toggle produced a broken hybrid.
+    // A proper light theme is a future rebuild item (parallel --pp palette + contrast audit).
 
     // ── Avatar account menu: crafted entrance + a little life over DaisyUI's focus dropdown ──
     // DaisyUI shows/hides the panel on focus; we layer an .is-open class (the CSS spring + section cascade)
