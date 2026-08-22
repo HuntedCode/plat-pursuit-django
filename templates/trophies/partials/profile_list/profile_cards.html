@@ -37,7 +37,9 @@ grid N+1s on a deferred load. {% endcomment %}
             </div>
             {% comment %} Held (not dropped) when a hunter wears no title, so a card without one stays the
             same height as the card beside it and the wall keeps its rhythm. {% endcomment %}
-            <p class="pp-hcard__title{% if not profile.display_title %} pp-hcard__title--empty{% endif %}">{{ profile.display_title|default:"No title" }}</p>
+            {% comment %} The supporter title joins the worn title after a dot (or fills an empty
+            slot) -- the level in words, static, the name keeps the motion. {% endcomment %}
+            <p class="pp-hcard__title{% if not profile.display_title and not profile.display_mark|supporter_title %} pp-hcard__title--empty{% endif %}">{% if profile.display_title %}{{ profile.display_title }}{% mark_title profile.display_mark sep=True %}{% elif profile.display_mark|supporter_title %}{% mark_title profile.display_mark %}{% else %}No title{% endif %}</p>
         </div>
     </div>
 

@@ -102,7 +102,9 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                 {% comment %}The worn title takes the secondary, the same hue it carries on the hunter
                 wall -- one vocabulary for "something earned" across both surfaces.{% endcomment %}
                 {% if profile.displayed_title %}
-                <p class="pp-phero__title">{{ profile.displayed_title }}</p>
+                <p class="pp-phero__title">{{ profile.displayed_title }}{% mark_title profile.display_mark sep=True %}</p>
+                {% elif profile.display_mark|supporter_title %}
+                <p class="pp-phero__title">{% mark_title profile.display_mark %}</p>
                 {% endif %}
 
                 {% comment %}Freshness, in the compact form the hunter cards use. It is the one thing on

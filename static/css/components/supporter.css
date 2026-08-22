@@ -146,6 +146,11 @@
     color: var(--sup-t, var(--pp-accent));   /* solid fill via currentColor, like the stars */
 }
 
+/* The supporter TITLE ("PlatPursuit Backer") joining a worn-title line: level colour, STATIC
+   (the flow is the name's), never wrapping mid-label. Colour arrives inline from the tag. */
+.pp-marktitle { font-weight: 600; white-space: nowrap; }
+.pp-marktitle__dot { color: var(--pp-text-mute); margin: 0 4px; font-style: normal; }
+
 /* Compact context (dense rows): slightly smaller glyphs. */
 .pp-markname--sm .pp-markname__svc { width: 11px; height: 11px; }
 .pp-markname--sm .pp-supstar { width: 10px; height: 10px; }

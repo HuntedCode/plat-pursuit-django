@@ -28,3 +28,22 @@ def mark_colour(mark):
     """The mark's colour alone, for legacy surfaces that colour a name without the glyph."""
     style = mark_style(mark)
     return style['colour'] if style else 'inherit'
+
+
+@register.filter
+def supporter_title(mark):
+    """The worn level's title-line label ("PlatPursuit Backer"), or '' for service/none --
+    for template conditionals; rendering goes through {% mark_title %}."""
+    style = mark_style(mark)
+    return style['label'] if style and style['kind'] == 'supporter' else ''
+
+
+@register.inclusion_tag('components/mark_title.html')
+def mark_title(mark, sep=False):
+    """The supporter title as a coloured, STATIC span; `sep` renders the joining dot when the
+    line already carries an earned title."""
+    style = mark_style(mark)
+    if not style or style['kind'] != 'supporter':
+        style = None
+    return {'mark': style, 'sep': sep}
+

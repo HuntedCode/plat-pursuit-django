@@ -366,3 +366,37 @@ def test_the_mobile_facepile_survives_the_css_build():
         )
     assert css.count('paint-order:stroke') >= 2, 'the facepile rim was dropped by the build'
 
+
+def test_the_supporter_title_joins_the_worn_title_line():
+    """His ask: the level in words ("PlatPursuit Backer") beside the title a hunter already
+    wears, in the level colour, STATIC -- the storefront preview promised exactly this line.
+    Supporters only: staff and mods have the glyph and the wall."""
+    from users.templatetags.mark_tags import supporter_title
+
+    assert supporter_title('patron') == 'PlatPursuit Patron'
+    assert supporter_title('staff') == ''
+    assert supporter_title('') == ''
+
+    row = render_to_string('trophies/partials/leaderboard_row.html', {
+        'entry': {'psn_username': 'Titled', 'display_mark': 'patron', 'rank': 1,
+                  'avatar_url': '', 'flag': '', 'displayed_title': 'Dragonborn', 'value': 1},
+        'board': {'slug': 'x'},
+    })
+    assert 'Dragonborn' in row and 'PlatPursuit Patron' in row
+    assert 'pp-marktitle__dot' in row, 'the joining dot is missing between the two titles'
+
+    untitled = render_to_string('trophies/partials/leaderboard_row.html', {
+        'entry': {'psn_username': 'Bare', 'display_mark': 'backer', 'rank': 2,
+                  'avatar_url': '', 'flag': '', 'displayed_title': '', 'value': 1},
+        'board': {'slug': 'x'},
+    })
+    assert 'PlatPursuit Backer' in untitled, 'an empty title slot should still carry the level'
+    assert 'pp-marktitle__dot' not in untitled
+
+    staff_row = render_to_string('trophies/partials/leaderboard_row.html', {
+        'entry': {'psn_username': 'Mod', 'display_mark': 'staff', 'rank': 3,
+                  'avatar_url': '', 'flag': '', 'displayed_title': 'Wrench', 'value': 1},
+        'board': {'slug': 'x'},
+    })
+    assert 'pp-marktitle' not in staff_row, 'service marks do not wear a supporter title'
+
