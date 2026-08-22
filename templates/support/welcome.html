@@ -28,11 +28,11 @@
     {% endif %}
 
     {% comment %} ============================================== the hero ==================
-    The storefront preview's promise ("this is how you will appear"), fulfilled: the one
-    .pp-supname flow on the page, at hero scale, wearing the level's stars. When the webhook
+    The storefront preview's promise ("this is how you will appear"), fulfilled: the flow-marked
+    name at hero scale, wearing the level's stars (the mark-perk tile echoes it at example size). When the webhook
     has not landed yet the hero renders from what was PURCHASED (display-only) and a quiet
     line says so; refreshing is always safe. {% endcomment %}
-    <section aria-label="Welcome" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral supw-hero"
+    <section aria-label="Welcome" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral"
              {% if level %}style="--sup-t: {{ level.colour }}"{% endif %}>
         <div class="card-body p-5 md:p-8 pp-head-cascade">
             <p class="supw__eyebrow">Support &middot; Welcome
@@ -46,7 +46,7 @@
                         <span class="pp-supname">{{ viewer_name }}</span>{% if level %}<span class="supw-id__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=level %}</span>{% endif %}
                     </span>
                     <span class="supw-id__sub">
-                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}PlatPursuit {{ level.name }}{% endif %}{% if interval %} &middot; {{ interval }}{% endif %}{% else %}PlatPursuit member{% endif %}
+                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, wearing the {{ level.name }} mark{% else %}PlatPursuit {{ level.name }}{% endif %}{% if interval %} &middot; billed {{ interval }}{% endif %}{% else %}PlatPursuit member{% endif %}
                     </span>
                 </span>
             </div>

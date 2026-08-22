@@ -169,14 +169,72 @@ def test_the_preview_harness_is_gated_and_fabricated(client, settings):
 
 def test_the_welcome_email_carries_the_discord_cta(settings):
     from django.template.loader import render_to_string
+    from users.constants import PREMIUM_PERKS
     body = render_to_string('emails/subscription_welcome.html', {
         'username': 'x', 'tier_name': 'Patron', 'site_url': 's', 'profile_url': 'p',
-        'preference_url': 'u', 'premium_perks': [],
+        'preference_url': 'u', 'premium_perks': PREMIUM_PERKS,
         'discord_url': settings.DISCORD_INVITE_URL,
     })
-    assert 'Join the Discord' in body and settings.DISCORD_INVITE_URL in body
-    assert 'mdash' not in body
+    assert f'href="{settings.DISCORD_INVITE_URL}"' in body
+    assert 'Join the Discord' in body
+    # Real perks render, so the perk-loop line (where the em dash lived) is actually exercised.
+    assert 'mdash' not in body and chr(8212) not in body
 
 
 def test_the_discord_invite_setting_exists(settings):
     assert settings.DISCORD_INVITE_URL.startswith('https://discord.gg/')
+
+
+def test_the_webhook_announcer_actually_announces():
+    """The other half of the no-announce pin: with an activation event type the welcome email
+    DOES send -- so the inline-path guard cannot rot into 'no email ever'."""
+    user = UserFactory()
+    ProfileFactory(user=user)
+    mail.outbox.clear()
+    SubscriptionService.activate_subscription(user, 'patron', 'stripe',
+                                              event_type='customer.subscription.created')
+    assert any('Welcome' in m.subject for m in mail.outbox),         'the activation event must send the welcome email'
+
+
+def test_a_grace_resubscriber_is_welcomed_as_the_new_tier(client, settings):
+    """The audit's ordering bug: a cancelled Backer buying Cornerstone was congratulated on
+    Backer (the active shortcut ran before the session was read). Purchase params win now."""
+    settings.DEBUG = False
+    user = _buyer(client)
+    SubscriptionService.activate_subscription(user, 'backer', 'stripe')
+    upgraded = _fake_session(metadata={'tier': 'cornerstone', 'interval': 'monthly'})
+    with patch('users.views.stripe.checkout.Session.retrieve', return_value=upgraded):
+        body = client.get(URL + '?session_id=cs_up').content.decode()
+    assert 'PlatPursuit Cornerstone' in body, 'the NEW tier must be the one celebrated'
+    assert 'settling in' in body
+
+
+def test_a_user_without_a_customer_id_cannot_use_a_foreign_session(client, settings):
+    """The guard lost its short-circuit: a legitimate Stripe buyer ALWAYS has a customer id by
+    redirect time, so a missing local id plus any session is a foreign session."""
+    settings.DEBUG = True   # the dangerous combination the audit named: guard skip + inline activation
+    user = UserFactory()
+    ProfileFactory(user=user)
+    client.force_login(user)   # no stripe_customer_id at all
+    with patch('users.views.stripe.checkout.Session.retrieve', return_value=_fake_session()):
+        response = client.get(URL + '?session_id=cs_foreign')
+    assert response.status_code == 302
+    user.refresh_from_db()
+    assert not user.premium_tier, 'a foreign session must never activate anything'
+
+
+def test_the_paypal_read_goes_through_the_snapshot_cache(client):
+    """A query-param-driven uncached 30s provider call was the audit find: the welcome page
+    reads the snapshot, so two hits cost one fetch."""
+    from users.services.paypal_service import PayPalService
+    from django.core.cache import cache
+    user = _buyer(client)
+    sub_id = 'I-CACHEWEL'
+    cache.delete(PayPalService.SUB_CACHE_KEY.format(id=sub_id))
+    details = {'custom_id': str(user.id), 'plan_id': 'P-X', 'status': 'ACTIVE',
+               'billing_info': {}}
+    with patch.object(PayPalService, 'get_subscription_details', return_value=details) as fetch:
+        client.get(URL + f'?provider=paypal&subscription_id={sub_id}')
+        client.get(URL + f'?provider=paypal&subscription_id={sub_id}')
+    assert fetch.call_count == 1, 'the second hit must come from the snapshot cache'
+

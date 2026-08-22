@@ -59,8 +59,6 @@ def worn_level_dict(premium_tier):
     their own level; grandfathered legacy tiers wear the price-nearest level's colour and stars
     but display their REAL tier name -- they were here first, and the name they bought is the
     name they keep. None for unmapped tiers (callers must fall back gracefully)."""
-    from users.constants import LEGACY_TIER_LEVEL_MAP, SUPPORT_TIERS
-
     slug = worn_supporter_level(premium_tier)
     tier = next((t for t in SUPPORT_TIERS if t['slug'] == slug), None)
     if tier is None:

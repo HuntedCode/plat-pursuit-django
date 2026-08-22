@@ -259,7 +259,7 @@ def test_the_paypal_snapshot_is_cached_and_busted():
         first = PayPalService.get_cached_subscription_snapshot(sub_id)
         second = PayPalService.get_cached_subscription_snapshot(sub_id)
     assert fetch.call_count == 1, 'the second read must come from cache'
-    assert first == second == {'status': 'ACTIVE',
+    assert first == second == {'status': 'ACTIVE', 'custom_id': None,
                                'next_billing_time': '2026-09-01T00:00:00Z', 'plan_id': 'P-1'}
 
     # A webhook for the subscription outdates the snapshot.

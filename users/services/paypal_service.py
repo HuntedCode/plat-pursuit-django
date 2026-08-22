@@ -183,6 +183,9 @@ class PayPalService:
             'status': details.get('status'),
             'next_billing_time': (details.get('billing_info') or {}).get('next_billing_time'),
             'plan_id': details.get('plan_id'),
+            # The welcome page's ownership check reads through this cache too (an uncached
+            # 30s provider call driven by a query param was the audit find).
+            'custom_id': details.get('custom_id'),
         }
         if not snapshot['status']:
             # A 200 with no status is not a snapshot worth pinning for 8 hours.

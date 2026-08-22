@@ -619,7 +619,7 @@ def _welcome_context(request, state, level, interval=None):
                         if profile else request.user.email.split('@')[0]),
         'viewer_avatar': profile.avatar_url if profile else '',
         'premium_perks': PREMIUM_PERKS,
-        'discord_invite_url': settings.DISCORD_INVITE_URL,
+        # discord_invite_url arrives via the global site_links context processor.
     }
 
 
@@ -635,7 +635,7 @@ def subscribe_success(request):
     state catches up via webhook. A refresh is always safe; a bare or stale hit lands on the
     storefront, never a broken page.
     """
-    from users.services.marks import worn_level_dict
+    from users.services.marks import worn_level_dict, worn_supporter_level
 
     user = request.user
 
@@ -653,34 +653,54 @@ def subscribe_success(request):
         profile = getattr(user, 'profile', None)
         return bool(user.premium_tier and profile and profile.user_is_premium)
 
-    # ACTIVATED: the webhook already landed (or this is a refresh) -- render from the denorm.
-    if already_active():
-        return render(request, 'support/welcome.html',
-                      _welcome_context(request, 'active', worn_level_dict(user.premium_tier)))
+    def active_interval():
+        # "billed monthly" on the active hero, via the one billing reader.
+        billing = SubscriptionService.describe_billing(
+            user, SubscriptionService.membership_status(user))
+        return {'month': 'monthly', 'year': 'yearly'}.get(billing.get('cycle'))
 
     provider = request.GET.get('provider', 'stripe')
+    session_id = request.GET.get('session_id')
+
+    # ACTIVATED with no purchase params: a refresh, a bookmark, a webhook-landed revisit --
+    # render from the denorm. A hit that CARRIES purchase params must process them first: a
+    # grace-period re-subscriber is still premium at their OLD tier, and the audit's find was
+    # this shortcut congratulating them on the tier they just left.
+    if already_active() and not session_id and provider != 'paypal':
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'active', worn_level_dict(user.premium_tier),
+                                       active_interval()))
 
     if provider == 'paypal':
         # PayPal appends ?subscription_id to the return URL; activation stays webhook-owned,
-        # this read is display-only. Ownership guard: custom_id was set to the buyer's user id
-        # at creation -- a foreign subscription id must never leak a tier.
+        # this read is display-only THROUGH THE SNAPSHOT CACHE (an uncached 30s provider call
+        # driven by a query param is the exact thing the snapshot exists to prevent).
+        # Ownership guard: custom_id was set to the buyer's user id at creation -- a foreign
+        # subscription id must never leak a tier.
+        from users.constants import PAYPAL_LADDER_PLANS
         from users.services.paypal_service import PayPalService
         subscription_id = request.GET.get('subscription_id')
         level = None
+        interval = None
         if subscription_id:
-            try:
-                details = PayPalService.get_subscription_details(subscription_id)
-                if details.get('custom_id') == str(user.id):
-                    tier = PayPalService.get_tier_from_plan_id(details.get('plan_id'))
-                    if tier:
-                        level = worn_level_dict(tier)
-            except Exception:
-                logger.exception("Welcome page could not verify PayPal subscription")
+            snapshot = PayPalService.get_cached_subscription_snapshot(subscription_id)
+            if snapshot and snapshot.get('custom_id') == str(user.id):
+                tier = PayPalService.get_tier_from_plan_id(snapshot.get('plan_id'))
+                if tier:
+                    level = worn_level_dict(tier)
+                    mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
+                    for slug, intervals in PAYPAL_LADDER_PLANS.get(mode, {}).items():
+                        for iv, pid in intervals.items():
+                            if pid == snapshot.get('plan_id'):
+                                interval = iv
+        if level is not None and already_active() and worn_level_dict(user.premium_tier) == level:
+            # The webhook already landed for this same purchase.
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active', level, interval or active_interval()))
         # Blind settling when anything above fell through: name + generic member line.
         return render(request, 'support/welcome.html',
-                      _welcome_context(request, 'settling', level))
+                      _welcome_context(request, 'settling', level, interval))
 
-    session_id = request.GET.get('session_id')
     if session_id:
         try:
             session = stripe.checkout.Session.retrieve(session_id)
@@ -689,8 +709,11 @@ def subscribe_success(request):
             messages.info(request, "We couldn't verify that checkout just now. If you completed a purchase, it will activate shortly.")
             return redirect('support_hub')
 
-        # Ownership guard: session ids are user-controlled query params.
-        if user.stripe_customer_id and session.customer != user.stripe_customer_id:
+        # Ownership guard, unconditional: session ids are user-controlled query params, and a
+        # legitimate Stripe buyer ALWAYS has a customer id by now (create_checkout_session
+        # saves it before the redirect) -- so a mismatch OR a missing local id is a foreign
+        # session, never a real arrival.
+        if session.customer != user.stripe_customer_id:
             return redirect('support_hub')
 
         tier = (session.metadata or {}).get('tier')
@@ -701,9 +724,16 @@ def subscribe_success(request):
             messages.info(request, "Your membership is activating. It will be ready in a minute or two.")
             return redirect('support_hub')
 
+        # The webhook already landed for this purchase (tier matches): the full active hero.
+        if already_active() and worn_supporter_level(user.premium_tier) == level['slug']:
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active',
+                                           worn_level_dict(user.premium_tier), interval))
+
         # DEBUG inline activation (the fundraiser's model: webhooks can't reach localhost).
-        # No event_type on purpose -- activation EVENTS are what announce (welcome email,
-        # Discord embed), and the real webhook must stay the only announcer.
+        # No event_type on purpose -- activation EVENTS are what ANNOUNCE (welcome email,
+        # Discord embed); note the Discord role assignment still runs inline, which is wanted
+        # in dev for testing the role flow.
         if settings.DEBUG and session.payment_status == 'paid':
             SubscriptionService.activate_subscription(user, tier, 'stripe')
             return render(request, 'support/welcome.html',
@@ -711,7 +741,8 @@ def subscribe_success(request):
                                            worn_level_dict(user.premium_tier), interval))
 
         # 'paid' or an async payment method still processing: both are SETTLING -- the page
-        # celebrates from the purchased tier while the webhook does the writing.
+        # celebrates from the PURCHASED tier while the webhook does the writing (this is also
+        # the grace re-subscriber's path: the new tier, not the one they left).
         return render(request, 'support/welcome.html',
                       _welcome_context(request, 'settling', level, interval))
 
