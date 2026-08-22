@@ -95,7 +95,7 @@ def test_a_signed_out_visitor_sees_the_whole_pitch(client):
     assert 'Support Platinum Pursuit' in body
     # The statement and the ask, not a login wall wearing the title.
     assert 'Help us build' in body
-    assert 'nothing locked away' in body
+    assert 'supporters are the reason it keeps growing' in body
     assert 'Backer' in body, 'the ladder is missing for a signed-out visitor'
 
 
@@ -901,7 +901,7 @@ def test_the_header_leads_with_the_invitation_not_a_disclaimer(client):
 
     # ...and the promise is still made, lower down.
     assert 'stays free for everyone' in body
-    assert 'nothing locked away' in body
+    assert 'supporters are the reason it keeps growing' in body
 
 
 def test_every_level_carries_its_own_colour_from_the_constant(client):

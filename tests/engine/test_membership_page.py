@@ -391,7 +391,10 @@ def test_a_non_member_sees_the_dial_not_a_door(client):
     response = client.get(reverse('subscription_management'))
     body = response.content.decode()
     assert 'No active membership' in body
-    assert 'Nothing on the site is locked' in body
+    # The dial-not-door point rides the grammar now ("what everyone here already gets"), never
+    # a defensive declaration -- his call: tell it less directly.
+    assert 'everyone here already gets' in body
+    assert 'Nothing on the site is locked' not in body
 
 
 def test_the_paypal_cancel_is_a_dialog_not_a_confirm(client):
