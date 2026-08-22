@@ -442,6 +442,7 @@ def test_past_due_offers_exactly_one_portal_button(client):
     body = response.content.decode()
     assert "didn&#x27;t go through" in body or "didn't go through" in body
     assert body.count(reverse('stripe_billing_portal')) == 1
+    assert 'supm-actions' not in body, 'an empty actions block still paints its divider'
 
 
 def test_paypal_grace_has_a_working_door_back(client):
@@ -524,11 +525,72 @@ def test_the_state_preview_is_staff_gated_and_fabricated(client, settings):
     assert 'No active membership' in body
 
 
-def test_no_em_dashes_in_the_page_copy():
-    """House rule: em dashes never appear in user-facing content. The sibling Support pages
-    are clean; this pins the newest one."""
+def test_no_em_dashes_in_the_support_templates():
+    """House rule: em dashes never appear in user-facing content, in any encoding. Pinned
+    across the whole Support template family."""
     import pathlib as _pathlib
+    import re as _re
     root = _pathlib.Path(__file__).resolve().parents[2]
-    body = (root / 'templates' / 'support' / 'membership.html').read_text(encoding='utf-8')
-    assert 'mdash' not in body and chr(8212) not in body
+    pattern = _re.compile(r'mdash|&#8212;|&#x2014;|' + chr(8212))
+    offenders = [f.name for f in (root / 'templates' / 'support').glob('*.html')
+                 if pattern.search(f.read_text(encoding='utf-8'))]
+    assert not offenders, f'em dashes in: {offenders}'
+
+
+def test_a_stale_paypal_expiry_cannot_strip_a_stripe_member():
+    """The provider switch the grace door opened: cancel PayPal, re-subscribe via Stripe. The old
+    PayPal sub's EXPIRED must not deactivate the premium a live Stripe sub is paying for -- the
+    PayPal handler now carries the same provider guard its Stripe twin has always had."""
+    from users.services.paypal_service import PayPalService
+
+    profile = ProfileFactory()
+    user = profile.user
+    user.subscription_provider = 'stripe'
+    user.premium_tier = 'patron'
+    user.paypal_subscription_id = 'I-STALE'   # the identifier the clearing would normally remove
+    user.save()
+    profile.refresh_from_db()
+
+    PayPalService.handle_webhook_event('BILLING.SUBSCRIPTION.EXPIRED', {'id': 'I-STALE'})
+    user.refresh_from_db()
+    assert user.premium_tier == 'patron', 'a stale PayPal expiry stripped a Stripe member'
+    assert user.subscription_provider == 'stripe'
+
+
+def test_switching_to_stripe_clears_the_stale_paypal_identifiers():
+    """Braces to the guard's belt: a Stripe activation drops the dead PayPal sub's ids, so its
+    later webhooks cannot even find this user."""
+    profile = ProfileFactory()
+    user = profile.user
+    user.subscription_provider = 'paypal'
+    user.paypal_subscription_id = 'I-OLD'
+    user.paypal_cancel_at = timezone.now() + timedelta(days=5)
+    user.save()
+
+    SubscriptionService.activate_subscription(user, 'patron', 'stripe')
+    user.refresh_from_db()
+    assert user.paypal_subscription_id is None
+    assert user.paypal_cancel_at is None
+    assert user.subscription_provider == 'stripe'
+
+
+def test_preview_pages_disarm_their_live_controls(client, settings):
+    """A staff member who is ALSO a real subscriber must not be able to mutate their account
+    from inside a fabricated state -- and the preview never touches the data layer at all."""
+    settings.DEBUG = False
+    staff = UserFactory(is_staff=True)
+    ProfileFactory(user=staff)
+    client.force_login(staff)
+
+    from users.services.paypal_service import PayPalService
+    with patch.object(PayPalService, 'get_cached_subscription_snapshot',
+                      side_effect=AssertionError('the preview touched the data layer')):
+        body = client.get(reverse('subscription_management') + '?preview=paypal').content.decode()
+    assert 'class="supm-cancel__go" disabled' in body, 'the cancel button is live in preview'
+    assert 'disabled onchange' in body, 'the wall toggle is live in preview'
+
+
+    body = client.get(reverse('subscription_management') + '?preview=active').content.decode()
+    zone = body.split('Manage billing')[0][-300:]
+    assert 'disabled' in zone, 'the portal button is live in preview'
 

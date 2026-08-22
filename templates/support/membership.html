@@ -135,7 +135,7 @@
                 <p class="supm-inset__sub">Your membership is still active while the payment retries. Updating your card usually sorts it in a minute.</p>
                 {% if can_open_portal %}
                 <form method="post" action="{% url 'stripe_billing_portal' %}">{% csrf_token %}
-                    <button type="submit" class="supm-inset__cta">Update payment method</button>
+                    <button type="submit" class="supm-inset__cta"{% if preview_active %} disabled{% endif %}>Update payment method</button>
                 </form>
                 {% endif %}
             </div>
@@ -143,11 +143,13 @@
 
             {% comment %} Actions, provider-branched. Stripe hands billing to the hosted portal
             (card, invoices, cancel); PayPal cancels in-app through the dialog below. {% endcomment %}
-            {% if membership.state != 'grace' %}
+            {% comment %} Stripe past-due renders NO actions row -- its portal button lives in
+            the inset above, and an empty block still paints its divider. {% endcomment %}
+            {% if membership.provider == 'paypal' and membership.state != 'grace' or membership.provider == 'stripe' and membership.state == 'active' and can_open_portal %}
             <div class="supm-actions">
-                {% if membership.provider == 'stripe' and can_open_portal and membership.state != 'past_due' %}
+                {% if membership.provider == 'stripe' %}
                 <form method="post" action="{% url 'stripe_billing_portal' %}">{% csrf_token %}
-                    <button type="submit" class="supm-actions__go">Manage billing</button>
+                    <button type="submit" class="supm-actions__go"{% if preview_active %} disabled{% endif %}>Manage billing</button>
                 </form>
                 <p class="supm-actions__note">Update your card, view invoices, or cancel. Opens Stripe's secure portal.</p>
                 {% elif membership.provider == 'paypal' %}
@@ -223,7 +225,7 @@
                 <input type="hidden" name="wall_visibility" value="1">
                 <label class="supm-wall__label">
                     <input type="checkbox" name="on_the_wall" value="yes" class="checkbox checkbox-primary checkbox-sm"
-                           {% if on_the_wall %}checked{% endif %} onchange="this.form.requestSubmit()">
+                           {% if on_the_wall %}checked{% endif %}{% if preview_active %} disabled{% endif %} onchange="this.form.requestSubmit()">
                     <span>List me on the supporter wall</span>
                 </label>
             </form>
@@ -253,7 +255,7 @@
         <div class="supm-cancel__row">
             <form method="dialog"><button class="supm-cancel__keep" autofocus>Keep my membership</button></form>
             <form method="post" action="{% url 'paypal_cancel_subscription' %}">{% csrf_token %}
-                <button type="submit" class="supm-cancel__go">Cancel membership</button>
+                <button type="submit" class="supm-cancel__go"{% if preview_active %} disabled{% endif %}>Cancel membership</button>
             </form>
         </div>
     </dialog>

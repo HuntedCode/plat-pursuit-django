@@ -22,7 +22,6 @@
 }
 
 .supm-testmode {
-    margin-bottom: 0.9rem;
     padding: 0.5rem 0.9rem;
     border: 1px dashed var(--pp-warning);
     border-radius: var(--pp-radius-sm);
@@ -334,7 +333,7 @@
 .supm-actions__note { font-size: 0.76rem; color: var(--pp-text-mute); }
 
 /* ---- perks section (free content; tiles come from support.css) ---------------------------- */
-.supm-perks { margin-bottom: 0.25rem; }
+.supm-perks { }
 
 /* The tiles stack exactly as the storefront modal stacks them (2x2 + the wide beta tile) --
    support.css owns the grid; nothing to override here. */

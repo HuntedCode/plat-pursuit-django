@@ -805,7 +805,10 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
 
     #: The dev/staff state preview (?preview=<key>): every state this page can be in, fabricated
     #: from constants so it can be eyeballed without conjuring subscriptions. Display-only by the
-    #: preview rule -- no provider or data layer runs for a preview, ever.
+    #: preview rule -- no provider or data layer runs for a preview, ever -- and the rendered
+    #: page's live controls (portal, cancel, wall toggle) are disabled while previewing, so a
+    #: staff member who is ALSO a real subscriber cannot mutate their own account from inside a
+    #: fabricated state.
     PREVIEW_STATES = ('active', 'cancelling', 'grace', 'past-due', 'paypal', 'paypal-grace',
                       'legacy', 'none')
 

@@ -119,7 +119,7 @@ A DB partial unique constraint prevents duplicate open periods. Total subscripti
 
 `/support/membership/` renders from `SubscriptionService.membership_status(user)` (read-only,
 richer than the boolean `has_active_subscription`, which deliberately reports `(False, None)`
-during Stripe grace so the double-subscribe guard lets a cancelled member re-subscribe):
+during grace (both providers) so the double-subscribe guard lets a cancelled member re-subscribe):
 
 | State | Meaning | Source |
 |---|---|---|
@@ -161,7 +161,7 @@ webhook and the user's own cancel) so the page never hangs on a live PayPal call
 
 1. Before creating a checkout session or PayPal subscription, `has_active_subscription(user)` is called
 2. Checks Stripe: queries `djstripe.Subscription` for active or past_due status
-3. Checks PayPal: verifies stored subscription ID, tier, and that `paypal_cancel_at` has not passed
+3. Checks PayPal: verifies stored subscription ID, tier, and that `paypal_cancel_at` is UNSET (a cancelled sub will not renew, so it does not block re-subscribing; expiry is handled by webhooks)
 4. Returns `(True, provider_name)` if active sub exists, blocking the new subscription attempt
 
 ## API Endpoints

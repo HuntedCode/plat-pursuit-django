@@ -293,6 +293,21 @@ class PayPalService:
                 logger.warning(f"No user found with paypal_subscription_id {subscription_id}")
                 return
 
+        # THE PROVIDER GUARD, mirror of the Stripe handler's ("a Stripe event must never end a
+        # PAYPAL subscriber's premium"): a member in PayPal grace can now re-subscribe (the
+        # double-subscribe guard reports False for a cancelled sub), and if they switch to
+        # Stripe, the OLD PayPal sub's later CANCELLED/SUSPENDED/EXPIRED must not strip the
+        # premium their live Stripe subscription is paying for. ACTIVATED and SALE.COMPLETED
+        # stay unguarded: activation is how a provider BECOMES current.
+        if event_type in ('BILLING.SUBSCRIPTION.CANCELLED', 'BILLING.SUBSCRIPTION.SUSPENDED',
+                          'BILLING.SUBSCRIPTION.EXPIRED'):
+            if user.subscription_provider != 'paypal' or user.paypal_subscription_id != subscription_id:
+                logger.info(
+                    f"Ignoring stale PayPal {event_type} for {user.email}: "
+                    f"current provider={user.subscription_provider}, event sub={subscription_id}"
+                )
+                return
+
         if event_type == 'BILLING.SUBSCRIPTION.ACTIVATED':
             plan_id = resource.get('plan_id')
             tier = PayPalService.get_tier_from_plan_id(plan_id)

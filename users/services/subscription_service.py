@@ -204,6 +204,13 @@ class SubscriptionService:
         if provider == 'paypal':
             user.paypal_cancel_at = None  # Clear any previous cancellation
             update_fields += ['paypal_cancel_at', 'paypal_subscription_id']
+        elif user.paypal_subscription_id or user.paypal_cancel_at:
+            # Switching TO another provider: drop the stale PayPal identifiers, so the dead
+            # sub's later webhooks cannot even find this user (the handler's provider guard is
+            # the belt; this is the braces).
+            user.paypal_subscription_id = None
+            user.paypal_cancel_at = None
+            update_fields += ['paypal_subscription_id', 'paypal_cancel_at']
 
         with transaction.atomic():
             user.save(update_fields=update_fields)

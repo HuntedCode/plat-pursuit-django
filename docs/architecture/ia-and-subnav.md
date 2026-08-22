@@ -107,6 +107,8 @@ facts, tenure, provider-branched actions (Stripe billing portal as a POST action
 in a dialog), the perk tiles, and the wall opt-out. The old URL is a PERMANENT 302 (never 301 on
 a payment-adjacent URL -- it is baked into every sent lifecycle email and stored notification);
 the `subscription_management` route NAME moved with the page so every reverse() caller followed.
+Staff (or DEBUG) can eyeball every state via `?preview=<active|cancelling|grace|past-due|paypal|
+paypal-grace|legacy|none>` -- fabricated context, disarmed controls, real name only.
 
 The view lives in `users.views` rather than `core.views` because **it answers this page's checkout
 POST**. The form carries no `action`, so it self-POSTs to whatever URL rendered it; serving the form
