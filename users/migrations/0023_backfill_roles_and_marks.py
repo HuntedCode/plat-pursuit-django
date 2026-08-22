@@ -13,24 +13,25 @@ def forwards(apps, schema_editor):
 
     CustomUser.objects.filter(is_staff=True).update(role='admin')
 
-    # Historical models lack methods, so the resolver is inlined against the same constants.
+    # Historical models lack methods, so the resolver's precedence is restated as a closed set
+    # of bulk UPDATEs (staff > mod > worn supporter level) -- one statement per outcome instead
+    # of a per-profile save loop, which at whale scale sat inside the deploy's migrate step.
+    from django.db.models import Q
+
     from users.constants import LADDER_SLUGS, LEGACY_TIER_LEVEL_MAP
 
-    profiles = Profile.objects.select_related('user').exclude(user__isnull=True)
-    for profile in profiles.iterator(chunk_size=500):
-        user = profile.user
-        if user.role == 'admin' or user.is_staff:
-            mark = 'staff'
-        elif user.role == 'moderator':
-            mark = 'mod'
-        elif profile.user_is_premium and user.premium_tier:
-            mark = (user.premium_tier if user.premium_tier in LADDER_SLUGS
-                    else LEGACY_TIER_LEVEL_MAP.get(user.premium_tier, '')) or ''
-        else:
-            mark = ''
-        if profile.display_mark != mark:
-            profile.display_mark = mark
-            profile.save(update_fields=['display_mark'])
+    linked = Profile.objects.exclude(user__isnull=True)
+    service = Q(user__role='admin') | Q(user__is_staff=True)
+
+    linked.filter(service).update(display_mark='staff')
+    linked.filter(user__role='moderator').exclude(service).update(display_mark='mod')
+    for slug in LADDER_SLUGS:
+        wearing = [slug] + [legacy for legacy, worn in LEGACY_TIER_LEVEL_MAP.items()
+                            if worn == slug]
+        (linked.filter(user_is_premium=True, user__premium_tier__in=wearing)
+               .exclude(service).exclude(user__role='moderator')
+               .update(display_mark=slug))
+    # Everyone else keeps the schema default ''.
 
 
 def backwards(apps, schema_editor):

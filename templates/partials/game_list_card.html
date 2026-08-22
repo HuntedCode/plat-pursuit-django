@@ -61,6 +61,7 @@
                 {% include 'partials/_avatar.html' with url=game_list.profile.avatar_url alt=game_list.profile.psn_username %}
             </div>
             <span class="truncate">
+                {# no mark: dormant surface pending the Game Lists revamp, see docs/features/marks-and-roles.md #}
                 <span class="font-medium text-secondary">{{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}</span>
             </span>
         </div>

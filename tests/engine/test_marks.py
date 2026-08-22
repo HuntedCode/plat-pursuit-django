@@ -35,6 +35,69 @@ def test_admin_role_carries_django_admin_access_and_moderator_does_not():
     assert user.is_moderator is True
 
 
+def test_unchecking_staff_on_an_admin_demotes_the_role_too():
+    """The changed field wins: an admin un-ticking "staff status" on an Administrator is a
+    demotion, not a request the model silently reverts (the inert-checkbox bug)."""
+    user = UserFactory()
+    user.role = 'admin'
+    user.save()
+
+    user.is_staff = False
+    user.save()
+    user.refresh_from_db()
+    assert user.is_staff is False and user.role == '', 'the lockstep re-armed the flag'
+    assert resolve_display_mark(user, is_premium=False) == ''
+
+
+def test_createsuperuser_lands_with_the_admin_role():
+    """Superusers made after the backfill must resolve 'staff' through the role field, not
+    lean forever on the bare-is_staff fallback."""
+    from users.models import CustomUser
+    su = CustomUser.objects.create_superuser(email='root@pp.test', password='x')
+    assert su.role == 'admin' and su.is_staff is True
+
+
+def test_narrow_saves_skip_the_mark_refresh():
+    """Login's last_login save must not cost a Profile round-trip -- only writes that can
+    move the mark (role/is_staff/is_superuser/premium_tier) refresh the denorm."""
+    profile = ProfileFactory()
+    user = profile.user
+    user.role = 'moderator'
+    user.save()
+    profile.refresh_from_db()
+    assert profile.display_mark == 'mod'
+
+    # A stale denorm survives a narrow save untouched (proving refresh did not run)...
+    type(profile).objects.filter(pk=profile.pk).update(display_mark='patron')
+    from django.utils import timezone
+    user.last_login = timezone.now()
+    user.save(update_fields=['last_login'])
+    profile.refresh_from_db()
+    assert profile.display_mark == 'patron', 'a narrow save still refreshed the mark'
+
+    # ...and a full save repairs it.
+    user.save()
+    profile.refresh_from_db()
+    assert profile.display_mark == 'mod'
+
+
+def test_unlinking_a_profile_takes_the_mark_with_it():
+    """An orphaned profile keeps rendering on Browse Hunters and the boards, so the mark must
+    come off when the account leaves."""
+    profile = ProfileFactory()
+    user = profile.user
+    user.role = 'admin'
+    user.save()
+    profile.refresh_from_db()
+    assert profile.display_mark == 'staff'
+
+    profile.user = None
+    profile.save()
+    profile.update_profile_premium(False)
+    profile.refresh_from_db()
+    assert profile.display_mark == '', 'the orphaned profile kept its mark'
+
+
 def test_superusers_keep_staff_regardless_of_role():
     user = UserFactory(is_superuser=True, is_staff=True)
     user.role = 'moderator'
@@ -182,6 +245,24 @@ def test_marked_surfaces_read_the_denorm():
     assert 'lb-row__prem' not in row, 'the legacy amber star survived'
 
 
+def test_comments_render_the_full_mark():
+    """A moderator's authority on a comment must not be hue-alone (and staff crimson sits a
+    breath from --pp-error): the full partial renders, glyph and aria-label included."""
+    from django.utils import timezone
+    rendered = render_to_string('partials/comment.html', {
+        'comment': {
+            'id': 1, 'author': {'username': 'ModAuthor', 'avatar_url': '', 'flag': '',
+                                'user_is_premium': False, 'display_mark': 'mod'},
+            'body': 'On topic.', 'display_body': 'On topic.', 'upvote_count': 0,
+            'is_edited': False, 'is_deleted': False, 'depth': 0,
+            'created_at': timezone.now(), 'updated_at': timezone.now(),
+            'user_has_voted': False, 'is_moderator': False,
+            'can_edit': False, 'can_delete': False, 'parent_id': None, 'replies': [],
+        },
+    })
+    assert 'aria-label="Moderator"' in rendered and 'pp-supname' in rendered
+
+
 def test_the_wall_carries_the_service_override(client):
     """A paying staff member's name AND sub-line wear the service colour on the credits, the
     sub-line saying so plainly ("Staff"); the stars stay their paid level's."""
@@ -270,9 +351,10 @@ def test_the_mobile_facepile_survives_the_css_build():
     in name contexts only. Read the BUILT stylesheet -- the build has silently dropped rules
     before -- and pin each rule under its mobile media query."""
     import pathlib
-    css = pathlib.Path('staticfiles/css/output.css').read_text(encoding='utf-8')
+    css = pathlib.Path('static/css/output.css').read_text(encoding='utf-8')
     for rule in (
         '.pp-markname .pp-supstar:not(:first-child)',
+        '.pp-markname--lg .pp-supstar:not(:first-child)',
         '.pp-markname .pp-supstar:not(:only-child)',
         '.sup-prev--credit .sup-prev__mark .pp-supstar:not(:only-child)',
     ):

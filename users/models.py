@@ -51,6 +51,7 @@ class UserManager(BaseUserManager):
         """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('role', 'admin')
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
         if extra_fields.get('is_superuser') is not True:
@@ -132,8 +133,18 @@ class CustomUser(AbstractUser):
         # A bare is_staff with NO role is left alone -- forcing it off would silently demote
         # every user flagged directly (tests, createsuperuser flows, the admin checkbox).
         desired = None
+        extra_fields = []
         if self.role == 'admin' and not self.is_staff:
-            desired = True
+            # Either the role was just granted (drive the flag on), or an admin un-ticked
+            # "staff status" on an existing Administrator -- then the CHANGED field wins and
+            # the demotion cascades to the role, so the two never sit in disagreement.
+            was_admin_with_staff = bool(self.pk) and type(self).objects.filter(
+                pk=self.pk, role='admin', is_staff=True).exists()
+            if was_admin_with_staff and not self.is_superuser:
+                self.role = ''
+                extra_fields.append('role')
+            else:
+                desired = True
         elif self.role == 'moderator' and self.is_staff and not self.is_superuser:
             desired = False
         elif self.role == '' and self.is_staff and not self.is_superuser and self.pk:
@@ -145,13 +156,19 @@ class CustomUser(AbstractUser):
                 desired = False
         if desired is not None:
             self.is_staff = desired
-            update_fields = kwargs.get('update_fields')
-            if update_fields is not None and 'is_staff' not in update_fields:
-                kwargs['update_fields'] = list(update_fields) + ['is_staff']
+            extra_fields.append('is_staff')
+        update_fields = kwargs.get('update_fields')
+        if extra_fields and update_fields is not None:
+            kwargs['update_fields'] = list(update_fields) + [
+                f for f in extra_fields if f not in update_fields]
         super().save(*args, **kwargs)
         # The service mark follows the role. Imported here to avoid an import cycle at load.
-        from users.services.marks import refresh_display_mark
-        refresh_display_mark(self)
+        # Skipped for narrow writes that cannot move the mark (login's last_login save was
+        # costing a Profile round-trip on every sign-in).
+        MARK_FIELDS = {'role', 'is_staff', 'is_superuser', 'premium_tier'}
+        if update_fields is None or MARK_FIELDS & set(update_fields) or extra_fields:
+            from users.services.marks import refresh_display_mark
+            refresh_display_mark(self)
 
     def get_premium_tier(self):
         """

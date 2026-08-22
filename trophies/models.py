@@ -273,6 +273,11 @@ class Profile(models.Model):
         if self.user_id:
             from users.services.marks import refresh_display_mark
             refresh_display_mark(self.user, is_premium=is_premium)
+        elif self.display_mark:
+            # Unlinking nulls the user before this runs; an orphaned profile keeps rendering on
+            # Browse Hunters and the boards, so the mark must come off with the account.
+            self.display_mark = ''
+            self.save(update_fields=['display_mark'])
     
     def get_time_since_last_sync(self) -> timedelta:
         """

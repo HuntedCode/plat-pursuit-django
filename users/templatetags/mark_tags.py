@@ -11,8 +11,16 @@ register = template.Library()
 
 
 @register.inclusion_tag('components/name_mark.html')
-def name_mark(name, mark=None, size=None):
-    return {'name': name, 'mark': mark_style(mark), 'size': size}
+def name_mark(name, mark=None, size=None, index=None):
+    # A row index desynchronises the name's flow against its neighbours (negative delay = start
+    # mid-cycle immediately). 700ms against the 16s loop spreads adjacent rows well apart.
+    delay = None
+    if index is not None:
+        try:
+            delay = f'-{(int(index) * 700) % 16000}ms'
+        except (TypeError, ValueError):
+            delay = None
+    return {'name': name, 'mark': mark_style(mark), 'size': size, 'delay': delay}
 
 
 @register.filter

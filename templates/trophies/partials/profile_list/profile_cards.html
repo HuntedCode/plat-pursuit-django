@@ -1,4 +1,4 @@
-{% load humanize custom_filters %}{% comment %} One hunter, as a card on the browse wall.
+{% load humanize custom_filters mark_tags %}{% comment %} One hunter, as a card on the browse wall.
 
 Deliberately THIN -- a face, a name, the title they chose to wear, where they are, and three numbers. This
 grid paints 30 cards a page and grows by 30 on every scroll, so anything that costs a query or an image per
@@ -12,9 +12,6 @@ two queries per profile, which on a 30-card page is ~60 queries to print a word 
 Every field read here must appear in the view's `.only(...)`, or Django re-fetches the row per card and the
 grid N+1s on a deferred load. {% endcomment %}
 {% for profile in object_list %}
-{% comment %} Supporters get a warmer card, not a louder one: the same amber their mark already carries,
-spent on the EDGE rather than on a shimmer. The old wall shimmered the whole border, which at this density
-read as "featured" rather than "supporter" -- an emphasis the card cannot back up. {% endcomment %}
 <article class="pp-hcard">
     <div class="pp-hcard__id">
         <div class="pp-hcard__avatar{% if not profile.avatar_url %} pp-hcard__avatar--none{% endif %}">
@@ -29,13 +26,10 @@ read as "featured" rather than "supporter" -- an emphasis the card cannot back u
                 {% comment %} Under Alphabetical the NAME is the sort axis, so it takes the accent the
                 stat cells take under every other ordering -- the one sort that previously highlighted
                 nothing, because no stat explains it. {% endcomment %}
-                {% load mark_tags %}<a class="pp-hcard__link pp-hcard__name{% if active_sort == 'alpha' %} pp-hcard__name--sorted{% endif %}" href="{% url 'profile_detail' profile.psn_username %}">{% name_mark name=profile.display_psn_username|default:profile.psn_username mark=profile.display_mark size='sm' %}</a>
-                {% comment %} Supporters kept a mark. The old wall gave them a shimmering border, which at
-                this density would be the loudest thing on the page and would read as "featured" rather
-                than "supporter" -- so it is one small glyph instead, carrying the site's one other
-                semantic hue. {% endcomment %}
-{% comment %} The mark replaces the flat supporter star: level stars in the level's colour, or
-                the staff wrench / mod shield. Name colouring comes with it via the partial. {% endcomment %}
+                {% comment %} The mark (components/name_mark.html) rides the name link: level stars in
+                the level's colour, or the staff wrench / mod shield. At this density the mark is the
+                supporter treatment -- a shimmering border was tried and read as "featured". {% endcomment %}
+                <a class="pp-hcard__link pp-hcard__name{% if active_sort == 'alpha' %} pp-hcard__name--sorted{% endif %}" href="{% url 'profile_detail' profile.psn_username %}">{% name_mark name=profile.display_psn_username|default:profile.psn_username mark=profile.display_mark size='sm' index=forloop.counter0 %}</a>
                 {% comment %} NOT aria-hidden. `Profile.flag` holds a country CODE ("US"), which is real
                 content and the card's only statement of where someone is -- hiding it would be right for a
                 decorative emoji flag and wrong for this. {% endcomment %}

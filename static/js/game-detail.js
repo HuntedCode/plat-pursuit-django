@@ -1457,10 +1457,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 '<div class="gd-blurb__foot"><time class="gd-blurb__time">just now</time></div></div>';
             const img = li.querySelector('.gd-blurb__av img'); if (img) img.src = av;
             const nameEl = li.querySelector('.gd-blurb__name');
-            nameEl.textContent = root.dataset.viewerName || 'You';
-            // The mark system colours the viewer's name to match the server-rendered cards; the
-            // glyph itself waits for a reload (this node is transient).
-            if (root.dataset.viewerMarkColour) nameEl.style.color = root.dataset.viewerMarkColour;
+            const viewerName = root.dataset.viewerName || 'You';
+            if (root.dataset.viewerMarkColour) {
+                // Same structure the server renders (.pp-markname > .pp-supname) so the hover
+                // state still applies; the glyph waits for a reload (this node is transient).
+                const wrap = document.createElement('span');
+                wrap.className = 'pp-markname';
+                wrap.style.setProperty('--sup-t', root.dataset.viewerMarkColour);
+                const nm = document.createElement('span');
+                nm.className = 'pp-supname';
+                nm.textContent = viewerName;
+                wrap.appendChild(nm);
+                nameEl.appendChild(wrap);
+            } else {
+                nameEl.textContent = viewerName;
+            }
             li.querySelector('.gd-blurb__text').textContent = text;
             return li;
         }

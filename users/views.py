@@ -436,8 +436,8 @@ class SupportStorefrontView(TemplateView):
             Profile.objects
             .filter(show_on_supporter_wall=True, user__premium_tier__in=eligible)
             .select_related('user')
-            .only('display_psn_username', 'psn_username', 'avatar_url', 'user__premium_tier',
-                  'user__role')
+            .only('display_psn_username', 'psn_username', 'avatar_url', 'display_mark',
+                  'user__premium_tier')
             # `Lower()` because a raw sort puts every lowercase name after every uppercase one,
             # which reads as two lists stapled together rather than one alphabetical run.
             .order_by(rank_order, Lower('psn_username'))[:self.WALL_CAP]
@@ -454,13 +454,12 @@ class SupportStorefrontView(TemplateView):
                 'tier_slug': self._worn_level(r.user.premium_tier),
                 # The service override, name-colour only: a paying staff member's NAME wears
                 # crimson (the site-wide precedence rule) but the stars and the level sub-line
-                # stay their paid level's -- the wall is specifically about who pays.
-                'service_colour': (SERVICE_MARKS['staff']['colour'] if r.user.role == 'admin'
-                                   else SERVICE_MARKS['mod']['colour'] if r.user.role == 'moderator'
-                                   else None),
-                'service_label': (SERVICE_MARKS['staff']['label'] if r.user.role == 'admin'
-                                  else SERVICE_MARKS['mod']['label'] if r.user.role == 'moderator'
-                                  else None),
+                # stay their paid level's -- the wall is specifically about who pays. Read from
+                # the denorm: precedence is baked in users/services/marks.py and nowhere else.
+                'service_colour': (SERVICE_MARKS[r.display_mark]['colour']
+                                   if r.display_mark in SERVICE_MARKS else None),
+                'service_label': (SERVICE_MARKS[r.display_mark]['label']
+                                  if r.display_mark in SERVICE_MARKS else None),
             }
             for r in rows
         ]

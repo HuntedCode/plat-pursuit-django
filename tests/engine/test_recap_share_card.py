@@ -30,6 +30,7 @@ class _Profile:
     display_psn_username = 'HuntedCode'
     psn_username = 'HuntedCode'
     avatar_url = ''
+    display_mark = ''
     is_plus = False
 
 

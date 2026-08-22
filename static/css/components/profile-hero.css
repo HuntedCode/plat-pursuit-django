@@ -115,9 +115,8 @@
 /* ---- Identity ----------------------------------------------------------------------------------- */
 /* The supporter mark, same glyph and hue as the hunter wall so the two surfaces agree about what a
    supporter looks like. */
-.pp-phero__supp { flex: none; display: inline-grid; place-items: center; color: var(--pp-accent); }
-.pp-phero__supp svg { width: 15px; height: 15px; }
-
+/* .pp-phero__supp retired 2026-08-21: the flat amber supporter star predated the mark system
+   (components/name_mark.html), which the header h1 now renders instead. */
 .pp-phero__tag {
     display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px;
     font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;

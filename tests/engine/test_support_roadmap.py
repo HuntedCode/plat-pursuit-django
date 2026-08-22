@@ -164,7 +164,7 @@ def test_the_breathing_chip_survives_the_css_build():
     passed while the built chip never breathed. This one reads the BUILD."""
     import pathlib as pl
     root = pl.Path(__file__).resolve().parents[2]
-    out = (root / 'staticfiles' / 'css' / 'output.css').read_text(encoding='utf-8')
+    out = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
 
     i = out.index('@keyframes rmHere{')
     block = out[i:i + 300]

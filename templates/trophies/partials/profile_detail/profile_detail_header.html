@@ -1,4 +1,4 @@
-{% load humanize custom_filters %}{% comment %} PROFILE HERO -- rebuilt 2026-08, from scratch.
+{% load humanize custom_filters mark_tags %}{% comment %} PROFILE HERO -- rebuilt 2026-08, from scratch.
 
 Its job is IDENTITY and STANDING, and nothing else. What it deliberately no longer carries:
 
@@ -89,12 +89,7 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
 
             <div class="pp-phero__who min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
-                    {% load mark_tags %}<h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight min-w-0 break-words">{% name_mark name=profile.display_psn_username|default:profile.psn_username mark=profile.display_mark %}</h1>
-                    {% if profile.user_is_premium %}
-                    <span class="pp-phero__supp" title="Platinum Pursuit supporter" aria-label="Supporter">
-                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>
-                    </span>
-                    {% endif %}
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight min-w-0 break-words">{% name_mark name=profile.display_psn_username|default:profile.psn_username mark=profile.display_mark size='lg' %}</h1>
                     {% comment %}The region flag sits with the name, which is what it is about. The PS Plus
                     pill used to sit beside it and was removed in 2026-08: a subscription almost every
                     active hunter holds says nothing that distinguishes one profile from another, so it

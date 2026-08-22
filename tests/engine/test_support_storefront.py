@@ -1005,7 +1005,11 @@ def test_the_supporter_name_treatment_never_gets_louder_with_price():
     root = pathlib.Path(__file__).resolve().parents[2]
     css = (root / 'static' / 'css' / 'components' / 'supporter.css').read_text(encoding='utf-8')
 
-    assert css.count('animation:') == 1, 'more than one animation on the supporter name'
+    # `animation: none` stillers are exempt: they SUBTRACT motion (service names, the Pursuer
+    # Card's earned register, state overrides) and cannot make any level louder.
+    live_animations = [m for m in re.findall(r'animation:\s*([^;]+);', css)
+                       if m.strip() != 'none']
+    assert len(live_animations) == 1, 'more than one animation on the supporter name'
 
     # Searched as a SELECTOR, not as a bare substring. A plain `slug in css` also matches prose --
     # "ally" is inside "eventually" -- which made this fail on a comment while passing on a real

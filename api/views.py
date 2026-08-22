@@ -544,6 +544,7 @@ class CommentListView(APIView):
                 'avatar_url': author_profile.avatar_url,
                 'flag': author_profile.flag,
                 'user_is_premium': author_profile.user_is_premium,
+                'display_mark': author_profile.display_mark,
             },
             'user_has_voted': False,
             'is_moderator': False,

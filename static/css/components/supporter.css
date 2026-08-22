@@ -109,6 +109,7 @@
     fill: none;
     stroke: var(--sup-t, var(--pp-accent));
     stroke-width: 2;
+    stroke-linejoin: round;   /* miter points read spiky at 10px; the share cards already round */
 }
 
 /* ---- the mark, composed (components/name_mark.html) --------------------------------------
@@ -129,6 +130,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    animation-delay: var(--sup-delay, 0ms);   /* set per row by the tag's index param */
 }
 
 .pp-markname__glyph {
@@ -148,6 +150,47 @@
 .pp-markname--sm .pp-markname__svc { width: 11px; height: 11px; }
 .pp-markname--sm .pp-supstar { width: 10px; height: 10px; }
 
+/* Large context (page-header h1s: Career hero, profile header). At 24-30px name sizes the 11px
+   glyph read as debris beside the name; here it scales to stay part of it. */
+.pp-markname--lg { gap: 6px; }
+.pp-markname--lg .pp-supstar { width: 15px; height: 15px; }
+.pp-markname--lg .pp-markname__svc { width: 16px; height: 16px; }
+
+/* Service names hold STILL. The flow is the bought register's signature -- staff and mods get
+   the colour and the glyph, not the shimmer, so three registers stay three renderings. */
+.pp-markname--svc .pp-supname {
+    animation: none;
+    background-image: none;
+    color: var(--sup-t, var(--pp-accent));
+    -webkit-text-fill-color: currentColor;
+}
+
+/* STATE OUT-RANKS IDENTITY. Wherever a surface colours a name to say something about NOW --
+   this row is you, the search landed here, this name is the sort axis, you are hovering it --
+   that colour must win over the mark's, or the state reads as broken for exactly the marked
+   users. The glyph keeps telling the identity; the name answers the state. */
+.lb-row.is-you .pp-supname,
+.lb-row.is-found .pp-supname,
+.lb-row__who:hover .pp-supname,
+.pp-hcard__name--sorted .pp-supname,
+.gd-blurb__name:hover .pp-supname {
+    animation: none;
+    background-image: none;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+}
+
+/* The Pursuer Card is the EARNED signature: the mark keeps its colour and stars but not the
+   flow (which at 22px outranked the 11px rank line -- the paid register must never sit above
+   the earned one), and the card's 800 weight wins over .pp-supname's 700. */
+.pursuer-card__name .pp-supname {
+    font-weight: 800;
+    animation: none;
+    background-image: none;
+    color: var(--sup-t, var(--pp-accent));
+    -webkit-text-fill-color: currentColor;
+}
+
 /* Mobile facepile: in NAME contexts the star run imbricates like an avatar stack -- five stars
    compress from ~55px to ~26px while the count stays readable as visible mass. Each overlapped
    star wears a thin rim in the surface colour (paint-order: stroke, cheap vector work -- NOT a
@@ -159,10 +202,13 @@
 
     .pp-markname .pp-supstar:not(:first-child) { margin-left: -6px; }
     .pp-markname--sm .pp-supstar:not(:first-child) { margin-left: -5.5px; }
+    .pp-markname--lg .pp-supstar:not(:first-child) { margin-left: -8px; }
 
+    /* The rim reads as separation only when it matches the ground; surfaces that are not bg-1
+       set --mark-rim (e.g. .gd-blurb in game-detail.css). */
     .pp-markname .pp-supstar:not(:only-child) path {
         paint-order: stroke;
-        stroke: var(--pp-bg-1);
+        stroke: var(--mark-rim, var(--pp-bg-1));
         stroke-width: 3;
         stroke-linejoin: round;
     }

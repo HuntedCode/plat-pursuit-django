@@ -1129,7 +1129,7 @@
     .sup-prev--credit .sup-prev__mark .pp-supstar:not(:first-child) { margin-left: -6px; }
     .sup-prev--credit .sup-prev__mark .pp-supstar:not(:only-child) path {
         paint-order: stroke;
-        stroke: var(--pp-bg-1);
+        stroke: var(--mark-rim, var(--pp-bg-1));
         stroke-width: 3;
         stroke-linejoin: round;
     }

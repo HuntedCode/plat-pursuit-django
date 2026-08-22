@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize mark_tags %}
 {% comment %} One leaderboard row, shared by all three Global Boards.
 
 The boards differ only in their FIGURES, so the view supplies `primary`/`primary_label` and an optional
@@ -47,7 +47,7 @@ renders without it is invisible to a virtualized wall. Harmless on the flow wall
                 {% comment %} The mark system (components/name_mark.html): supporter level,
                 staff wrench or mod shield, one object wherever you meet a name. Replaced the
                 legacy amber star, which predated the ladder and knew one flat state. {% endcomment %}
-                {% load mark_tags %}<span class="lb-row__uname">{% name_mark name=entry.psn_username mark=entry.display_mark size='sm' %}</span>
+                <span class="lb-row__uname">{% name_mark name=entry.psn_username mark=entry.display_mark size='sm' index=entry.rank %}</span>
             </span>
             {% comment %} The worn title, when there is one. `pr-1` because it is italic inside a clamped
             box and italic glyphs slant past their box. {% endcomment %}

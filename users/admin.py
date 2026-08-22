@@ -27,6 +27,7 @@ class CustomUserAdmin(UserAdmin):
     list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'timezone_confirmed', 'is_staff', 'is_active', 'date_joined')
     list_select_related = ('profile',)
     list_filter = (
+        'role',
         'is_staff',
         'is_active',
         'is_superuser',
@@ -35,6 +36,7 @@ class CustomUserAdmin(UserAdmin):
         'user_timezone',
         ('timezone_confirmed_at', admin.EmptyFieldListFilter),
         PSNLinkedFilter,
+        'role',
     )
     search_fields = ('email', 'profile__psn_username', 'profile__display_psn_username')
     ordering = ('email',)
@@ -51,7 +53,13 @@ class CustomUserAdmin(UserAdmin):
         }),
         ('Subscription', {'fields': ('subscription_provider', 'stripe_customer_id', 'paypal_subscription_id', 'paypal_cancel_at')}),
         ('Email Preferences', {'fields': ('email_preferences',)}),
-        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Permissions', {
+            'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+            'description': 'Role drives the service mark and the admin flag: Administrator keeps '
+                           '"staff status" on, Moderator turns it off (moderators get the mod toolset, '
+                           'not this admin). Un-ticking "staff status" on an Administrator demotes the '
+                           'role too -- the two never disagree.',
+        }),
         ('Important Dates', {'fields': ('last_login', 'date_joined')}),
     )
 

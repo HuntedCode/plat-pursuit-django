@@ -40,8 +40,8 @@
             <div class="flex flex-wrap items-center gap-2 mb-2">
                 {# Username #}
                 <a href="{% url 'profile_detail' comment.author.username %}"
-                   class="font-semibold {% if not comment.author.display_mark %}text-primary{% endif %} hover:underline hover:text-primary-focus transition-colors"{% if comment.author.display_mark %} style="color: {{ comment.author.display_mark|mark_colour }}"{% endif %}>
-                    {{ comment.author.username }}
+                   class="font-semibold {% if not comment.author.display_mark %}text-primary{% endif %} hover:underline hover:text-primary-focus transition-colors">
+                    {% name_mark name=comment.author.username mark=comment.author.display_mark size='sm' %}
                 </a>
 
                 {# Is Moderator #}

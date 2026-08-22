@@ -1585,3 +1585,8 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 .gd-breport__area::placeholder { color: var(--pp-text-mute); }
 
 @media (prefers-reduced-motion: reduce) { .gd-rate__dropbtn svg { transition: none; } .gd-blurb__report { transition: none; } }
+
+/* The quick-take cards sit on a bg-2 wash, so the mobile facepile rim (supporter.css) matches
+   that ground instead of bg-1. */
+.gd-blurb { --mark-rim: var(--pp-bg-2); }
+
