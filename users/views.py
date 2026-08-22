@@ -635,7 +635,7 @@ def subscribe_success(request):
     state catches up via webhook. A refresh is always safe; a bare or stale hit lands on the
     storefront, never a broken page.
     """
-    from users.services.marks import worn_level_dict, worn_supporter_level
+    from users.services.marks import worn_level_dict
 
     user = request.user
 
@@ -677,9 +677,15 @@ def subscribe_success(request):
         # driven by a query param is the exact thing the snapshot exists to prevent).
         # Ownership guard: custom_id was set to the buyer's user id at creation -- a foreign
         # subscription id must never leak a tier.
+        import re as _re
         from users.constants import PAYPAL_LADDER_PLANS
         from users.services.paypal_service import PayPalService
         subscription_id = request.GET.get('subscription_id')
+        # The id feeds the SHARED snapshot cache: only PayPal's own shape gets anywhere near it
+        # (any logged-in user could otherwise pin cache entries / drive a provider fetch per
+        # guessed id).
+        if subscription_id and not _re.fullmatch(r'I-[A-Z0-9]{4,30}', subscription_id):
+            subscription_id = None
         level = None
         interval = None
         if subscription_id:
@@ -689,14 +695,24 @@ def subscribe_success(request):
                 if tier:
                     level = worn_level_dict(tier)
                     mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
-                    for slug, intervals in PAYPAL_LADDER_PLANS.get(mode, {}).items():
+                    for intervals in PAYPAL_LADDER_PLANS.get(mode, {}).values():
                         for iv, pid in intervals.items():
                             if pid == snapshot.get('plan_id'):
                                 interval = iv
+                                break
+                        if interval:
+                            break
         if level is not None and already_active() and worn_level_dict(user.premium_tier) == level:
             # The webhook already landed for this same purchase.
             return render(request, 'support/welcome.html',
                           _welcome_context(request, 'active', level, interval or active_interval()))
+        if level is None and already_active():
+            # The webhook landed but the plan couldn't be verified (no id, snapshot miss, or an
+            # unmapped plan -- which is EVERY plan until the live id paste at cutover): the
+            # member's real tier beats a blind settling hero.
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active', worn_level_dict(user.premium_tier),
+                                           active_interval()))
         # Blind settling when anything above fell through: name + generic member line.
         return render(request, 'support/welcome.html',
                       _welcome_context(request, 'settling', level, interval))
@@ -724,8 +740,10 @@ def subscribe_success(request):
             messages.info(request, "Your membership is activating. It will be ready in a minute or two.")
             return redirect('support_hub')
 
-        # The webhook already landed for this purchase (tier matches): the full active hero.
-        if already_active() and worn_supporter_level(user.premium_tier) == level['slug']:
+        # The webhook already landed for THIS purchase (raw tier match -- worn slugs collapse
+        # legacy onto ladder, which re-opened the old-tier bug for a grace premium_yearly
+        # member buying Backer): the full active hero.
+        if already_active() and user.premium_tier == tier:
             return render(request, 'support/welcome.html',
                           _welcome_context(request, 'active',
                                            worn_level_dict(user.premium_tier), interval))

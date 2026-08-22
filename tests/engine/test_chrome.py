@@ -378,9 +378,13 @@ def test_subnav_mobile_sheet_present(client):
 def test_subnav_hidden_on_itemless_hub(client):
     # Leaderboards is the itemless hub now (Support grew a four-item rail in 2026-08) -- the
     # {% if hub_section and hub_subnav_items %} guard renders nothing for it.
-    assert b'class="pp-sub"' not in client.get('/leaderboards/').content
+    resp = client.get('/leaderboards/')
+    assert resp.status_code == 200, 'a redirect would make the negative below vacuous'
+    assert b'class="pp-sub"' not in resp.content
     # And the Support rail genuinely renders, so the guard's other half is exercised too.
-    assert b'pp-sub' in client.get('/support/').content
+    resp = client.get('/support/')
+    assert resp.status_code == 200
+    assert b'class="pp-sub"' in resp.content
 
 
 # --- navsync: global sync state for the navbar's status-aware avatar + panel ---

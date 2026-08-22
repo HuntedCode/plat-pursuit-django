@@ -60,6 +60,7 @@ def test_the_stripe_race_renders_the_purchased_tier(client, settings):
         body = client.get(URL + '?session_id=cs_x').content.decode()
     assert 'PlatPursuit Patron' in body
     assert 'settling in' in body
+    assert 'billed monthly' in body, 'the interval voice must reach the settling hero'
     user.refresh_from_db()
     assert not user.premium_tier, 'outside DEBUG the view must never write premium'
 
@@ -106,7 +107,7 @@ def test_paypal_verifies_ownership_and_recovers_the_tier(client):
     details = {'custom_id': str(user.id), 'plan_id': plan_id, 'status': 'ACTIVE'}
     with patch('users.services.paypal_service.PayPalService.get_subscription_details',
                return_value=details):
-        body = client.get(URL + '?provider=paypal&subscription_id=I-NEW').content.decode()
+        body = client.get(URL + '?provider=paypal&subscription_id=I-NEWPATRON1').content.decode()
     assert 'PlatPursuit Patron' in body
     assert 'settling in' in body
 
@@ -237,4 +238,50 @@ def test_the_paypal_read_goes_through_the_snapshot_cache(client):
         client.get(URL + f'?provider=paypal&subscription_id={sub_id}')
         client.get(URL + f'?provider=paypal&subscription_id={sub_id}')
     assert fetch.call_count == 1, 'the second hit must come from the snapshot cache'
+
+
+def test_a_webhook_landed_revisit_renders_the_full_active_hero(client, settings):
+    """The revisit branch: same session_id, but the webhook wrote premium between purchase and
+    refresh -- the raw-tier match renders active, not another settling screen."""
+    settings.DEBUG = False
+    user = _buyer(client)
+    SubscriptionService.activate_subscription(user, 'patron', 'stripe')
+    with patch('users.views.stripe.checkout.Session.retrieve', return_value=_fake_session()):
+        body = client.get(URL + '?session_id=cs_x').content.decode()
+    assert 'PlatPursuit Patron' in body
+    assert 'settling in' not in body
+
+
+def test_a_legacy_grace_resubscriber_celebrates_the_new_tier(client, settings):
+    """The verification audit's find: worn slugs collapse legacy onto ladder, so a grace
+    premium_yearly member buying Backer was short-circuited into the OLD hero ('Premium
+    Yearly, a founding tier'). Raw tiers compare now."""
+    settings.DEBUG = False
+    user = _buyer(client)
+    SubscriptionService.activate_subscription(user, 'premium_yearly', 'stripe')
+    bought = _fake_session(metadata={'tier': 'backer', 'interval': 'monthly'})
+    with patch('users.views.stripe.checkout.Session.retrieve', return_value=bought):
+        body = client.get(URL + '?session_id=cs_new').content.decode()
+    assert 'settling in' in body, 'a different purchase must settle, not shortcut'
+    assert 'founding tier' not in body, 'the OLD legacy hero leaked through the worn-slug compare'
+
+
+def test_an_active_paypal_member_never_sees_the_blind_hero(client):
+    """Live today has an EMPTY PayPal plan map (ids paste at cutover), so plan verification
+    always misses -- a member whose webhook landed must get their real tier, not 'settling'."""
+    user = _buyer(client)
+    SubscriptionService.activate_subscription(user, 'patron', 'paypal')
+    body = client.get(URL + '?provider=paypal').content.decode()
+    assert 'PlatPursuit Patron' in body
+    assert 'settling in' not in body
+
+
+def test_a_malformed_subscription_id_never_reaches_the_cache(client):
+    """The id feeds the SHARED snapshot cache, so only PayPal's own shape gets near it."""
+    from users.services.paypal_service import PayPalService
+    _buyer(client)
+    with patch.object(PayPalService, 'get_cached_subscription_snapshot') as snap:
+        client.get(URL + '?provider=paypal&subscription_id=../../evil')
+        client.get(URL + '?provider=paypal&subscription_id=' + 'X' * 500)
+    snap.assert_not_called()
 
