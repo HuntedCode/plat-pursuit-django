@@ -31,19 +31,16 @@ def mark_colour(mark):
 
 
 @register.filter
-def supporter_title(mark):
-    """The worn level's title-line label ("PlatPursuit Backer"), or '' for service/none --
-    for template conditionals; rendering goes through {% mark_title %}."""
+def mark_title_label(mark):
+    """The mark's title-line label ("PlatPursuit Backer" / "Staff" / "Moderator"), or empty
+    for the unmarked -- for template conditionals; rendering goes through {% mark_title %}."""
     style = mark_style(mark)
-    return style['label'] if style and style['kind'] == 'supporter' else ''
+    return style['label'] if style else ''
 
 
 @register.inclusion_tag('components/mark_title.html')
 def mark_title(mark, sep=False):
-    """The supporter title as a coloured, STATIC span; `sep` renders the joining dot when the
-    line already carries an earned title."""
-    style = mark_style(mark)
-    if not style or style['kind'] != 'supporter':
-        style = None
-    return {'mark': style, 'sep': sep}
+    """The mark's title as a coloured, STATIC span -- every register, each in its own colour;
+    `sep` renders the joining dot when the line already carries an earned title."""
+    return {'mark': mark_style(mark), 'sep': sep}
 

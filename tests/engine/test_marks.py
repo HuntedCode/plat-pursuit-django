@@ -367,15 +367,16 @@ def test_the_mobile_facepile_survives_the_css_build():
     assert css.count('paint-order:stroke') >= 2, 'the facepile rim was dropped by the build'
 
 
-def test_the_supporter_title_joins_the_worn_title_line():
-    """His ask: the level in words ("PlatPursuit Backer") beside the title a hunter already
-    wears, in the level colour, STATIC -- the storefront preview promised exactly this line.
-    Supporters only: staff and mods have the glyph and the wall."""
-    from users.templatetags.mark_tags import supporter_title
+def test_the_mark_title_joins_the_worn_title_line():
+    """His ask: the mark in words beside the title a hunter already wears -- "PlatPursuit
+    Backer" for supporters, "Staff" / "Moderator" for service -- in the mark's colour, STATIC.
+    Service marks wear their label the same way: "Staff" / "Moderator" in the service colour."""
+    from users.templatetags.mark_tags import mark_title_label
 
-    assert supporter_title('patron') == 'PlatPursuit Patron'
-    assert supporter_title('staff') == ''
-    assert supporter_title('') == ''
+    assert mark_title_label('patron') == 'PlatPursuit Patron'
+    assert mark_title_label('staff') == 'Staff'
+    assert mark_title_label('mod') == 'Moderator'
+    assert mark_title_label('') == ''
 
     row = render_to_string('trophies/partials/leaderboard_row.html', {
         'entry': {'psn_username': 'Titled', 'display_mark': 'patron', 'rank': 1,
@@ -398,5 +399,7 @@ def test_the_supporter_title_joins_the_worn_title_line():
                   'avatar_url': '', 'flag': '', 'displayed_title': 'Wrench', 'value': 1},
         'board': {'slug': 'x'},
     })
-    assert 'pp-marktitle' not in staff_row, 'service marks do not wear a supporter title'
+    from users.constants import SERVICE_MARKS
+    assert 'Staff' in staff_row and SERVICE_MARKS['staff']['colour'] in staff_row, (
+        'the service title should join the line in the service colour')
 

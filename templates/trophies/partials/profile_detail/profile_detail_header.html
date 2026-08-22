@@ -103,7 +103,7 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                 wall -- one vocabulary for "something earned" across both surfaces.{% endcomment %}
                 {% if profile.displayed_title %}
                 <p class="pp-phero__title">{{ profile.displayed_title }}{% mark_title profile.display_mark sep=True %}</p>
-                {% elif profile.display_mark|supporter_title %}
+                {% elif profile.display_mark|mark_title_label %}
                 <p class="pp-phero__title">{% mark_title profile.display_mark %}</p>
                 {% endif %}
 

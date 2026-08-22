@@ -1,6 +1,7 @@
 {% comment %}
-The supporter TITLE ("PlatPursuit Backer"), joining a worn-title line in the level's colour.
+The mark's TITLE, joining a worn-title line in its colour: "PlatPursuit Backer" for
+supporters, "Staff" / "Moderator" for the service marks.
 STATIC on purpose (his call): the flow animation belongs to the name; this line just says the
-level in words, the form the storefront preview has promised since the ladder shipped. Renders
-nothing for service marks or the unmarked -- callers can use it unconditionally.
+mark in words, the form the storefront preview has promised since the ladder shipped. Renders
+nothing for the unmarked -- callers can use it unconditionally.
 {% endcomment %}{% if mark %}{% if sep %}<span class="pp-marktitle__dot" aria-hidden="true">&middot;</span>{% endif %}<span class="pp-marktitle" style="color: {{ mark.colour }}">{{ mark.label }}</span>{% endif %}

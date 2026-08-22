@@ -51,7 +51,7 @@ renders without it is invisible to a virtualized wall. Harmless on the flow wall
             </span>
             {% comment %} The worn title, when there is one. `pr-1` because it is italic inside a clamped
             box and italic glyphs slant past their box. {% endcomment %}
-            {% if entry.displayed_title %}<span class="lb-row__title italic pr-1">{{ entry.displayed_title }}{% mark_title entry.display_mark sep=True %}</span>{% elif entry.display_mark|supporter_title %}<span class="lb-row__title italic pr-1">{% mark_title entry.display_mark %}</span>{% endif %}
+            {% if entry.displayed_title %}<span class="lb-row__title italic pr-1">{{ entry.displayed_title }}{% mark_title entry.display_mark sep=True %}</span>{% elif entry.display_mark|mark_title_label %}<span class="lb-row__title italic pr-1">{% mark_title entry.display_mark %}</span>{% endif %}
         </span>
     </a>
     {% else %}
