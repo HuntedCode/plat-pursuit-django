@@ -58,9 +58,7 @@
 
 .fnd__lede {
     font-size: 0.95rem;
-    font-style: italic;
     color: var(--pp-text-dim);
-    padding-right: 0.25rem;
 }
 
 .fnd__desc {
@@ -77,8 +75,8 @@
     color: var(--pp-text);
 }
 
-.fnd__h3 { font-weight: 700; font-size: 0.92rem; font-style: italic; padding-right: 0.25rem; }
-.fnd__sub { font-size: 0.83rem; font-style: italic; color: var(--pp-text-dim); padding-right: 0.25rem; margin-top: 2px; }
+.fnd__h3 { font-weight: 700; font-size: 0.92rem; }
+.fnd__sub { font-size: 0.83rem; color: var(--pp-text-dim); margin-top: 2px; }
 .fnd__flavour { font-size: 0.75rem; font-style: italic; color: var(--pp-text-mute); padding-right: 0.25rem; }
 .fnd__count { font-weight: 400; color: var(--pp-text-mute); font-size: 0.9em; }
 .fnd__label { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); }
@@ -109,6 +107,33 @@
 .fnd-cta--wide { width: 100%; justify-content: center; padding: 12px 20px; }
 .fnd-cta--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
 .fnd-cta--ghost:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+
+/* The emitter host: the family's floating stars (support.css .sup-go__rise clips to the nearest
+   positioned ancestor). The label spans ride above the stars; disabled buttons emit nothing. */
+.fnd-cta--rise { position: relative; overflow: hidden; --sup-t: var(--pp-primary); }
+.fnd-cta__lbl { position: relative; display: inline-flex; align-items: center; gap: 8px; }
+.fnd-cta--rise:disabled .sup-go__rise { display: none; }
+
+/* ---- inputs (token twins of the stock DaisyUI fields) -------------------------------------- */
+.fnd-input {
+    padding: 9px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
+    color: var(--pp-text);
+    font-size: 0.9rem;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-input::placeholder { color: var(--pp-text-mute); }
+
+.fnd-input:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 25%, transparent);
+}
+
+.fnd-input--search { padding-left: 2.2rem; font-size: 0.85rem; }
 
 .fnd-pill {
     display: inline-flex;
@@ -190,7 +215,7 @@
     padding: 0.5rem 0.9rem;
 }
 
-.fnd-history__summary { font-size: 0.85rem; font-weight: 700; font-style: italic; cursor: pointer; color: var(--pp-text); }
+.fnd-history__summary { font-size: 0.85rem; font-weight: 700; cursor: pointer; color: var(--pp-text); }
 .fnd-history__row {
     display: flex;
     align-items: center;
@@ -311,7 +336,7 @@
 .fnd-claim .pp-med { --sz: 64px; }
 
 .fnd-claim__name { font-weight: 600; font-size: 0.8rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding-right: 0.25rem; }
-.fnd-claim__by { font-size: 0.68rem; font-style: italic; color: var(--pp-text-mute); padding-right: 0.25rem; }
+.fnd-claim__by { font-size: 0.68rem; color: var(--pp-text-mute); }
 
 /* ---- the empty state ----------------------------------------------------------------------- */
 .fnd-empty {

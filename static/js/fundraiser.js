@@ -210,6 +210,14 @@ const FundraiserPage = {
             modal.showModal();
         }));
 
+        // The Support family's dialog closes: the shared X and click-on-backdrop (the dialog
+        // element itself is the backdrop hit target); Escape is native.
+        modal.querySelectorAll('[data-picker-close]').forEach(btn =>
+            btn.addEventListener('click', () => modal.close()));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.close();
+        });
+
         // Search/filter
         const searchInput = document.getElementById('badge-picker-search');
         if (searchInput) {

@@ -1,57 +1,50 @@
-{# Badge Picker Modal: lets donors with remaining picks choose a badge series for artwork #}
-{% load static %}
-<dialog id="badge-picker-modal" class="modal">
-    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300">
-        <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" aria-label="Close">X</button>
-        </form>
+{% comment %} Badge Picker Modal: lets donors with remaining picks choose a badge series for
+artwork. The Support family's dialog treatment (.sup-modal, the storefront perks modal's shape):
+native <dialog>, header row with the shared close button, backdrop-click and Escape handled in
+fundraiser.js. Every id is a JS hook -- keep them. {% endcomment %}
+<dialog id="badge-picker-modal" class="sup-modal" aria-labelledby="badge-picker-h">
+    <div class="sup-modal__head">
+        <h2 id="badge-picker-h">Choose a Badge Series</h2>
+        <button type="button" class="sup-modal__x" data-picker-close aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+    </div>
 
-        <h3 class="font-bold text-xl italic mb-1">Choose a Badge Series</h3>
-        <p class="text-base-content/60 text-sm italic mb-4">
-            Pick a badge to commission custom artwork for.
-            <span id="picker-picks-count" class="text-accent font-semibold"></span>
-        </p>
+    <p class="sup-modal__lede">
+        Pick a badge to commission custom artwork for.
+        <span id="picker-picks-count" class="text-accent font-semibold"></span>
+    </p>
 
-        {# Search/filter bar #}
-        <div class="mb-4 relative">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="badge-picker-search" class="input input-bordered input-sm w-full pl-9"
-                   placeholder="Search badge series by name...">
-        </div>
+    <div class="mb-4 relative">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="badge-picker-search" class="fnd-input fnd-input--search w-full"
+               placeholder="Search badge series by name...">
+    </div>
 
-        {# Badge grid #}
-        <div id="badge-picker-grid" class="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-96 overflow-y-auto pr-1">
-            {% for badge in available_badges %}
-                {% include 'fundraiser/partials/_badge_tile.html' with badge=badge %}
-            {% empty %}
-                <div class="col-span-full text-center py-8 text-base-content/50 italic">
-                    No badges available for claiming at this time.
-                </div>
-            {% endfor %}
-        </div>
+    <div id="badge-picker-grid" class="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-96 overflow-y-auto pr-1">
+        {% for badge in available_badges %}
+            {% include 'fundraiser/partials/_badge_tile.html' with badge=badge %}
+        {% empty %}
+            <div class="col-span-full text-center py-8 fnd__flavour">
+                No badges available for claiming at this time.
+            </div>
+        {% endfor %}
+    </div>
 
-        <div id="badge-picker-empty" class="hidden text-center py-6 text-base-content/50 italic">
-            No badges match your search.
-        </div>
+    <div id="badge-picker-empty" class="hidden text-center py-6 fnd__flavour">
+        No badges match your search.
+    </div>
 
-        {# Confirm claim area #}
-        <div id="badge-claim-confirm" class="hidden mt-4 fnd-panel fnd-panel--accent">
-            <div class="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                    <span class="text-sm font-semibold">Claiming:</span>
-                    <span id="claim-badge-name" class="text-sm text-accent font-bold ml-1"></span>
-                </div>
-                <div class="flex gap-2">
-                    <button type="button" id="cancel-claim-btn" class="btn btn-ghost btn-sm">Cancel</button>
-                    <button type="button" id="confirm-claim-btn" class="btn btn-primary btn-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                        Confirm Claim
-                    </button>
-                </div>
+    <div id="badge-claim-confirm" class="hidden mt-4 fnd-panel fnd-panel--accent">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+                <span class="text-sm font-semibold">Claiming:</span>
+                <span id="claim-badge-name" class="text-sm text-accent font-bold ml-1"></span>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" id="cancel-claim-btn" class="fnd-cta fnd-cta--sm fnd-cta--ghost">Cancel</button>
+                <button type="button" id="confirm-claim-btn" class="fnd-cta fnd-cta--sm">Confirm Claim</button>
             </div>
         </div>
     </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
 </dialog>
