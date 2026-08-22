@@ -736,3 +736,17 @@ live DB. **After deploy: demote the moderators by hand in the Django admin** (th
 backfilled as admin, the pre-split meaning); each demotion syncs `is_staff` off and flips their
 mark to the green shield automatically. The supporter marks appear site-wide in the same deploy
 -- the intended splash.
+
+### Email parking + settings rebuild (2026-08-22)
+
+Non-vital emails are OFF pending the email-system rebuild: only auth (verification, password
+reset, welcome), billing/subscription lifecycle, fundraiser (receipt, claim, artwork), and the
+membership welcome still send. At deploy:
+
+- **Suspend the Render cron for `send_weekly_digest`** (Monday 08:00 UTC). The command now
+  fails safe behind `WEEKLY_DIGEST_SEND_ENABLED` (default False), same pattern as the recap
+  sender, but a paused cron beats a weekly no-op log. Do NOT delete the job definition; the
+  email rebuild will want the slot back.
+- `send_monthly_recap_emails` was already paused (2026-08); no change.
+- `/users/email-preferences/` now 302s to Settings (tokened links in old email footers land
+  there); no action needed, listed so nobody hunts for the missing page.

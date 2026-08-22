@@ -4,12 +4,14 @@ REST API views for user settings updates.
 import logging
 
 import pytz
-from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
+
+from trophies.services.profile_stats_service import update_profile_trophy_counts
+from users.services.timezone_service import set_user_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -41,35 +43,15 @@ class UpdateTimezoneAPIView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        old_timezone = request.user.user_timezone or 'UTC'
-        request.user.user_timezone = timezone_value
-        # Stamped on EVERY successful save, including one that picks the same zone back. The point of the
-        # stamp is not "what did you pick" -- the field above already holds that -- but "have you ever
-        # answered", which `user_timezone` cannot express because it defaults to UTC and is non-null.
-        # Confirming UTC is an answer, and a hunter who does it must not be asked again.
-        request.user.timezone_confirmed_at = timezone.now()
-        request.user.save(update_fields=['user_timezone', 'timezone_confirmed_at'])
-
-        recaps_reset = 0
-        if old_timezone != timezone_value:
-            profile = getattr(request.user, 'profile', None)
-            if profile:
-                from trophies.models import MonthlyRecap
-                recaps_reset = MonthlyRecap.objects.filter(
-                    profile=profile,
-                    is_finalized=True,
-                ).update(is_finalized=False)
-                if recaps_reset:
-                    logger.info(
-                        "Un-finalized %d recaps for profile %s after timezone change: %s -> %s",
-                        recaps_reset, profile.id, old_timezone, timezone_value,
-                    )
+        # One writer for the field + its coupled side effects (confirmation stamp, recap
+        # un-finalize) -- see users/services/timezone_service.py for the semantics.
+        changed, recaps_reset = set_user_timezone(request.user, timezone_value)
 
         return Response({
             'success': True,
             'timezone': timezone_value,
             'recaps_reset': recaps_reset,
-            'changed': old_timezone != timezone_value,
+            'changed': changed,
         })
 
 
@@ -105,6 +87,11 @@ class UpdateQuickSettingsAPIView(APIView):
                 return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
             setattr(profile, setting, value)
             profile.save(update_fields=[setting])
+            # hide_hiddens / hide_zeros feed the filter-respecting trophy-count denorms, so a
+            # toggle must recompute them -- the Settings page path always did, and this path
+            # silently didn't (stale totals until the nightly recalc).
+            profile.refresh_from_db()
+            update_profile_trophy_counts(profile)
 
         elif setting in self.USER_BOOL_SETTINGS:
             if not isinstance(value, bool):
@@ -112,19 +99,12 @@ class UpdateQuickSettingsAPIView(APIView):
             setattr(request.user, setting, value)
             request.user.save(update_fields=[setting])
 
-        # Timezone setting (reuse validation from UpdateTimezoneAPIView)
+        # Timezone setting (same validation as UpdateTimezoneAPIView, same one writer --
+        # this branch used to skip the confirmation stamp, a third divergent behaviour)
         elif setting == 'user_timezone':
             if not isinstance(value, str) or value not in pytz.common_timezones_set:
                 return Response({'error': 'Invalid timezone.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            old_tz = request.user.user_timezone or 'UTC'
-            request.user.user_timezone = value
-            request.user.save(update_fields=['user_timezone'])
-            # Un-finalize recaps if timezone changed (they're rendered in the user's tz).
-            if old_tz != value:
-                profile = getattr(request.user, 'profile', None)
-                if profile:
-                    from trophies.models import MonthlyRecap
-                    MonthlyRecap.objects.filter(profile=profile, is_finalized=True).update(is_finalized=False)
+            set_user_timezone(request.user, value)
 
         # Browse page default filters (save/clear per page)
         elif setting == 'browse_defaults':

@@ -1,5 +1,6 @@
 # users/views.py
 import json
+import pytz
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 
@@ -30,9 +31,10 @@ from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
                              LEGACY_TIER_LEVEL_MAP, PAYPAL_LADDER_PLANS,
                              PREMIUM_PERKS, SUPPORT_TIERS,
                              SUPPORT_TIERS_ARE_PLACEHOLDERS)
-from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
+from users.forms import CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
+from users.services.timezone_service import set_user_timezone
 from users.models import CustomUser
 from trophies.forms import ProfileSettingsForm
 from trophies.services.profile_stats_service import update_profile_trophy_counts
@@ -53,75 +55,116 @@ class CustomConfirmEmailView(ConfirmEmailView):
         return response
     
 class SettingsView(LoginRequiredMixin, View):
+    """The account settings page (rebuilt 2026-08, ground-up).
+
+    Four POST actions, one per section: `regional` (timezone through the ONE timezone writer,
+    plus the clock format), `library` (the two hide toggles + denorm recompute), `change_password`
+    (throttled, and invalid submits re-render with field errors instead of redirecting them away),
+    `unlink_profile`. Email management is allauth's (`account_email`); membership lives on
+    /support/membership/ and this page only points there.
+    """
     template_name = 'users/settings.html'
-    login_url = '/login/'
 
-    def get(self, request):
-        user_form = UserSettingsForm(instance=request.user)
-        password_form = CustomPasswordChangeForm(user=request.user)
-        profile = request.user.profile if hasattr(request.user, 'profile') else None
-        profile_form = ProfileSettingsForm(instance=profile) if profile else None
+    # The password action is the one credential-sensitive POST on the page, and it bypasses
+    # allauth's rate limits (deliberately: the page keeps its own form for field-level errors).
+    # A small cache throttle covers it: failures within the window count, success resets.
+    # Each FAILURE restarts the TTL (five failures spread over an hour still trip it), and a
+    # blocked attempt returns before the set, so hammering cannot extend the lockout past
+    # 15 minutes from the fifth failure. The cache is django_redis with IGNORE_EXCEPTIONS,
+    # so on a Redis outage the throttle fails OPEN -- acceptable for a logged-in-only form.
+    PW_THROTTLE_MAX = 5
+    PW_THROTTLE_WINDOW = 15 * 60
 
-        context = {
-            'user_form': user_form,
-            'password_form': password_form,
-            'profile_form': profile_form,
+    def get(self, request, password_form=None):
+        return render(request, self.template_name, self._context(request, password_form))
+
+    def _context(self, request, password_form=None):
+        from users.services.marks import worn_level_dict
+        profile = getattr(request.user, 'profile', None)
+        level = worn_level_dict(request.user.premium_tier) if request.user.premium_tier else None
+        return {
             'profile': profile,
-            'breadcrumb': [
-                {'text': 'Home', 'url': '/'},
-                {'text': 'Settings'},
-            ],
+            'password_form': password_form or CustomPasswordChangeForm(user=request.user),
+            'timezones': pytz.common_timezones,
+            'level': level,
+            # premium_tier is null/blank for non-members and worn_level_dict returns None for
+            # unmapped tiers, so the level alone answers membership. Gating on the profile's
+            # user_is_premium denorm was the audit-caught bug: a member with no linked PSN
+            # profile (or a denorm lagging a fresh purchase) read as "not a member".
+            'is_member': bool(level),
         }
-        return render(request, self.template_name, context)
-    
+
     def post(self, request):
         action = request.POST.get('action')
+        handler = {
+            'regional': self._save_regional,
+            'library': self._save_library,
+            'change_password': self._change_password,
+            'unlink_profile': self._unlink_profile,
+        }.get(action)
+        if handler is None:
+            return redirect('settings')
+        return handler(request)
 
-        if action == 'update_user':
-            user_form = UserSettingsForm(request.POST, instance=request.user)
-            if user_form.is_valid():
-                user_form.save()
-                messages.success(request, 'User settings updated successfully!')
-            else:
-                messages.error(request, 'Error updating user settings.')
+    def _save_regional(self, request):
+        tz_name = (request.POST.get('user_timezone') or '').strip()
+        if tz_name not in pytz.common_timezones_set:
+            messages.error(request, 'Pick a timezone from the list.')
             return redirect('settings')
-        
-        elif action == 'change_password':
-            password_form = CustomPasswordChangeForm(user=request.user, data=request.POST)
-            if password_form.is_valid():
-                user = password_form.save()
-                update_session_auth_hash(request, user)
-                messages.success(request, 'Password changed successfully.')
-            else:
-                messages.error(request, 'Error changing password. Check fields.')
-            return redirect('settings')
-
-        elif action == 'unlink_profile':
-            profile = request.user.profile if hasattr(request.user, 'profile') else None
-            if profile:
-                profile.unlink_user()
-                messages.success(request, 'PSN profile unlinked successfully!')
-            else:
-                messages.error(request, 'No profile to unlink.')
-            return redirect('settings')
-        
-        elif action == 'update_profile':
-            if not hasattr(request.user, 'profile'):
-                messages.error(request, 'Link a PSN account to change this setting!')
-                return redirect('settings')
-            profile_form = ProfileSettingsForm(request.POST, instance=request.user.profile)
-            if profile_form.is_valid():
-                profile_form.save()
-                request.user.profile.refresh_from_db()
-                update_profile_trophy_counts(request.user.profile)
-                messages.success(request, 'Profile settings updated successfully!')
-            else:
-                messages.error(request, 'Error updating profile settings.')
-            return redirect('settings')
-
-        
+        # The one writer: stamps timezone_confirmed_at and un-finalizes recaps on change
+        # (the old settings page skipped both, leaving recaps rendered in the old zone).
+        changed, recaps_reset = set_user_timezone(request.user, tz_name)
+        use_24 = request.POST.get('use_24hr_clock') == 'on'
+        if use_24 != request.user.use_24hr_clock:
+            request.user.use_24hr_clock = use_24
+            request.user.save(update_fields=['use_24hr_clock'])
+        note = ' Your monthly recaps will regenerate in the new timezone.' if recaps_reset else ''
+        messages.success(request, f'Regional settings saved.{note}')
         return redirect('settings')
-    
+
+    def _save_library(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if profile is None:
+            messages.error(request, 'Link a PSN account to change library settings.')
+            return redirect('settings')
+        form = ProfileSettingsForm(request.POST, instance=profile)
+        if form.is_valid():
+            form.save()
+            # The hide toggles feed the filter-respecting trophy-count denorms.
+            profile.refresh_from_db()
+            update_profile_trophy_counts(profile)
+            messages.success(request, 'Library settings saved.')
+        else:
+            messages.error(request, 'Could not save library settings.')
+        return redirect('settings')
+
+    def _change_password(self, request):
+        throttle_key = f'settings:pwattempts:{request.user.pk}'
+        attempts = cache.get(throttle_key, 0)
+        if attempts >= self.PW_THROTTLE_MAX:
+            messages.error(request, 'Too many password attempts. Try again in a few minutes.')
+            return redirect('settings')
+        form = CustomPasswordChangeForm(user=request.user, data=request.POST)
+        if form.is_valid():
+            cache.delete(throttle_key)
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, 'Password changed.')
+            return redirect('settings')
+        cache.set(throttle_key, attempts + 1, self.PW_THROTTLE_WINDOW)
+        # Re-render (no redirect) so the bound form's field errors reach the template --
+        # the old page redirected and reduced every failure to one generic banner.
+        return self.get(request, password_form=form)
+
+    def _unlink_profile(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if profile:
+            profile.unlink_user()
+            messages.success(request, 'PSN profile unlinked.')
+        else:
+            messages.error(request, 'No profile to unlink.')
+        return redirect('settings')
+
 class SupportStorefrontView(TemplateView):
     """`/support/` -- the Support hub landing AND the membership storefront, deliberately one page.
 
@@ -1073,7 +1116,14 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
 
 
 class EmailPreferencesRedirectView(LoginRequiredMixin, View):
-    """
+    """PARKED (2026-08, unrouted): the email-preferences page went dark with the non-vital
+    emails -- every remaining email is transactional, so there is nothing to opt out of. Its
+    URLs now 302 to Settings. Kept (with EmailPreferencesView, the form and the service) as
+    the starting point for the email-system rebuild. NOTE for that rebuild: the redirect
+    below reverses `email_preferences`, which currently resolves to the token-DROPPING
+    RedirectView in users/urls.py -- re-route the real view before re-routing this one, or
+    it mints a token and immediately eats it.
+
     Redirect logged-in users to the token-based email preferences page.
     Generates a fresh preference token and redirects to EmailPreferencesView.
     """

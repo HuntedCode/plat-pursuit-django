@@ -453,6 +453,11 @@ NOTIFICATION_CACHE_ENABLED = os.getenv('NOTIFICATION_CACHE_ENABLED', 'True') == 
 # Flip to True via the environment when the rebuilt email ships.
 MONTHLY_RECAP_SEND_ENABLED = os.getenv('MONTHLY_RECAP_SEND_ENABLED', 'False') == 'True'
 
+# Weekly digest: OFF with the rest of the non-vital emails (2026-08) pending the email-system
+# rebuild. Only vital account emails (auth), billing, fundraiser, and the membership welcome
+# still send. Same fail-safe pattern as the recap flag above; pause the Render cron too.
+WEEKLY_DIGEST_SEND_ENABLED = os.getenv('WEEKLY_DIGEST_SEND_ENABLED', 'False') == 'True'
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

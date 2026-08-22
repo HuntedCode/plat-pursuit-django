@@ -120,11 +120,12 @@ Emails are gated by the `admin_announcements` preference. `NotificationLog` trac
 
 ### Email Preferences Access
 
-Users can manage email preferences via:
-- Token-based links in email footers (works without login)
-- Settings page: `/users/settings/` has an "Email Preferences" section that generates a token and redirects to the preference page
-
-The `EmailPreferencesRedirectView` at `/users/email-preferences/redirect/` handles the logged-in redirect flow.
+**PARKED (2026-08)** with the non-vital emails, pending the email-system rebuild. Only vital
+emails send now (auth, billing, fundraiser, membership welcome) and all are transactional, so
+there is nothing to opt out of. Both `/users/email-preferences/` routes 302 to Settings (old
+tokened footer links land there); `EmailPreferencesView`, `EmailPreferencesRedirectView`, the
+form and `EmailPreferenceService` are kept unrouted as the rebuild's starting point. Kept
+templates' footers link Account Settings instead of the preference page.
 
 ### Testing Emails
 

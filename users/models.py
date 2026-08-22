@@ -4,7 +4,6 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 import pytz
-from trophies.util_modules.constants import REGIONS
 from djstripe.models import Subscription
 from users.constants import PREMIUM_TIER_CHOICES
 
@@ -87,7 +86,6 @@ class CustomUser(AbstractUser):
         null=True, blank=True,
         help_text="When the user explicitly confirmed or changed their timezone. Null = never asked/answered.",
     )
-    default_region = models.CharField(max_length=2, choices=[(r, r) for r in REGIONS], null=True, blank=True, default=None, help_text="User's preferred default region filter for games.")
     use_24hr_clock = models.BooleanField(default=False, help_text="Use 24-hour time format (23:00) instead of 12-hour AM/PM format (11:00 PM)")
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID for this user.")
     paypal_subscription_id = models.CharField(max_length=255, blank=True, null=True, help_text="PayPal Subscription ID for active subscription.")

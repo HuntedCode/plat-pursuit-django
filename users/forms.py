@@ -2,7 +2,6 @@ from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from allauth.account.forms import SignupForm
 from .models import CustomUser
-import pytz
 
 
 class CustomUserCreationForm(SignupForm):
@@ -36,23 +35,6 @@ class CustomUserCreationForm(SignupForm):
         if CustomUser.objects.filter(email=email).exists():
             raise forms.ValidationError("This email is already in use.")
         return email
-
-class UserSettingsForm(forms.ModelForm):
-    class Meta:
-        model = CustomUser
-        fields = ['user_timezone', 'use_24hr_clock']
-        widgets = {
-            'user_timezone': forms.Select(attrs={'class': 'select w-full'}),
-            'use_24hr_clock': forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'}),
-        }
-        labels = {
-            'user_timezone': 'Timezone',
-            'use_24hr_clock': 'Use 24-Hour Clock Format',
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['user_timezone'].choices = [(tz, tz) for tz in pytz.common_timezones]
 
 class CustomPasswordChangeForm(PasswordChangeForm):
     def __init__(self, *args, **kwargs):

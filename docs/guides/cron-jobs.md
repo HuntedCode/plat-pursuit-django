@@ -24,7 +24,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
 | Weekly (Sunday 07:00 UTC) | `enrich_from_igdb --refresh --max-minutes 90` | Weekly | None |
-| Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
+| ~~Weekly (Monday 08:00 UTC)~~ | ~~`send_weekly_digest`~~ | **PAUSED (2026-08)** | Parked with the non-vital emails pending the email-system rebuild. `WEEKLY_DIGEST_SEND_ENABLED` defaults to False, so the command no-ops even if the job runs. |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
 | ~~3rd of month, 06:00 UTC~~ | ~~`send_monthly_recap_emails`~~ | **PAUSED (2026-08)** | Monthly recap rebuild in progress. `MONTHLY_RECAP_SEND_ENABLED` defaults to False, so the command no-ops even if the job runs. Stops the in-app notification too (dispatched from inside the email loop). |
 
@@ -293,7 +293,12 @@ historical pass after Phase 3's rematch run.
 - **Idempotency**: Safe to re-run. Uses `get_or_generate_recap()` which returns existing recaps if already generated. The finalize step is also idempotent (already-finalized recaps are skipped).
 - **Failure impact**: Recap emails cannot be sent (they require finalized recaps). Users cannot view their monthly recap page until recaps are generated.
 
-### send_weekly_digest
+### send_weekly_digest — PAUSED (2026-08)
+
+Parked with the rest of the non-vital emails pending the email-system rebuild (only auth,
+billing, fundraiser, and the membership welcome emails still send). `WEEKLY_DIGEST_SEND_ENABLED`
+defaults to False so the command fails safe if the cron fires; suspend the Render cron itself
+at the next deploy (see the prod deploy checklist).
 
 - **Schedule**: Monday at 08:00 UTC
 - **Command**: `python manage.py send_weekly_digest`

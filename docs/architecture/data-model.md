@@ -380,7 +380,7 @@ Logs PSN API calls for token monitoring: endpoint, status code, response time, r
 ## User & Account Models (users app)
 
 ### CustomUser
-Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `default_region`, `email_preferences` (JSON). The `is_premium()` method checks subscription status against both Stripe and PayPal.
+Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `email_preferences` (JSON). (`default_region` was deleted 2026-08: zero consumers.) The `is_premium()` method checks subscription status against both Stripe and PayPal.
 
 Key relationships:
 - Reverse: `profile` OneToOne from Profile

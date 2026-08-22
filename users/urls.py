@@ -1,11 +1,18 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from users.views import SettingsView, subscribe_success, EmailPreferencesView, EmailPreferencesRedirectView, paypal_cancel_subscription, stripe_billing_portal
+from users.views import SettingsView, subscribe_success, paypal_cancel_subscription, stripe_billing_portal
 
 urlpatterns = [
     path('settings/', SettingsView.as_view(), name='settings'),
-    path('email-preferences/', EmailPreferencesView.as_view(), name='email_preferences'),
-    path('email-preferences/redirect/', EmailPreferencesRedirectView.as_view(), name='email_preferences_redirect'),
+    # Email preferences: PARKED (2026-08) with the non-vital emails, pending the email-system
+    # rebuild. Every remaining email is transactional (auth, billing, fundraiser, membership
+    # welcome), so there is nothing to opt out of. The path stays as a redirect because tokened
+    # links to it live in every email footer ever delivered; they land on Settings, where email
+    # options will return with the rebuild. Views are parked unrouted in users/views.py.
+    path('email-preferences/', RedirectView.as_view(
+        pattern_name='settings', permanent=False), name='email_preferences'),
+    path('email-preferences/redirect/', RedirectView.as_view(
+        pattern_name='settings', permanent=False), name='email_preferences_redirect'),
     # The storefront moved to /support/ (SupportStorefrontView) so the checkout form and its POST
     # handler share a URL. TEMPORARY, not permanent: a 301 on a payment URL is cached by the browser
     # and cannot be taken back, and a 301 on a POST is downgraded to a GET with the body dropped.
