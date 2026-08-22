@@ -22,6 +22,18 @@
     <div class="supm-testmode" role="note">TEST MODE ACTIVE &mdash; no real payments are processed.</div>
     {% endif %}
 
+    {% if preview_active %}
+    {% comment %} Staff/dev state preview: fabricated context, real name. The strip lists every
+    state so the whole page can be eyeballed in eight clicks. {% endcomment %}
+    <div class="supm-preview" role="note">
+        <span class="supm-preview__label">Previewing state:</span>
+        {% for s in preview_states %}
+        <a href="?preview={{ s }}" class="supm-preview__chip{% if s == preview_active %} is-on{% endif %}">{{ s }}</a>
+        {% endfor %}
+        <a href="{% url 'subscription_management' %}" class="supm-preview__exit">exit</a>
+    </div>
+    {% endif %}
+
     {% comment %} ============================================== header card =============== {% endcomment %}
     <section aria-label="Membership overview" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
         <div class="card-body p-5 md:p-7 pp-head-cascade">

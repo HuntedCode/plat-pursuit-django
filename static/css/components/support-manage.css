@@ -26,6 +26,38 @@
     letter-spacing: 0.06em;
 }
 
+/* The staff/dev state-preview strip (?preview=<state>). */
+.supm-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0.45rem 0.7rem;
+    border: 1px dashed color-mix(in oklab, var(--pp-secondary) 55%, transparent);
+    border-radius: var(--pp-radius-sm);
+    font-size: 0.74rem;
+}
+
+.supm-preview__label { font-weight: 800; color: var(--pp-text-mute); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.64rem; }
+
+.supm-preview__chip {
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim);
+}
+
+.supm-preview__chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-secondary) 50%, var(--pp-border)); }
+
+.supm-preview__chip.is-on {
+    color: var(--pp-secondary);
+    border-color: color-mix(in oklab, var(--pp-secondary) 55%, transparent);
+    background: color-mix(in oklab, var(--pp-secondary) 12%, transparent);
+}
+
+.supm-preview__exit { margin-left: auto; color: var(--pp-text-mute); text-decoration: underline; }
+.supm-preview__exit:hover { color: var(--pp-text); }
+
 /* ---- header type (the roadmap page's scale, shared voice across Support subpages) --------- */
 .supm__eyebrow {
     font-size: 0.68rem;

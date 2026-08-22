@@ -1,6 +1,6 @@
 # users/views.py
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 
 from allauth.account.views import ConfirmEmailView
@@ -803,6 +803,52 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             )
         return redirect('subscription_management')
 
+    #: The dev/staff state preview (?preview=<key>): every state this page can be in, fabricated
+    #: from constants so it can be eyeballed without conjuring subscriptions. Display-only by the
+    #: preview rule -- no provider or data layer runs for a preview, ever.
+    PREVIEW_STATES = ('active', 'cancelling', 'grace', 'past-due', 'paypal', 'paypal-grace',
+                      'legacy', 'none')
+
+    def _preview_context(self, state):
+        """Fabricated context for one preview state. Real name/avatar (the storefront preview's
+        promise: 'this is what YOU look like'), everything else hand-built."""
+        from users.constants import SUPPORT_TIERS
+        from users.services.subscription_service import MembershipStatus
+
+        now = timezone.now()
+        soon = now + timedelta(days=20)
+        patron = next(t for t in SUPPORT_TIERS if t['slug'] == 'patron')
+        backer = next(t for t in SUPPORT_TIERS if t['slug'] == 'backer')
+        level = dict(patron, star_range=range(patron['stars']), is_legacy=False,
+                     display_name=patron['name'])
+        legacy_level = dict(backer, star_range=range(backer['stars']), is_legacy=True,
+                            display_name='Premium Yearly')
+        tenure = {'member_since': now - timedelta(days=400), 'current_started': now - timedelta(days=100),
+                  'total_days': 400, 'total_months': 13}
+        sandbox_paypal = 'https://www.sandbox.paypal.com/myaccount/autopay/'
+
+        base = {'level': level, 'tenure': tenure,
+                'billing': {'amount': 15, 'cycle': 'month'}, 'next_billing': soon}
+        states = {
+            'active': dict(base, membership=MembershipStatus('active', 'stripe'),
+                           can_open_portal=True),
+            'cancelling': dict(base, membership=MembershipStatus('active', 'stripe', cancels_at=soon),
+                               cancels_at=soon, next_billing=None, can_open_portal=True),
+            'grace': dict(base, membership=MembershipStatus('grace', 'stripe', grace_until=soon),
+                          cancels_at=soon, next_billing=None, can_open_portal=True),
+            'past-due': dict(base, membership=MembershipStatus('past_due', 'stripe'),
+                             next_billing=None, can_open_portal=True),
+            'paypal': dict(base, membership=MembershipStatus('active', 'paypal'),
+                           paypal_manage_url=sandbox_paypal),
+            'paypal-grace': dict(base, membership=MembershipStatus('grace', 'paypal', grace_until=soon),
+                                 cancels_at=soon, next_billing=None, paypal_manage_url=sandbox_paypal),
+            'legacy': dict(base, membership=MembershipStatus('active', 'stripe'),
+                           level=legacy_level, billing={'amount': None, 'cycle': 'year'},
+                           can_open_portal=True),
+            'none': {'membership': MembershipStatus('none'), 'level': None},
+        }
+        return states[state]
+
     def get_context_data(self, **kwargs):
         """The membership page's read: state, worn level, billing, tenure -- all display-only.
 
@@ -825,6 +871,13 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         context['has_profile'] = profile is not None
         context['viewer_name'] = (profile.display_psn_username or profile.psn_username) if profile else user.email.split('@')[0]
         context['viewer_avatar'] = profile.avatar_url if profile else ''
+
+        preview = self.request.GET.get('preview')
+        if preview in self.PREVIEW_STATES and (settings.DEBUG or user.is_staff):
+            context.update(self._preview_context(preview))
+            context['preview_active'] = preview
+            context['preview_states'] = self.PREVIEW_STATES
+            return context
 
         membership = SubscriptionService.membership_status(user)
         context['membership'] = membership

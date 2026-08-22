@@ -488,3 +488,38 @@ def test_an_unmapped_tier_renders_without_a_level(client):
     assert response.status_code == 200
     assert 'PlatPursuit member' in body
     assert '--sup-t' not in body.split('sup-perk')[0], 'no level, no level tint on the status card'
+
+
+# ---------------------------------------------------------------- the state preview ----
+
+def test_the_state_preview_is_staff_gated_and_fabricated(client, settings):
+    """?preview=<state> shows any state to staff (or DEBUG) without conjuring subscriptions --
+    fabricated context per the preview rule, never the data layer. A regular member's page is
+    untouched by the param."""
+    settings.DEBUG = False
+    staff = UserFactory(is_staff=True)
+    ProfileFactory(user=staff)
+    client.force_login(staff)
+
+    response = client.get(reverse('subscription_management') + '?preview=grace')
+    body = response.content.decode()
+    assert "You&#x27;ve cancelled" in body or "You've cancelled" in body
+    assert 'Previewing state:' in body
+
+    response = client.get(reverse('subscription_management') + '?preview=past-due')
+    body = response.content.decode()
+    assert "didn&#x27;t go through" in body or "didn't go through" in body
+
+    # Every declared state renders.
+    from users.views import SubscriptionManagementView
+    for state in SubscriptionManagementView.PREVIEW_STATES:
+        assert client.get(reverse('subscription_management') + f'?preview={state}').status_code == 200
+
+    # A regular user gets their real (none) state, param ignored, no strip.
+    plain = UserFactory()
+    ProfileFactory(user=plain)
+    client.force_login(plain)
+    body = client.get(reverse('subscription_management') + '?preview=grace').content.decode()
+    assert 'Previewing state:' not in body
+    assert 'No active membership' in body
+
