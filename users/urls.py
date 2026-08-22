@@ -1,6 +1,6 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from users.views import SettingsView, subscribe_success, SubscriptionManagementView, EmailPreferencesView, EmailPreferencesRedirectView, paypal_cancel_subscription
+from users.views import SettingsView, subscribe_success, SubscriptionManagementView, EmailPreferencesView, EmailPreferencesRedirectView, paypal_cancel_subscription, stripe_billing_portal
 
 urlpatterns = [
     path('settings/', SettingsView.as_view(), name='settings'),
@@ -19,4 +19,5 @@ urlpatterns = [
     path('subscribe/success/', subscribe_success, name='subscribe_success'),
     path('subscription-management/', SubscriptionManagementView.as_view(), name='subscription_management'),
     path('paypal/cancel/', paypal_cancel_subscription, name='paypal_cancel_subscription'),
+    path('stripe/portal/', stripe_billing_portal, name='stripe_billing_portal'),
 ]

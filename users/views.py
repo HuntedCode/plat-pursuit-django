@@ -729,6 +729,31 @@ def paypal_webhook(request):
 
 @login_required
 @require_POST
+def stripe_billing_portal(request):
+    """Mint a Stripe billing-portal session and redirect into it.
+
+    A POST action, not a per-GET mint: the old management page created a portal session on every
+    page load -- a wasted Stripe API call per view and slower TTFB, and a link a prefetcher could
+    follow. Failure lands back on the page with a message, never a dead button.
+    """
+    user = request.user
+    if not user.stripe_customer_id:
+        messages.error(request, "No billing account found.")
+        return redirect('subscription_management')
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=user.stripe_customer_id,
+            return_url=request.build_absolute_uri(reverse('subscription_management')),
+        )
+    except stripe.error.StripeError:
+        logger.exception("Failed to create Stripe billing portal session")
+        messages.error(request, "Couldn't open the billing portal just now. Please try again.")
+        return redirect('subscription_management')
+    return redirect(portal_session.url)
+
+
+@login_required
+@require_POST
 def paypal_cancel_subscription(request):
     """Cancel the user's active PayPal subscription."""
     from users.services.paypal_service import PayPalService
@@ -740,6 +765,9 @@ def paypal_cancel_subscription(request):
 
     success = PayPalService.cancel_subscription(user.paypal_subscription_id)
     if success:
+        # The membership page reads a cached PayPal snapshot; without this bust the member
+        # reloads into a stale "Active" for up to 8 hours.
+        PayPalService.bust_subscription_snapshot(user.paypal_subscription_id)
         messages.success(request, "Your subscription has been cancelled. You will retain access until the end of your current billing period.")
     else:
         messages.error(request, "Error cancelling subscription. Please try through PayPal directly.")
@@ -819,18 +847,7 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
                 else:
                     context['next_billing'] = 'N/A'
 
-                try:
-                    return_url = self.request.build_absolute_uri(
-                        reverse('subscription_management')
-                    )
-                    portal_session = stripe.billing_portal.Session.create(
-                        customer=user.stripe_customer_id,
-                        return_url=return_url,
-                    )
-                    context['portal_url'] = portal_session.url
-                except stripe.error.StripeError:
-                    logger.exception("Failed to create Stripe billing portal session")
-                    context['portal_url'] = None
+                context['can_open_portal'] = bool(user.stripe_customer_id)
             else:
                 context['tier'] = 'None'
                 context['status'] = 'No Subscription'
@@ -840,13 +857,12 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             context['tier'] = user.get_premium_tier()
             context['premium_tier_slug'] = user.premium_tier
 
-            try:
-                sub_details = PayPalService.get_subscription_details(user.paypal_subscription_id)
-                paypal_status = sub_details.get('status', 'UNKNOWN')
-                context['status'] = paypal_status.capitalize()
-
-                billing_info = sub_details.get('billing_info', {})
-                next_billing = billing_info.get('next_billing_time')
+            # Cached snapshot (8h TTL, webhook-busted) -- the page must not hang on a live
+            # PayPal call per GET. Snapshot miss/failure degrades to Active with no date.
+            snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
+            if snapshot:
+                context['status'] = (snapshot.get('status') or 'UNKNOWN').capitalize()
+                next_billing = snapshot.get('next_billing_time')
                 if next_billing:
                     try:
                         context['next_billing'] = datetime.fromisoformat(
@@ -856,8 +872,7 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
                         context['next_billing'] = next_billing
                 else:
                     context['next_billing'] = 'N/A'
-            except Exception:
-                logger.exception("Error fetching PayPal subscription details")
+            else:
                 context['status'] = 'Active'
                 context['next_billing'] = 'N/A'
 

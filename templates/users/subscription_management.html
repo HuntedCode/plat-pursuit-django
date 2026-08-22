@@ -51,8 +51,10 @@
                 <h3 class="font-bold">Payment Issue</h3>
                 <p class="text-sm pr-1">Your most recent payment didn't go through. Please update your payment method to avoid losing premium access.</p>
             </div>
-            {% if portal_url %}
-            <a href="{{ portal_url }}" class="btn btn-sm btn-warning">Update Payment</a>
+            {% if can_open_portal %}
+            <form method="post" action="{% url 'stripe_billing_portal' %}" class="inline">{% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-warning">Update Payment</button>
+            </form>
             {% endif %}
         </div>
     </div>
@@ -98,11 +100,13 @@
 
                 <div class="divider my-0"></div>
 
-                {% if subscription_provider == 'stripe' and portal_url %}
-                <a href="{{ portal_url }}" class="btn btn-primary btn-wide gap-2">
+                {% if subscription_provider == 'stripe' and can_open_portal %}
+                <form method="post" action="{% url 'stripe_billing_portal' %}">{% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-wide gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                     Manage Billing
-                </a>
+                </button>
+                </form>
                 {% elif subscription_provider == 'paypal' %}
                 <div class="flex flex-col gap-3 w-full items-center">
                     <a href="{{ paypal_manage_url }}" target="_blank" rel="noopener" class="btn btn-primary btn-wide gap-2">

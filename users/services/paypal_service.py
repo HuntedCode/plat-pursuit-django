@@ -147,6 +147,44 @@ class PayPalService:
         response.raise_for_status()
         return response.json()
 
+    #: The membership page reads status/next-billing through this snapshot instead of a live
+    #: PayPal call per GET. 8h TTL; busted by every subscription webhook and by the user's own
+    #: cancel action, so state changes show immediately while a quiet subscription costs one
+    #: API call per 8 hours.
+    SUB_CACHE_KEY = 'paypal:sub:{id}'
+    SUB_CACHE_TTL = 60 * 60 * 8
+
+    @staticmethod
+    def get_cached_subscription_snapshot(subscription_id: str) -> Optional[dict]:
+        """The three display primitives ({'status', 'next_billing_time', 'plan_id'}), cached.
+
+        Failures cache nothing and return None -- the page renders without the date rather than
+        hanging on PayPal, and the next request retries instead of pinning a miss for 8h.
+        """
+        if not subscription_id:
+            return None
+        key = PayPalService.SUB_CACHE_KEY.format(id=subscription_id)
+        snapshot = cache.get(key)
+        if snapshot is not None:
+            return snapshot
+        try:
+            details = PayPalService.get_subscription_details(subscription_id)
+        except Exception:
+            logger.exception("PayPal subscription snapshot fetch failed for %s", subscription_id)
+            return None
+        snapshot = {
+            'status': details.get('status'),
+            'next_billing_time': (details.get('billing_info') or {}).get('next_billing_time'),
+            'plan_id': details.get('plan_id'),
+        }
+        cache.set(key, snapshot, PayPalService.SUB_CACHE_TTL)
+        return snapshot
+
+    @staticmethod
+    def bust_subscription_snapshot(subscription_id: str) -> None:
+        if subscription_id:
+            cache.delete(PayPalService.SUB_CACHE_KEY.format(id=subscription_id))
+
     @staticmethod
     def cancel_subscription(subscription_id: str, reason: str = "User requested cancellation") -> bool:
         """
@@ -218,6 +256,9 @@ class PayPalService:
         if not subscription_id:
             logger.warning(f"No subscription_id in PayPal webhook event {event_type}")
             return
+
+        # Every subscription event outdates the membership page's cached snapshot.
+        PayPalService.bust_subscription_snapshot(subscription_id)
 
         # Look up user by paypal_subscription_id
         try:

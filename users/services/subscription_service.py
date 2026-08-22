@@ -10,8 +10,9 @@ This service manages:
 """
 import logging
 import stripe
-from typing import Optional, Dict, Tuple
-from datetime import datetime, timedelta
+from typing import NamedTuple, Optional, Dict, Tuple
+from datetime import datetime, timedelta, timezone as dt_timezone
+from django.urls import reverse
 from django.utils import timezone
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -28,6 +29,20 @@ from trophies.discord_utils.discord_notifications import send_subscription_notif
 from trophies.services.discord_roles import notify_bot_role_earned
 
 logger = logging.getLogger('users.services.subscription')
+
+
+class MembershipStatus(NamedTuple):
+    """The membership page's read of a user's standing -- richer than the boolean
+    `has_active_subscription` (which deliberately says (False, None) during Stripe grace so the
+    double-subscribe guard lets a cancelled member re-subscribe).
+
+    state: 'active' | 'past_due' | 'grace' | 'none'
+    """
+    state: str
+    provider: Optional[str] = None
+    grace_until: Optional[datetime] = None   # set when state == 'grace'
+    cancels_at: Optional[datetime] = None    # set when active but a cancel is scheduled
+    stripe_sub: Optional[Subscription] = None  # the djstripe row the state was read from
 
 
 class SubscriptionService:
@@ -346,6 +361,126 @@ class SubscriptionService:
 
         return (False, None)
 
+    @staticmethod
+    def membership_status(user) -> MembershipStatus:
+        """The membership page's state read: active / past_due / grace / none, read-only.
+
+        Mirrors `update_user_subscription`'s truth without writing anything. The crucial extra
+        over `has_active_subscription` is GRACE: a cancelled Stripe sub with paid time left keeps
+        premium (see the canceled branch there), but the boolean helper reports (False, None) --
+        correct for the double-subscribe guard, wrong for a page that would tell a paying member
+        they have "no active subscription".
+        """
+        if user.stripe_customer_id:
+            sub = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id,
+                stripe_data__status__in=['active', 'trialing'],
+            ).first()
+            if sub:
+                data = sub.stripe_data or {}
+                cancels_at = None
+                if data.get('cancel_at_period_end'):
+                    # Portal cancels leave the sub 'active' with this flag; the period end IS the
+                    # end date. `dt_timezone.utc`, never django.utils.timezone.utc (removed in
+                    # Django 5.0).
+                    end_ts = data.get('cancel_at') or data.get('current_period_end')
+                    if end_ts:
+                        cancels_at = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
+                return MembershipStatus('active', 'stripe', cancels_at=cancels_at, stripe_sub=sub)
+
+            past_due = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id, stripe_data__status='past_due'
+            ).first()
+            if past_due:
+                return MembershipStatus('past_due', 'stripe', stripe_sub=past_due)
+
+            if user.premium_tier and SubscriptionService.is_tier_premium(user.premium_tier):
+                canceled = Subscription.objects.filter(
+                    customer__id=user.stripe_customer_id, stripe_data__status='canceled'
+                ).first()
+                if canceled:
+                    end_ts = (canceled.stripe_data or {}).get('current_period_end')
+                    if end_ts:
+                        until = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
+                        if until > timezone.now():
+                            return MembershipStatus('grace', 'stripe', grace_until=until,
+                                                    stripe_sub=canceled)
+
+        if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
+            if user.paypal_cancel_at:
+                if user.paypal_cancel_at > timezone.now():
+                    return MembershipStatus('grace', 'paypal', grace_until=user.paypal_cancel_at)
+                return MembershipStatus('none')
+            return MembershipStatus('active', 'paypal')
+
+        return MembershipStatus('none')
+
+    @staticmethod
+    def premium_tenure(user) -> Dict:
+        """Member-since and total supported time, from SubscriptionPeriod (the only tenure data on
+        the site). One values_list pass; bounded per user (a handful of periods). The milestones
+        metric `premium_months` delegates here -- one implementation, pinned by a parity test."""
+        from users.models import SubscriptionPeriod
+
+        now = timezone.now()
+        member_since = None
+        current_started = None
+        total_days = 0
+        for started, ended in SubscriptionPeriod.objects.filter(user=user).values_list(
+                'started_at', 'ended_at'):
+            if not started:
+                continue
+            total_days += max(((ended or now) - started).days, 0)
+            if member_since is None or started < member_since:
+                member_since = started
+            if ended is None:
+                current_started = started
+        return {
+            'member_since': member_since,
+            'current_started': current_started,
+            'total_days': total_days,
+            'total_months': int(total_days // 30),
+        }
+
+    @staticmethod
+    def describe_billing(user, membership: MembershipStatus) -> Dict:
+        """What the member pays and how often: {'amount': int|None dollars, 'cycle':
+        'month'|'year'|None}. Best-effort display data -- never guessed, omitted when unknown.
+        """
+        amount = None
+        cycle = None
+
+        if membership.provider == 'stripe' and membership.stripe_sub is not None:
+            plan = (membership.stripe_sub.stripe_data or {}).get('plan') or {}
+            if plan.get('amount'):
+                amount = plan['amount'] // 100
+            cycle = plan.get('interval') or None
+
+        elif membership.provider == 'paypal':
+            from users.services.paypal_service import PayPalService
+            from users.constants import PAYPAL_LADDER_PLANS, SUPPORT_TIERS
+
+            snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
+            plan_id = (snapshot or {}).get('plan_id')
+            if plan_id:
+                for slug, intervals in PAYPAL_LADDER_PLANS.get(settings.PAYPAL_MODE, {}).items():
+                    for interval, pid in intervals.items():
+                        if pid == plan_id:
+                            cycle = 'month' if interval == 'monthly' else 'year'
+                            tier = next((t for t in SUPPORT_TIERS if t['slug'] == slug), None)
+                            if tier:
+                                amount = tier['monthly'] if cycle == 'month' else tier['yearly']
+                            break
+                    if cycle:
+                        break
+            if cycle is None:
+                # Legacy PayPal tiers: the cycle is knowable from the tier, the dollar figure
+                # lives only on the processor -- never guess it.
+                cycle = {'premium_monthly': 'month', 'premium_yearly': 'year',
+                         'supporter': 'month'}.get(user.premium_tier)
+
+        return {'amount': amount, 'cycle': cycle}
+
     # ── Stripe-specific methods ──────────────────────────────────────────
 
     @staticmethod
@@ -451,7 +586,11 @@ class SubscriptionService:
             if canceled_sub:
                 canceled_data = canceled_sub.stripe_data or {}
                 period_end_ts = canceled_data.get('current_period_end')
-                if period_end_ts and datetime.fromtimestamp(period_end_ts, tz=timezone.utc) > timezone.now():
+                # dt_timezone.utc, NOT timezone.utc: `timezone` is django.utils.timezone, whose
+                # `utc` alias was removed in Django 5.0 -- this line raised AttributeError for
+                # every grace-period check since the 5.x upgrade (same bug class as the one fixed
+                # on the management page view).
+                if period_end_ts and datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc) > timezone.now():
                     # Still in grace period, keep premium active
                     return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
 
@@ -610,12 +749,12 @@ class SubscriptionService:
             return False
 
         # Generate billing portal URL for Stripe users, fallback to management page
-        portal_url = f"{settings.SITE_URL}/users/subscription-management/"
+        portal_url = f"{settings.SITE_URL}{reverse('subscription_management')}"
         if user.stripe_customer_id:
             try:
                 portal_session = stripe.billing_portal.Session.create(
                     customer=user.stripe_customer_id,
-                    return_url=f"{settings.SITE_URL}/users/subscription-management/",
+                    return_url=f"{settings.SITE_URL}{reverse('subscription_management')}",
                 )
                 portal_url = portal_session.url
             except stripe.error.StripeError:
@@ -695,7 +834,7 @@ class SubscriptionService:
                 notification_type='payment_failed',
                 title=title,
                 message=message,
-                action_url='/users/subscription-management/',
+                action_url=reverse('subscription_management'),
                 action_text='Manage Subscription',
                 icon='💳',
                 priority=priority,
@@ -812,7 +951,7 @@ class SubscriptionService:
         invoice_url = invoice_data.get('hosted_invoice_url', '')
         if not invoice_url:
             logger.warning(f"No hosted_invoice_url in payment_action_required event for {user.email}")
-            invoice_url = f"{settings.SITE_URL}/users/subscription-management/"
+            invoice_url = f"{settings.SITE_URL}{reverse('subscription_management')}"
 
         logger.info(f"Payment action required for {user.email}: invoice_url={invoice_url}")
 
@@ -843,7 +982,7 @@ class SubscriptionService:
                     "your latest subscription payment. This usually takes less "
                     "than a minute."
                 ),
-                action_url='/users/subscription-management/',
+                action_url=reverse('subscription_management'),
                 action_text='Manage Subscription',
                 icon='\U0001f510',
                 priority='normal',
@@ -998,7 +1137,7 @@ class SubscriptionService:
             'username': username,
             'tier_name': tier_name,
             'next_billing_date': next_billing_date,
-            'manage_url': f"{settings.SITE_URL}/users/subscription-management/",
+            'manage_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
             'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }

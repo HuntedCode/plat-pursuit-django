@@ -1991,13 +1991,45 @@ def test_an_active_stripe_member_can_load_the_management_page(client):
     client.force_login(user)
 
     fake_sub = type('S', (), {'stripe_data': {'status': 'active', 'current_period_end': 1767225600}})()
-    fake_portal = type('P', (), {'url': 'https://billing.stripe.com/x'})()
 
+    # NO portal patch: the page GET must not mint a billing-portal session any more (that was a
+    # Stripe API call per view). If this render tries, the missing mock makes it explode.
     with patch('users.views.SubscriptionService.has_active_subscription',
-               return_value=(True, 'stripe')),             patch('users.views.Subscription.objects') as sub_mgr,             patch('users.views.stripe.billing_portal.Session.create', return_value=fake_portal):
+               return_value=(True, 'stripe')),             patch('users.views.Subscription.objects') as sub_mgr:
         sub_mgr.filter.return_value.first.return_value = fake_sub
         response = client.get(reverse('subscription_management'))
 
     assert response.status_code == 200, 'an active Stripe member cannot open their own billing page'
-    assert b'billing.stripe.com' in response.content
+    assert reverse('stripe_billing_portal').encode() in response.content,         'the portal action is gone from the page'
+
+
+def test_the_billing_portal_is_a_post_action(client):
+    """POST mints the session and redirects into it; GET is refused; Stripe failure lands back
+    on the page with a message instead of a dead button."""
+    user = UserFactory()
+    user.stripe_customer_id = 'cus_test123'
+    user.save()
+    client.force_login(user)
+
+    fake_portal = type('P', (), {'url': 'https://billing.stripe.com/x'})()
+    with patch('users.views.stripe.billing_portal.Session.create', return_value=fake_portal):
+        response = client.post(reverse('stripe_billing_portal'))
+    assert response.status_code == 302 and 'billing.stripe.com' in response['Location']
+
+    assert client.get(reverse('stripe_billing_portal')).status_code == 405
+
+    import stripe as stripe_mod
+    with patch('users.views.stripe.billing_portal.Session.create',
+               side_effect=stripe_mod.error.StripeError('down')):
+        response = client.post(reverse('stripe_billing_portal'), follow=True)
+    assert response.status_code == 200
+    assert b"Couldn&#x27;t open the billing portal" in response.content or         b"Couldn't open the billing portal" in response.content
+
+
+def test_the_portal_post_without_a_customer_is_a_polite_redirect(client):
+    user = UserFactory()
+    client.force_login(user)
+    response = client.post(reverse('stripe_billing_portal'))
+    assert response.status_code == 302
+    assert response['Location'] == reverse('subscription_management')
 

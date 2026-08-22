@@ -111,16 +111,11 @@ def _community_months(profile) -> int:
 
 @milestone_metric("premium_months")
 def _premium_months(profile) -> int:
-    # Whole months summed across the user's subscription periods (open periods count up to now). Bounded per
-    # user (a handful of periods), so the small Python sum is whale-safe.
-    from django.utils import timezone
-    from users.models import SubscriptionPeriod
+    # Whole months summed across the user's subscription periods (open periods count up to now).
+    # Delegates to the one tenure implementation, shared with the membership page -- a parity test
+    # pins the two surfaces to the same number.
+    from users.services.subscription_service import SubscriptionService
     user = getattr(profile, 'user', None)
     if not user:
         return 0
-    now = timezone.now()
-    total_days = 0
-    for started, ended in SubscriptionPeriod.objects.filter(user=user).values_list('started_at', 'ended_at'):
-        if started:
-            total_days += max(((ended or now) - started).days, 0)
-    return int(total_days // 30)
+    return SubscriptionService.premium_tenure(user)['total_months']
