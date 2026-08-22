@@ -109,19 +109,31 @@ def test_support_hub_resolves_incl_fundraiser():
 
 
 def test_support_hub_rail_is_on():
-    """2026-08: Support grew to four real destinations (storefront / roadmap / membership /
-    fundraiser), which is what turned the rail on. Membership is login-only, so anon sees
-    three items; the reversal-of-the-Leaderboards-removal reasoning lives in hub_subnav.py."""
+    """2026-08: Support grew to four real destinations, which is what turned the rail on. His
+    labels: the campaign chip reads Badge Art (the content, not the mechanism) and My
+    Membership renders ONLY for members (premium_tier truthiness, the navbar link's own gate)
+    in its own Yours group -- non-members' door is the storefront."""
     ctx = hub_subnav(_req('/support/'))
     assert ctx['hub_section'] == 'support'
     slugs = [i.slug for i in ctx['hub_subnav_items']]
-    assert slugs == ['support', 'roadmap', 'fundraiser'], 'anon sees three (membership is auth-gated)'
+    assert slugs == ['support', 'roadmap', 'fundraiser'], 'anon sees three'
 
     from tests.factories import UserFactory
     authed = _req('/support/')
     authed.user = UserFactory()
-    slugs = [i.slug for i in hub_subnav(authed)['hub_subnav_items']]
-    assert slugs == ['support', 'roadmap', 'membership', 'fundraiser']
+    assert [i.slug for i in hub_subnav(authed)['hub_subnav_items']] == \
+        ['support', 'roadmap', 'fundraiser'], 'a logged-in NON-member sees no My Membership chip'
+
+    member = _req('/support/')
+    member.user = UserFactory()
+    member.user.premium_tier = 'patron'
+    items = hub_subnav(member)['hub_subnav_items']
+    assert [i.slug for i in items] == ['support', 'roadmap', 'fundraiser', 'membership']
+    by_slug = {i.slug: i for i in items}
+    assert by_slug['fundraiser'].label == 'Badge Art'
+    assert by_slug['membership'].label == 'My Membership'
+    assert by_slug['membership'].group == 'Yours'
+
 
 
 def test_support_landing_renders(client):

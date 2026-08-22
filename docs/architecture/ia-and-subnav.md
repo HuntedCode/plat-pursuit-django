@@ -115,10 +115,13 @@ here while the handler stayed at `/users/subscribe/` would mean a redirect on a 
 turn into a GET with the body dropped. Handler and form must share a URL. For the same reason the old
 URL redirects **temporarily** (302): a cached permanent redirect on a payment URL cannot be taken back.
 
-**The Support RAIL is ON (2026-08-22):** Support / Roadmap / Membership / Fundraiser, four real
-destinations, which is what makes the reversal of the Leaderboards-rail removal principled
+**The Support RAIL is ON (2026-08-22):** Support / Roadmap / Badge Art / My Membership, four
+real destinations, which is what makes the reversal of the Leaderboards-rail removal principled
 ("a rail naming the page you're on is not navigation" held because that hub collapsed to ONE
-page; Support grew to four). Membership is `auth_required`, so anon viewers see three items.
+page; Support grew to four). "Badge Art" names the campaign's content rather than the mechanism.
+"My Membership" is `membership_required` (premium_tier truthiness, the same gate as the navbar's
+own link) and sits in its own `Yours` group -- non-members and anon viewers see three items,
+because a non-member's door is the storefront.
 The slugged campaign pages (`fundraiser` / `fundraiser_success` URL names) light the Fundraiser
 item via `_URL_NAME_TO_SLUG_OVERRIDES`. The paired `LEADERBOARDS_HUB` comment block in
 `hub_subnav.py` was revised with this flip, as both blocks required.

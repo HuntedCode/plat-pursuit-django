@@ -42,6 +42,10 @@ class HubSubnavItem:
     url_name: str
     icon: str | None = None
     auth_required: bool = False
+    membership_required: bool = False  # dropped unless the viewer holds a premium tier (the
+                                       # cheap `user.premium_tier` truthiness the navbar's own
+                                       # Membership link already gates on -- never is_premium(),
+                                       # which costs provider queries on every request)
     group: str = ''  # the rail group this item belongs to (e.g. 'Catalog' / 'Curation'). Items are
                      # defined in group order so the template can {% regroup %} consecutive runs.
 
@@ -199,8 +203,9 @@ SUPPORT_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('support', 'Support', 'support_hub', 'heart'),
         HubSubnavItem('roadmap', 'Roadmap', 'support_roadmap', 'map'),
-        HubSubnavItem('membership', 'Membership', 'subscription_management', 'star', auth_required=True),
-        HubSubnavItem('fundraiser', 'Fundraiser', 'support_fundraiser', 'palette'),
+        HubSubnavItem('fundraiser', 'Badge Art', 'support_fundraiser', 'palette'),
+        HubSubnavItem('membership', 'My Membership', 'subscription_management', 'star',
+                      auth_required=True, membership_required=True, group='Yours'),
     ),
 )
 
@@ -341,6 +346,7 @@ def build_rendered_items(
     hub: HubSubnavConfig,
     *,
     is_authenticated: bool,
+    is_member: bool = False,
     extras: tuple[RenderedSubnavItem, ...] = (),
 ) -> tuple[RenderedSubnavItem, ...]:
     """
@@ -358,6 +364,8 @@ def build_rendered_items(
     rendered: list[RenderedSubnavItem] = []
     for item in hub.items:
         if item.auth_required and not is_authenticated:
+            continue
+        if item.membership_required and not is_member:
             continue
         try:
             url = reverse(item.url_name)
