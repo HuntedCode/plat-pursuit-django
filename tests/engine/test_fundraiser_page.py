@@ -297,3 +297,43 @@ def test_the_admin_tabs_are_the_segmented_switcher(client):
     assert 'pp-switch' in body
     assert 'tabs-boxed' not in body
 
+
+def test_the_reclothe_actually_reaches_the_browser():
+    """The audit's critical find: fundraiser.css was written to a high standard and never
+    imported -- every source-reading check stayed green while the page shipped naked. This one
+    reads the BUILT bundle."""
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[2]
+    assert 'fundraiser.css' in (root / 'static' / 'css' / 'input.css').read_text(encoding='utf-8')
+    built = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
+    for cls in ('.fnd-donors', '.fnd-cta', '.fnd-tile', '.fnd-horizon__fill--claimed'):
+        assert cls in built, f'{cls} missing from the built bundle'
+
+
+def test_the_modal_gate_matches_the_browse_all_doorway(client):
+    """An authed visitor with no picks gets the 18-tile page and NO modal (nothing on the page
+    can open it); the full list belongs to pick-holders only."""
+    campaign = _campaign()
+    for i in range(20):
+        _series_with_edition(f'gated-{i:02d}')
+    user = UserFactory()
+    ProfileFactory(user=user)
+    client.force_login(user)
+    body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
+    assert 'id="badge-picker-modal"' not in body
+    assert body.count('badge-pick-option') == 18
+
+
+def test_the_donor_wall_cards_actually_have_edges(client):
+    """The credit base reads --sup-t with no fallback (IACVT: an unset var kills the whole
+    border/background declaration). is-legacy is the documented neutral treatment."""
+    campaign = _campaign()
+    profile = ProfileFactory()
+    Donation.objects.create(
+        fundraiser=campaign, amount=25, provider='stripe',
+        provider_transaction_id=f'tx-{next(_seq)}', status='completed',
+        user=profile.user, profile=profile, completed_at=timezone.now(),
+    )
+    body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
+    assert 'sup-prev--credit is-legacy fnd-donor' in body
+

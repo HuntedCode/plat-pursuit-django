@@ -131,7 +131,7 @@ const FundraiserPage = {
             return;
         }
 
-        hint.innerHTML = `<span class="badge badge-primary badge-sm font-semibold">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!${carryNote}</span>`;
+        hint.innerHTML = `<span class="fnd-pill">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!${carryNote}</span>`;
     },
 
     // ── Provider Toggle ──────────────────────────────────────────────────
@@ -439,7 +439,7 @@ const FundraiserAdmin = {
 
         const chips = Array.from(tabContainer.querySelectorAll('.pp-switch__chip'));
         if (!chips.length) return;
-        PlatPursuit.wireTablist(chips, {
+        const tablist = PlatPursuit.wireTablist(chips, {
             onSelect: (chip) => {
                 chips.forEach(c => {
                     c.classList.toggle('is-active', c === chip);
@@ -448,6 +448,7 @@ const FundraiserAdmin = {
                 document.querySelectorAll('.admin-panel').forEach(p => p.classList.add('hidden'));
                 const panel = document.getElementById(`panel-${chip.dataset.tab}`);
                 if (panel) panel.classList.remove('hidden');
+                tablist.syncTabindex();
             },
         });
     },

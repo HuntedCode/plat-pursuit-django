@@ -36,7 +36,7 @@
             <div class="card-body p-4 md:p-6 pp-head-cascade">
                 <h2 class="fnd__h2 text-success">Mission Accomplished!</h2>
                 <p class="fnd__sub">This fundraiser has wrapped up. Here's what the community achieved together.</p>
-                <div class="grid grid-cols-3 gap-2 md:gap-3 mt-2 max-w-md">
+                <div class="grid {% if badge_tracker %}grid-cols-3{% else %}grid-cols-2{% endif %} gap-2 md:gap-3 mt-2 max-w-md">
                     <div class="scard">
                         <div class="scard__label">Raised</div>
                         <div class="scard__value pp-tally text-success" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</div>
@@ -431,7 +431,7 @@
 {% endblock %}
 
 {% block fixed_overlays %}
-{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' %}
+{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' and total_picks_remaining %}
     {% include 'fundraiser/partials/badge_picker_modal.html' %}
 {% endif %}
 {% endblock %}

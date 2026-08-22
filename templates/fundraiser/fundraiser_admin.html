@@ -86,17 +86,19 @@
     PlatPursuit.wireTablist. Panels keep their ids. {% endcomment %}
     <div class="flex items-center justify-end mb-6">
         <div id="fundraiser-admin-tabs" class="pp-switch" role="tablist" aria-label="Admin views">
-            <button class="pp-switch__chip is-active" role="tab" aria-selected="true" data-tab="donations">
+            <button type="button" id="admin-tab-donations" class="pp-switch__chip is-active" role="tab"
+                    aria-selected="true" aria-controls="panel-donations" data-tab="donations">
                 Donations ({{ donations|length }})
             </button>
-            <button class="pp-switch__chip" role="tab" aria-selected="false" data-tab="claims">
+            <button type="button" id="admin-tab-claims" class="pp-switch__chip" role="tab"
+                    aria-selected="false" aria-controls="panel-claims" data-tab="claims">
                 Badge Claims ({{ claims|length }})
             </button>
         </div>
     </div>
 
     {# ─── Donations Panel ─────────────────────────────────────────────── #}
-    <div id="panel-donations" class="admin-panel">
+    <div id="panel-donations" class="admin-panel" role="tabpanel" aria-labelledby="admin-tab-donations">
         {% if donations %}
         <div class="overflow-x-auto">
             <table class="table table-zebra">
@@ -168,7 +170,7 @@
     </div>
 
     {# ─── Badge Claims Panel ──────────────────────────────────────────── #}
-    <div id="panel-claims" class="admin-panel hidden">
+    <div id="panel-claims" class="admin-panel hidden" role="tabpanel" aria-labelledby="admin-tab-claims">
         {% if claims %}
         <div class="overflow-x-auto">
             <table class="table table-zebra">
