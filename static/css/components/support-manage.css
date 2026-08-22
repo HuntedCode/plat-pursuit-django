@@ -8,11 +8,17 @@
    resolve in storefront -> roadmap -> membership order.
    ========================================================================================== */
 
-/* The page column: same rhythm as the roadmap's .rm root (flex + gap), no per-card margins. */
+/* The page column: same rhythm as the roadmap's .rm root (flex + gap), no per-card margins.
+   Width-capped and centred: this page is a single reading column of prose-weight cards, and at
+   the container's full 1536px everything clustered hard left. The roadmap can run full width
+   because its 4-up feature grids fill it; nothing here does. */
 .supm {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    width: 100%;
+    max-width: 60rem;
+    margin-inline: auto;
 }
 
 .supm-testmode {
@@ -330,10 +336,8 @@
 /* ---- perks section (free content; tiles come from support.css) ---------------------------- */
 .supm-perks { margin-bottom: 0.25rem; }
 
-/* The tile grid was sized for the 680px storefront modal; on the full page it breathes to 3. */
-@media (min-width: 1024px) {
-    .supm-perks .sup-perks-grid { grid-template-columns: repeat(3, 1fr); }
-}
+/* The tiles stack exactly as the storefront modal stacks them (2x2 + the wide beta tile) --
+   support.css owns the grid; nothing to override here. */
 
 .supm-perks__h {
     font-family: var(--pp-font-display);

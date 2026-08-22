@@ -523,3 +523,12 @@ def test_the_state_preview_is_staff_gated_and_fabricated(client, settings):
     assert 'Previewing state:' not in body
     assert 'No active membership' in body
 
+
+def test_no_em_dashes_in_the_page_copy():
+    """House rule: em dashes never appear in user-facing content. The sibling Support pages
+    are clean; this pins the newest one."""
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[2]
+    body = (root / 'templates' / 'support' / 'membership.html').read_text(encoding='utf-8')
+    assert 'mdash' not in body and chr(8212) not in body
+

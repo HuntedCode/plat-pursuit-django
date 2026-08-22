@@ -19,7 +19,7 @@
     {% endif %}
 
     {% if not is_live %}
-    <div class="supm-testmode" role="note">TEST MODE ACTIVE &mdash; no real payments are processed.</div>
+    <div class="supm-testmode" role="note">TEST MODE ACTIVE: no real payments are processed.</div>
     {% endif %}
 
     {% if preview_active %}
@@ -43,10 +43,10 @@
                 {% if membership.state != 'none' %}
                 Everything about your support in one place: what you carry, what it costs, and the
                 controls.{% if membership.state == 'active' %} To change your level or billing cycle, cancel here and re-subscribe at
-                the new one when your paid time runs out &mdash; nothing is lost in between.{% endif %}
+                the new one when your paid time runs out. Nothing is lost in between.{% endif %}
                 {% else %}
                 Membership keeps the servers on and the rebuild moving. Nothing on the site is
-                locked either way &mdash; members simply get more of what everyone gets.
+                locked either way. Members simply get more of what everyone gets.
                 {% endif %}
             </p>
         </div>
@@ -117,7 +117,7 @@
 
             {% if membership.state == 'grace' %}
             <div class="supm-inset supm-inset--grace">
-                <p class="supm-inset__lead">You've cancelled &mdash; and everything stays yours until {{ cancels_at|date:"F j, Y" }}.</p>
+                <p class="supm-inset__lead">You've cancelled, and everything stays yours until {{ cancels_at|date:"F j, Y" }}.</p>
                 <p class="supm-inset__sub">Your perks, your mark and your place on the wall all run to the end of the time you paid for. If you change your mind, the door is open.</p>
                 <a href="{% url 'support_hub' %}" class="supm-inset__cta supm-inset__cta--rise">
                     <span class="sup-go__rise" aria-hidden="true">
@@ -149,7 +149,7 @@
                 <form method="post" action="{% url 'stripe_billing_portal' %}">{% csrf_token %}
                     <button type="submit" class="supm-actions__go">Manage billing</button>
                 </form>
-                <p class="supm-actions__note">Update your card, view invoices, or cancel &mdash; opens Stripe's secure portal.</p>
+                <p class="supm-actions__note">Update your card, view invoices, or cancel. Opens Stripe's secure portal.</p>
                 {% elif membership.provider == 'paypal' %}
                 <div class="supm-actions__row">
                     <a href="{{ paypal_manage_url }}" target="_blank" rel="noopener" class="supm-actions__go">Manage on PayPal</a>
@@ -198,7 +198,7 @@
         <div class="card-body p-4 md:p-6 supm-none">
             <p class="supm-none__lead">No active membership.</p>
             <p class="supm-none__sub">
-                Nothing on the site is locked either way &mdash; membership is a way to back the
+                Nothing on the site is locked either way. Membership is a way to back the
                 project, wear the mark, and get more of what everyone already gets.
             </p>
             <a href="{% url 'support_hub' %}" class="supm-none__cta">See the support page</a>
@@ -232,7 +232,7 @@
     {% endif %}
 
     <p class="supm-trust">
-        Payments are handled by Stripe and PayPal &mdash; card details never touch our servers.
+        Payments are handled by Stripe and PayPal. Card details never touch our servers.
         Cancel any time. Paid time is always honoured to the end.
     </p>
 
@@ -247,7 +247,7 @@
         </div>
         <p class="sup-modal__lede">
             You'll keep every perk until the end of the time you've paid for{% if next_billing %}
-            ({{ next_billing|date:"F j, Y" }}){% endif %}. After that your membership ends &mdash;
+            ({{ next_billing|date:"F j, Y" }}){% endif %}. After that your membership ends, and
             you can re-subscribe any time, at any level.
         </p>
         <div class="supm-cancel__row">
