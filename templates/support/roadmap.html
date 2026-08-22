@@ -41,7 +41,7 @@ happens in our Discord, which the ask card says out loud.
     wishlist hollow-and-dashed (a dream drawn in outline). {% endcomment %}
 
     {% for tier in tiers %}
-    <section class="rm-tier is-{{ tier.key }}" aria-labelledby="rm-tier-{{ tier.key }}">
+    <section class="rm-tier pp-arrive is-{{ tier.key }}" aria-labelledby="rm-tier-{{ tier.key }}">
         <div class="rm-tier__head">
             <h2 id="rm-tier-{{ tier.key }}"><span class="rm-tier__chip">{{ tier.name }}</span></h2>
             <p class="rm-tier__sub">{{ tier.sub }}</p>
@@ -51,7 +51,7 @@ happens in our Discord, which the ask card says out loud.
             stagger indexes it, and a global index left later tiers' first cards invisible for
             half a second after they had scrolled into view. {% endcomment %}
             {% for feat in tier.feats %}
-            <div class="rm-feat card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral" style="--i: {{ forloop.counter0 }}">
+            <div class="rm-feat pp-arrive__it card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral" style="--i: {{ forloop.counter0 }}">
                 <div class="card-body p-4">
                     <div class="rm-feat__head">
                         <span class="rm-feat__icon" aria-hidden="true">{% include 'support/_roadmap_icon.html' with key=feat.key %}</span>
@@ -68,8 +68,8 @@ happens in our Discord, which the ask card says out loud.
     {% comment %} ============================================== the ask ================== {% endcomment %}
     {% comment %} The destination card. Members shape the roadmap in the Discord -- the in-house
     answer to "link out to a project board", which we would never. {% endcomment %}
-    <section class="rm-ask card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-4 md:p-6">
+    <section class="rm-ask pp-arrive card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-4 md:p-6 pp-arrive__it">
             <div class="rm-ask__head">
                 <span class="rm-feat__icon rm-feat__icon--ask" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
@@ -107,26 +107,16 @@ happens in our Discord, which the ask card says out loud.
 </div>
 
 <script>
+    /* The shared section arrival (motion.css .pp-arrive + utils.js): this page's bespoke
+       observer was promoted into the primitive, so the page now consumes it like its siblings.
+       If the bundle ever fails to load, the arm comes OFF -- nothing may strand the hidden
+       state. */
     (function () {
-        /* Scroll choreography, wired at end-of-body: the ARMING happened before paint (the
-           extra_head script put .rm-arm on <html>), this only reveals. Every path shows the
-           cards: no JS -> never armed; JS without IO -> reveal everything right here; JS + IO ->
-           the choreography. */
-        var tiers = document.querySelectorAll('.rm-tier, .rm-ask');
-        if (!tiers.length) return;
-        if (!('IntersectionObserver' in window)) {
-            tiers.forEach(function (t) { t.classList.add('is-in'); });
+        if (!window.PlatPursuit || !PlatPursuit.arriveOnScroll) {
+            document.documentElement.classList.remove('pp-arm');
             return;
         }
-        var io = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('is-in');
-                    io.unobserve(entry.target);
-                }
-            });
-        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
-        tiers.forEach(function (t) { io.observe(t); });
+        PlatPursuit.onPageReady(function (first) { if (first) PlatPursuit.arriveOnScroll(); });
     })();
 </script>
 {% endblock %}
@@ -134,8 +124,8 @@ happens in our Discord, which the ask card says out loud.
 {% block extra_head %}
 <script>
     /* Arms the scroll choreography BEFORE first paint (the motion-patterns pattern): the hidden
-       state gates on html.rm-arm, so incremental painting can never flash a card visible before
+       state gates on html.pp-arm, so incremental painting can never flash a card visible before
        the end-of-body observer hides it. Without JS this never runs and nothing is hidden. */
-    document.documentElement.classList.add('rm-arm');
+    document.documentElement.classList.add('pp-arm');
 </script>
 {% endblock %}

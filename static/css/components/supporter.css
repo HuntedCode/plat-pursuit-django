@@ -146,9 +146,19 @@
     color: var(--sup-t, var(--pp-accent));   /* solid fill via currentColor, like the stars */
 }
 
-/* The supporter TITLE ("PlatPursuit Backer") joining a worn-title line: level colour, STATIC
-   (the flow is the name's), never wrapping mid-label. Colour arrives inline from the tag. */
-.pp-marktitle { font-weight: 600; white-space: nowrap; }
+/* The mark's TITLE ("PlatPursuit Backer" / "Staff") joining a worn-title line. QUIET on
+   purpose, per the register rule: it sits in the EARNED title's slot, so it must never
+   out-weigh or out-chroma its neighbour -- the hue (mixed down against the line's mute) still
+   names the level, at the line's own weight. Roman even in italic slots: a roman coloured
+   phrase in an italic slot reads as a different KIND of thing, which is the whole point. The
+   raw hue arrives inline as --mt-c from the tag. */
+.pp-marktitle {
+    font-weight: 500;
+    font-style: normal;
+    white-space: nowrap;
+    color: color-mix(in oklab, var(--mt-c, var(--pp-accent)) 62%, var(--pp-text-mute));
+}
+
 .pp-marktitle__dot { color: var(--pp-text-mute); margin: 0 4px; font-style: normal; }
 
 /* Compact context (dense rows): slightly smaller glyphs. */

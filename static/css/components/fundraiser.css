@@ -57,7 +57,9 @@
 }
 
 .fnd__lede {
-    font-size: 0.95rem;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    max-width: 62ch;
     color: var(--pp-text-dim);
 }
 
@@ -128,12 +130,27 @@
 .fnd-input::placeholder { color: var(--pp-text-mute); }
 
 .fnd-input:focus {
-    outline: none;
+    /* Transparent outline, not none: box-shadow is not painted under forced-colors mode, and
+       the outline slot is what high-contrast users actually see. */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
     border-color: color-mix(in oklab, var(--pp-primary) 60%, transparent);
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 25%, transparent);
 }
 
 .fnd-input--search { padding-left: 2.2rem; font-size: 0.85rem; }
+
+.fnd-input__ic {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: var(--pp-text-mute);
+}
+
+.fnd__accent { color: var(--pp-accent); font-weight: 700; font-size: 0.85rem; }
 
 .fnd-pill {
     display: inline-flex;

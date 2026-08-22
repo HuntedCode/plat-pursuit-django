@@ -151,7 +151,8 @@ def hub_subnav(request):
         # No dynamic extras: Profile is reached from the avatar menu, and the fundraiser lives in the
         # Support hub.
         is_member = is_auth and bool(getattr(request.user, 'premium_tier', ''))
-        items = build_rendered_items(hub, is_authenticated=is_auth, is_member=is_member)
+        items = build_rendered_items(hub, is_authenticated=is_auth, is_member=is_member,
+                                     active_slug=active_slug)
         active_label = next((i.label for i in items if i.slug == active_slug), '')
 
         return {

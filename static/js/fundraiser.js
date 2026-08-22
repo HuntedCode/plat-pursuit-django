@@ -322,7 +322,7 @@ const FundraiserPage = {
             Toast.show('No badge picks remaining.', 'error');
             if (confirmBtn) {
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = 'Confirm Claim';
+                confirmBtn.textContent = 'Confirm claim';
             }
             return;
         }
@@ -356,7 +356,7 @@ const FundraiserPage = {
         } finally {
             if (confirmBtn) {
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = 'Confirm Claim';
+                confirmBtn.textContent = 'Confirm claim';
             }
         }
     },

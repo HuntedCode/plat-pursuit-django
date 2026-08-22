@@ -145,17 +145,21 @@ def test_the_cta_previews_the_storefronts_stars(client):
 
 
 def test_nothing_is_hidden_without_javascript(client):
-    """The scroll choreography's contract: hiding gates on html.rm-arm, which only the head
-    script sets (before paint, per motion-patterns). Server markup must never carry it, and the
-    end-of-body script must reveal everything when IntersectionObserver is missing."""
+    """The scroll choreography's contract, now via the SHARED primitive the roadmap fathered
+    (motion.css .pp-arrive + PlatPursuit.arriveOnScroll): hiding gates on html.pp-arm, which
+    only the head script sets before paint. Server markup must never carry it; the no-IO
+    reveal-all fallback lives in utils.js, pinned here for the whole family."""
     body = client.get(reverse('support_roadmap')).content.decode()
 
-    # Scripts stripped first: the class only matters as MARKUP (a class attribute the server
-    # rendered); the scripts may name it in code and comments freely.
     markup = re.sub(r'<script.*?</script>', ' ', body, flags=re.S)
-    assert 'rm-arm' not in markup, 'the arming class is server-rendered; cards would hide without JS'
-    # The no-IO fallback: armed by the head script but no observer means reveal all, not return.
-    assert "classList.add('is-in')" in body
+    assert 'pp-arm' not in markup, 'the arming class is server-rendered; cards would hide without JS'
+    assert "classList.add('pp-arm')" in body, 'the pre-paint arming script is missing'
+    assert 'arriveOnScroll' in body, 'the page must consume the shared arrival'
+
+    import pathlib as pl
+    utils = (pl.Path(__file__).resolve().parents[2] / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    at = utils.index('function arriveOnScroll')
+    assert "classList.add('is-in')" in utils[at:at + 900], 'the no-IO fallback must reveal everything'
 
 
 def test_the_breathing_chip_survives_the_css_build():

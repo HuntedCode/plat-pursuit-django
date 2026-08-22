@@ -4,7 +4,7 @@ native <dialog>, header row with the shared close button, backdrop-click and Esc
 fundraiser.js. Every id is a JS hook -- keep them. {% endcomment %}
 <dialog id="badge-picker-modal" class="sup-modal" aria-labelledby="badge-picker-h">
     <div class="sup-modal__head">
-        <h2 id="badge-picker-h">Choose a Badge Series</h2>
+        <h2 id="badge-picker-h">Choose a badge series</h2>
         <button type="button" class="sup-modal__x" data-picker-close aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
@@ -12,16 +12,16 @@ fundraiser.js. Every id is a JS hook -- keep them. {% endcomment %}
 
     <p class="sup-modal__lede">
         Pick a badge to commission custom artwork for.
-        <span id="picker-picks-count" class="text-accent font-semibold"></span>
+        <span id="picker-picks-count" class="fnd__accent"></span>
     </p>
 
     <div class="mb-4 relative">
-        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <svg class="fnd-input__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="text" id="badge-picker-search" class="fnd-input fnd-input--search w-full"
                placeholder="Search badge series by name...">
     </div>
 
-    <div id="badge-picker-grid" class="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-96 overflow-y-auto pr-1">
+    <div id="badge-picker-grid" class="grid grid-cols-2 lg:grid-cols-3 gap-2">
         {% for badge in available_badges %}
             {% include 'fundraiser/partials/_badge_tile.html' with badge=badge %}
         {% empty %}
@@ -39,11 +39,11 @@ fundraiser.js. Every id is a JS hook -- keep them. {% endcomment %}
         <div class="flex items-center justify-between flex-wrap gap-2">
             <div>
                 <span class="text-sm font-semibold">Claiming:</span>
-                <span id="claim-badge-name" class="text-sm text-accent font-bold ml-1"></span>
+                <span id="claim-badge-name" class="fnd__accent ml-1"></span>
             </div>
             <div class="flex gap-2">
                 <button type="button" id="cancel-claim-btn" class="fnd-cta fnd-cta--sm fnd-cta--ghost">Cancel</button>
-                <button type="button" id="confirm-claim-btn" class="fnd-cta fnd-cta--sm">Confirm Claim</button>
+                <button type="button" id="confirm-claim-btn" class="fnd-cta fnd-cta--sm">Confirm claim</button>
             </div>
         </div>
     </div>

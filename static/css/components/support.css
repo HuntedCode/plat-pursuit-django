@@ -1111,14 +1111,10 @@
 .sup-prev--credit[style*="--svc-t"] .sup-prev__cname,
 .sup-prev--credit[style*="--svc-t"] .sup-prev__sub { color: var(--svc-t); }
 
-/* Arrives a row at a time, capped hard: the delay is per-card, so an uncapped stagger over two
-   hundred would leave the last one waiting seconds after it was already on screen. */
-@media (prefers-reduced-motion: no-preference) {
-    .sup-prev--credit {
-        animation: ppRevealIn 0.45s var(--pp-ease) backwards;
-        animation-delay: calc(min(var(--i, 0) * 18ms, 600ms));
-    }
-}
+/* The credits' entrance moved to the shared section arrival (motion.css .pp-arrive):
+   the load-time rule that lived here animated below-fold cards unseen, and once the section
+   was gated it FOUGHT the gate (animation beat the hidden state, then backwards-fill blanked
+   the cards until boot). One owner now. */
 
 /* Mobile facepile on wall credit rows: a NAME context, so the star run imbricates exactly as
    .pp-markname does (see supporter.css for the full rationale). The purchase-box become-preview

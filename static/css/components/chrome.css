@@ -424,6 +424,11 @@
 .pp-sub__sheetgroup + .pp-sub__sheetgroup { margin-top: 9px; }
 .pp-sub__sheet .pp-sub__gl { display: block; padding: 3px 4px 5px; margin: 0; }
 .pp-sub__sheetgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+/* Orphan pills in the two-column sheet stretch full width: a lone half-cell under a group
+   label (My Membership) or a ragged odd tail reads as a mistake rather than a grid. */
+.pp-sub__sheetgroup .pp-subpill:only-child { grid-column: 1 / -1; }
+.pp-sub__sheetgrid > .pp-subpill:nth-child(odd):last-child { grid-column: 1 / -1; }
 .pp-sub__sheet .pp-subpill { display: block; text-align: center; padding: 9px 11px; border-radius: var(--pp-radius-md); }
 @media (prefers-reduced-motion: reduce) { .pp-sub__sheet { transition: none; } .pp-sub__mchev, .pp-sub__morebtn svg { transition: none; } }
 

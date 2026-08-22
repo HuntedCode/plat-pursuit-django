@@ -191,7 +191,7 @@
         {% for perk in premium_perks %}{% if perk.footnote %}
         <p class="supm-perks__fn" id="supm-perks-fn">* {{ perk.footnote }}</p>
         {% endif %}{% endfor %}
-        <p class="supm-perks__more"><a href="{% url 'support_hub' %}">See the full pitch on the support page</a></p>
+        <p class="supm-perks__more"><a href="{% url 'support_hub' %}">More about what your support builds</a></p>
     </div>
 
     {% else %}
@@ -291,8 +291,13 @@
 
 {% block js_scripts %}
 <script>
-PlatPursuit.onPageReady(function () {
-    PlatPursuit.arriveOnScroll();
+(function () {
+    if (!window.PlatPursuit || !PlatPursuit.arriveOnScroll) {
+        document.documentElement.classList.remove('pp-arm');
+        return;
+    }
+PlatPursuit.onPageReady(function (first) {
+    if (first) PlatPursuit.arriveOnScroll();
     var dialog = document.getElementById('supm-cancel');
     if (!dialog) return;
     document.querySelectorAll('[data-cancel-open]').forEach(function (btn) {
@@ -305,5 +310,6 @@ PlatPursuit.onPageReady(function () {
         if (e.target === dialog) dialog.close();
     });
 });
+})();
 </script>
 {% endblock %}

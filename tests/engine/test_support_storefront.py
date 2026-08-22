@@ -1187,10 +1187,12 @@ def test_a_worn_title_sits_before_the_level(client):
     with _member(False):
         body = re.sub(r'\s+', ' ', _get(client).content.decode())
 
-    sub = body[body.index('sup-prev__sub'):]
-    sub = sub[:sub.index('</span>')]
+    # The level now renders through the shared .pp-marktitle span (one rendering everywhere),
+    # so slice a fixed window instead of stopping at the first inner </span>.
+    sub = body[body.index('sup-prev__sub'):][:400]
     assert 'The Completionist' in sub
     assert sub.index('The Completionist') < sub.index('PlatPursuit'), 'the earned title comes first'
+    assert 'pp-marktitle' in sub, 'the preview must render the same primitive the live rows do'
 
 
 def test_the_checklist_demonstrates_the_mark_it_describes(client):

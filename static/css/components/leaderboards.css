@@ -182,6 +182,13 @@
 /* A star, matching Browse Hunters -- one status, one glyph, wherever you meet it. It was a bare `&#9670;`
    diamond here and a Lucide star there, and the diamond is not a Lucide glyph at all (design-system:
    every UI glyph is an inlined Lucide stroke icon, brand marks and the rating star excepted). */
+/* The title line is a flex PAIR when a mark title joins it: the earned half ellipsizes, the
+   short fixed mark title never truncates mid-brand (at 375px the old single-box ellipsis ate
+   "PlatPursuit Cornerstone" down to "PlatPur..."). */
+.lb-row__title { display: flex; align-items: baseline; min-width: 0; }
+.lb-row__title > .pp-marktitle, .lb-row__title > .pp-marktitle__dot { flex: none; }
+.lb-row__title-earned { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* .lb-row__prem retired 2026-08-22: the flat amber supporter star predates the ladder; rows now
    render the mark system (components/name_mark.html) inside .lb-row__uname. */
 /* A row whose profile could not be hydrated. It keeps its slot so the numbering stays honest, and reads

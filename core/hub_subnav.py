@@ -190,20 +190,22 @@ LEADERBOARDS_HUB = HubSubnavConfig(
 )
 
 
-# The Support hub: four real destinations as of 2026-08 (storefront, roadmap, membership,
-# fundraiser), which is what turned the rail on -- the reversal of the Leaderboards removal is
+# The Support hub: four real destinations as of 2026-08 (storefront, roadmap, Badge Art, My
+# Membership), which is what turned the rail on -- the reversal of the Leaderboards removal is
 # principled, see the comment above. The /fundraiser/ prefix keeps the campaign slug pages in
-# this hub; their active-item highlighting rides the overrides map below. Membership is
-# login-only, so its item drops for anon via auth_required.
+# this hub; their active-item highlighting rides the overrides map below. My Membership is
+# membership_required (premium_tier truthiness, the navbar link's own gate) in its 'Yours'
+# group -- a non-member's door is the storefront -- except when it IS the active page, which
+# always names itself.
 SUPPORT_HUB = HubSubnavConfig(
     key='support',
     label='Support',
     icon='heart',
     prefixes=('/support/', '/fundraiser/'),
     items=(
-        HubSubnavItem('support', 'Support', 'support_hub', 'heart'),
-        HubSubnavItem('roadmap', 'Roadmap', 'support_roadmap', 'map'),
-        HubSubnavItem('fundraiser', 'Badge Art', 'support_fundraiser', 'palette'),
+        HubSubnavItem('support', 'Support', 'support_hub', 'heart', group='The project'),
+        HubSubnavItem('roadmap', 'Roadmap', 'support_roadmap', 'map', group='The project'),
+        HubSubnavItem('fundraiser', 'Badge Art', 'support_fundraiser', 'palette', group='The project'),
         HubSubnavItem('membership', 'My Membership', 'subscription_management', 'star',
                       auth_required=True, membership_required=True, group='Yours'),
     ),
@@ -347,6 +349,7 @@ def build_rendered_items(
     *,
     is_authenticated: bool,
     is_member: bool = False,
+    active_slug: str | None = None,
     extras: tuple[RenderedSubnavItem, ...] = (),
 ) -> tuple[RenderedSubnavItem, ...]:
     """
@@ -363,9 +366,13 @@ def build_rendered_items(
     """
     rendered: list[RenderedSubnavItem] = []
     for item in hub.items:
-        if item.auth_required and not is_authenticated:
+        # The page you are ON always names itself: a gated item never drops while active, or
+        # the rail renders with no current pill and the mobile trigger reads bare (e.g. a
+        # non-member landing on /support/membership/, which serves them a real state).
+        is_active = active_slug is not None and item.slug == active_slug
+        if item.auth_required and not is_authenticated and not is_active:
             continue
-        if item.membership_required and not is_member:
+        if item.membership_required and not is_member and not is_active:
             continue
         try:
             url = reverse(item.url_name)

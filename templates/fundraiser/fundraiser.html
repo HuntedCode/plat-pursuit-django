@@ -34,7 +34,7 @@
     {% if is_ended and not is_staff_preview %}
         <section aria-label="Campaign results" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-success shadow-lg shadow-neutral">
             <div class="card-body p-4 md:p-6 pp-head-cascade">
-                <h2 class="fnd__h2 text-success">Mission Accomplished!</h2>
+                <h2 class="fnd__h2 text-success">Mission accomplished!</h2>
                 <p class="fnd__sub">This fundraiser has wrapped up. Here's what the community achieved together.</p>
                 <div class="grid {% if badge_tracker %}grid-cols-3{% else %}grid-cols-2{% endif %} gap-2 md:gap-3 mt-2 max-w-md">
                     <div class="scard">
@@ -52,7 +52,7 @@
                     </div>
                     {% endif %}
                 </div>
-                <p class="fnd__flavour">The hunt never ends, but this chapter is complete. Thank you!</p>
+                <p class="fnd__flavour">The hunt never ends, but this chapter is complete. Thank you.</p>
             </div>
         </section>
     {% endif %}
@@ -69,12 +69,12 @@
             {% if is_live and user.is_authenticated %}
                 <p class="mt-1"><button type="button" id="hero-donate-cta" class="fnd-cta">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    Support the Cause
+                    Support the cause
                 </button></p>
             {% elif is_live %}
                 <p class="mt-1"><a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    Join the Hunt
+                    Join the hunt
                 </a></p>
             {% endif %}
         </div>
@@ -86,7 +86,7 @@
         <div class="scard">
             <div class="scard__label">Total Raised</div>
             <div class="scard__value pp-tally text-success" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</div>
-            <div class="scard__sub">and counting!</div>
+            <div class="scard__sub">and counting</div>
         </div>
         <div class="scard">
             <div class="scard__label">Donors</div>
@@ -125,7 +125,7 @@
             <div class="card-body p-4 md:p-6 space-y-4">
                 <div class="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                        <h2 class="fnd__h2">My Contributions</h2>
+                        <h2 class="fnd__h2">My contributions</h2>
                         <p class="fnd__sub">Your trophy hunting generosity at a glance.</p>
                     </div>
                     <span class="fnd-pill">${{ total_donated|floatformat:0 }} donated</span>
@@ -157,17 +157,17 @@
                     {% if is_live and total_picks_remaining > 0 %}
                         <div class="fnd-panel">
                             <div class="flex items-center justify-between flex-wrap gap-2">
-                                <p class="text-sm text-base-content/70">
-                                    You have <span class="font-bold text-accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }} to use.
+                                <p class="fnd__sub">
+                                    You have <span class="fnd__accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }} to use.
                                 </p>
                                 <button type="button" id="open-badge-picker-btn" class="fnd-cta fnd-cta--sm">
-                                    Browse Available Badges
+                                    Browse available badges
                                 </button>
                             </div>
                         </div>
                     {% elif total_picks_remaining > 0 %}
                         <div class="fnd-panel">
-                            <p class="text-sm text-base-content/50">
+                            <p class="fnd__flavour">
                                 You have {{ total_picks_remaining }} badge pick{{ total_picks_remaining|pluralize }} remaining.
                                 {% if is_ended %}Badge claiming is no longer available for this fundraiser.{% endif %}
                             </p>
@@ -177,7 +177,7 @@
 
                 {% if user_claims %}
                     <div>
-                        <h3 class="fnd__h3">Your Claimed Badges</h3>
+                        <h3 class="fnd__h3">Your claimed badges</h3>
                         <div class="flex flex-wrap gap-2">
                             {% for claim in user_claims %}
                                 <a href="{% url 'badge_detail' claim.series_slug %}"
@@ -191,7 +191,7 @@
                 {% endif %}
 
                 <details class="fnd-history">
-                    <summary class="fnd-history__summary">Donation History</summary>
+                    <summary class="fnd-history__summary">Donation history</summary>
                     <div class="space-y-1 pt-2">
                         {% for donation in user_donations %}
                             <div class="fnd-history__row">
@@ -214,7 +214,7 @@
             <div class="card-body p-4">
                 <p class="fnd__sub">
                     Your contributions will appear here after your first donation.
-                    Every dollar helps bring our badges to life!
+                    Every dollar helps bring our badges to life.
                 </p>
             </div>
         </section>
@@ -228,7 +228,7 @@
         <section aria-label="Badge series awaiting a patron" class="fnd-free">
             <div>
                 <h2 class="fnd__h2">
-                    Artworks Awaiting a Patron
+                    Artworks awaiting a patron
                     {% if available_badges_count %}<span class="fnd__count">({{ available_badges_count }})</span>{% endif %}
                 </h2>
                 <p class="fnd__sub">
@@ -242,7 +242,7 @@
                             Join the hunt and donate ${{ badge_pick_divisor }}+ to claim one.
                         {% endif %}
                     {% else %}
-                        Every current badge series has a patron. Donate to help commission the next wave!
+                        Every current badge series has a patron. Donate to help commission the next wave.
                     {% endif %}
                 </p>
             </div>
@@ -262,14 +262,14 @@
                         Browse all {{ available_badges_count }}
                     </button></p>
                 {% elif available_badges_count > 18 %}
-                    <p class="fnd__flavour">Showing the first 18 of {{ available_badges_count }} series waiting.</p>
+                    <p class="fnd__flavour">Plus more series waiting beyond these first 18.</p>
                 {% endif %}
             {% else %}
                 <div class="fnd-empty">
                     <svg class="w-10 h-10 mx-auto text-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                     </svg>
-                    <p class="mt-2 text-primary font-semibold">Every current badge series has a patron!</p>
+                    <p class="mt-2 text-primary font-semibold">Every current badge series has a patron.</p>
                     <p class="fnd__flavour">More artworks will open up as the campaign grows. Keep the momentum going.</p>
                 </div>
             {% endif %}
@@ -281,9 +281,9 @@
         <section aria-label="Make a donation" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
             <div class="card-body p-4 md:p-6 space-y-5">
                 <div>
-                    <h2 class="fnd__h2">Make a Donation</h2>
+                    <h2 class="fnd__h2">Make a donation</h2>
                     <p class="fnd__sub">
-                        Every dollar brings a badge to life. Pick your amount and let's go!
+                        Every dollar brings a badge to life. Pick your amount and off we go.
                         {% if fundraiser.campaign_type == 'badge_artwork' %}
                             Donate ${{ badge_pick_divisor }} or more to claim a badge series for custom artwork.
                         {% endif %}
@@ -349,8 +349,7 @@
                         <span class="sup-go__rise" aria-hidden="true">
                             {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
                         </span>
-                        <span class="fnd-cta__lbl"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span>
-                        <span id="donate-btn-text" class="fnd-cta__lbl">Donate</span>
+                        <span class="fnd-cta__lbl"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span id="donate-btn-text">Donate</span></span>
                     </button>
                 </div>
             </div>
@@ -358,7 +357,7 @@
     {% elif is_live %}
         <section aria-label="Join the hunt" class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
             <div class="card-body p-4 md:p-6 space-y-2">
-                <h2 class="fnd__h2">Join the Hunt</h2>
+                <h2 class="fnd__h2">Join the hunt</h2>
                 <p class="fnd__sub">Create a PlatPursuit account to donate and claim badge artwork. Your support keeps the pursuit alive.</p>
                 <div class="flex gap-3 mt-2">
                     <a href="{% url 'account_login' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta">Log In</a>
@@ -374,13 +373,13 @@
     {% if completed_claims or pending_claims %}
         <section aria-label="Claimed badges" class="fnd-free">
             <div>
-                <h2 class="fnd__h2">Claimed Badges</h2>
+                <h2 class="fnd__h2">Claimed badges</h2>
                 <p class="fnd__sub">Badges adopted by the community for custom artwork.</p>
             </div>
 
             {% if completed_claims %}
                 <div class="space-y-2">
-                    <h3 class="fnd__h3 text-success">Artwork Complete</h3>
+                    <h3 class="fnd__h3 text-success">Artwork complete</h3>
                     <p class="fnd__flavour">Brought to life by the community.</p>
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
                         {% for claim in completed_claims %}
@@ -403,7 +402,7 @@
 
             {% if pending_claims %}
                 <div class="space-y-2">
-                    <h3 class="fnd__h3 text-warning">In the Queue</h3>
+                    <h3 class="fnd__h3 text-warning">In the queue</h3>
                     <p class="fnd__flavour">Claimed and waiting for their glow-up.</p>
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
                         {% for claim in pending_claims %}

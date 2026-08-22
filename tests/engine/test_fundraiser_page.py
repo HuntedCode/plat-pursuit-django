@@ -68,7 +68,7 @@ def test_an_ended_campaign_celebrates(client):
     response = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug}))
     body = response.content.decode()
     assert response.status_code == 200
-    assert 'Mission Accomplished' in body
+    assert 'Mission accomplished' in body
     assert 'donation-form' not in body, 'an ended campaign must not take money'
 
 

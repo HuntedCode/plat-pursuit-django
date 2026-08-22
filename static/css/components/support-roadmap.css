@@ -268,24 +268,6 @@
 
 /* ---- entrance ------------------------------------------------------------------------- */
 
-/* Scroll choreography: cards reveal where you are actually LOOKING. The page script arms each
-   page (html.rm-arm, set pre-paint in extra_head) and flips .is-in per tier on viewport entry;
-   CSS owns the motion, staggered
-   off each card's --i index. Without JS nothing is armed and nothing is ever hidden; under
-   reduced motion the armed state must not hide anything either, so the hide lives INSIDE the
-   no-preference gate. */
-@media (prefers-reduced-motion: no-preference) {
-    html.rm-arm .rm-tier:not(.is-in) .rm-feat,
-    html.rm-arm .rm-ask:not(.is-in) .card-body { opacity: 0; }
-
-    .rm-tier.is-in .rm-feat {
-        opacity: 1;
-        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
-        animation-delay: calc(var(--i, 0) * 70ms);
-    }
-
-    .rm-ask.is-in .card-body {
-        opacity: 1;
-        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
-    }
-}
+/* The scroll choreography moved to the shared primitive it fathered (motion.css .pp-arrive /
+   .pp-arrive__it + PlatPursuit.arriveOnScroll): tiers are .pp-arrive sections, feats and the
+   ask body are .pp-arrive__it items. One implementation for the whole Support family. */
