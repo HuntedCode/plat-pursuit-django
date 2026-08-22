@@ -54,9 +54,9 @@
 
     {% if membership.state != 'none' %}
     {% comment %} ============================================== status card =============== {% endcomment %}
-    <section aria-label="Membership status" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral supm-status"
+    <section aria-label="Membership status" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral supm-status pp-arrive"
              {% if level %}style="--sup-t: {{ level.colour }}"{% endif %}>
-        <div class="card-body p-4 md:p-6">
+        <div class="card-body p-4 md:p-6 pp-arrive__it">
 
             {% comment %} The standing row: the one .pp-supname on the page (a single name, so the
             flow animation fully belongs here), the level's stars beside it, exactly the object a
@@ -170,11 +170,11 @@
     {% comment %} ============================================== the perks ================= {% endcomment %}
     {% comment %} FREE content, not a card (stacked-page rule): the storefront modal's icon tiles,
     inline. Same constant, same tiles -- the promise you bought is the promise this page shows. {% endcomment %}
-    <div class="supm-perks">
+    <div class="supm-perks pp-arrive">
         <h2 class="supm-perks__h">What your membership includes</h2>
         <div class="sup-perks-grid">
             {% for perk in premium_perks %}
-            <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %}" style="--perk-c: {{ perk.colour }}">
+            <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %} pp-arrive__it" style="--perk-c: {{ perk.colour }}; --i: {{ forloop.counter0 }}">
                 <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
                 <div class="sup-perk__body">
                     <h3 class="sup-perk__name"{% if perk.asterisk %} aria-describedby="supm-perks-fn"{% endif %}>{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
@@ -196,8 +196,8 @@
 
     {% else %}
     {% comment %} ============================================== no membership ============= {% endcomment %}
-    <section aria-label="No active membership" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-4 md:p-6 supm-none">
+    <section aria-label="No active membership" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+        <div class="card-body p-4 md:p-6 supm-none pp-arrive__it">
             <p class="supm-none__lead">No active membership.</p>
             <p class="supm-none__sub">
                 Membership is a way to back the project, wear the mark, and get a little
@@ -214,8 +214,8 @@
     lapsed one keeps control of the setting for when they return -- the wall query itself only
     lists eligible tiers). {% endcomment %}
     {% if has_profile %}
-    <section aria-label="Supporter wall preference" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-4 md:p-6 supm-wall">
+    <section aria-label="Supporter wall preference" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+        <div class="card-body p-4 md:p-6 supm-wall pp-arrive__it">
             <div class="supm-wall__say">
                 <h2 class="supm-wall__h">The supporter wall</h2>
                 <p class="supm-wall__sub">Supporters are credited by name on the support page. Entirely optional.</p>
@@ -280,9 +280,19 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<script>
+    {% comment %} Arms the section arrival BEFORE first paint (motion.css .pp-arrive): the hidden
+    state gates on html.pp-arm, so incremental painting can never flash a card visible before the
+    boot script hides it. Without JS this never runs and nothing is hidden. {% endcomment %}
+    document.documentElement.classList.add('pp-arm');
+</script>
+{% endblock %}
+
 {% block js_scripts %}
 <script>
 PlatPursuit.onPageReady(function () {
+    PlatPursuit.arriveOnScroll();
     var dialog = document.getElementById('supm-cancel');
     if (!dialog) return;
     document.querySelectorAll('[data-cancel-open]').forEach(function (btn) {

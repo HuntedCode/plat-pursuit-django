@@ -597,3 +597,29 @@ def test_preview_pages_disarm_their_live_controls(client, settings):
     zone = body.split('Manage billing')[0][-300:]
     assert 'disabled' in zone, 'the portal button is live in preview'
 
+
+def test_the_section_arrival_reaches_both_pages_and_the_bundle(client, settings):
+    """The Support family's shared entrance (his ask: the fundraiser had proper entrances and
+    the siblings mostly popped in). Pinned in the BUILT bundle -- the class of check the
+    fundraiser's unshipped-import miss taught us -- and on both pages: the pre-paint arm plus
+    marked sections."""
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[2]
+    built = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
+    at = built.find('html.pp-arm .pp-arrive')
+    assert at != -1, 'the arrival primitive is missing from the built bundle'
+    media_at = built.rfind('@media', 0, at)
+    assert media_at != -1 and 'prefers-reduced-motion:no-preference' in built[media_at:at].replace(' ', ''),         'the hidden state must live inside the no-preference gate'
+
+    user = UserFactory()
+    ProfileFactory(user=user)
+    client.force_login(user)
+    body = client.get(reverse('subscription_management')).content.decode()
+    assert "classList.add('pp-arm')" in body, 'membership must arm before first paint'
+    assert 'pp-arrive' in body and 'pp-arrive__it' in body
+
+    with patch('users.views.SubscriptionService.get_prices_from_stripe', return_value={}):
+        body = client.get('/support/').content.decode()
+    assert "classList.add('pp-arm')" in body, 'the storefront must arm before first paint'
+    assert 'pp-arrive__it' in body
+

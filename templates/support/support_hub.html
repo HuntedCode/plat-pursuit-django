@@ -345,7 +345,7 @@ substrate, and an earlier version of this page did, which is most of why it read
     {% comment %} The roadmap band: part of the pitch, directly under the ask. What your support
     BUILDS, compressed to one strip -- each certainty tier and a few of its feature names, from
     ROADMAP_FEATURES, the same list /support/roadmap/ walks in full. {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-road>
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3 pp-arrive" data-sup-road>
         <div class="card-body p-4 md:p-5 lg:p-6">
             <div class="sup-road__head">
                 {% comment %} A real heading: the band was invisible to the page outline and the
@@ -363,7 +363,7 @@ substrate, and an earlier version of this page did, which is most of why it read
             dashed outline) -- the band previews the page it links to. {% endcomment %}
             <dl class="sup-road__tiers" aria-labelledby="sup-road-heading">
                 {% for tier in roadmap_teaser %}
-                <div class="sup-road__cell is-{{ tier.key }}">
+                <div class="sup-road__cell is-{{ tier.key }} pp-arrive__it" style="--i: {{ forloop.counter0 }}">
                     <dt><span class="rm-tier__chip">{{ tier.name }}</span></dt>
                     {% comment %} A real list inside the dd, so each feature is an audible item
                     rather than three names run together as one string. {% endcomment %}
@@ -391,7 +391,7 @@ substrate, and an earlier version of this page did, which is most of why it read
     `premium_monthly`, `premium_yearly` or `supporter`, so a band counting only the new ladder would
     read zero on a live site. The money is a MONTHLY EQUIVALENT, yearly pledges divided by twelve, so
     one figure means one thing. {% endcomment %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-paid>
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3 pp-arrive" data-sup-paid>
         <div class="card-body p-4 md:p-5 lg:p-6">
             {% comment %} No heading and no lede: four labelled figures already say "here is how this
             is paid for" without a sentence telling you so. {% endcomment %}
@@ -400,7 +400,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 "$0 a month from 0 supporters" on the page asking you to fund the thing is worse than
                 a shorter band. {% endcomment %}
                 {% if supporter_count %}
-                <div class="scard">
+                <div class="scard pp-arrive__it" style="--i: 0">
                     <div class="scard__label">Supporters</div>
                     <div class="scard__value pp-tally text-primary" data-countup="{{ supporter_count }}">{{ supporter_count|intcomma }}</div>
                     <div class="scard__sub">chipping in right now</div>
@@ -408,7 +408,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 {% comment %} Omitted rather than shown as zero when Stripe prices are unavailable:
                 the view returns None for "we cannot say", which is not the same as nothing. {% endcomment %}
                 {% if supporter_monthly is not None %}
-                <div class="scard">
+                <div class="scard pp-arrive__it" style="--i: 1">
                     <div class="scard__label">Monthly support</div>
                     <div class="scard__value pp-tally" data-countup="{{ supporter_monthly }}" data-countup-prefix="$">${{ supporter_monthly|intcomma }}</div>
                     <div class="scard__sub">from our generous supporters</div>
@@ -416,12 +416,12 @@ substrate, and an earlier version of this page did, which is most of why it read
                 {% endif %}
                 {% endif %}
 
-                <div class="scard">
+                <div class="scard pp-arrive__it" style="--i: 2">
                     <div class="scard__label">Months running</div>
                     <div class="scard__value pp-tally" data-countup="{{ months_running }}">{{ months_running }}</div>
                     <div class="scard__sub">live since January 2026</div>
                 </div>
-                <div class="scard">
+                <div class="scard pp-arrive__it" style="--i: 3">
                     <div class="scard__label">Ads served</div>
                     <div class="scard__value pp-tally">0</div>
                     <div class="scard__sub">and it stays that way</div>
@@ -441,7 +441,7 @@ substrate, and an earlier version of this page did, which is most of why it read
     Omitted entirely when nobody is on it, rather than rendering an empty frame under a heading that
     promises names. {% endcomment %}
     {% if wall %}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-wall>
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3 pp-arrive" data-sup-wall>
         <div class="card-body p-4 md:p-5 lg:p-6">
             {% comment %} CREDITS, not a donor board. The word is doing real work: credits are
             about contribution, where "the people paying for it" reads as a transaction -- and this
@@ -469,7 +469,7 @@ substrate, and an earlier version of this page did, which is most of why it read
                 since it was a sheen (and a test forbids it here), so the credit name takes the same
                 tier colour STATICALLY via `.sup-prev__cname`. {% endcomment %}
                 {% for person in wall %}
-                <li class="sup-prev sup-prev--credit{% if not person.tier %} is-legacy{% endif %}"
+                <li class="sup-prev sup-prev--credit pp-arrive__it{% if not person.tier %} is-legacy{% endif %}"
                     style="--i: {{ forloop.counter0 }}{% if person.tier %}; --sup-t: {{ person.tier.colour }}{% endif %}{% if person.service_colour %}; --svc-t: {{ person.service_colour }}{% endif %}">
                     <span class="sup-prev__av">
                         {% include 'partials/_avatar.html' with url=person.avatar alt='' %}
@@ -546,6 +546,14 @@ substrate, and an earlier version of this page did, which is most of why it read
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<script>
+    {% comment %} Arms the section arrival BEFORE first paint (motion.css .pp-arrive); without
+    JS this never runs and nothing is hidden. {% endcomment %}
+    document.documentElement.classList.add('pp-arm');
+</script>
+{% endblock %}
+
 {% block js_scripts %}
 <script>
 (function () {
@@ -554,6 +562,8 @@ substrate, and an earlier version of this page did, which is most of why it read
 
     PP.onPageReady(function (first) {
         if (!first) return;
+
+        PP.arriveOnScroll();
 
         // The purchase box needs no JS at all: the cycle switch and the amount grid are radios
         // driving :has() rules, and the shared switcher.css styles the chips off :has(input:checked)

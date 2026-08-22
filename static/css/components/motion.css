@@ -69,6 +69,23 @@
  * unnoticed. A keyframe with more than one consumer belongs in the shared file; that is the fix for the
  * cause and not just the symptom. `tests/engine/test_css_animations.py` now fails on any such dangling
  * reference. */
+/* SECTION ARRIVAL -- the Support family's shared entrance (generalized from the roadmap's
+   scroll choreography). Mark a section `.pp-arrive` and its revealing pieces `.pp-arrive__it`
+   (optionally with a per-item `--i`); a page opts in by arming `html.pp-arm` BEFORE first
+   paint (extra_head one-liner) and calling PlatPursuit.arriveOnScroll() at boot. Three-path
+   degradation, the load-bearing part: no JS -> never armed, nothing hidden; JS without IO ->
+   the helper reveals everything immediately; reduced motion -> the hide lives INSIDE the
+   no-preference gate, so nothing is ever hidden from a reduced-motion viewer. */
+@media (prefers-reduced-motion: no-preference) {
+    html.pp-arm .pp-arrive:not(.is-in) .pp-arrive__it { opacity: 0; }
+
+    .pp-arrive.is-in .pp-arrive__it {
+        opacity: 1;
+        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
+        animation-delay: calc(min(var(--i, 0), 10) * 70ms);
+    }
+}
+
 @keyframes ppRevealIn { from { opacity: 0; transform: translateY(12px) scale(0.955); } to { opacity: 1; transform: none; } }
 
 /* The supporter name flow.

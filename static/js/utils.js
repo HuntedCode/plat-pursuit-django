@@ -2405,6 +2405,30 @@ function dismissableSheet(dialog, opts) {
  *
  * @param {function(boolean)} fn  called as fn(true) on load, fn(false) on each history restore
  */
+/**
+ * arriveOnScroll -- the Support family's section-arrival wiring (see motion.css .pp-arrive).
+ * The ARMING happened before paint (a page's extra_head adds html.pp-arm); this only reveals.
+ * Every path shows the content: no JS never arms; JS without IO reveals everything here;
+ * JS + IO flips .is-in per section as it enters the viewport.
+ */
+function arriveOnScroll() {
+    var sections = document.querySelectorAll('.pp-arrive');
+    if (!sections.length) { return; }
+    if (!('IntersectionObserver' in window)) {
+        sections.forEach(function (s) { s.classList.add('is-in'); });
+        return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-in');
+                io.unobserve(entry.target);
+            }
+        });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+    sections.forEach(function (s) { io.observe(s); });
+}
+
 function onPageReady(fn) {
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () { fn(true); }, { once: true });
@@ -3266,6 +3290,7 @@ window.PlatPursuit.staggerCards = staggerCards;
 window.PlatPursuit.dismissableSheet = dismissableSheet;
 window.PlatPursuit.CardDownload = CardDownload;
 window.PlatPursuit.onPageReady = onPageReady;
+window.PlatPursuit.arriveOnScroll = arriveOnScroll;
 
 /**
  * wireGuidelinesSheet -- the Community Guidelines sheet (`#gd-guidelines-modal`), opened OVER whatever
