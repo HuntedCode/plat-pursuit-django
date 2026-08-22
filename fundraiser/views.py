@@ -20,9 +20,30 @@ from django.views.generic import TemplateView
 from trophies.mixins import StaffRequiredMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
+from fundraiser.services.donation_service import DonationService
 from trophies.models import Concept, Profile
 
 logger = logging.getLogger(__name__)
+
+
+class FundraiserLandingView(TemplateView):
+    """/support/fundraiser/ -- the Support hub's doorway, and the rail item's no-args target.
+
+    A pure RESOLVER, not a second campaign page: the slug URL is the single payment-adjacent
+    surface (cancel URLs, emails and notifications all land there), so rendering a campaign at
+    a second URL would fork the flows. Latest campaign wins -- live first, else the most recent
+    (which covers both the upcoming preview and the ended celebration); lifecycle handling
+    stays in FundraiserView. A site that has never run a campaign gets a quiet card.
+    """
+    template_name = 'fundraiser/fundraiser_landing_empty.html'
+
+    def get(self, request, *args, **kwargs):
+        from fundraiser.models import get_live_fundraiser
+
+        fundraiser = get_live_fundraiser() or Fundraiser.objects.order_by('-created_at').first()
+        if fundraiser:
+            return redirect('fundraiser', slug=fundraiser.slug)
+        return super().get(request, *args, **kwargs)
 
 
 class FundraiserView(TemplateView):
@@ -189,18 +210,27 @@ class FundraiserView(TemplateView):
             # total_needing_art includes claimed-but-pending badges (still no image).
             # Completed claims have artwork uploaded, so they're no longer in that query.
             # True total = still needing art + already completed artwork.
+            tracker_total = total_needing_art + completed_count
             context['badge_tracker'] = {
-                'total': total_needing_art + completed_count,
+                'total': tracker_total,
                 'claimed': claimed_count,
                 'completed': completed_count,
                 'pending': pending_count,
+                # Integer percentages for the horizon bar's two fills (completed accent over a
+                # claimed underlay), so the template never does width math in a style attribute.
+                'completed_pct': round(completed_count * 100 / tracker_total) if tracker_total else 0,
+                'claimed_pct': (round((completed_count + pending_count) * 100 / tracker_total)
+                                if tracker_total else 0),
             }
 
             # Available series for claiming (logged-in users only). The already-claimed exclusion is
             # inside the helper, via the artwork_claim reverse OneToOne.
-            context['available_badges'] = (
-                DonationService.series_needing_artwork().order_by(Lower('name'))
-            )
+            available_badges = DonationService.series_needing_artwork().order_by(Lower('name'))
+            context['available_badges'] = available_badges
+            # The on-page grid shows a bounded preview; the picker modal alone carries the full
+            # list (the page used to render every tile TWICE -- ~400 tiles in the DOM).
+            context['available_badges_preview'] = available_badges[:18]
+            context['available_badges_count'] = available_badges.count()
 
         # User-specific context
         if self.request.user.is_authenticated:
@@ -274,7 +304,6 @@ class DonationSuccessView(LoginRequiredMixin, TemplateView):
                     # In DEBUG mode, complete the donation on redirect since
                     # webhooks can't reach the local dev server.
                     if settings.DEBUG:
-                        from fundraiser.services.donation_service import DonationService
                         donation_id = session.metadata.get('donation_id')
                         if donation_id:
                             donation = Donation.objects.filter(
@@ -301,7 +330,6 @@ class DonationSuccessView(LoginRequiredMixin, TemplateView):
 
         elif paypal_token:
             # PayPal: attempt capture on redirect (webhook as backup)
-            from fundraiser.services.donation_service import DonationService
             try:
                 capture_data = DonationService.capture_paypal_order(paypal_token)
                 if capture_data.get('status') == 'COMPLETED':

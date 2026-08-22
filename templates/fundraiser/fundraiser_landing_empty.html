@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Fundraiser - PlatPursuit{% endblock %}
+
+{% block content %}
+{% comment %} The landing's none-state: only reachable when no campaign has EVER run (any campaign,
+live or past, 302s to its own page instead). Quiet by design. {% endcomment %}
+<div class="fnd">
+    <section aria-label="Fundraiser" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+        <div class="card-body p-5 md:p-7 pp-head-cascade">
+            <p class="fnd__eyebrow">Support &middot; Fundraiser</p>
+            <h1 class="fnd__h1">Nothing running right now.</h1>
+            <p class="fnd__lede">
+                When a campaign is on, this is where it lives: commissioned badge artwork, a donor
+                wall, and a way to put your name on a piece of the site. Until then, the support
+                page is always open.
+            </p>
+            <p><a href="{% url 'support_hub' %}" class="fnd-cta">See the support page</a></p>
+        </div>
+    </section>
+</div>
+{% endblock %}

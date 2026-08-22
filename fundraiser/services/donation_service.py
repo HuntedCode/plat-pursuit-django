@@ -439,7 +439,7 @@ class DonationService:
                 'donation': donation,
                 'fundraiser': donation.fundraiser,
                 'badge_picks_earned': donation.badge_picks_earned,
-                'claim_url': f"{settings.SITE_URL}/fundraiser/{donation.fundraiser.slug}/",
+                'claim_url': f"{settings.SITE_URL}{reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug})}",
             }
 
             EmailService.send_html_email(
@@ -624,7 +624,7 @@ class DonationService:
                     'content': (
                         f"You earned *{picks}* badge artwork "
                         f"{'pick' if picks == 1 else 'picks'}! "
-                        f"Head to the [fundraiser page](/fundraiser/{donation.fundraiser.slug}/) "
+                        f"Head to the [fundraiser page]({reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug})}) "
                         f"to browse available badges and claim your picks."
                     ),
                     'order': 1,
@@ -651,7 +651,7 @@ class DonationService:
                     f"to {donation.fundraiser.name}!"
                 ),
                 sections=sections,
-                action_url=f'/fundraiser/{donation.fundraiser.slug}/',
+                action_url=reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug}),
                 action_text='View Fundraiser',
                 priority='normal',
                 metadata={
@@ -760,7 +760,7 @@ class DonationService:
 
             description += (
                 f"\n\nWant to help bring our badges to life? "
-                f"Donate here: {settings.SITE_URL}/fundraiser/{donation.fundraiser.slug}/"
+                f"Donate here: {settings.SITE_URL}{reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug})}"
             )
 
             embed_data = {

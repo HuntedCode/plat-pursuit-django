@@ -42,7 +42,7 @@ from milestones.views import MilestoneListView   # new milestones app (replaces 
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
 from users.subscription_admin_views import SubscriptionAdminView
-from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView
+from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView, FundraiserLandingView
 # Notifications are HIDDEN pending their rebuild (2026-08); every view in `notifications/views.py` is
 # parked unrouted. See the redirect block further down for why the URL names survive.
 
@@ -80,6 +80,9 @@ urlpatterns = [
     # surface, not a settings page). The route NAME stays `subscription_management`: every email,
     # notification and reverse() caller follows it here automatically.
     path('support/membership/', SubscriptionManagementView.as_view(), name='subscription_management'),
+    # The hub's fundraiser doorway: resolves the latest campaign and 302s to its slug page (the
+    # one canonical payment-adjacent URL). Reverses with no args -- the sub-nav rail item's target.
+    path('support/fundraiser/', FundraiserLandingView.as_view(), name='support_fundraiser'),
 
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/lucky/', RandomGameView.as_view(), name='random_game'),
