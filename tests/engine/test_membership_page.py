@@ -367,6 +367,7 @@ def test_an_active_ladder_member_wears_their_level(client):
     # mark perk's rendered example, which hosts its own --sup-t exactly as the storefront does.
     assert body.count(f'--sup-t: {patron_colour}') == 2, 'unexpected extra --sup-t hosts'
     assert 'supm-status' in body
+    assert '<dialog id="supm-cancel"' not in body, 'the PayPal cancel dialog leaked to Stripe'
     assert 'PlatPursuit Patron' in body
     assert '$15 / month' in body
     assert 'pp-supname' in body
@@ -420,3 +421,70 @@ def test_messages_render_without_the_breadcrumb(client):
                            {'wall_visibility': '1', 'on_the_wall': 'yes'}, follow=True)
     assert b'You are on the supporter wall.' in response.content
 
+
+def test_a_scheduled_cancel_shows_the_date_and_suppresses_next_billing(client):
+    user = _stripe_user()
+    ProfileFactory(user=user)
+    end_ts = 4102444800
+    response = _page(client, user, _fake_sub(
+        status='active', current_period_end=end_ts, cancel_at_period_end=True))
+    body = response.content.decode()
+    assert 'Cancels ' in body
+    assert 'Next billing' not in body, 'a cancelling member must not be promised a renewal'
+
+
+def test_past_due_offers_exactly_one_portal_button(client):
+    """The inset's "Update payment method" IS the action; a second identical portal button 40px
+    below it read as unrehearsed."""
+    user = _stripe_user()
+    ProfileFactory(user=user)
+    response = _page(client, user, _fake_sub(status='past_due'))
+    body = response.content.decode()
+    assert "didn&#x27;t go through" in body or "didn't go through" in body
+    assert body.count(reverse('stripe_billing_portal')) == 1
+
+
+def test_paypal_grace_has_a_working_door_back(client):
+    """The critical audit find: a PayPal grace member's Re-subscribe CTA led to the storefront,
+    which bounced them straight back here because the guard still called them subscribed. A
+    cancelled sub will not renew, so the guard now reports (False, None) -- the storefront
+    shows the buy box and checkout permits it -- while this page still reads grace."""
+    user = UserFactory()
+    ProfileFactory(user=user)
+    user.subscription_provider = 'paypal'
+    user.paypal_subscription_id = 'I-GRACEDOOR'
+    user.premium_tier = 'patron'
+    user.paypal_cancel_at = timezone.now() + timedelta(days=12)
+    user.save()
+
+    assert SubscriptionService.has_active_subscription(user) == (False, None), \
+        'the guard must let a cancelled member re-subscribe'
+    assert SubscriptionService.membership_status(user).state == 'grace'
+
+    client.force_login(user)
+    response = client.get(reverse('subscription_management'))
+    body = response.content.decode()
+    assert "You&#x27;ve cancelled" in body or "You've cancelled" in body
+    assert 'Re-subscribe' in body
+    assert 'View the subscription on PayPal' in body
+
+
+def test_a_member_with_no_profile_still_gets_a_page(client):
+    user = _stripe_user()
+    response = _page(client, user, _fake_sub(status='active', current_period_end=4102444800))
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert user.email.split('@')[0] in body, 'the viewer name falls back to the email local part'
+    assert 'List me on the supporter wall' not in body, 'no profile, no wall toggle'
+
+
+def test_an_unmapped_tier_renders_without_a_level(client):
+    """level=None (data drift / a retired tier): the page falls back to the primary tint and a
+    plain member line instead of breaking."""
+    user = _stripe_user(tier='ad_free')
+    ProfileFactory(user=user)
+    response = _page(client, user, _fake_sub(status='active', current_period_end=4102444800))
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert 'PlatPursuit member' in body
+    assert '--sup-t' not in body.split('sup-perk')[0], 'no level, no level tint on the status card'

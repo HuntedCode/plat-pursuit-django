@@ -8,6 +8,13 @@
    resolve in storefront -> roadmap -> membership order.
    ========================================================================================== */
 
+/* The page column: same rhythm as the roadmap's .rm root (flex + gap), no per-card margins. */
+.supm {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 .supm-testmode {
     margin-bottom: 0.9rem;
     padding: 0.5rem 0.9rem;
@@ -142,6 +149,7 @@
     border: 1px solid;
     font-size: 0.74rem;
     font-weight: 700;
+    white-space: nowrap;   /* "Cancels Sep 21, 2027" sits a pixel from wrapping at 375px */
 }
 
 .supm-chip--ok {
@@ -184,6 +192,19 @@
 }
 
 .supm-inset__lead { font-weight: 700; font-size: 0.92rem; color: var(--pp-text); }
+.supm-inset__aside { font-size: 0.78rem; }
+.supm-inset__aside a { color: var(--pp-text-dim); text-decoration: underline; }
+.supm-inset__aside a:hover { color: var(--pp-text); }
+
+.supm-inset__confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.83rem;
+    color: var(--pp-text);
+    cursor: pointer;
+    margin-top: 4px;
+}
 .supm-inset__sub { font-size: 0.83rem; line-height: 1.5; color: var(--pp-text-dim); max-width: 58ch; }
 
 .supm-inset__cta {
@@ -275,7 +296,12 @@
 .supm-actions__note { font-size: 0.76rem; color: var(--pp-text-mute); }
 
 /* ---- perks section (free content; tiles come from support.css) ---------------------------- */
-.supm-perks { margin-bottom: 1.25rem; }
+.supm-perks { margin-bottom: 0.25rem; }
+
+/* The tile grid was sized for the 680px storefront modal; on the full page it breathes to 3. */
+@media (min-width: 1024px) {
+    .supm-perks .sup-perks-grid { grid-template-columns: repeat(3, 1fr); }
+}
 
 .supm-perks__h {
     font-family: var(--pp-font-display);

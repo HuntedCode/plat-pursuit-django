@@ -353,9 +353,13 @@ class SubscriptionService:
                 return (True, 'stripe')
 
         # Check PayPal (trust our stored state, set by webhooks).
-        # Must mirror is_premium() logic: respect paypal_cancel_at expiry.
+        # A CANCELLED sub -- even one with paid time left -- reports False here, mirroring how a
+        # canceled Stripe row falls through the status list above: this helper answers "is there
+        # a subscription that will renew", and its False during grace is what lets a cancelled
+        # member re-subscribe (the storefront and checkout guard both read it). The page's grace
+        # display comes from membership_status, which reads the cancel date itself.
         if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
-            if user.paypal_cancel_at and user.paypal_cancel_at < timezone.now():
+            if user.paypal_cancel_at:
                 return (False, None)
             return (True, 'paypal')
 
