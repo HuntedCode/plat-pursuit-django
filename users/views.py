@@ -749,6 +749,7 @@ def stripe_billing_portal(request):
         logger.exception("Failed to create Stripe billing portal session")
         messages.error(request, "Couldn't open the billing portal just now. Please try again.")
         return redirect('subscription_management')
+    logger.info(f"Billing portal session minted for {user.email}")
     return redirect(portal_session.url)
 
 
@@ -776,7 +777,7 @@ def paypal_cancel_subscription(request):
 
 
 class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
-    template_name = 'users/subscription_management.html'
+    template_name = 'support/membership.html'
 
     def post(self, request, *args, **kwargs):
         """The supporter wall opt-out.
@@ -803,94 +804,79 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         return redirect('subscription_management')
 
     def get_context_data(self, **kwargs):
-        is_live = settings.STRIPE_MODE == 'live'
+        """The membership page's read: state, worn level, billing, tenure -- all display-only.
+
+        `membership_status` (not `has_active_subscription`) so a cancelled-but-paid Stripe member
+        sees their GRACE state instead of "no active membership". Everything degrades to omission:
+        an unknown billing amount is not shown, never guessed.
+        """
+        from users.constants import LEGACY_TIER_LEVEL_MAP, SUPPORT_TIERS
+        from users.services.marks import worn_supporter_level
 
         context = super().get_context_data(**kwargs)
         user = self.request.user
+        profile = getattr(user, 'profile', None)
 
-        has_active, provider = SubscriptionService.has_active_subscription(user)
-        context['subscription_provider'] = provider
-        context['is_live'] = is_live
+        context['is_live'] = settings.STRIPE_MODE == 'live'
         # Same source of truth as the storefront. These two pages had hand-written perk lists that
         # had already drifted apart from each other AND from what the site actually does.
         context['premium_perks'] = PREMIUM_PERKS
-        profile = getattr(self.request.user, 'profile', None)
         context['on_the_wall'] = profile.show_on_supporter_wall if profile else False
         context['has_profile'] = profile is not None
+        context['viewer_name'] = (profile.display_psn_username or profile.psn_username) if profile else user.email.split('@')[0]
+        context['viewer_avatar'] = profile.avatar_url if profile else ''
 
-        if provider == 'stripe':
-            sub = Subscription.objects.filter(
-                customer__id=user.stripe_customer_id, stripe_data__status='active'
-            ).first()
+        membership = SubscriptionService.membership_status(user)
+        context['membership'] = membership
 
-            # Fallback: check for past_due subscription so users can still
-            # access billing portal to fix their payment method
-            if not sub:
-                sub = Subscription.objects.filter(
-                    customer__id=user.stripe_customer_id, stripe_data__status='past_due'
-                ).first()
-                if sub:
-                    context['payment_past_due'] = True
+        # The worn LEVEL: ladder members wear their own level; grandfathered legacy tiers wear
+        # the price-nearest level's colour and stars but display their REAL tier name -- they
+        # were here first, and the name they bought is the name they keep.
+        level = None
+        if membership.state != 'none' and user.premium_tier:
+            slug = worn_supporter_level(user.premium_tier)
+            tier = next((t for t in SUPPORT_TIERS if t['slug'] == slug), None)
+            if tier:
+                is_legacy = user.premium_tier in LEGACY_TIER_LEVEL_MAP
+                level = dict(
+                    tier,
+                    star_range=range(tier['stars']),
+                    is_legacy=is_legacy,
+                    display_name=(SubscriptionService.get_tier_display_name(user.premium_tier)
+                                  if is_legacy else tier['name']),
+                )
+        context['level'] = level
 
-            if sub:
-                stripe_data = sub.stripe_data or {}
-                context['tier'] = user.get_premium_tier()
-                context['premium_tier_slug'] = user.premium_tier
-                context['status'] = str(stripe_data.get('status', 'unknown')).capitalize()
-                period_end_ts = stripe_data.get('current_period_end')
-                if period_end_ts:
-                    # `dt_timezone.utc`, NOT `timezone.utc`: `timezone` here is
-                    # django.utils.timezone, whose `utc` alias was REMOVED in Django 5.0 -- this
-                    # line raised AttributeError for every active Stripe member since the 5.x
-                    # upgrade, and no test covered the active-subscription branch to notice.
-                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)
-                else:
-                    context['next_billing'] = 'N/A'
+        if membership.state != 'none':
+            context['billing'] = SubscriptionService.describe_billing(user, membership)
+            context['tenure'] = SubscriptionService.premium_tenure(user)
+            context['cancels_at'] = membership.cancels_at or membership.grace_until
 
+            if membership.provider == 'stripe':
                 context['can_open_portal'] = bool(user.stripe_customer_id)
-            else:
-                context['tier'] = 'None'
-                context['status'] = 'No Subscription'
+                data = (membership.stripe_sub.stripe_data or {}) if membership.stripe_sub else {}
+                period_end_ts = data.get('current_period_end')
+                # dt_timezone.utc, NOT timezone.utc (django.utils alias removed in Django 5.0).
+                if period_end_ts and membership.state == 'active' and not membership.cancels_at:
+                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)
 
-        elif provider == 'paypal':
-            from users.services.paypal_service import PayPalService
-            context['tier'] = user.get_premium_tier()
-            context['premium_tier_slug'] = user.premium_tier
-
-            # Cached snapshot (8h TTL, webhook-busted) -- the page must not hang on a live
-            # PayPal call per GET. Snapshot miss/failure degrades to Active with no date.
-            snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
-            if snapshot:
-                context['status'] = (snapshot.get('status') or 'UNKNOWN').capitalize()
-                next_billing = snapshot.get('next_billing_time')
-                if next_billing:
-                    try:
-                        context['next_billing'] = datetime.fromisoformat(
-                            next_billing.replace('Z', '+00:00')
-                        )
-                    except (ValueError, AttributeError):
-                        context['next_billing'] = next_billing
-                else:
-                    context['next_billing'] = 'N/A'
-            else:
-                context['status'] = 'Active'
-                context['next_billing'] = 'N/A'
-
-            context['paypal_cancel_at'] = user.paypal_cancel_at
-            context['paypal_manage_url'] = (
-                'https://www.paypal.com/myaccount/autopay/'
-                if settings.PAYPAL_MODE == 'live'
-                else 'https://www.sandbox.paypal.com/myaccount/autopay/'
-            )
-        else:
-            context['tier'] = 'None'
-            context['status'] = 'No Subscription'
-
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': '/'},
-            {'text': 'Settings', 'url': reverse('settings')},
-            {'text': 'My Premium'},
-        ]
+            elif membership.provider == 'paypal':
+                from users.services.paypal_service import PayPalService
+                context['paypal_manage_url'] = (
+                    'https://www.paypal.com/myaccount/autopay/'
+                    if settings.PAYPAL_MODE == 'live'
+                    else 'https://www.sandbox.paypal.com/myaccount/autopay/'
+                )
+                if membership.state == 'active':
+                    snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
+                    next_billing = (snapshot or {}).get('next_billing_time')
+                    if next_billing:
+                        try:
+                            context['next_billing'] = datetime.fromisoformat(
+                                next_billing.replace('Z', '+00:00')
+                            )
+                        except (ValueError, AttributeError):
+                            pass
 
         return context
 

@@ -26,6 +26,7 @@ Usage:
     python manage.py test_email_system your.email@example.com --weekly-digest-preview
 """
 from django.core.management.base import BaseCommand, CommandError
+from django.urls import reverse
 from django.conf import settings
 from core.services.email_service import EmailService
 
@@ -380,7 +381,7 @@ class Command(BaseCommand):
         context = {
             'username': 'TestUser',
             'is_final_warning': is_final,
-            'portal_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'portal_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'tier_name': 'Premium Monthly',
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
@@ -529,7 +530,7 @@ class Command(BaseCommand):
             'username': 'TestUser',
             'tier_name': 'Premium Monthly',
             'next_billing_date': 'March 19, 2026',
-            'manage_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'manage_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
         }
@@ -576,7 +577,7 @@ class Command(BaseCommand):
         context = {
             'username': 'TestUser',
             'tier_name': 'Premium Monthly',
-            'invoice_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'invoice_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,
         }

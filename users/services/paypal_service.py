@@ -151,8 +151,12 @@ class PayPalService:
     #: PayPal call per GET. 8h TTL; busted by every subscription webhook and by the user's own
     #: cancel action, so state changes show immediately while a quiet subscription costs one
     #: API call per 8 hours.
-    SUB_CACHE_KEY = 'paypal:sub:{id}'
+    SUB_CACHE_KEY = 'paypal:sub:' + settings.PAYPAL_MODE + ':{id}'
     SUB_CACHE_TTL = 60 * 60 * 8
+    #: Failure marker: cached for 60s so a PayPal outage costs one timeout per minute, not one
+    #: 30s hang per page GET (the exact thing the snapshot exists to prevent).
+    SUB_CACHE_MISS = '__paypal_unavailable__'
+    SUB_CACHE_MISS_TTL = 60
 
     @staticmethod
     def get_cached_subscription_snapshot(subscription_id: str) -> Optional[dict]:
@@ -165,18 +169,24 @@ class PayPalService:
             return None
         key = PayPalService.SUB_CACHE_KEY.format(id=subscription_id)
         snapshot = cache.get(key)
+        if snapshot == PayPalService.SUB_CACHE_MISS:
+            return None
         if snapshot is not None:
             return snapshot
         try:
             details = PayPalService.get_subscription_details(subscription_id)
         except Exception:
             logger.exception("PayPal subscription snapshot fetch failed for %s", subscription_id)
+            cache.set(key, PayPalService.SUB_CACHE_MISS, PayPalService.SUB_CACHE_MISS_TTL)
             return None
         snapshot = {
             'status': details.get('status'),
             'next_billing_time': (details.get('billing_info') or {}).get('next_billing_time'),
             'plan_id': details.get('plan_id'),
         }
+        if not snapshot['status']:
+            # A 200 with no status is not a snapshot worth pinning for 8 hours.
+            return None
         cache.set(key, snapshot, PayPalService.SUB_CACHE_TTL)
         return snapshot
 

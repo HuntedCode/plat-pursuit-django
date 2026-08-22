@@ -112,7 +112,7 @@ class CustomUser(AbstractUser):
         if self.subscription_provider == 'stripe' and self.stripe_customer_id:
             return Subscription.objects.filter(
                 customer__id=self.stripe_customer_id,
-                stripe_data__status__in=['active', 'past_due']
+                stripe_data__status__in=['active', 'trialing', 'past_due']
             ).exists()
         elif self.subscription_provider == 'paypal' and self.paypal_subscription_id:
             if self.paypal_cancel_at and self.paypal_cancel_at < timezone.now():

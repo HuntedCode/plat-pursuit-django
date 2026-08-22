@@ -363,7 +363,7 @@ def test_neither_page_hand_writes_its_own_perk_list_again():
     members with a list of things they did not have. So this checks the templates themselves.
     """
     root = pathlib.Path(__file__).resolve().parents[2]
-    for name in ('support/support_hub.html', 'users/subscription_management.html',
+    for name in ('support/support_hub.html', 'support/membership.html',
                  'emails/subscription_welcome.html', 'emails/payment_failed.html',
                  'emails/subscription_cancelled.html'):
         markup = (root / 'templates' / name).read_text(encoding='utf-8')
@@ -2029,7 +2029,7 @@ def test_the_billing_portal_is_a_post_action(client):
 def test_the_portal_post_without_a_customer_is_a_polite_redirect(client):
     user = UserFactory()
     client.force_login(user)
-    response = client.post(reverse('stripe_billing_portal'))
-    assert response.status_code == 302
-    assert response['Location'] == reverse('subscription_management')
+    response = client.post(reverse('stripe_billing_portal'), follow=True)
+    assert response.status_code == 200
+    assert b'No billing account found.' in response.content
 

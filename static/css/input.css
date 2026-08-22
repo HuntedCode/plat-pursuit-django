@@ -47,6 +47,7 @@
 @import "./components/supporter.css";
 @import "./components/support.css";
 @import "./components/support-roadmap.css";
+@import "./components/support-manage.css";
 @plugin "daisyui";
 
 @theme {

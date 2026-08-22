@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Membership - PlatPursuit{% endblock %}
+
+{% block content %}
+<div class="supm">
+
+    {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
+    page does not carry -- without this block the PayPal-cancel confirmation, the wall-toggle
+    confirmation and the double-subscribe guard's "manage it here" all arrive silently. {% endcomment %}
+    {% if messages %}
+    <div class="sup-msgs" role="status">
+        {% for message in messages %}
+        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not is_live %}
+    <div class="supm-testmode" role="note">TEST MODE ACTIVE &mdash; no real payments are processed.</div>
+    {% endif %}
+
+    {% comment %} ============================================== header card =============== {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
+        <div class="card-body p-5 md:p-7 pp-head-cascade">
+            <p class="supm__eyebrow">Support &middot; Membership</p>
+            <h1 class="supm__h1">Your membership.</h1>
+            <p class="supm__lede">
+                {% if membership.state != 'none' %}
+                Everything about your support in one place: what you carry, what it costs, and the
+                controls. To change your level or billing cycle, cancel here and re-subscribe at
+                the new one when your paid time runs out &mdash; nothing is lost in between.
+                {% else %}
+                Membership keeps the servers on and the rebuild moving. Nothing on the site is
+                locked either way &mdash; members simply get more of what everyone gets.
+                {% endif %}
+            </p>
+        </div>
+    </section>
+
+    {% if membership.state != 'none' %}
+    {% comment %} ============================================== status card =============== {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-4 supm-status"
+             {% if level %}style="--sup-t: {{ level.colour }}"{% endif %}>
+        <div class="card-body p-4 md:p-6">
+
+            {% comment %} The standing row: the one .pp-supname on the page (a single name, so the
+            flow animation fully belongs here), the level's stars beside it, exactly the object a
+            leaderboard row renders. {% endcomment %}
+            <div class="supm-who">
+                <span class="supm-who__av">{% include 'partials/_avatar.html' with url=viewer_avatar alt='' %}</span>
+                <span class="supm-who__id">
+                    <span class="supm-who__name">
+                        <span class="pp-supname">{{ viewer_name }}</span>{% if level %}<span class="supm-who__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=level %}</span>{% endif %}
+                    </span>
+                    <span class="supm-who__sub">
+                        {% if level %}{% if level.is_legacy %}{{ level.display_name }} &middot; a founding tier, worn as {{ level.name }}{% else %}PlatPursuit {{ level.name }}{% endif %}{% else %}PlatPursuit member{% endif %}
+                        {% if tenure.member_since %} &middot; member since {{ tenure.member_since|date:"M Y" }}{% endif %}
+                    </span>
+                </span>
+            </div>
+
+            {% comment %} The facts: everything a member would otherwise open a processor
+            dashboard to learn. Unknown values are OMITTED, never guessed. {% endcomment %}
+            <dl class="supm-facts">
+                <div class="supm-fact">
+                    <dt>Status</dt>
+                    <dd>
+                        {% if membership.state == 'past_due' %}<span class="supm-chip supm-chip--warn">Payment issue</span>
+                        {% elif membership.state == 'grace' %}<span class="supm-chip supm-chip--end">Ends {{ cancels_at|date:"M j, Y" }}</span>
+                        {% elif cancels_at %}<span class="supm-chip supm-chip--end">Cancels {{ cancels_at|date:"M j, Y" }}</span>
+                        {% else %}<span class="supm-chip supm-chip--ok">Active</span>{% endif %}
+                    </dd>
+                </div>
+                {% if billing.amount and billing.cycle %}
+                <div class="supm-fact">
+                    <dt>You give</dt>
+                    <dd>${{ billing.amount }} / {{ billing.cycle }}</dd>
+                </div>
+                {% elif billing.cycle %}
+                <div class="supm-fact">
+                    <dt>Billing cycle</dt>
+                    <dd>{{ billing.cycle|title }}ly</dd>
+                </div>
+                {% endif %}
+                {% if next_billing %}
+                <div class="supm-fact">
+                    <dt>Next billing</dt>
+                    <dd>{{ next_billing|date:"M j, Y" }}</dd>
+                </div>
+                {% endif %}
+                <div class="supm-fact">
+                    <dt>Via</dt>
+                    <dd>{{ membership.provider|title }}</dd>
+                </div>
+                {% if tenure.total_months %}
+                <div class="supm-fact">
+                    <dt>Time supporting</dt>
+                    <dd>{{ tenure.total_months }} month{{ tenure.total_months|pluralize }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+
+            {% if membership.state == 'grace' %}
+            <div class="supm-inset supm-inset--grace">
+                <p class="supm-inset__lead">You've cancelled &mdash; and everything stays yours until {{ cancels_at|date:"F j, Y" }}.</p>
+                <p class="supm-inset__sub">Your perks, your mark and your place on the wall all run to the end of the time you paid for. If you change your mind, the door is open.</p>
+                <a href="{% url 'support_hub' %}" class="supm-inset__cta">Re-subscribe</a>
+            </div>
+            {% elif membership.state == 'past_due' %}
+            <div class="supm-inset supm-inset--due">
+                <p class="supm-inset__lead">Your last payment didn't go through.</p>
+                <p class="supm-inset__sub">Your membership is still active while the payment retries. Updating your card usually sorts it in a minute.</p>
+                {% if can_open_portal %}
+                <form method="post" action="{% url 'stripe_billing_portal' %}">{% csrf_token %}
+                    <button type="submit" class="supm-inset__cta">Update payment method</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% comment %} Actions, provider-branched. Stripe hands billing to the hosted portal
+            (card, invoices, cancel); PayPal cancels in-app through the dialog below. {% endcomment %}
+            {% if membership.state != 'grace' %}
+            <div class="supm-actions">
+                {% if membership.provider == 'stripe' and can_open_portal %}
+                <form method="post" action="{% url 'stripe_billing_portal' %}">{% csrf_token %}
+                    <button type="submit" class="supm-actions__go">Manage billing</button>
+                </form>
+                <p class="supm-actions__note">Update your card, view invoices, or cancel &mdash; opens Stripe's secure portal.</p>
+                {% elif membership.provider == 'paypal' %}
+                <div class="supm-actions__row">
+                    <a href="{{ paypal_manage_url }}" target="_blank" rel="noopener" class="supm-actions__go">Manage on PayPal</a>
+                    {% if not cancels_at %}
+                    <button type="button" class="supm-actions__cancel" data-cancel-open>Cancel membership</button>
+                    {% endif %}
+                </div>
+                <p class="supm-actions__note">Payment details live on PayPal; cancelling here takes effect at the end of your paid time.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+    </section>
+
+    {% comment %} ============================================== the perks ================= {% endcomment %}
+    {% comment %} FREE content, not a card (stacked-page rule): the storefront modal's icon tiles,
+    inline. Same constant, same tiles -- the promise you bought is the promise this page shows. {% endcomment %}
+    <div class="supm-perks">
+        <h2 class="supm-perks__h">What your membership includes</h2>
+        <div class="sup-perks-grid">
+            {% for perk in premium_perks %}
+            <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %}" style="--perk-c: {{ perk.colour }}">
+                <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
+                <div class="sup-perk__body">
+                    <h3 class="sup-perk__name"{% if perk.asterisk %} aria-describedby="supm-perks-fn"{% endif %}>{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
+                    <p class="sup-perk__mem">{{ perk.member }}</p>
+                    {% if perk.slug == 'mark' %}
+                    <p class="sup-perk__ex sup-perk__ex--mark" style="--sup-t: {% if level %}{{ level.colour }}{% else %}{{ perk.colour }}{% endif %}"><span class="pp-supname">{{ viewer_name }}</span> <svg class="pp-supstar" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></p>
+                    {% elif perk.example %}
+                    <p class="sup-perk__ex">{{ perk.example }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% for perk in premium_perks %}{% if perk.footnote %}
+        <p class="supm-perks__fn" id="supm-perks-fn">* {{ perk.footnote }}</p>
+        {% endif %}{% endfor %}
+        <p class="supm-perks__more"><a href="{% url 'support_hub' %}">See the full pitch on the support page</a></p>
+    </div>
+
+    {% else %}
+    {% comment %} ============================================== no membership ============= {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-4">
+        <div class="card-body p-4 md:p-6 supm-none">
+            <p class="supm-none__lead">No active membership.</p>
+            <p class="supm-none__sub">
+                Nothing on the site is locked either way &mdash; membership is a way to back the
+                project, wear the mark, and get more of what everyone already gets.
+            </p>
+            <a href="{% url 'support_hub' %}" class="supm-none__cta">See the support page</a>
+        </div>
+    </section>
+    {% endif %}
+
+    {% comment %} ============================================== the wall toggle ==========
+    Deliberately OUTSIDE the member/non-member branch: show_on_supporter_wall defaults True and a
+    LAPSED supporter is still credited on the wall -- they must always be able to take themselves
+    off, membership or not. {% endcomment %}
+    {% if has_profile %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-4">
+        <div class="card-body p-4 md:p-6 supm-wall">
+            <div class="supm-wall__say">
+                <h2 class="supm-wall__h">The supporter wall</h2>
+                <p class="supm-wall__sub">Supporters are credited by name on the support page. Entirely optional.</p>
+            </div>
+            <form method="post" class="supm-wall__form">
+                {% csrf_token %}
+                <input type="hidden" name="wall_visibility" value="1">
+                <label class="supm-wall__label">
+                    <input type="checkbox" name="on_the_wall" value="yes" class="checkbox checkbox-primary checkbox-sm"
+                           {% if on_the_wall %}checked{% endif %} onchange="this.form.requestSubmit()">
+                    <span>List me on the supporter wall</span>
+                </label>
+            </form>
+        </div>
+    </section>
+    {% endif %}
+
+    <p class="supm-trust">
+        Payments are handled by Stripe and PayPal &mdash; card details never touch our servers.
+        Cancel any time; paid time is always honoured to the end.
+    </p>
+
+    {% comment %} ============================================== cancel dialog ============= {% endcomment %}
+    {% if membership.provider == 'paypal' and membership.state == 'active' and not cancels_at %}
+    <dialog id="supm-cancel" class="sup-modal" aria-labelledby="supm-cancel-h">
+        <div class="sup-modal__head">
+            <h2 id="supm-cancel-h">Cancel your membership?</h2>
+            <button type="button" class="sup-modal__x" data-cancel-close aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+        <p class="sup-modal__lede">
+            You'll keep every perk until the end of the time you've paid for{% if next_billing %}
+            ({{ next_billing|date:"F j, Y" }}){% endif %}. After that your membership ends &mdash;
+            you can re-subscribe any time, at any level.
+        </p>
+        <div class="supm-cancel__row">
+            <form method="dialog"><button class="supm-cancel__keep">Keep my membership</button></form>
+            <form method="post" action="{% url 'paypal_cancel_subscription' %}">{% csrf_token %}
+                <button type="submit" class="supm-cancel__go">Cancel membership</button>
+            </form>
+        </div>
+    </dialog>
+    <noscript>
+        {% comment %} Without JS the dialog opener is inert; the same two-step confirm renders as
+        static content -- never a one-click cancel, never a dead end. {% endcomment %}
+        <div class="supm-inset supm-inset--due">
+            <p class="supm-inset__lead">Cancel your membership?</p>
+            <p class="supm-inset__sub">You'll keep every perk until the end of the time you've paid for. After that your membership ends.</p>
+            <form method="post" action="{% url 'paypal_cancel_subscription' %}">{% csrf_token %}
+                <button type="submit" class="supm-inset__cta">Cancel membership</button>
+            </form>
+        </div>
+    </noscript>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+PlatPursuit.onPageReady(function () {
+    var dialog = document.getElementById('supm-cancel');
+    if (!dialog) return;
+    document.querySelectorAll('[data-cancel-open]').forEach(function (btn) {
+        btn.addEventListener('click', function () { dialog.showModal(); });
+    });
+    document.querySelectorAll('[data-cancel-close]').forEach(function (btn) {
+        btn.addEventListener('click', function () { dialog.close(); });
+    });
+    dialog.addEventListener('click', function (e) {
+        if (e.target === dialog) dialog.close();
+    });
+});
+</script>
+{% endblock %}

@@ -40,7 +40,7 @@ sitemaps = {
 from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
-from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView
+from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
 from users.subscription_admin_views import SubscriptionAdminView
 from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdminView, BadgeRevealView
 # Notifications are HIDDEN pending their rebuild (2026-08); every view in `notifications/views.py` is
@@ -76,6 +76,10 @@ urlpatterns = [
     # the subscription services and the Stripe/PayPal knowledge already are.
     path('support/', SupportStorefrontView.as_view(), name='support_hub'),
     path('support/roadmap/', SupportRoadmapView.as_view(), name='support_roadmap'),
+    # Membership management joined the Support hub in the 2026-08 rebuild (it is a membership
+    # surface, not a settings page). The route NAME stays `subscription_management`: every email,
+    # notification and reverse() caller follows it here automatically.
+    path('support/membership/', SubscriptionManagementView.as_view(), name='subscription_management'),
 
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/lucky/', RandomGameView.as_view(), name='random_game'),

@@ -1,6 +1,6 @@
 from django.urls import path
 from django.views.generic import RedirectView
-from users.views import SettingsView, subscribe_success, SubscriptionManagementView, EmailPreferencesView, EmailPreferencesRedirectView, paypal_cancel_subscription, stripe_billing_portal
+from users.views import SettingsView, subscribe_success, EmailPreferencesView, EmailPreferencesRedirectView, paypal_cancel_subscription, stripe_billing_portal
 
 urlpatterns = [
     path('settings/', SettingsView.as_view(), name='settings'),
@@ -17,7 +17,13 @@ urlpatterns = [
     # Does NOT move. This exact path is baked into every Stripe `success_url` and PayPal `return_url`
     # we have ever sent, including on subscriptions bought months ago.
     path('subscribe/success/', subscribe_success, name='subscribe_success'),
-    path('subscription-management/', SubscriptionManagementView.as_view(), name='subscription_management'),
+    # The membership page moved to /support/membership/ (2026-08 rebuild). This redirect is
+    # PERMANENT INFRASTRUCTURE, not cleanup debt: the old path is baked into every notification
+    # row already in the DB and every lifecycle email ever sent. 302 on purpose, same reasoning
+    # as `subscribe` above -- a 301 on a payment-adjacent URL is cached by the browser and cannot
+    # be taken back. Unnamed so nothing can reverse to the old path.
+    path('subscription-management/', RedirectView.as_view(
+        pattern_name='subscription_management', permanent=False, query_string=True)),
     path('paypal/cancel/', paypal_cancel_subscription, name='paypal_cancel_subscription'),
     path('stripe/portal/', stripe_billing_portal, name='stripe_billing_portal'),
 ]

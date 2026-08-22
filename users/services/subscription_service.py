@@ -347,7 +347,7 @@ class SubscriptionService:
         if user.stripe_customer_id:
             active_stripe = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
-                stripe_data__status__in=['active', 'past_due']
+                stripe_data__status__in=['active', 'trialing', 'past_due']
             ).exists()
             if active_stripe:
                 return (True, 'stripe')
@@ -379,15 +379,28 @@ class SubscriptionService:
             if sub:
                 data = sub.stripe_data or {}
                 cancels_at = None
-                if data.get('cancel_at_period_end'):
-                    # Portal cancels leave the sub 'active' with this flag; the period end IS the
-                    # end date. `dt_timezone.utc`, never django.utils.timezone.utc (removed in
-                    # Django 5.0).
+                if data.get('cancel_at_period_end') or data.get('cancel_at'):
+                    # Portal cancels leave the sub 'active' with cancel_at_period_end; a cancel
+                    # scheduled for a specific date sets cancel_at ALONE. Either way the end date
+                    # is real information. `dt_timezone.utc`, never django.utils.timezone.utc
+                    # (removed in Django 5.0).
                     end_ts = data.get('cancel_at') or data.get('current_period_end')
                     if end_ts:
                         cancels_at = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
                 return MembershipStatus('active', 'stripe', cancels_at=cancels_at, stripe_sub=sub)
 
+        # The PayPal-subscriber guard, same reasoning as update_user_subscription's: for a
+        # provider='paypal' user, STALE Stripe rows (the past_due/canceled sub they left behind
+        # before re-subscribing via PayPal) must never claim the page. Only an ACTIVE Stripe sub
+        # (checked above) outranks the PayPal read.
+        if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
+            if user.paypal_cancel_at:
+                if user.paypal_cancel_at > timezone.now():
+                    return MembershipStatus('grace', 'paypal', grace_until=user.paypal_cancel_at)
+                return MembershipStatus('none')
+            return MembershipStatus('active', 'paypal')
+
+        if user.stripe_customer_id:
             past_due = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id, stripe_data__status='past_due'
             ).first()
@@ -405,13 +418,6 @@ class SubscriptionService:
                         if until > timezone.now():
                             return MembershipStatus('grace', 'stripe', grace_until=until,
                                                     stripe_sub=canceled)
-
-        if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
-            if user.paypal_cancel_at:
-                if user.paypal_cancel_at > timezone.now():
-                    return MembershipStatus('grace', 'paypal', grace_until=user.paypal_cancel_at)
-                return MembershipStatus('none')
-            return MembershipStatus('active', 'paypal')
 
         return MembershipStatus('none')
 
@@ -453,7 +459,10 @@ class SubscriptionService:
         if membership.provider == 'stripe' and membership.stripe_sub is not None:
             plan = (membership.stripe_sub.stripe_data or {}).get('plan') or {}
             if plan.get('amount'):
-                amount = plan['amount'] // 100
+                # Legacy Stripe prices are not whole-dollar-guaranteed; never floor a member's
+                # real price ($4.99 must not read as $4).
+                cents = plan['amount']
+                amount = cents // 100 if cents % 100 == 0 else f"{cents / 100:.2f}"
             cycle = plan.get('interval') or None
 
         elif membership.provider == 'paypal':
@@ -463,7 +472,8 @@ class SubscriptionService:
             snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
             plan_id = (snapshot or {}).get('plan_id')
             if plan_id:
-                for slug, intervals in PAYPAL_LADDER_PLANS.get(settings.PAYPAL_MODE, {}).items():
+                mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
+                for slug, intervals in PAYPAL_LADDER_PLANS.get(mode, {}).items():
                     for interval, pid in intervals.items():
                         if pid == plan_id:
                             cycle = 'month' if interval == 'monthly' else 'year'

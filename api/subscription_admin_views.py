@@ -8,6 +8,7 @@ Provides:
 import logging
 
 from django.utils.decorators import method_decorator
+from django.urls import reverse
 from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
@@ -121,7 +122,7 @@ class SubscriptionAdminActionView(APIView):
                 ).order_by('-created_at').first()
                 invoice_url = (latest.metadata or {}).get('invoice_url', '') if latest else ''
                 if not invoice_url:
-                    invoice_url = f"{settings.SITE_URL}/users/subscription-management/"
+                    invoice_url = f"{settings.SITE_URL}{reverse('subscription_management')}"
                 sent = SubscriptionService._send_payment_action_required_email(
                     user, invoice_url, triggered_by='admin_manual',
                 )
