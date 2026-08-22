@@ -6,8 +6,8 @@ to their display shape (tiles grouped by the 5 disciplines).
 
 Presentation data that isn't on the model lives here as constants: the discipline taglines +
 header icons, and the flavor/criteria copy (flavor prefers the seeded `Job.description`,
-falling back to DESCRIPTIONS). SYMBOLS / SHAPES are legacy marks still read by the `/design/*`
-workshops. The XP math uses the REAL leveling helpers + real `ProfileJobXP`. All assembly is
+falling back to DESCRIPTIONS). SYMBOLS / SHAPES are legacy marks kept for the job tiles that
+still render them. The XP math uses the REAL leveling helpers + real `ProfileJobXP`. All assembly is
 bounded by the ~25-row Job catalog, so Python iteration is safe (no whale risk).
 """
 import json

@@ -185,5 +185,11 @@ def test_the_workshop_that_renders_the_card_loads_them_itself():
 
 def test_the_design_workshop_still_renders(client):
     """The card markup and its behaviour are kept deliberately -- the forge's fresh-sync choreography is
-    reusable and its syncing->synced transition detection is not trivial to rewrite."""
+    reusable and its syncing->synced transition detection is not trivial to rewrite. Staff-gated since
+    the 2026-08 design-lab strip (it renders the production partial, so it stays a regression surface)."""
+    profile = ProfileFactory(is_linked=True)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+    client.force_login(profile.user)
+
     assert client.get('/design/pursuer-card-ranks/').status_code == 200

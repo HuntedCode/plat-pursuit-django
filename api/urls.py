@@ -30,11 +30,6 @@ from .share_temp_views import serve_share_temp_image
 # GameSearchView stays: it is a general game-search endpoint that happens to live in this module.
 from .game_list_views import GameSearchView
 from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
-from .game_family_views import (
-    GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
-    GameFamilyAddConceptView, GameFamilyRemoveConceptView,
-    ConceptSearchView as GameFamilyConceptSearchView,
-)
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
 from .title_views import EquipTitleAPIView
@@ -146,13 +141,8 @@ urlpatterns = [
     path('game-backgrounds/', GameBackgroundSearchView.as_view(), name='game-background-search'),
     path('game-backgrounds/<int:concept_id>/images/', ConceptBannerImagesView.as_view(), name='concept-banner-images'),
 
-    # Game Family endpoints (staff-only)
-    path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),
-    path('game-families/<int:family_id>/', GameFamilyUpdateView.as_view(), name='game-family-update'),
-    path('game-families/<int:family_id>/delete/', GameFamilyDeleteView.as_view(), name='game-family-delete'),
-    path('game-families/<int:family_id>/add-concept/', GameFamilyAddConceptView.as_view(), name='game-family-add-concept'),
-    path('game-families/<int:family_id>/remove-concept/', GameFamilyRemoveConceptView.as_view(), name='game-family-remove-concept'),
-    path('game-families/search-concepts/', GameFamilyConceptSearchView.as_view(), name='game-family-search-concepts'),
+    # Game Family staff endpoints were REMOVED with the game-family management page in the 2026-08
+    # staff strip-down (the IGDB pipeline still creates families; Django admin covers overrides).
 
     # Subscription admin endpoints (staff-only)
     path('admin/subscriptions/action/', SubscriptionAdminActionView.as_view(), name='subscription-admin-action'),

@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, BadgePresentationView, RequirementsChecklistWorkshopView, StageCardsWorkshopView, GameCardWorkshopView, BadgeJourneyWorkshopView, ChromeWorkshopView, RecapStageWorkshopView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, RoadmapSitemap,
@@ -37,7 +37,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, CommentModerationView, ModerationActionView, ModerationLogView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
@@ -453,13 +453,9 @@ urlpatterns = [
     path('search/', SearchView.as_view(), name='search'),
     path('logout/', LogoutView.as_view(template_name='account/logout.html'), name='logout'),
 
-    path('staff/moderation/', CommentModerationView.as_view(), name='comment_moderation'),
-    path('staff/moderation/action/<int:report_id>/', ModerationActionView.as_view(), name='moderation_action'),
-    path('staff/moderation/log/', ModerationLogView.as_view(), name='moderation_log'),
-    path('staff/review-moderation/', ReviewModerationView.as_view(), name='review_moderation'),
-    path('staff/review-moderation/action/<int:report_id>/', ReviewModerationActionView.as_view(), name='review_moderation_action'),
-    path('staff/review-moderation/log/', ReviewModerationLogView.as_view(), name='review_moderation_log'),
-    path('staff/game-families/', GameFamilyManagementView.as_view(), name='game_family_management'),
+    # Staff moderation pages (comment + review queues) and the game-family manager were REMOVED in the
+    # 2026-08 staff strip-down, pending their rebuild. The data models (CommentReport, ModerationLog,
+    # ReviewReport, GameFamily) are untouched; Django admin covers them in the meantime.
     # Notification staff pages: HIDDEN with the rest of the system (see the note on `notification_inbox`
     # above). Names kept so the parked views' own redirects still reverse.
     path('staff/notifications/', RedirectView.as_view(pattern_name='home', permanent=False), name='admin_notification_center'),
@@ -470,20 +466,10 @@ urlpatterns = [
     # hit. Any redirect on a path that captures something has to use this form.
     path('staff/notifications/scheduled/<int:pk>/cancel/', RedirectView.as_view(url='/', permanent=False), name='admin_cancel_scheduled'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
-    # Bookmark-only staff analytics dashboard. Not linked from nav.
-    # CSP violation reporting. Ingest endpoint MUST live at the project root
-    # (not under /staff/ or /api/) since browsers POST reports without auth.
-    path('csp-report/', csp_report_ingest, name='csp_report'),
-    path('staff/csp-violations/', CspViolationsView.as_view(), name='staff_csp_violations'),
-    path('staff/csp-violations/clear/', CspViolationsClearView.as_view(), name='staff_csp_violations_clear'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.
     path('staff/badge-create/', BadgeSeriesCreationView.as_view(), name='badge_creation'),
     path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
-    # Read-only browser for the deprecated Checklist system (tables retained
-    # after the Roadmap migration). Not linked from nav.
-    path('staff/legacy-checklists/', LegacyChecklistListView.as_view(), name='legacy_checklist_list'),
-    path('staff/legacy-checklists/<int:pk>/', LegacyChecklistDetailView.as_view(), name='legacy_checklist_detail'),
     # NOTE: the Platinum Grid wizard is RETIRED (2026-08). /shareables/platinum-grid/ bounces to
     # the shareables landing; the legacy /staff/platinum-grid/ + /tools/platinum-grid/ 301s funnel
     # into that bounce. PlatinumGridView is parked unrouted in trophies/views/platinum_grid_views.py.
@@ -539,34 +525,13 @@ urlpatterns = [
     # Arcade (mini-games)
     path('arcade/stellar-circuit/', TemplateView.as_view(template_name='minigames/stellar-circuit.html'), name='stellar_circuit'),
 
-    # Design previews (team-facing, publicly accessible by direct link).
-    # Used to gather feedback on proposed visual primitives before they're
-    # committed to the canonical design system. Not linked from nav.
-    path('design/frame/', TemplateView.as_view(template_name='design/frame_preview.html'), name='design_frame_preview'),
-    path('design/frame-component/', FrameComponentTestView.as_view(), name='design_frame_component_test'),
-    path('design/binder/', BinderPreviewView.as_view(), name='design_binder_preview'),
-    path('design/badge-collection/', BadgeCollectionListView.as_view(), name='design_badge_collection_list'),
-    path('design/badge-presentation/', BadgePresentationView.as_view(), name='design_badge_presentation'),
-    path('design/requirements-checklist/', RequirementsChecklistWorkshopView.as_view(), name='design_requirements_checklist'),
-    path('design/stage-cards/', StageCardsWorkshopView.as_view(), name='design_stage_cards'),
-    path('design/game-card/', GameCardWorkshopView.as_view(), name='design_game_card'),
-    path('design/badge-journey/', BadgeJourneyWorkshopView.as_view(), name='design_badge_journey'),
-    path('design/chrome/', ChromeWorkshopView.as_view(), name='design_chrome'),
-    path('design/recap-stage/', RecapStageWorkshopView.as_view(), name='design_recap_stage'),
-    path('design/tally/', TemplateView.as_view(template_name='design/tally_preview.html'), name='design_tally_preview'),
-    path('design/horizon/', TemplateView.as_view(template_name='design/horizon_preview.html'), name='design_horizon_preview'),
-    path('design/pursuer-card/', PursuerCardPreviewView.as_view(), name='design_pursuer_card_preview'),
+    # Design workshops. The 2026-08 staff strip-down removed the one-off exploration labs and
+    # staff-gated the four that survive as living references (they were fully public before,
+    # with no robots block). robots.txt also disallows /design/ now.
+    path('design/frame/', DesignLabView.as_view(template_name='design/frame_preview.html'), name='design_frame_preview'),
+    path('design/horizon/', DesignLabView.as_view(template_name='design/horizon_preview.html'), name='design_horizon_preview'),
     path('design/pursuer-card-ranks/', PursuerCardRanksPreviewView.as_view(), name='design_pursuer_card_ranks_preview'),
-    path('design/pursuer-card-customization/', PursuerCardCustomizationPreviewView.as_view(), name='design_pursuer_card_customization_preview'),
-    path('design/pursuer-card-v2/', TemplateView.as_view(template_name='design/pursuer_card_workshop.html'), name='design_pursuer_card_workshop'),
-    path('design/pursuer-card-spectral/', TemplateView.as_view(template_name='design/pursuer_card_spectral.html'), name='design_pursuer_card_spectral'),
-    path('design/pursuer-card-collection/', TemplateView.as_view(template_name='design/pursuer_card_collection.html'), name='design_pursuer_card_collection'),
-    path('design/style-guide/', TemplateView.as_view(template_name='design/style_guide_preview.html'), name='design_style_guide_preview'),
-    path('design/jobs/', JobsWorkshopView.as_view(), name='design_jobs_preview'),
-    path('design/lab/', LabWorkshopView.as_view(), name='design_lab_preview'),
-    path('design/research-panel/', DesignResearchPanelView.as_view(), name='design_research_panel_preview'),
-    path('design/mobile-subnav/', TemplateView.as_view(template_name='design/mobile_subnav.html'), name='design_mobile_subnav'),
-    path('design/rank-colours/', TemplateView.as_view(template_name='design/rank_colours_preview.html'), name='design_rank_colours_preview'),
+    path('design/style-guide/', DesignLabView.as_view(template_name='design/style_guide_preview.html'), name='design_style_guide_preview'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

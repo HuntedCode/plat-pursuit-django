@@ -10,34 +10,6 @@ def site_links(request):
     return {'discord_invite_url': settings.DISCORD_INVITE_URL}
 
 
-def moderation(request):
-    """
-    Provide pending reports count for staff members.
-
-    Only queries the database if the user is authenticated staff to avoid
-    unnecessary overhead for regular users. Results are cached for 60 seconds
-    to prevent per-request DB queries on every page load.
-    """
-    pending_reports_count = 0
-
-    if request.user.is_authenticated and request.user.is_staff:
-        from django.core.cache import cache
-        from trophies.models import CommentReport
-
-        pending_reports_count = cache.get_or_set(
-            'mod:pending_reports_count',
-            lambda: CommentReport.objects.filter(status='pending').count(),
-            60,
-        )
-
-    return {
-        'pending_reports_count': pending_reports_count,
-        # Kept for template compatibility during the Phase 2.6 transition;
-        # GameFamilyProposal is no longer used and the count is always 0.
-        'pending_proposals_count': 0,
-    }
-
-
 def active_fundraiser(request):
     """
     Inject the currently active fundraiser for the site-wide banner.

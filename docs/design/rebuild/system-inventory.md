@@ -227,7 +227,7 @@ The reason we built these was to inform design across the rebuild. **Frame is pr
 
 ### Binder Surface
 - **What:** Badge Gallery as a trading-card binder; 6 views + 3D page-flip; first "Surface" (composite container).
-- **Status:** **Workshop-only**, locked at `/design/binder/` + list at `/design/badge-collection/`. Full reference in `binder-surface.md`.
+- **Status:** **Design record only.** The `/design/binder/` + `/design/badge-collection/` labs were removed in the 2026-08 design-lab strip; `binder-surface.md` holds the full reference.
 - **Disposition:** **Adapt (extract)** — the implementation target for the Phase 1 Badge Gallery rebuild (current gallery predates the kit). Depends on Frame (ready).
 
 ---

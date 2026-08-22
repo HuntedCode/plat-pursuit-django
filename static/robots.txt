@@ -59,6 +59,7 @@ Disallow: /api/
 # Internal pages
 Disallow: /staff/
 Disallow: /monitoring/
+Disallow: /design/
 
 # Guides (temporarily hidden during redesign)
 Disallow: /guides/

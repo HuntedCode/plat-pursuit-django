@@ -287,9 +287,10 @@ Constraints worth knowing before editing it:
 
 ### Presentation: the Entrance and the Stage
 
-The recap is a **ceremony**, not a dashboard panel. Direction chosen from three built at
-[`/design/recap-stage/`](../../templates/design/recap_stage_workshop.html); the other two (a PS-era
-"broadcast" readout, and a scroll-driven editorial "spread") remain on that page.
+The recap is a **ceremony**, not a dashboard panel. Direction chosen from three built at the
+`/design/recap-stage/` workshop (removed in the 2026-08 design-lab strip after the decision
+shipped); the other two candidates were a PS-era "broadcast" readout and a scroll-driven
+editorial "spread".
 
 The page used to be a breadcrumb plus three nested `card bg-base-200/90 border-2 border-base-300`
 wrappers around a fixed-height box with a row of dots and two ghost circle buttons -- anti-reference #1 in

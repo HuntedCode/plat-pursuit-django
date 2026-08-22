@@ -119,14 +119,9 @@ models and templates are retained.
 
 ### Game Families (Staff Only)
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/game-families/` | Staff | Create family |
-| PUT | `/api/v1/game-families/<id>/` | Staff | Update family |
-| DELETE | `/api/v1/game-families/<id>/delete/` | Staff | Delete family |
-| POST | `/api/v1/game-families/<id>/add-concept/` | Staff | Add concept to family |
-| POST | `/api/v1/game-families/<id>/remove-concept/` | Staff | Remove concept |
-| GET | `/api/v1/game-families/search-concepts/` | Staff | Search concepts |
+> **REMOVED 2026-08** (staff strip-down): all six `game-families/` staff endpoints were deleted with
+> the `/staff/game-families/` management page. The `GameFamily` model and the IGDB linking pipeline
+> are untouched; manual overrides go through Django admin until a rebuild.
 
 ### Fundraiser
 

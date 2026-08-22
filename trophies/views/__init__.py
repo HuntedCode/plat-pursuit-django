@@ -11,12 +11,7 @@ from .profile_views import ProfilesListView, ProfileDetailView, ProfileDayView, 
 from .badge_views import BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView
 # Checklist views removed during roadmap migration (DB tables retained)
 from .sync_views import ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView
-from .admin_views import (
-    TokenMonitoringView, BadgeSeriesCreationView, CommentModerationView, ModerationActionView,
-    ModerationLogView, ReviewModerationView, ReviewModerationActionView,
-    ReviewModerationLogView, GameFamilyManagementView,
-    LegacyChecklistListView, LegacyChecklistDetailView,
-)
+from .admin_views import TokenMonitoringView, BadgeSeriesCreationView
 from .misc_views import SearchView
 from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
 from .review_hub_views import ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView
@@ -43,9 +38,7 @@ __all__ = [
     # Sync views
     'ProfileSyncStatusView', 'TriggerSyncView', 'SearchSyncProfileView', 'AddSyncStatusView', 'ProfileSuggestView', 'SiteSuggestView',
     # Admin views
-    'TokenMonitoringView', 'BadgeSeriesCreationView', 'CommentModerationView', 'ModerationActionView', 'ModerationLogView',
-    'ReviewModerationView', 'ReviewModerationActionView', 'ReviewModerationLogView', 'GameFamilyManagementView',
-    'LegacyChecklistListView', 'LegacyChecklistDetailView',
+    'TokenMonitoringView', 'BadgeSeriesCreationView',
     # Misc views
     'SearchView',
     # List views

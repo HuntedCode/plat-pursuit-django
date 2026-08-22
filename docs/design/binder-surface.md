@@ -2,9 +2,9 @@
 
 The Binder is a branded **Surface** in the PlatPursuit design system — a recognizable layout container that arranges Frames into a trading-card binder metaphor. It sits alongside the four signature primitives (Frame, Pursuer Card, Horizon, Tally) defined in [visual-identity.md §3](visual-identity.md#3-signatures), but is categorically different from them: primitives are *atomic* (small repeated units of identity), Surfaces are *composite* (branded containers that arrange primitives).
 
-This doc captures the design decisions and technical learnings from the Binder prototype at [`/design/binder/`](../../templates/design/binder_preview.html). The workshop below describes the **full** six-view design; the production extraction (see status note) is a deliberate subset.
+This doc captures the design decisions and technical learnings from the Binder prototype that lived at `/design/binder/` until the 2026-08 design-lab strip removed it (template deleted; this doc is now the only record). The workshop described the **full** six-view design; the production extraction (see status note) was a deliberate subset.
 
-> **Status: SUPERSEDED (2026-07).** The Binder *was* the production `/collection/` page, but it has been **replaced by the Badge Medallion "Case"** — the badge art is already a self-contained laurel-framed medallion, so it now presents as a precious OBJECT rather than a trading-card in a binder. See **[badge-medallion.md](../reference/badge-medallion.md)** for the shipped component + Case. The binder code (`templates/components/binder.html` + `binder.css` + `binder.js`) is kept **only** for the `/design/binder/` design lab; this doc is retained as that lab's design + technical reference. The (now historical) production divergences from the six-view workshop were:
+> **Status: SUPERSEDED (2026-07).** The Binder *was* the production `/collection/` page, but it has been **replaced by the Badge Medallion "Case"** — the badge art is already a self-contained laurel-framed medallion, so it now presents as a precious OBJECT rather than a trading-card in a binder. See **[badge-medallion.md](../reference/badge-medallion.md)** for the shipped component + Case. The binder code and the `/design/binder/` lab were fully deleted in the 2026-08 design-lab strip; this doc is retained as the design + technical record. The (now historical) production divergences from the six-view workshop were:
 > - **Sets, not one continuous run.** Each badge type (Series, Developers, …) is its own binder view, picked from a set-tab strip; pages paginate within a set. Cross-linked with the sibling **List** view (`#card-NNNN` ↔ `#row-NNNN`).
 > - **Gallery / Compact / Spread were NOT extracted.** The responsive grid (4 → 2 → 1 columns, chrome slimmed on phones) solved the mobile-fit problem that **Gallery** existed for, and the **List** view covers dense scanning — so Gallery was dropped as a redundant middle ground (Binder = the charm, List = the hunting tool). Compact + Spread remain workshop-only.
 
@@ -40,7 +40,7 @@ A 3 × 2 matrix of **view mode** (Single / Compact / Spread) × **presentation**
 
 ### Collection list view (sixth view)
 
-At [`/design/badge-collection/`](../../templates/design/badge_collection_list.html), a sortable / filterable / searchable **table** of every card. Same data set as the Binder, different presentation — the trade is browseability for inspectability. The two views are bidirectionally deep-linked: every row links to `#card-NNNN` in the Binder, every binder sleeve links to `#row-NNNN` in the list. Users who want to find a specific badge fast jump to the list; users who want to *experience* their collection stay in the Binder.
+At `/design/badge-collection/` (removed with the binder lab in the 2026-08 design-lab strip), a sortable / filterable / searchable **table** of every card. Same data set as the Binder, different presentation — the trade was browseability for inspectability. The two views were bidirectionally deep-linked: every row linked to `#card-NNNN` in the Binder, every binder sleeve linked to `#row-NNNN` in the list. Users who wanted to find a specific badge fast jumped to the list; users who wanted to *experience* their collection stayed in the Binder.
 
 The list view is conceptually part of the same Surface — same data, same identity, same chrome family — but lives in a sibling template because the table layout has no overlap with the binder dressing.
 
@@ -84,7 +84,7 @@ The Gallery preset systematically strips every piece of binder dressing — cove
 
 ## Technical Learnings
 
-The Binder workshop surfaced a half-dozen technical pitfalls that future Surfaces (and the eventual Binder code extraction) should plan for. The most important live below; the comments in [`templates/design/binder_preview.html`](../../templates/design/binder_preview.html) hold the full case-by-case rationale.
+The Binder workshop surfaced a half-dozen technical pitfalls that future Surfaces should plan for. The most important live below (the workshop template that held the full case-by-case comments was deleted in the 2026-08 design-lab strip, so this section is the surviving record).
 
 ### preserve-3d makes z-index unreliable
 
@@ -122,8 +122,10 @@ The Frame's tier-tinted corner-notch diamonds sit at the four corners of every c
 
 ## Reference Implementations
 
-- **The workshop** ([`/design/binder/`](../../templates/design/binder_preview.html)): the canonical interactive prototype with all six views, the page-flip choreography, both presentation modes, drag + arrow navigation, the cross-link to the list view, every chrome variant. Until the full extraction happens this is the source of truth.
-- **The list view** ([`/design/badge-collection/`](../../templates/design/badge_collection_list.html)): the sortable / filterable list pendant. Bidirectionally deep-linked to the workshop.
+Both were deleted in the 2026-08 design-lab strip; this doc is now the only record.
+
+- **The workshop** (`/design/binder/`): the canonical interactive prototype with all six views, the page-flip choreography, both presentation modes, drag + arrow navigation, the cross-link to the list view, every chrome variant.
+- **The list view** (`/design/badge-collection/`): the sortable / filterable list pendant. Bidirectionally deep-linked to the workshop.
 
 ---
 
@@ -140,9 +142,9 @@ Things the workshop intentionally avoided, that future extractions and productio
 
 ## Open Threads
 
-- **Full code extraction.** The prototype currently lives as a single ~3000-line workshop template. When the Binder gets a real product mounting point, follow the Frame extraction model: split into `templates/components/binder.html` + sub-partials, dedicated `static/css/components/binder.css`, JS controller as `window.PlatPursuit.Binder`, test harness at `/design/binder-component/`, prototype stays alive at `/design/binder/`. The technical learnings above are the contract; the workshop is the visual reference.
+- **Full code extraction.** The ~3000-line workshop template was deleted in the 2026-08 design-lab strip, so a revival would rebuild from this doc (the technical learnings above are the contract). If it happens, follow the Frame extraction model: `templates/components/binder.html` + sub-partials, dedicated `static/css/components/binder.css`, JS controller as `window.PlatPursuit.Binder`.
 - **Production mounting point.** Where the Binder ships first is the next decision. Candidates: the Logbook hero, a dedicated `/my-pursuit/collection/` route, the Badge Gallery rebuild named in [visual-identity.md Open Threads](visual-identity.md#open-threads). All three are plausible; pick when the gamification Phase 1 work tells us what surface the user lands on first.
-- **Data contract.** The workshop hand-builds spread data in [`core/views.py:BinderPreviewView`](../../core/views.py); a production extraction needs a real `Badge.to_binder_context(user)` adapter (sibling to the deferred `Badge.to_frame_context(user)` adapter in the Frame doc). Pagination, lazy-load, and series-grouping rules all live in that adapter.
+- **Data contract.** The workshop hand-built spread data in the removed `BinderPreviewView`; a production extraction needs a real `Badge.to_binder_context(user)` adapter (sibling to the deferred `Badge.to_frame_context(user)` adapter in the Frame doc). Pagination, lazy-load, and series-grouping rules all live in that adapter.
 - **State persistence.** Mode + presentation aren't persisted in the prototype. Production extraction should decide: localStorage (simple, no backend cost), user-preference (consistent across devices), or per-session (no persistence at all). The Frame's flip state has the same open question.
 - **Page-tab interaction.** The page tabs are currently labels only. A natural extension is making them jump-to-series anchors so a long binder is scannable. Defer until the production mount tells us how many series the user typically has.
 

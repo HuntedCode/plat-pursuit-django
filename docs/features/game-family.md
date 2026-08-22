@@ -104,9 +104,7 @@ better.
 | `trophies/models.py` (Concept.family) | FK to GameFamily (nullable, SET_NULL) |
 | `trophies/services/igdb_service.py` (`_link_concept_to_family`) | The deterministic linking logic; runs on every match acceptance |
 | `trophies/management/commands/backfill_game_families_from_igdb.py` | One-shot historical backfill against existing accepted matches |
-| `trophies/views/admin_views.py` (GameFamilyManagementView) | Staff admin page at `/staff/game-families/` — inspection + manual overrides |
-| `api/game_family_views.py` | Staff-only CRUD API for manual creates/edits on edge cases IGDB doesn't cover |
-| `templates/trophies/game_family_management.html` | Admin dashboard template |
+| ~~Staff management page + CRUD API~~ | REMOVED 2026-08 (staff strip-down): `/staff/game-families/`, `api/game_family_views.py`, and the dashboard template are gone. Manual overrides go through Django admin until a rebuild. |
 
 ## Data Model
 

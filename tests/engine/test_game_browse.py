@@ -430,24 +430,6 @@ def test_header_scard_grid_renders_when_heartbeat_warm(client):
     assert '{#' not in content                # multi-line comment leak guard (header block)
 
 
-def test_game_card_workshop_renders(client):
-    """The /design/game-card/ workshop renders a card without crashing. A bare game (no badges/contract)
-    hits the 'plain' branch, so this exercises the card partial + its empty-slot placeholders -- and guards
-    against multi-line {# #} comment leaks (which only surface when a card actually renders)."""
-    from django.urls import reverse
-
-    GameFactory(title_name='Workshop Plain Game', title_platform=['PS5'])
-
-    resp = client.get(reverse('design_game_card'))
-    content = resp.content.decode()
-
-    assert resp.status_code == 200
-    assert 'Game card' in content
-    assert 'Workshop Plain Game' in content       # a real card rendered (the plain branch)
-    assert 'No badges' in content                 # empty-slot placeholder present
-    assert '{#' not in content                    # no raw Django comment markers leaked
-
-
 def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
     """Render cost stays bounded regardless of catalogue size (no per-card N+1): one page of 30 cards costs
     the same whether there are 10 or 60 games, INCLUDING the batched badge + contract pursuer-hook maps

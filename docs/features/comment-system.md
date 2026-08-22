@@ -13,7 +13,7 @@ Comments on the new Roadmap system were intentionally not built. The [Review Hub
 
 - The `Comment`, `CommentVote`, `CommentReport`, `ModerationLog`, and `BannedWord` model tables remain populated with historical data.
 - `CommentService` still exposes vote, report, edit, and soft-delete operations for existing comments.
-- The staff moderation dashboard at `/staff/moderation/` still surfaces pending `CommentReport` rows so historical content can be cleaned up.
+- The staff moderation dashboard (`/staff/moderation/`) was removed in the 2026-08 staff strip-down, pending the moderation-tools rebuild. Pending `CommentReport` rows are visible in Django admin in the meantime.
 - `Concept.absorb()` still migrates legacy comments during concept reassignment so historical rows survive concept merges (see [Concept Model](../architecture/concept-model.md)).
 
 ## What Was Removed
@@ -47,9 +47,8 @@ The model tables are preserved as-is. See `trophies/models.py` for the canonical
 ## Moderation Flow (Still Active)
 
 1. A user POSTs to `/api/v1/comments/<id>/report/` with a `reason` and optional `details`. Duplicate reports per profile are blocked.
-2. The `CommentReport` row appears in the staff moderation queue at `/staff/moderation/` (rendered by `CommentModerationView` in `trophies/views/admin_views.py`).
-3. Staff acts via `ModerationActionView`: delete (soft-delete the comment), dismiss (close the report), or review.
-4. Every action records a `ModerationLog` entry preserving the original body and the moderator's reason.
+2. The `CommentReport` row is stored as `pending`. The staff queue page and its action view were removed in the 2026-08 staff strip-down (pending the moderation-tools rebuild); staff review reports via Django admin.
+3. Historical actions recorded `ModerationLog` entries preserving the original body and the moderator's reason; the log table is retained.
 
 ## Gotchas and Pitfalls
 

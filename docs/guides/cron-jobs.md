@@ -391,7 +391,7 @@ There is no centralized cron job monitoring dashboard. Use these approaches to v
 
 - **Missing site heartbeat ribbon**: If the "PlatPursuit at a Glance" ribbon disappears from every home shell, `refresh_homepage_hourly` has been failing for at least two consecutive hours (the partial silently hides when both the current and fallback buckets are empty). Check the Render cron logs.
 - **Leaderboard staleness**: Each leaderboard page shows a "Last updated" timestamp sourced from the `_refresh_time` cache key.
-- **Sync queue backlog**: If profiles are not updating, check the TokenKeeper stats via `redis_admin` or the token monitoring admin page (`/staff/token-monitoring/`).
+- **Sync queue backlog**: If profiles are not updating, check the TokenKeeper stats via `redis_admin` or the token monitoring admin page (`/monitoring/tokens/`).
 - **Missing recap emails**: On the 3rd-4th of each month, spot-check that recap emails were sent by querying `MonthlyRecap.objects.filter(email_sent=False, is_finalized=True)`.
 - **Premium tenure milestones**: Now the `premium_months` ladder in the milestones app — if a subscriber reports a missing tier, run `recompute_milestones --profile <psn_username>`.
 

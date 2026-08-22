@@ -49,7 +49,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 | `static/js/frame.js` | Public `PlatPursuit.Frame` controller |
 | `static/css/input.css` | Tailwind entry — `@import "./components/frame.css"` bundles the component into `output.css` |
 | `templates/base.html` | Mounts the rarity sprite once per page |
-| `templates/design/frame_component_test.html` | State × size × tier test harness at `/design/frame-component/` |
+| ~~`templates/design/frame_component_test.html`~~ | Test harness REMOVED 2026-08 (design-lab strip); verify parity against real product pages instead |
 
 ## Data Contract
 
@@ -221,13 +221,12 @@ To test: in Chromium DevTools → Rendering → Emulate CSS media feature `prefe
 - **`@property --pp-build` browser support**. Requires Chrome 85+, Firefox 128+, Safari 16.4+. Below those versions the build mask transition snaps instead of animating. Functional but less polished. The pre-existing daisyUI `--radialprogress` build warnings about `@property` are unrelated and harmless.
 - **Inline `style="--pp-build: ..."` and CSP**. The partial emits an inline style attribute for in-progress cards. Verify the site CSP allows `style-src 'unsafe-inline'` (or the equivalent nonce / hash policy) before mounting on a page with a stricter CSP override.
 - **JS file must be loaded per-page, not in base.html**. `static/js/frame.js` is loaded only on pages that mount Frames, via `{% block js_scripts %}`. It's not in `base.html` because most pages don't need it. Auto-init handles all server-rendered Frames; HTMX-swapped Frames need an explicit `PlatPursuit.Frame.init(swappedRoot)` call.
-- **The prototype at `/design/frame/` is the design history, not a stale copy**. It stays referenced in `visual-identity.md` as the source of truth for design rationale. The test harness at `/design/frame-component/` is the production-component verification surface. Don't retire the prototype.
+- **The prototype at `/design/frame/` is the design history, not a stale copy**. It stays referenced in `visual-identity.md` as the source of truth for design rationale, and survived the 2026-08 design-lab strip (staff-gated now). Don't retire the prototype. The `/design/frame-component/` test harness was removed in that strip; verify visual parity on real product pages after CSS / JS changes.
 - **Reduced motion is JS-gated for the earn moment, CSS-gated for everything else**. If you add a new decorative animation to `frame.css`, also add it to the `@media (prefers-reduced-motion: reduce)` block at the bottom of the stylesheet.
 
 ## Reference Implementation
 
-- **Production test harness**: [`/design/frame-component/`](../../templates/design/frame_component_test.html) — every state × size × tier combination rendered through the partial. Use this to verify visual parity after CSS / JS changes.
-- **Design prototype**: [`/design/frame/`](../../templates/design/frame_preview.html) — the original 5000-line workshop. Preserved for design rationale.
+- **Design prototype**: [`/design/frame/`](../../templates/design/frame_preview.html) — the original 5000-line workshop. Preserved for design rationale (staff-gated since 2026-08). The state × size × tier test harness that lived at `/design/frame-component/` was removed in the 2026-08 design-lab strip.
 
 ## Related Docs
 

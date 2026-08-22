@@ -180,8 +180,8 @@ CONTENT_SECURITY_POLICY = {
             "blob:",                                 # canvas-confetti Web Worker
         ],
         "frame-ancestors": ["'none'"],
-        # Browsers POST violation reports here; viewable at /staff/csp-violations/.
-        "report-uri": ["/csp-report/"],
+        # No report-uri: the CSP violation dashboard + ingest endpoint were removed in the
+        # 2026-08 staff strip-down (violations are visible in browser DevTools when debugging).
     },
 }
 
@@ -310,7 +310,6 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "plat_pursuit.context_processors.site_links",
-                "plat_pursuit.context_processors.moderation",
                 "plat_pursuit.context_processors.high_sync_volume",
                 "plat_pursuit.context_processors.psn_outage",
                 "plat_pursuit.context_processors.active_fundraiser",

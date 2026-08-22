@@ -177,9 +177,8 @@ The companion **flip** (to a back face) is still a planned follow-up.
   shelf AND in the Showcase/Chase/Gallery — but the `#card-<id>` deep-link anchor lives on the **shelf**
   medallion only. Showcase, Chase, and every Gallery cell pass **`no_id=True`**; forgetting it produces
   duplicate IDs and sends the deep-link jump to the wrong node.
-- Retiring the binder from the collection did **not** delete `binder.html`/`binder.css`/`binder.js` —
-  they're still used by `/design/binder/`, which is also why `collection_service.spreads`/`pages` are
-  **still built** (the binder lab consumes them). They are not dead despite the Case not using `spreads`.
+- The binder is fully gone as of the 2026-08 staff/design strip-down: the `/design/binder/` lab and its
+  files were deleted (nothing in `collection_service` consumed them; the lab built its own spreads).
 - **Two server-rendered views = the badge set in the DOM ~2x** (Case shelves + Gallery wall). As of the
   July 2026 discovery restructure the Collection is scoped to the viewer's **ENGAGED series** (series they
   hold or are in-progress on -- see `collection_service._engaged_scope`), so the count is **bounded by the
@@ -190,6 +189,6 @@ The companion **flip** (to a back face) is still a planned follow-up.
 ## Related Docs
 
 - [Frame Component](frame-component.md) — the trading-card housing the Medallion supersedes on the collection.
-- [Binder Surface](../design/binder-surface.md) — the retired binder (now a design lab only).
+- [Binder Surface](../design/binder-surface.md) — the retired binder (design record only; the lab was deleted 2026-08).
 - [Visual Identity](../design/visual-identity.md) — the primitive constitution.
 - [Premium Motion Patterns](motion-patterns.md) — the motion recipes + GPU gotchas.
