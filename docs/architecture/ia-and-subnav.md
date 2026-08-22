@@ -27,7 +27,7 @@ URL-matched.
 > reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
-| **Support** | `/support/` | the membership storefront (live) + `/support/roadmap/` (live) + the coming fundraiser sub-page | "ways to support us" |
+| **Support** | `/support/` | the membership storefront (live) + `/support/roadmap/` (live) + `/support/membership/` (live) + the coming fundraiser sub-page | "ways to support us" |
 
 **Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
 that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
@@ -99,6 +99,14 @@ icon cards in three certainty tiers (in the works / up next / the wishlist, `ROA
 `ROADMAP_FEATURES` in `users/constants.py`), no dates or counts anywhere, test-enforced. The
 storefront carries a roadmap band teasing three features per tier in the same vocabulary. The
 Support sub-nav RAIL stays deferred until `/support/fundraiser/` exists too.
+
+`/support/membership/` shipped 2026-08 (`SubscriptionManagementView`, moved from
+`/users/subscription-management/`): the manage side of the hub -- level-tinted status card
+(state via `SubscriptionService.membership_status`: active / past_due / grace / none), billing
+facts, tenure, provider-branched actions (Stripe billing portal as a POST action; PayPal cancel
+in a dialog), the perk tiles, and the wall opt-out. The old URL is a PERMANENT 302 (never 301 on
+a payment-adjacent URL -- it is baked into every sent lifecycle email and stored notification);
+the `subscription_management` route NAME moved with the page so every reverse() caller followed.
 
 The view lives in `users.views` rather than `core.views` because **it answers this page's checkout
 POST**. The form carries no `action`, so it self-POSTs to whatever URL rendered it; serving the form

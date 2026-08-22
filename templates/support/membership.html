@@ -108,7 +108,12 @@
             <div class="supm-inset supm-inset--grace">
                 <p class="supm-inset__lead">You've cancelled &mdash; and everything stays yours until {{ cancels_at|date:"F j, Y" }}.</p>
                 <p class="supm-inset__sub">Your perks, your mark and your place on the wall all run to the end of the time you paid for. If you change your mind, the door is open.</p>
-                <a href="{% url 'support_hub' %}" class="supm-inset__cta">Re-subscribe</a>
+                <a href="{% url 'support_hub' %}" class="supm-inset__cta supm-inset__cta--rise">
+                    <span class="sup-go__rise" aria-hidden="true">
+                        {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                    </span>
+                    <span class="supm-inset__cta-lbl">Re-subscribe</span>
+                </a>
             </div>
             {% elif membership.state == 'past_due' %}
             <div class="supm-inset supm-inset--due">

@@ -252,6 +252,7 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 |-------------|-----|---------|
 | `paypal_access_token:{PAYPAL_MODE}` | ~8h (`min(expires_in - 300, 28800)`) | PayPal OAuth access token |
 | `paypal_webhook:{transmission_id}` | 604800s (7d) | Webhook idempotency key |
+| `paypal:sub:{PAYPAL_MODE}:{subscription_id}` | 8h (60s failure marker) | Membership-page subscription snapshot (status / next billing / plan id); busted by every PayPal subscription webhook and by the user's own cancel |
 
 **Files**: `users/services/paypal_service.py`, `users/views.py`
 
