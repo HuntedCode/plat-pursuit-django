@@ -1,7 +1,7 @@
 {# Badge Picker Modal: lets donors with remaining picks choose a badge series for artwork #}
 {% load static %}
 <dialog id="badge-picker-modal" class="modal">
-    <div class="modal-box max-w-3xl bg-base-100 border-4 border-base-300">
+    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300">
         <form method="dialog">
             <button class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3" aria-label="Close">X</button>
         </form>
@@ -35,7 +35,7 @@
         </div>
 
         {# Confirm claim area #}
-        <div id="badge-claim-confirm" class="hidden mt-4 p-3 bg-primary/10 border-2 border-primary/30 rounded-lg">
+        <div id="badge-claim-confirm" class="hidden mt-4 fnd-panel fnd-panel--accent">
             <div class="flex items-center justify-between flex-wrap gap-2">
                 <div>
                     <span class="text-sm font-semibold">Claiming:</span>

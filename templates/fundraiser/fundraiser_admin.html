@@ -82,13 +82,17 @@
     </div>
 
     {# ─── Tabs ────────────────────────────────────────────────────────── #}
-    <div id="fundraiser-admin-tabs" class="tabs tabs-boxed mb-6">
-        <button class="tab tab-active" data-tab="donations">
-            Donations ({{ donations|length }})
-        </button>
-        <button class="tab" data-tab="claims">
-            Badge Claims ({{ claims|length }})
-        </button>
+    {% comment %} The one sanctioned tab treatment: the shared segmented switcher, wired with
+    PlatPursuit.wireTablist. Panels keep their ids. {% endcomment %}
+    <div class="flex items-center justify-end mb-6">
+        <div id="fundraiser-admin-tabs" class="pp-switch" role="tablist" aria-label="Admin views">
+            <button class="pp-switch__chip is-active" role="tab" aria-selected="true" data-tab="donations">
+                Donations ({{ donations|length }})
+            </button>
+            <button class="pp-switch__chip" role="tab" aria-selected="false" data-tab="claims">
+                Badge Claims ({{ claims|length }})
+            </button>
+        </div>
     </div>
 
     {# ─── Donations Panel ─────────────────────────────────────────────── #}
@@ -243,7 +247,7 @@
 {% block js_scripts %}
 <script src="{% static 'js/fundraiser.js' %}"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    PlatPursuit.onPageReady(function() {
         PlatPursuit.FundraiserAdmin.init();
     });
 </script>

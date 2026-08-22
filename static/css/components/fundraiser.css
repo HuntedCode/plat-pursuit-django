@@ -1,0 +1,388 @@
+/* ==========================================================================================
+   FUNDRAISER (/fundraiser/<slug>/ + the /support/fundraiser/ landing) -- the campaign page,
+   re-clothed to the rebuild vocabulary while keeping its structure. The donor wall borrows the
+   credits-wall family from support.css (same bundle, cross-file reuse is free); scards, tallies
+   and the horizon come from their own components. Every animation is gated on
+   prefers-reduced-motion: no-preference at source.
+   ========================================================================================== */
+
+/* The page column: flex-gap rhythm, reading width matching the old max-w-6xl. */
+.fnd {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 72rem;
+    margin-inline: auto;
+}
+
+/* Free sections (available artworks, claimed galleries, donor wall) keep an inner rhythm. */
+.fnd-free {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 6px;
+}
+
+.fnd-staffnote {
+    padding: 0.5rem 0.9rem;
+    border: 1px dashed var(--pp-warning);
+    border-radius: var(--pp-radius-sm);
+    color: var(--pp-warning);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-align: center;
+}
+
+/* ---- type ---------------------------------------------------------------------------------- */
+.fnd__eyebrow {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.fnd__h1 {
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.45rem;
+    line-height: 1.15;
+    color: var(--pp-text);
+}
+
+@media (min-width: 1024px) {
+    .fnd__h1 { font-size: 1.75rem; }
+}
+
+.fnd__lede {
+    font-size: 0.95rem;
+    font-style: italic;
+    color: var(--pp-text-dim);
+    padding-right: 0.25rem;
+}
+
+.fnd__desc {
+    max-width: 62ch;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
+
+.fnd__h2 {
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--pp-text);
+}
+
+.fnd__h3 { font-weight: 700; font-size: 0.92rem; font-style: italic; padding-right: 0.25rem; }
+.fnd__sub { font-size: 0.83rem; font-style: italic; color: var(--pp-text-dim); padding-right: 0.25rem; margin-top: 2px; }
+.fnd__flavour { font-size: 0.75rem; font-style: italic; color: var(--pp-text-mute); padding-right: 0.25rem; }
+.fnd__count { font-weight: 400; color: var(--pp-text-mute); font-size: 0.9em; }
+.fnd__label { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); }
+
+/* ---- the CTA family ------------------------------------------------------------------------ */
+.fnd-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 20px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    color: var(--pp-text);
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: box-shadow var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-cta:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    box-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 30%, transparent);
+}
+
+.fnd-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+.fnd-cta--sm { padding: 7px 14px; font-size: 0.83rem; }
+.fnd-cta--wide { width: 100%; justify-content: center; padding: 12px 20px; }
+.fnd-cta--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
+.fnd-cta--ghost:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+
+.fnd-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--pp-text);
+    white-space: nowrap;
+}
+
+/* ---- inner panels (form groups, pick prompt) ----------------------------------------------- */
+.fnd-panel {
+    padding: 0.9rem 1rem;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+}
+
+.fnd-panel--accent {
+    border-color: color-mix(in oklab, var(--pp-primary) 35%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 8%, transparent);
+}
+
+/* ---- the two-fill horizon (tracker) --------------------------------------------------------
+   The claimed underlay sits beneath the standard .pp-horizon__fill; both widths arrive as CSS
+   vars from the view. Motion/reduce behavior is inherited from horizon.css. */
+.fnd-horizon .pp-horizon__track { position: relative; }
+
+.fnd-horizon__fill--claimed {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--fnd-claimed, 0%);
+    border-radius: inherit;
+    background: color-mix(in oklab, var(--pp-primary) 38%, transparent);
+}
+
+.fnd-horizon .pp-horizon__fill { position: relative; width: var(--fnd-completed, 0%); --horizon-from: var(--pp-success); --horizon-to: var(--pp-success); }
+
+.fnd-horizon__key {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-2) 70%, transparent);
+}
+
+.fnd-horizon__key--completed { background: var(--pp-success); border-color: transparent; }
+.fnd-horizon__key--claimed { background: color-mix(in oklab, var(--pp-primary) 38%, transparent); border-color: transparent; }
+
+/* ---- status chips (claimed-badge list) ----------------------------------------------------- */
+.fnd-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    border-left-width: 3px;
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-chip:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.fnd-chip--done { border-left-color: var(--pp-success); }
+.fnd-chip--working { border-left-color: var(--pp-warning); }
+.fnd-chip__name { font-weight: 600; font-size: 0.85rem; color: var(--pp-text); }
+.fnd-chip__state { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+
+/* ---- donation history ---------------------------------------------------------------------- */
+.fnd-history {
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent);
+    padding: 0.5rem 0.9rem;
+}
+
+.fnd-history__summary { font-size: 0.85rem; font-weight: 700; font-style: italic; cursor: pointer; color: var(--pp-text); }
+.fnd-history__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+.fnd-history__row:hover { background: color-mix(in oklab, var(--pp-bg-3, var(--pp-bg-2)) 45%, transparent); }
+.fnd-history__provider {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim);
+}
+
+/* ---- amount presets + provider options (the form's selection states) ----------------------- */
+.fnd-preset {
+    padding: 12px 8px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: transparent;
+    color: var(--pp-text-dim);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-preset:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+
+.fnd-preset.is-active {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 24%, transparent);
+}
+
+.fnd-provider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 8px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim);
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-provider:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
+
+.fnd-provider.is-active {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 20%, transparent);
+}
+
+/* ---- badge tiles (available artworks + picker) --------------------------------------------- */
+.fnd-tile {
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+    padding: 0.7rem 0.5rem;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-tile:hover {
+    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 20%, transparent);
+}
+
+/* Picker selection: a state change in colour and glow, never a border-width jump. */
+.fnd-tile.is-picked {
+    border-color: color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 28%, transparent);
+}
+
+.fnd-tile__name {
+    font-weight: 600;
+    font-size: 0.72rem;
+    line-height: 1.25;
+    color: var(--pp-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding-right: 0.25rem;
+}
+
+/* ---- claimed-gallery tiles ----------------------------------------------------------------- */
+.fnd-claim {
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+    padding: 0.8rem 0.6rem;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    text-align: center;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+
+.fnd-claim:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.fnd-claim--done { border-color: color-mix(in oklab, var(--pp-success) 35%, var(--pp-border)); }
+.fnd-claim--done:hover { border-color: color-mix(in oklab, var(--pp-success) 60%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--pp-success) 20%, transparent); }
+/* The medallion component defaults to --sz: 160px; this gallery's figures are 64px. */
+.fnd-claim .pp-med { --sz: 64px; }
+
+.fnd-claim__name { font-weight: 600; font-size: 0.8rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding-right: 0.25rem; }
+.fnd-claim__by { font-size: 0.68rem; font-style: italic; color: var(--pp-text-mute); padding-right: 0.25rem; }
+
+/* ---- the empty state ----------------------------------------------------------------------- */
+.fnd-empty {
+    padding: 1.5rem;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 5%, transparent);
+    text-align: center;
+}
+
+/* ---- donor wall (credits-wall base + donor extensions) ------------------------------------- */
+.fnd-donors {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* The credit card base gives the row geometry + entrance; the donor extension stacks message
+   and claim chips beneath it. */
+.fnd-donor { display: grid; gap: 8px; align-items: start; }
+.fnd-donor__row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.fnd-donor__link { font-weight: 700; color: var(--pp-text); }
+.fnd-donor__link:hover { color: var(--pp-primary); }
+
+.fnd-donor__crown { display: inline-flex; color: var(--pp-warning); flex: none; }
+.fnd-donor__crown svg { width: 13px; height: 13px; }
+
+.fnd-donor--top {
+    border-color: color-mix(in oklab, var(--pp-warning) 45%, var(--pp-border));
+    box-shadow: 0 0 14px color-mix(in oklab, var(--pp-warning) 14%, transparent);
+}
+
+.fnd-donor__msg {
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--pp-text-dim);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding-right: 0.25rem;
+}
+
+.fnd-donor__claims { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.fnd-donor__claim {
+    font-size: 0.66rem;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--pp-accent) 40%, transparent);
+    color: var(--pp-accent);
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fnd-donor__claim:hover { border-color: var(--pp-accent); }
+
+/* ---- entrance stagger (tiles, claims, donors) ----------------------------------------------
+   The credits-wall pattern: ppRevealIn with a capped per-item delay via --i, gated at source. */
+@media (prefers-reduced-motion: no-preference) {
+    .fnd-tile,
+    .fnd-claim,
+    .fnd-donor {
+        animation: ppRevealIn 0.45s var(--pp-ease, ease-out) backwards;
+        animation-delay: calc(min(var(--i, 0), 12) * 40ms);
+    }
+}

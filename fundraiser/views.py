@@ -40,7 +40,10 @@ class FundraiserLandingView(TemplateView):
     def get(self, request, *args, **kwargs):
         from fundraiser.models import get_live_fundraiser
 
-        fundraiser = get_live_fundraiser() or Fundraiser.objects.order_by('-created_at').first()
+        fundraiser = get_live_fundraiser() or (
+            Fundraiser.objects.filter(start_date__lte=timezone.now())
+            .order_by('-start_date').first()
+        )
         if fundraiser:
             return redirect('fundraiser', slug=fundraiser.slug)
         return super().get(request, *args, **kwargs)
@@ -225,12 +228,15 @@ class FundraiserView(TemplateView):
 
             # Available series for claiming (logged-in users only). The already-claimed exclusion is
             # inside the helper, via the artwork_claim reverse OneToOne.
-            available_badges = DonationService.series_needing_artwork().order_by(Lower('name'))
+            available_badges = list(
+                DonationService.series_needing_artwork().order_by(Lower('name'))
+            )
             context['available_badges'] = available_badges
             # The on-page grid shows a bounded preview; the picker modal alone carries the full
-            # list (the page used to render every tile TWICE -- ~400 tiles in the DOM).
+            # list (the page used to render every tile TWICE -- ~400 tiles in the DOM). The list
+            # is materialized once (bounded, ~100-200 rows), so the count costs nothing.
             context['available_badges_preview'] = available_badges[:18]
-            context['available_badges_count'] = available_badges.count()
+            context['available_badges_count'] = len(available_badges)
 
         # User-specific context
         if self.request.user.is_authenticated:

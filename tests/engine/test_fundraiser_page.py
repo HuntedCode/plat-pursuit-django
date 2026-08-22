@@ -85,7 +85,7 @@ def test_upcoming_is_staff_preview_only(client):
     client.force_login(staff)
     response = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug}))
     assert response.status_code == 200
-    assert 'Staff Preview' in response.content.decode() or 'preview' in response.content.decode().lower()
+    assert 'STAFF PREVIEW' in response.content.decode()
 
 
 def test_a_completed_claim_renders_its_medallion(client):
@@ -104,6 +104,7 @@ def test_a_completed_claim_renders_its_medallion(client):
     )
     body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
     assert 'pp-med' in body, 'the completed claim gallery lost its medallions again'
+    assert 'pp-med__l' in body, 'the medallion rendered but with no art layers'
 
 
 # ------------------------------------------------------------------------ the landing ----
@@ -121,6 +122,22 @@ def test_the_landing_resolves_an_ended_campaign_when_nothing_is_live(client):
     response = client.get(reverse('support_fundraiser'))
     assert response.status_code == 302
     assert response['Location'] == reverse('fundraiser', kwargs={'slug': ended.slug})
+
+
+def test_the_landing_skips_a_drafted_upcoming_campaign(client):
+    """Audit find: resolving the newest ROW bounced the public home with a toast whenever the
+    next campaign was drafted. The landing resolves the latest STARTED campaign instead (the
+    ended celebration), or the quiet card when none ever started."""
+    ended = _campaign(start_date=timezone.now() - timedelta(days=30),
+                      end_date=timezone.now() - timedelta(days=2))
+    _campaign(start_date=timezone.now() + timedelta(days=5))
+    response = client.get(reverse('support_fundraiser'))
+    assert response.status_code == 302
+    assert response['Location'] == reverse('fundraiser', kwargs={'slug': ended.slug})
+
+    Fundraiser.objects.filter(slug=ended.slug).delete()
+    response = client.get(reverse('support_fundraiser'))
+    assert response.status_code == 200, 'only a draft exists: the public gets the quiet card'
 
 
 def test_the_landing_without_any_campaign_is_a_quiet_card(client):
@@ -166,3 +183,117 @@ def test_email_links_still_carry_the_slug_path():
     from fundraiser.services import donation_service
     source = inspect.getsource(donation_service)
     assert '/fundraiser/{donation' not in source, 'a literal path survived the reverse()-ification'
+
+
+# ------------------------------------------------------------------- the re-clothe (Phase 2) ----
+
+def test_the_success_redirect_message_finally_renders(client):
+    """The page never carried the breadcrumb partial (the site's only messages renderer), so the
+    post-payment "Thank you" was silently swallowed. The .sup-msgs block fixes it."""
+    campaign = _campaign()
+    user = UserFactory()
+    ProfileFactory(user=user)
+    client.force_login(user)
+
+    fake_session = type('S', (), {'payment_status': 'paid',
+                                  'metadata': {'donation_id': ''}})()
+    with patch('fundraiser.views.stripe.checkout.Session.retrieve', return_value=fake_session):
+        response = client.get(
+            reverse('fundraiser_success', kwargs={'slug': campaign.slug}) + '?session_id=cs_x',
+            follow=True,
+        )
+    assert b'Thank you for your donation' in response.content
+
+
+def test_no_scale_hovers_in_the_fundraiser_surface():
+    """Glow, not scale (career-reference-standard 5). The legacy partials/badge.html is out of
+    scope; this pins the fundraiser's own JS and templates."""
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[2]
+    files = [root / 'static' / 'js' / 'fundraiser.js']
+    files += list((root / 'templates' / 'fundraiser').rglob('*.html'))
+    offenders = [str(f.name) for f in files
+                 if 'scale-105' in f.read_text(encoding='utf-8')
+                 or 'hover:scale' in f.read_text(encoding='utf-8')]
+    assert not offenders, f'scale hovers in: {offenders}'
+
+
+def test_the_double_render_is_fixed(client):
+    """The page used to render every available tile TWICE (grid + modal, ~400 tiles). The
+    on-page grid is now an 18-tile preview and the modal alone carries the full list."""
+    campaign = _campaign()
+    for i in range(22):
+        _series_with_edition(f'series-{i:02d}')
+    user = UserFactory()
+    profile = ProfileFactory(user=user)
+    Donation.objects.create(
+        fundraiser=campaign, amount=10, provider='stripe',
+        provider_transaction_id=f'tx-{next(_seq)}', status='completed',
+        badge_picks_earned=1, badge_picks_used=0, user=user, profile=profile,
+        completed_at=timezone.now(),
+    )
+    client.force_login(user)
+    body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
+    on_page = body.split('id="badge-picker-grid"')[0]
+    modal = body.split('id="badge-picker-grid"')[1]
+    assert on_page.count('badge-pick-option') == 18, 'the on-page grid must be the 18-tile preview'
+    assert modal.count('badge-pick-option') == 22, 'the modal must carry the full list'
+    assert 'Browse all 22' in body
+
+
+def test_the_pulse_is_gone_and_the_tracker_rides_the_horizon(client):
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[2]
+    assert 'progress-pulse' not in (root / 'static' / 'css' / 'input.css').read_text(encoding='utf-8')
+
+    campaign = _campaign()
+    _series_with_edition('tracked')
+    body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
+    assert 'pp-horizon' in body
+    assert 'progress-pulse' not in body
+
+
+def test_the_js_hooks_survive_the_reclothe(client):
+    """Every id fundraiser.js reaches for must exist on a live authed page with picks."""
+    campaign = _campaign()
+    _series_with_edition('hooked')
+    user = UserFactory()
+    profile = ProfileFactory(user=user)
+    Donation.objects.create(
+        fundraiser=campaign, amount=10, provider='stripe',
+        provider_transaction_id=f'tx-{next(_seq)}', status='completed',
+        badge_picks_earned=1, badge_picks_used=0, user=user, profile=profile,
+        completed_at=timezone.now(),
+    )
+    client.force_login(user)
+    body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
+    for hook in ('id="donation-form"', 'id="donation-amount"', 'id="min-amount-warning"',
+                 'id="donate-btn"', 'id="donate-btn-text"', 'id="donation-anonymous"',
+                 'id="donation-message"', 'id="hero-donate-cta"', 'id="open-badge-picker-btn"',
+                 'id="badge-picker-modal"', 'id="badge-picker-grid"', 'id="badge-picker-search"',
+                 'id="badge-claim-confirm"', 'id="claim-badge-name"', 'id="confirm-claim-btn"',
+                 'id="cancel-claim-btn"', 'data-donation-ids='):
+        assert hook in body, f'JS hook missing after the re-clothe: {hook}'
+
+
+def test_the_donor_wall_wears_the_credits_vocabulary(client):
+    campaign = _campaign()
+    profile = ProfileFactory()
+    Donation.objects.create(
+        fundraiser=campaign, amount=25, provider='stripe',
+        provider_transaction_id=f'tx-{next(_seq)}', status='completed',
+        user=profile.user, profile=profile, completed_at=timezone.now(),
+    )
+    body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
+    assert 'sup-prev--credit' in body and 'fnd-donor' in body
+    assert 'border-4 border-warning' not in body, 'the heavy top-donor border should be a quiet accent now'
+
+
+def test_the_admin_tabs_are_the_segmented_switcher(client):
+    campaign = _campaign()
+    staff = UserFactory(is_staff=True)
+    client.force_login(staff)
+    body = client.get(reverse('fundraiser_admin')).content.decode()
+    assert 'pp-switch' in body
+    assert 'tabs-boxed' not in body
+
