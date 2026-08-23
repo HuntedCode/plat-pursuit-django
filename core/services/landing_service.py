@@ -19,7 +19,7 @@ from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
 
-BADGE_SHOWCASE_CACHE_KEY = 'landing_badge_showcase_v1'
+BADGE_SHOWCASE_CACHE_KEY = 'landing_badge_showcase_v2'   # v2: series-type + custom-art only
 BADGE_SHOWCASE_TTL = 3600
 SHOWCASE_CARD_CACHE_KEY = 'landing_showcase_card_v1'
 SHOWCASE_CARD_TTL = 6 * 3600   # refreshed hourly by the cron; survives a few missed runs
@@ -32,6 +32,11 @@ BADGE_SHOWCASE_CAP = 6
 def _build_badge_showcase():
     """The most-held live badges, one edition per series, as medallion frames.
 
+    SERIES-type badges with CUSTOM artwork only (his call): the shelf is the handcrafted-art
+    pitch, so a default-subject medallion or a franchise/dev/user badge would undercut the very
+    claim beside it. The exclude mirrors art_layers' own resolution order (per-group override,
+    then series image) so "custom" here can never disagree with what the medallion draws.
+
     Bounded: one ordered query sliced generously, deduped to BADGE_SHOWCASE_CAP series in Python.
     Frames match `home_service._recent_medallions`' minimal shape, consumed by the shared
     components/badge_medallion.html -- the landing shows the REAL objects, not screenshots.
@@ -40,7 +45,8 @@ def _build_badge_showcase():
     from trophies.services.badge_detail_service import group_medallion_layers
 
     rows = (
-        GroupBadge.objects.filter(is_live=True)
+        GroupBadge.objects.filter(is_live=True, series__badge_type='series')
+        .exclude(badge_image_override='', series__badge_image='')
         .select_related('platform_group', 'series', 'series__submitted_by')
         .order_by('-earned_count', 'id')[:BADGE_SHOWCASE_CAP * 3]
     )

@@ -243,7 +243,7 @@ def test_the_shelf_slots_are_inspect_triggers(client):
     and the hint invites the tap."""
     from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
 
-    GroupBadgeFactory(series=BadgeSeriesFactory(),
+    GroupBadgeFactory(series=BadgeSeriesFactory(badge_image='badges/custom-art.png'),
                       platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra HD'),
                       is_live=True, earned_count=10)
     cache.delete(landing_service.BADGE_SHOWCASE_CACHE_KEY)
@@ -260,12 +260,12 @@ def test_the_shelf_slots_are_inspect_triggers(client):
 def test_the_badge_showcase_dedupes_to_one_edition_per_series():
     from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
 
-    series = BadgeSeriesFactory()
+    series = BadgeSeriesFactory(badge_image='badges/custom-a.png')
     pg1 = PlatformGroupFactory(key='legacy-hd', name='Legacy HD')
     pg2 = PlatformGroupFactory(key='ultra-hd', name='Ultra HD')
     GroupBadgeFactory(series=series, platform_group=pg1, is_live=True, earned_count=50)
     GroupBadgeFactory(series=series, platform_group=pg2, is_live=True, earned_count=40)
-    other = BadgeSeriesFactory()
+    other = BadgeSeriesFactory(badge_image='badges/custom-b.png')
     GroupBadgeFactory(series=other, platform_group=pg1, is_live=True, earned_count=30)
 
     frames = landing_service._build_badge_showcase()
@@ -275,3 +275,24 @@ def test_the_badge_showcase_dedupes_to_one_edition_per_series():
     assert len(set(names)) == 2
     assert all(f['state'] == 'earned' and f['art_layers'] for f in frames)
     assert all(f['badge_id'] for f in frames), 'a frame without badge_id cannot open its peek'
+
+
+def test_the_showcase_refuses_default_art_and_non_series_types():
+    """The shelf is the handcrafted-art pitch: a default-subject medallion or a
+    franchise/developer badge beside "illustrated by hand" undercuts the claim."""
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD')
+    # No custom art anywhere: the medallion would draw the static default subject.
+    GroupBadgeFactory(series=BadgeSeriesFactory(), platform_group=pg, is_live=True, earned_count=99)
+    # Custom art, wrong type.
+    GroupBadgeFactory(series=BadgeSeriesFactory(badge_type='franchise', badge_image='badges/f.png'),
+                      platform_group=pg, is_live=True, earned_count=98)
+    # The one that belongs: series-type, custom art (via the per-group override this time).
+    keeper = GroupBadgeFactory(series=BadgeSeriesFactory(),
+                               platform_group=pg, is_live=True, earned_count=1,
+                               badge_image_override='badges/override.png')
+
+    frames = landing_service._build_badge_showcase()
+
+    assert [f['badge_id'] for f in frames] == [keeper.id]
