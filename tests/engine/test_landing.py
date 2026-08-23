@@ -110,6 +110,28 @@ def test_the_landing_is_free_once_its_caches_are_warm(client, django_assert_num_
     assert resp.status_code == 200
 
 
+def test_team_members_can_preview_the_landing_signed_in(client):
+    """The beta requires logging in and the landing only routes to logged-out visitors, so the
+    team gets a door: /?preview=landing for staff and moderators. Anyone else keeps their
+    normal home state -- the front door grows no public mode."""
+    staff = ProfileFactory(is_linked=True, sync_status='synced')
+    staff.user.is_staff = True
+    staff.user.save(update_fields=['is_staff'])
+    client.force_login(staff.user)
+    assert 'data-land-search' in client.get('/?preview=landing', **CF).content.decode()
+
+    mod = ProfileFactory(is_linked=True, sync_status='synced')
+    mod.user.role = 'moderator'
+    mod.user.save()
+    client.force_login(mod.user)
+    assert 'data-land-search' in client.get('/?preview=landing', **CF).content.decode()
+
+    member = ProfileFactory(is_linked=True, sync_status='synced')
+    client.force_login(member.user)
+    body = client.get('/?preview=landing', **CF).content.decode()
+    assert 'data-land-search' not in body, 'the preview leaked past the team gate'
+
+
 # --- The showcase card ---
 
 def test_the_fixture_card_renders_when_no_cron_card_exists(client):

@@ -44,6 +44,22 @@ def test_gate_allows_staff_and_stamps_noindex(client, settings):
     assert resp['X-Robots-Tag'] == 'noindex, nofollow'
 
 
+def test_gate_allows_moderators(client, settings):
+    """Mods review the beta too (2026-08-23). The role split keeps them OFF is_staff, so the
+    door checks the role -- a mod must get in WITHOUT the admin bit."""
+    settings.IS_BETA = True
+    profile = ProfileFactory(is_linked=True)
+    profile.user.role = 'moderator'
+    profile.user.save()
+    assert profile.user.is_staff is False, 'the role split broke: a mod became Django-staff'
+    client.force_login(profile.user)
+
+    resp = client.get('/support/')
+
+    assert resp.status_code == 200
+    assert resp['X-Robots-Tag'] == 'noindex, nofollow'
+
+
 def test_gate_keeps_login_flow_open_for_anon(client, settings):
     # /accounts/ must stay reachable or staff could never sign in to pass the gate.
     settings.IS_BETA = True

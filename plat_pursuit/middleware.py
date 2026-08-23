@@ -309,8 +309,8 @@ class BetaStaffGateMiddleware:
             if not request.user.is_authenticated:
                 return redirect_to_login(request.get_full_path())
             return HttpResponseForbidden(
-                'PlatPursuit staff beta — your account is signed in but is not '
-                'staff, so access is restricted.'
+                'PlatPursuit team beta — your account is signed in but is not '
+                'on the team (staff or moderator), so access is restricted.'
             )
 
         response = self.get_response(request)
@@ -318,6 +318,9 @@ class BetaStaffGateMiddleware:
         return response
 
     def _is_allowed(self, request):
-        if request.user.is_staff:
+        # Staff, plus moderators (2026-08-23: the mod team reviews the beta too). The role
+        # split deliberately keeps mods OFF is_staff -- Django-admin access exactly -- so the
+        # beta door checks the role, not the admin bit.
+        if request.user.is_staff or getattr(request.user, 'is_moderator', False):
             return True
         return request.path.startswith(self.EXEMPT_PREFIXES)

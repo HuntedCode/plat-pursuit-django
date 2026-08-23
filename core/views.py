@@ -171,10 +171,24 @@ class HomeView(TemplateView):
             'synced':    'trophies/home.html',
         }[state]
 
+    def _team_previewing_landing(self):
+        """True when a signed-in team member (staff or moderator) asks to SEE the anonymous
+        landing (`/?preview=landing`) -- the page only ever routes to logged-out visitors, and
+        the beta requires logging in, so reviewers need a door. Team-gated: the param is
+        harmless (the landing is cached community data), but the front door should not grow an
+        undocumented public mode."""
+        return (
+            self.request.GET.get('preview') == 'landing'
+            and self.request.user.is_authenticated
+            and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
+        )
+
     def _resolve_state(self):
         """Compute the home-page state for the current request user."""
         request = self.request
         if not request.user.is_authenticated:
+            return 'anonymous'
+        if self._team_previewing_landing():
             return 'anonymous'
         profile = getattr(request.user, 'profile', None)
         if profile is None or not profile.is_linked:
