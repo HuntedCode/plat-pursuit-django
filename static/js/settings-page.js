@@ -45,7 +45,9 @@
         var go = document.querySelector('[data-delete-go]');
         if (phrase && go) {
             phrase.addEventListener('input', function () {
-                go.disabled = phrase.value.trim().toLowerCase() !== 'delete my account';
+                // The label shows the phrase in quotes, so typing the quotes counts too.
+                var typed = phrase.value.trim().toLowerCase().replace(/^["']+|["']+$/g, '').trim();
+                go.disabled = typed !== 'delete my account';
             });
         }
 

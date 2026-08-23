@@ -10,7 +10,6 @@ Cancel-first guard: an active or past-due membership blocks deletion; grace forf
 warning. Stale processor webhooks for a deleted user must no-op (the handlers' DoesNotExist
 guards are load-bearing now).
 """
-import json
 from unittest.mock import patch
 
 import pytest
@@ -290,10 +289,10 @@ def test_a_blocked_member_sees_the_cancel_first_row_instead_of_the_dialog(client
 
 # ── the export ────────────────────────────────────────────────────────────────────────────────
 
-def test_the_export_carries_words_with_scores_and_skips_score_only_ratings(client):
-    """Blurb-carrying rows only: that matches the "take your words with you" framing, and the
-    score-only rows survive deletion anyway (nothing to save). Non-ASCII survives un-escaped
-    (ensure_ascii=False + charset) and the DLC-group branch carries the group name."""
+def test_the_export_is_readable_text_with_words_scores_and_no_score_only_rows(client):
+    """A plain .txt, not JSON: PlayStation gamers open this on anything, no computer knowledge
+    asked. Blurb-carrying rows only (score-only rows survive deletion anyway); the DLC-group
+    branch carries the group name and non-ASCII prose ships intact."""
     from tests.factories import ConceptTrophyGroupFactory
 
     profile, user, rating = _account(client)
@@ -315,12 +314,14 @@ def test_the_export_carries_words_with_scores_and_skips_score_only_ratings(clien
 
     assert resp.status_code == 200
     assert 'attachment' in resp['Content-Disposition']
-    payload = json.loads(resp.content)
-    assert len(payload['ratings']) == 2, 'score-only ratings are not words'
-    by_take = {r['quick_take']: r for r in payload['ratings']}
-    assert by_take['A brutal, beautiful climb. Ein Traum.']['difficulty'] == 8
-    assert by_take['Short and sharp.']['trophy_group'] == 'Frozen Wilds'
-    assert 'Ein Traum' in resp.content.decode('utf-8'), 'non-ASCII ships un-escaped'
+    assert 'platpursuit-quick-takes.txt' in resp['Content-Disposition']
+    assert resp['Content-Type'].startswith('text/plain')
+    body = resp.content.decode('utf-8')
+    assert '"A brutal, beautiful climb. Ein Traum."' in body, 'non-ASCII prose ships intact'
+    assert 'Difficulty 8/10' in body
+    assert '(Frozen Wilds)' in body, 'DLC ratings name their group'
+    assert '"Short and sharp."' in body
+    assert score_only_concept.unified_title not in body, 'score-only ratings are not words'
 
 
 def test_the_delete_throttle_is_independent_of_the_password_change_throttle(client):

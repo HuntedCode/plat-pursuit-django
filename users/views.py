@@ -304,11 +304,13 @@ class SettingsView(LoginRequiredMixin, View):
 @require_GET
 def export_quick_takes(request):
     """The deletion dialog's "take your words with you" download: every rating that carries a
-    quick take, with its scores for context, as a JSON attachment. Offered before deletion so
-    the permanent blurb erase is a choice made with a copy in hand; harmless to hit at any
-    other time. Blurb-carrying rows only -- that matches the link's framing AND the deletion
-    semantics (score-only ratings survive on the profile, so there is nothing to save), and it
-    keeps the iteration bounded by hand-written prose rather than library size (whale-safe).
+    quick take, with its scores for context, as a PLAIN TEXT file -- these are PlayStation
+    gamers, and a .txt opens on anything (a phone included) with no computer knowledge asked.
+    Offered before deletion so the permanent blurb erase is a choice made with a copy in hand;
+    harmless to hit at any other time. Blurb-carrying rows only -- that matches the link's
+    framing AND the deletion semantics (score-only ratings survive on the profile, so there is
+    nothing to save), and it keeps the iteration bounded by hand-written prose rather than
+    library size (whale-safe).
     """
     from trophies.models import UserConceptRating
 
@@ -322,30 +324,30 @@ def export_quick_takes(request):
         .select_related('concept', 'concept_trophy_group')
         .order_by('-updated_at')
     )
-    payload = {
-        'psn_name': profile.display_psn_username or profile.psn_username,
-        'exported_at': timezone.now().isoformat(),
-        'ratings': [
-            {
-                'game': r.concept.unified_title,
-                'trophy_group': r.concept_trophy_group.display_name if r.concept_trophy_group else None,
-                'difficulty': r.difficulty,
-                'grindiness': r.grindiness,
-                'hours_to_platinum': r.hours_to_platinum,
-                'fun': r.fun_ranking,
-                'overall': r.overall_rating,
-                'recommendation': r.recommendation,
-                'quick_take': r.blurb,
-                'updated_at': r.updated_at.isoformat(),
-            }
-            for r in rows
-        ],
-    }
-    response = HttpResponse(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        content_type='application/json; charset=utf-8',
-    )
-    response['Content-Disposition'] = 'attachment; filename="platpursuit-quick-takes.json"'
+    rec_labels = dict(UserConceptRating.RECOMMENDATIONS)
+    lines = [
+        'Your PlatPursuit quick takes',
+        f'PSN: {profile.display_psn_username or profile.psn_username}',
+        f'Exported {timezone.now().strftime("%B %d, %Y")}',
+        '',
+    ]
+    for r in rows:
+        title = r.concept.unified_title
+        if r.concept_trophy_group:
+            title = f'{title} ({r.concept_trophy_group.display_name})'
+        lines.append('-' * 40)
+        lines.append(title)
+        lines.append(
+            f'  Difficulty {r.difficulty}/10 | Grind {r.grindiness}/10 | '
+            f'Fun {r.fun_ranking}/10 | Overall {r.overall_rating}/5 | '
+            f'About {r.hours_to_platinum} hours'
+        )
+        if r.recommendation:
+            lines.append(f'  Recommendation: {rec_labels.get(r.recommendation, r.recommendation)}')
+        lines.append(f'  "{r.blurb}"')
+        lines.append('')
+    response = HttpResponse('\n'.join(lines), content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="platpursuit-quick-takes.txt"'
     return response
 
 class SupportStorefrontView(TemplateView):

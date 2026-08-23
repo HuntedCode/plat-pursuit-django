@@ -300,6 +300,14 @@
 
 .stg-delete__warn a { text-decoration: underline; color: var(--pp-text); }
 
+/* The confirmation phrase inside its label: quoted in the markup, tinted here, so it reads as
+   "the exact thing to type" rather than part of the sentence. */
+.stg-delete__phrase {
+    color: var(--pp-error);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
 .stg-delete__form {
     display: flex;
     flex-direction: column;
