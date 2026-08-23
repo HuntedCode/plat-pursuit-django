@@ -792,7 +792,7 @@ the numbering concept is abandoned (his call), so a rollback would come back wit
 
 ## SEO Lane 0 (2026-08-23)
 - [ ] Jeffrey: create a Google Search Console DOMAIN property for platpursuit.com (DNS TXT verification), submit /sitemap.xml, add a monthly look to the routine. Every SEO lane's success is measured there.
-- [ ] Cherry-pick the prod-relevant Lane 0 fixes to `main` ahead of the cutover: static/robots.txt (the wildcard rules block every canonical game/badge/jobs page ON PROD TODAY), the BotCanonicalRedirectMiddleware lookahead, and base.html's path-only canonical + og:url. NOT the BadgeSeries sitemap (prod's badge system is still the legacy model until cutover).
+- [ ] SEO Lane 0 ships WITH the cutover (his call 2026-08-23: no early cherry-pick). Known cost accepted: prod's robots.txt keeps blocking canonical game/badge/jobs pages until then, so expect index recovery to START at cutover, not before. After cutover, verify in GSC that /games/<np>/ pages report Allowed under the robots tester.
 - [ ] `collectstatic` after the robots.txt change (WhiteNoise serves staticfiles/).
 - [ ] After cutover: resubmit /sitemap.xml in GSC (the badge section changes model; roadmaps section is withdrawn).
 

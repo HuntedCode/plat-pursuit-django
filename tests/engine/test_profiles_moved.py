@@ -45,7 +45,11 @@ def test_every_legacy_path_lands_on_the_same_hunter(client, legacy, suffix):
 
     assert resp.status_code == 301
     assert resp['Location'] == f'/hunters/{profile.psn_username}/{suffix}'
-    assert client.get(resp['Location'], **THROUGH_CLOUDFLARE).status_code == 200
+    # The trophy-case door closed 2026-08-23 (SEO Lane 0): its hop lands on the profile via a
+    # second redirect. Either way the chain must end 200 on the SAME hunter.
+    final = client.get(resp['Location'], follow=True, **THROUGH_CLOUDFLARE)
+    assert final.status_code == 200
+    assert f'/hunters/{profile.psn_username}/' in final.request['PATH_INFO']
 
 
 @pytest.mark.parametrize('legacy', ['/community/profiles/', '/profiles/'])

@@ -231,16 +231,17 @@ def test_the_bot_301_spares_the_noslash_subpage_forms(client):
     assert resp.status_code == 301 and resp['Location'] == '/games/NPWR12345_00/'
 
 
-def test_a_private_hunters_trophy_case_is_noindexed(client):
-    """The sibling page the detail-page noindex forgot: the trophy case renders a private
-    hunter's platinum list under their name."""
-    private = ProfileFactory(is_linked=True, psn_history_public=False, total_trophies=10)
-    public = ProfileFactory(is_linked=True, psn_history_public=True, total_trophies=10)
+def test_the_trophy_case_door_is_closed(client):
+    """Found via this lane's audit (a private hunter's platinum list rendered indexable), then
+    retired outright on his call: nothing in the rebuilt site linked the page. 302 not 301 --
+    it is the parked showcase system's selection UI, preserved for that rebuild."""
+    profile = ProfileFactory(is_linked=True, psn_history_public=True, total_trophies=10)
 
-    assert 'noindex, follow' in client.get(
-        f'/hunters/{private.psn_username}/trophy-case/', **CF).content.decode()
-    assert 'content="index, follow"' in client.get(
-        f'/hunters/{public.psn_username}/trophy-case/', **CF).content.decode()
+    resp = client.get(f'/hunters/{profile.psn_username}/trophy-case/', **CF)
+
+    assert resp.status_code == 302
+    assert resp['Location'] == f'/hunters/{profile.psn_username}/'
+
 
 
 def test_jsonld_urls_agree_with_the_canonical(client):

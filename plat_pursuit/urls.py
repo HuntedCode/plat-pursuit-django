@@ -39,7 +39,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, TrophyCaseView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
@@ -184,7 +184,13 @@ urlpatterns = [
     # fetches this same URL.
     path('hunters/<str:psn_username>/day/<str:day>/', ProfileDayView.as_view(), name='profile_day'),
     path('hunters/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
-    path('hunters/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
+    # Trophy Case: DOOR CLOSED 2026-08-23 (his call, found via the SEO Lane 0 audit -- nothing in
+    # the rebuilt site linked it; the profile's Trophies tab superseded it). 302 not 301: the page
+    # was the selection UI for the PARKED showcase system (profile customization, hidden 2026-08),
+    # whose user-authored selections are deliberately preserved -- if that rebuild wants this UI
+    # back, restoring is this one line. TrophyCaseView, ToggleSelectionView and the templates stay.
+    path('hunters/<str:psn_username>/trophy-case/', RedirectView.as_view(
+        pattern_name='profile_detail', permanent=False), name='trophy_case'),
     path('profiles/', RedirectView.as_view(
         pattern_name='profiles_list', permanent=True, query_string=True)),
     path('community/profiles/', RedirectView.as_view(
