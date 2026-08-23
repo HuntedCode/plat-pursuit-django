@@ -290,9 +290,12 @@ def test_the_privacy_policy_states_the_site_serves_no_ads(client):
     assert 'AdSense' not in body
     assert 'Advertising Cookies' not in body
     assert re.search(r'does not serve advertising', body), 'the no-ads statement is missing'
-    # The cookie section still has to describe what we DO set.
-    assert 'Essential Cookies' in body
-    assert 'Analytics Cookies' in body
+    # The cookie section still has to describe what we DO set -- which, since the 2026-08
+    # analytics deletion and copy-page review, is the two named essentials and nothing else.
+    # (This test used to pin the 'Analytics Cookies' bullet as PRESENT, faithfully preserving
+    # a claim whose system had been deleted; test_copy_pages.py now owns the truth pins.)
+    assert 'only essential cookies' in body
+    assert 'Analytics Cookies' not in body
 
 
 @pytest.mark.django_db
