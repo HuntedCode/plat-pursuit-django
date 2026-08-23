@@ -1,6 +1,6 @@
 # Staging / Beta Environment (`beta.platpursuit.com`)
 
-A staff-only deployment of the **`rebuild`** branch running against a **snapshot of prod
+A team-only deployment (staff + moderators) of the **`rebuild`** branch running against a **snapshot of prod
 data**, so the team can click through the redesign before it ships. It is deliberately NOT a
 backend-testing environment: **no real emails, no live payments, no PSN sync.**
 
@@ -10,7 +10,7 @@ backend-testing environment: **no real emails, no live payments, no PSN sync.**
 |---|---|
 | Branch | `rebuild` (auto-deploys on push) |
 | Data | A restored **snapshot** of the prod DB — frozen (no sync worker runs) |
-| Access | **Staff only** — anonymous → login, non-staff → 403 (`BetaStaffGateMiddleware`) |
+| Access | **Team only** (staff + moderators) — anonymous → login, non-team → 403 (`BetaStaffGateMiddleware`; mods enter via `role='moderator'`, never `is_staff`) |
 | Email | Dummy backend — nothing ever sends |
 | Payments | Inert — Stripe/PayPal default to test/sandbox |
 | PSN sync | **Off** — no TokenKeeper worker, so no token contention with prod |
@@ -44,8 +44,10 @@ With `BETA` unset, all of the above is a no-op, so this is safe on production.
    Postgres role can create `pg_trgm`.
 6. **Custom domain** — add `beta.platpursuit.com` to the service, create the CNAME at your DNS
    registrar, wait for the auto-TLS cert.
-7. **Make yourself staff** — your user in the snapshot needs `is_staff=True`. If not, open the
-   Render Shell: `python manage.py shell` → set `is_staff` on your `User`, or use the admin.
+7. **Put yourself on the team** — the gate admits `is_staff=True` (admins) and `role='moderator'`.
+   If your snapshot user has neither, open the Render Shell: `python manage.py shell` → set the
+   right one on your `User`, or use the admin. For MODERATOR reviewers always set `role`, never
+   `is_staff` — the role lockstep (`users/models.py`) keeps mods off the admin bit by design.
 
 ## Env vars
 

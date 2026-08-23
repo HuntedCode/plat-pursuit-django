@@ -432,7 +432,14 @@ window.PlatPursuit = window.PlatPursuit || {};
                 // nothing"). A press with the gate unmet lands in onRefused below.
                 onChange: function (state) {
                     var req = el('rmg-req');
-                    if (req) { req.classList.toggle('is-met', state.ready); }
+                    if (req) {
+                        req.classList.toggle('is-met', state.ready);
+                        // The urge is a moment, not a mode: any state change (typing hours, the
+                        // next game's prefill) clears it, so one refusal cannot pre-scold the
+                        // rest of a 70-game run -- the line is static chrome that survives the
+                        // card swap.
+                        req.classList.remove('is-urging');
+                    }
                 },
                 onRefused: function (msg, fieldName) {
                     PP.ToastManager.show(msg, 'warning');

@@ -1235,4 +1235,13 @@ def test_a_refused_submit_is_never_silent():
     assert 'onRefused: function' in rmg
     assert "classList.add('is-urging')" in rmg
     assert 'id="rmg-submit" disabled' not in page, 'the submit button ships dead again'
+    # And the JS half: the ready-state toggle staying out of onChange is the actual regression
+    # surface (the template attribute alone would not keep the button alive), and Enter must not
+    # regain its swallow-on-disabled guard.
+    assert 'submit.disabled = !state.ready' not in rmg, 'the ready-state disable toggle came back'
+    assert '!submit.disabled' not in rmg, "Enter's silent swallow guard came back"
+    # One refusal must not pre-scold the rest of a bulk run: the urge clears on state change.
+    assert "classList.remove('is-urging')" in rmg.split('onChange')[1].split('onRefused')[0], (
+        'onChange no longer clears the urged line between games'
+    )
 

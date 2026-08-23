@@ -279,12 +279,14 @@ class TimezoneMiddleware:
 # Beta / staging staff gate.
 #
 # The beta deployment (beta.platpursuit.com) runs the `rebuild` branch against a
-# snapshot of prod data so staff can click through the redesign before release.
-# When settings.IS_BETA is True this locks the whole site to logged-in STAFF:
+# snapshot of prod data so the TEAM can click through the redesign before release.
+# When settings.IS_BETA is True this locks the whole site to the logged-in team
+# (staff OR moderators -- the role split keeps mods off is_staff, so the door
+# checks the role too, 2026-08-23):
 #   - anonymous visitors are redirected to the login page,
-#   - logged-in non-staff get a 403,
+#   - logged-in non-team accounts get a 403,
 #   - the auth flow (/accounts/), static assets and a /healthz/ probe stay open
-#     so staff can actually sign in and Render's health check passes,
+#     so the team can actually sign in and Render's health check passes,
 #   - every served response is stamped noindex so beta never gets crawled.
 #
 # Entirely inert when IS_BETA is False, so it's a no-op on production.

@@ -251,7 +251,7 @@ MIDDLEWARE = [
     "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    # Staff-only gate for the beta deployment (no-op unless IS_BETA). Runs right
+    # Team gate (staff + moderators) for the beta deployment (no-op unless IS_BETA). Runs right
     # after auth so request.user is populated.
     "plat_pursuit.middleware.BetaStaffGateMiddleware",
     'allauth.account.middleware.AccountMiddleware',

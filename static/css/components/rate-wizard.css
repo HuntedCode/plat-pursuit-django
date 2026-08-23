@@ -237,8 +237,8 @@
 .rmg__req .rmg__req-ok { display: none; color: var(--pp-success); }
 /* A refused submit urges the line: colour snaps to warning and (motion permitting) it nudges
    sideways once. The class is removed-and-readded per refusal so a second press re-pulses. */
-.rmg__req.is-urging { color: var(--pp-warning); }
-.rmg__req.is-urging .rmg__req-x { color: var(--pp-warning); }
+.rmg__req.is-urging:not(.is-met) { color: var(--pp-warning); }
+.rmg__req.is-urging:not(.is-met) .rmg__req-x { color: var(--pp-warning); }
 @media (prefers-reduced-motion: no-preference) {
     .rmg__req.is-urging { animation: rmgReqUrge 0.45s var(--pp-ease); }
 }
