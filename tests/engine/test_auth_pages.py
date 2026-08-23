@@ -124,3 +124,70 @@ def test_every_reachable_account_template_is_ours(name):
 
     assert 'site-packages' not in origin, \
         f'{name} resolves to the raw allauth package template (white page on a dark site)'
+
+
+# ── Phase B: login + signup rebuild ───────────────────────────────────────────────────────────
+
+def _make_verified(password='phase-b-pass-9'):
+    from allauth.account.models import EmailAddress
+    profile = ProfileFactory(is_linked=True)
+    user = profile.user
+    user.set_password(password)
+    user.save()
+    EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+    return user, password
+
+
+def test_login_preserves_next_through_the_post(client):
+    """The ?next= contract is explicit now (a hidden input), not an accident of the empty
+    form action re-posting the query string."""
+    user, password = _make_verified()
+
+    page = client.get('/accounts/login/?next=/support/').content.decode()
+    assert 'name="next" value="/support/"' in page
+
+    resp = client.post('/accounts/login/?next=/support/',
+                       {'login': user.email, 'password': password, 'next': '/support/'})
+    assert resp.status_code == 302
+    assert resp['Location'] == '/support/'
+
+
+def test_signup_page_renders_with_one_h1_and_the_honeypot(client):
+    body = client.get('/accounts/signup/').content.decode()
+
+    assert body.count('<h1') == 1, 'h1 discipline: the page title, not the brand mark'
+    assert 'name="website"' in body, 'the honeypot must survive every restyle'
+    assert 'pp-head-cascade' in body
+
+
+def test_login_page_renders_with_one_h1(client):
+    body = client.get('/accounts/login/').content.decode()
+
+    assert body.count('<h1') == 1
+    assert 'pp-head-cascade' in body
+
+
+def test_the_honeypot_rejects_bots_that_fill_every_field(client):
+    from users.models import CustomUser
+
+    resp = client.post('/accounts/signup/', {
+        'email': 'bot@example.com', 'email2': 'bot@example.com',
+        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1',
+        'website': 'https://spam.example',
+    })
+
+    assert resp.status_code == 200, 'form re-renders with the error, no account'
+    assert not CustomUser.objects.filter(email='bot@example.com').exists()
+
+
+def test_a_human_signup_still_works(client):
+    from users.models import CustomUser
+
+    resp = client.post('/accounts/signup/', {
+        'email': 'human@example.com', 'email2': 'human@example.com',
+        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1',
+        'website': '',
+    })
+
+    assert resp.status_code == 302
+    assert CustomUser.objects.filter(email='human@example.com').exists()
