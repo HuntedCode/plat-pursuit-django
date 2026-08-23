@@ -141,10 +141,40 @@
         els.forEach(function (el) { io.observe(el); });
     }
 
+    // --- 4. The badge inspect (the How It Works precedent, verbatim shape) -----------------
+
+    function wireBadgePeek() {
+        var modal = document.getElementById('badge-peek');
+        if (!modal || !window.PlatPursuit || !PlatPursuit.Medallion || !PlatPursuit.Medallion.detailModal) { return; }
+        var peek = PlatPursuit.Medallion.detailModal({
+            modal: modal,
+            bodySel: '[data-peek-body]',
+            closeSel: '[data-peek-close]',
+        });
+        var tmpl = modal.dataset.peekUrl;
+
+        function openPeek(cell) {
+            var id = cell.dataset.badgeId;
+            if (!id) { return; }
+            peek.open(tmpl.replace(/0\/$/, id + '/'), cell);
+        }
+
+        document.querySelectorAll('.land-medals__slot[data-badge-id]').forEach(function (cell) {
+            cell.addEventListener('click', function () { openPeek(cell); });
+            cell.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openPeek(cell);
+                }
+            });
+        });
+    }
+
     function boot() {
         wireSearch();
         wireCardFit();
         wireCountUps();
+        wireBadgePeek();
         if (window.PlatPursuit && PlatPursuit.arriveOnScroll) {
             PlatPursuit.arriveOnScroll();
         } else {

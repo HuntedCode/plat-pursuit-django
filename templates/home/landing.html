@@ -128,13 +128,23 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
             {% if badge_showcase %}
             <div class="land-medals pp-arrive__it" style="--i: 1;">
                 {% for frame in badge_showcase %}
-                <div class="land-medals__slot" title="{{ frame.series_name }}">
+                {% comment %}Each slot is an inspect trigger: the shared quick-peek modal (the
+                same one badge detail and How It Works hand to anon visitors) picks the medallion
+                up into a 3D tilt stage. The id rides the wrapper, How It Works' pattern.
+                {% endcomment %}
+                <div class="land-medals__slot pp-forge-peek" role="button" tabindex="0"
+                     data-badge-id="{{ frame.badge_id }}" title="{{ frame.series_name }}"
+                     aria-label="Inspect the {{ frame.series_name }} badge">
                     {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
                 </div>
                 {% endfor %}
             </div>
+            <p class="land-medals__hint pp-arrive__it" style="--i: 2;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11.5a3 3 0 1 1 6 0"/><path d="M12 2v3"/><path d="M4.2 5.2 6.3 7.3"/><path d="M19.8 5.2 17.7 7.3"/><path d="M12 11.5V20l2.5-2 2 3 2.5-1.5-2-3.5H20z"/></svg>
+                Click or tap a medallion to inspect it
+            </p>
             {% endif %}
-            <div class="land-sec__foot pp-arrive__it" style="--i: 2;">
+            <div class="land-sec__foot pp-arrive__it" style="--i: 3;">
                 <a href="{% url 'badges_list' %}" class="pp-cta pp-cta--ghost">Browse the badge gallery</a>
             </div>
         </div>
@@ -170,10 +180,48 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                 <h2 class="land-sec__h2">Ratings you can finally trust</h2>
                 <p class="land-sec__sub">Only hunters who finished the platinum, or cleared the whole list, can rate a game here. Difficulty, grind, fun, and a verdict, from people who went all the way.</p>
             </div>
-            <div class="land-verdicts pp-arrive__it" style="--i: 1;" aria-hidden="true">
-                <span class="land-verdicts__pill" style="--v: #3add9e;">Do it</span>
-                <span class="land-verdicts__pill" style="--v: #fcca21;">Good game, tough plat</span>
-                <span class="land-verdicts__pill" style="--v: #ff5860;">Skip it</span>
+            {% comment %}A demo rating in the site's own vocabulary -- live HTML, not a
+            screenshot: the shared .pp-stars glyphs, the real tone colours, the real verdict
+            words. Content is invented and captioned as a sample.{% endcomment %}
+            <div class="land-rdemo pp-arrive__it" style="--i: 1;">
+                <article class="land-rdemo__card" aria-label="A sample rating">
+                    <div class="land-rdemo__head">
+                        <div class="min-w-0">
+                            <h3 class="land-rdemo__title">Sekiro: Shadows Die Twice</h3>
+                            <p class="land-rdemo__by">rated by a hunter with the platinum</p>
+                        </div>
+                        <div class="land-rdemo__verdict">
+                            <span class="pp-stars" style="--fill: 90%;" role="img" aria-label="Scored 4.5 out of 5"><span class="pp-stars__on"></span></span>
+                            <span class="land-rdemo__score">4.5<span class="land-rdemo__of">/5</span></span>
+                        </div>
+                    </div>
+                    <div class="land-rdemo__stats">
+                        <div class="land-rdemo__stat" data-tone="bad">
+                            <span class="land-rdemo__k">Difficulty</span>
+                            <span class="land-rdemo__n">9<span class="land-rdemo__of">/10</span></span>
+                            <span class="land-rdemo__w">Brutal</span>
+                        </div>
+                        <div class="land-rdemo__stat" data-tone="good">
+                            <span class="land-rdemo__k">Grind</span>
+                            <span class="land-rdemo__n">3<span class="land-rdemo__of">/10</span></span>
+                            <span class="land-rdemo__w">Some grind</span>
+                        </div>
+                        <div class="land-rdemo__stat" data-tone="warn">
+                            <span class="land-rdemo__k">Hours</span>
+                            <span class="land-rdemo__n">55<span class="land-rdemo__of">h</span></span>
+                        </div>
+                        <div class="land-rdemo__stat" data-tone="good">
+                            <span class="land-rdemo__k">Fun</span>
+                            <span class="land-rdemo__n">9<span class="land-rdemo__of">/10</span></span>
+                            <span class="land-rdemo__w">A blast</span>
+                        </div>
+                    </div>
+                    <p class="land-rdemo__take">&ldquo;Brutal bosses, zero filler. Every death taught me something. Earn this one.&rdquo;</p>
+                    <div class="land-rdemo__foot">
+                        <span class="land-rdemo__pill">Do it</span>
+                        <span class="land-rdemo__note">A sample rating. Real ones require the platinum.</span>
+                    </div>
+                </article>
             </div>
             {% if site_heartbeat.expanded.ratings_total.value %}
             <div class="land-pulse__grid land-pulse__grid--duo pp-arrive__it" style="--i: 2;">
@@ -232,6 +280,19 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
         </div>
     </section>
 </main>
+{% endblock %}
+
+{% block fixed_overlays %}
+{% comment %}The badge inspect modal: the shared pick-it-up stage (medallion.js detailModal),
+fed by the anon-safe quick-peek endpoint -- the same experience badge detail hands a logged-out
+visitor. Lives in fixed_overlays so it sits outside #page-recede.{% endcomment %}
+<div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'group_badge_quick_peek' 0 %}" hidden>
+    <div class="pp-detail-modal__scrim" data-peek-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+        <div class="pp-detail-modal__body" data-peek-body></div>
+    </div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}

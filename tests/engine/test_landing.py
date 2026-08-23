@@ -160,6 +160,50 @@ def test_the_cron_render_caches_a_real_card():
     assert html and 'share-image-content' in html
 
 
+def test_the_ratings_demo_card_is_live_html(client):
+    """The demo rating is the site's own vocabulary as real markup (shared .pp-stars, tone
+    colours, the model's verdict words), captioned as a sample -- not a screenshot."""
+    body = _get(client).content.decode()
+
+    assert 'land-rdemo__card' in body
+    assert 'pp-stars' in body, 'the shared fractional-star component is missing'
+    assert 'Do it' in body, "the verdict pill must use the model's real label"
+    assert 'A sample rating. Real ones require the platinum.' in body
+
+    # The words must be the REAL vocabulary for the numbers shown -- the demo teaches the
+    # product's language, and 'Breezy' beside a 3 already slipped through once.
+    from core.templatetags.custom_filters import rating_verdict
+    assert rating_verdict(9, 'difficulty') in body
+    assert rating_verdict(3, 'grindiness') in body
+    assert rating_verdict(9, 'fun') in body
+
+
+def test_the_inspect_modal_shell_ships_with_the_page(client):
+    """The badge quick-peek: the same anon-safe machinery badge detail uses, plus the hint that
+    makes the affordance discoverable."""
+    body = _get(client).content.decode()
+
+    assert 'id="badge-peek"' in body, 'the inspect modal shell is missing'
+    assert '/group-badge-peek/0/' in body, 'the anon quick-peek URL template is missing'
+
+
+def test_the_shelf_slots_are_inspect_triggers(client):
+    """With real badges on the shelf, each slot carries the trigger contract (role, key, id)
+    and the hint invites the tap."""
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory, PlatformGroupFactory
+
+    GroupBadgeFactory(series=BadgeSeriesFactory(),
+                      platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra HD'),
+                      is_live=True, earned_count=10)
+    cache.delete(landing_service.BADGE_SHOWCASE_CACHE_KEY)
+
+    body = _get(client).content.decode()
+
+    assert 'land-medals__slot pp-forge-peek' in body
+    assert 'data-badge-id=' in body, 'the trigger has no badge id to open'
+    assert 'Click or tap a medallion to inspect it' in body, 'the hint is missing'
+
+
 # --- The badge showcase ---
 
 def test_the_badge_showcase_dedupes_to_one_edition_per_series():
@@ -179,3 +223,4 @@ def test_the_badge_showcase_dedupes_to_one_edition_per_series():
     assert len(frames) == 2, 'two editions of one series produced two showcase slots'
     assert len(set(names)) == 2
     assert all(f['state'] == 'earned' and f['art_layers'] for f in frames)
+    assert all(f['badge_id'] for f in frames), 'a frame without badge_id cannot open its peek'

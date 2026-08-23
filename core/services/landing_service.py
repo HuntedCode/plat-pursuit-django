@@ -59,6 +59,8 @@ def _build_badge_showcase():
             'art_layers': layers,
             'series_name': gb.series.name,
             'badge_name': gb.platform_group.name,
+            # The inspect modal's key: the anon-safe quick-peek endpoint takes a GroupBadge id.
+            'badge_id': gb.id,
         })
         if len(frames) >= BADGE_SHOWCASE_CAP:
             break
