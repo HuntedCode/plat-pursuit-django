@@ -239,7 +239,11 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                     fresh card shows five tiles and the empty sixth reads as room to grow.
                     {% endcomment %}
                     {% if ring %}
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px 8px; margin-top: 14px;">
+                    {% comment %}align-items: flex-start, because the Top Job wrapper is taller than its
+                    row-mate (the caption hangs under it) and the default stretch was inflating the
+                    tile beside it -- Finesse's box grew to match the wrapper's full height.
+                    {% endcomment %}
+                    <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 8px; margin-top: 14px;">
                         {% for f in ring %}
                         <div style="width: 47%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
                             <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ f.colour }}; flex-shrink: 0;"></span>
