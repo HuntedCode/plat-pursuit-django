@@ -124,10 +124,11 @@ def _build_hero(profile, jobs):
     }
 
 
-def build_career_context(profile):
-    """Assemble the full Career context for `profile`. Each zone is isolated so a failure
-    degrades to a missing section rather than a 500. The jobs experience is built first because
-    the hero reads its totals (Pursuer Level + Total XP)."""
+def build_hero_context(profile):
+    """The Pursuer hero alone: jobs totals + the hero dict + compact XP, with the same per-zone
+    isolation as the full build. For surfaces (the Profile Card) that need the identity but none
+    of the tier dates or per-discipline radar payloads the Career page itself renders -- calling
+    the full build there paid two extra milestone queries per render for keys nothing read."""
     context = {}
     jobs = None
     try:
@@ -136,11 +137,19 @@ def build_career_context(profile):
         logger.exception("Career jobs build failed for profile %s", getattr(profile, 'id', '?'))
     context['career'] = jobs
     context['total_xp_compact'] = _compact(jobs['total_xp']) if jobs else '0'
-    context['job_tier_dates'] = _job_tier_dates(profile)   # {job_slug: {tier_key: reached_at}} for the modals
-    context['tiers_earned'] = _tiers_earned(jobs)          # prestige tiers held across all jobs (a stat-card aggregate)
     try:
         context['hero'] = _build_hero(profile, jobs)
     except Exception:
         logger.exception("Career hero build failed for profile %s", getattr(profile, 'id', '?'))
         context['hero'] = None
+    return context
+
+
+def build_career_context(profile):
+    """Assemble the full Career context for `profile`. Each zone is isolated so a failure
+    degrades to a missing section rather than a 500. The jobs experience is built first because
+    the hero reads its totals (Pursuer Level + Total XP)."""
+    context = build_hero_context(profile)
+    context['job_tier_dates'] = _job_tier_dates(profile)   # {job_slug: {tier_key: reached_at}} for the modals
+    context['tiers_earned'] = _tiers_earned(context['career'])   # prestige tiers held across all jobs (a stat-card aggregate)
     return context

@@ -1,5 +1,13 @@
 # Profile Cards & Forum Signatures
 
+> **Historical record.** This feature was deleted in the 2026-08 rebuild, and its successor now
+> exists: the **Profile Card** on the profile page's Card tab -- see
+> [share-images.md](share-images.md), "The Profile Card". Note that
+> `core/services/profile_card_service.py` has been REUSED by the new card (it holds
+> `get_card_data`, not the old `ProfileCardDataService`), and the last two orphans this doc's
+> file table lists (`profile_card_tab.html`, `profile-card-share.js`) were deleted with the
+> 2026-08-23 rebuild. The tables below describe the DELETED system only.
+
 > **DELETED 2026-08 (badge cutover 5b).** The profile-card renderer, its four API endpoints, the token
 > signature and `render_profile_sigs` are all gone. The Pursuer Card is the identity surface now.
 >

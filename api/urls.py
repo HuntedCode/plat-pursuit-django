@@ -14,7 +14,8 @@ from .views import (
 # used it as a user picker. That form authored LEGACY tier badges and was deleted in badge cutover 5b,
 # so the picker went with it: there is no routed exception here any more.
 from .shareable_views import (
-    PlatCardHTMLView, PlatCardPNGView, LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
+    PlatCardHTMLView, PlatCardPNGView, ProfileCardPNGView,
+    LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
 )
 # Platinum Grid is RETIRED (2026-08); api/platinum_grid_views.py is parked unrouted.
 from .recap_views import (
@@ -97,6 +98,8 @@ urlpatterns = [
     # these carry TokenAuthentication, so assume external consumers too. Same card.
     path('shareables/platinum/<int:earned_trophy_id>/html/', LegacyPlatinumCardHTMLView.as_view(), name='shareable-platinum-html'),
     path('shareables/platinum/<int:earned_trophy_id>/png/', LegacyPlatinumCardPNGView.as_view(), name='shareable-platinum-png'),
+    # Profile Card. No key: always the caller's own profile (ownership is structural).
+    path('shareables/profile/png/', ProfileCardPNGView.as_view(), name='profile-card-png'),
 
     # Monthly recap endpoints
     path('recap/available/', RecapAvailableView.as_view(), name='recap-available'),

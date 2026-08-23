@@ -81,6 +81,8 @@ def test_both_hosts_load_the_shared_controller():
     'shareables/partials/share_modal.html',
     'partials/rate_before_download_modal.html',
     'shareables/plat_card.html',
+    'shareables/profile_card.html',
+    'trophies/partials/profile_detail/tabs/card_tab.html',
     'trophies/partials/game_detail/quick_rate_modal.html',
 ])
 def test_share_flow_templates_have_balanced_comment_tags(name):

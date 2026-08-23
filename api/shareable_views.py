@@ -25,6 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.services import completion_card_service as cards
+from core.services import profile_card_service as profile_cards
 from core.services.share_card_utils import resolve_temp_path
 from core.services.share_image_cache import ShareImageCache
 from trophies.themes import PLAT_CARD_DEFAULT_THEME, PLAT_CARD_THEME_KEYS
@@ -32,6 +33,11 @@ from trophies.themes import PLAT_CARD_DEFAULT_THEME, PLAT_CARD_THEME_KEYS
 logger = logging.getLogger(__name__)
 
 CARD_TEMPLATE = 'shareables/plat_card.html'
+PROFILE_CARD_TEMPLATE = 'shareables/profile_card.html'
+#: The Profile Card's ground is the family radial the template bakes in; naming it here (rather
+#: than borrowing PLAT_CARD_DEFAULT_THEME) keeps the card on this ground even if the plat card's
+#: default ever changes.
+PROFILE_CARD_THEME = 'ppSubstrate'
 
 #: The card carries a large cover slot, so share-temp images must not be downscaled and re-upscaled
 #: during the render. See the renderer's image_max_size note.
@@ -47,6 +53,36 @@ def _format_playtime(seconds):
         return ''
     hours, minutes = int(seconds // 3600), int((seconds % 3600) // 60)
     return f"{hours}h {minutes}m" if hours else f"{minutes}m"
+
+
+def _cache_layer_urls(urls, log_tag):
+    """Resolve badge-medallion layer URLs for the renderer.
+
+    These are NOT all remote: group_medallion_layers returns `static(...)` paths for the backdrop
+    fallback and the default subject art, and FileField urls that are /media/ under DEBUG.
+    ShareImageCache hard-rejects any non-http(s) scheme, so routing everything through it dropped
+    every static layer in every environment -- a badge with no custom image rendered with no
+    medallion at all, silently.
+
+    The renderer resolves BOTH /static/ and /media/ into data URIs itself, so those pass through
+    untouched. Only genuinely remote URLs need caching. (/media/ resolution was added after custom
+    badge art turned up in the preview but not in the PNG -- the preview is a real page on the site
+    origin, where a root-relative src resolves; the PNG is set_content() in about:blank, where it
+    does not.)
+    """
+    cached_layers = []
+    for url in urls or []:
+        if not url:
+            continue
+        if url.startswith(('http://', 'https://')):
+            resolved = ShareImageCache.fetch_and_cache(url)
+            if not resolved:
+                logger.warning("[%s] failed to cache medallion layer: %s", log_tag, url)
+        else:
+            resolved = url          # /static/... (or /media/... in dev) -- the renderer handles it
+        if resolved:
+            cached_layers.append(resolved)
+    return cached_layers
 
 
 def build_card_context(profile, standing):
@@ -68,33 +104,31 @@ def build_card_context(profile, standing):
             logger.warning("[PLAT-CARD] failed to cache %s: %s", key, source)
         data[key] = cached or ''
 
-    # Badge medallion art. Unlike the four images above, these are NOT all remote: group_medallion_layers
-    # returns `static(...)` paths for the backdrop fallback and the default subject art, and FileField
-    # urls that are /media/ under DEBUG. ShareImageCache hard-rejects any non-http(s) scheme, so routing
-    # everything through it dropped every static layer in every environment -- a badge with no custom
-    # image rendered with no medallion at all, silently.
-    #
-    # The renderer resolves BOTH /static/ and /media/ into data URIs itself, so those pass through
-    # untouched. Only genuinely remote URLs need caching. (/media/ resolution was added after custom
-    # badge art turned up in the preview but not in the PNG -- the preview is a real page on the site
-    # origin, where a root-relative src resolves; the PNG is set_content() in about:blank, where it
-    # does not.)
     for line in data['badge_lines']:
-        cached_layers = []
-        for url in line.get('medallion_layers') or []:
-            if not url:
-                continue
-            if url.startswith(('http://', 'https://')):
-                resolved = ShareImageCache.fetch_and_cache(url)
-                if not resolved:
-                    logger.warning("[PLAT-CARD] failed to cache medallion layer: %s", url)
-            else:
-                resolved = url          # /static/... (or /media/... in dev) -- the renderer handles it
-            if resolved:
-                cached_layers.append(resolved)
-        line['medallion_cached'] = cached_layers
+        line['medallion_cached'] = _cache_layer_urls(line.get('medallion_layers'), 'PLAT-CARD')
 
     data['playtime'] = _format_playtime(data['play_duration_seconds'])
+    return data
+
+
+def build_profile_card_context(profile):
+    """Profile Card data plus the locally-cached image paths the renderer needs.
+
+    Same caching rules as the plat card's context: the avatar is remote (PSN CDN) and goes through
+    ShareImageCache; medallion layers follow `_cache_layer_urls`. The Card tab's inline preview does
+    NOT use this -- a real page on the site origin resolves every URL itself -- so caching costs
+    land only on the download.
+    """
+    data = profile_cards.get_card_data(profile)
+
+    source = data['user_avatar_url']
+    cached = ShareImageCache.fetch_and_cache(source) if source else ''
+    if source and not cached:
+        logger.warning("[PROFILE-CARD] failed to cache avatar: %s", source)
+    data['avatar_image'] = cached or ''
+
+    for m in data['badges']['medallions']:
+        m['layers_cached'] = _cache_layer_urls(m.get('layers'), 'PROFILE-CARD')
     return data
 
 
@@ -221,6 +255,57 @@ class PlatCardPNGView(_CardViewBase):
 
         response = HttpResponse(png_bytes, content_type='image/png')
         response['Content-Disposition'] = f'attachment; filename="{safe_name}-{suffix}.png"'
+        return response
+
+
+class ProfileCardPNGView(APIView):
+    """GET /api/v1/shareables/profile/png/ -- the Profile Card download, always the caller's own.
+
+    No key in the URL: the card is built FROM `request.user.profile`, so ownership is structural
+    rather than a predicate, and a deep link cannot name anyone else's card. The Card tab renders
+    its preview inline (real page, real data); this endpoint exists only to hand over the PNG.
+
+    Always the family ground (`ppSubstrate` -- the same radial the template bakes in), so the
+    renderer's theme pass is a visual no-op. No theme picker in v1: the profile card is a
+    self-portrait with a designed ground, not a themed artifact.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='20/m', method='GET', block=True))
+    def get(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response(
+                {'error': 'No profile linked to this account'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        context = build_profile_card_context(profile)
+        html = render_to_string(PROFILE_CARD_TEMPLATE, context)
+
+        try:
+            from core.services.playwright_renderer import render_png
+            png_bytes = render_png(
+                html,
+                format_type='landscape',
+                theme_key=PROFILE_CARD_THEME,
+                # Renderer default budget: this card's largest share-temp image is a 58px avatar,
+                # so the plat card's 1000px cover budget would base64 far more than any slot shows.
+            )
+        except Exception:
+            logger.exception("[PROFILE-CARD] render failed for profile %s", profile.id)
+            return Response(
+                {'error': 'Failed to render share image'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        safe_name = "".join(
+            c for c in (context['username'] or '') if c.isalnum() or c in (' ', '-', '_')
+        ).strip() or 'hunter'
+
+        response = HttpResponse(png_bytes, content_type='image/png')
+        response['Content-Disposition'] = f'attachment; filename="{safe_name}-profile-card.png"'
         return response
 
 

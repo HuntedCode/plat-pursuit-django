@@ -1,0 +1,39 @@
+{% comment %}The Card tab -- the owner's Profile Card, previewed and downloaded in place.
+
+Owner-only (the view normalizes the slug away for visitors), because the share-card family only
+ever serves your own card. The preview is the REAL 1200x630 artifact scaled to fit with a
+transform (the share modal's rule: one template for preview and PNG, so the two cannot drift), and
+the download is the same three-state CardDownload button every other card uses.
+
+Stacked chrome, free content: an intro card up top, then the artifact itself standing bare.{% endcomment %}
+<div class="pfc" data-pfc>
+    <div class="card bg-base-200 border border-base-300 border-l-4 border-l-primary mb-4 md:mb-5">
+        <div class="card-body p-3 md:p-5">
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="min-w-0 flex-1">
+                    <h2 class="font-display text-base md:text-lg font-bold text-base-content">Your Profile Card</h2>
+                    <p class="text-xs md:text-sm text-base-content/60 mt-0.5">Your whole career on one card: platinums, trophies, badges, and your Pursuer standing. Downloads as a 1200x630 image, sized for link previews and timelines.</p>
+                </div>
+                {% if card_html %}
+                <button type="button" class="pp-cta pp-dl pfc__dl" data-pfc-download
+                        data-url="{{ card_png_url }}" data-filename="{{ card_filename }}">
+                    {% include 'partials/download_button_icons.html' %}
+                    <span data-dl-label>Download</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if card_html %}
+    <div class="pfc__frame" data-pfc-frame>
+        <div class="pfc__scaler" data-pfc-scaler>{{ card_html }}</div>
+    </div>
+    {% else %}
+    <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 md:p-7 text-center">
+            <p class="text-sm text-base-content/60">Your card could not be built just now. Give it a moment and try again.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>

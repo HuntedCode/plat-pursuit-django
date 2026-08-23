@@ -80,12 +80,39 @@ segmented variant filter (All / Platinum / 100%), a quiet toolbar (search, sort,
 | `/shareables/` — a 4-card wayfinder landing | The Plat Cards page itself. Three of the four destinations no longer exist |
 | `/shareables/platinums/` — browse all platinums, every row in one response | Redirects to `/shareables/`. Keeps its URL name: platinum notifications deep-link it with `?et=` |
 | `/shareables/platinum-grid/` — multi-plat collage wizard | Retired. 302 to `/shareables/`; view parked unrouted |
-| `/shareables/profile-card/` — profile card builder | Retired. 302 to `/shareables/`; view parked unrouted |
+| `/shareables/profile-card/` — profile card builder | Retired and later DELETED outright (view, service, renderer, templates, `share-image.js`). Its successor is the Profile Card on the profile page's Card tab (below). The URL still 302s to `/shareables/` |
 | Monthly Recap (surfaced as a wayfinder card) | Unchanged at `/recap/`, with its own subnav entry |
 
 The Game Detail hero also had a "Share Card" button. It was removed so a plat card comes from exactly
 one place — which also dropped `share-image.js`, `shareable-manager.js`, `color-grid-modal.js` and an
 inlined theme blob off the SEO-inbound page.
+
+## The Profile Card (the profile page's Card tab)
+
+The family's third sibling (2026-08): one 1200x630 landscape card whose subject is the **hunter's
+whole career** -- platinum count, per-tier trophy tallies, trophy level / average completion /
+rarest platinum / career XP, the badge collection (newest medallions + held-of-catalog), and the
+Pursuer standing (disciplines ring, level, rank, dominant discipline). It replaces the deleted 2025
+profile card and is built entirely on the new systems.
+
+**Where it lives:** its own **Card tab on the profile page**, owner-only -- not on My Shareables
+(that page is plat-cards-only; every card has its own singular place). The tab's preview is the
+REAL card template rendered server-side with live data and transform-scaled to fit, so preview and
+download cannot drift. The view normalizes `?tab=card` away for visitors on both render paths.
+
+**Endpoint:** `GET /api/v1/shareables/profile/png/` (`ProfileCardPNGView`). No key in the URL: the
+card is built from `request.user.profile`, so ownership is structural. Always renders on the
+`ppSubstrate` ground (the family radial, so the renderer's theme pass is a visual no-op); no theme
+picker in v1.
+
+**Data:** `core/services/profile_card_service.get_card_data(profile)` -- every figure is a Profile
+denorm (`trophy_snapshot`), a materialized read-model (held `UserGroupBadge` rows), or the
+catalog-bounded Career build. The disciplines ring reuses `career_service`'s precomputed
+stroke-dash geometry with hexes attached from `completion_card_service.DISCIPLINE_COLOURS`.
+
+**Pins:** `tests/engine/test_profile_card.py` -- the identity literals shared verbatim with
+`plat_card.html` (same contract as the recap card's pin), the two embedded faces, no `var(--)`,
+ownership on the endpoint and the tab, and graceful degrade when the card build fails.
 
 ## The share modal
 
@@ -179,14 +206,17 @@ art the card already offers.
 | File | Purpose |
 |------|---------|
 | `core/services/completion_card_service.py` | Eligibility, variant, ordinals, and the card payload |
+| `core/services/profile_card_service.py` | The Profile Card payload (whole-career sibling) |
 | `core/services/playwright_renderer.py` | PNG rendering: base64 embedding, font faces, theme CSS, thread isolation |
 | `core/services/share_image_cache.py` | Fetch + cache external images with deterministic filenames |
 | `core/services/share_card_utils.py` | `resolve_temp_path` (all that survives of the old helper set) |
 | `core/services/shareable_data_service.py` | `get_rarity_label` only — the notification pipeline shares it |
-| `api/shareable_views.py` | `PlatCard{HTML,PNG}View` + `LegacyPlatinumCard{HTML,PNG}View` |
+| `api/shareable_views.py` | `PlatCard{HTML,PNG}View` + `ProfileCardPNGView` + `LegacyPlatinumCard{HTML,PNG}View` |
 | `api/recap_views.py` | Recap card endpoints |
-| `trophies/views/shareables_views.py` | `PlatCardsView` (+ the parked `MyProfileCardView`) |
+| `trophies/views/shareables_views.py` | `PlatCardsView` |
 | `templates/shareables/plat_card.html` | **The card.** Landscape 1200x630, both variants |
+| `templates/shareables/profile_card.html` | **The Profile Card.** Landscape 1200x630, one variant |
+| `templates/trophies/partials/profile_detail/tabs/card_tab.html` + `static/js/profile-card-tab.js` + `static/css/components/profile-card-tab.css` | The profile page's Card tab (inline preview + download) |
 | `templates/shareables/plat_cards.html` | The page |
 | `templates/shareables/partials/plat_card_results.html` | Grid partial (HTMX swaps + infinite-scroll pages) |
 | `templates/shareables/partials/share_modal.html` | The modal |

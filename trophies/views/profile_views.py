@@ -496,6 +496,34 @@ class ProfileDetailView(DetailView):
         })
         return context
 
+    def _build_card_tab_context(self, profile):
+        """The owner's Profile Card -- the share-card family's whole-career sibling, previewed inline.
+
+        The preview is the REAL card: the same template the PNG endpoint renders, server-side, with
+        live data -- so what the owner sees is what downloads (the family rule, from the share
+        modal). No ShareImageCache here: this is a real page on the site origin, where every image
+        URL resolves itself, so caching costs land only on the download.
+        """
+        from django.template.loader import render_to_string
+
+        from core.services import profile_card_service
+
+        try:
+            data = profile_card_service.get_card_data(profile)
+            # The inline render needs the same keys the PNG context carries, uncached.
+            data['avatar_image'] = data['user_avatar_url']
+            for m in data['badges']['medallions']:
+                m['layers_cached'] = m['layers']
+            card_html = render_to_string('shareables/profile_card.html', data)
+        except Exception:
+            logger.exception("Profile Card build failed for profile %s", profile.id)
+            card_html = ''
+        return {
+            'card_html': card_html,
+            'card_png_url': reverse('api:profile-card-png'),
+            'card_filename': f"{profile.display_psn_username or profile.psn_username}-profile-card.png",
+        }
+
     def _build_ratings_tab_context(self, profile):
         """What this hunter thinks of what they have played.
 
@@ -566,6 +594,20 @@ class ProfileDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         profile: Profile = self.object
         tab = self.request.GET.get('tab', 'games')
+        # Ownership, resolved early because the Card tab depends on it (edit controls read it too).
+        is_own_profile = (
+            self.request.user.is_authenticated and
+            hasattr(self.request.user, 'profile') and
+            self.request.user.profile == profile
+        )
+        # The Card tab is the owner's own share surface. For anyone else the slug is not a tab at
+        # all, so it normalizes to the default BEFORE the dispatch / template map / chip loop read
+        # it -- half-normalizing is exactly how a visitor would get the card TEMPLATE over the games
+        # CONTEXT. `_resolved_tab` carries the decision to get_template_names, which otherwise
+        # re-reads the raw query string on the HTMX path.
+        if tab == 'card' and not is_own_profile:
+            tab = 'games'
+        self._resolved_tab = tab
         per_page = 50
         page_number = self.request.GET.get('page', 1)
 
@@ -614,6 +656,8 @@ class ProfileDetailView(DetailView):
             tab_context = self._build_ratings_tab_context(profile)
         elif tab == 'lists':
             tab_context = self._build_lists_tab_context(public_lists_qs)
+        elif tab == 'card':
+            tab_context = self._build_card_tab_context(profile)
         else:
             # Default to games tab if invalid tab specified
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -630,21 +674,22 @@ class ProfileDetailView(DetailView):
         # The tabs the switcher renders, in order. Lists is deliberately NOT here: Game Lists is parked
         # and every route into it redirects home, so the tab offered cards whose links bounced the reader
         # to the homepage. Its builder and template stay (hidden, not deleted); only the door is closed.
-        context['profile_tabs'] = (
+        profile_tabs = [
             ('games', 'Games'),
             ('trophies', 'Trophies'),
             ('badges', 'Badges'),
             ('ratings', 'Ratings'),
-        )
+        ]
+        # The Card tab is owner-only: the share-card family only ever serves your OWN card (same
+        # rule as the plat card endpoints), so a visitor is not offered a chip that would 403.
+        if is_own_profile:
+            profile_tabs.append(('card', 'Card'))
+        context['profile_tabs'] = tuple(profile_tabs)
 
         context['tab_template'] = self._TAB_TEMPLATES.get(tab, self._TAB_TEMPLATES['games'])
 
-        # Own profile check (for edit controls)
-        context['is_own_profile'] = (
-            self.request.user.is_authenticated and
-            hasattr(self.request.user, 'profile') and
-            self.request.user.profile == profile
-        )
+        # Own profile check (for edit controls; computed with the tab normalization above)
+        context['is_own_profile'] = is_own_profile
 
         context['seo_description'] = (
             f"{profile.display_psn_username}'s PlayStation trophy profile. "
@@ -663,6 +708,7 @@ class ProfileDetailView(DetailView):
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
         'ratings': 'trophies/partials/profile_detail/tabs/ratings_tab.html',
         'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
+        'card': 'trophies/partials/profile_detail/tabs/card_tab.html',
     }
     _RESULTS_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_results.html',
@@ -692,7 +738,9 @@ class ProfileDetailView(DetailView):
         return self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
     def get_template_names(self):
-        tab = self.request.GET.get('tab', 'games')
+        # The normalized tab from get_context_data (which always runs first on a real request);
+        # falling back to the raw query string keeps the map's own games default as the backstop.
+        tab = getattr(self, '_resolved_tab', self.request.GET.get('tab', 'games'))
 
         # A private profile never answers with a tab body, on ANY path. Returning the full page instead
         # means the request renders profile_detail.html, whose `{% if profile.psn_history_public %}` drops

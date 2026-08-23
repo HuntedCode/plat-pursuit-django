@@ -1,0 +1,32 @@
+/* ==========================================================================================
+   pfc -- the profile page's Card tab (the Profile Card previewed in place).
+
+   The card itself carries every style inline (it is a share-card sibling and renders with no
+   stylesheet); this file only frames it: a fixed-ratio stage the 1200x630 artifact is
+   transform-scaled into by profile-card-tab.js. Height is set by the JS from the live scale,
+   so the frame never reserves more room than the scaled card fills.
+   ========================================================================================== */
+
+.pfc__frame {
+    position: relative;
+    width: 100%;
+    /* Correct height before the JS measures (and if it never runs): the frame keeps the card's
+       ratio, so the pre-JS state is a cropped card at the right size rather than a 630px void. */
+    aspect-ratio: 1200 / 630;
+    max-width: 1200px;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--pp-border);
+    box-shadow: 0 18px 40px rgba(5, 8, 12, 0.45);
+}
+
+.pfc__scaler {
+    width: 1200px;
+    height: 630px;
+    transform-origin: top left;
+}
+
+.pfc__dl {
+    flex-shrink: 0;
+}
