@@ -699,10 +699,11 @@ class SupportStorefrontView(TemplateView):
                 # stars (grandfathered presentation). The None/'Supporter' fallback is a
                 # structural backstop the map-coverage test keeps unreachable.
                 'tier_slug': self._worn_level(r.user.premium_tier),
-                # The service override, name-colour only: a paying staff member's NAME wears
-                # crimson (the site-wide precedence rule) but the stars and the level sub-line
-                # stay their paid level's -- the wall is specifically about who pays. Read from
-                # the denorm: precedence is baked in users/services/marks.py and nowhere else.
+                # The service override: a paying staff member's NAME wears the service colour
+                # and (2026-08-23, his call) the mark slot draws the service GLYPH rather than
+                # the paid level's stars -- a backer star beside the word "Staff" read as the
+                # wrong icon. The sub-line names the role. Read from the denorm: precedence is
+                # baked in users/services/marks.py and nowhere else.
                 'service_colour': (SERVICE_MARKS[r.display_mark]['colour']
                                    if r.display_mark in SERVICE_MARKS else None),
                 'service_label': (SERVICE_MARKS[r.display_mark]['label']

@@ -337,3 +337,29 @@ def test_the_donor_wall_cards_actually_have_edges(client):
     body = client.get(reverse('fundraiser', kwargs={'slug': campaign.slug})).content.decode()
     assert 'sup-prev--credit is-legacy fnd-donor' in body
 
+
+# ------------------------------------------------------------------ marks on the giving walls --
+
+def test_the_donor_wall_wears_marks_statically(client):
+    """Donors wear their mark (2026-08-23): colour via custom prop so :hover still out-ranks
+    identity, glyph run labelled off for AT, and never the flow treatment (a wall of names)."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    wall = (root / 'templates' / 'fundraiser' / 'partials' / 'donor_wall.html').read_text(encoding='utf-8')
+    css = (root / 'static' / 'css' / 'components' / 'fundraiser.css').read_text(encoding='utf-8')
+    page = (root / 'templates' / 'fundraiser' / 'fundraiser.html').read_text(encoding='utf-8')
+
+    assert '--don-c' in wall, 'the donor mark colour is not a custom prop'
+    assert 'style="color:' not in wall, 'an inline color would beat :hover and kill the affordance'
+    assert '_mark_glyphs_inline.html' in wall
+    assert 'aria-hidden="true"' in wall.split('_mark_glyphs_inline')[0].rsplit('<span', 1)[-1]
+    assert '.fnd-donor__link[style*="--don-c"]' in css, 'the identity colour rule is missing'
+
+    # The claim tiles: static marked names (a GRID of names never takes the flow treatment).
+    # Matched as the TAG, not the bare word -- the template's own comment explaining the ban
+    # names it (the trap that has bitten four source-pin tests before this one).
+    assert '{% name_mark' not in page, 'the flow treatment came back to the claim grid'
+    assert page.count('fnd-claim__wearer') == 2, 'both claim tiles carry the static marked name'
+    assert 'fnd-claim__by text-accent' not in page, "the accent caption drowned the mod's amber"
+

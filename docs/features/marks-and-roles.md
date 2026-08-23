@@ -7,7 +7,7 @@ role split, built together 2026-08-22.
 
 | Register | Marks | Source |
 |---|---|---|
-| Service | staff (crimson wrench), mod (green shield) | `CustomUser.role` |
+| Service | staff (crimson wrench), mod (amber shield) | `CustomUser.role` |
 | Giving | the six supporter levels (colour + building stars), legacy tiers via `LEGACY_TIER_LEVEL_MAP` | `premium_tier` + premium state |
 | Earned | trophy metals, badges, ranks | untouched -- marks never borrow from it |
 
@@ -45,10 +45,13 @@ Applied on: leaderboard rows, Browse Hunters cards, the profile header (`size='l
 Career hero (`size='lg'`), the Pursuer Card name line, game-detail quick takes (the JS
 live-prepend twin builds the same `.pp-markname > .pp-supname` structure), and inline on the
 three Playwright share templates via `components/_mark_glyphs_inline.html` (recap card, plat
-card, platinum grid -- explicit hex, no stylesheet). The Credits wall keeps its own card but
-takes the service override on the NAME + sub-line only (`--svc-t`, read from the denorm): a
-paying staff member's name is crimson while the stars stay their paid level -- the wall is about
-who pays.
+card, platinum grid -- explicit hex, no stylesheet). The Credits wall keeps its own card and
+takes the FULL service override (`--svc-t` + `service_key`, read from the denorm): a paying
+staff member's name is crimson, the sub-line names the role, and the mark slot draws the
+service GLYPH (wrench/shield) rather than the paid level's stars -- reversed 2026-08-23 (a
+backer star beside the word "Staff" read as the wrong icon). The fundraiser's donor wall and
+claimed-badge tiles wear marks too, STATICALLY (colour + glyph run, never the flow -- they are
+grids of names).
 
 Register/state rules (supporter.css): service names hold STILL (the flow is the bought
 register's signature); the Pursuer Card name is still + 800 weight (the earned rank line keeps

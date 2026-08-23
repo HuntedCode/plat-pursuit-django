@@ -1108,7 +1108,8 @@
 
 /* The service override on the wall: staff/mod NAMES wear their service colour while the stars
    and level sub-line stay the paid level's -- the wall is about who pays, the name about who
-   they are. --svc-t is set per card by the view when the payer holds a service role. */
+   they are; the mark slot draws their service glyph (wrench/shield) rather than the paid
+   level's stars (2026-08-23). --svc-t is set per card by the view for service roles. */
 .sup-prev--credit[style*="--svc-t"] .sup-prev__cname,
 .sup-prev--credit[style*="--svc-t"] .sup-prev__sub { color: var(--svc-t); }
 

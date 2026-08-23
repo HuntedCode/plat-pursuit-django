@@ -324,7 +324,7 @@ LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 # supporters do -- name in the mark's colour plus a glyph -- but from a THIRD register. Giving is
 # stars on the cool ramp; earning is the trophy metals; SERVICE is these two: the wrench for the
 # people who build the site (crimson -- no other surface uses a red) and the shield for the
-# people who guard it (spring green, pushed yellow-ward so it can never blur with Backer's teal
+# people who guard it (amber (2026-08-23: was a spring green that sat beside backer teal at glyph size) so it can never blur with Backer's teal
 # at 11px). PRECEDENCE: staff > mod > supporter level -- one mark per name, the highest wins.
 # The colour-distance test covers these against the whole giving ramp.
 SERVICE_MARKS = {

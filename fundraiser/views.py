@@ -17,6 +17,8 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.generic import TemplateView
 
+from users.services.marks import mark_style
+
 from trophies.mixins import StaffRequiredMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
@@ -143,7 +145,6 @@ class FundraiserView(TemplateView):
                       .order_by('-claimed_at')):
             profile_claims[claim.profile_id].append(claim)
 
-        from users.services.marks import mark_style
         context['donors'] = [
             {
                 'profile': profiles_by_id.get(d['profile_id']),
@@ -178,6 +179,9 @@ class FundraiserView(TemplateView):
             from trophies.services.badge_detail_service import group_medallion_layers
 
             for claim in all_claims:
+                # The wearer's mark, resolved once per claim (bounded list). Static rendering on
+                # the tiles -- see the template note; the flow treatment is banned on grids.
+                claim.mark = mark_style(claim.profile.display_mark) if claim.profile else None
                 # Medallion composition lives on GroupBadge (the backdrop and shape come from the
                 # PlatformGroup), so a series resolves one edition to draw itself.
                 #

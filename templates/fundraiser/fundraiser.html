@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static mark_tags %}
+{% load static %}
 
 {% block title %}{{ fundraiser.name }}{% endblock %}
 
@@ -383,8 +383,13 @@
                                     {% endif %}
                                 </figure>
                                 <span class="fnd-claim__name">{{ claim.series_name }}</span>
+                                {% comment %} STATIC marked name, the credits wall's treatment,
+                                not name_mark: this is a GRID of names, and a grid of phase-locked
+                                flowing names is the pulsing wall that treatment is banned from.
+                                The caption also drops text-accent -- the mod's amber mark sat
+                                invisible inside an accent-coloured caption. {% endcomment %}
                                 {% if claim.profile %}
-                                    <span class="fnd-claim__by text-accent">Funded by {% name_mark name=claim.profile.display_psn_username mark=claim.profile.display_mark %}</span>
+                                    <span class="fnd-claim__by">Funded by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
                                 {% endif %}
                             </a>
                         {% endfor %}
@@ -408,7 +413,7 @@
                                 </div>
                                 <span class="fnd-claim__name">{{ claim.series_name }}</span>
                                 {% if claim.profile %}
-                                    <span class="fnd-claim__by">Claimed by {% name_mark name=claim.profile.display_psn_username mark=claim.profile.display_mark %}</span>
+                                    <span class="fnd-claim__by">Claimed by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
                                 {% endif %}
                                 <span class="fnd-chip__state{% if claim.status == 'in_progress' %} text-warning{% endif %}">{{ claim.get_status_display }}</span>
                             </a>

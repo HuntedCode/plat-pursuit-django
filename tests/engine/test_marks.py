@@ -190,8 +190,11 @@ def test_mark_style_answers_every_key():
 
 
 def test_service_colours_keep_their_distance_from_the_giving_ramp():
-    """Crimson and spring green must never blur with a ladder hue at 11px -- the same measured
-    standard the ramp itself is held to."""
+    """Crimson and amber must never blur with a ladder hue at 11px -- the same measured
+    standard the ramp itself is held to. (Amber replaced the mod's spring green 2026-08-23:
+    it sat beside backer teal at glyph size, the exact blur this test exists to forbid --
+    but only checked service-vs-ladder, so the pair slipped through. The service-vs-service
+    check below closes that hole, and pins staff/mod apart from each other too.)"""
     def hls(hex_value):
         r, g, b = (int(hex_value.lstrip('#')[i:i + 2], 16) / 255 for i in (0, 2, 4))
         h, l, _ = colorsys.rgb_to_hls(r, g, b)
@@ -204,6 +207,18 @@ def test_service_colours_keep_their_distance_from_the_giving_ramp():
             hue_gap = min(abs(mh - th), 360 - abs(mh - th))
             assert hue_gap > 25 or abs(ml - tl) > 0.12, (
                 f"{key} sits too close to {tier['slug']} ({hue_gap:.0f} deg apart)"
+            )
+
+    # And the service marks apart from EACH OTHER: staff crimson vs mod amber measures ~25.5deg
+    # on this yardstick -- passing, but with half a degree to spare, so the pin matters.
+    keys = list(SERVICE_MARKS)
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            ah, al = hls(SERVICE_MARKS[a]['colour'])
+            bh, bl = hls(SERVICE_MARKS[b]['colour'])
+            hue_gap = min(abs(ah - bh), 360 - abs(ah - bh))
+            assert hue_gap > 25 or abs(al - bl) > 0.12, (
+                f"{a} sits too close to {b} ({hue_gap:.0f} deg apart)"
             )
 
 

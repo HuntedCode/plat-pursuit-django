@@ -380,7 +380,13 @@
 .fnd-donor__row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
 .fnd-donor__link { font-weight: 700; color: var(--pp-text); }
+/* Identity via custom prop, not an inline color: STATE OUT-RANKS IDENTITY (supporter.css's own
+   rule) -- an inline color would beat :hover and kill the affordance for marked donors only. */
+.fnd-donor__link[style*="--don-c"] { color: var(--don-c); }
 .fnd-donor__link:hover { color: var(--pp-primary); }
+
+.fnd-donor__glyphs,
+.fnd-claim__glyphs { display: inline-flex; vertical-align: middle; margin-left: 4px; }
 
 .fnd-donor__crown { display: inline-flex; color: var(--pp-warning); flex: none; }
 .fnd-donor__crown svg { width: 13px; height: 13px; }
