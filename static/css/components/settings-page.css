@@ -131,58 +131,16 @@
 .stg-pw { display: grid; gap: 10px; }
 @media (min-width: 768px) { .stg-pw { grid-template-columns: repeat(3, 1fr); } }
 
-/* ---- buttons (the family CTA recipe: tinted wash, 45% border, glow hover) ----------------- */
-.stg-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 0.45rem 1rem;
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--pp-text);
-    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
-    border-radius: var(--pp-radius-sm);
-    transition: box-shadow 0.15s ease;
-}
-
-.stg-btn:hover:not(:disabled) { box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
-
-.stg-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    box-shadow: none;
-}
-
-.stg-btn--ghost {
-    color: var(--pp-text-dim);
-    background: transparent;
-    border-color: var(--pp-border);
-}
-
-.stg-btn--ghost:hover:not(:disabled) {
-    color: var(--pp-text);
-    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 20%, transparent);
-}
-
-.stg-btn--danger {
-    color: var(--pp-error);
-    background: transparent;
-    border-color: color-mix(in oklab, var(--pp-error) 45%, var(--pp-border));
-}
-
-.stg-btn--danger:hover:not(:disabled) { box-shadow: 0 0 10px color-mix(in oklab, var(--pp-error) 25%, transparent); }
+/* ---- buttons: the shared .pp-cta primitive (components/cta.css) -- settings uses it
+   directly rather than minting a fifth hand-rolled family. Only the dialog action pair
+   below stays page-owned (it is the confirm-dialog language, aligned to .supm-cancel__*). */
 
 @media (prefers-reduced-motion: no-preference) {
-    .stg-btn:active:not(:disabled),
     .stg-confirm__keep:active,
     .stg-confirm__go:active:not(:disabled) { transform: translateY(1px); }
 }
 
 /* ---- focus (the house ring, on everything interactive) ------------------------------------ */
-.stg-btn:focus-visible,
 .stg-confirm__keep:focus-visible,
 .stg-confirm__go:focus-visible,
 .stg-select:focus-visible,

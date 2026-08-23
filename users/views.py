@@ -117,11 +117,12 @@ class SettingsView(LoginRequiredMixin, View):
         billing relationship -- the processor keeps charging and the webhooks dead-end on
         CustomUser.DoesNotExist with no site-side cancel path left.
 
-        Residual window, accepted and documented: a checkout approved seconds ago whose
+        Residual window, now CLOSED downstream: a checkout approved seconds ago whose
         activation webhook has not landed is invisible to every site-side signal (both
-        processors write our identifiers only from the webhook). Closing it fully means
-        teaching the activation webhooks to cancel at the processor when the user is gone --
-        an email/payments-lane follow-up, recorded in the deploy checklist's known list.
+        processors write our identifiers only from the webhook) -- but the activation
+        webhooks now SELF-HEAL that case, cancelling at the processor when they resolve to
+        no user (see _self_heal_orphaned_stripe_sub and the PayPal ACTIVATED branch; both
+        behind PAYMENT_SELF_HEAL_ENABLED, backstopped by the weekly audit's orphan sweep).
         """
         if membership.state in ('active', 'past_due'):
             return True

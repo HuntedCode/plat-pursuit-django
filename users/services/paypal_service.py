@@ -286,8 +286,42 @@ class PayPalService:
                         # Set PayPal fields on the user object without saving yet.
                         # activate_subscription() will save all fields atomically.
                         user.paypal_subscription_id = subscription_id
-                    except (CustomUser.DoesNotExist, ValueError):
-                        logger.warning(f"No user found with custom_id {custom_id} for PayPal sub {subscription_id}")
+                    except ValueError:
+                        # An unparseable custom_id is a malformed/foreign event, NOT a proof the
+                        # subscription is ours-but-orphaned -- never cancel on it.
+                        logger.warning(f"Unparseable custom_id {custom_id!r} for PayPal sub {subscription_id}")
+                        return
+                    except CustomUser.DoesNotExist:
+                        # SELF-HEAL: custom_id is OUR user-id stamp, written at plan creation --
+                        # a valid id with no row means the account died between checkout approval
+                        # and this webhook (the deletion race). Left alone the subscription bills
+                        # forever with no site-side cancel path, so cancel it at PayPal now.
+                        # Behind the same default-off flag as the Stripe heal, and NEVER silent:
+                        # cancel_subscription returns False on a non-204 and requests can raise.
+                        from django.conf import settings as dj_settings
+                        if not getattr(dj_settings, 'PAYMENT_SELF_HEAL_ENABLED', False):
+                            logger.error(
+                                f"Self-heal disabled: PayPal sub {subscription_id} activated for "
+                                f"deleted user {custom_id}; cancel it BY HAND (no PayPal arm in "
+                                f"the audit sweep)")
+                            return
+                        logger.error(
+                            f"SELF-HEAL: PayPal sub {subscription_id} activated for deleted user "
+                            f"{custom_id}; cancelling at the processor")
+                        try:
+                            cancelled = PayPalService.cancel_subscription(
+                                subscription_id,
+                                reason='Account deleted before activation webhook landed',
+                            )
+                        except Exception:
+                            logger.exception(
+                                f"SELF-HEAL FAILED (exception) for PayPal sub {subscription_id}; "
+                                f"cancel it BY HAND in the PayPal dashboard")
+                            return
+                        if not cancelled:
+                            logger.error(
+                                f"SELF-HEAL FAILED (non-204) for PayPal sub {subscription_id}; "
+                                f"cancel it BY HAND in the PayPal dashboard")
                         return
                 else:
                     logger.warning(f"No user found for PayPal subscription {subscription_id}")

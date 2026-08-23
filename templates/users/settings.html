@@ -52,7 +52,7 @@
                             <option value="{{ tz }}"{% if tz == user.user_timezone %} selected{% endif %}>{{ tz }}</option>
                             {% endfor %}
                         </select>
-                        <button type="button" class="stg-btn stg-btn--ghost" data-tz-detect>Detect</button>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-tz-detect>Detect</button>
                     </div>
                     <p class="stg-field__hint" id="stg-tz-hint" data-tz-hint role="status" hidden></p>
                 </div>
@@ -64,7 +64,7 @@
                     </span>
                 </label>
                 <div class="stg-form__foot">
-                    <button type="submit" class="stg-btn">Save regional settings</button>
+                    <button type="submit" class="pp-cta">Save regional settings</button>
                 </div>
             </form>
         </div>
@@ -106,7 +106,7 @@
                 </label>
                 <p class="stg-form__note">Saving recalculates your totals, so the change lands everywhere at once.</p>
                 <div class="stg-form__foot">
-                    <button type="submit" class="stg-btn">Save library settings</button>
+                    <button type="submit" class="pp-cta">Save library settings</button>
                 </div>
             </form>
 
@@ -115,7 +115,7 @@
                     <span class="stg-danger__name">Unlink this PSN account</span>
                     <span class="stg-danger__sub">Your trophy data stays on the profile and relinking later picks it back up.</span>
                 </div>
-                <button type="button" class="stg-btn stg-btn--danger" data-unlink-open>Unlink</button>
+                <button type="button" class="pp-cta pp-cta--danger" data-unlink-open>Unlink</button>
             </div>
         </div>
     </section>
@@ -127,7 +127,7 @@
                 <p class="stg-sec__sub">No PSN account linked yet. Linking one is where the pursuit starts.</p>
             </div>
             <div class="stg-form__foot">
-                <a href="{% url 'link_psn' %}" class="stg-btn">Link your PSN account</a>
+                <a href="{% url 'link_psn' %}" class="pp-cta">Link your PSN account</a>
             </div>
         </div>
     </section>
@@ -146,7 +146,7 @@
                     <span class="stg-row__name">Email</span>
                     <span class="stg-row__sub">{{ user.email }}</span>
                 </div>
-                <a href="{% url 'account_email' %}" class="stg-btn stg-btn--ghost">Manage email addresses</a>
+                <a href="{% url 'account_email' %}" class="pp-cta pp-cta--ghost">Manage email addresses</a>
             </div>
 
             <form method="post" class="stg-form" novalidate>
@@ -174,7 +174,7 @@
                     </div>
                 </div>
                 <div class="stg-form__foot">
-                    <button type="submit" class="stg-btn">Change password</button>
+                    <button type="submit" class="pp-cta">Change password</button>
                 </div>
             </form>
 
@@ -188,9 +188,9 @@
                     {% endif %}
                 </div>
                 {% if deletion_blocked %}
-                <a href="{% url 'subscription_management' %}" class="stg-btn stg-btn--ghost">Manage membership</a>
+                <a href="{% url 'subscription_management' %}" class="pp-cta pp-cta--ghost">Manage membership</a>
                 {% else %}
-                <button type="button" class="stg-btn stg-btn--danger" data-delete-open>Delete account</button>
+                <button type="button" class="pp-cta pp-cta--danger" data-delete-open>Delete account</button>
                 {% endif %}
             </div>
         </div>
@@ -212,9 +212,9 @@
             </div>
             <div class="stg-form__foot">
                 {% if is_member %}
-                <a href="{% url 'subscription_management' %}" class="stg-btn">Manage membership</a>
+                <a href="{% url 'subscription_management' %}" class="pp-cta">Manage membership</a>
                 {% else %}
-                <a href="{% url 'support_hub' %}" class="stg-btn stg-btn--ghost">See the support page</a>
+                <a href="{% url 'support_hub' %}" class="pp-cta pp-cta--ghost">See the support page</a>
                 {% endif %}
             </div>
         </div>
@@ -243,7 +243,7 @@
                     <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" required>
                     <span>Yes, permanently delete my account</span>
                 </label>
-                <button type="submit" class="stg-btn stg-btn--danger">Delete my account</button>
+                <button type="submit" class="pp-cta pp-cta--danger">Delete my account</button>
             </form>
         </div>
     </noscript>
@@ -261,7 +261,7 @@
                     <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" required>
                     <span>Yes, unlink this PSN account</span>
                 </label>
-                <button type="submit" class="stg-btn stg-btn--danger">Unlink</button>
+                <button type="submit" class="pp-cta pp-cta--danger">Unlink</button>
             </form>
         </div>
     </noscript>

@@ -1,0 +1,70 @@
+/* ==========================================================================================
+   pp-cta -- THE shared CTA button primitive (extracted 2026-08).
+
+   Settings was about to become the FIFTH hand-rolled CTA family (.fnd-cta, .supm-actions__*,
+   .supm-cancel__*, .supm-inset__cta, .stg-btn), all riffing one recipe: tinted wash + 45%
+   border on the accent, glow on hover, never a solid fill. This file IS that recipe, once.
+
+   Accent: set --cta-c on the button or any ancestor (defaults to --pp-primary). New pages use
+   pp-cta directly; the four older families keep their classes and migrate opportunistically
+   when their pages are next touched -- do NOT restyle shipped Support pages just to rename
+   classes.
+   ========================================================================================== */
+
+.pp-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0.45rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--cta-c, var(--pp-primary)) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--cta-c, var(--pp-primary)) 45%, transparent);
+    border-radius: var(--pp-radius-sm);
+    transition: box-shadow 0.15s ease;
+    cursor: pointer;
+}
+
+.pp-cta:hover:not(:disabled) {
+    box-shadow: 0 0 14px color-mix(in oklab, var(--cta-c, var(--pp-primary)) 30%, transparent);
+}
+
+.pp-cta:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.pp-cta:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+.pp-cta--ghost {
+    color: var(--pp-text-dim);
+    background: transparent;
+    border-color: var(--pp-border);
+}
+
+.pp-cta--ghost:hover:not(:disabled) {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--cta-c, var(--pp-primary)) 45%, var(--pp-border));
+    box-shadow: 0 0 10px color-mix(in oklab, var(--cta-c, var(--pp-primary)) 20%, transparent);
+}
+
+.pp-cta--danger {
+    --cta-c: var(--pp-error);
+    color: var(--cta-c);
+    background: transparent;
+    border-color: color-mix(in oklab, var(--cta-c) 45%, var(--pp-border));
+}
+
+.pp-cta--danger:hover:not(:disabled) {
+    box-shadow: 0 0 10px color-mix(in oklab, var(--cta-c) 25%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .pp-cta:active:not(:disabled) { transform: translateY(1px); }
+}

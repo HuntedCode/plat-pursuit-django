@@ -40,6 +40,7 @@ authoritative doc for the full spec. The four docs by role: **this playbook** (p
 | Primitive | What | Code | Full spec |
 |---|---|---|---|
 | `.pp-switch` / `__chip` / `__lbl` | Segmented view/tab switcher — the ONE treatment | `components/switcher.css` | design-system (Tab Group) |
+| `.pp-cta` (+ `--ghost` / `--danger`) | THE CTA button: tinted wash + 45% border on `--cta-c` (default primary), glow hover, never a solid fill. Extracted 2026-08 when Settings was about to mint the FIFTH hand-rolled family (`.fnd-cta`, `.supm-actions__*`, `.supm-cancel__*`, `.supm-inset__cta` migrate opportunistically — don't restyle shipped pages just to rename) | `components/cta.css` | this row |
 | `.pgl` (+ `.pgl--static`) | Progression ladder (tier/rank stepper); `--pgl-accent` / per-rung `--rung-c` | `components/elements.css` | design-system (Progression ladder) |
 | Medallion `.pp-med` | The badge object (size via `--sz`) | `components/badge_medallion.html` | playbook (Shared components) |
 | Horizon `.pp-horizon` (+ `--segmented`) | Progress bar / discrete meter | `components/horizon.css` | playbook (Shared components) |

@@ -297,5 +297,6 @@ def test_the_built_bundle_carries_the_settings_family():
     read the BUILT bundle, not the source file."""
     built = (ROOT / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
 
-    for selector in ('.stg-sec', '.stg-confirm__go', '.stg-delete__warn'):
+    for selector in ('.stg-sec', '.stg-confirm__go', '.stg-delete__warn',
+                     '.pp-cta', '.pp-cta--danger'):
         assert selector in built, f'{selector} missing from the built bundle'

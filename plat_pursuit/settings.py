@@ -458,6 +458,17 @@ MONTHLY_RECAP_SEND_ENABLED = os.getenv('MONTHLY_RECAP_SEND_ENABLED', 'False') ==
 # still send. Same fail-safe pattern as the recap flag above; pause the Render cron too.
 WEEKLY_DIGEST_SEND_ENABLED = os.getenv('WEEKLY_DIGEST_SEND_ENABLED', 'False') == 'True'
 
+# Where the weekly subscription-audit cron mails its run report (an OPERATOR email, outside the
+# email parking -- that covered user-facing sends). Empty = no email, which keeps dev runs quiet.
+# NOTE: IS_BETA forces the dummy email backend, so a beta run with this set still sends nothing.
+AUDIT_REPORT_EMAIL = os.getenv('AUDIT_REPORT_EMAIL', '')
+
+# The webhook self-heal (cancel an orphaned subscription at the processor when its activation
+# resolves to a deleted user) is DEFAULT OFF, house pattern for side-effecting background
+# behaviour: any environment receiving real webhooks against an incomplete users table (a
+# staging clone, a restored DB) must not be able to cancel real subscriptions. Prod enables.
+PAYMENT_SELF_HEAL_ENABLED = os.getenv('PAYMENT_SELF_HEAL_ENABLED', 'False') == 'True'
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

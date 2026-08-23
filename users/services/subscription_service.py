@@ -1305,3 +1305,64 @@ class SubscriptionService:
                 logger.info(f"Updated subscription for user {user.email} from webhook {event_type}")
             except CustomUser.DoesNotExist:
                 logger.warning(f"No user found with stripe_customer_id {customer_id}")
+                SubscriptionService._self_heal_orphaned_stripe_sub(event_type, event_data, customer_id)
+
+    @staticmethod
+    def _self_heal_orphaned_stripe_sub(event_type: str, event_data: dict, customer_id: str) -> None:
+        """Cancel a LIVE subscription whose user no longer exists (the account-deletion race:
+        checkout approved seconds before deletion, activation webhook landed after). Left alone
+        it would bill forever with no site-side cancel path.
+
+        Deliberately narrow -- every guard here is protecting a PAYING member from a wrongful
+        cancellation, and the whole thing sits behind a default-off flag (house pattern for
+        side-effecting background behaviour; a staging clone receiving real webhooks against an
+        incomplete users table must not cancel real subscriptions):
+        - Only subscription lifecycle events, whose payload IS the subscription (id + status).
+          checkout.session.completed is skipped: its subscription.created follows and heals.
+        - Only when the event's own status is non-terminal (nothing to cancel otherwise, and
+          cancelling a canceled sub raises). `incomplete` is deliberately absent: that is the
+          status a brand-new checkout occupies during SCA, it self-expires in 23 hours, and
+          cancelling it buys nothing.
+        - POSITIVE evidence only: the local Customer row must EXIST with subscriber NULL. Our
+          checkout creates the row synchronously with subscriber set, and account deletion
+          SET_NULLs it -- so exists-with-null is the deletion race's exact fingerprint. A row
+          with a subscriber is the duplicate-customer [MISMATCH] the audit repoints (a PAYING
+          member), and a MISSING row is a customer we know nothing about (dashboard-created,
+          imported, a mirror gap) -- absence of knowledge is not proof of orphanhood, so both
+          cases log and leave it to the weekly sweep.
+        The initial invoice is already paid in this race, so the log line carries
+        latest_invoice for a by-hand refund. The weekly audit's orphan sweep backstops any
+        failure here.
+        """
+        if not getattr(settings, 'PAYMENT_SELF_HEAL_ENABLED', False):
+            logger.warning(
+                f"Self-heal disabled: sub {event_data.get('id')} under unknown customer "
+                f"{customer_id} left for the weekly audit's orphan sweep")
+            return
+        if event_type not in ('customer.subscription.created', 'customer.subscription.updated'):
+            return
+        sub_id = event_data.get('id')
+        status = event_data.get('status')
+        if not sub_id or status not in ('active', 'trialing', 'past_due', 'unpaid'):
+            return
+        known = Customer.objects.filter(id=customer_id).values_list('subscriber_id', flat=True).first()
+        if known is None and not Customer.objects.filter(id=customer_id).exists():
+            logger.error(
+                f"Sub {sub_id} under customer {customer_id} which the mirror does not know at "
+                f"all; NOT cancelling (no positive orphan evidence) -- weekly sweep will list it")
+            return
+        if known is not None:
+            logger.warning(
+                f"Sub {sub_id} under unknown customer {customer_id} has a djstripe subscriber; "
+                f"leaving it for the audit's repoint (duplicate-customer case, NOT an orphan)")
+            return
+        try:
+            stripe.Subscription.cancel(sub_id)
+            logger.error(
+                f"SELF-HEAL: cancelled orphaned Stripe sub {sub_id} (customer {customer_id}, "
+                f"status {status}, latest_invoice {event_data.get('latest_invoice')}) -- its "
+                f"user no longer exists (account-deletion race); refund the invoice by hand")
+        except Exception:
+            logger.exception(
+                f"SELF-HEAL FAILED for orphaned Stripe sub {sub_id}; the weekly audit's orphan "
+                f"sweep will surface it for a hand-cancel")

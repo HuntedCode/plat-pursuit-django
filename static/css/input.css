@@ -50,6 +50,7 @@
 @import "./components/support-manage.css";
 @import "./components/support-welcome.css";
 @import "./components/fundraiser.css";
+@import "./components/cta.css";
 @import "./components/settings-page.css";
 @plugin "daisyui";
 

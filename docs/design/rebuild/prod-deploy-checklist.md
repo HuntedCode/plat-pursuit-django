@@ -751,7 +751,7 @@ membership welcome still send. At deploy:
 - `/users/email-preferences/` now 302s to Settings (tokened links in old email footers land
   there); no action needed, listed so nobody hunts for the missing page.
 
-### Account deletion webhook follow-up (2026-08-22, known gap)
+### Account deletion webhook follow-up (2026-08-22) -- SUPERSEDED, see the self-heal entry below
 
 Deletion's cancel-first guard blocks every site-visible payment state (membership_status,
 has_active_subscription, a PayPal id with no scheduled end, any non-terminal Stripe sub in the
@@ -761,3 +761,21 @@ webhook). The complete fix is a payments-lane follow-up for the email/notificati
 era: when an activation webhook resolves to no user (CustomUser.DoesNotExist), CANCEL the
 subscription at the processor instead of only logging. Until then the orphan keeps billing
 with no site-side cancel path; the webhook handlers already no-op safely (test-pinned).
+
+### Subscription-audit report email + webhook self-heal (2026-08-22) -- CLOSES the deletion race
+
+The "account deletion webhook follow-up" above is now BUILT, plus the weekly report email:
+
+- **Set `AUDIT_REPORT_EMAIL` on the CRON SERVICE's environment** (his address) -- on Render a
+  cron job is its own service, so the web service's env does not reach it; use the cron's env
+  or a shared env group. **Set `PAYMENT_SELF_HEAL_ENABLED=True` there AND on the web service**
+  (the webhooks run on web) -- it is default-off so staging clones can never cancel real subs. The weekly audit cron
+  then mails its full run report after every run, topline counts in the subject -- no more
+  remembering to check the logs. Empty/unset = no email (dev default).
+- The audit also sweeps for ORPHANED subscriptions (live Stripe sub, no user row, no djstripe
+  subscriber) and lists them loudly; report-only, cancel by hand in the dashboard.
+- The activation webhooks now SELF-HEAL the deletion race: a Stripe subscription event for a
+  customer with no user AND no djstripe subscriber (the subscriber check protects the
+  duplicate-customer [MISMATCH] case from wrongful cancellation) cancels the sub at Stripe;
+  a PayPal ACTIVATED whose valid custom_id resolves to no user cancels at PayPal. Both log
+  loudly as SELF-HEAL; the audit sweep backstops any failure.

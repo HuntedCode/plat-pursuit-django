@@ -13,7 +13,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
 | 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs the badge chain: `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `audit_badge_coverage` |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
-| Weekly (any quiet hour) | `djstripe_sync_models Subscription` then `audit_subscription_status --fix` | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no emails |
+| Weekly (any quiet hour) | `djstripe_sync_models Subscription` then `audit_subscription_status --fix` | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no USER emails. Also sweeps for ORPHANED subscriptions (live sub, no user -- the account-deletion race; report-only, cancel by hand) and mails the full run report to `AUDIT_REPORT_EMAIL` (operator email, topline counts in the subject; empty setting = no email, `--no-email` skips) |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
