@@ -10,9 +10,10 @@
     {% comment %} The page drops the breadcrumb partial (the site's only messages renderer), so
     Django messages need a home of their own: every save on this page answers through one. {% endcomment %}
     {% if messages %}
-    <div class="stg-msgs" role="status">
+    <div>
         {% for message in messages %}
-        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
+        <div role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}"
+             class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
             {{ message }}
         </div>
         {% endfor %}
@@ -25,6 +26,11 @@
             <p class="stg__eyebrow">Account &middot; Settings</p>
             <h1 class="stg__h1">Settings.</h1>
             <p class="stg__lede">How PlatPursuit fits you: your timezone, your library, your account.</p>
+            <p class="stg__facts">
+                {% if profile %}<span>{{ profile.display_psn_username|default:profile.psn_username }}</span><span aria-hidden="true">&middot;</span>{% endif %}
+                <span>{{ user.user_timezone }}</span>
+                {% if is_member %}<span aria-hidden="true">&middot;</span><span>PlatPursuit {{ level.name }}</span>{% endif %}
+            </p>
         </div>
     </section>
 
@@ -41,14 +47,14 @@
                 <div class="stg-field">
                     <label class="stg-field__label" for="stg-tz">Timezone</label>
                     <div class="stg-field__row">
-                        <select id="stg-tz" name="user_timezone" class="stg-select" autocomplete="off">
+                        <select id="stg-tz" name="user_timezone" class="stg-select" autocomplete="off" aria-describedby="stg-tz-hint">
                             {% for tz in timezones %}
                             <option value="{{ tz }}"{% if tz == user.user_timezone %} selected{% endif %}>{{ tz }}</option>
                             {% endfor %}
                         </select>
                         <button type="button" class="stg-btn stg-btn--ghost" data-tz-detect>Detect</button>
                     </div>
-                    <p class="stg-field__hint" data-tz-hint hidden></p>
+                    <p class="stg-field__hint" id="stg-tz-hint" data-tz-hint role="status" hidden></p>
                 </div>
                 <label class="stg-toggle">
                     <input type="checkbox" name="use_24hr_clock" class="checkbox checkbox-primary checkbox-sm"{% if user.use_24hr_clock %} checked{% endif %}>
@@ -114,10 +120,10 @@
         </div>
     </section>
     {% else %}
-    <section aria-label="Link your PSN account" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+    <section aria-labelledby="stg-library-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
         <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
             <div class="stg-sec__head">
-                <h2 class="stg-sec__h">Library</h2>
+                <h2 class="stg-sec__h" id="stg-library-h">Library</h2>
                 <p class="stg-sec__sub">No PSN account linked yet. Linking one is where the pursuit starts.</p>
             </div>
             <div class="stg-form__foot">
@@ -153,18 +159,18 @@
                 <div class="stg-pw">
                     <div class="stg-field">
                         <label class="stg-field__label" for="id_old_password">Current password</label>
-                        <input type="password" id="id_old_password" name="old_password" class="stg-input" autocomplete="current-password" required>
-                        {% if password_form.old_password.errors %}<p class="stg-field__error" role="alert">{{ password_form.old_password.errors.0 }}</p>{% endif %}
+                        <input type="password" id="id_old_password" name="old_password" class="stg-input" autocomplete="current-password" required{% if password_form.old_password.errors %} aria-invalid="true" aria-describedby="old-password-error"{% endif %}>
+                        {% if password_form.old_password.errors %}<p class="stg-field__error" id="old-password-error" role="alert">{{ password_form.old_password.errors.0 }}</p>{% endif %}
                     </div>
                     <div class="stg-field">
                         <label class="stg-field__label" for="id_new_password1">New password</label>
-                        <input type="password" id="id_new_password1" name="new_password1" class="stg-input" autocomplete="new-password" required>
-                        {% if password_form.new_password1.errors %}<p class="stg-field__error" role="alert">{{ password_form.new_password1.errors.0 }}</p>{% endif %}
+                        <input type="password" id="id_new_password1" name="new_password1" class="stg-input" autocomplete="new-password" required{% if password_form.new_password1.errors %} aria-invalid="true" aria-describedby="new-password1-error"{% endif %}>
+                        {% if password_form.new_password1.errors %}<p class="stg-field__error" id="new-password1-error" role="alert">{{ password_form.new_password1.errors.0 }}</p>{% endif %}
                     </div>
                     <div class="stg-field">
                         <label class="stg-field__label" for="id_new_password2">Confirm new password</label>
-                        <input type="password" id="id_new_password2" name="new_password2" class="stg-input" autocomplete="new-password" required>
-                        {% if password_form.new_password2.errors %}<p class="stg-field__error" role="alert">{{ password_form.new_password2.errors.0 }}</p>{% endif %}
+                        <input type="password" id="id_new_password2" name="new_password2" class="stg-input" autocomplete="new-password" required{% if password_form.new_password2.errors %} aria-invalid="true" aria-describedby="new-password2-error"{% endif %}>
+                        {% if password_form.new_password2.errors %}<p class="stg-field__error" id="new-password2-error" role="alert">{{ password_form.new_password2.errors.0 }}</p>{% endif %}
                     </div>
                 </div>
                 <div class="stg-form__foot">
@@ -191,7 +197,7 @@
     </section>
 
     {% comment %} ============================================== membership ================ {% endcomment %}
-    <section aria-labelledby="stg-membership-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive"{% if is_member %} style="--sup-t: {{ level.colour }}"{% endif %}>
+    <section aria-labelledby="stg-membership-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral stg-membership pp-arrive"{% if is_member %} style="--sup-t: {{ level.colour }}"{% endif %}>
         <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
             <div class="stg-sec__head">
                 <h2 class="stg-sec__h" id="stg-membership-h">Membership</h2>
@@ -213,6 +219,53 @@
             </div>
         </div>
     </section>
+
+    {% comment %} No-JS fallbacks for the two confirm dialogs, INSIDE the reading column so
+    they align with everything above. Without JS the dialog openers are inert, so these render
+    as static two-steps: the required checkbox is the confirm, and for deletion the password
+    field stays the real gate. {% endcomment %}
+    {% if not deletion_blocked %}
+    <noscript>
+        <div class="stg-danger stg-danger--noscript">
+            <div class="stg-danger__say">
+                <span class="stg-danger__name">Delete your account?</span>
+                <span class="stg-danger__sub">
+                    Permanent. Your PSN profile and ratings stay public.
+                    {% if has_blurbs %}Your written quick takes are erased, so <a href="{% url 'export_quick_takes' %}">download a copy</a> first if you want to keep them.{% endif %}
+                    {% if deletion_grace_until %}Your remaining membership time (through {{ deletion_grace_until|date:"F j, Y" }}) ends now and cannot be refunded.{% endif %}
+                </span>
+            </div>
+            <form method="post">{% csrf_token %}
+                <input type="hidden" name="action" value="delete_account">
+                <label class="sr-only" for="stg-noscript-pw">Your password</label>
+                <input type="password" id="stg-noscript-pw" name="password" class="stg-input" placeholder="Your password" autocomplete="current-password" required>
+                <label class="stg-danger__confirm">
+                    <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" required>
+                    <span>Yes, permanently delete my account</span>
+                </label>
+                <button type="submit" class="stg-btn stg-btn--danger">Delete my account</button>
+            </form>
+        </div>
+    </noscript>
+    {% endif %}
+    {% if profile %}
+    <noscript>
+        <div class="stg-danger stg-danger--noscript">
+            <div class="stg-danger__say">
+                <span class="stg-danger__name">Unlink your PSN account?</span>
+                <span class="stg-danger__sub">Nothing is deleted, and relinking later picks everything back up.</span>
+            </div>
+            <form method="post">{% csrf_token %}
+                <input type="hidden" name="action" value="unlink_profile">
+                <label class="stg-danger__confirm">
+                    <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" required>
+                    <span>Yes, unlink this PSN account</span>
+                </label>
+                <button type="submit" class="stg-btn stg-btn--danger">Unlink</button>
+            </form>
+        </div>
+    </noscript>
+    {% endif %}
 
 </div>
 
@@ -256,35 +309,17 @@ is client-side friction; the password is the server-side gate. {% endcomment %}
             <input type="password" id="stg-delete-pw" name="password" class="stg-input" autocomplete="current-password" required>
         </div>
         <div class="stg-field">
-            <label class="stg-field__label" for="stg-delete-phrase">Type <span class="stg-delete__phrase">"delete my account"</span> to confirm</label>
+            <label class="stg-field__label" for="stg-delete-phrase" id="stg-delete-phrase-label">Type <span class="stg-delete__phrase">"delete my account"</span> to confirm</label>
             <input type="text" id="stg-delete-phrase" class="stg-input" autocomplete="off" autocapitalize="off" spellcheck="false">
         </div>
         <div class="stg-confirm__row">
             <button type="button" class="stg-confirm__keep" data-delete-close autofocus>Keep my account</button>
-            <button type="submit" class="stg-confirm__go" data-delete-go disabled>Delete my account</button>
+            {% comment %} aria-describedby points at the phrase label so assistive tech hears
+            WHY the button is disabled. {% endcomment %}
+            <button type="submit" class="stg-confirm__go" data-delete-go disabled aria-describedby="stg-delete-phrase-label">Delete my account</button>
         </div>
     </form>
 </dialog>
-<noscript>
-    {% comment %} Without JS the dialog opener is inert, so the confirm renders as static
-    content. The password field is the real gate either way; the required checkbox keeps it
-    a genuine two-step. {% endcomment %}
-    <div class="stg-danger stg-danger--noscript">
-        <div class="stg-danger__say">
-            <span class="stg-danger__name">Delete your account?</span>
-            <span class="stg-danger__sub">Permanent. Your PSN profile and ratings stay public. {% if has_blurbs %}Your written quick takes are erased, so <a href="{% url 'export_quick_takes' %}">download a copy</a> first if you want to keep them.{% endif %}</span>
-        </div>
-        <form method="post">{% csrf_token %}
-            <input type="hidden" name="action" value="delete_account">
-            <input type="password" name="password" class="stg-input" placeholder="Your password" autocomplete="current-password" required>
-            <label class="stg-danger__confirm">
-                <input type="checkbox" required>
-                <span>Yes, permanently delete my account</span>
-            </label>
-            <button type="submit" class="stg-btn stg-btn--danger">Delete my account</button>
-        </form>
-    </div>
-</noscript>
 {% endif %}
 
 {% comment %} ============================================== unlink dialog ================= {% endcomment %}
@@ -309,24 +344,6 @@ is client-side friction; the password is the server-side gate. {% endcomment %}
         </form>
     </div>
 </dialog>
-<noscript>
-    {% comment %} Without JS the dialog opener is inert, so the confirm renders as static content.
-    The required checkbox keeps it a genuine two-step. {% endcomment %}
-    <div class="stg-danger stg-danger--noscript">
-        <div class="stg-danger__say">
-            <span class="stg-danger__name">Unlink your PSN account?</span>
-            <span class="stg-danger__sub">Nothing is deleted, and relinking later picks everything back up.</span>
-        </div>
-        <form method="post">{% csrf_token %}
-            <input type="hidden" name="action" value="unlink_profile">
-            <label class="stg-danger__confirm">
-                <input type="checkbox" required>
-                <span>Yes, unlink this PSN account</span>
-            </label>
-            <button type="submit" class="stg-btn stg-btn--danger">Unlink</button>
-        </form>
-    </div>
-</noscript>
 {% endif %}
 {% endblock %}
 
@@ -334,8 +351,18 @@ is client-side friction; the password is the server-side gate. {% endcomment %}
 <script>
     {% comment %} Arms the section arrival BEFORE first paint (motion.css .pp-arrive): the hidden
     state gates on html.pp-arm so incremental painting can never flash a card visible before the
-    boot script hides it. Without JS this never runs and nothing is hidden. {% endcomment %}
+    boot script hides it. Without JS this never runs and nothing is hidden. FAILSAFE: the disarm
+    lives in an EXTERNAL file (settings-page.js), so if that file 404s or is blocked, nothing
+    would ever reveal the cards -- the load-event check below disarms unless the boot left its
+    marker. Harmless when the boot ran (pp-arm stays, the observers own the reveal). {% endcomment %}
     document.documentElement.classList.add('pp-arm');
+    window.addEventListener('load', function () {
+        setTimeout(function () {
+            if (!document.documentElement.hasAttribute('data-stg-booted')) {
+                document.documentElement.classList.remove('pp-arm');
+            }
+        }, 400);
+    });
 </script>
 {% endblock %}
 

@@ -18,6 +18,9 @@
     if (!PlatPursuit.arriveOnScroll) {
         document.documentElement.classList.remove('pp-arm');
     }
+    // Proof-of-boot for the template's load-event failsafe: with this set, pp-arm stays and
+    // the arrival observers own the reveal; without it (this file 404'd) the template disarms.
+    document.documentElement.setAttribute('data-stg-booted', '1');
 
     PlatPursuit.onPageReady(function (first) {
         if (first && PlatPursuit.arriveOnScroll) PlatPursuit.arriveOnScroll();
@@ -36,7 +39,14 @@
                 btn.addEventListener('click', function () { dialog.close(); });
             });
             dialog.addEventListener('click', function (e) {
-                if (e.target === dialog) dialog.close();
+                // Bounds-check, not target-check: the dialog's own padding has e.target ===
+                // dialog, and a click there must NOT close (on the delete dialog it would
+                // discard a typed password + phrase). Only a genuine scrim click closes.
+                var r = dialog.getBoundingClientRect();
+                if (e.clientX < r.left || e.clientX > r.right ||
+                    e.clientY < r.top || e.clientY > r.bottom) {
+                    dialog.close();
+                }
             });
         });
 
@@ -44,11 +54,17 @@
         var phrase = document.getElementById('stg-delete-phrase');
         var go = document.querySelector('[data-delete-go]');
         if (phrase && go) {
-            phrase.addEventListener('input', function () {
-                // The label shows the phrase in quotes, so typing the quotes counts too.
-                var typed = phrase.value.trim().toLowerCase().replace(/^["']+|["']+$/g, '').trim();
+            var checkPhrase = function () {
+                // The label shows the phrase in quotes, so typing the quotes counts too --
+                // including the curly ones iOS/Gboard smart punctuation substitutes, which
+                // would otherwise leave the button dead with no explanation.
+                var typed = phrase.value.trim().toLowerCase()
+                    .replace(/^["'‘’“”]+|["'‘’“”]+$/g, '')
+                    .trim();
                 go.disabled = typed !== 'delete my account';
-            });
+            };
+            phrase.addEventListener('input', checkPhrase);
+            checkPhrase(); // a bfcache-restored value should not need a keystroke to count
         }
 
         // ---- timezone detect -----------------------------------------------

@@ -304,7 +304,7 @@ def test_the_export_is_readable_text_with_words_scores_and_no_score_only_rows(cl
     UserConceptRating.objects.create(
         profile=profile, concept=dlc_concept, concept_trophy_group=ctg, difficulty=5,
         grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0,
-        blurb='Short and sharp.')
+        recommendation='good_game_bad_plat', blurb='Short and sharp.')
     score_only_concept = ConceptFactory()
     UserConceptRating.objects.create(
         profile=profile, concept=score_only_concept, difficulty=3, grindiness=2,
@@ -317,11 +317,16 @@ def test_the_export_is_readable_text_with_words_scores_and_no_score_only_rows(cl
     assert 'platpursuit-quick-takes.txt' in resp['Content-Disposition']
     assert resp['Content-Type'].startswith('text/plain')
     body = resp.content.decode('utf-8')
+    assert 'Your PlatPursuit quick takes' in body
     assert '"A brutal, beautiful climb. Ein Traum."' in body, 'non-ASCII prose ships intact'
     assert 'Difficulty 8/10' in body
+    assert 'Overall 4.0/5' in body and 'About 20 hours' in body
     assert '(Frozen Wilds)' in body, 'DLC ratings name their group'
+    assert 'Recommendation: Good game, tough trophies' in body, \
+        'a platinum-less DLC set gets its own wording, never "tough plat"'
     assert '"Short and sharp."' in body
     assert score_only_concept.unified_title not in body, 'score-only ratings are not words'
+    assert '\r\n' in body, 'CRLF so the .txt opens cleanly everywhere'
 
 
 def test_the_delete_throttle_is_independent_of_the_password_change_throttle(client):

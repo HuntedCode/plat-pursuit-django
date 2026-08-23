@@ -902,6 +902,7 @@
 
 .sup-modal__x svg { width: 15px; height: 15px; }
 .sup-modal__x:hover { color: var(--pp-text); border-color: var(--pp-text-mute); }
+.sup-modal__x:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 .sup-modal__lede {
     margin-top: 8px;

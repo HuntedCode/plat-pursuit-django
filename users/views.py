@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Value, When
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.db.models.functions import Lower
 from django.utils import timezone
 from django.contrib import messages
@@ -136,12 +136,17 @@ class SettingsView(LoginRequiredMixin, View):
         # paused...) blocks too; canceled/incomplete_expired are terminal and don't.
         # `stripe_data__status`, NOT `status`: dj-stripe 2.10's lean models keep the payload
         # in the stripe_data JSON (every filter in subscription_service reads it this way,
-        # and a bare `status` lookup is a FieldError at query-build time). A row with no
-        # status in its payload fails the exclude and blocks -- the safe direction.
+        # and a bare `status` lookup is a FieldError at query-build time). The explicit
+        # isnull arm is load-bearing: a payload with NO status key yields SQL NULL, which a
+        # bare exclude() silently DROPS (NULL never matches either side of NOT IN) -- and a
+        # status-less row is exactly what a half-synced mirror looks like, so it must block.
         if user.stripe_customer_id:
             return Subscription.objects.filter(
                 customer_id=user.stripe_customer_id,
-            ).exclude(stripe_data__status__in=('canceled', 'incomplete_expired')).exists()
+            ).filter(
+                ~Q(stripe_data__status__in=('canceled', 'incomplete_expired'))
+                | Q(stripe_data__status__isnull=True)
+            ).exists()
         return False
 
     def post(self, request):
@@ -313,22 +318,30 @@ def export_quick_takes(request):
     library size (whale-safe).
     """
     from trophies.models import UserConceptRating
+    from trophies.services.rating_service import concepts_defining_a_platinum
 
     profile = getattr(request.user, 'profile', None)
     if profile is None:
         return redirect('settings')
 
-    rows = (
+    rows = list(
         UserConceptRating.objects.filter(profile=profile)
         .exclude(blurb='')
         .select_related('concept', 'concept_trophy_group')
         .order_by('-updated_at')
     )
-    rec_labels = dict(UserConceptRating.RECOMMENDATIONS)
+    # The house has_platinum rule (api/rating_views.py): a DLC-group rating never speaks of a
+    # platinum, a base-game rating does when the concept defines one. One batched lookup.
+    plat_concepts = concepts_defining_a_platinum(
+        {r.concept_id for r in rows if r.concept_trophy_group_id is None})
+    # The export date in the USER'S zone (the page's other half is a dedicated timezone
+    # writer; a UTC date here would read as tomorrow to an evening exporter). Day formatted
+    # by hand because strftime's unpadded day is platform-dependent (%-d vs %#d).
+    exported = timezone.now().astimezone(pytz.timezone(request.user.user_timezone or 'UTC'))
     lines = [
         'Your PlatPursuit quick takes',
         f'PSN: {profile.display_psn_username or profile.psn_username}',
-        f'Exported {timezone.now().strftime("%B %d, %Y")}',
+        f'Exported {exported.strftime("%B")} {exported.day}, {exported.year}',
         '',
     ]
     for r in rows:
@@ -343,10 +356,15 @@ def export_quick_takes(request):
             f'About {r.hours_to_platinum} hours'
         )
         if r.recommendation:
-            lines.append(f'  Recommendation: {rec_labels.get(r.recommendation, r.recommendation)}')
+            # The rating's own wording: a DLC set never says "tough plat", and a base game
+            # only does when the concept defines a platinum -- the same branch every other
+            # renderer honours (get_recommendation_display always says "platinum", wrongly).
+            has_plat = r.concept_trophy_group_id is None and r.concept_id in plat_concepts
+            lines.append(f'  Recommendation: {r.recommendation_label(has_plat) or r.recommendation}')
         lines.append(f'  "{r.blurb}"')
         lines.append('')
-    response = HttpResponse('\n'.join(lines), content_type='text/plain; charset=utf-8')
+    # CRLF on purpose: a .txt attachment that "opens on anything" includes old Notepad.
+    response = HttpResponse('\r\n'.join(lines), content_type='text/plain; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="platpursuit-quick-takes.txt"'
     return response
 

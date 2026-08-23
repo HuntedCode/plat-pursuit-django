@@ -3,8 +3,11 @@
 
    A single reading column of section cards in the membership page's rhythm (that page is the
    closest sibling: quiet facts, small forms, one accent). This file owns only the .stg-* page
-   furniture; the unlink dialog rides the shared .sup-modal, and the membership card's level
-   tint arrives as an inline --sup-t the same way the membership page passes it.
+   furniture; the unlink/delete dialogs ride the shared .sup-modal, and the membership card's
+   level tint arrives as an inline --sup-t consumed by .stg-membership below, the same recipe
+   as .supm-status. Buttons follow the family CTA recipe (tinted wash + 45% border, glow on
+   hover, never a solid fill) so "Manage membership" here and on the membership page speak
+   one language.
    ========================================================================================== */
 
 .stg {
@@ -33,11 +36,24 @@
     color: var(--pp-text);
 }
 
+@media (min-width: 1024px) {
+    .stg__h1 { font-size: 1.75rem; }
+}
+
 .stg__lede {
-    max-width: 56ch;
-    font-size: 0.86rem;
+    max-width: 62ch;
+    font-size: 0.92rem;
     line-height: 1.55;
     color: var(--pp-text-dim);
+}
+
+/* The header's quiet facts beat (third cascade beat): who this page is dialled for. */
+.stg__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    font-size: 0.78rem;
+    color: var(--pp-text-mute);
 }
 
 /* ---- section cards ------------------------------------------------------------------------ */
@@ -56,6 +72,13 @@
     font-size: 0.8rem;
     line-height: 1.5;
     color: var(--pp-text-dim);
+}
+
+/* The membership card wears the member's level tint on its border (inline --sup-t from the
+   template; non-members carry no style attr and fall back to the plain border). Two-class
+   selector so it outweighs the card's border-base-300 utility. */
+.card.stg-membership {
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-border)) 26%, var(--pp-border));
 }
 
 /* ---- forms -------------------------------------------------------------------------------- */
@@ -98,23 +121,17 @@
     color: var(--pp-text);
     background: var(--pp-bg-2);
     border: 1px solid var(--pp-border);
-    border-radius: var(--pp-radius-md);
+    border-radius: var(--pp-radius-sm);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .stg-select { flex: 1; min-width: 0; }
 
-.stg-select:focus-visible,
-.stg-input:focus-visible {
-    outline: 2px solid color-mix(in oklab, var(--pp-primary) 60%, transparent);
-    outline-offset: 1px;
-}
-
 /* Password trio: single column on mobile, three-up from md so the form stays one beat tall. */
 .stg-pw { display: grid; gap: 10px; }
 @media (min-width: 768px) { .stg-pw { grid-template-columns: repeat(3, 1fr); } }
 
-/* ---- buttons ------------------------------------------------------------------------------ */
+/* ---- buttons (the family CTA recipe: tinted wash, 45% border, glow hover) ----------------- */
 .stg-btn {
     display: inline-flex;
     align-items: center;
@@ -123,14 +140,20 @@
     padding: 0.45rem 1rem;
     font-size: 0.8rem;
     font-weight: 700;
-    color: color-mix(in oklab, var(--pp-primary) 25%, #06131a);
-    background: var(--pp-primary);
-    border: 1.5px solid color-mix(in oklab, var(--pp-primary) 55%, #000);
-    border-radius: var(--pp-radius-md);
-    transition: box-shadow 0.15s ease, filter 0.15s ease;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    border-radius: var(--pp-radius-sm);
+    transition: box-shadow 0.15s ease;
 }
 
-.stg-btn:hover { box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
+.stg-btn:hover:not(:disabled) { box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
+
+.stg-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
 
 .stg-btn--ghost {
     color: var(--pp-text-dim);
@@ -138,7 +161,7 @@
     border-color: var(--pp-border);
 }
 
-.stg-btn--ghost:hover {
+.stg-btn--ghost:hover:not(:disabled) {
     color: var(--pp-text);
     border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
     box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 20%, transparent);
@@ -150,7 +173,31 @@
     border-color: color-mix(in oklab, var(--pp-error) 45%, var(--pp-border));
 }
 
-.stg-btn--danger:hover { box-shadow: 0 0 10px color-mix(in oklab, var(--pp-error) 25%, transparent); }
+.stg-btn--danger:hover:not(:disabled) { box-shadow: 0 0 10px color-mix(in oklab, var(--pp-error) 25%, transparent); }
+
+@media (prefers-reduced-motion: no-preference) {
+    .stg-btn:active:not(:disabled),
+    .stg-confirm__keep:active,
+    .stg-confirm__go:active:not(:disabled) { transform: translateY(1px); }
+}
+
+/* ---- focus (the house ring, on everything interactive) ------------------------------------ */
+.stg-btn:focus-visible,
+.stg-confirm__keep:focus-visible,
+.stg-confirm__go:focus-visible,
+.stg-select:focus-visible,
+.stg-input:focus-visible,
+.stg-delete__warn a:focus-visible,
+.stg-danger__sub a:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+.stg-toggle:focus-within {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+    border-radius: var(--pp-radius-sm);
+}
 
 /* ---- toggle rows -------------------------------------------------------------------------- */
 .stg-toggle {
@@ -224,7 +271,7 @@
     gap: 10px;
     padding: 0.7rem 0.85rem;
     border: 1px solid color-mix(in oklab, var(--pp-error) 30%, var(--pp-border));
-    border-radius: var(--pp-radius-md);
+    border-radius: var(--pp-radius-sm);
     background: color-mix(in oklab, var(--pp-error) 6%, transparent);
 }
 
@@ -233,6 +280,9 @@
 .stg-danger__name { font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
 
 .stg-danger__sub { font-size: 0.74rem; line-height: 1.45; color: var(--pp-text-mute); }
+
+/* The only link to a user's own irreplaceable prose must read as one. */
+.stg-danger__sub a { text-decoration: underline; color: var(--pp-text); }
 
 .stg-danger__confirm {
     display: flex;
@@ -251,7 +301,7 @@
     gap: 8px;
 }
 
-/* ---- confirm-dialog actions (the membership cancel row's shape; unlink AND delete) -------- */
+/* ---- confirm-dialog actions (aligned to .supm-cancel__* -- one dialog language) ----------- */
 .stg-confirm__row {
     display: flex;
     flex-wrap: wrap;
@@ -261,40 +311,42 @@
 }
 
 .stg-confirm__keep {
-    padding: 0.45rem 1rem;
-    font-size: 0.8rem;
+    padding: 8px 16px;
+    font-size: 0.86rem;
     font-weight: 700;
     color: var(--pp-text);
-    background: var(--pp-bg-2);
-    border: 1px solid var(--pp-border);
-    border-radius: var(--pp-radius-md);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    border-radius: var(--pp-radius-sm);
 }
 
-.stg-confirm__keep:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.stg-confirm__keep:hover { box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 25%, transparent); }
 
 .stg-confirm__go {
-    padding: 0.45rem 1rem;
-    font-size: 0.8rem;
+    padding: 8px 16px;
+    font-size: 0.86rem;
     font-weight: 700;
-    color: var(--pp-error);
+    color: var(--pp-text-dim);
     background: transparent;
-    border: 1.5px solid color-mix(in oklab, var(--pp-error) 45%, var(--pp-border));
-    border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--pp-error) 45%, var(--pp-border));
+    border-radius: var(--pp-radius-sm);
 }
 
-.stg-confirm__go:hover { box-shadow: 0 0 10px color-mix(in oklab, var(--pp-error) 25%, transparent); }
+.stg-confirm__go:hover:not(:disabled) {
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-error) 14%, transparent);
+}
 
 .stg-confirm__go:disabled {
-    opacity: 0.45;
+    opacity: 0.55;
     cursor: not-allowed;
-    box-shadow: none;
 }
 
 /* ---- delete dialog extras ----------------------------------------------------------------- */
 .stg-delete__warn {
     padding: 0.6rem 0.8rem;
     border: 1px solid color-mix(in oklab, var(--pp-error) 30%, var(--pp-border));
-    border-radius: var(--pp-radius-md);
+    border-radius: var(--pp-radius-sm);
     background: color-mix(in oklab, var(--pp-error) 6%, transparent);
 }
 
