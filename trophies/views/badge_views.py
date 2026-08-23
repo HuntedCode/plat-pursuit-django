@@ -8,16 +8,17 @@ from trophies.constants import EVALUATABLE_BADGE_TYPES, PLATFORM_LABELS
 _GALLERY_STATES = ('earned', 'unearned')
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
 SERIES_PAGE_SIZE = 30   # series rows per page (Series view infinite scroll)
-# (key, label). Order mirrors the Collection Gallery's sort dropdown.
+# (key, label). Order mirrors the Collection Gallery's sort dropdown. ('Set order' and the
+# set_number field were removed 2026-08-23: the new system never assigned the numbers, so the
+# sort was name-order wearing a different label.)
 GALLERY_SORTS = [
-    ('set_number', 'Set order'),
     ('name', 'Name (A-Z)'),
     ('rarity', 'Rarest first'),
     ('popular', 'Most earned'),
     ('newest', 'Newest'),
 ]
 GALLERY_SORT_KEYS = {k for k, _ in GALLERY_SORTS}
-GALLERY_SORT_DEFAULT = 'set_number'
+GALLERY_SORT_DEFAULT = 'name'
 # Series-view sorts (per-series tiles). No tier/XP/closest sorts -- the grouping model has no tier ladder.
 SERIES_SORTS = [
     ('name', 'Name (A-Z)'),
@@ -292,10 +293,6 @@ class BadgeListView(ListView):
         q = (g.get('q') or '').strip()
         if q:
             search_q = Q(series__series_slug__icontains=slugify(q)) | Q(series__name__icontains=q)
-            # A numeric query (optionally "#0042") also matches the badge's edition/set number.
-            numeric = q.lstrip('#')
-            if numeric.isdigit() and len(numeric) <= 9:   # fits a PositiveIntegerField; guards absurd input
-                search_q |= Q(set_number=int(numeric))
             qs = qs.filter(search_q)
 
         # Personal-state multi-select (auth only): Earned / Not-earned, OR'd. One binary-hold EXISTS probe.
@@ -320,22 +317,19 @@ class BadgeListView(ListView):
                 cond |= Q(earned_count=0)
             qs = qs.filter(cond)
 
-        # SET ORDER is the canonical default + the tiebreaker within every other sort (so cards fall back to a
-        # stable order on ties). Every order_by ends on 'pk' -- a unique final tiebreak so infinite-scroll
-        # pages don't reorder ties (duplicated / skipped medallions).
+        # NAME is the canonical default + the tiebreaker within every other sort (so cards fall
+        # back to a stable order on ties). Every order_by ends on 'pk' -- a unique final tiebreak
+        # so infinite-scroll pages don't reorder ties (duplicated / skipped medallions).
         name_key = Lower('series__name')
-        set_order = (F('set_number').asc(nulls_last=True), name_key)
         sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT
-        if sort == 'name':
-            qs = qs.order_by(name_key, *set_order, 'pk')
-        elif sort == 'rarity':
-            qs = qs.order_by('earned_count', *set_order, 'pk')    # fewest earners = rarest first
+        if sort == 'rarity':
+            qs = qs.order_by('earned_count', name_key, 'pk')    # fewest earners = rarest first
         elif sort == 'popular':
-            qs = qs.order_by('-earned_count', *set_order, 'pk')
+            qs = qs.order_by('-earned_count', name_key, 'pk')
         elif sort == 'newest':
-            qs = qs.order_by('-created_at', *set_order, 'pk')
-        else:                                                      # set_number (default)
-            qs = qs.order_by(*set_order, 'pk')
+            qs = qs.order_by('-created_at', name_key, 'pk')
+        else:                                                    # name (default)
+            qs = qs.order_by(name_key, 'pk')
         return qs
 
     def _gallery_context_data(self, **kwargs):

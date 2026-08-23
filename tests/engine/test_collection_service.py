@@ -315,7 +315,8 @@ def test_sort_options_and_invalid_fallback():
 
     assert ctx['sort'] == DEFAULT_SORT == 'progress'
     keys = {k for k, _ in ctx['sort_options']}
-    assert {'progress', 'earned', 'rarity', 'series', 'edition', 'set_number'} <= keys
+    assert {'progress', 'earned', 'rarity', 'series', 'edition'} <= keys
+    assert 'set_number' not in keys, "the 'Set order' sort was retired with the field (2026-08-23)"
 
 
 def test_themes_reflect_badge_types():

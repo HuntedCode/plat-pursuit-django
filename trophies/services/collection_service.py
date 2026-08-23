@@ -48,7 +48,6 @@ COLLECTION_SORTS = [
     ('rarity', 'Rarest first'),
     ('series', 'Series (A-Z)'),
     ('edition', 'Edition'),
-    ('set_number', 'Set order'),
 ]
 DEFAULT_SORT = 'progress'
 
@@ -123,7 +122,6 @@ def _badge_frame(gb, holds, standings, participants):
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
         'developer': series.developer.name if series.developer_id else None,
-        'set_number': gb.set_number,
         'badge_id': gb.id,
         'dom_id': f'card-{gb.id}',
         'series_slug': series.series_slug,

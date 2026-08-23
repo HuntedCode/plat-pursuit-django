@@ -142,16 +142,6 @@ def test_gallery_search_matches_series(client):
     assert '/badges/elden-ring/' in html and '/badges/dark-souls/' not in html
 
 
-def test_gallery_search_by_set_number(client):
-    a = _series_groups('sn42', 'Set A', [('ultra-hd', 'Ultra HD')])[0]
-    b = _series_groups('sn7', 'Set B', [('ultra-hd', 'Ultra HD')])[0]
-    GroupBadge.objects.filter(id=a.id).update(set_number=42)
-    GroupBadge.objects.filter(id=b.id).update(set_number=7)
-    for query in ('42', '#42', '#0042'):
-        html = client.get(GALLERY, {'view': 'gallery', 'q': query}).content.decode()
-        assert '/badges/sn42/' in html and '/badges/sn7/' not in html, query
-
-
 def test_gallery_type_filter(client):
     _series_groups('rs', 'RS', [('ultra-hd', 'Ultra HD')], badge_type='series')
     _series_groups('fr', 'FR', [('ultra-hd', 'Ultra HD')], badge_type='franchise')
@@ -183,34 +173,33 @@ def test_gallery_owned_marker_and_earned_filter(client):
 
 # ------------------------------------------------------------------ Gallery: sorts -----------------------
 
-def test_gallery_defaults_to_set_order(client):
-    a = _series_groups('dflt-a', 'AAA first by name', [('ultra-hd', 'Ultra HD')])[0]
-    z = _series_groups('dflt-z', 'ZZZ last by name', [('ultra-hd', 'Ultra HD')])[0]
-    GroupBadge.objects.filter(id=a.id).update(set_number=9)
-    GroupBadge.objects.filter(id=z.id).update(set_number=1)
-    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()   # no ?sort -> set order
-    assert html.index('/badges/dflt-z/') < html.index('/badges/dflt-a/')   # #1 before #9 (name would disagree)
+def test_gallery_defaults_to_name_order(client):
+    """set_number (and its 'Set order' sort) was removed 2026-08-23: the new system never
+    assigned the numbers, so the sort was name-order wearing a different label. Name is the
+    honest default now."""
+    _series_groups('dflt-z', 'ZZZ last by name', [('ultra-hd', 'Ultra HD')])
+    _series_groups('dflt-a', 'AAA first by name', [('ultra-hd', 'Ultra HD')])
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()   # no ?sort -> name
+    assert html.index('/badges/dflt-a/') < html.index('/badges/dflt-z/')
 
 
-def test_gallery_name_sort_breaks_ties_by_set_order(client):
-    hi = _series_groups('tie-hi', 'Same Name', [('ultra-hd', 'Ultra HD')])[0]
-    lo = _series_groups('tie-lo', 'Same Name', [('ultra-hd', 'Ultra HD')])[0]
-    GroupBadge.objects.filter(id=hi.id).update(set_number=9)
-    GroupBadge.objects.filter(id=lo.id).update(set_number=1)
-    html = client.get(GALLERY, {'view': 'gallery', 'sort': 'name'}).content.decode()
-    assert html.index('/badges/tie-lo/') < html.index('/badges/tie-hi/')   # #1 before #9 on the name tie
+def test_gallery_rejects_the_retired_set_order_sort_key(client):
+    _series_groups('rk-z', 'ZZZ', [('ultra-hd', 'Ultra HD')])
+    _series_groups('rk-a', 'AAA', [('ultra-hd', 'Ultra HD')])
+    html = client.get(GALLERY, {'view': 'gallery', 'sort': 'set_number'}).content.decode()
+    assert html.index('/badges/rk-a/') < html.index('/badges/rk-z/'), 'unknown key falls back to name'
+    assert 'Set order' not in html, 'the sort dropdown must not offer the retired key'
 
 
 @pytest.mark.parametrize('sort', ['rarity', 'popular', 'newest'])
-def test_gallery_every_sort_breaks_ties_by_set_order(client, sort):
+def test_gallery_every_sort_breaks_ties_by_name(client, sort):
     from django.utils import timezone
-    hi = _series_groups('rs-tie-hi', 'Tie Hi', [('ultra-hd', 'Ultra HD')])[0]
-    lo = _series_groups('rs-tie-lo', 'Tie Lo', [('ultra-hd', 'Ultra HD')])[0]
-    GroupBadge.objects.filter(id=hi.id).update(set_number=9, created_at=timezone.now())
-    GroupBadge.objects.filter(id=lo.id).update(set_number=1, created_at=timezone.now())
-    # both have 0 earners -> the primary key ties; only the set-number fallback can order them.
+    _series_groups('rs-tie-z', 'ZZZ Tie', [('ultra-hd', 'Ultra HD')])
+    _series_groups('rs-tie-a', 'AAA Tie', [('ultra-hd', 'Ultra HD')])
+    GroupBadge.objects.update(created_at=timezone.now())
+    # both have 0 earners -> the primary key ties; only the name fallback can order them.
     html = client.get(GALLERY, {'view': 'gallery', 'sort': sort}).content.decode()
-    assert html.index('/badges/rs-tie-lo/') < html.index('/badges/rs-tie-hi/')
+    assert html.index('/badges/rs-tie-a/') < html.index('/badges/rs-tie-z/')
 
 
 # ------------------------------------------------------------------ Gallery: pagination / whale-safe -----

@@ -64,8 +64,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 | `badge_name` | str | **yes** | Plinth front + back header. |
 | `description` | str | no | Back face only; suppressed if missing. |
 | `art_layers` | list[str] (URLs) | **yes** | Rendered as `<img class="pp-frame__layer">` into `.pp-frame__art`. Three layers is canonical (backdrop, default, foreground) but any number works. |
-| `engraving_rank` | int | no | Earned cards only. `None` suppresses the engraving entirely. Rank `1` triggers the first-earn pulsing animation. Renders alone in the bottom-left corner of the plinth (e.g. `#247`) — the "of all time" subtitle was retired in favor of the cleaner two-corner balance with `set_number`. |
-| `set_number` | int | no | The print-run / edition number engraved in the bottom-right corner of the plinth (zero-padded to 4 digits, e.g. `0247`). Shared across every badge of the same series + tier — the manufacturer's-mark stamp. Renders in earned, in-progress, AND unearned states; tier-color tinted. |
+| `engraving_rank` | int | no | Earned cards only. `None` suppresses the engraving entirely. Rank `1` triggers the first-earn pulsing animation. Renders alone in the bottom-left corner of the plinth (e.g. `#247`) — the "of all time" subtitle was retired. |
 | `current_rank` | int | no | Earned cards only. The user's CURRENT-cycle rank (refreshed each maintenance cycle), printed as ink on chrome alongside the badge name on the front. Distinct from `engraving_rank` (permanent etched mark) — current_rank is the live, mutable count. |
 | `current_cycle` | int | no | Cycle number that pairs with `current_rank` (e.g. `"Cycle 2"`). Falls back to `"Current"` if missing. |
 | `earned_date` | str | no | Pre-formatted display string (e.g. `"Aug 15, 2024"`). |
@@ -94,7 +93,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 | `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left) and the set-mark (bottom-right); badge name, meta, and cycle print are suppressed. |
 | `mini` | Inline / leaderboards / chips / Pursuer Card badge peek | 110px max width. **Chrome-only tier identity** — title bar and plinth are hidden entirely. Tier color carries via border + corner notches + backdrop gradient. Mini was briefly trialed with slim chrome (series + engraving + set-mark) but the text became unreadable at typical placements, so the chrome was retired. |
 
-Default + Compact render the textual identifiers when present (series name in the title bar, `engraving_rank` in the bottom-left of the plinth, `set_number` in the bottom-right). Mini drops the text entirely; at that scale the chrome alone has to do the recognition work.
+Default + Compact render the textual identifiers when present (series name in the title bar, `engraving_rank` in the bottom-left of the plinth). Mini drops the text entirely; at that scale the chrome alone has to do the recognition work. (The `set_number` bottom-right stamp was removed 2026-08-23 with the field.)
 
 ## States
 

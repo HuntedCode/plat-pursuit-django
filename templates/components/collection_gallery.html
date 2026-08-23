@@ -27,7 +27,6 @@ collection-gallery.css, wired by collection.js (initGallery).
                     <option value="rarity:asc">Rarest first</option>
                     <option value="series:asc">Series (A&ndash;Z)</option>
                     <option value="edition:asc">Edition</option>
-                    <option value="set_number:asc">Set order</option>
                 </select>
             </label>
             <button type="button" class="pp-gallery__advbtn" data-gallery-filters-toggle aria-expanded="false" aria-controls="gallery-advanced">
@@ -97,7 +96,6 @@ collection-gallery.css, wired by collection.js (initGallery).
            data-theme="{{ badge.theme|slugify }}"
            data-series="{{ badge.series_name|lower }}"
            data-badge="{{ badge.badge_name|lower }}"
-           data-set-number="{{ badge.set_number|default:0 }}"
            data-rarity-pct="{{ badge.rarity_pct|default:0 }}"
            data-rarity="{{ badge.rarity_class }}"
            data-progress="{{ badge.progress_pct|default:0 }}"

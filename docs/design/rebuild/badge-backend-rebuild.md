@@ -87,7 +87,7 @@ overrides). Live in `trophies/models.py` (marked "BADGE REBUILD" section); migra
   `title` (one per series), `badge_image` + `holo_badge_image` (subject art), `funded_by`. Replaces the old
   `base_badge` self-FK inheritance.
 - **`GroupBadge`** — the **earnable** per-group badge (one per `series` × `platform_group`): `is_live`,
-  `set_number`, per-group denorm (`earned_count`, `required_stages`, `rarity_*`), and **nullable overrides**
+  per-group denorm (`earned_count`, `required_stages`, `rarity_*`), and **nullable overrides**
   (`badge_image_override`, `holo_badge_image_override`, `funded_by_override`) with `effective_funded_by` /
   `effective_holo_image` / `art_layers()` accessors. **No `tier` field** — the `tier=1` collision disappears.
 - **`UserGroupBadge`** — a CURRENT hold (binary; the row exists iff the profile meets the bar): `profile`,

@@ -28,7 +28,7 @@ _TIER_BACKDROP = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}
 @dataclass
 class GroupView:
     """One platform-group badge for the selector + its panel."""
-    group_badge: object          # GroupBadge (id, set_number, effective_funded_by, ... for the template)
+    group_badge: object          # GroupBadge (id, effective_funded_by, ... for the template)
     platform_group: object       # PlatformGroup (name, key, medallion_shape, ...)
     art: dict                    # GroupBadge.art_layers()
     state: str                   # 'holo' | 'earned' | 'in_progress' | 'none'
@@ -164,7 +164,6 @@ def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
         'stages_done': gv.stages_cleared,
         'progress_pct': gv.progress_pct,
         'segments': [i < gv.stages_cleared for i in range(gv.gating_count)],
-        'set_number': gv.group_badge.set_number,
         'engraving_rank': gv.earners_rank,   # live earners position (was a permanent stamp in the legacy frame)
         'owner_name': owner,
         'badge_id': gv.group_badge.id,

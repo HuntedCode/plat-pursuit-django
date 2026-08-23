@@ -110,7 +110,7 @@
     {% endif %}
     {% if frame.engraving_rank %}
         {# Permanent earn-rank engraved in the bottom-left corner of the plinth, #}
-        {# opposite the set-mark in the bottom-right. The "of all time" subtitle #}
+        {# in the bottom-left of the plinth. The "of all time" subtitle #}
         {# was retired -- the # prefix on the number reads as the rank cleanly on #}
         {# its own, and the cleaner two-corner layout balances the plinth chrome. #}
         {# Maintenance cards SHOW the mint engraving -- it's a permanent fact that #}
@@ -127,13 +127,6 @@
         <div class="pp-frame__engraving pp-frame__engraving--placeholder">
             <span class="pp-frame__engraving-num">#---</span>
         </div>
-    {% endif %}
-    {% if frame.set_number %}
-        {# Set number — shared across every badge of the same (series, tier). #}
-        {# Engraved in the bottom-right corner of the plinth like a manufacturer's #}
-        {# mark / print-run stamp. Permanent etched-chrome treatment. Zero-padded #}
-        {# to 4 digits — accepts an int (preferred) or a string of 4 digits. #}
-        <span class="pp-frame__set-mark">{{ frame.set_number|stringformat:"04d" }}</span>
     {% endif %}
 </div>
 </div>

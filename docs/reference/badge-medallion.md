@@ -39,14 +39,13 @@ unearned so "done vs not done" reads instantly across a shelf; the two are told 
 the rising-colour fill**, not by brighter base art. On a surface passing **`always_meter`** both draw a
 meter, so there the **fill** alone separates them.
 
-### Edition + earn marks (`show_ids`)
-Pass **`show_ids=True`** and the medallion prints a small line under the count: the badge's **set number**
-(`#0042`, every badge has one — muted) and, for earned badges, the permanent **earn rank** (`7th`, the
-Nth profile to earn this tier — glows in the tier accent). Both come from the frame dict (`set_number`,
-`engraving_rank`), so it's read-at-a-glance without opening the badge. Passed by the Case shelf, Gallery
-cells, and Showcase (there the redundant `N/N` count is hidden); **not** the tiny Chase strip or the
-detail modal (which lists both in its full stats grid). The Case is sorted by `set_number` by default
-(series stay together as consecutive groups of 4), so the printed numbers read in order down a shelf.
+### Earn mark (`show_ids`)
+Pass **`show_ids=True`** and, for earned badges, the medallion prints the permanent **earn rank**
+(`7th`, the Nth profile to earn this tier — glows in the tier accent) under the count, from the frame
+dict's `engraving_rank`. Passed by the Case shelf, Gallery cells, and Showcase (there the redundant
+`N/N` count is hidden); **not** the tiny Chase strip or the detail modal (which lists it in its full
+stats grid). (The set number that used to share this line was removed 2026-08-23 with the
+`set_number` field — the new system never assigned the numbers.)
 
 ### Rising-colour fill
 In-progress + maintenance overlay a **full-colour copy of ONLY the subject** (`art_layers.1`, the main

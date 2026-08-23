@@ -66,9 +66,9 @@ def test_every_offered_sort_can_actually_be_performed():
     # empty list only proves the dict has the key, not that the sort can run.
     frames = [
         {'series_name': 'A', 'state': 'in_progress', 'progress_pct': 40,
-         'rarity_pct': 3.2, 'earned_ts': 0, 'set_number': 1},
+         'rarity_pct': 3.2, 'earned_ts': 0},
         {'series_name': 'B', 'state': 'earned', 'progress_pct': 100,
-         'rarity_pct': 40, 'earned_ts': 500, 'set_number': 2},
+         'rarity_pct': 40, 'earned_ts': 500},
     ]
     for value, _label in ProfileDetailView._BADGE_SORTS:
         assert len(ProfileDetailView._sort_badges(frames, value)) == 2, f'{value} dropped rows'

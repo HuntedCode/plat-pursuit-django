@@ -2100,10 +2100,6 @@ class Badge(models.Model):
         'Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='developed_badges',
         help_text="Associated developer/company (developer badges). Drives the Frame's subject name + enables developer reporting.",
     )
-    set_number = models.PositiveIntegerField(
-        null=True, blank=True,
-        help_text="Edition / print-run number engraved on the Frame. Admin-assigned per tier (4 consecutive numbers per series), numbered independently within each badge type (every type starts its own sequence at 1).",
-    )
     rarity_pct = models.FloatField(
         null=True, blank=True,
         help_text="Denormalized: % of linked profiles who have earned this badge. Refreshed by the rarity command (not hand-edited).",
@@ -2243,39 +2239,6 @@ class Badge(models.Model):
             'has_custom_image': False,
             'is_avatar': False,
         }
-
-    @classmethod
-    def assign_next_set_numbers(cls, series_slugs):
-        """Stamp the next sequential set numbers onto each series' four tier badges
-        (Bronze=N, Silver=N+1, Gold=N+2, Platinum=N+3). Numbering is scoped PER BADGE TYPE:
-        each type (Series, Franchise, Developer, ...) is its own "set" with an independent
-        sequence starting at 1, so the same number can appear once per type. Atomic, so each
-        series gets a contiguous, non-overlapping block even under concurrent admin actions.
-        Skips a series that doesn't have exactly 4 tiers (1-4) or that already has set
-        numbers. Returns {'assigned': [...], 'invalid_tiers': [...],
-        'already_numbered': [...]} (slugs)."""
-        result = {'assigned': [], 'invalid_tiers': [], 'already_numbered': []}
-        with transaction.atomic():
-            next_by_type = {}  # badge_type -> next set_number (independent sequence per type)
-            for slug in dict.fromkeys(series_slugs):  # dedup, preserve order
-                tiers = list(cls.objects.filter(series_slug=slug).order_by('tier'))
-                if [b.tier for b in tiers] != [1, 2, 3, 4]:
-                    result['invalid_tiers'].append(slug)
-                    continue
-                if any(b.set_number for b in tiers):
-                    result['already_numbered'].append(slug)
-                    continue
-                btype = tiers[0].badge_type  # a series' four tiers share one badge type
-                if btype not in next_by_type:
-                    next_by_type[btype] = (
-                        cls.objects.filter(badge_type=btype).aggregate(m=Max('set_number'))['m'] or 0
-                    ) + 1
-                for badge in tiers:
-                    badge.set_number = next_by_type[btype]
-                    badge.save(update_fields=['set_number'])
-                    next_by_type[btype] += 1
-                result['assigned'].append(slug)
-        return result
 
     # Rarity buckets by % of linked profiles who earned the badge (lower = rarer).
     RARITY_THRESHOLDS = ((1.0, 'mythic'), (5.0, 'rare'), (20.0, 'uncommon'))
@@ -3030,7 +2993,7 @@ class BadgeSeries(models.Model):
 
     series_slug = models.SlugField(max_length=100, unique=True, help_text="Stable series identity; shared by this series' group badges.")
     name = models.CharField(max_length=255)
-    badge_type = models.CharField(max_length=12, choices=BADGE_TYPES, default='series', help_text="Attribution/flavor (drives subject name, set-numbering group, display label). All types share one earn engine.")
+    badge_type = models.CharField(max_length=12, choices=BADGE_TYPES, default='series', help_text="Attribution/flavor (drives subject name and display label). All types share one earn engine.")
     completion_policy = models.CharField(max_length=12, choices=COMPLETION_POLICIES, default='all', help_text="How a group badge is earned: 'all' gating stages, or 'min_count' (megamix).")
     min_required = models.PositiveIntegerField(default=0, help_text="For completion_policy='min_count' (megamix): stages needed. Interpretation under the per-group split is resolved by the evaluator.")
     description = models.TextField(blank=True)
@@ -3097,7 +3060,6 @@ class GroupBadge(models.Model):
     series = models.ForeignKey(BadgeSeries, on_delete=models.CASCADE, related_name='group_badges')
     platform_group = models.ForeignKey(PlatformGroup, on_delete=models.PROTECT, related_name='group_badges')
     is_live = models.BooleanField(default=False, help_text="Hidden until released. Dormant grouping badges stay False until the cutover flip.")
-    set_number = models.PositiveIntegerField(null=True, blank=True, help_text="Edition/print-run number engraved on the medallion. Assigned by the new numbering scheme (see rebuild doc).")
 
     # Per-group denormalization (owned by the evaluator's apply() step, not signals).
     earned_count = models.PositiveIntegerField(default=0, help_text="Active earners (status='earned'). Rarity uses the same count.")

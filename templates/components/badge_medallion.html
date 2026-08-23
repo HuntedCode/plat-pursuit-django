@@ -44,7 +44,6 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
                 {% comment %} The badge's affiliation, engraved: franchise > collection > developer, else the
                 series name (the same label the Case page uses). frame sets these in that priority order. {% endcomment %}
                 <span class="pp-med__back-sub">{% firstof frame.franchise frame.collection frame.developer frame.series_name %}</span>
-                {% if frame.set_number %}<span class="pp-med__back-no">No.&nbsp;{{ frame.set_number|stringformat:"04d" }}</span>{% endif %}
                 <span class="pp-med__back-word">Platinum Pursuit</span>
                 {% comment %} Personalised to the owner -- only on a badge they HOLD (earned/maintenance, so the
                 earn rank exists): their name + the rank they earned it at. Makes the base feel truly theirs. {% endcomment %}
@@ -72,12 +71,11 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
         {% endif %}
     {% endif %}
     {% if total and not no_count %}<span class="pp-med__count">{% if show_repair and state == 'maintenance' %}<svg class="pp-med__wrench" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><span class="sr-only">needs re-earning, </span>{% endif %}{{ frame.stages_done|default:0 }} / {{ total }}</span>{% endif %}
-    {% comment %} Edition + earn marks (Case/Gallery/Showcase pass show_ids): the badge's set number
-    (every badge has one) and, for earned badges, the permanent earn rank (you were the Nth to earn it). {% endcomment %}
-    {% if show_ids %}{% if frame.set_number or frame.engraving_rank %}
+    {% comment %} Earn mark (Case/Gallery/Showcase pass show_ids): for earned badges, the permanent
+    earn rank (you were the Nth to earn it). {% endcomment %}
+    {% if show_ids %}{% if frame.engraving_rank %}
     <span class="pp-med__ids">
-        {% if frame.set_number %}<span class="pp-med__setno" title="Set number">#{{ frame.set_number|stringformat:"04d" }}</span>{% endif %}
-        {% if frame.engraving_rank %}<span class="pp-med__earnno" title="Earn rank -- you were the {{ frame.engraving_rank|ordinal }} to earn this badge">{{ frame.engraving_rank|ordinal }}</span>{% endif %}
+        <span class="pp-med__earnno" title="Earn rank -- you were the {{ frame.engraving_rank|ordinal }} to earn this badge">{{ frame.engraving_rank|ordinal }}</span>
     </span>
     {% endif %}{% endif %}
 </div>

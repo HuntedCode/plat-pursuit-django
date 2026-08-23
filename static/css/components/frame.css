@@ -216,8 +216,8 @@
 
 /* Plinth (badge name + meta line + corner labels). The extra
  * padding-bottom reserves a "footer strip" for the absolute
- * engraving (bottom-left) and set-mark (bottom-right) so they
- * don't overlap the meta line that sits above them in flow. */
+ * engraving (bottom-left) so it
+ * doesn't overlap the meta line that sits above them in flow. */
 .pp-frame__plinth {
     position: relative;
     background: var(--frame-chrome-bg);
@@ -308,12 +308,12 @@
  * Default (no class) : gallery / grid views — the primary
  *           target; fits a 4-wide desktop grid at ~290px.
  * Compact : in-progress badges + dense lists. Slim chrome with
- *           series title, rank engraving, and set-mark only.
+ *           series title and rank engraving only.
  * Mini   : inline / chip use. Chrome-only tier identity -- the
  *          border color, corner notches, and backdrop carry the
  *          tier read on their own; no text rendering at this
  *          scale. Mini was briefly tried with slim chrome (series
- *          + engraving + set-mark) but the text became unreadable
+ *          + engraving) but the text became unreadable
  *          at typical mini placements (badge-peek thumbnails in
  *          the Pursuer Card, leaderboard chips), so the chrome
  *          was retired and the variant is back to chrome-only.
@@ -338,12 +338,6 @@
     gap: 4px;
 }
 .pp-frame--compact .pp-frame__engraving-num { font-size: 8px; }
-.pp-frame--compact .pp-frame__set-mark {
-    bottom: 3px;
-    right: 7px;
-    font-size: 7.5px;
-    letter-spacing: 0.14em;
-}
 
 /* Mini: chrome-only tier identity. Tier color carried by the
  * border + corner notches + backdrop gradient. Title bar and
@@ -450,7 +444,7 @@
  * into the plinth (decorated format: "#247 of all time").
  * ============================================================ */
 /* Engraving sits absolute in the bottom-left corner of the
- * plinth, mirroring the set-mark in the bottom-right. The "of
+ * plinth. The "of
  * all time" subtitle was retired -- the # prefix on its own
  * reads as the rank, and the two-corner balance keeps the
  * plinth chrome legible without an extra row of decoration. */
@@ -540,35 +534,6 @@
 .pp-frame__cycle-print-label {
     opacity: 0.78;
 }
-
-/* Set number — engraved in the bottom-right corner of the plinth.
- * Shared across every badge of the same (series, tier) — it's
- * the print-run / edition stamp, like a manufacturer's mark on
- * a watch case-back. Etched chrome treatment matching the mint
- * engraving (deboss text-shadow), tier-tinted, ambient. Always
- * 4 digits zero-padded (e.g. 0009, 0247) so the stamp reads as
- * a fixed-format part number. */
-.pp-frame__set-mark {
-    position: absolute;
-    bottom: 5px;
-    right: 9px;
-    font-size: 11px;            /* bigger than the original 8.5 but still an etched mark */
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    color: rgba(255, 255, 255, 0.5);
-    /* Same carved bevel as the engraving (dark top groove, light bottom catch). */
-    text-shadow:
-        0 -1px 1px rgba(0, 0, 0, 0.7),
-        0 1px 0 rgba(255, 255, 255, 0.12);
-    line-height: 1;
-    pointer-events: none;
-    font-variant-numeric: tabular-nums;
-    z-index: 3;
-}
-.pp-frame--bronze   .pp-frame__set-mark { color: rgba(225, 185, 135, 0.66); }
-.pp-frame--silver   .pp-frame__set-mark { color: rgba(228, 233, 242, 0.66); }
-.pp-frame--gold     .pp-frame__set-mark { color: rgba(247, 223, 145, 0.72); }
-.pp-frame--platinum .pp-frame__set-mark { color: rgba(224, 242, 251, 0.76); }
 
 /* Shared hover lift + tier-tinted outer shadow. Gleam sweep
  * sits on .pp-hover-a below. */

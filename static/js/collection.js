@@ -42,16 +42,11 @@
         if (term === '') return true;
         if (el.getAttribute('data-series').indexOf(term) !== -1) return true;
         if (el.getAttribute('data-badge').indexOf(term) !== -1) return true;
-        // A numeric query (optionally "#0042") also matches the badge's set number.
-        var numeric = term.replace(/^#/, '');
-        if (/^\d+$/.test(numeric)
-            && parseInt(numeric, 10) === (parseInt(el.getAttribute('data-set-number'), 10) || 0)) return true;
         return false;
     }
 
     function sortValue(el, key) {
         switch (key) {
-            case 'set_number': return parseInt(el.getAttribute('data-set-number'), 10) || 0;
             case 'series':     return el.getAttribute('data-series');
             // Editions sort by key string; 'legacy-hd' < 'ultra-hd' happens to match sort_order. A future
             // edition whose key doesn't sort into place alphabetically would need a key->order map here.

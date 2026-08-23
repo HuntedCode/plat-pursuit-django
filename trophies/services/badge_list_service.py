@@ -34,7 +34,6 @@ def _list_frame(gb, tier, layers, is_avatar, held, is_holo) -> dict:
         'collection': series.collection.name if series.collection_id else None,
         'developer': series.developer.name if series.developer_id else None,
         'stages_total': gb.required_stages,
-        'set_number': gb.set_number,
         'badge_id': gb.id,
     }
 

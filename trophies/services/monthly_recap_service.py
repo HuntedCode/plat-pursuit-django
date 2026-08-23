@@ -604,7 +604,6 @@ class MonthlyRecapService:
                 'series_name': gb.series.name,
                 'badge_name': gb.platform_group.name,      # the edition: "Legacy HD" / "Ultra HD"
                 'series_slug': gb.series.series_slug,
-                'set_number': gb.set_number,
             })
 
         # One evaluation yields EVERY month's buckets; we keep the one being generated.

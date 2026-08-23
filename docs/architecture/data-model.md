@@ -118,7 +118,7 @@ Key relationships:
 #### GroupBadge
 **The earnable thing**: one row per (`BadgeSeries` x `PlatformGroup`), `unique_together`.
 
-Key fields: `is_live` (default False -- hidden until released), `set_number`, and the engine-owned denorms
+Key fields: `is_live` (default False -- hidden until released) and the engine-owned denorms
 `earned_count`, `required_stages`, `rarity_pct`, `rarity_rank`, `rarity_class`.
 
 Per-edition overrides, each null-means-inherit: `badge_image_override`, `holo_badge_image_override`,

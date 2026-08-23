@@ -242,12 +242,6 @@
     color: color-mix(in oklab, var(--med-glow) 88%, #ffffff);
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14), 0 -1px 1px rgba(0, 0, 0, 0.72);
 }
-.pp-med__back-no {   /* engraved edition number -- secondary to the subject above */
-    font-size: calc(var(--sz) * 0.062); font-weight: 700; letter-spacing: 0.1em; line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: color-mix(in oklab, var(--med-glow) 58%, #cbd5e1);
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14), 0 -1px 1px rgba(0, 0, 0, 0.7);
-}
 .pp-med__back-word {   /* maker's wordmark */
     font-size: calc(var(--sz) * 0.048); font-weight: 700; letter-spacing: 0.26em; text-transform: uppercase;
     line-height: 1; color: color-mix(in oklab, var(--med-c) 52%, transparent);
@@ -275,9 +269,7 @@
     opacity: 0.5;
 }
 .pp-med--unearned .pp-med__back-sub,
-.pp-med--in_progress .pp-med__back-sub,
-.pp-med--unearned .pp-med__back-no,
-.pp-med--in_progress .pp-med__back-no {
+.pp-med--in_progress .pp-med__back-sub {
     color: rgba(148, 163, 184, 0.5); text-shadow: none;
 }
 .pp-med--unearned .pp-med__back-word,
@@ -407,17 +399,15 @@
 }
 
 /* edition + earn marks -- surfaced under the badge so you read set # / earn rank without opening it.
-   Set number (every badge) is muted; earn rank (earned only, "5th") glows in the tier accent. */
+   Earn rank (earned only, "5th") glows in the tier accent. */
 .pp-med__ids {
     display: flex; align-items: center; gap: 7px; margin-top: 5px;
     font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
 }
-.pp-med__setno { color: rgba(148, 163, 184, 0.72); letter-spacing: 0.02em; }
 .pp-med__earnno {
     color: var(--med-glow); letter-spacing: 0.01em;
     text-shadow: 0 0 8px color-mix(in oklab, var(--med-glow) 40%, transparent);
 }
-.pp-med__setno + .pp-med__earnno { padding-left: 7px; border-left: 1px solid rgba(255, 255, 255, 0.14); }
 
 /* Keep the info row legible ON TOP of the art's glow: the neon "next"/maintenance drop-shadow blooms
    downward past the emblem into this area, and the art sits at z-index 1 -- so lift the meter/count/ids

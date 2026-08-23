@@ -430,7 +430,7 @@ class ProfileDetailView(DetailView):
         return {'trophy_log': list(qs.order_by('-earned_date_time')[offset:offset + per_page])}
 
     # How a visitor can reorder someone's badges. Deliberately SHORTER than the Collection gallery's six:
-    # `edition` and `set_number` are organisational sorts that help an owner audit their own wall, and this
+    # `edition` is an organisational sort that helps an owner audit their own wall, and this
     # is a stranger's read-only view. These four are the four questions a visitor actually asks.
     _BADGE_SORTS = [
         ('earned', 'Recently earned'),
@@ -462,7 +462,7 @@ class ProfileDetailView(DetailView):
             # no-data value (an edition nobody holds yet), so it sorts last instead of leading the wall.
             'rarity': lambda f: (not f.get('rarity_pct'), f.get('rarity_pct', 0),
                                  f.get('series_name', '').lower()),
-            'series': lambda f: (f.get('series_name', '').lower(), f.get('set_number') or 0),
+            'series': lambda f: f.get('series_name', '').lower(),
         }
         return sorted(frames, key=keys[sort])
 

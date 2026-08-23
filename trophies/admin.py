@@ -4763,7 +4763,7 @@ class GroupBadgeInline(admin.TabularInline):
     """Manage a series' group badges (Legacy HD / Ultra HD / ...) right on the BadgeSeries page."""
     model = GroupBadge
     extra = 0
-    fields = ['platform_group', 'is_live', 'set_number',
+    fields = ['platform_group', 'is_live',
               'badge_image_override', 'holo_badge_image_override', 'funded_by_override',
               'earned_count', 'required_stages']
     readonly_fields = ['earned_count', 'required_stages']
@@ -4804,7 +4804,7 @@ class BadgeSeriesAdmin(admin.ModelAdmin):
 
 @admin.register(GroupBadge)
 class GroupBadgeAdmin(admin.ModelAdmin):
-    list_display = ['__str__', 'is_live', 'platform_group', 'series_type', 'set_number',
+    list_display = ['__str__', 'is_live', 'platform_group', 'series_type',
                     'earned_count', 'required_stages', 'rarity_class', 'art_preview']
     list_filter = ['is_live', 'platform_group', 'series__badge_type']
     list_editable = ['is_live']
@@ -4815,7 +4815,7 @@ class GroupBadgeAdmin(admin.ModelAdmin):
                        'rarity_pct', 'rarity_rank', 'rarity_class', 'art_preview']
     actions = ['mark_live', 'mark_hidden']
     fieldsets = [
-        ('Badge', {'fields': ['series', 'platform_group', 'is_live', 'set_number']}),
+        ('Badge', {'fields': ['series', 'platform_group', 'is_live']}),
         ('Artwork overrides (blank = inherit the series default)', {
             'fields': ['badge_image_override', 'holo_badge_image_override', 'funded_by_override', 'art_preview'],
         }),

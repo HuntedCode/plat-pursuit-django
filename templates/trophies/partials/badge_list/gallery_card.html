@@ -16,8 +16,8 @@ badge detail page with this edition's tab open (?group=<key>). Expects a `card` 
         {% comment %} Name: the broadest meaningful grouping -- franchise > collection > developer > series name
         (always populated, the guaranteed final fallback). Mirrors the medallion back-sub. {% endcomment %}
         <span class="pp-bgal__name">{% firstof card.frame.franchise card.frame.collection card.frame.developer card.frame.series_name %}</span>
-        {# Catalog identity: the platform group (tinted in its medallion metal, matching the detail page) + set #. #}
-        <span class="pp-bgal__meta"><span class="pp-bgal__pg">{{ card.platform_group.name }}</span>{% if card.group_badge.set_number %} &middot; #{{ card.group_badge.set_number|stringformat:"04d" }}{% endif %}</span>
+        {# Catalog identity: the platform group (tinted in its medallion metal, matching the detail page). #}
+        <span class="pp-bgal__meta"><span class="pp-bgal__pg">{{ card.platform_group.name }}</span></span>
         {# Live rarity grade (coloured) + the earner count; a "be the first" nudge while no one has earned it yet. #}
         <span class="pp-bgal__meta">{% if card.rarity_class %}<span class="pp-bgal__grade" data-rarity="{{ card.rarity_class }}">{{ card.rarity_class|title }}</span> &middot; {% endif %}{% if card.earned_count %}{{ card.earned_count|intcomma }} earned{% else %}<span class="pp-bgal__cta">Be the first</span>{% endif %}</span>
     </span>
