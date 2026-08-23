@@ -328,44 +328,93 @@
 /* ── The demo rating card ── */
 /* Echoes .pp-rcard's vocabulary (left recommendation edge, stars-over-score verdict, four
    toned stat cells, the quoted take) without its data coupling: live HTML, not a screenshot. */
-.land-rdemo { max-width: 560px; margin: 1.9rem auto 0; }
-/* The stack: every card in the same grid cell (height = tallest card, so the section never
-   jumps between slides), crossfading on .is-active. */
+.land-rdemo { max-width: 1000px; margin: 1.9rem auto 0; }
+/* The stack: every SLIDE (a pair of cards) in the same grid cell (height = tallest slide, so
+   the section never jumps), crossfading on .is-active. */
 .land-rdemo__stack { display: grid; }
-.land-rdemo__stack > .land-rdemo__card { grid-area: 1 / 1; }
+.land-rdemo__stack > .land-rdemo__slide { grid-area: 1 / 1; }
+.land-rdemo__slide {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    align-items: stretch;
+}
+@media (min-width: 768px) { .land-rdemo__slide { grid-template-columns: repeat(2, 1fr); } }
+/* A lone card (the fixture, or an odd tail) centers at single-card width instead of hugging
+   half the row. */
+.land-rdemo__card:only-child { grid-column: 1 / -1; width: 100%; max-width: 560px; justify-self: center; }
+.land-rdemo__stack > .land-rdemo__slide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.land-rdemo__stack > .land-rdemo__slide.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-rdemo__stack > .land-rdemo__slide {
+        transition: opacity 0.55s var(--pp-ease), visibility 0s linear 0.55s, transform 0.55s var(--pp-ease);
+        transform: translateY(6px);
+    }
+    .land-rdemo__stack > .land-rdemo__slide.is-active {
+        transition: opacity 0.55s var(--pp-ease), visibility 0s, transform 0.55s var(--pp-ease);
+        transform: translateY(0);
+    }
+}
+
+/* The card: pp-rcard's shape -- no padding on the card (the art bleeds to its edges; the box
+   metrics live on the body), stacked on a phone, art-panel split from md:. */
 .land-rdemo__card {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
-    padding: 1.1rem 1.25rem;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
     background: var(--pp-bg-1);
     border: 1px solid var(--pp-border);
     border-left: 3px solid var(--rec-c, var(--pp-primary));
     border-radius: var(--pp-radius-md, 12px);
     text-align: left;
 }
+@media (min-width: 768px) { .land-rdemo__card { flex-direction: row; } }
 .land-rdemo__card[data-rec="worth_it"] { --rec-c: var(--pp-success); }
 .land-rdemo__card[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
 .land-rdemo__card[data-rec="skip"] { --rec-c: var(--pp-error); }
-.land-rdemo__stack > .land-rdemo__card {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
+
+/* The art panel, copied from .pp-rcard: a wide band on a phone, a left column from md:, the
+   image absolutely positioned (the panel's height comes from the flex stretch), and one overlay
+   doing two jobs -- fading the frame into the card's surface toward the BODY (down when
+   stacked, across when split) and holding the whole image back so six screenshots don't
+   out-shout the numbers they sit beside. */
+.land-rdemo__art { position: relative; flex: none; width: 100%; height: 72px; background: var(--pp-bg-2); }
+@media (min-width: 768px) { .land-rdemo__art { width: 110px; height: auto; } }
+.land-rdemo__shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.land-rdemo__art::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to bottom,
+                color-mix(in oklab, var(--pp-bg-1) 22%, transparent) 0%,
+                color-mix(in oklab, var(--pp-bg-1) 30%, transparent) 55%,
+                var(--pp-bg-1) 100%);
 }
-.land-rdemo__stack > .land-rdemo__card.is-active {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
+@media (min-width: 768px) {
+    .land-rdemo__art::after {
+        background: linear-gradient(to right,
+                    color-mix(in oklab, var(--pp-bg-1) 22%, transparent) 0%,
+                    color-mix(in oklab, var(--pp-bg-1) 30%, transparent) 55%,
+                    var(--pp-bg-1) 100%);
+    }
 }
-@media (prefers-reduced-motion: no-preference) {
-    .land-rdemo__stack > .land-rdemo__card {
-        transition: opacity 0.55s var(--pp-ease), visibility 0s linear 0.55s, transform 0.55s var(--pp-ease);
-        transform: translateY(6px);
-    }
-    .land-rdemo__stack > .land-rdemo__card.is-active {
-        transition: opacity 0.55s var(--pp-ease), visibility 0s, transform 0.55s var(--pp-ease);
-        transform: translateY(0);
-    }
+
+.land-rdemo__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 1.1rem 1.25rem;
 }
 .land-rdemo__head {
     display: flex;

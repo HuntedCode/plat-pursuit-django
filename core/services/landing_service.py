@@ -158,7 +158,7 @@ def _fixture_card_html():
 
 SHOWCASE_RATINGS_CACHE_KEY = 'landing_showcase_ratings_v1'
 SHOWCASE_RATINGS_TTL = 6 * 3600
-SHOWCASE_RATINGS_CAP = 5
+SHOWCASE_RATINGS_CAP = 6   # three slides of two
 
 
 def _fixture_demo_ratings():
@@ -166,6 +166,7 @@ def _fixture_demo_ratings():
     produces, so the template renders one thing either way."""
     return [{
         'title': 'Sekiro: Shadows Die Twice',
+        'art_url': '',
         'stars_pct': 90,
         'overall': '4.5',
         'stats': [
@@ -207,7 +208,10 @@ def render_showcase_ratings():
         UserConceptRating.visible_blurbs()
         .filter(profile=profile, concept_trophy_group__isnull=True)
         .exclude(recommendation='')
-        .select_related('concept')
+        # landscape_url reads the igdb image-id columns off the match; the defer travels with the
+        # select_related (the raw_response rule), cron path or not.
+        .select_related('concept__igdb_match')
+        .defer('concept__igdb_match__raw_response')
         .order_by('-overall_rating', '-id')
     )
     rows = list(base.filter(recommendation='worth_it')[:SHOWCASE_RATINGS_CAP])
@@ -237,6 +241,9 @@ def render_showcase_ratings():
                       'tone': rating_tone(r.fun_ranking, 'fun'), 'word': rating_verdict(r.fun_ranking, 'fun')})
         cards.append({
             'title': r.concept.unified_title if r.concept_id else '',
+            # The pp-rcard art treatment: the game's landscape frame fading into the card. Empty
+            # when the concept has none (~1 in 20); the card renders panel-less rather than broken.
+            'art_url': (r.concept.landscape_url or '') if r.concept_id else '',
             'stars_pct': round(float(r.overall_rating or 0) / 5 * 100),
             'overall': f"{float(r.overall_rating or 0):g}",
             'stats': stats,
@@ -292,10 +299,13 @@ def build_landing_context():
     except Exception:
         logger.exception("Landing showcase ratings resolution failed")
         cached_ratings = None
+    ratings = cached_ratings or _fixture_demo_ratings()
     return {
         'badge_showcase': _badge_showcase(),
         'showcase_card_html': showcase_card,
         'showcase_card_is_sample': not cached,
-        'demo_ratings': cached_ratings or _fixture_demo_ratings(),
+        # Slides of two (his call: pairs read as a wall excerpt, and three slides of two beats
+        # five of one). An odd tail leaves a lone centered card; the fixture is one slide of one.
+        'demo_rating_pairs': [ratings[i:i + 2] for i in range(0, len(ratings), 2)],
         'demo_ratings_is_sample': not cached_ratings,
     }

@@ -175,7 +175,7 @@
     function wireRatingsCarousel() {
         var host = document.querySelector('[data-land-carousel]');
         if (!host) { return; }
-        var cards = Array.prototype.slice.call(host.querySelectorAll('.land-rdemo__card'));
+        var cards = Array.prototype.slice.call(host.querySelectorAll('.land-rdemo__slide'));
         var dots = Array.prototype.slice.call(host.querySelectorAll('[data-land-dotindex]'));
         if (cards.length < 2) { return; }
         var index = 0, timer = null;

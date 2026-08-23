@@ -183,15 +183,20 @@ def test_real_ratings_replace_the_sample_carousel(client):
     dots) and drops the sample caption."""
     cache.set(landing_service.SHOWCASE_RATINGS_CACHE_KEY, [
         {'title': f'Real Game {i}', 'stars_pct': 90, 'overall': '4.5',
+         'art_url': f'https://images.example/frame-{i}.jpg',
          'stats': [{'k': 'Fun', 'n': '9', 'of': '/10', 'tone': 'good', 'word': 'A blast'}],
          'take': 'A real quick take.', 'rec': 'worth_it', 'rec_label': 'Do it'}
-        for i in range(3)
+        for i in range(4)
     ], landing_service.SHOWCASE_RATINGS_TTL)
 
     body = _get(client).content.decode()
 
-    assert 'Real Game 0' in body and 'Real Game 2' in body
-    assert body.count('land-rdemo__dot ') + body.count('land-rdemo__dot"') >= 3, 'the dots are missing'
+    assert 'Real Game 0' in body and 'Real Game 3' in body
+    # Four cards pair into two slides; the dots count SLIDES, not cards.
+    assert body.count('land-rdemo__slide') >= 2
+    assert body.count('data-land-dotindex') == 2, 'the dots must match the slide count'
+    assert 'land-rdemo__art' in body, 'the art panel never rendered'
+    assert 'https://images.example/frame-0.jpg' in body
     assert 'A sample rating.' not in body
     assert 'A real rating. Every one requires the platinum.' in body
     # The fixture SLIDE by its own take -- bare 'Sekiro' also matches the fixture Profile
@@ -220,7 +225,8 @@ def test_the_cron_gathers_blurbed_ratings_positive_first():
         assert landing_service.render_showcase_ratings() is True
 
     cards = cache.get(landing_service.SHOWCASE_RATINGS_CACHE_KEY)
-    assert len(cards) == 5
+    assert len(cards) == 5   # only five eligible exist; the cap is six
+    assert all('art_url' in c for c in cards)
     assert [c['rec'] for c in cards[:4]] == ['worth_it'] * 4, 'positive verdicts must lead'
     assert cards[4]['rec'] == 'skip', 'the top-up slide is missing'
     assert all(c['take'] for c in cards)
