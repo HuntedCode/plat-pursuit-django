@@ -129,10 +129,13 @@ def test_robots_disallows_the_design_namespace():
     assert 'Disallow: /design/' in robots
 
 
-def test_the_navbar_no_longer_links_the_removed_tools():
+def test_the_navbar_carries_no_staff_links_at_all():
+    """The strip removed moderation + game families; the fundraiser link followed 2026-08-22
+    (his call: unneeded for now). The avatar menu is identical for every signed-in hunter;
+    staff pages are bookmark-reached and cross-link each other."""
     navbar = (ROOT / 'templates' / 'partials' / 'navbar.html').read_text(encoding='utf-8')
 
-    for marker in ('comment_moderation', 'game_family_management',
+    for marker in ('comment_moderation', 'game_family_management', 'fundraiser_admin',
                    'pending_reports_count', 'pending_proposals_count'):
         assert marker not in navbar, f'{marker} survived the strip'
 

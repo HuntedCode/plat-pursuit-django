@@ -140,9 +140,9 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                         <a href="{% url 'link_psn' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Link PSN</a>
                     {% endif %}
                     <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
-                    {% if user.is_staff %}
-                        <a href="{% url 'fundraiser_admin' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Fundraiser</a>
-                    {% endif %}
+                    {% comment %} No staff links in the avatar menu since the 2026-08 strip-down:
+                    the staff pages are bookmark-reached (fundraiser admin cross-links its
+                    siblings), and the menu stays identical for every signed-in hunter. {% endcomment %}
                     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="pp-avmenu__danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></form>
                 </div>
             </div>
