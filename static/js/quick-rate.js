@@ -20,7 +20,7 @@
  *       submitEl,                      // defaults to [data-gd-qr-submit] inside the form
  *       submitLabel, hoursLabel, playtimeHint,
  *       announcesSave,                 // the host toasts the save itself; otherwise this does
- *       onSaved(data, payload), onError(message), onChange(state),
+ *       onSaved(data, payload), onError(message), onChange(state), onRefused(message, fieldName),
  *   })  ->  { setTarget, prefill, submit, state, detach }
  *
  *   PlatPursuit.QuickRate.open({ ...the same, plus... title, cancelLabel,
@@ -158,6 +158,15 @@
             // and come back 400 from the server instead of being prevented.
             return Boolean(h) && h >= 1 && Boolean(recValue(form));
         }
+        // A refused submit is FEEDBACK, never silence. The first cut suppressed the toast for
+        // hosts with an inline requirement line (onChange), and a hunter who missed the line was
+        // left pressing a button that did nothing. Hosts may take over the telling via onRefused
+        // (the wizard focuses the missing field and urges its line); everyone else gets the toast.
+        function refuse(msg, fieldName) {
+            if (o.onRefused) { o.onRefused(msg, fieldName); }
+            else if (PP.ToastManager) { PP.ToastManager.show(msg, 'warning'); }
+        }
+
         function announce() {
             if (o.onChange) {
                 o.onChange({
@@ -183,15 +192,13 @@
             if (busy) { return; }
             var hours = hoursValue();
             if (!hours || hours < 1) {
-                // The hours gate. A host that renders its own requirement line hears about it through
-                // onChange and says so inline; one that does not gets the toast.
-                if (!o.onChange && PP.ToastManager) { PP.ToastManager.show('Enter the hours it took you.', 'warning'); }
+                refuse('Enter the hours it took you.', 'hours_to_platinum');
                 announce();
                 return;
             }
             var recommendation = recValue(form);
             if (!recommendation) {
-                if (!o.onChange && PP.ToastManager) { PP.ToastManager.show('Pick a recommendation.', 'warning'); }
+                refuse('Pick a recommendation.', 'recommendation');
                 announce();
                 return;
             }

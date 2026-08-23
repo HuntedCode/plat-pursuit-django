@@ -1209,3 +1209,30 @@ def test_the_ledger_rule_turns_with_the_wrap_not_with_a_label():
             f'the {width}px block turns the rule vertical without constraining the title, so the row can '
             f'wrap while still styled as though it had not'
         )
+
+
+# ------------------------------------------------------------------ refusal feedback ----------
+
+def test_a_refused_submit_is_never_silent():
+    """Regression (2026-08-23): the hours gate suppressed its toast for hosts with an inline
+    requirement line, and the wizard ALSO disabled its button -- so a hunter who missed the line
+    pressed a dead control and got nothing at all. The contract now: refusal is feedback --
+    RatingFields either hands it to the host (onRefused) or toasts it itself, and the wizard's
+    button never plays dead."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    qr = (root / 'static' / 'js' / 'quick-rate.js').read_text(encoding='utf-8')
+    rmg = (root / 'static' / 'js' / 'rate-my-games.js').read_text(encoding='utf-8')
+    page = (root / 'templates' / 'trophies' / 'rate_my_games.html').read_text(encoding='utf-8')
+
+    # The shared form: a refusal channel exists, and the old silent-when-onChange guard is gone.
+    assert 'function refuse(' in qr
+    assert 'o.onRefused' in qr
+    assert '!o.onChange && PP.ToastManager' not in qr, 'the silent-refusal suppression came back'
+
+    # The wizard: takes the channel (toast + focus + the urged line), and ships an ENABLED button.
+    assert 'onRefused: function' in rmg
+    assert "classList.add('is-urging')" in rmg
+    assert 'id="rmg-submit" disabled' not in page, 'the submit button ships dead again'
+

@@ -426,11 +426,24 @@ window.PlatPursuit = window.PlatPursuit || {};
             this.fields = PP.RatingFields.attach(form, {
                 submitEl: submit,
                 submitLabel: 'Submit rating',
-                // The one gate: hours. Said inline, next to the button, rather than only as a toast on refusal.
+                // The requirement line is STATE; refusal is FEEDBACK, and the two are different
+                // jobs. The button stays enabled always -- a disabled button swallows the press
+                // and reads as a broken page (his report: "left sitting there waiting for
+                // nothing"). A press with the gate unmet lands in onRefused below.
                 onChange: function (state) {
-                    if (submit) { submit.disabled = !state.ready; }
                     var req = el('rmg-req');
                     if (req) { req.classList.toggle('is-met', state.ready); }
+                },
+                onRefused: function (msg, fieldName) {
+                    PP.ToastManager.show(msg, 'warning');
+                    var req = el('rmg-req');
+                    if (req) {
+                        req.classList.remove('is-urging');
+                        void req.offsetWidth;   // restart the pulse when refused twice running
+                        req.classList.add('is-urging');
+                    }
+                    var missing = form.querySelector('[name="' + fieldName + '"]');
+                    if (missing && missing.focus) { missing.focus(); }
                 },
                 // This host names the GAME in its toast ("Elden Ring rated!"), which is what makes a bulk
                 // run legible -- the card has already been replaced by the next one by the time you read
@@ -614,10 +627,11 @@ window.PlatPursuit = window.PlatPursuit || {};
 
                 if (e.key === 'Enter') {
                     // Enter is a submit from anywhere EXCEPT the quick take, where it is a newline the
-                    // hunter is deliberately typing. It never fires while the hours gate is unmet.
+                    // hunter is deliberately typing. With the gate unmet it still fires -- and is
+                    // refused out loud (toast + focus), never swallowed.
                     if (tag === 'TEXTAREA') { return; }
                     var submit = el('rmg-submit');
-                    if (submit && !submit.disabled) { e.preventDefault(); submit.click(); }
+                    if (submit) { e.preventDefault(); submit.click(); }
                     return;
                 }
                 // A bare S -- never while they are typing, or skipping would eat a letter of their take.

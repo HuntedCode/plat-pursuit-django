@@ -235,6 +235,18 @@
 .rmg__req svg { width: 15px; height: 15px; flex: none; }
 .rmg__req .rmg__req-x { color: var(--pp-text-mute); }
 .rmg__req .rmg__req-ok { display: none; color: var(--pp-success); }
+/* A refused submit urges the line: colour snaps to warning and (motion permitting) it nudges
+   sideways once. The class is removed-and-readded per refusal so a second press re-pulses. */
+.rmg__req.is-urging { color: var(--pp-warning); }
+.rmg__req.is-urging .rmg__req-x { color: var(--pp-warning); }
+@media (prefers-reduced-motion: no-preference) {
+    .rmg__req.is-urging { animation: rmgReqUrge 0.45s var(--pp-ease); }
+}
+@keyframes rmgReqUrge {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    60% { transform: translateX(3px); }
+}
 .rmg__req.is-met .rmg__req-x { display: none; }
 .rmg__req.is-met .rmg__req-ok { display: inline; }
 .rmg__req.is-met { color: var(--pp-text-dim); }
