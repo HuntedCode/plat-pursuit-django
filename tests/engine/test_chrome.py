@@ -49,6 +49,25 @@ def test_footer_hides_personal_cockpit_from_anon(client):
     assert b'>My Shareables</a>' not in resp.content
 
 
+def test_footer_support_column_carries_all_four_hub_destinations(client):
+    """2026-08-22: the 'Membership (soon)' placeholder became a live link when the store
+    shipped, and the column mirrors the rail (Hub / Roadmap / Badge Art / Membership) so an
+    anon visitor no longer sees a Support column of exactly one live link."""
+    body = client.get('/support/').content
+
+    assert b'&middot; soon' not in body and b'\xc2\xb7 soon' not in body
+    assert b'>Roadmap</a>' in body
+    assert b'>Badge Art</a>' in body
+    assert b'>Membership</a>' in body
+
+
+def test_footer_my_pursuit_includes_rate_my_games_for_authed(client):
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    assert b'>Rate My Games</a>' in client.get('/support/').content
+
+
 # --- Top chrome: aria-current parity (navbar hub button + mobile tab) ---
 
 def test_navbar_and_tabbar_mark_active_hub_with_aria_current(client):

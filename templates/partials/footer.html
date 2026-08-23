@@ -40,6 +40,7 @@
                     <li><a href="{% url 'my_titles' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Titles</a></li>
                     <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Plat Cards</a></li>
                     <li><a href="{% url 'recap_index' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Recap</a></li>
+                    <li><a href="{% url 'rate_my_games' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Rate My Games</a></li>
                     {% else %}
                     {# Anon/no-profile: only the public catalog members of the hub. #}
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
@@ -53,15 +54,17 @@
                 </ul>
             </nav>
 
-            {# Support hub — the fundraiser's home + the coming membership store. #}
+            {% comment %} Support hub — mirrors the rail's four destinations (hub_subnav
+            SUPPORT_HUB). The Badge Art landing 302s to the latest campaign, so it works for
+            every viewer where the old slugged link was gated on the linked-profile
+            fundraiser processor. {% endcomment %}
             <nav aria-label="Support pages">
                 <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Support</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'support_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Support Hub</a></li>
-                    {% if active_fundraiser %}
-                    <li><a href="{% url 'fundraiser' active_fundraiser.slug %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Fundraiser</a></li>
-                    {% endif %}
-                    <li class="text-neutral-content/30 cursor-default">Membership <span class="text-[0.65rem] uppercase tracking-wide">&middot; soon</span></li>
+                    <li><a href="{% url 'support_roadmap' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Roadmap</a></li>
+                    <li><a href="{% url 'support_fundraiser' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badge Art</a></li>
+                    <li><a href="{% url 'subscription_management' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Membership</a></li>
                 </ul>
             </nav>
 

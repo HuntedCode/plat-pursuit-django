@@ -107,17 +107,15 @@ Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`), one column per st
 
 | Browse | Leaderboards | My Pursuit | Support | Legal | Connect |
 |--------|-----------|------------|---------|-------|---------|
-| Games | Badge Leaderboards | Overview* | Support Hub | Privacy | Social icons |
-| Trophies | Profiles | Collection* | Fundraiser† | Terms | (X, YouTube, Discord) |
-| Recently Added | Challenges | The Lab* | Membership (soon) | About | |
-| Flagged Games | Game Lists | Research Panel* | | Contact | |
-| Franchises | Leaderboards | Badges / Milestones / Titles* | | | |
-| Genres & Themes | | Plat Cards / Recap* | | | |
-| Companies | | My Challenges / My Lists* | | | |
-| Engines | | | | | |
+| Games | Badge Leaderboards | Home* | Support Hub | Privacy | Social icons |
+| Recently Added | | Collection* | Roadmap | Terms | (X, YouTube, Discord) |
+| Franchises | | Career* / Contracts* | Badge Art | About | |
+| Genres & Themes | | Badges / Milestones / Titles* | Membership | How badges work | |
+| Companies | | Plat Cards* / Recap* | | Contact | |
+| Hunters | | Rate My Games* | | | |
 
-- **My Pursuit is auth-aware** (three states, no bogus links): authed-with-profile sees the full personal-hub sitemap (marked `*`); anon/no-profile sees only the public catalog members (Badges, Milestones, Research Panel); anon additionally gets Sign In / Sign Up (a divider separates them). This keeps a stable 6-column grid without a separate Account column.
-- **Support** (†) links the hub always; the direct Fundraiser link renders only when `active_fundraiser` is in context (banner-active + a live campaign + linked-profile viewer). Membership is a muted "coming soon" placeholder mirroring the Support landing until the store ships.
+- **My Pursuit is auth-aware** (three states, no bogus links): authed-with-profile sees the full personal-hub sitemap (marked `*`); anon/no-profile sees only the public catalog members (Badges, Milestones, Contracts); anon additionally gets Sign In / Sign Up (a divider separates them). This keeps a stable 6-column grid without a separate Account column.
+- **Support** mirrors the rail's four destinations (Support Hub, Roadmap, Badge Art, Membership). Badge Art is the no-args fundraiser landing (302 to the latest campaign), so it works for every viewer where the old slugged link was gated on the linked-profile fundraiser processor. Updated 2026-08-22: the "Membership (soon)" placeholder became a live link when the store shipped, and Rate My Games joined My Pursuit.
 - Column headings are `<h2>` (`font-semibold text-xs uppercase tracking-wider`) per the design-system section-header pattern.
 
 ## Cross-Linking Inventory
