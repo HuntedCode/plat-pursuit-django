@@ -295,3 +295,43 @@ def test_password_set_url_hands_off_to_settings_too(client):
 
     assert resp.status_code == 302
     assert resp['Location'] == reverse('settings')
+
+
+# ── QoL: failed attempts keep your typing; remember-me verified real ──────────────────────────
+
+def test_a_wrong_password_keeps_the_typed_email(client):
+    """The page is a classic form POST, so the reload is inherent -- but the email input had
+    no value binding, so a typo in the password also cost you your email."""
+    user, password = _make_verified()
+
+    resp = client.post('/accounts/login/', {'login': user.email, 'password': 'not-it'})
+
+    assert resp.status_code == 200
+    assert f'value="{user.email}"' in resp.content.decode(), 'the email must survive the failure'
+
+
+def test_a_failed_signup_keeps_both_typed_emails(client):
+    resp = client.post('/accounts/signup/', {
+        'email': 'keep.me@example.com', 'email2': 'keep.me@example.com',
+        'password1': 'mismatched-pass-1', 'password2': 'mismatched-pass-2',
+        'website': '',
+    })
+
+    assert resp.status_code == 200
+    assert resp.content.decode().count('value="keep.me@example.com"') == 2
+
+
+def test_remember_me_actually_remembers_and_forgetting_actually_forgets(client):
+    """ACCOUNT_SESSION_REMEMBER is unset, so allauth honours the checkbox exactly: checked =
+    a persistent session (SESSION_COOKIE_AGE), unchecked = the session DIES with the browser.
+    Both directions verified so 'does it even do anything' has a pinned answer: yes."""
+    user, password = _make_verified()
+
+    client.post('/accounts/login/', {'login': user.email, 'password': password})
+    assert client.session.get_expire_at_browser_close(), \
+        'without remember, the session must end when the browser closes'
+
+    client.post('/logout/')
+    client.post('/accounts/login/', {'login': user.email, 'password': password, 'remember': 'on'})
+    assert not client.session.get_expire_at_browser_close()
+    assert client.session.get_expiry_age() > 60 * 60 * 24, 'remembered sessions persist for days'
