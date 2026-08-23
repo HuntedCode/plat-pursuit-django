@@ -236,7 +236,10 @@
         wireBadgePeek();
         wireRatingsCarousel();
         if (window.PlatPursuit && PlatPursuit.arriveOnScroll) {
-            PlatPursuit.arriveOnScroll();
+            // Deeper than the shared -8% default: on a long marketing scroll the entrance was
+            // firing just below the fold and playing unseen (his note). -18% means a section is
+            // properly INTO the viewport before its beat runs.
+            PlatPursuit.arriveOnScroll({ rootMargin: '0px 0px -18% 0px' });
         } else {
             document.documentElement.classList.remove('pp-arm');
         }

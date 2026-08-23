@@ -2411,13 +2411,18 @@ function dismissableSheet(dialog, opts) {
  * Every path shows the content: no JS never arms; JS without IO reveals everything here;
  * JS + IO flips .is-in per section as it enters the viewport.
  */
-function arriveOnScroll() {
+function arriveOnScroll(opts) {
     var sections = document.querySelectorAll('.pp-arrive');
     if (!sections.length) { return; }
     if (!('IntersectionObserver' in window)) {
         sections.forEach(function (s) { s.classList.add('is-in'); });
         return;
     }
+    // rootMargin is the depth dial: how far past the viewport's bottom edge a section must be
+    // before it arrives. The -8% default is the Support family's tuning; a long marketing
+    // scroll (the landing) passes deeper so the beat is actually SEEN mid-scroll instead of
+    // having fired just below the fold.
+    var margin = (opts && opts.rootMargin) || '0px 0px -8% 0px';
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (entry) {
             if (entry.isIntersecting) {
@@ -2425,7 +2430,7 @@ function arriveOnScroll() {
                 io.unobserve(entry.target);
             }
         });
-    }, { rootMargin: '0px 0px -8% 0px', threshold: 0 });
+    }, { rootMargin: margin, threshold: 0 });
     sections.forEach(function (s) { io.observe(s); });
 }
 
