@@ -122,9 +122,18 @@
             // FINE pointer: track the cursor. Cache the scene's box on enter (it's static while you tilt -- the
             // CARD rotates, not the scene) so we don't force a layout read on every pointermove frame. Rect read
             // off the (untransformed) scene so tilt doesn't feed back.
+            //
+            // _ppTiltHold: set by the detail modal while the disc is IN FLIGHT (grow-in / put-down).
+            // The flight is a transform on the scene itself, so a pointerenter fired while the modal
+            // lands under a parked cursor would cache a mid-flight rect -- and every move then tilts
+            // against a box that no longer exists, sticking at wild angles until the next re-enter.
+            // While held: no tilt, no cache; the first move after release caches the settled rect.
             var sceneRect = null;
-            scene.addEventListener('pointerenter', function () { sceneRect = scene.getBoundingClientRect(); });
+            scene.addEventListener('pointerenter', function () {
+                sceneRect = scene._ppTiltHold ? null : scene.getBoundingClientRect();
+            });
             scene.addEventListener('pointermove', function (e) {
+                if (scene._ppTiltHold) { sceneRect = null; return; }
                 var r = sceneRect || (sceneRect = scene.getBoundingClientRect());
                 applyTilt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
             });
@@ -266,6 +275,7 @@
             var dy = (sr.top + sr.height / 2) - (mr.top + mr.height / 2);
             growingSrc = srcMed || null;
             if (growingSrc) { var gs = growingSrc.querySelector('.pp-med__stage'); if (gs) gs.style.visibility = 'hidden'; }
+            modalDisc._ppTiltHold = true;   // the tilt must not measure the disc mid-flight
             modal.classList.add('is-opening');
             modalDisc.style.transformOrigin = 'center center';
             modalDisc.style.transition = 'none';
@@ -278,6 +288,7 @@
                 settled = true;
                 clearSettle();
                 modalDisc.style.transition = ''; modalDisc.style.transform = ''; modalDisc.style.transformOrigin = '';
+                modalDisc._ppTiltHold = false;   // settled: the tilt may measure again
                 // Leave the tapped grid badge HIDDEN while open -- "picked up". close() respawns it.
                 if (dialog) dialog.focus();
                 var hintCard = body.querySelector('.pp-bdetail__stage .pp-med__art');
@@ -352,6 +363,7 @@
             var dy = (sr.top + sr.height / 2) - (mr.top + mr.height / 2);
             modal.classList.remove('is-growing');
             modal.classList.add('is-closing');   // fades scrim + dialog chrome (NOT the disc)
+            modalDisc._ppTiltHold = true;   // in flight again; the modal hides after, so no release
             modalDisc.style.transformOrigin = 'center center';
             modalDisc.style.transition = 'transform 0.4s cubic-bezier(0.4, 0.05, 0.55, 0.95)';
             modalDisc.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scale + ')';
