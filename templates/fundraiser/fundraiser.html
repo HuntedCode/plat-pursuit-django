@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static mark_tags %}
 
 {% block title %}{{ fundraiser.name }}{% endblock %}
 
@@ -384,7 +384,7 @@
                                 </figure>
                                 <span class="fnd-claim__name">{{ claim.series_name }}</span>
                                 {% if claim.profile %}
-                                    <span class="fnd-claim__by text-accent">Funded by {{ claim.profile.display_psn_username }}</span>
+                                    <span class="fnd-claim__by text-accent">Funded by {% name_mark name=claim.profile.display_psn_username mark=claim.profile.display_mark %}</span>
                                 {% endif %}
                             </a>
                         {% endfor %}
@@ -408,7 +408,7 @@
                                 </div>
                                 <span class="fnd-claim__name">{{ claim.series_name }}</span>
                                 {% if claim.profile %}
-                                    <span class="fnd-claim__by">Claimed by {{ claim.profile.display_psn_username }}</span>
+                                    <span class="fnd-claim__by">Claimed by {% name_mark name=claim.profile.display_psn_username mark=claim.profile.display_mark %}</span>
                                 {% endif %}
                                 <span class="fnd-chip__state{% if claim.status == 'in_progress' %} text-warning{% endif %}">{{ claim.get_status_display }}</span>
                             </a>

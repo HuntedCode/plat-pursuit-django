@@ -707,6 +707,10 @@ class SupportStorefrontView(TemplateView):
                                    if r.display_mark in SERVICE_MARKS else None),
                 'service_label': (SERVICE_MARKS[r.display_mark]['label']
                                   if r.display_mark in SERVICE_MARKS else None),
+                # Which service GLYPH the mark slot draws (2026-08-23, his call reversing the
+                # stars-stay-paid rule): a staff or mod entry wears its wrench/shield on the wall,
+                # not the paid level's stars -- the backer star beside "Staff" read as a bug.
+                'service_key': r.display_mark if r.display_mark in SERVICE_MARKS else None,
             }
             for r in rows
         ]

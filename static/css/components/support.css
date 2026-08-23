@@ -1112,6 +1112,14 @@
 .sup-prev--credit[style*="--svc-t"] .sup-prev__cname,
 .sup-prev--credit[style*="--svc-t"] .sup-prev__sub { color: var(--svc-t); }
 
+/* The service glyph in the mark slot (wrench/shield): sized with the stars it stands in for,
+   filled with the role's colour. */
+.sup-prev__mark--svc svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--svc-t, var(--pp-text));
+}
+
 /* The credits' entrance moved to the shared section arrival (motion.css .pp-arrive):
    the load-time rule that lived here animated below-fold cards unseen, and once the section
    was gated it FOUGHT the gate (animation beat the hidden state, then backwards-fill blanked

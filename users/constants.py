@@ -329,7 +329,7 @@ LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 # The colour-distance test covers these against the whole giving ramp.
 SERVICE_MARKS = {
     'staff': {'label': 'Staff', 'colour': '#e0564f'},
-    'mod': {'label': 'Moderator', 'colour': '#59c96f'},
+    'mod': {'label': 'Moderator', 'colour': '#ff9d45'},   # amber: off the supporter ramp (teal->pink) AND off staff crimson; was a green that sat next to backer teal
 }
 
 # GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their billing and their

@@ -143,9 +143,14 @@ class FundraiserView(TemplateView):
                       .order_by('-claimed_at')):
             profile_claims[claim.profile_id].append(claim)
 
+        from users.services.marks import mark_style
         context['donors'] = [
             {
                 'profile': profiles_by_id.get(d['profile_id']),
+                # The worn mark (supporter stars / staff wrench / mod shield), resolved from the
+                # denorm by the one resolver -- the wall thanks PEOPLE, and people wear their
+                # marks here like everywhere else (2026-08-23, with the credits wall's glyphs).
+                'mark': mark_style(profiles_by_id[d['profile_id']].display_mark),
                 'total_amount': d['total_amount'],
                 'donation_count': d['donation_count'],
                 'latest_donation': d['latest_donation'],

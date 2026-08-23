@@ -468,7 +468,11 @@ substrate, and an earlier version of this page did, which is most of why it read
                     </span>
                     <span class="sup-prev__who">
                         <span class="sup-prev__name">
-                            <span class="sup-prev__cname">{{ person.name }}</span>{% if person.tier %}<span class="sup-prev__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
+                            {% comment %} Service people wear their GLYPH here, not their paid
+                            level's stars (his call): a backer star beside the word "Staff" read
+                            as the wrong icon, and the wrench/shield is the mark the rest of the
+                            site knows them by. Same paths as components/name_mark.html. {% endcomment %}
+                            <span class="sup-prev__cname">{{ person.name }}</span>{% if person.service_key %}<span class="sup-prev__mark sup-prev__mark--svc" aria-hidden="true">{% if person.service_key == 'staff' %}<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>{% else %}<svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>{% endif %}</span>{% elif person.tier %}<span class="sup-prev__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
                         </span>
                         {% comment %} Service roles say so, plainly, in their colour ("Staff" /
                         "Moderator") -- more obvious than a crimson name alone. Everyone else

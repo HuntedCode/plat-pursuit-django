@@ -1575,6 +1575,32 @@ def test_legacy_supporters_rank_with_their_worn_level(client):
     assert wall.index('LegacyPlus') < wall.index('NewPatron') < wall.index('NewBacker'),         'the worn Sponsor level did not place the legacy supporter above patron'
 
 
+def test_service_people_wear_their_glyph_on_the_wall_not_their_paid_stars(client):
+    """His call (2026-08-23), reversing the stars-stay-paid rule: a paying staff member or mod
+    wears the wrench/shield in the credits' mark slot -- the backer star beside the word "Staff"
+    read as the wrong icon. Everyone else keeps their level's stars."""
+    from tests.factories import ProfileFactory
+
+    ProfileFactory(display_psn_username='TheBoss', show_on_supporter_wall=True,
+                   user__premium_tier='backer', display_mark='staff')
+    ProfileFactory(display_psn_username='TheMod', show_on_supporter_wall=True,
+                   user__premium_tier='backer', display_mark='mod')
+    ProfileFactory(display_psn_username='PlainBacker', show_on_supporter_wall=True,
+                   user__premium_tier='backer')
+    _clear_support_cache()
+
+    wall = _wall(_flat(client))
+
+    assert wall.count('sup-prev__mark--svc') == 2, 'the service glyph slots are missing'
+    assert 'M14.7 6.3a1 1 0 0 0 0 1.4' in wall, "the staff wrench never rendered"
+    assert 'M20 13c0 5-3.5 7.5' in wall, "the mod shield never rendered"
+    # The mod's amber, not the old green that sat beside backer teal.
+    assert '#ff9d45' in wall
+    assert '#59c96f' not in wall
+    # A plain supporter still wears stars.
+    assert 'pp-supstar' in wall
+
+
 def test_a_non_supporter_is_never_on_the_wall(client):
     """`show_on_supporter_wall` defaults True on EVERY profile, supporter or not, because it is
     inert for anyone without a tier. If the query ever stopped filtering on the tier, that default

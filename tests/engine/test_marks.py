@@ -220,7 +220,7 @@ def test_the_partial_renders_each_register():
     assert 'pp-supname' in staff
 
     mod = _render('Mo', 'mod')
-    assert '#59c96f' in mod and 'aria-label="Moderator"' in mod
+    assert '#ff9d45' in mod and 'aria-label="Moderator"' in mod
 
     patron = _render('Pat', 'patron')
     assert patron.count('pp-supstar') == 2

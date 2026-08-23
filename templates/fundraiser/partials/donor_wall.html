@@ -20,7 +20,7 @@ crown chip and a warning-tint accent, never a heavier border. {% endcomment %}
                     </span>
                     <span class="sup-prev__who">
                         <span class="sup-prev__name">
-                            <a href="{% url 'profile_detail' donor.profile.psn_username %}" class="fnd-donor__link">{{ donor.profile.display_psn_username }}</a>
+                            <a href="{% url 'profile_detail' donor.profile.psn_username %}" class="fnd-donor__link"{% if donor.mark %} style="color: {{ donor.mark.colour }}"{% endif %}>{{ donor.profile.display_psn_username }}</a>{% include 'components/_mark_glyphs_inline.html' with mark=donor.mark star_px=12 svc_px=13 %}
                             {% if forloop.first %}
                             <span class="fnd-donor__crown" role="img" aria-label="Top supporter" title="Top supporter">
                                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/></svg>
