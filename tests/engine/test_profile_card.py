@@ -97,6 +97,8 @@ def test_the_card_wears_the_mark():
 
     # One star SVG per _mark_glyphs_inline star; the marked name is coloured, not #f0f6fd.
     assert 'M12 2.6l2.6 5.9' in html, 'the supporter star run is missing'
+    # And the tier's full name in words, on the identity strip (his call: stars need their words).
+    assert 'PlatPursuit Backer' in html, 'the mark label is missing from the identity strip'
 
 
 def test_a_fresh_profile_still_composes_a_complete_card():
@@ -107,6 +109,10 @@ def test_a_fresh_profile_still_composes_a_complete_card():
     assert 'share-image-content' in html
     assert 'Platinum' in html          # the big-statement label survives a zero
     assert 'of' in html and 'Badges' in html
+    # The career row is a FIXED shape -- zeros render, cells never vanish (the density call:
+    # a fresh Pursuer's card shows the shape of what's ahead, not a gap-toothed row).
+    for label in ('Jobs Played', 'Tiers Earned', 'Career XP', 'Collection'):
+        assert label in html, f'the career row lost its {label} cell'
 
 
 # --- The PNG endpoint ---

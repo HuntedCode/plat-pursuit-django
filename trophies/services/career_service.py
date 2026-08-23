@@ -137,6 +137,7 @@ def build_hero_context(profile):
         logger.exception("Career jobs build failed for profile %s", getattr(profile, 'id', '?'))
     context['career'] = jobs
     context['total_xp_compact'] = _compact(jobs['total_xp']) if jobs else '0'
+    context['tiers_earned'] = _tiers_earned(jobs)   # prestige tiers held across all jobs (free: pure Python)
     try:
         context['hero'] = _build_hero(profile, jobs)
     except Exception:
@@ -151,5 +152,4 @@ def build_career_context(profile):
     the hero reads its totals (Pursuer Level + Total XP)."""
     context = build_hero_context(profile)
     context['job_tier_dates'] = _job_tier_dates(profile)   # {job_slug: {tier_key: reached_at}} for the modals
-    context['tiers_earned'] = _tiers_earned(context['career'])   # prestige tiers held across all jobs (a stat-card aggregate)
     return context

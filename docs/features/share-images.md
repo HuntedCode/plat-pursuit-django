@@ -90,10 +90,15 @@ inlined theme blob off the SEO-inbound page.
 ## The Profile Card (the profile page's Card tab)
 
 The family's third sibling (2026-08): one 1200x630 landscape card whose subject is the **hunter's
-whole career** -- platinum count, per-tier trophy tallies, trophy level / average completion /
-rarest platinum / career XP, the badge collection (newest medallions + held-of-catalog), and the
-Pursuer standing (disciplines ring, level, rank, dominant discipline). It replaces the deleted 2025
-profile card and is built entirely on the new systems.
+whole career**, deliberately DENSE (his call: "if there is any card that should be dense it's this
+one"). Identity strip carries the worn title and the mark's full name (supporter tier / Staff /
+Moderator) in its colour. The trophy side: platinum count + 100% games, per-tier tallies, trophy
+level / average completion / games / rarest-platinum %, a flavor line naming the rarest and latest
+platinums, then a fixed-shape career row (jobs played of catalog, tiers earned, career XP,
+collection %). The Pursuer side: disciplines ring around the level, rank, and the full five-
+discipline legend with per-family level totals. The spine: newest medallions, held-of-catalog with
+open-chase and holo counts, the closest-badge chase with its real progress bar, and the dominant
+discipline. It replaces the deleted 2025 profile card and is built entirely on the new systems.
 
 **Where it lives:** its own **Card tab on the profile page**, owner-only -- not on My Shareables
 (that page is plat-cards-only; every card has its own singular place). The tab's preview is the

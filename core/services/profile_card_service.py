@@ -41,10 +41,33 @@ def _badge_summary(profile):
     same denominator it uses), so the card can never claim a badge the Collection wouldn't show.
     All reads are bounded by holdings, never by trophies.
     """
+    from trophies.models import SeriesBadgeStanding
+    from trophies.services.collection_service import closest_badge
+
     catalog_total = GroupBadge.objects.filter(is_live=True).count()
     held = UserGroupBadge.objects.filter(profile=profile, group_badge__is_live=True)
     earned = held.count()
     holo = held.filter(is_holo=True).count()
+
+    # Chases still open: standings short of complete, minus series already held in ANY edition
+    # (megamix badges are earned at min_count while progress_bp measures cleared/gating, so a held
+    # series can sit under 10000 bp -- the same wrinkle closest_badge excludes held series for; and
+    # like closest_badge's exclusion the held set is deliberately NOT live-filtered, so a retired
+    # edition still counts as holding the series). The live-series gate mirrors closest_badge's
+    # third exclusion: standings survive a series going dormant forever, and a curator smoke-testing
+    # an unreleased series against real profiles must not put a phantom chase on their card. All
+    # reads bounded by engagement, never trophies.
+    held_slugs = set(
+        UserGroupBadge.objects.filter(profile=profile)
+        .values_list('group_badge__series__series_slug', flat=True)
+    )
+    chasing = (
+        SeriesBadgeStanding.objects
+        .filter(profile=profile, progress_bp__lt=10000,
+                series_slug__in=GroupBadge.objects.filter(is_live=True).values('series__series_slug'))
+        .exclude(series_slug__in=held_slugs)
+        .count()
+    )
 
     medallions = []
     recent = (
@@ -65,7 +88,11 @@ def _badge_summary(profile):
     return {
         'earned': earned,
         'catalog_total': catalog_total,
+        'pct': round(earned / catalog_total * 100) if catalog_total else 0,
         'holo': holo,
+        'chasing': chasing,
+        # The series they're nearest to finishing -- the Collection CTA's own read (or None).
+        'closest': closest_badge(profile),
         'medallions': medallions,
     }
 
@@ -88,14 +115,28 @@ def get_card_data(profile):
     if dominant:
         dominant = {**dominant, 'colour': DISCIPLINE_COLOURS.get(dominant.get('slug'), '#9da5b1')}
 
-    # The rarest platinum's global earn rate, off the denormed FK -- one PK lookup, no scan.
-    rarest_rate = None
-    if profile.rarest_plat_id:
-        rarest_rate = (
-            EarnedTrophy.objects.filter(pk=profile.rarest_plat_id)
-            .values_list('trophy__trophy_earn_rate', flat=True)
+    # The rarest and latest platinums, off the denormed FKs -- one PK lookup each, no scan, and
+    # values_list means the ~30 KB IGDB blob can never ride along.
+    def _plat_flavor(pk):
+        if not pk:
+            return None, None
+        row = (
+            EarnedTrophy.objects.filter(pk=pk)
+            .values_list('trophy__game__concept__unified_title', 'trophy__game__title_name',
+                         'trophy__trophy_earn_rate')
             .first()
         )
+        if not row:
+            return None, None
+        unified, title_name, rate = row
+        return (unified or title_name), rate
+
+    rarest_name, rarest_rate = _plat_flavor(profile.rarest_plat_id)
+    # For a hunter with one platinum (or a rarest that IS the latest) the two clauses would print
+    # the same game twice; the latest clause simply drops, and its query with it.
+    recent_name = None
+    if profile.recent_plat_id and profile.recent_plat_id != profile.rarest_plat_id:
+        recent_name, _ = _plat_flavor(profile.recent_plat_id)
 
     # All four tiers, unconditionally: this is a career, not one game's trophy list, so a zero is
     # a true statement about the hunter rather than a tier the game never defined.
@@ -110,7 +151,9 @@ def get_card_data(profile):
         for tier, colour in TIER_DISPLAY
     ]
 
-    total_job_xp = hero.get('total_job_xp') or 0
+    # Jobs actually touched (personal, unlike jobs['total'] which is the ~24-job catalog size).
+    jobs = (career_ctx or {}).get('career') or {}
+    jobs_played = sum(d.get('played', 0) for d in jobs.get('disciplines', []))
 
     return {
         'username': profile.display_psn_username or profile.psn_username,
@@ -127,14 +170,18 @@ def get_card_data(profile):
         'avg_progress': snap.get('avg_progress') or 0,
         'tier_counts': tier_counts,
         'rarest_rate': round(float(rarest_rate), 2) if rarest_rate is not None else None,
+        'rarest_name': rarest_name,
+        'recent_name': recent_name,
 
         'pursuer_level': hero.get('pursuer_level') or 0,
         'rank_label': (hero.get('pursuer_rank') or {}).get('label', ''),
         'ring': ring,
         'dominant': dominant,
-        # Compact ("2.6M") because the cell is small; zero is hidden by the template, so a hunter
-        # who hasn't touched the Job Board isn't shown an empty ledger.
-        'career_xp_compact': (career_ctx or {}).get('total_xp_compact') if total_job_xp else None,
+        'jobs_played': jobs_played,
+        'jobs_total': jobs.get('total') or 0,
+        'tiers_earned': (career_ctx or {}).get('tiers_earned') or 0,
+        # Compact ("2.6M"); zeros render honestly -- the career row is a fixed shape.
+        'career_xp_compact': (career_ctx or {}).get('total_xp_compact') or '0',
 
         'badges': _badge_summary(profile),
     }
