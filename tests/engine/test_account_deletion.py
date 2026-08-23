@@ -191,6 +191,22 @@ def test_a_paypal_id_with_no_scheduled_end_blocks_even_when_status_reads_none(cl
     assert CustomUser.objects.filter(pk=user.pk).exists()
 
 
+def test_a_former_stripe_customer_with_no_live_sub_can_load_and_delete(client):
+    """Regression: the guard's djstripe query filtered on a bare `status`, which dj-stripe
+    2.10's lean Subscription doesn't have as a column (it lives in the stripe_data JSON) --
+    a FieldError 500 on settings GET for anyone with a stripe_customer_id. The other tests
+    never set one, so the branch went unbuilt until a real dev machine hit it."""
+    profile, user, rating = _account(client)
+    user.stripe_customer_id = 'cus_former_member'
+    user.save(update_fields=['stripe_customer_id'])
+
+    assert client.get(URL).status_code == 200
+
+    resp = _delete(client)
+    assert resp['Location'] == reverse('account_deleted')
+    assert not CustomUser.objects.filter(pk=user.pk).exists()
+
+
 def test_has_active_subscription_blocks_when_membership_status_misses(client):
     profile, user, rating = _account(client)
 

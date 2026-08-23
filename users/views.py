@@ -134,10 +134,14 @@ class SettingsView(LoginRequiredMixin, View):
             return True
         # Any non-terminal Stripe subscription in the local mirror (unpaid, incomplete,
         # paused...) blocks too; canceled/incomplete_expired are terminal and don't.
+        # `stripe_data__status`, NOT `status`: dj-stripe 2.10's lean models keep the payload
+        # in the stripe_data JSON (every filter in subscription_service reads it this way,
+        # and a bare `status` lookup is a FieldError at query-build time). A row with no
+        # status in its payload fails the exclude and blocks -- the safe direction.
         if user.stripe_customer_id:
             return Subscription.objects.filter(
                 customer_id=user.stripe_customer_id,
-            ).exclude(status__in=('canceled', 'incomplete_expired')).exists()
+            ).exclude(stripe_data__status__in=('canceled', 'incomplete_expired')).exists()
         return False
 
     def post(self, request):
