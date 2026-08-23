@@ -117,7 +117,7 @@ def test_the_429_handler_is_declared_and_returns_429():
     'account/email.html', 'account/email_confirm.html', 'account/verification_sent.html',
     'account/password_reset.html', 'account/password_reset_done.html',
     'account/password_reset_from_key.html', 'account/password_reset_from_key_done.html',
-    'account/link_psn.html',
+    'account/link_psn.html', 'account/account_inactive.html', 'account/reauthenticate.html',
 ])
 def test_every_reachable_account_template_is_ours(name):
     origin = get_template(name).origin.name
@@ -191,3 +191,59 @@ def test_a_human_signup_still_works(client):
 
     assert resp.status_code == 302
     assert CustomUser.objects.filter(email='human@example.com').exists()
+
+
+# ── Phases D + E: touch-ups + the created overrides ───────────────────────────────────────────
+
+@pytest.mark.parametrize('url,h1_text', [
+    ('/accounts/password/reset/', 'Forgot Password?'),
+    ('/accounts/password/reset/done/', 'Reset Link Sent'),
+    ('/accounts/password/reset/key/done/', 'Password Reset Complete'),
+    ('/accounts/confirm-email/', 'Check Your Inbox'),
+])
+def test_touched_up_pages_carry_cascade_and_one_h1(client, url, h1_text):
+    body = client.get(url).content.decode()
+
+    assert 'pp-head-cascade' in body
+    assert body.count('<h1') == 1
+    assert h1_text in body
+
+
+def test_no_sub_aa_dimming_survives_in_the_family():
+    """text-base-content/40 and /50 sit below the AA floor --pp-text-mute was raised to;
+    the family floor is /60."""
+    root = ROOT / 'templates' / 'account'
+    for f in sorted(root.glob('*.html')):
+        src = f.read_text(encoding='utf-8')
+        assert 'text-base-content/40' not in src, f'{f.name} dims below the family floor'
+        assert 'text-base-content/50' not in src, f'{f.name} dims below the family floor'
+
+
+def test_account_inactive_wears_house_chrome(client):
+    profile = ProfileFactory(is_linked=True)
+    user = profile.user
+    user.set_password('inactive-pass-1')
+    user.is_active = False
+    user.save()
+    from allauth.account.models import EmailAddress
+    EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+
+    resp = client.post('/accounts/login/', {'login': user.email, 'password': 'inactive-pass-1'},
+                       follow=True)
+
+    body = resp.content.decode()
+    assert 'Account Inactive' in body
+    assert 'Contact Us' in body, 'the one moment a bare white page would be most alarming'
+
+
+def test_link_psn_step_one_renders_for_an_unlinked_user(client):
+    profile = ProfileFactory(is_linked=True)
+    user = profile.user
+    profile.unlink_user()
+    client.force_login(user)
+
+    body = client.get(reverse('link_psn')).content.decode()
+
+    assert body.count('<h1') == 1
+    assert 'Link Your PSN Account' in body
+    assert 'pp-head-cascade' in body
