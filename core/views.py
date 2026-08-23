@@ -202,6 +202,13 @@ class HomeView(TemplateView):
         # community-stats card. Reused directly so we don't recompute on render.
         context['site_heartbeat'] = get_cached_heartbeat()
 
+        if state == 'anonymous':
+            # The landing: cached community reads + cron-rendered artifacts ONLY (see the
+            # service's module rule). Adds no per-user work; the page stays ~free.
+            from core.services import landing_service
+            context.update(landing_service.build_landing_context())
+            return context
+
         if state == 'syncing':
             profile = self.request.user.profile
             context['profile'] = profile

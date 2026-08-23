@@ -1,0 +1,367 @@
+/* ==========================================================================================
+   land -- the anonymous landing (2026-08 rebuild).
+
+   Mobile-first (base 375 -> md 768 -> lg 1024). One custom family for the page's own shapes;
+   buttons are pp-cta, medallions are the shared component, the showcase card is the real
+   Profile Card transform-scaled the way every card preview on the site is. The section
+   eyebrow (tick + small caps) deliberately echoes the Profile Card's own section eyebrows:
+   the front door teaches the product's grammar before you're inside.
+   ========================================================================================== */
+
+/* ── Eyebrow (shared by every section) ── */
+.land-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--pp-text-mute);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+.land-eyebrow__tick {
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--pp-primary);
+    flex-shrink: 0;
+}
+
+/* ── Hero ── */
+.land-hero {
+    padding: 3.5rem 0 3rem;
+}
+@media (min-width: 768px) { .land-hero { padding: 5.5rem 0 4rem; } }
+
+.land-hero__inner {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1.1rem;
+}
+.land-hero__inner .land-eyebrow { justify-content: center; }
+
+.land-hero__h1 {
+    font-family: var(--pp-font-display);
+    font-size: 2.1rem;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: var(--pp-text);
+    text-wrap: balance;
+}
+@media (min-width: 768px) { .land-hero__h1 { font-size: 3.1rem; } }
+
+.land-hero__sub {
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+    max-width: 56ch;
+}
+@media (min-width: 768px) { .land-hero__sub { font-size: 1.05rem; } }
+
+/* The hero's one orchestrated beat: children rise in sequence on load. Same recipe as
+   pp-head-cascade but for more children, and gated behind no-preference. */
+@media (prefers-reduced-motion: no-preference) {
+    .land-hero__inner > * { animation: ppRevealIn 0.55s var(--pp-ease) backwards; }
+    .land-hero__inner > :nth-child(1) { animation-delay: 0s; }
+    .land-hero__inner > :nth-child(2) { animation-delay: 0.07s; }
+    .land-hero__inner > :nth-child(3) { animation-delay: 0.14s; }
+    .land-hero__inner > :nth-child(4) { animation-delay: 0.22s; }
+    .land-hero__inner > :nth-child(n+5) { animation-delay: 0.3s; }
+}
+
+/* The search */
+.land-search {
+    display: flex;
+    width: 100%;
+    max-width: 520px;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+}
+.land-search__input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.7rem 1rem;
+    font-size: 1rem;
+    color: var(--pp-text);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.land-search__input:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+.land-search__go {
+    font-size: 0.9rem;
+    padding: 0.7rem 1.15rem;
+    white-space: nowrap;
+}
+@media (max-width: 480px) {
+    .land-search { flex-direction: column; }
+}
+
+.land-search__hint {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--pp-text-mute);
+    max-width: 52ch;
+}
+
+/* The wait, staged */
+.land-search__status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-1);
+    max-width: 520px;
+    width: 100%;
+}
+.land-search__status.is-error { border-color: color-mix(in oklab, var(--pp-error) 45%, transparent); }
+.land-search__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--pp-primary);
+    flex-shrink: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-search__status.is-waiting .land-search__dot { animation: landPulse 1.6s ease-in-out infinite; }
+}
+@keyframes landPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.72); }
+}
+.land-search__status.is-error .land-search__dot { background: var(--pp-error); }
+.land-search__status.is-ready .land-search__dot { background: var(--pp-success); }
+.land-search__msg {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--pp-text-dim);
+    min-width: 0;
+}
+.land-search__visit {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--pp-primary);
+    white-space: nowrap;
+}
+.land-search__visit svg { width: 14px; height: 14px; }
+.land-search__visit:hover { text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+
+.land-hero__accounts {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+}
+.land-hero__link { color: var(--pp-text-dim); font-weight: 600; transition: color 0.15s ease; }
+.land-hero__link:hover { color: var(--pp-text); }
+.land-hero__sep { color: var(--pp-text-mute); }
+
+/* ── The heartbeat band ── */
+.land-pulse {
+    padding: 1.75rem 0;
+    border-top: 1px solid var(--pp-divider);
+    border-bottom: 1px solid var(--pp-divider);
+    background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent);
+}
+.land-pulse__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem 1rem;
+    max-width: 900px;
+    margin: 0 auto;
+}
+@media (min-width: 768px) { .land-pulse__grid { grid-template-columns: repeat(4, 1fr); } }
+.land-pulse__grid--duo {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 480px;
+    margin-top: 1.5rem;
+}
+.land-pulse__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.3rem;
+}
+.land-pulse__num {
+    font-family: var(--pp-font-display);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--pp-text);
+    letter-spacing: -0.02em;
+}
+@media (min-width: 768px) { .land-pulse__num { font-size: 1.9rem; } }
+.land-pulse__lbl {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.land-pulse__tag {
+    margin-top: 1.25rem;
+    text-align: center;
+    font-size: 0.82rem;
+    font-style: italic;
+    color: var(--pp-text-mute);
+    padding-right: 4px;
+}
+
+/* ── Generic section ── */
+.land-sec { padding: 3.25rem 0; }
+@media (min-width: 768px) { .land-sec { padding: 4.5rem 0; } }
+.land-sec--tight { padding: 2rem 0; }
+
+.land-sec__head {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.8rem;
+}
+.land-sec__head .land-eyebrow { justify-content: center; }
+.land-sec__h2 {
+    font-family: var(--pp-font-display);
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    color: var(--pp-text);
+    text-wrap: balance;
+}
+@media (min-width: 768px) { .land-sec__h2 { font-size: 2.1rem; } }
+.land-sec__h2--sm { font-size: 1.3rem; }
+@media (min-width: 768px) { .land-sec__h2--sm { font-size: 1.55rem; } }
+.land-sec__sub {
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
+.land-sec__foot { display: flex; justify-content: center; margin-top: 2rem; }
+
+/* ── Medallion shelf ── */
+.land-medals {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem 0.75rem;
+    max-width: 760px;
+    margin: 2.25rem auto 0;
+}
+@media (min-width: 768px) { .land-medals { grid-template-columns: repeat(6, 1fr); } }
+.land-medals__slot { min-width: 0; }
+
+/* ── The showcase card ── */
+.land-card { margin-top: 2.25rem; }
+.land-card__frame {
+    position: relative;
+    width: 100%;
+    max-width: 1000px;
+    aspect-ratio: 1200 / 630;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--pp-border);
+    box-shadow: 0 18px 40px rgba(5, 8, 12, 0.45);
+}
+.land-card__scaler {
+    width: 1200px;
+    height: 630px;
+    transform-origin: top left;
+}
+.land-card__note {
+    margin-top: 0.9rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--pp-text-mute);
+}
+
+/* ── Verdict pills ── */
+.land-verdicts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: 1.75rem;
+}
+.land-verdicts__pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.9rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--v);
+    border: 1px solid color-mix(in oklab, var(--v) 50%, transparent);
+    background: color-mix(in oklab, var(--v) 10%, transparent);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+/* ── The proof (share card images) ── */
+.land-proof {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    max-width: 980px;
+    margin: 2.25rem auto 0;
+}
+@media (min-width: 768px) { .land-proof { grid-template-columns: 1fr 1fr; } }
+.land-proof__img {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid var(--pp-border);
+    box-shadow: 0 14px 32px rgba(5, 8, 12, 0.4);
+}
+
+/* ── Discord ── */
+.land-discord {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 1.5rem 1.5rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md, 12px);
+    background: var(--pp-bg-1);
+}
+@media (min-width: 768px) {
+    .land-discord { flex-direction: row; align-items: center; justify-content: space-between; }
+}
+.land-discord__go { flex-shrink: 0; }
+
+/* ── The close ── */
+.land-close {
+    padding: 3.5rem 0 4.5rem;
+    border-top: 1px solid var(--pp-divider);
+}
+.land-close__inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+}
+.land-close__ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }

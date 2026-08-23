@@ -161,6 +161,19 @@ def compute_site_heartbeat() -> dict:
         games_in_contracts = None
         is_partial = True
 
+    # Community ratings -- the landing's Ratings section reads these. The distinct over the full
+    # ratings table is exactly the kind of read that belongs here (hourly cron) and never on a
+    # request path.
+    try:
+        from trophies.models import UserConceptRating
+        ratings_total = UserConceptRating.objects.count()
+        rated_games = UserConceptRating.objects.values('concept').distinct().count()
+    except Exception:
+        logger.exception("ratings stats query failed")
+        ratings_total = None
+        rated_games = None
+        is_partial = True
+
     # Flavor line: pre-formatted in service so template stays dumb
     flavor_numbers = (
         f"{_humanize_compact(badge_xp_total)} XP earned · "
@@ -238,6 +251,16 @@ def compute_site_heartbeat() -> dict:
                 'value': games_in_contracts,
                 'label': 'Games in contracts',
                 'sublabel': 'catalogue',
+            },
+            'ratings_total': {
+                'value': ratings_total,
+                'label': 'Ratings',
+                'sublabel': 'from finishers only',
+            },
+            'rated_games': {
+                'value': rated_games,
+                'label': 'Games rated',
+                'sublabel': 'by people who finished them',
             },
         },
         'flavor': {

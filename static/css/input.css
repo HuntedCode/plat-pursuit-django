@@ -53,6 +53,7 @@
 @import "./components/cta.css";
 @import "./components/settings-page.css";
 @import "./components/profile-card-tab.css";
+@import "./components/landing.css";
 @plugin "daisyui";
 
 @theme {

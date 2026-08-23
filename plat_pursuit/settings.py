@@ -65,6 +65,10 @@ DISCORD_TEST_WEBHOOK_URL = os.getenv('DISCORD_TEST_WEBHOOK_URL')
 # The public invite. Defaulted to the real one so prod works with no env change -- this was
 # never configured anywhere, which left the welcome email's Discord CTA dead in production.
 DISCORD_INVITE_URL = os.getenv('DISCORD_INVITE_URL', 'https://discord.gg/platpursuit')
+
+# The profile whose REAL Profile Card the anon landing showcases (rendered hourly by
+# refresh_homepage_hourly, never on the request path). Unset -> the landing's literal fixture.
+LANDING_SHOWCASE_PSN = os.getenv('LANDING_SHOWCASE_PSN', '')
 PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
 PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
 
