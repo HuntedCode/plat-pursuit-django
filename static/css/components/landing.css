@@ -98,6 +98,10 @@
     border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
     box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 22%, transparent);
 }
+.land-search__input:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
 .land-search__go {
     font-size: 0.9rem;
     padding: 0.7rem 1.15rem;
@@ -161,11 +165,17 @@
     white-space: nowrap;
 }
 .land-search__visit svg { width: 14px; height: 14px; }
+.land-search__visit:focus-visible,
+.land-hero__link:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
 @media (prefers-reduced-motion: no-preference) {
     .land-search__status:not([hidden]) { animation: ppRevealIn 0.4s var(--pp-ease); }
     /* The payoff moment gets the page's one SPRING: the overshoot is celebration, and it is
        spent here rather than on chrome because "your profile exists now" is the emotion. */
-    .land-search__visit:not([hidden]) { animation: landSpringIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+    .land-search__visit:not([hidden]) { animation: landSpringIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
 }
 @keyframes landSpringIn {
     from { opacity: 0; transform: scale(0.8); }
@@ -351,10 +361,10 @@
 /* ── The demo rating card ── */
 /* Echoes .pp-rcard's vocabulary (left recommendation edge, stars-over-score verdict, four
    toned stat cells, the quoted take) without its data coupling: live HTML, not a screenshot. */
-.land-rdemo { max-width: 1000px; margin: 1.9rem auto 0; }
+.land-rdemo { max-width: 1000px; margin: 1.9rem auto 0; touch-action: pan-y; }
 /* The stack: every SLIDE (a pair of cards) in the same grid cell (height = tallest slide, so
    the section never jumps), crossfading on .is-active. */
-.land-rdemo__stack { display: grid; touch-action: pan-y; }
+.land-rdemo__stack { display: grid; }
 .land-rdemo__stack > .land-rdemo__slide { grid-area: 1 / 1; }
 .land-rdemo__slide {
     display: grid;
@@ -468,6 +478,11 @@
     color: var(--pp-text);
 }
 .land-rdemo__of { font-size: 0.72em; color: var(--pp-text-mute); font-weight: 600; }
+/* pp-rcard's documented lesson, inherited with its art treatment: this card's width is the
+   PAIRING's business, not the viewport's, so the 2x2 -> 1x4 flip is a CONTAINER query (a
+   media query put four cells in a ~206px body at 768px and overflow: hidden ate the Fun cell
+   silently). The wrapper exists because an element is never its own query container. */
+.land-rdemo__statswrap { container-type: inline-size; }
 .land-rdemo__stats {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -476,18 +491,21 @@
     border-top: 1px solid var(--pp-divider);
     border-bottom: 1px solid var(--pp-divider);
 }
-@media (min-width: 640px) { .land-rdemo__stats { grid-template-columns: repeat(4, 1fr); } }
-.land-rdemo__stat { display: flex; flex-direction: column; gap: 2px; }
+@container (min-width: 360px) { .land-rdemo__stats { grid-template-columns: repeat(4, 1fr); } }
+.land-rdemo__stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .land-rdemo__stat[data-tone="good"] { --stat-c: var(--pp-success); }
 .land-rdemo__stat[data-tone="warn"] { --stat-c: var(--pp-warning); }
 .land-rdemo__stat[data-tone="bad"]  { --stat-c: var(--pp-error); }
 .land-rdemo__stat[data-tone="high"] { --stat-c: var(--pp-accent); }
 .land-rdemo__k {
-    font-size: 0.64rem;
+    font-size: 0.55rem;
     font-weight: 700;
     color: var(--pp-text-mute);
-    letter-spacing: 0.13em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .land-rdemo__n {
     font-family: var(--pp-font-display);
@@ -496,7 +514,7 @@
     color: var(--stat-c, var(--pp-text));
     line-height: 1;
 }
-.land-rdemo__w { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); }
+.land-rdemo__w { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .land-rdemo__take {
     font-size: 0.88rem;
     font-style: italic;
@@ -532,28 +550,42 @@
 .land-rdemo__dots {
     display: flex;
     justify-content: center;
-    gap: 0.55rem;
-    margin-top: 0.9rem;
+    gap: 2px;
+    margin-top: 0.75rem;
 }
+/* Fixed-width SLOTS holding a morphing inner pill: the row's total width never changes, so the
+   centered strip cannot jitter sideways as the pill travels -- and every slot is a real >=24px
+   target rather than an 8px speck. */
 .land-rdemo__dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    width: 28px;
+    height: 24px;
     border: none;
     padding: 0;
     cursor: pointer;
-    background: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
-    transition: background 0.2s ease, transform 0.2s ease;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.land-rdemo__dot { transition: background 0.2s ease, width 0.28s var(--pp-ease); }
-.land-rdemo__dot.is-active {
-    background: var(--pp-primary);
-    width: 22px;
+.land-rdemo__dot::before {
+    content: '';
+    width: 8px;
+    height: 8px;
     border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
+    transition: background 0.2s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-rdemo__dot::before { transition: background 0.2s ease, width 0.28s var(--pp-ease); }
+}
+.land-rdemo__dot.is-active::before {
+    background: var(--pp-primary);
+    width: 20px;
 }
 .land-rdemo__dot:focus-visible {
     outline: 2px solid var(--pp-primary);
-    outline-offset: 3px;
+    outline-offset: 1px;
+    border-radius: 999px;
 }
 
 /* ── The proof (share card images) ── */

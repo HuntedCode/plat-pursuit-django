@@ -183,6 +183,9 @@
                 if (!entry.isIntersecting) { return; }
                 io.disconnect();
                 setTimeout(function () {
+                    // A hovered medallion already shows the state the nudge previews -- and the
+                    // animation ending under a held hover would snap between transform stacks.
+                    if (art.matches && art.matches(':hover')) { return; }
                     // The hover state, previewed: lift, slight overshoot down, settle. Once.
                     art.animate([
                         { transform: 'none' },
@@ -201,19 +204,23 @@
     function wireRatingsCarousel() {
         var host = document.querySelector('[data-land-carousel]');
         if (!host) { return; }
-        var cards = Array.prototype.slice.call(host.querySelectorAll('.land-rdemo__slide'));
+        var slides = Array.prototype.slice.call(host.querySelectorAll('.land-rdemo__slide'));
         var dots = Array.prototype.slice.call(host.querySelectorAll('[data-land-dotindex]'));
-        if (cards.length < 2) { return; }
+        if (slides.length < 2) { return; }
         var index = 0, timer = null;
         var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
         function show(next) {
-            index = (next + cards.length) % cards.length;
-            cards.forEach(function (card, i) {
-                card.classList.toggle('is-active', i === index);
-                card.setAttribute('aria-hidden', i === index ? 'false' : 'true');
+            index = (next + slides.length) % slides.length;
+            slides.forEach(function (slide, i) {
+                slide.classList.toggle('is-active', i === index);
+                slide.setAttribute('aria-hidden', i === index ? 'false' : 'true');
             });
-            dots.forEach(function (dot, i) { dot.classList.toggle('is-active', i === index); });
+            dots.forEach(function (dot, i) {
+                dot.classList.toggle('is-active', i === index);
+                if (i === index) { dot.setAttribute('aria-current', 'true'); }
+                else { dot.removeAttribute('aria-current'); }
+            });
         }
 
         // The rotation only runs while the carousel is actually ON SCREEN: slides advancing
@@ -241,21 +248,25 @@
         host.addEventListener('focusin', stop);
         host.addEventListener('focusout', start);
 
-        // Swipe: direct manipulation, the mobile-native way to page a carousel. Horizontal
-        // only (touch-action: pan-y leaves vertical scrolling to the browser); a swipe advances
-        // and the auto-rotation simply continues from the chosen slide.
-        var swipeX = null, swipeY = null;
-        host.addEventListener('pointerdown', function (e) { swipeX = e.clientX; swipeY = e.clientY; });
+        // Swipe: direct manipulation, the mobile-native way to page a carousel. TOUCH/PEN only
+        // (a mouse drag is text selection, not a page gesture), horizontal only (touch-action:
+        // pan-y on the host leaves vertical scrolling to the browser), and identified by
+        // pointerId so a drag that wanders out and back can never page against a stale origin.
+        // A swipe is a CHOICE, same as a dot press: the rotation stays stopped afterwards.
+        var swipeX = null, swipeY = null, swipeId = null;
+        host.addEventListener('pointerdown', function (e) {
+            if (e.pointerType === 'mouse') { return; }
+            swipeId = e.pointerId; swipeX = e.clientX; swipeY = e.clientY;
+        });
         host.addEventListener('pointerup', function (e) {
-            if (swipeX === null) { return; }
+            if (swipeId === null || e.pointerId !== swipeId) { return; }
             var dx = e.clientX - swipeX, dy = e.clientY - swipeY;
-            swipeX = swipeY = null;
+            swipeId = swipeX = swipeY = null;
             if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy) * 1.5) { return; }
             stop();
             show(index + (dx < 0 ? 1 : -1));
-            start();
         });
-        host.addEventListener('pointercancel', function () { swipeX = swipeY = null; });
+        host.addEventListener('pointercancel', function () { swipeId = swipeX = swipeY = null; });
 
         if ('IntersectionObserver' in window) {
             var io = new IntersectionObserver(function (entries) {

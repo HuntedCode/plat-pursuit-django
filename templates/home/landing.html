@@ -197,7 +197,7 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                             Absent art renders a panel-less card, never a broken one.{% endcomment %}
                             {% if r.art_url %}
                             <div class="land-rdemo__art" aria-hidden="true">
-                                <img class="land-rdemo__shot" src="{{ r.art_url }}" alt="" loading="lazy" />
+                                <img class="land-rdemo__shot" src="{{ r.art_url }}" alt="" loading="lazy" decoding="async" />
                             </div>
                             {% endif %}
                             <div class="land-rdemo__body">
@@ -211,7 +211,7 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                                         <span class="land-rdemo__score">{{ r.overall }}<span class="land-rdemo__of">/5</span></span>
                                     </div>
                                 </div>
-                                <div class="land-rdemo__stats">
+                                <div class="land-rdemo__statswrap"><div class="land-rdemo__stats">
                                     {% for st in r.stats %}
                                     <div class="land-rdemo__stat" data-tone="{{ st.tone }}">
                                         <span class="land-rdemo__k">{{ st.k }}</span>
@@ -219,7 +219,7 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                                         {% if st.word %}<span class="land-rdemo__w">{{ st.word }}</span>{% endif %}
                                     </div>
                                     {% endfor %}
-                                </div>
+                                </div></div>
                                 <p class="land-rdemo__take">&ldquo;{{ r.take }}&rdquo;</p>
                                 <div class="land-rdemo__foot">
                                     <span class="land-rdemo__pill" data-rec="{{ r.rec }}">{{ r.rec_label }}</span>
@@ -232,9 +232,9 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                     {% endfor %}
                 </div>
                 {% if demo_rating_pairs|length > 1 %}
-                <div class="land-rdemo__dots" aria-label="More ratings">
+                <div class="land-rdemo__dots" role="group" aria-label="More ratings">
                     {% for pair in demo_rating_pairs %}
-                    <button type="button" class="land-rdemo__dot{% if forloop.first %} is-active{% endif %}" data-land-dotindex="{{ forloop.counter0 }}" aria-label="Show ratings {{ forloop.counter }}"></button>
+                    <button type="button" class="land-rdemo__dot{% if forloop.first %} is-active{% endif %}" data-land-dotindex="{{ forloop.counter0 }}"{% if forloop.first %} aria-current="true"{% endif %} aria-label="Show ratings {{ forloop.counter }}"></button>
                     {% endfor %}
                 </div>
                 {% endif %}

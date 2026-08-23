@@ -182,7 +182,7 @@ def _fixture_demo_ratings():
 
 
 def render_showcase_ratings():
-    """Cron-side: up to five of the showcase hunter's REAL blurbed base-game ratings, positive
+    """Cron-side: up to six of the showcase hunter's REAL blurbed base-game ratings, positive
     verdicts first, precomputed into literal display dicts (tones and verdict words through the
     site's own filters, so the carousel can never teach vocabulary the product doesn't use).
     Returns True when a set was cached. Never called on the request path.
@@ -243,7 +243,11 @@ def render_showcase_ratings():
             'title': r.concept.unified_title if r.concept_id else '',
             # The pp-rcard art treatment: the game's landscape frame fading into the card. Empty
             # when the concept has none (~1 in 20); the card renders panel-less rather than broken.
-            'art_url': (r.concept.landscape_url or '') if r.concept_id else '',
+            # The medium IGDB renditions: the panel is a 110px column / 72px band, and six
+            # full-size frames on the front door is bandwidth nobody sees.
+            'art_url': ((r.concept.landscape_urls(limit=1, artwork_size='720p',
+                                                  screenshot_size='screenshot_med') or [''])[0]
+                        if r.concept_id else ''),
             'stars_pct': round(float(r.overall_rating or 0) / 5 * 100),
             'overall': f"{float(r.overall_rating or 0):g}",
             'stats': stats,
