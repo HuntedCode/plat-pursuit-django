@@ -175,9 +175,17 @@
             <div class="stg-danger">
                 <div class="stg-danger__say">
                     <span class="stg-danger__name">Delete your account</span>
-                    <span class="stg-danger__sub">The self-serve flow is still being built. For now, send us a message and we will take care of it for you.</span>
+                    {% if deletion_blocked %}
+                    <span class="stg-danger__sub">Your membership is still active. Cancel it first, and deletion opens the moment it ends. Paid time is always honoured.</span>
+                    {% else %}
+                    <span class="stg-danger__sub">Permanently removes your sign-in and personal data. Your PSN profile and trophy history stay public, the same as any hunter who never registered.</span>
+                    {% endif %}
                 </div>
-                <a href="{% url 'contact' %}" class="stg-btn stg-btn--ghost">Contact us</a>
+                {% if deletion_blocked %}
+                <a href="{% url 'subscription_management' %}" class="stg-btn stg-btn--ghost">Manage membership</a>
+                {% else %}
+                <button type="button" class="stg-btn stg-btn--danger" data-delete-open>Delete account</button>
+                {% endif %}
             </div>
         </div>
     </section>
@@ -208,6 +216,77 @@
 
 </div>
 
+{% comment %} ============================================== delete dialog =================
+The specific warning, not boilerplate: what survives (the public pursuit) and what is
+destroyed (the account, and the words -- permanently, even on a return). The blurb warning
+and the download link render only when there is at least one blurb to lose. The typed phrase
+is client-side friction; the password is the server-side gate. {% endcomment %}
+{% if not deletion_blocked %}
+<dialog id="stg-delete" class="sup-modal" aria-labelledby="stg-delete-h">
+    <div class="sup-modal__head">
+        <h2 id="stg-delete-h">Delete your account?</h2>
+        <button type="button" class="sup-modal__x" data-delete-close aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+    </div>
+    <p class="sup-modal__lede">
+        Your sign-in and personal data are permanently removed from PlatPursuit. Stripe and
+        PayPal keep their own transaction records, as they are required to.
+        {% if profile %}Your PSN profile and trophy history stay public, and your game ratings
+        stay with them. If you ever return and relink, your pursuit picks up where it left off.{% endif %}
+    </p>
+    {% if has_blurbs %}
+    <p class="sup-modal__lede stg-delete__warn">
+        Your written quick takes are erased permanently. They will not come back, even if you
+        return and relink. <a href="{% url 'export_quick_takes' %}">Download a copy</a> first
+        if you want to keep your words.
+    </p>
+    {% endif %}
+    {% if deletion_grace_until %}
+    <p class="sup-modal__lede stg-delete__warn">
+        Your remaining membership time (through {{ deletion_grace_until|date:"F j, Y" }}) ends
+        now and cannot be refunded.
+    </p>
+    {% endif %}
+    <form method="post" class="stg-delete__form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_account">
+        <div class="stg-field">
+            <label class="stg-field__label" for="stg-delete-pw">Your password</label>
+            <input type="password" id="stg-delete-pw" name="password" class="stg-input" autocomplete="current-password" required>
+        </div>
+        <div class="stg-field">
+            <label class="stg-field__label" for="stg-delete-phrase">Type <strong>delete my account</strong> to confirm</label>
+            <input type="text" id="stg-delete-phrase" class="stg-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="stg-confirm__row">
+            <button type="button" class="stg-confirm__keep" data-delete-close autofocus>Keep my account</button>
+            <button type="submit" class="stg-confirm__go" data-delete-go disabled>Delete my account</button>
+        </div>
+    </form>
+</dialog>
+<noscript>
+    {% comment %} Without JS the dialog opener is inert, so the confirm renders as static
+    content. The password field is the real gate either way; the required checkbox keeps it
+    a genuine two-step. {% endcomment %}
+    <div class="stg-danger stg-danger--noscript">
+        <div class="stg-danger__say">
+            <span class="stg-danger__name">Delete your account?</span>
+            <span class="stg-danger__sub">Permanent. Your PSN profile and ratings stay public. {% if has_blurbs %}Your written quick takes are erased, so <a href="{% url 'export_quick_takes' %}">download a copy</a> first if you want to keep them.{% endif %}</span>
+        </div>
+        <form method="post">{% csrf_token %}
+            <input type="hidden" name="action" value="delete_account">
+            <input type="password" name="password" class="stg-input" placeholder="Your password" autocomplete="current-password" required>
+            <label class="stg-danger__confirm">
+                <input type="checkbox" required>
+                <span>Yes, permanently delete my account</span>
+            </label>
+            <button type="submit" class="stg-btn stg-btn--danger">Delete my account</button>
+        </form>
+    </div>
+</noscript>
+{% endif %}
+
 {% comment %} ============================================== unlink dialog ================= {% endcomment %}
 {% if profile %}
 <dialog id="stg-unlink" class="sup-modal" aria-labelledby="stg-unlink-h">
@@ -222,11 +301,11 @@
         account. Nothing is deleted: the trophy history stays with the profile, and relinking later
         picks everything back up.
     </p>
-    <div class="stg-unlink__row">
-        <form method="dialog"><button class="stg-unlink__keep" autofocus>Keep it linked</button></form>
+    <div class="stg-confirm__row">
+        <form method="dialog"><button class="stg-confirm__keep" autofocus>Keep it linked</button></form>
         <form method="post">{% csrf_token %}
             <input type="hidden" name="action" value="unlink_profile">
-            <button type="submit" class="stg-unlink__go">Unlink</button>
+            <button type="submit" class="stg-confirm__go">Unlink</button>
         </form>
     </div>
 </dialog>

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Goodbye - PlatPursuit{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% comment %} Where a just-deleted account lands, anonymously (the session died with the row).
+Quiet and final: no upsell, no survey, one honest paragraph and the door left open. {% endcomment %}
+
+{% block main_layout %}
+<main id="main-content" class="flex-1 flex items-center justify-center px-4 py-6 md:py-10" role="main">
+    <div class="w-full max-w-lg">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-5 md:p-7">
+                <h1 class="text-xl md:text-2xl font-bold mb-2">Your account is deleted.</h1>
+                <p class="text-sm text-base-content/70 leading-relaxed mb-3">
+                    Your sign-in and personal data are gone. Your PSN trophy history remains
+                    public, the same as any hunter who never registered.
+                </p>
+                <p class="text-sm text-base-content/70 leading-relaxed mb-4">
+                    If you ever come back, register again and relink your PSN account. The
+                    pursuit will be waiting where you left it. Thanks for hunting with us.
+                </p>
+                <a href="/" class="link text-sm">Back to PlatPursuit</a>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}

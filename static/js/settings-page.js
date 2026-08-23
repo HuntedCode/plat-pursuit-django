@@ -1,10 +1,12 @@
 /**
  * Settings page (/users/settings/) -- rebuilt 2026-08.
  *
- * Three jobs, all element wiring (re-run on history restore via onPageReady):
+ * Four jobs, all element wiring (re-run on history restore via onPageReady):
  *   1. Section arrival (shared .pp-arrive observer; the template arms html.pp-arm pre-paint).
- *   2. The unlink confirm dialog (native <dialog>, scrim click closes).
+ *   2. The unlink + delete confirm dialogs (native <dialog>, scrim click closes).
  *   3. The timezone Detect button (Intl guess -> select + inline hint; a Save still commits it).
+ *   4. The delete dialog's typed-phrase gate (client-side friction; the password field is the
+ *      server-side gate, so a JS-less submit is still safe).
  */
 (function () {
     'use strict';
@@ -20,17 +22,30 @@
     PlatPursuit.onPageReady(function (first) {
         if (first && PlatPursuit.arriveOnScroll) PlatPursuit.arriveOnScroll();
 
-        // ---- unlink dialog -------------------------------------------------
-        var dialog = document.getElementById('stg-unlink');
-        if (dialog) {
-            document.querySelectorAll('[data-unlink-open]').forEach(function (btn) {
+        // ---- confirm dialogs (unlink + delete share the wiring shape) ------
+        [
+            { id: 'stg-unlink', open: '[data-unlink-open]', close: '[data-unlink-close]' },
+            { id: 'stg-delete', open: '[data-delete-open]', close: '[data-delete-close]' },
+        ].forEach(function (cfg) {
+            var dialog = document.getElementById(cfg.id);
+            if (!dialog) return;
+            document.querySelectorAll(cfg.open).forEach(function (btn) {
                 btn.addEventListener('click', function () { dialog.showModal(); });
             });
-            document.querySelectorAll('[data-unlink-close]').forEach(function (btn) {
+            document.querySelectorAll(cfg.close).forEach(function (btn) {
                 btn.addEventListener('click', function () { dialog.close(); });
             });
             dialog.addEventListener('click', function (e) {
                 if (e.target === dialog) dialog.close();
+            });
+        });
+
+        // ---- delete: typed-phrase gate -------------------------------------
+        var phrase = document.getElementById('stg-delete-phrase');
+        var go = document.querySelector('[data-delete-go]');
+        if (phrase && go) {
+            phrase.addEventListener('input', function () {
+                go.disabled = phrase.value.trim().toLowerCase() !== 'delete my account';
             });
         }
 

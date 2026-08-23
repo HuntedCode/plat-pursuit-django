@@ -750,3 +750,14 @@ membership welcome still send. At deploy:
 - `send_monthly_recap_emails` was already paused (2026-08); no change.
 - `/users/email-preferences/` now 302s to Settings (tokened links in old email footers land
   there); no action needed, listed so nobody hunts for the missing page.
+
+### Account deletion webhook follow-up (2026-08-22, known gap)
+
+Deletion's cancel-first guard blocks every site-visible payment state (membership_status,
+has_active_subscription, a PayPal id with no scheduled end, any non-terminal Stripe sub in the
+djstripe mirror). The residual race it cannot see: a checkout approved seconds before deletion
+whose activation webhook has not landed (both processors write our identifiers only from the
+webhook). The complete fix is a payments-lane follow-up for the email/notifications rebuild
+era: when an activation webhook resolves to no user (CustomUser.DoesNotExist), CANCEL the
+subscription at the processor instead of only logging. Until then the orphan keeps billing
+with no site-side cancel path; the webhook handlers already no-op safely (test-pinned).

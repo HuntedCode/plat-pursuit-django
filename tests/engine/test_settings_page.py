@@ -287,7 +287,7 @@ def test_the_page_links_its_three_additions(linked_client):
 
     assert reverse('account_email') in body                  # email management
     assert reverse('subscription_management') in body or reverse('support_hub') in body  # membership
-    assert reverse('contact') in body                        # deletion stub
+    assert 'data-delete-open' in body                        # account deletion (real flow)
 
 
 # ── the bundle ────────────────────────────────────────────────────────────────────────────────
@@ -297,4 +297,5 @@ def test_the_built_bundle_carries_the_settings_family():
     read the BUILT bundle, not the source file."""
     built = (ROOT / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
 
-    assert '.stg-sec' in built
+    for selector in ('.stg-sec', '.stg-confirm__go', '.stg-delete__warn'):
+        assert selector in built, f'{selector} missing from the built bundle'

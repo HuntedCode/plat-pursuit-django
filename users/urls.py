@@ -1,9 +1,13 @@
 from django.urls import path
-from django.views.generic import RedirectView
-from users.views import SettingsView, subscribe_success, paypal_cancel_subscription, stripe_billing_portal
+from django.views.generic import RedirectView, TemplateView
+from users.views import SettingsView, export_quick_takes, subscribe_success, paypal_cancel_subscription, stripe_billing_portal
 
 urlpatterns = [
     path('settings/', SettingsView.as_view(), name='settings'),
+    # The deletion dialog's "take your words with you" download (and harmless any other time).
+    path('settings/export/quick-takes/', export_quick_takes, name='export_quick_takes'),
+    # Where a just-deleted account lands: anonymous by definition (the session died with the row).
+    path('goodbye/', TemplateView.as_view(template_name='users/goodbye.html'), name='account_deleted'),
     # Email preferences: PARKED (2026-08) with the non-vital emails, pending the email-system
     # rebuild. Every remaining email is transactional (auth, billing, fundraiser, membership
     # welcome), so there is nothing to opt out of. The path stays as a redirect because tokened

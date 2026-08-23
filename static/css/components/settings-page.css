@@ -215,7 +215,7 @@
     text-overflow: ellipsis;
 }
 
-/* ---- danger rows (unlink, delete stub) ---------------------------------------------------- */
+/* ---- danger rows (unlink, account deletion) ----------------------------------------------- */
 .stg-danger {
     display: flex;
     flex-wrap: wrap;
@@ -244,8 +244,15 @@
 
 .stg-danger--noscript { margin-top: 12px; }
 
-/* ---- unlink dialog actions (the membership cancel row's shape) ---------------------------- */
-.stg-unlink__row {
+.stg-danger--noscript form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ---- confirm-dialog actions (the membership cancel row's shape; unlink AND delete) -------- */
+.stg-confirm__row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -253,7 +260,7 @@
     margin-top: 14px;
 }
 
-.stg-unlink__keep {
+.stg-confirm__keep {
     padding: 0.45rem 1rem;
     font-size: 0.8rem;
     font-weight: 700;
@@ -263,9 +270,9 @@
     border-radius: var(--pp-radius-md);
 }
 
-.stg-unlink__keep:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.stg-confirm__keep:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 
-.stg-unlink__go {
+.stg-confirm__go {
     padding: 0.45rem 1rem;
     font-size: 0.8rem;
     font-weight: 700;
@@ -275,4 +282,27 @@
     border-radius: var(--pp-radius-md);
 }
 
-.stg-unlink__go:hover { box-shadow: 0 0 10px color-mix(in oklab, var(--pp-error) 25%, transparent); }
+.stg-confirm__go:hover { box-shadow: 0 0 10px color-mix(in oklab, var(--pp-error) 25%, transparent); }
+
+.stg-confirm__go:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ---- delete dialog extras ----------------------------------------------------------------- */
+.stg-delete__warn {
+    padding: 0.6rem 0.8rem;
+    border: 1px solid color-mix(in oklab, var(--pp-error) 30%, var(--pp-border));
+    border-radius: var(--pp-radius-md);
+    background: color-mix(in oklab, var(--pp-error) 6%, transparent);
+}
+
+.stg-delete__warn a { text-decoration: underline; color: var(--pp-text); }
+
+.stg-delete__form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}

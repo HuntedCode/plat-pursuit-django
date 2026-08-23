@@ -8,11 +8,12 @@ from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Value, When
 from django.db.models.functions import Lower
 from django.utils import timezone
 from django.contrib import messages
-from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
@@ -22,7 +23,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
@@ -80,8 +81,18 @@ class SettingsView(LoginRequiredMixin, View):
 
     def _context(self, request, password_form=None):
         from users.services.marks import worn_level_dict
+        from trophies.models import UserConceptRating
         profile = getattr(request.user, 'profile', None)
         level = worn_level_dict(request.user.premium_tier) if request.user.premium_tier else None
+        # Deletion is cancel-first: any live payment relationship blocks it and the dialog
+        # gives way to a "manage membership" pointer. Grace is allowed through with a forfeit
+        # warning: the member already cancelled, and deleting simply ends the paid tail early.
+        membership = SubscriptionService.membership_status(request.user)
+        deletion_blocked = self._deletion_blocked(request.user, membership)
+        # Gates the blurb warning + the download link in the delete dialog: someone who never
+        # wrote a quick take gets a shorter dialog with nothing to export.
+        has_blurbs = bool(profile) and UserConceptRating.objects.filter(
+            profile=profile).exclude(blurb='').exists()
         return {
             'profile': profile,
             'password_form': password_form or CustomPasswordChangeForm(user=request.user),
@@ -92,7 +103,42 @@ class SettingsView(LoginRequiredMixin, View):
             # user_is_premium denorm was the audit-caught bug: a member with no linked PSN
             # profile (or a denorm lagging a fresh purchase) read as "not a member".
             'is_member': bool(level),
+            'deletion_blocked': deletion_blocked,
+            'deletion_grace_until': membership.grace_until if membership.state == 'grace' else None,
+            'has_blurbs': has_blurbs,
         }
+
+    @staticmethod
+    def _deletion_blocked(user, membership):
+        """Cancel-first, belt and braces. `membership_status` is the headline truth, but it
+        deliberately reads 'none' for states a deletion must still respect: a Stripe sub
+        sitting in `unpaid`/`incomplete`, or a PayPal id with no scheduled end that a webhook
+        hiccup left behind. Deleting the user row in any of those states orphans a LIVE
+        billing relationship -- the processor keeps charging and the webhooks dead-end on
+        CustomUser.DoesNotExist with no site-side cancel path left.
+
+        Residual window, accepted and documented: a checkout approved seconds ago whose
+        activation webhook has not landed is invisible to every site-side signal (both
+        processors write our identifiers only from the webhook). Closing it fully means
+        teaching the activation webhooks to cancel at the processor when the user is gone --
+        an email/payments-lane follow-up, recorded in the deploy checklist's known list.
+        """
+        if membership.state in ('active', 'past_due'):
+            return True
+        has_sub, _ = SubscriptionService.has_active_subscription(user)
+        if has_sub:
+            return True
+        # A PayPal subscription id with no cancellation scheduled is a live relationship,
+        # whatever membership_status thinks (grace carries paypal_cancel_at and passes).
+        if user.paypal_subscription_id and not user.paypal_cancel_at:
+            return True
+        # Any non-terminal Stripe subscription in the local mirror (unpaid, incomplete,
+        # paused...) blocks too; canceled/incomplete_expired are terminal and don't.
+        if user.stripe_customer_id:
+            return Subscription.objects.filter(
+                customer_id=user.stripe_customer_id,
+            ).exclude(status__in=('canceled', 'incomplete_expired')).exists()
+        return False
 
     def post(self, request):
         action = request.POST.get('action')
@@ -101,6 +147,7 @@ class SettingsView(LoginRequiredMixin, View):
             'library': self._save_library,
             'change_password': self._change_password,
             'unlink_profile': self._unlink_profile,
+            'delete_account': self._delete_account,
         }.get(action)
         if handler is None:
             return redirect('settings')
@@ -164,6 +211,138 @@ class SettingsView(LoginRequiredMixin, View):
         else:
             messages.error(request, 'No profile to unlink.')
         return redirect('settings')
+
+    def _delete_account(self, request):
+        """Destroy the ACCOUNT, keep the public pursuit (the deletion semantics locked in the
+        2026-08 settings review, Steam comparison and all):
+
+        - The PSN profile survives as an unlinked public hunter (`unlink_user()` -- the same
+          battle-tested bookkeeping as the unlink action: premium denorm, mark, counts).
+        - Numeric ratings survive with it (statistical signal on a public identity; removing
+          them would quietly erode community averages for zero privacy gain).
+        - Blurbs are CLEARED, not hidden -- prose is the one field with the person's voice in
+          it, and a hidden state would be retention without a purpose plus a leak-back path.
+          Pending reports on those blurbs are dismissed as moot.
+        - The user row and everything personal cascade away (allauth emails, tenure periods).
+
+        Guards: cancel-first membership check re-verified server-side (the template hides the
+        form when blocked, but templates are not access control), password re-entry behind the
+        same throttle shape as the password action, CSRF via the normal form path.
+        """
+        from core.models import EmailLog
+        from trophies.models import BlurbReport, UserConceptRating
+
+        # Staff first, before anything destructive: moderation history PROTECTs its moderator
+        # FK ("never delete moderator history"), so a staff self-delete would 500 mid-flow.
+        # Staff offboarding is a by-hand process anyway.
+        if request.user.is_staff or request.user.is_superuser:
+            messages.error(
+                request,
+                'Staff accounts are removed by hand. Send us a message and we will sort it.',
+            )
+            return redirect('settings')
+
+        membership = SubscriptionService.membership_status(request.user)
+        if self._deletion_blocked(request.user, membership):
+            messages.error(
+                request,
+                'Your membership is still active. Cancel it first, and deletion opens the '
+                'moment it ends. Paid time is always honoured.',
+            )
+            return redirect('settings')
+
+        throttle_key = f'settings:delattempts:{request.user.pk}'
+        attempts = cache.get(throttle_key, 0)
+        if attempts >= self.PW_THROTTLE_MAX:
+            messages.error(request, 'Too many attempts. Try again in a few minutes.')
+            return redirect('settings')
+        if not request.user.check_password(request.POST.get('password') or ''):
+            cache.set(throttle_key, attempts + 1, self.PW_THROTTLE_WINDOW)
+            messages.error(request, 'That password is not right. Nothing has been deleted.')
+            return redirect('settings')
+        cache.delete(throttle_key)
+
+        user = request.user
+        profile = getattr(user, 'profile', None)
+        # One transaction for every irreversible step: a failure anywhere rolls the whole
+        # thing back rather than leaving a half-destroyed, logged-out account. The logout is
+        # inside on purpose -- the session flush is a DB write and belongs to the same fate.
+        with transaction.atomic():
+            if profile is not None:
+                # Dismissed with the same bookkeeping the admin's own dismiss action writes
+                # (a dismissed row with no reviewed_at reads as corruption in the queue).
+                # reviewed_by stays NULL legitimately: this is a system action. Reports the
+                # user FILED against others stay pending on the surviving profile.
+                BlurbReport.objects.filter(
+                    rating__profile=profile, status='pending',
+                ).update(status='dismissed', reviewed_at=timezone.now(),
+                         admin_notes='Author deleted their account.')
+                # blurb_hidden resets with the clear: the flag is a judgment on prose that no
+                # longer exists, and the write path never resets it -- left set, a returning
+                # hunter's NEW quick take on the same game would be invisible.
+                UserConceptRating.objects.filter(profile=profile).exclude(blurb='').update(
+                    blurb='', blurb_hidden=False)
+                profile.unlink_user()
+            # The address is the personal data in an email log; the log's system value
+            # (what sent, when, delivery status) survives the scrub.
+            EmailLog.objects.filter(user=user).update(recipient_email='')
+
+            logger.info("Account deletion: user %s (profile %s)", user.pk,
+                        profile.pk if profile else None)
+            # Log out BEFORE the delete so the session stops referencing a row that is
+            # about to go; the goodbye page renders anonymously.
+            logout(request)
+            user.delete()
+        return redirect('account_deleted')
+
+
+@login_required
+@require_GET
+def export_quick_takes(request):
+    """The deletion dialog's "take your words with you" download: every rating that carries a
+    quick take, with its scores for context, as a JSON attachment. Offered before deletion so
+    the permanent blurb erase is a choice made with a copy in hand; harmless to hit at any
+    other time. Blurb-carrying rows only -- that matches the link's framing AND the deletion
+    semantics (score-only ratings survive on the profile, so there is nothing to save), and it
+    keeps the iteration bounded by hand-written prose rather than library size (whale-safe).
+    """
+    from trophies.models import UserConceptRating
+
+    profile = getattr(request.user, 'profile', None)
+    if profile is None:
+        return redirect('settings')
+
+    rows = (
+        UserConceptRating.objects.filter(profile=profile)
+        .exclude(blurb='')
+        .select_related('concept', 'concept_trophy_group')
+        .order_by('-updated_at')
+    )
+    payload = {
+        'psn_name': profile.display_psn_username or profile.psn_username,
+        'exported_at': timezone.now().isoformat(),
+        'ratings': [
+            {
+                'game': r.concept.unified_title,
+                'trophy_group': r.concept_trophy_group.display_name if r.concept_trophy_group else None,
+                'difficulty': r.difficulty,
+                'grindiness': r.grindiness,
+                'hours_to_platinum': r.hours_to_platinum,
+                'fun': r.fun_ranking,
+                'overall': r.overall_rating,
+                'recommendation': r.recommendation,
+                'quick_take': r.blurb,
+                'updated_at': r.updated_at.isoformat(),
+            }
+            for r in rows
+        ],
+    }
+    response = HttpResponse(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        content_type='application/json; charset=utf-8',
+    )
+    response['Content-Disposition'] = 'attachment; filename="platpursuit-quick-takes.json"'
+    return response
 
 class SupportStorefrontView(TemplateView):
     """`/support/` -- the Support hub landing AND the membership storefront, deliberately one page.
