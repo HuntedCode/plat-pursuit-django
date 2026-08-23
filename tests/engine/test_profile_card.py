@@ -181,6 +181,33 @@ def test_the_download_is_always_your_own_card(client, monkeypatch):
     assert 'cardowner-profile-card.png' in resp['Content-Disposition'].lower()
 
 
+def test_the_download_refuses_a_theme_it_cannot_render(client):
+    """Recap's rule: an unknown theme, or one expecting a game image this card never supplies,
+    is a 400 -- never a silent swap to a different ground than the preview showed."""
+    profile = _linked_profile()
+    client.force_login(profile.user)
+
+    assert client.get('/api/v1/shareables/profile/png/?theme=nope').status_code == 400
+    # The half the filter exists for: ppArt is real and curated, but it expects a game image.
+    assert client.get('/api/v1/shareables/profile/png/?theme=ppArt').status_code == 400
+
+
+def test_a_curated_ground_renders(client, monkeypatch):
+    profile = _linked_profile()
+    client.force_login(profile.user)
+    seen = {}
+
+    def fake_render(html, **kwargs):
+        seen.update(kwargs)
+        return b'PNG-fake'
+    monkeypatch.setattr('core.services.playwright_renderer.render_png', fake_render)
+
+    resp = client.get('/api/v1/shareables/profile/png/?theme=ppEmber')
+
+    assert resp.status_code == 200
+    assert seen.get('theme_key') == 'ppEmber', 'the chosen ground never reached the renderer'
+
+
 def test_a_render_failure_reports_instead_of_crashing(client, monkeypatch):
     profile = _linked_profile()
     client.force_login(profile.user)
@@ -212,6 +239,11 @@ def test_the_owner_gets_the_card_tab(client):
     assert '<div class="share-image-content"' in body, 'the inline preview is missing or escaped'
     assert 'data-pfc-download' in body, 'the download control is missing'
     assert 'data-tab="card"' in body, 'the Card chip is not offered to the owner'
+    # The family's grounds, the same .pc-theme swatch component the recap and plat cards render,
+    # with no game-art backing offered (a career has no game to back it with).
+    assert 'data-pfc-theme' in body, 'the ground swatches are missing'
+    assert body.count('pc-theme__swatch') >= 8, 'the curated grounds are not all offered'
+    assert 'pc-theme--art' not in body, 'a game-art ground leaked into the profile card picker'
 
 
 def test_a_visitor_is_not_offered_the_chip_and_cannot_reach_the_tab(client):

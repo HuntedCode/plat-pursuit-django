@@ -521,8 +521,13 @@ class ProfileDetailView(DetailView):
         except Exception:
             logger.exception("Profile Card build failed for profile %s", profile.id)
             card_html = ''
+        # The family's curated grounds, game-art backings excluded upstream (they need a game,
+        # and a career is not one) -- recap's exact filter, so the three cards share one palette.
+        from trophies.themes import get_plat_card_themes
+        card_themes = [(k, t) for k, t in get_plat_card_themes() if not t.get('is_game_art')]
         return {
             'card_html': card_html,
+            'card_themes': card_themes,
             'card_png_url': reverse('api:profile-card-png'),
             'card_filename': f"{profile.display_psn_username or profile.psn_username}-profile-card.png",
         }

@@ -276,9 +276,10 @@ class ProfileCardPNGView(APIView):
     rather than a predicate, and a deep link cannot name anyone else's card. The Card tab renders
     its preview inline (real page, real data); this endpoint exists only to hand over the PNG.
 
-    Always the family ground (`ppSubstrate` -- the same radial the template bakes in), so the
-    renderer's theme pass is a visual no-op. No theme picker in v1: the profile card is a
-    self-portrait with a designed ground, not a themed artifact.
+    `?theme=` selects one of the curated grounds, validated the recap endpoint's way: anything
+    unknown, or any theme expecting a game image this card never supplies, is refused rather
+    than silently swapped. Default is the family radial the template bakes in, so the untouched
+    render's theme pass is a visual no-op.
     """
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -292,6 +293,13 @@ class ProfileCardPNGView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
+        theme_key = (request.query_params.get('theme') or PROFILE_CARD_THEME).strip()
+        if theme_key != PROFILE_CARD_THEME:
+            from trophies.themes import GRADIENT_THEMES
+            if theme_key not in GRADIENT_THEMES or GRADIENT_THEMES[theme_key].get('requires_game_image'):
+                return Response({'error': 'Invalid theme.'},
+                                status=http_status.HTTP_400_BAD_REQUEST)
+
         context = build_profile_card_context(profile)
         html = render_to_string(PROFILE_CARD_TEMPLATE, context)
 
@@ -300,7 +308,7 @@ class ProfileCardPNGView(APIView):
             png_bytes = render_png(
                 html,
                 format_type='landscape',
-                theme_key=PROFILE_CARD_THEME,
+                theme_key=theme_key,
                 # Renderer default budget: this card's largest share-temp image is a 58px avatar,
                 # so the plat card's 1000px cover budget would base64 far more than any slot shows.
             )

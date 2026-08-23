@@ -27,6 +27,20 @@
     transform-origin: top left;
 }
 
-.pfc__dl {
-    flex-shrink: 0;
+/* Grid, not flex: .pc-theme__swatch has aspect-ratio and NO width -- it is sized by its track
+   (both siblings size it that way). A flex row sized each swatch to its own label text. */
+.pfc__grounds {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+    gap: 0.75rem 1rem;
+    max-width: 760px;
+    margin: 1rem auto 0;
 }
+
+.pfc__actions {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 1200px;
+    margin: 1rem auto 0;
+}
+
