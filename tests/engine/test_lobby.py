@@ -253,3 +253,20 @@ def test_every_router_template_consumes_messages_through_exactly_one_renderer():
     syncing = (root / 'home/syncing.html').read_text(encoding='utf-8')
     assert 'partials/breadcrumb.html' in syncing, 'syncing lost its renderer'
     assert "partials/_messages.html" not in syncing, 'syncing would double-render'
+
+
+def test_the_lobby_marks_its_names_like_everywhere_else(client):
+    """The two name renders (welcome header + Career moat) wear the display mark, consistent
+    with every other surface. A supporter's stars must show in both spots."""
+    profile = ProfileFactory(is_linked=True, sync_status='synced')
+    user = profile.user
+    user.premium_tier = 'backer'
+    user.save(update_fields=['premium_tier'])
+    profile.user_is_premium = True
+    profile.display_mark = 'backer'
+    profile.save(update_fields=['user_is_premium', 'display_mark'])
+    client.force_login(user)
+
+    body = client.get('/', **CF).content.decode()
+
+    assert body.count('pp-markname') >= 2, 'both the header and the moat must carry the mark'

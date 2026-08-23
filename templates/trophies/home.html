@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load humanize static %}
+{% load humanize static mark_tags %}
 {% block title %}Home{% endblock %}
 
 {% comment %}
@@ -43,7 +43,7 @@ would be a second copy of it to keep in step.{% endcomment %}
                 <span class="home-hi__av">{% include 'partials/_avatar.html' with url=hero.avatar_url alt=hero.pursuer_name %}</span>
                 <div class="min-w-0">
                     <p class="home-hi__eyebrow">Welcome back</p>
-                    <h1 class="home-hi__name">{{ hero.pursuer_name|default:"Pursuer" }}</h1>
+                    <h1 class="home-hi__name">{% if hero.pursuer_name %}{% name_mark name=hero.pursuer_name mark=hero.display_mark size='lg' %}{% else %}Pursuer{% endif %}</h1>
                     {% if sync %}
                     <p class="home-hi__sync">
                         <span class="home-hi__dot{% if sync.ready %} is-ready{% endif %}" aria-hidden="true"></span>
@@ -129,7 +129,7 @@ uses, so the lobby promises exactly what the page delivers.{% endcomment %}
     <a href="{% url 'career' %}" class="home-moat home-moat--career group"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
         <div class="home-moat__body">
             <span class="home-moat__eyebrow">Your Career</span>
-            <span class="home-moat__name">{{ hero.pursuer_name }}</span>
+            <span class="home-moat__name">{% name_mark name=hero.pursuer_name mark=hero.display_mark %}</span>
             {% if hero.pursuer_rank %}<span class="home-moat__rank">{{ hero.pursuer_rank.name }}</span>{% endif %}
             {% if hero.dominant %}
             <span class="hero-disc-chip mt-2" style="--disc: var(--disc-{{ hero.dominant.slug }});"><span class="hero-disc-chip__dot" aria-hidden="true"></span>Leads with {{ hero.dominant.label }}</span>
