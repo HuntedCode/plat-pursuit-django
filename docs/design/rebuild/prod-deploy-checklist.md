@@ -782,6 +782,6 @@ The "account deletion webhook follow-up" above is now BUILT, plus the weekly rep
 
 ### Migration trophies/0316: badge set numbers dropped (2026-08-23)
 
-Two RemoveFields, safe on a live DB. Note for the rollback-audit ledger: this also drops the
+Two RemoveFields plus a help_text-only AlterField (no DDL), safe on a live DB. Note for the rollback-audit ledger: this also drops the
 LEGACY Badge.set_number column, which held real assigned numbers from the pre-cutover system --
 the numbering concept is abandoned (his call), so a rollback would come back without them.

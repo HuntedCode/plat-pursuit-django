@@ -89,8 +89,8 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 
 | Size | Use case | Behavior |
 |------|----------|----------|
-| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Title bar shows series (left) + tier label (right). Full plinth: badge name, meta (earned date + rarity), engraving in bottom-left, set-mark in bottom-right. |
-| `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left) and the set-mark (bottom-right); badge name, meta, and cycle print are suppressed. |
+| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Title bar shows series (left) + tier label (right). Full plinth: badge name, meta (earned date + rarity), engraving in bottom-left. |
+| `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left); badge name, meta, and cycle print are suppressed. |
 | `mini` | Inline / leaderboards / chips / Pursuer Card badge peek | 110px max width. **Chrome-only tier identity** — title bar and plinth are hidden entirely. Tier color carries via border + corner notches + backdrop gradient. Mini was briefly trialed with slim chrome (series + engraving + set-mark) but the text became unreadable at typical placements, so the chrome was retired. |
 
 Default + Compact render the textual identifiers when present (series name in the title bar, `engraving_rank` in the bottom-left of the plinth). Mini drops the text entirely; at that scale the chrome alone has to do the recognition work. (The `set_number` bottom-right stamp was removed 2026-08-23 with the field.)
@@ -99,9 +99,9 @@ Default + Compact render the textual identifiers when present (series name in th
 
 | State | Visual | Plinth meta | Engraving |
 |-------|--------|-------------|-----------|
-| `earned` | Full reveal. Title bar shows tier. Hover lift + tier-tinted gleam sweep. | "Earned [date]" + rarity | `#[rank]` in the bottom-left corner of the plinth (first-earn pulse for `#1`); `set_number` mirrored in the bottom-right. |
-| `in_progress` | Blueprint mode: cyan grid, lock icon, Fabricating banner, construction line at the `--pp-build` height. | "[done] of [total] stages" + rarity | Placeholder (the engraving slot stays in its bottom-left position with `visibility:hidden` so the earn-moment etch animation has a settled target); `set_number` still visible in the bottom-right. |
-| `unearned` | Blueprint at 0% with "To Earn" stamp. Lock icon centered. | (empty) | (engraving omitted unless the card is pinned, which falls back to the placeholder); `set_number` still visible. |
+| `earned` | Full reveal. Title bar shows tier. Hover lift + tier-tinted gleam sweep. | "Earned [date]" + rarity | `#[rank]` in the bottom-left corner of the plinth (first-earn pulse for `#1`). |
+| `in_progress` | Blueprint mode: cyan grid, lock icon, Fabricating banner, construction line at the `--pp-build` height. | "[done] of [total] stages" + rarity | Placeholder (the engraving slot stays in its bottom-left position with `visibility:hidden` so the earn-moment etch animation has a settled target). |
+| `unearned` | Blueprint at 0% with "To Earn" stamp. Lock icon centered. | (empty) | (engraving omitted unless the card is pinned, which falls back to the placeholder). |
 
 `is_pinned` is independent of state — any state can be pinned. Pinned cards get a cyan accent border + the map-pin chip at top-left; on blueprint cards the accent pulse takes priority over the schematic-glow hover.
 

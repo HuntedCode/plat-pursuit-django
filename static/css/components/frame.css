@@ -216,8 +216,8 @@
 
 /* Plinth (badge name + meta line + corner labels). The extra
  * padding-bottom reserves a "footer strip" for the absolute
- * engraving (bottom-left) so it
- * doesn't overlap the meta line that sits above them in flow. */
+ * engraving (bottom-left) so it doesn't overlap the meta line
+ * that sits above it in flow. */
 .pp-frame__plinth {
     position: relative;
     background: var(--frame-chrome-bg);
@@ -446,8 +446,8 @@
 /* Engraving sits absolute in the bottom-left corner of the
  * plinth. The "of
  * all time" subtitle was retired -- the # prefix on its own
- * reads as the rank, and the two-corner balance keeps the
- * plinth chrome legible without an extra row of decoration. */
+ * reads as the rank and keeps the plinth chrome legible
+ * without an extra row of decoration. */
 .pp-frame__engraving {
     position: absolute;
     bottom: 5px;

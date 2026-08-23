@@ -176,11 +176,20 @@ def test_gallery_owned_marker_and_earned_filter(client):
 def test_gallery_defaults_to_name_order(client):
     """set_number (and its 'Set order' sort) was removed 2026-08-23: the new system never
     assigned the numbers, so the sort was name-order wearing a different label. Name is the
-    honest default now."""
-    _series_groups('dflt-z', 'ZZZ last by name', [('ultra-hd', 'Ultra HD')])
-    _series_groups('dflt-a', 'AAA first by name', [('ultra-hd', 'Ultra HD')])
+    honest default now. Three series arranged so every OTHER sort key produces a different
+    leader (rarity leads with B, popular and newest lead with C) -- only a genuine name
+    default yields A, B, C. The first cut passed under all four keys, which pins nothing
+    (audit-caught)."""
+    from django.utils import timezone
+    a = _series_groups('dflt-a', 'AAA by name', [('ultra-hd', 'Ultra HD')])[0]
+    b = _series_groups('dflt-b', 'BBB by name', [('ultra-hd', 'Ultra HD')])[0]
+    c = _series_groups('dflt-c', 'CCC by name', [('ultra-hd', 'Ultra HD')])[0]
+    GroupBadge.objects.filter(id=a.id).update(earned_count=5)
+    GroupBadge.objects.filter(id=b.id).update(earned_count=0)   # rarity would lead with B
+    GroupBadge.objects.filter(id=c.id).update(earned_count=9, created_at=timezone.now())
+    # popular and newest would both lead with C
     html = client.get(GALLERY, {'view': 'gallery'}).content.decode()   # no ?sort -> name
-    assert html.index('/badges/dflt-a/') < html.index('/badges/dflt-z/')
+    assert html.index('/badges/dflt-a/') < html.index('/badges/dflt-b/') < html.index('/badges/dflt-c/')
 
 
 def test_gallery_rejects_the_retired_set_order_sort_key(client):

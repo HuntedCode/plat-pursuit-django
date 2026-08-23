@@ -8,8 +8,9 @@
 {% block content %}
 <div class="mt-4 mb-12">
 
-{% include 'partials/_messages.html' %}
-
+{% comment %} Django messages render via the breadcrumb below -- the ONE home state that
+carries it. Do not add the shared messages partial here too: a second renderer shows every
+message twice (audit-caught in the first cut of the lobby-messages fix). {% endcomment %}
 {# ─── Sync Status Card ───────────────────────────────────────────────── #}
 <section class="max-w-4xl mx-auto">
     {% include 'partials/breadcrumb.html' %}

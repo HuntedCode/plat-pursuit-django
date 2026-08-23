@@ -155,7 +155,10 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         'list_badges': [], 'themes': [],
         'summary': {'total': 0, 'catalog_total': 0, 'earned': 0, 'in_progress': 0, 'holo': 0,
                     'pct': 0, 'recent': 0, 'editions': []},
-        'sort': sort, 'sort_options': COLLECTION_SORTS,
+        # sort_options was dropped from the context 2026-08-23 (audit): the gallery template
+        # hardcodes its <option>s, so the key had no consumer and could silently drift from
+        # the server-side validation list (COLLECTION_SORTS stays for exactly that check).
+        'sort': sort,
     }
     try:
         engaged, holds, earned_at, standings = _engaged_series(profile)

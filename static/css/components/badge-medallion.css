@@ -398,7 +398,7 @@
     box-shadow: 0 0 calc(3px + 6px * var(--repair-pulse)) rgb(226 48 38 / calc(0.28 + 0.32 * var(--repair-pulse)));
 }
 
-/* edition + earn marks -- surfaced under the badge so you read set # / earn rank without opening it.
+/* edition + earn marks -- surfaced under the badge so you read the earn rank without opening it.
    Earn rank (earned only, "5th") glows in the tier accent. */
 .pp-med__ids {
     display: flex; align-items: center; gap: 7px; margin-top: 5px;

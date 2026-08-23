@@ -221,24 +221,35 @@ def _login(client, password='lobby-msg-pass-1', **profile_kwargs):
     ('syncing', dict(is_linked=True, sync_status='syncing')),
     ('synced', dict(is_linked=True, sync_status='synced')),
 ])
-def test_the_login_message_shows_on_the_lobby_not_the_next_page(client, state, setup):
+def test_the_login_message_shows_on_the_lobby_exactly_once(client, state, setup):
     """The real reported flow, in every authed router state: sign in, land on `/`, and the
-    'signed in' message renders THERE rather than queuing for the next breadcrumb page."""
+    'signed in' message renders THERE rather than queuing for the next breadcrumb page.
+    EXACTLY once: the syncing state carries the breadcrumb partial (a second messages
+    renderer), and its first cut double-rendered every message in two visual languages --
+    the count is the assertion that catches that whole class."""
     resp = _login(client, **setup)
 
     assert resp.status_code == 200
     assert resp.request['PATH_INFO'] == '/', f'{state}: login should land on the lobby'
-    assert 'Successfully signed in' in resp.content.decode(), \
-        f'{state}: the message must render where the user LANDS, not queue for the next page'
+    n = resp.content.decode().count('Successfully signed in')
+    assert n == 1, (
+        f'{state}: rendered {n} times -- zero means the message queued for the next page, '
+        f'two means a breadcrumb page also includes _messages.html'
+    )
 
 
-def test_all_four_router_templates_include_the_messages_partial():
-    """The anon landing cannot receive a login message, so it is pinned at source level with
-    the other three: every state of `/` consumes the messages framework."""
+def test_every_router_template_consumes_messages_through_exactly_one_renderer():
+    """The anon landing cannot receive a login message, so the source pin covers it with the
+    rest: each state of `/` consumes the framework through ONE renderer -- three include the
+    shared partial, and syncing gets it via the breadcrumb it already carries (including both
+    was the audit-caught double-render)."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2] / 'templates'
-    for name in ('trophies/home.html', 'home/landing.html',
-                 'home/syncing.html', 'home/link_psn.html'):
+    for name in ('trophies/home.html', 'home/landing.html', 'home/link_psn.html'):
         src = (root / name).read_text(encoding='utf-8')
         assert "partials/_messages.html" in src, f'{name} renders messages nowhere'
+        assert 'partials/breadcrumb.html' not in src, f'{name} would double-render'
+    syncing = (root / 'home/syncing.html').read_text(encoding='utf-8')
+    assert 'partials/breadcrumb.html' in syncing, 'syncing lost its renderer'
+    assert "partials/_messages.html" not in syncing, 'syncing would double-render'

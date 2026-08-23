@@ -314,9 +314,13 @@ def test_sort_options_and_invalid_fallback():
     ctx = build_collection_context(profile, sort='bogus')
 
     assert ctx['sort'] == DEFAULT_SORT == 'progress'
-    keys = {k for k, _ in ctx['sort_options']}
+    # The dropdown is hardcoded in the template and sort_options left the context (it had no
+    # consumer, audit 2026-08-23), so the pin reads the validation list itself.
+    from trophies.services.collection_service import COLLECTION_SORTS
+    keys = {k for k, _ in COLLECTION_SORTS}
     assert {'progress', 'earned', 'rarity', 'series', 'edition'} <= keys
     assert 'set_number' not in keys, "the 'Set order' sort was retired with the field (2026-08-23)"
+    assert 'sort_options' not in ctx
 
 
 def test_themes_reflect_badge_types():
