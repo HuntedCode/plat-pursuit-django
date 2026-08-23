@@ -111,10 +111,6 @@ def get_card_data(profile):
         for f in (hero.get('ring') or [])
     ]
 
-    dominant = hero.get('dominant')
-    if dominant:
-        dominant = {**dominant, 'colour': DISCIPLINE_COLOURS.get(dominant.get('slug'), '#9da5b1')}
-
     # The rarest and latest platinums, off the denormed FKs -- one PK lookup each, no scan, and
     # values_list means the ~30 KB IGDB blob can never ride along.
     def _plat_flavor(pk):
@@ -176,7 +172,6 @@ def get_card_data(profile):
         'pursuer_level': hero.get('pursuer_level') or 0,
         'rank_label': (hero.get('pursuer_rank') or {}).get('label', ''),
         'ring': ring,
-        'dominant': dominant,
         'jobs_played': jobs_played,
         'jobs_total': jobs.get('total') or 0,
         'tiers_earned': (career_ctx or {}).get('tiers_earned') or 0,

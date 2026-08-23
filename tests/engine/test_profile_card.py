@@ -111,8 +111,14 @@ def test_a_fresh_profile_still_composes_a_complete_card():
     assert 'of' in html and 'Badges' in html
     # The career row is a FIXED shape -- zeros render, cells never vanish (the density call:
     # a fresh Pursuer's card shows the shape of what's ahead, not a gap-toothed row).
-    for label in ('Jobs Played', 'Tiers Earned', 'Career XP', 'Collection'):
-        assert label in html, f'the career row lost its {label} cell'
+    for label in ('Jobs played', 'Tiers earned', 'Career XP', 'Collection'):
+        assert label in html, f'the Career/Collection sections lost their {label} line'
+    # The three section eyebrows, in the site's own nouns -- the sectioning IS the design
+    # decision (his note: the first cut mixed the systems' stats illegibly). Matched as the
+    # eyebrow element's own text (">Career<"), because bare "Career" is trivially satisfied by
+    # the ledger's "Career XP" line and would pin nothing.
+    for eyebrow in ('Trophy Record', 'Career', 'Collection'):
+        assert f'>{eyebrow}</span>' in html, f'the {eyebrow} section lost its eyebrow'
 
 
 # --- The PNG endpoint ---
