@@ -34,7 +34,9 @@ from trophies.services.rarity import community_size
 
 class MyTitlesView(LoginRequiredMixin, TemplateView):
     template_name = 'trophies/my_titles.html'
-    login_url = '/login/'
+    # '/login/' was not a route -- anonymous visitors 302'd into a 404 (the same failure class
+    # as LinkPSN's reverse_lazy('login'); this was the hardcoded-string twin the sweep missed).
+    login_url = reverse_lazy('account_login')
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not hasattr(request.user, 'profile'):

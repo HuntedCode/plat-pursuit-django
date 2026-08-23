@@ -7,8 +7,13 @@ logger = logging.getLogger('psn_api')
 class CustomAccountAdapter(DefaultAccountAdapter):
     def confirm_email(self, request, email_address):
         logger.debug(f"Confirming email: {email_address.email} for user {email_address.user}")
-        super().confirm_email(request, email_address)
+        # The RETURN is load-bearing and was missing for the override's whole life: allauth
+        # treats a falsy result as "confirmation failed", so the address got verified in the
+        # DB while the flow reported failure -- which silently disabled login-on-confirmation
+        # and bounced every fresh signup to the login form.
+        confirmed = super().confirm_email(request, email_address)
         logger.debug(f"Email verified: {email_address.verified}")
+        return confirmed
 
     def send_confirmation_mail(self, request, emailconfirmation, signup):
         """

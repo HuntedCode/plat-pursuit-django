@@ -277,11 +277,18 @@ ACCOUNT_RATE_LIMITS = {
     'signup': '5/m/ip',
 }
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
+# THE live setting in allauth 65.x (verified in app_settings.py; the *_AUTO_LOGIN spelling this
+# project also carried for a while does not exist there and reads as nothing). A fresh signup
+# clicking their confirmation link is logged in and lands on home rather than being asked to
+# re-type the password they chose a minute ago. Pinned by test_auth_pages.
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Plat Pursuit] '
 DEFAULT_FROM_EMAIL = 'Plat Pursuit <no-reply@platpursuit.com>'
-ACCOUNT_LOGOUT_REDIRECT_URL = '/accounts/login/'
+# NOTE: ACCOUNT_LOGOUT_REDIRECT_URL was deleted 2026-08-23 -- allauth's LogoutView is shadowed
+# (its URL bounces home), so nothing read it. Django's LOGOUT_REDIRECT_URL is deliberately
+# UNSET: that is what makes POST /logout/ render the "Signed Out" page instead of redirecting.
+# Setting it later would silently kill that page.
 ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
 

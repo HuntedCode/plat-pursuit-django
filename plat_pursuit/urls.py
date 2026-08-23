@@ -495,6 +495,10 @@ urlpatterns = [
     #   nowhere, so its URL bounces home instead of rendering a dead confirm card.
     path('accounts/password/change/', RedirectView.as_view(
         pattern_name='settings', permanent=False), name='account_change_password'),
+    # password/set/ too: for a user with an UNUSABLE password (programmatic creation), allauth
+    # would render its raw package template -- Settings owns password management either way.
+    path('accounts/password/set/', RedirectView.as_view(
+        pattern_name='settings', permanent=False), name='account_set_password'),
     path('accounts/logout/', RedirectView.as_view(
         url='/', permanent=False), name='account_logout'),
 

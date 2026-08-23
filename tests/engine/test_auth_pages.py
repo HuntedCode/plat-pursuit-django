@@ -96,9 +96,11 @@ def test_rate_limits_are_scoped_and_the_resend_cooldown_is_back():
     assert limits['signup'] == '5/m/ip'
 
 
-def test_logout_redirect_carries_its_trailing_slash():
-    assert dj_settings.ACCOUNT_LOGOUT_REDIRECT_URL == '/accounts/login/', \
-        'the missing slash cost every allauth logout an APPEND_SLASH 301 hop'
+def test_django_logout_redirect_stays_unset():
+    """Deliberately load-bearing: an unset LOGOUT_REDIRECT_URL is what makes POST /logout/
+    render the Signed Out page instead of redirecting. (allauth's own redirect setting was
+    deleted as inert -- its LogoutView is shadowed, so nothing read it.)"""
+    assert dj_settings.LOGOUT_REDIRECT_URL is None
 
 
 def test_the_429_handler_is_declared_and_returns_429():
@@ -247,3 +249,49 @@ def test_link_psn_step_one_renders_for_an_unlinked_user(client):
     assert body.count('<h1') == 1
     assert 'Link Your PSN Account' in body
     assert 'pp-head-cascade' in body
+
+
+# ── the audit's findings, pinned ──────────────────────────────────────────────────────────────
+
+def test_confirming_an_email_logs_the_new_hunter_in(client, mailoutbox):
+    """THE regression pin: ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION is the live setting in allauth
+    65.x (the *_AUTO_LOGIN spelling reads as nothing there). With it off, every fresh signup
+    was asked to re-type the password they chose a minute ago. The full real flow, because
+    allauth only auto-logs-in when the link is opened in the SAME session as the signup."""
+    import re as _re
+
+    client.post('/accounts/signup/', {
+        'email': 'fresh@example.com', 'email2': 'fresh@example.com',
+        'password1': 'a-perfectly-fine-pass-1', 'password2': 'a-perfectly-fine-pass-1',
+        'website': '',
+    })
+    assert len(mailoutbox) == 1, 'the verification email must send'
+    match = _re.search(r'/accounts/confirm-email/[^\s"\']+/', mailoutbox[0].body)
+    assert match, 'no confirmation link in the email body'
+
+    resp = client.get(match.group(0), follow=True)
+
+    assert resp.status_code == 200
+    assert resp.wsgi_request.user.is_authenticated, \
+        'the confirmation link must log the new hunter in, not bounce them to the login form'
+
+
+def test_titles_page_sends_anonymous_visitors_to_a_real_login(client):
+    """login_url was the hardcoded string '/login/' -- not a route, so anonymous visitors
+    302d into a 404 (the string twin of the LinkPSN reverse-name bug)."""
+    resp = client.get('/titles/')
+
+    assert resp.status_code == 302
+    assert resp['Location'].startswith('/accounts/login/')
+
+
+def test_password_set_url_hands_off_to_settings_too(client):
+    """For a user with an UNUSABLE password allauth would render its raw package template;
+    Settings owns password management either way."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    resp = client.get('/accounts/password/set/')
+
+    assert resp.status_code == 302
+    assert resp['Location'] == reverse('settings')

@@ -28,7 +28,7 @@
                     happened to re-post the query string, which is why inbound
                     ?next= links (fundraiser, roadmap, the beta gate) worked at all -- a
                     rebuild that added an action would have silently broken every one. {% endcomment %}
-                    {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+                    {% if redirect_field_value %}<input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">{% endif %}
 
                     <div class="form-control">
                         <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_email">Email</label>

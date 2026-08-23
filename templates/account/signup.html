@@ -24,7 +24,7 @@
 
                 <form method="post" class="space-y-4">
                     {% csrf_token %}
-                    {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+                    {% if redirect_field_value %}<input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">{% endif %}
 
                     {# Honeypot: positioned off-screen so humans never see/tab to it. #}
                     {# Bots that auto-fill every field trip the validator in CustomUserCreationForm.clean_website. #}
