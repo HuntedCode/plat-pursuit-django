@@ -8,15 +8,7 @@
     {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
     page does not carry -- without this block the PayPal-cancel confirmation, the wall-toggle
     confirmation and the double-subscribe guard's "manage it here" all arrive silently. {% endcomment %}
-    {% if messages %}
-    <div class="sup-msgs" role="status">
-        {% for message in messages %}
-        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
-            {{ message }}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+    {% include 'partials/_messages.html' %}
 
     {% if not is_live %}
     <div class="supm-testmode" role="note">TEST MODE ACTIVE: no real payments are processed.</div>

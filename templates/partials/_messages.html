@@ -1,0 +1,16 @@
+{% comment %} THE Django-messages renderer for pages without the breadcrumb partial (the site's
+only other consumer). Extracted 2026-08-23 when the home templates turned out to render messages
+NOWHERE, so a login's "signed in" message queued silently until the next breadcrumb page showed
+it. Errors announce as alerts, everything else as status (the settings page's a11y shape).
+Include ONCE per page; a page that carries the breadcrumb must not include this too, or every
+message renders twice. {% endcomment %}
+{% if messages %}
+<div>
+    {% for message in messages %}
+    <div role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}"
+         class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

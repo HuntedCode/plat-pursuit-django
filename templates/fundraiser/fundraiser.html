@@ -9,15 +9,7 @@
     {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
     page does not carry -- without this block the success redirect's "Thank you for your donation"
     and the processing fallbacks are silently swallowed. {% endcomment %}
-    {% if messages %}
-    <div class="sup-msgs" role="status">
-        {% for message in messages %}
-        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
-            {{ message }}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+    {% include 'partials/_messages.html' %}
 
     {% comment %} ============================================== staff preview ============= {% endcomment %}
     {% if is_staff_preview %}

@@ -8,6 +8,8 @@
 {% block main_layout %}
 <main id="main-content" class="flex-grow" role="main">
 
+{% if messages %}<div class="container mx-auto px-4 pt-4">{% include 'partials/_messages.html' %}</div>{% endif %}
+
 {% comment %}SECTION 1: WELCOME HERO{% endcomment %}
 <section class="relative min-h-[60vh] md:min-h-[70vh] flex items-center justify-center overflow-hidden">
     {# Animated gradient background #}

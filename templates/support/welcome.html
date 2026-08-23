@@ -7,15 +7,7 @@
 
     {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
     page does not carry; nothing may arrive silently on a payment-adjacent page. {% endcomment %}
-    {% if messages %}
-    <div class="sup-msgs" role="status">
-        {% for message in messages %}
-        <div class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
-            {{ message }}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+    {% include 'partials/_messages.html' %}
 
     {% if preview_active %}
     <div class="supm-preview" role="note">

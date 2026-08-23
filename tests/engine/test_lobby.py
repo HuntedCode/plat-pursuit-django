@@ -6,6 +6,8 @@ regress silently -- that `/` is still a four-state router, that none of those st
 and that the wordmark (its only nav affordance) is lit when you are standing on it.
 """
 import pytest
+from allauth.account.models import EmailAddress
+from django.urls import reverse
 
 from tests.factories import ProfileFactory
 
@@ -196,3 +198,47 @@ def test_only_the_hovered_medallion_moves():
     assert 'rotate(' not in rules[rules.index('.home-moat__med'):rules.index('.home-moat__med') + 400], (
         'the medallions are tilting again -- a straight rise was the ask'
     )
+
+
+# ── Django messages on `/` (2026-08-23 bug) ───────────────────────────────────────────────────
+# The home templates rendered messages NOWHERE (the breadcrumb partial is the site's default
+# renderer and the lobby deliberately carries no breadcrumb), so a login's "signed in" message
+# queued silently and surfaced on whatever page the user visited NEXT. All four router states
+# now include partials/_messages.html.
+
+def _login(client, password='lobby-msg-pass-1', **profile_kwargs):
+    profile = ProfileFactory(**profile_kwargs)
+    user = profile.user
+    user.set_password(password)
+    user.save()
+    EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+    return client.post(reverse('account_login'),
+                       {'login': user.email, 'password': password}, follow=True, **CF)
+
+
+@pytest.mark.parametrize('state,setup', [
+    ('no_psn', dict(is_linked=False)),
+    ('syncing', dict(is_linked=True, sync_status='syncing')),
+    ('synced', dict(is_linked=True, sync_status='synced')),
+])
+def test_the_login_message_shows_on_the_lobby_not_the_next_page(client, state, setup):
+    """The real reported flow, in every authed router state: sign in, land on `/`, and the
+    'signed in' message renders THERE rather than queuing for the next breadcrumb page."""
+    resp = _login(client, **setup)
+
+    assert resp.status_code == 200
+    assert resp.request['PATH_INFO'] == '/', f'{state}: login should land on the lobby'
+    assert 'Successfully signed in' in resp.content.decode(), \
+        f'{state}: the message must render where the user LANDS, not queue for the next page'
+
+
+def test_all_four_router_templates_include_the_messages_partial():
+    """The anon landing cannot receive a login message, so it is pinned at source level with
+    the other three: every state of `/` consumes the messages framework."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / 'templates'
+    for name in ('trophies/home.html', 'home/landing.html',
+                 'home/syncing.html', 'home/link_psn.html'):
+        src = (root / name).read_text(encoding='utf-8')
+        assert "partials/_messages.html" in src, f'{name} renders messages nowhere'

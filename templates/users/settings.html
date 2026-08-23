@@ -9,16 +9,7 @@
 
     {% comment %} The page drops the breadcrumb partial (the site's only messages renderer), so
     Django messages need a home of their own: every save on this page answers through one. {% endcomment %}
-    {% if messages %}
-    <div>
-        {% for message in messages %}
-        <div role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}"
-             class="px-4 py-3 mb-2 rounded-lg border text-sm {% if message.tags == 'error' %}border-error/40 bg-error/10{% else %}border-primary/40 bg-primary/10{% endif %}">
-            {{ message }}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+    {% include 'partials/_messages.html' %}
 
     {% comment %} ============================================== header ==================== {% endcomment %}
     <section aria-label="Settings" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
