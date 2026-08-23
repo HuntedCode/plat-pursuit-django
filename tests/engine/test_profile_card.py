@@ -256,7 +256,7 @@ def test_a_visitor_is_not_offered_the_chip_and_cannot_reach_the_tab(client):
 
     full = client.get(_detail_url(owner) + '?tab=card', **CF)
     assert 'share-image-content' not in full.content.decode()
-    # The chip, not the URL string: the canonical link legitimately echoes the query.
+    # The chip, not the URL string: other markup (og tags, hx-get) echoes the query.
     assert 'data-tab="card"' not in full.content.decode()
 
     htmx = client.get(_detail_url(owner) + '?tab=card', **CF,

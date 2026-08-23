@@ -4,6 +4,7 @@
 {% load humanize %}
 {% load job_icons %}
 {% block title %}Browse Games{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="pp-gbrowse">

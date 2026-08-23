@@ -3,6 +3,7 @@
 {% load humanize %}
 {% load job_icons %}
 {% block title %}Recently Added{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="pp-gbrowse">

@@ -52,7 +52,7 @@ def jsonld_website(request):
             "@type": "SearchAction",
             "target": {
                 "@type": "EntryPoint",
-                "urlTemplate": f"{_get_site_url()}/search/?q={{search_term_string}}",
+                "urlTemplate": f"{_get_site_url()}/search/?type=game&query={{search_term_string}}",
             },
             "query-input": "required name=search_term_string",
         },
@@ -85,7 +85,7 @@ def jsonld_breadcrumbs(breadcrumb, request):
                 item["item"] = f"{base_url}{url}"
         elif i == len(breadcrumb):
             # Last item: use the current page URL
-            item["item"] = request.build_absolute_uri()
+            item["item"] = request.build_absolute_uri(request.path)
         items.append(item)
 
     return _render_jsonld({
@@ -105,7 +105,7 @@ def jsonld_game(game, concept, request):
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": game.title_name,
-        "url": request.build_absolute_uri(),
+        "url": request.build_absolute_uri(request.path),
     }
 
     # Image
@@ -192,7 +192,7 @@ def jsonld_roadmap(roadmap, game, concept, request, contributors=None):
         return ''
 
     base_url = f"{request.scheme}://{request.get_host()}"
-    page_url = request.build_absolute_uri()
+    page_url = request.build_absolute_uri(request.path)
     game_title = game.title_name or ''
     group_name = ''
     try:
@@ -399,7 +399,7 @@ def jsonld_profile(profile, request):
     data = {
         "@context": "https://schema.org",
         "@type": "ProfilePage",
-        "url": request.build_absolute_uri(),
+        "url": request.build_absolute_uri(request.path),
         "mainEntity": {
             "@type": "Person",
             "name": profile.display_psn_username,

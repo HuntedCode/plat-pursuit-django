@@ -2,6 +2,7 @@
 {% load static %}
 {% load humanize %}
 {% block title %}Developers &amp; Publishers{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block meta_description %}Browse PlayStation game developers and publishers on Platinum Pursuit. Find games by your favourite studios, filter by role, platform, country, and genre.{% endblock %}
 {% block og_title %}Developers &amp; Publishers on Platinum Pursuit{% endblock %}
 

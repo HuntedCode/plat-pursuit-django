@@ -2,6 +2,7 @@
 {% load static %}
 {% load humanize %}
 {% block title %}Browse Badges{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}

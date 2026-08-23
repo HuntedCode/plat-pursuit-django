@@ -699,11 +699,17 @@ class ProfileDetailView(DetailView):
         # Own profile check (for edit controls; computed with the tab normalization above)
         context['is_own_profile'] = is_own_profile
 
-        context['seo_description'] = (
-            f"{profile.display_psn_username}'s PlayStation trophy profile. "
-            f"Level {profile.trophy_level}, {profile.total_trophies} trophies, "
-            f"{profile.total_games} games."
-        )
+        if profile.psn_history_public:
+            context['seo_description'] = (
+                f"{profile.display_psn_username}'s PlayStation trophy profile. "
+                f"Level {profile.trophy_level}, {profile.total_trophies} trophies, "
+                f"{profile.total_games} games."
+            )
+        else:
+            # The page refuses to show this hunter's stats; the meta must not leak them either.
+            context['seo_description'] = (
+                f"{profile.display_psn_username} on Platinum Pursuit."
+            )
 
 
         return context

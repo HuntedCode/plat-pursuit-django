@@ -2,6 +2,7 @@
 {% load static %}
 {% load humanize %}
 {% block title %}Browse Hunters{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% comment %} BROWSE HUNTERS (/profiles/) -- rebuilt 2026-08, from scratch.
 

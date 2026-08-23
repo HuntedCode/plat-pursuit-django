@@ -789,3 +789,10 @@ the numbering concept is abandoned (his call), so a rollback would come back wit
 ## Anon landing rebuild (2026-08-23)
 - [ ] Set `LANDING_SHOWCASE_PSN` on the CRON service env (the only reader: `refresh_homepage_hourly` renders the card + ratings into the shared cache; the web server only reads the cache and needs nothing). The hunter whose real Profile Card fronts the landing; unset = the fixture card renders with its "sample" caption.
 - [ ] Confirm `refresh_homepage_hourly` cron logs "Landing showcase card cached" after the first run.
+
+## SEO Lane 0 (2026-08-23)
+- [ ] Jeffrey: create a Google Search Console DOMAIN property for platpursuit.com (DNS TXT verification), submit /sitemap.xml, add a monthly look to the routine. Every SEO lane's success is measured there.
+- [ ] Cherry-pick the prod-relevant Lane 0 fixes to `main` ahead of the cutover: static/robots.txt (the wildcard rules block every canonical game/badge/jobs page ON PROD TODAY), the BotCanonicalRedirectMiddleware lookahead, and base.html's path-only canonical + og:url. NOT the BadgeSeries sitemap (prod's badge system is still the legacy model until cutover).
+- [ ] `collectstatic` after the robots.txt change (WhiteNoise serves staticfiles/).
+- [ ] After cutover: resubmit /sitemap.xml in GSC (the badge section changes model; roadmaps section is withdrawn).
+

@@ -2,6 +2,7 @@
 {% load static %}
 {% load humanize %}
 {% block title %}{{ object.name }} - Games & Trophy Lists{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block meta_description %}PlayStation games developed, published, or ported by {{ object.name }}. Browse trophy lists, community ratings, and platinum progress on Platinum Pursuit.{% endblock %}
 {% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
 {% block og_description %}All PlayStation games from {{ object.name }} with trophy lists and community ratings.{% endblock %}

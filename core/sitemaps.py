@@ -44,8 +44,13 @@ class GameSitemap(Sitemap):
     limit = 5000
 
     def items(self):
+        # Shovelware is excluded from what we ADVERTISE (SEO Lane 0): the curated flag existed
+        # and fed only a browse filter while the sitemap invited crawlers to index every
+        # asset-flip stub at priority 0.6. Sites are quality-scored on their worst indexed
+        # pages. (Concept-level dedupe of regional siblings is Lane 1.)
         return (
             Game.objects
+            .exclude_shovelware()
             .filter(np_communication_id__isnull=False)
             .only('np_communication_id', 'created_at')
             .order_by('-id')
@@ -72,10 +77,14 @@ class ProfileSitemap(Sitemap):
     limit = 5000
 
     def items(self):
+        # The quality floor (SEO Lane 0, strategy decision #2): profiles are an SEO asset, but
+        # only the ones with something to show. Never-synced stubs, zero-trophy rows and
+        # private-history profiles (which render a header-only page) are noindexed on the page
+        # AND absent here -- the two must agree, or the sitemap advertises what the meta forbids.
         return (
             Profile.objects
-            .filter(psn_username__isnull=False)
-            .only('psn_username', 'created_at')
+            .filter(psn_username__isnull=False, psn_history_public=True, total_trophies__gt=0)
+            .only('psn_username', 'last_synced')
             .order_by('-id')
         )
 
@@ -83,26 +92,36 @@ class ProfileSitemap(Sitemap):
         return reverse('profile_detail', kwargs={'psn_username': obj.psn_username})
 
     def lastmod(self, obj):
-        return obj.created_at
+        # last_synced, not created_at: a profile's page changes when its data does, and
+        # created_at gave crawlers no recrawl signal for the set that changes most.
+        return obj.last_synced
 
     def get_latest_lastmod(self):
         return (
-            Profile.objects.filter(psn_username__isnull=False)
-            .order_by('-created_at')
-            .values_list('created_at', flat=True)
+            Profile.objects
+            .filter(psn_username__isnull=False, psn_history_public=True, total_trophies__gt=0)
+            .order_by('-last_synced')
+            .values_list('last_synced', flat=True)
             .first()
         )
 
 
 class BadgeSitemap(Sitemap):
+    """BadgeSeries with a live edition -- the set BadgeDetailView actually serves (it 404s a
+    series with no live GroupBadge). The previous version read the RETIRED legacy Badge model
+    (`tier=1` is vocabulary from the tier-ladder system): it emitted URLs that 404'd for dormant
+    legacy rows and missed live series entirely (SEO Lane 0). NOTE the prod/main split: until
+    the badge cutover, prod's sitemap keeps the legacy read."""
     changefreq = 'weekly'
     priority = 0.6
     limit = 5000
 
     def items(self):
+        from trophies.models import BadgeSeries
         return (
-            Badge.objects
-            .filter(tier=1, is_live=True)
+            BadgeSeries.objects
+            .filter(group_badges__is_live=True)
+            .distinct()
             .only('series_slug', 'created_at')
             .order_by('-id')
         )
@@ -114,8 +133,9 @@ class BadgeSitemap(Sitemap):
         return obj.created_at
 
     def get_latest_lastmod(self):
+        from trophies.models import BadgeSeries
         return (
-            Badge.objects.filter(tier=1, is_live=True)
+            BadgeSeries.objects.filter(group_badges__is_live=True)
             .order_by('-created_at')
             .values_list('created_at', flat=True)
             .first()

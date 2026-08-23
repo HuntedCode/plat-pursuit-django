@@ -2,6 +2,7 @@
 {% load static humanize custom_filters %}
 
 {% block title %}Leaderboards{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block meta_description %}Global Platinum Pursuit leaderboards: badge trophies, Badge Points, and Career XP. Slice any board by country, and the badge boards by platform edition.{% endblock %}
 
 {% comment %} Global Boards -- the Leaderboards hub landing, rebuilt to the Career standard (2026-08).

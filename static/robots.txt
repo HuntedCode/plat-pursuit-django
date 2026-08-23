@@ -65,15 +65,23 @@ Disallow: /design/
 Disallow: /guides/
 Disallow: /my-guides/
 
-# Profile-scoped variants of canonical pages. These are duplicates of the
-# canonical pages on the <username> axis and dilute crawl budget. Canonical
-# /games/<np_id>/ and /badges/<badge>/ pages remain crawlable.
-Disallow: /games/*/*
-Disallow: /badges/*/*
-# /jobs/<slug>/ranks/ is a bare HTML FRAGMENT fetched into job detail's Ranks tab -- no <html>, no title,
-# no canonical. Same shape as /badges/<slug>/ranks/, which the line above already covers. /jobs/ and
-# /jobs/<slug>/ stay crawlable.
-Disallow: /jobs/*/*
+# Profile-scoped variants of canonical pages (/games/<np>/<user>/ etc.) are NOT
+# handled here any more (2026-08-23, SEO Lane 0). The old wildcard rules
+# (/games/*/*) ALSO matched the canonical pages themselves: in robots syntax `*`
+# matches zero or more characters, so /games/<np_id>/ matched /games/ * / * --
+# every game, badge and jobs detail page on the site was blocked while three
+# sitemaps advertised them. There is no robots pattern for "exactly two path
+# segments." The variants are defended instead by the bot canonical 301
+# (BotCanonicalRedirectMiddleware) and the anonymous-visitor gate, which both
+# survive URL renames the way this file cannot.
+
+# Bare HTML fragment endpoints (no <html>, no title, no canonical) -- these are
+# fetched into tabs/modals by JS and must not be indexed as pages.
+Disallow: /jobs/*/ranks/
+Disallow: /jobs/*/contracts/
+Disallow: /badge-ranks/
+Disallow: /leaderboards/rows/
+Disallow: /group-badge-peek/
 
 # Filtered / paginated / tabbed variants of a profile. The canonical
 # /profiles/<username>/ page stays crawlable -- profiles are the free floor of

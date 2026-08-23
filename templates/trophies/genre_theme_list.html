@@ -2,6 +2,7 @@
 {% load static %}
 {% load humanize %}
 {% block title %}Genres & Themes{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="pp-gbrowse">

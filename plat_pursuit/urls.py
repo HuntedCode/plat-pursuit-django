@@ -25,7 +25,7 @@ from django.views.generic import RedirectView, TemplateView
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
-    BadgeSitemap, RoadmapSitemap,
+    BadgeSitemap,
 )
 
 sitemaps = {
@@ -33,7 +33,9 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
     'badges': BadgeSitemap,
-    'roadmaps': RoadmapSitemap,
+    # 'roadmaps' — withdrawn 2026-08-23 (SEO Lane 0): Roadmaps are hidden from the site with no
+    # return promised, and a sitemap must not advertise pages nothing links to. The class stays
+    # in core/sitemaps.py; re-register if the system returns.
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }

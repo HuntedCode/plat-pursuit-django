@@ -8,13 +8,17 @@
     <title>{% block title %}{{ title|default:"Platinum Pursuit" }}{% endblock %} - Platinum Pursuit</title>
     <meta name="description" content="{% block meta_description %}{{ seo_description|default:'Platinum Pursuit: No trophy can hide from us. Track your trophies, earn game badges, and connect with fellow hunters.' }}{% endblock %}">
     <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
-    <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
+    {% comment %}Path-only by default (SEO Lane 0): the querystring canonical minted a new
+    self-canonical for every ?page/?sort/?utm permutation site-wide. Pages whose params are
+    load-bearing for identity override the block; ?tab= style views of one entity correctly
+    canonicalize to the entity.{% endcomment %}
+    <link rel="canonical" href="{% block canonical_url %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}">
 
     <!-- Open Graph -->
     <meta property="og:title" content="{% block og_title %}{% firstof seo_title title 'Platinum Pursuit' %}{% endblock %}">
     <meta property="og:description" content="{% block og_description %}{{ seo_description|default:'Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.' }}{% endblock %}">
     <meta property="og:type" content="{% block og_type %}website{% endblock %}">
-    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:url" content="{% block og_url %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}">
     <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endblock %}">
     <meta property="og:site_name" content="Platinum Pursuit">
 
