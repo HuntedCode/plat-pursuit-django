@@ -779,3 +779,9 @@ The "account deletion webhook follow-up" above is now BUILT, plus the weekly rep
   duplicate-customer [MISMATCH] case from wrongful cancellation) cancels the sub at Stripe;
   a PayPal ACTIVATED whose valid custom_id resolves to no user cancels at PayPal. Both log
   loudly as SELF-HEAL; the audit sweep backstops any failure.
+
+### Migration trophies/0316: badge set numbers dropped (2026-08-23)
+
+Two RemoveFields, safe on a live DB. Note for the rollback-audit ledger: this also drops the
+LEGACY Badge.set_number column, which held real assigned numbers from the pre-cutover system --
+the numbering concept is abandoned (his call), so a rollback would come back without them.
