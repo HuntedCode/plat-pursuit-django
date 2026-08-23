@@ -282,6 +282,21 @@ def test_inspect_view_anon_renders_showcase(client):
     assert 'data-state="earned"' in body            # showcase forces the full-colour medallion
 
 
+def test_inspect_funder_credit_wears_the_mark_and_walks_to_the_profile(client):
+    """The art-funder credit is a person, not a string: a marked funder's name renders through
+    the mark system (supporter stars and colour) and links to their public profile."""
+    funder = ProfileFactory(display_mark='backer')
+    series = BadgeSeriesFactory(series_slug='funded', name='Funded Series', funded_by=funder)
+    _stage(series, 1, ['PS5'])
+    gb = _group(series, 'ultra-hd', 'Ultra HD', ['PS4', 'PS5'])
+
+    body = client.get(reverse('group_badge_quick_peek', kwargs={'group_badge_id': gb.id})).content.decode()
+
+    assert 'Artwork funded by' in body
+    assert 'pp-markname' in body, "the funder's mark never rendered"
+    assert f'/hunters/{funder.psn_username}/' in body, 'the credit does not walk to the profile'
+
+
 def test_inspect_view_dormant_group_badge_404(client):
     series = BadgeSeriesFactory(series_slug='d', name='Dormant')
     pg = PlatformGroupFactory(key='ultra-hd', name='Ultra HD', platforms=['PS4', 'PS5'])

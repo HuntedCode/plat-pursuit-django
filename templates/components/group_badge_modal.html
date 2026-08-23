@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize mark_tags %}
 {% comment %}
 Grouping-badge inspect ("pick it up") -- the medallion big + its facts for ONE platform-group badge
 (Legacy HD / Ultra HD). Rendered by GroupBadgeInspectView (badge detail page's #badge-peek dialog) AND
@@ -31,7 +31,11 @@ detail page, deep-linked to this edition's tab; omitted on the badge-detail peek
             {% if not showcase and detail.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series Points</div><div class="v">{{ detail.series_xp|intcomma }}</div></div>{% endif %}
             {% if gv.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ gv.earned_count|intcomma }}</div></div>{% endif %}
         </div>
-        {% if gv.group_badge.effective_funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ gv.group_badge.effective_funded_by.display_psn_username|default:gv.group_badge.effective_funded_by.psn_username }}</span></div>{% endif %}
+        {% comment %}The funder wears their mark (supporter stars are half of why art gets
+        funded) and the name walks to their public profile -- the credit is a person, not a
+        string. name_mark renders the bare name when unmarked, so nothing changes for an
+        unmarked funder except the link.{% endcomment %}
+        {% if gv.group_badge.effective_funded_by %}{% with funder=gv.group_badge.effective_funded_by %}<div class="pp-bdetail__funder">Artwork funded by <a class="pp-bdetail__funder-name" href="{% url 'profile_detail' psn_username=funder.psn_username %}">{% name_mark name=funder.display_psn_username|default:funder.psn_username mark=funder.display_mark %}</a></div>{% endwith %}{% endif %}
         {% comment %} Collection only: jump to the full badge detail page, deep-linked to THIS edition's tab
         (?group=<key>). The badge-detail peek omits this -- you're already on that page. {% endcomment %}
         {% if show_detail_link and series.series_slug %}

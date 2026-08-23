@@ -471,7 +471,7 @@ class GroupBadgeInspectView(View):
         gb = (
             GroupBadge.objects
             .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
-                            'series__funded_by', 'platform_group')
+                            'series__funded_by', 'funded_by_override', 'platform_group')
             .filter(id=group_badge_id, is_live=True).first()
         )
         if gb is None:
