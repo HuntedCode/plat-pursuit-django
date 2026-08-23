@@ -74,12 +74,13 @@ is not on the view's join re-opens the N+1.
                 <span class="pp-pgcard__count">{{ pgame.earned_trophies_count|default:0 }} / {{ pgame.earned_trophies_count|add:pgame.unearned_trophies_count }}</span>
             </span>
 
-            {% if pgame.progress > 0 %}
+            {% comment %}The TRACK renders at every progress including zero: a 0% game losing the
+            whole element read as a broken card next to its siblings (his find), and an empty
+            track is a true statement -- the record exists, nothing is filled yet.{% endcomment %}
             <span class="pp-gcard__bar">
                 <span class="pp-gcard__barfill pp-gcard__barfill--{% if pgame.has_plat and pgame.progress == 100 %}plat{% elif pgame.has_plat %}platdlc{% elif pgame.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}"
-                      style="width: {{ pgame.progress }}%"></span>
+                      style="width: {{ pgame.progress|default:0 }}%"></span>
             </span>
-            {% endif %}
 
         <span class="pp-gcard__foot">
             <span class="pp-gcard__plats">

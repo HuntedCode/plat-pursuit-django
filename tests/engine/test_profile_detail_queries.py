@@ -170,6 +170,19 @@ def test_the_games_tab_uses_the_site_game_card(client):
     assert 'hover:border-' not in body, 'per-platform hover tinting is back on the game cards'
 
 
+def test_a_zero_progress_game_still_renders_its_bar(client):
+    """Regression (2026-08-23, his find): the whole bar element was guarded on progress > 0, so a
+    0% game's card rendered everything EXCEPT its bar -- reading as broken beside its siblings.
+    The empty track is a true statement (the record exists, nothing is filled yet), so it renders
+    at every progress."""
+    profile = _profile_with_games(1)   # the fixture leaves ProfileGame.progress at 0
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+
+    assert 'pp-gcard__bar' in body, 'the 0% card lost its bar again'
+    assert 'width: 0%' in body, 'the empty track must carry a zero-width fill, not no fill'
+
+
 def test_the_completion_bar_means_the_same_thing_it_does_on_browse(client):
     """The bar's five states encode the relationship with a game, and the profile fills it from the
     OWNER's progress rather than the viewer's. Sharing the classes is what keeps a colour meaning one
@@ -178,8 +191,7 @@ def test_the_completion_bar_means_the_same_thing_it_does_on_browse(client):
 
     profile = _profile_with_games(1)
     # Progress is set explicitly: the shared fixture builds the trophies but leaves ProfileGame.progress
-    # at 0, and the bar only renders above 0 -- so without this the test would assert on a card state the
-    # fixture never produces and pass or fail for reasons unrelated to the card.
+    # at 0, and this test is about the FILLED states -- the zero state has its own test below.
     ProfileGame.objects.filter(profile=profile).update(progress=100, has_plat=True)
 
     body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
