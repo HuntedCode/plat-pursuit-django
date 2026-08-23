@@ -787,5 +787,5 @@ LEGACY Badge.set_number column, which held real assigned numbers from the pre-cu
 the numbering concept is abandoned (his call), so a rollback would come back without them.
 
 ## Anon landing rebuild (2026-08-23)
-- [ ] Set `LANDING_SHOWCASE_PSN` on the web service env (the hunter whose real Profile Card fronts the landing; unset = the fixture card renders with its "sample" caption).
+- [ ] Set `LANDING_SHOWCASE_PSN` on the CRON service env (the only reader: `refresh_homepage_hourly` renders the card + ratings into the shared cache; the web server only reads the cache and needs nothing). The hunter whose real Profile Card fronts the landing; unset = the fixture card renders with its "sample" caption.
 - [ ] Confirm `refresh_homepage_hourly` cron logs "Landing showcase card cached" after the first run.
