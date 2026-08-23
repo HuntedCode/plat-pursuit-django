@@ -126,7 +126,7 @@ def _fixture_card_context():
         ],
         'top_job': None,               # a real job name belongs to the catalog; the fixture claims none
         'jobs_played': 19,
-        'jobs_total': 24,
+        'jobs_total': 25,
         'tiers_earned': 41,
         'career_xp_compact': '1.2M',
         'badges': {

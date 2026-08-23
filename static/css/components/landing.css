@@ -228,6 +228,14 @@
 .land-sec { padding: 3.25rem 0; }
 @media (min-width: 768px) { .land-sec { padding: 4.5rem 0; } }
 .land-sec--tight { padding: 2rem 0; }
+/* Every other section sits on the heartbeat band's own faint wash (his call: the scroll should
+   announce its section changes). Hairlines close each washed band, so boundaries read as designed
+   edges rather than a colour accident. */
+.land-sec--alt {
+    background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent);
+    border-top: 1px solid var(--pp-divider);
+    border-bottom: 1px solid var(--pp-divider);
+}
 
 .land-sec__head {
     max-width: 640px;

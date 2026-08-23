@@ -161,7 +161,7 @@ def get_card_data(profile):
         for tier, colour in TIER_DISPLAY
     ]
 
-    # Jobs actually touched (personal, unlike jobs['total'] which is the ~24-job catalog size).
+    # Jobs actually touched (personal, unlike jobs['total'] which is the 25-job catalog size).
     jobs = (career_ctx or {}).get('career') or {}
     jobs_played = sum(d.get('played', 0) for d in jobs.get('disciplines', []))
 
