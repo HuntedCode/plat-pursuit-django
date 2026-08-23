@@ -170,6 +170,32 @@
         });
     }
 
+    // --- 4b. The shelf's affordance nudge ---------------------------------------------------
+
+    function wireShelfNudge() {
+        var shelf = document.querySelector('.land-medals');
+        if (!shelf || !('IntersectionObserver' in window)) { return; }
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+        var art = shelf.querySelector('.land-medals__slot .pp-med__art');
+        if (!art || !art.animate) { return; }
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) { return; }
+                io.disconnect();
+                setTimeout(function () {
+                    // The hover state, previewed: lift, slight overshoot down, settle. Once.
+                    art.animate([
+                        { transform: 'none' },
+                        { transform: 'translateY(-7%) scale(1.05)', offset: 0.4 },
+                        { transform: 'translateY(1.5%) scale(0.995)', offset: 0.75 },
+                        { transform: 'none' },
+                    ], { duration: 950, easing: 'ease-in-out' });
+                }, 650);
+            });
+        }, { threshold: 0.6 });
+        io.observe(shelf);
+    }
+
     // --- 5. The ratings carousel -----------------------------------------------------------
 
     function wireRatingsCarousel() {
@@ -215,6 +241,22 @@
         host.addEventListener('focusin', stop);
         host.addEventListener('focusout', start);
 
+        // Swipe: direct manipulation, the mobile-native way to page a carousel. Horizontal
+        // only (touch-action: pan-y leaves vertical scrolling to the browser); a swipe advances
+        // and the auto-rotation simply continues from the chosen slide.
+        var swipeX = null, swipeY = null;
+        host.addEventListener('pointerdown', function (e) { swipeX = e.clientX; swipeY = e.clientY; });
+        host.addEventListener('pointerup', function (e) {
+            if (swipeX === null) { return; }
+            var dx = e.clientX - swipeX, dy = e.clientY - swipeY;
+            swipeX = swipeY = null;
+            if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy) * 1.5) { return; }
+            stop();
+            show(index + (dx < 0 ? 1 : -1));
+            start();
+        });
+        host.addEventListener('pointercancel', function () { swipeX = swipeY = null; });
+
         if ('IntersectionObserver' in window) {
             var io = new IntersectionObserver(function (entries) {
                 entries.forEach(function (entry) {
@@ -234,6 +276,7 @@
         wireCardFit();
         wireCountUps();
         wireBadgePeek();
+        wireShelfNudge();
         wireRatingsCarousel();
         if (window.PlatPursuit && PlatPursuit.arriveOnScroll) {
             // Deeper than the shared -8% default: on a long marketing scroll the entrance was

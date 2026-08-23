@@ -101,7 +101,7 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                 </div>
                 <div class="land-pulse__cell pp-arrive__it" style="--i: 1;">
                     <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.always.trophies_24h.value|default:0 }}">{{ site_heartbeat.always.trophies_24h.value|default:0|intcomma }}</span>
-                    <span class="land-pulse__lbl">Earned in the last 24h</span>
+                    <span class="land-pulse__lbl"><span class="land-pulse__livedot" aria-hidden="true"></span>Earned in the last 24h</span>
                 </div>
                 <div class="land-pulse__cell pp-arrive__it" style="--i: 2;">
                     <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.always.profiles_total.value|default:0 }}">{{ site_heartbeat.always.profiles_total.value|default:0|intcomma }}</span>
@@ -289,7 +289,12 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                 <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your backlog is not going to hunt itself.</h2>
                 <p class="land-sec__sub pp-arrive__it" style="--i: 1;">Free to use. One search to see your whole history.</p>
                 <div class="land-close__ctas pp-arrive__it" style="--i: 2;">
-                    <a href="{% url 'account_signup' %}" class="pp-cta">Create a free account</a>
+                    <a href="{% url 'account_signup' %}" class="pp-cta land-rise">
+                        <span class="sup-go__rise" aria-hidden="true">
+                            {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                        </span>
+                        <span class="land-rise__lbl">Create a free account</span>
+                    </a>
                     <a href="{% url 'account_login' %}" class="pp-cta pp-cta--ghost">Log in</a>
                 </div>
             </div>

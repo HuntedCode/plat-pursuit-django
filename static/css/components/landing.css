@@ -161,6 +161,16 @@
     white-space: nowrap;
 }
 .land-search__visit svg { width: 14px; height: 14px; }
+@media (prefers-reduced-motion: no-preference) {
+    .land-search__status:not([hidden]) { animation: ppRevealIn 0.4s var(--pp-ease); }
+    /* The payoff moment gets the page's one SPRING: the overshoot is celebration, and it is
+       spent here rather than on chrome because "your profile exists now" is the emotion. */
+    .land-search__visit:not([hidden]) { animation: landSpringIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+}
+@keyframes landSpringIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
 .land-search__visit:hover { text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
 
 .land-hero__accounts {
@@ -209,11 +219,24 @@
 }
 @media (min-width: 768px) { .land-pulse__num { font-size: 1.9rem; } }
 .land-pulse__lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.7rem;
     font-weight: 600;
     color: var(--pp-text-mute);
     letter-spacing: 0.12em;
     text-transform: uppercase;
+}
+.land-pulse__livedot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pp-primary);
+    flex-shrink: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-pulse__livedot { animation: landPulse 2.2s ease-in-out infinite; }
 }
 .land-pulse__tag {
     margin-top: 1.25rem;
@@ -331,7 +354,7 @@
 .land-rdemo { max-width: 1000px; margin: 1.9rem auto 0; }
 /* The stack: every SLIDE (a pair of cards) in the same grid cell (height = tallest slide, so
    the section never jumps), crossfading on .is-active. */
-.land-rdemo__stack { display: grid; }
+.land-rdemo__stack { display: grid; touch-action: pan-y; }
 .land-rdemo__stack > .land-rdemo__slide { grid-area: 1 / 1; }
 .land-rdemo__slide {
     display: grid;
@@ -522,9 +545,11 @@
     background: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
     transition: background 0.2s ease, transform 0.2s ease;
 }
+.land-rdemo__dot { transition: background 0.2s ease, width 0.28s var(--pp-ease); }
 .land-rdemo__dot.is-active {
     background: var(--pp-primary);
-    transform: scale(1.2);
+    width: 22px;
+    border-radius: 999px;
 }
 .land-rdemo__dot:focus-visible {
     outline: 2px solid var(--pp-primary);
@@ -581,3 +606,7 @@
     gap: 1rem;
 }
 .land-close__ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
+/* The star emitter's host recipe (fundraiser's fnd-cta--rise, on a pp-cta): the clip box, the
+   star colour, and the label riding above the stars. */
+.land-rise { position: relative; overflow: hidden; --sup-t: var(--pp-primary); }
+.land-rise__lbl { position: relative; }
