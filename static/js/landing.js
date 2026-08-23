@@ -170,11 +170,54 @@
         });
     }
 
+    // --- 5. The ratings carousel -----------------------------------------------------------
+
+    function wireRatingsCarousel() {
+        var host = document.querySelector('[data-land-carousel]');
+        if (!host) { return; }
+        var cards = Array.prototype.slice.call(host.querySelectorAll('.land-rdemo__card'));
+        var dots = Array.prototype.slice.call(host.querySelectorAll('[data-land-dotindex]'));
+        if (cards.length < 2) { return; }
+        var index = 0, timer = null;
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function show(next) {
+            index = (next + cards.length) % cards.length;
+            cards.forEach(function (card, i) {
+                card.classList.toggle('is-active', i === index);
+                card.setAttribute('aria-hidden', i === index ? 'false' : 'true');
+            });
+            dots.forEach(function (dot, i) { dot.classList.toggle('is-active', i === index); });
+        }
+
+        function start() {
+            // No auto-advance under reduced motion: the dots remain the manual path.
+            if (reduce || timer) { return; }
+            timer = setInterval(function () { show(index + 1); }, 7000);
+        }
+        function stop() {
+            if (timer) { clearInterval(timer); timer = null; }
+        }
+
+        dots.forEach(function (dot) {
+            dot.addEventListener('click', function () {
+                show(parseInt(dot.dataset.landDotindex, 10) || 0);
+                stop();   // a chosen slide stays chosen; auto-advance resumes on mouse-out
+            });
+        });
+        host.addEventListener('mouseenter', stop);
+        host.addEventListener('mouseleave', start);
+        host.addEventListener('focusin', stop);
+        host.addEventListener('focusout', start);
+        start();
+    }
+
     function boot() {
         wireSearch();
         wireCardFit();
         wireCountUps();
         wireBadgePeek();
+        wireRatingsCarousel();
         if (window.PlatPursuit && PlatPursuit.arriveOnScroll) {
             PlatPursuit.arriveOnScroll();
         } else {

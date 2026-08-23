@@ -178,6 +178,57 @@ def test_the_ratings_demo_card_is_live_html(client):
     assert rating_verdict(9, 'fun') in body
 
 
+def test_real_ratings_replace_the_sample_carousel(client):
+    """With the cron cache warm, the carousel renders the hunter's real ratings (all slides +
+    dots) and drops the sample caption."""
+    cache.set(landing_service.SHOWCASE_RATINGS_CACHE_KEY, [
+        {'title': f'Real Game {i}', 'stars_pct': 90, 'overall': '4.5',
+         'stats': [{'k': 'Fun', 'n': '9', 'of': '/10', 'tone': 'good', 'word': 'A blast'}],
+         'take': 'A real quick take.', 'rec': 'worth_it', 'rec_label': 'Do it'}
+        for i in range(3)
+    ], landing_service.SHOWCASE_RATINGS_TTL)
+
+    body = _get(client).content.decode()
+
+    assert 'Real Game 0' in body and 'Real Game 2' in body
+    assert body.count('land-rdemo__dot ') + body.count('land-rdemo__dot"') >= 3, 'the dots are missing'
+    assert 'A sample rating.' not in body
+    assert 'A real rating. Every one requires the platinum.' in body
+    # The fixture SLIDE by its own take -- bare 'Sekiro' also matches the fixture Profile
+    # Card's rarest-platinum line, which legitimately renders on this page.
+    assert 'Brutal bosses, zero filler.' not in body, 'the fixture slide leaked in beside real ratings'
+
+
+def test_the_cron_gathers_blurbed_ratings_positive_first():
+    """The selection rule: blurbs required, worth_it first, topped up with others, capped."""
+    from django.test import override_settings
+    from tests.factories import UserConceptRatingFactory
+
+    profile = ProfileFactory(psn_username='ratinghunter', is_linked=True)
+    for i in range(4):
+        UserConceptRatingFactory(profile=profile, recommendation='worth_it',
+                                 blurb=f'Great platinum number {i}.', overall_rating=4.5)
+    UserConceptRatingFactory(profile=profile, recommendation='skip',
+                             blurb='Not this one.', overall_rating=2.0)
+    UserConceptRatingFactory(profile=profile, recommendation='worth_it', blurb='',
+                             overall_rating=5.0)   # blurbless: never a slide
+
+    UserConceptRatingFactory(profile=profile, recommendation='worth_it', overall_rating=5.0,
+                             blurb='Moderated away.', blurb_hidden=True)   # NEVER a slide
+
+    with override_settings(LANDING_SHOWCASE_PSN='ratinghunter'):
+        assert landing_service.render_showcase_ratings() is True
+
+    cards = cache.get(landing_service.SHOWCASE_RATINGS_CACHE_KEY)
+    assert len(cards) == 5
+    assert [c['rec'] for c in cards[:4]] == ['worth_it'] * 4, 'positive verdicts must lead'
+    assert cards[4]['rec'] == 'skip', 'the top-up slide is missing'
+    assert all(c['take'] for c in cards)
+    assert all(c['take'] != 'Moderated away.' for c in cards), 'a hidden blurb reached the front door'
+    # The words are the real filters' output, precomputed cron-side.
+    assert all(st['tone'] in ('good', 'warn', 'bad', 'high') for c in cards for st in c['stats'])
+
+
 def test_the_inspect_modal_shell_ships_with_the_page(client):
     """The badge quick-peek: the same anon-safe machinery badge detail uses, plus the hint that
     makes the affordance discoverable."""

@@ -39,11 +39,15 @@ class Command(BaseCommand):
         # The landing's showcase Profile Card -- a stable key, not hour-bucketed: it is an
         # artifact, not a stat, and the landing falls back to its literal fixture when unset.
         try:
-            from core.services.landing_service import render_showcase_card
+            from core.services.landing_service import render_showcase_card, render_showcase_ratings
             if render_showcase_card():
                 self.stdout.write(self.style.SUCCESS("Landing showcase card cached"))
             else:
                 self.stdout.write("Landing showcase card skipped (LANDING_SHOWCASE_PSN unset or unknown)")
+            if render_showcase_ratings():
+                self.stdout.write(self.style.SUCCESS("Landing showcase ratings cached"))
+            else:
+                self.stdout.write("Landing showcase ratings skipped (unset, unknown, or no blurbed ratings)")
         except Exception as e:
-            logger.exception("Failed to render the landing showcase card")
-            self.stdout.write(self.style.ERROR(f"Landing showcase card failed: {e}"))
+            logger.exception("Failed to render the landing showcase artifacts")
+            self.stdout.write(self.style.ERROR(f"Landing showcase artifacts failed: {e}"))

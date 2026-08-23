@@ -180,48 +180,49 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                 <h2 class="land-sec__h2">Ratings you can finally trust</h2>
                 <p class="land-sec__sub">Only hunters who finished the platinum, or cleared the whole list, can rate a game here. Difficulty, grind, fun, and a verdict, from people who went all the way.</p>
             </div>
-            {% comment %}A demo rating in the site's own vocabulary -- live HTML, not a
-            screenshot: the shared .pp-stars glyphs, the real tone colours, the real verdict
-            words. Content is invented and captioned as a sample.{% endcomment %}
-            <div class="land-rdemo pp-arrive__it" style="--i: 1;">
-                <article class="land-rdemo__card" aria-label="A sample rating">
-                    <div class="land-rdemo__head">
-                        <div class="min-w-0">
-                            <h3 class="land-rdemo__title">Sekiro: Shadows Die Twice</h3>
-                            <p class="land-rdemo__by">rated by a hunter with the platinum</p>
+            {% comment %}Real ratings from the showcase hunter (cron-cached, blurbs required,
+            positive verdicts first), as a slow crossfade carousel -- or the hand-written sample
+            when the cache is cold. Words and tones are precomputed through the site's own
+            filters, so the carousel can never teach vocabulary the product doesn't use.
+            {% endcomment %}
+            <div class="land-rdemo pp-arrive__it" style="--i: 1;" data-land-carousel>
+                <div class="land-rdemo__stack">
+                    {% for r in demo_ratings %}
+                    <article class="land-rdemo__card{% if forloop.first %} is-active{% endif %}" data-rec="{{ r.rec }}" aria-label="A rating of {{ r.title }}"{% if not forloop.first %} aria-hidden="true"{% endif %}>
+                        <div class="land-rdemo__head">
+                            <div class="min-w-0">
+                                <h3 class="land-rdemo__title">{{ r.title }}</h3>
+                                <p class="land-rdemo__by">rated by a hunter who finished it</p>
+                            </div>
+                            <div class="land-rdemo__verdict">
+                                <span class="pp-stars" style="--fill: {{ r.stars_pct }}%;" role="img" aria-label="Scored {{ r.overall }} out of 5"><span class="pp-stars__on"></span></span>
+                                <span class="land-rdemo__score">{{ r.overall }}<span class="land-rdemo__of">/5</span></span>
+                            </div>
                         </div>
-                        <div class="land-rdemo__verdict">
-                            <span class="pp-stars" style="--fill: 90%;" role="img" aria-label="Scored 4.5 out of 5"><span class="pp-stars__on"></span></span>
-                            <span class="land-rdemo__score">4.5<span class="land-rdemo__of">/5</span></span>
+                        <div class="land-rdemo__stats">
+                            {% for st in r.stats %}
+                            <div class="land-rdemo__stat" data-tone="{{ st.tone }}">
+                                <span class="land-rdemo__k">{{ st.k }}</span>
+                                <span class="land-rdemo__n">{{ st.n }}<span class="land-rdemo__of">{{ st.of }}</span></span>
+                                {% if st.word %}<span class="land-rdemo__w">{{ st.word }}</span>{% endif %}
+                            </div>
+                            {% endfor %}
                         </div>
-                    </div>
-                    <div class="land-rdemo__stats">
-                        <div class="land-rdemo__stat" data-tone="bad">
-                            <span class="land-rdemo__k">Difficulty</span>
-                            <span class="land-rdemo__n">9<span class="land-rdemo__of">/10</span></span>
-                            <span class="land-rdemo__w">Brutal</span>
+                        <p class="land-rdemo__take">&ldquo;{{ r.take }}&rdquo;</p>
+                        <div class="land-rdemo__foot">
+                            <span class="land-rdemo__pill" data-rec="{{ r.rec }}">{{ r.rec_label }}</span>
+                            <span class="land-rdemo__note">{% if demo_ratings_is_sample %}A sample rating. Real ones require the platinum.{% else %}A real rating. Every one requires the platinum.{% endif %}</span>
                         </div>
-                        <div class="land-rdemo__stat" data-tone="good">
-                            <span class="land-rdemo__k">Grind</span>
-                            <span class="land-rdemo__n">3<span class="land-rdemo__of">/10</span></span>
-                            <span class="land-rdemo__w">Some grind</span>
-                        </div>
-                        <div class="land-rdemo__stat" data-tone="warn">
-                            <span class="land-rdemo__k">Hours</span>
-                            <span class="land-rdemo__n">55<span class="land-rdemo__of">h</span></span>
-                        </div>
-                        <div class="land-rdemo__stat" data-tone="good">
-                            <span class="land-rdemo__k">Fun</span>
-                            <span class="land-rdemo__n">9<span class="land-rdemo__of">/10</span></span>
-                            <span class="land-rdemo__w">A blast</span>
-                        </div>
-                    </div>
-                    <p class="land-rdemo__take">&ldquo;Brutal bosses, zero filler. Every death taught me something. Earn this one.&rdquo;</p>
-                    <div class="land-rdemo__foot">
-                        <span class="land-rdemo__pill">Do it</span>
-                        <span class="land-rdemo__note">A sample rating. Real ones require the platinum.</span>
-                    </div>
-                </article>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% if demo_ratings|length > 1 %}
+                <div class="land-rdemo__dots" aria-label="More ratings">
+                    {% for r in demo_ratings %}
+                    <button type="button" class="land-rdemo__dot{% if forloop.first %} is-active{% endif %}" data-land-dotindex="{{ forloop.counter0 }}" aria-label="Show rating {{ forloop.counter }}"></button>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             {% if site_heartbeat.expanded.ratings_total.value %}
             <div class="land-pulse__grid land-pulse__grid--duo pp-arrive__it" style="--i: 2;">
