@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from django.template.loader import render_to_string
 
-from tests.factories import ProfileFactory
+from tests.factories import EarnedTrophyFactory, ProfileFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -29,6 +29,9 @@ def _card_html(profile):
     data['avatar_image'] = data['user_avatar_url']
     for m in data['badges']['medallions']:
         m['layers_cached'] = m['layers']
+    for key in ('rarest_plat', 'latest_plat'):
+        if data.get(key):
+            data[key]['cover_cached'] = data[key]['cover_url']
     return render_to_string('shareables/profile_card.html', data)
 
 
@@ -119,6 +122,29 @@ def test_a_fresh_profile_still_composes_a_complete_card():
     # the ledger's "Career XP" line and would pin nothing.
     for eyebrow in ('Trophy Record', 'Career', 'Collection'):
         assert f'>{eyebrow}</span>' in html, f'the {eyebrow} section lost its eyebrow'
+
+
+def test_the_platinum_minis_wear_their_art():
+    """The rarest platinum renders as a mini card: eyebrow, name, rate, and the game's REAL cover
+    through the cover_cached hop -- the branch every earlier test missed by rendering only the
+    no-platinums placeholder path. Concept deliberately absent so the fallback chain lands on
+    title_icon_url, the URL asserted below."""
+    profile = _linked_profile()
+    et = EarnedTrophyFactory(
+        profile=profile,
+        trophy__trophy_type='platinum',
+        trophy__trophy_earn_rate=1.4,
+        trophy__game__concept=None,
+        trophy__game__title_icon_url='https://cdn.example/rarest-cover.png',
+    )
+    profile.rarest_plat = et
+    profile.save(update_fields=['rarest_plat'])
+
+    html = _card_html(profile)
+
+    assert '>Rarest Platinum</div>' in html, 'the rarest mini card is missing its eyebrow'
+    assert 'https://cdn.example/rarest-cover.png' in html, 'the cover never reached the card'
+    assert '1.4% of players' in html, 'the earn rate left the mini card'
 
 
 # --- The PNG endpoint ---

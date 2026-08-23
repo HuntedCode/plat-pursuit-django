@@ -109,7 +109,7 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                         <div style="margin-left: auto; line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ total_earned|intcomma }} Trophies</div>
                     </div>
 
-                    {# The trophy numbers. Rarest % is the one cell that can be absent (no platinums). #}
+                    {# The trophy numbers. Rarest's % lives on its mini card below, not here. #}
                     <div style="display: flex; gap: 40px; margin-top: 16px;">
                         <div>
                             <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_level|intcomma }}</div>
@@ -123,21 +123,49 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                             <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ total_games|intcomma }}</div>
                             <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Games</div>
                         </div>
-                        {% if rarest_rate is not None %}
-                        <div>
-                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ rarest_rate }}%</div>
-                            <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Rarest Platinum</div>
-                        </div>
-                        {% endif %}
                     </div>
 
-                    {% comment %}The flavor line: WHICH platinums those were. Names are what other
-                    hunters actually ask about; one thin line carries both without costing a cell.
-                    (The latest clause is dropped by the service when it would repeat the rarest.)
+                    {% comment %}The rarest and latest platinums as MINI CARDS -- real cover art
+                    (object-cover object-top, the house cover rules), the game's name, and the one
+                    figure each is famous for: the rarest wears its global earn rate, the latest its
+                    date. Names-with-art is what other hunters actually ask about. The service drops
+                    the latest card when it would repeat the rarest, and the row is absent entirely
+                    for a hunter with no platinums (the numbers above still hold the panel).
                     {% endcomment %}
-                    {% if rarest_name or recent_name %}
-                    <div style="margin-top: 12px; font-size: 14px; line-height: 1.3; color: #8a939f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        {% if rarest_name %}Rarest: <span style="color: #f0f6fd; font-weight: 600;">{{ rarest_name }}</span>{% endif %}{% if rarest_name and recent_name %} &nbsp;&middot;&nbsp; {% endif %}{% if recent_name %}Latest platinum: <span style="color: #f0f6fd; font-weight: 600;">{{ recent_name }}</span>{% endif %}
+                    {% if rarest_plat or latest_plat %}
+                    <div style="display: flex; gap: 14px; margin-top: 15px;">
+                        {% if rarest_plat %}
+                        <div style="flex: 1; min-width: 0; max-width: 348px; display: flex; align-items: center; gap: 11px; padding: 8px 12px 8px 8px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 10px; background: rgba(24, 29, 35, 0.55);">
+                            {% if rarest_plat.cover_cached %}
+                            <img src="{{ rarest_plat.cover_cached }}" alt="" style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; object-fit: cover; object-position: top; background: #232a31;" />
+                            {% else %}
+                            <div style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; background: #232a31; border: 1px solid #404853; box-sizing: border-box;"></div>
+                            {% endif %}
+                            <div style="min-width: 0;">
+                                <div style="font-size: 10px; font-weight: 700; color: #27ebfe; letter-spacing: 0.15em; text-transform: uppercase; line-height: 1.2;">Rarest Platinum</div>
+                                <div style="font-size: 15px; font-weight: 600; color: #f0f6fd; line-height: 1.25; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_plat.name }}</div>
+                                {% if rarest_plat.earn_rate is not None %}
+                                <div style="font-size: 12px; font-weight: 500; color: #8a939f; line-height: 1.2; margin-top: 3px;">{{ rarest_plat.earn_rate }}% of players</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if latest_plat %}
+                        <div style="flex: 1; min-width: 0; max-width: 348px; display: flex; align-items: center; gap: 11px; padding: 8px 12px 8px 8px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 10px; background: rgba(24, 29, 35, 0.55);">
+                            {% if latest_plat.cover_cached %}
+                            <img src="{{ latest_plat.cover_cached }}" alt="" style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; object-fit: cover; object-position: top; background: #232a31;" />
+                            {% else %}
+                            <div style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; background: #232a31; border: 1px solid #404853; box-sizing: border-box;"></div>
+                            {% endif %}
+                            <div style="min-width: 0;">
+                                <div style="font-size: 10px; font-weight: 700; color: #27ebfe; letter-spacing: 0.15em; text-transform: uppercase; line-height: 1.2;">Latest Platinum</div>
+                                <div style="font-size: 15px; font-weight: 600; color: #f0f6fd; line-height: 1.25; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ latest_plat.name }}</div>
+                                {% if latest_plat.earned_at %}
+                                <div style="font-size: 12px; font-weight: 500; color: #8a939f; line-height: 1.2; margin-top: 3px;">{{ latest_plat.earned_at|date:"M j, Y" }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                     {% endif %}
                 </div>
@@ -196,18 +224,33 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                         </div>
                     </div>
 
-                    {% comment %}The five-discipline makeup: what this Pursuer is made of, in the
-                    ring's own colours. Two columns; the fifth wraps alone, which reads as a list
-                    ending rather than a hole.{% endcomment %}
+                    {% comment %}The makeup GRID: six tiles, two columns. Five disciplines (dot,
+                    label, total levels in the ring's own colours) and a sixth slot crowning the
+                    HIGHEST-LEVELED JOB with its real Lucide glyph in its discipline's colour --
+                    the one job this Pursuer is most, named. The job tile only exists once real XP
+                    does (the level-1 floor would otherwise crown an arbitrary untouched job); a
+                    fresh card shows five tiles and the empty sixth reads as room to grow.
+                    {% endcomment %}
                     {% if ring %}
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 15px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px 8px; margin-top: 14px;">
                         {% for f in ring %}
-                        <div style="width: 45%; display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 47%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
                             <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ f.colour }}; flex-shrink: 0;"></span>
-                            <span style="flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: #9da5b1; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.label }}</span>
+                            <span style="flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: #9da5b1; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.label }}</span>
                             <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #f0f6fd; line-height: 1.3; flex-shrink: 0;">{{ f.total|intcomma }}</span>
                         </div>
                         {% endfor %}
+                        {% if top_job %}
+                        <div style="width: 47%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid {{ top_job.colour }}66; border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
+                            {% if top_job.icon_paths %}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ top_job.colour }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ top_job.icon_paths|safe }}</svg>
+                            {% else %}
+                            <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ top_job.colour }}; flex-shrink: 0;"></span>
+                            {% endif %}
+                            <span style="flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: #f0f6fd; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ top_job.name }}</span>
+                            <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: {{ top_job.colour }}; line-height: 1.3; flex-shrink: 0;">Lv {{ top_job.level|intcomma }}</span>
+                        </div>
+                        {% endif %}
                     </div>
                     {% endif %}
                 </div>
@@ -224,24 +267,31 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                 <span style="font-size: 11px; font-weight: 700; color: #8a939f; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1;">Collection</span>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 26px; margin-top: 10px; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 24px; margin-top: 10px; overflow: hidden;">
                 <div style="display: flex; align-items: center; gap: 13px; min-width: 0;">
+                    <div style="min-width: 0; flex-shrink: 0;">
+                        <div style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; white-space: nowrap;">{{ badges.earned|intcomma }} of {{ badges.catalog_total|intcomma }} Badges</div>
+                        <div style="font-size: 14px; line-height: 1.3; color: #8a939f; margin-top: 4px; white-space: nowrap;">{% if badges.chasing %}{{ badges.chasing|intcomma }} chase{{ badges.chasing|pluralize }} open{% endif %}{% if badges.chasing and badges.holo %} &middot; {% endif %}{% if badges.holo %}{{ badges.holo|intcomma }} holographic{% endif %}{% if not badges.chasing and not badges.holo %}The collection so far{% endif %}</div>
+                    </div>
+
+                    {% comment %}The shelf: up to eight newest medallions, filling the band the way
+                    a shelf should, with a "+N" coin saying the collection continues past the edge.
+                    The count block sits FIRST so a short shelf still reads left-anchored beside its
+                    numbers rather than floating in a void.{% endcomment %}
                     {% if badges.medallions %}
-                    <div style="display: flex; align-items: center; gap: 9px; flex-shrink: 0;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; overflow: hidden;">
                         {% for m in badges.medallions %}
-                        <div style="position: relative; width: 54px; height: 54px; flex-shrink: 0;">
+                        <div style="position: relative; width: 50px; height: 50px; flex-shrink: 0;">
                             {% for layer in m.layers_cached %}
                             <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%;{% if m.is_avatar %} object-fit: cover; border-radius: 50%;{% else %} object-fit: contain;{% endif %}" />
                             {% endfor %}
                         </div>
                         {% endfor %}
+                        {% if badges.more %}
+                        <div style="min-width: 40px; height: 40px; box-sizing: border-box; padding: 0 9px; flex-shrink: 0; border-radius: 999px; border: 1px solid rgba(64, 72, 83, 0.7); background: rgba(24, 29, 35, 0.55); display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 13px; font-weight: 700; color: #8a939f; white-space: nowrap;">+{{ badges.more|intcomma }}</div>
+                        {% endif %}
                     </div>
                     {% endif %}
-
-                    <div style="min-width: 0;">
-                        <div style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ badges.earned|intcomma }} of {{ badges.catalog_total|intcomma }} Badges</div>
-                        <div style="font-size: 14px; line-height: 1.3; color: #8a939f; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{% if badges.chasing %}{{ badges.chasing|intcomma }} chase{{ badges.chasing|pluralize }} open{% endif %}{% if badges.chasing and badges.holo %} &middot; {% endif %}{% if badges.holo %}{{ badges.holo|intcomma }} holographic{% endif %}{% if not badges.chasing and not badges.holo %}The collection so far{% endif %}</div>
-                    </div>
                 </div>
 
                 {% comment %}The nearest unfinished series, with its real progress -- the Collection

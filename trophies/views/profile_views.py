@@ -514,6 +514,9 @@ class ProfileDetailView(DetailView):
             data['avatar_image'] = data['user_avatar_url']
             for m in data['badges']['medallions']:
                 m['layers_cached'] = m['layers']
+            for key in ('rarest_plat', 'latest_plat'):
+                if data.get(key):
+                    data[key]['cover_cached'] = data[key]['cover_url']
             card_html = render_to_string('shareables/profile_card.html', data)
         except Exception:
             logger.exception("Profile Card build failed for profile %s", profile.id)

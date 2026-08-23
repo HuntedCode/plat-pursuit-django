@@ -25,13 +25,16 @@ from users.services.marks import mark_style
 # One colour vocabulary across the family: the card renders with no stylesheet, and these maps are
 # the hand-ported token hexes the plat card already keeps in sync with input.css. Imported, not
 # copied -- a second copy is a second thing to drift.
-from core.services.completion_card_service import DISCIPLINE_COLOURS, TIER_DISPLAY
+from core.services.completion_card_service import (
+    DISCIPLINE_COLOURS, JOB_ICON_PATHS, TIER_DISPLAY,
+)
 
 logger = logging.getLogger(__name__)
 
-#: How many recently-earned medallions the spine band shows. Each one is another image (or two)
-#: to cache and base64 into the render; three reads as "a collection", four reads as a list.
-RECENT_MEDALLION_CAP = 3
+#: How many recently-earned medallions the Collection band shows. Sized so the strip plus the
+#: count/chase/catalog blocks fill the band's full width (his call: the bottom should fill);
+#: each is one subject-art image to cache and base64 into the render, so the cap is a budget too.
+RECENT_MEDALLION_CAP = 8
 
 
 def _badge_summary(profile):
@@ -94,6 +97,8 @@ def _badge_summary(profile):
         # The series they're nearest to finishing -- the Collection CTA's own read (or None).
         'closest': closest_badge(profile),
         'medallions': medallions,
+        # Holdings beyond the strip, for the "+N" chip that says the shelf continues.
+        'more': max(0, earned - len(medallions)),
     }
 
 
@@ -111,28 +116,37 @@ def get_card_data(profile):
         for f in (hero.get('ring') or [])
     ]
 
-    # The rarest and latest platinums, off the denormed FKs -- one PK lookup each, no scan, and
-    # values_list means the ~30 KB IGDB blob can never ride along.
-    def _plat_flavor(pk):
+    # The rarest and latest platinums as MINI CARDS (cover art + name + figure), off the denormed
+    # FKs -- one PK lookup each, no scan. The cover chain needs the Game + Concept + IGDBMatch in
+    # hand (display_image_url is IGDB-first), so this is the one place the card selects a concept
+    # join -- with the mandatory raw_response defer riding along.
+    def _plat_mini(pk):
         if not pk:
-            return None, None
-        row = (
+            return None
+        et = (
             EarnedTrophy.objects.filter(pk=pk)
-            .values_list('trophy__game__concept__unified_title', 'trophy__game__title_name',
-                         'trophy__trophy_earn_rate')
+            .select_related('trophy__game__concept__igdb_match')
+            .defer('trophy__game__concept__igdb_match__raw_response')
             .first()
         )
-        if not row:
-            return None, None
-        unified, title_name, rate = row
-        return (unified or title_name), rate
+        if not et or not et.trophy or not et.trophy.game:
+            return None
+        game = et.trophy.game
+        concept = game.concept
+        rate = et.trophy.trophy_earn_rate
+        return {
+            'name': (concept.unified_title if concept else '') or game.title_name,
+            'cover_url': game.display_image_url or '',
+            'earn_rate': round(float(rate), 2) if rate is not None else None,
+            'earned_at': et.earned_date_time,
+        }
 
-    rarest_name, rarest_rate = _plat_flavor(profile.rarest_plat_id)
-    # For a hunter with one platinum (or a rarest that IS the latest) the two clauses would print
-    # the same game twice; the latest clause simply drops, and its query with it.
-    recent_name = None
+    rarest_plat = _plat_mini(profile.rarest_plat_id)
+    # For a hunter with one platinum (or a rarest that IS the latest) two cards would show the
+    # same game twice; the latest card simply drops, and its query with it.
+    latest_plat = None
     if profile.recent_plat_id and profile.recent_plat_id != profile.rarest_plat_id:
-        recent_name, _ = _plat_flavor(profile.recent_plat_id)
+        latest_plat = _plat_mini(profile.recent_plat_id)
 
     # All four tiers, unconditionally: this is a career, not one game's trophy list, so a zero is
     # a true statement about the hunter rather than a tier the game never defined.
@@ -151,6 +165,22 @@ def get_card_data(profile):
     jobs = (career_ctx or {}).get('career') or {}
     jobs_played = sum(d.get('played', 0) for d in jobs.get('disciplines', []))
 
+    # The highest-leveled job, with its real Lucide glyph in its discipline's colour -- the grid's
+    # sixth slot. Only once real XP exists: the level-1 floor makes every untouched job "level 1",
+    # and crowning an arbitrary one would be a claim the hunter never earned.
+    top_job = None
+    if jobs.get('total_xp'):
+        tiles = [t for d in jobs.get('disciplines', []) for t in d.get('jobs', [])]
+        started = [t for t in tiles if t.get('started')]
+        if started:
+            t = max(started, key=lambda t: t.get('level', 0))
+            top_job = {
+                'name': t.get('name', ''),
+                'level': t.get('level', 0),
+                'icon_paths': JOB_ICON_PATHS.get(t.get('icon', ''), ''),
+                'colour': DISCIPLINE_COLOURS.get(t.get('disc_slug'), '#9da5b1'),
+            }
+
     return {
         'username': profile.display_psn_username or profile.psn_username,
         'mark': mark_style(profile.display_mark),
@@ -165,13 +195,13 @@ def get_card_data(profile):
         'trophy_level': snap.get('trophy_level', 0),
         'avg_progress': snap.get('avg_progress') or 0,
         'tier_counts': tier_counts,
-        'rarest_rate': round(float(rarest_rate), 2) if rarest_rate is not None else None,
-        'rarest_name': rarest_name,
-        'recent_name': recent_name,
+        'rarest_plat': rarest_plat,
+        'latest_plat': latest_plat,
 
         'pursuer_level': hero.get('pursuer_level') or 0,
         'rank_label': (hero.get('pursuer_rank') or {}).get('label', ''),
         'ring': ring,
+        'top_job': top_job,
         'jobs_played': jobs_played,
         'jobs_total': jobs.get('total') or 0,
         'tiers_earned': (career_ctx or {}).get('tiers_earned') or 0,

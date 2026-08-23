@@ -129,6 +129,17 @@ def build_profile_card_context(profile):
 
     for m in data['badges']['medallions']:
         m['layers_cached'] = _cache_layer_urls(m.get('layers'), 'PROFILE-CARD')
+
+    # The two platinum mini-cards' covers (IGDB/PSN, always remote when present).
+    for key in ('rarest_plat', 'latest_plat'):
+        mini = data.get(key)
+        if not mini:
+            continue
+        source = mini.get('cover_url') or ''
+        cached = ShareImageCache.fetch_and_cache(source) if source else ''
+        if source and not cached:
+            logger.warning("[PROFILE-CARD] failed to cache %s cover: %s", key, source)
+        mini['cover_cached'] = cached or ''
     return data
 
 
