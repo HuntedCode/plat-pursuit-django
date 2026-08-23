@@ -16,7 +16,6 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         Matches the styling of our monthly recap emails for brand consistency.
         """
         from core.services.email_service import EmailService
-        from users.services.email_preference_service import EmailPreferenceService
 
         user = emailconfirmation.email_address.user
         email = emailconfirmation.email_address.email
@@ -24,20 +23,13 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         # Generate activation URL using allauth's built-in method
         activate_url = self.get_email_confirmation_url(request, emailconfirmation)
 
-        # Generate email preferences token
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(user.id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            logger.exception(f"Failed to generate preference_url for user {user.id}: {e}")
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
-        # Build template context
+        # Build template context. (The preference-token construction that used to live here
+        # was dropped 2026-08-23: the preferences page is parked and no kept email template
+        # consumes preference_url -- it was a wasted token per send.)
         context = {
             'username': user.username or email.split('@')[0],  # Fallback to email prefix
             'activate_url': activate_url,
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
             'expiration_days': settings.ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS,
         }
 
@@ -69,25 +61,15 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         Matches the styling of our monthly recap emails for brand consistency.
         """
         from core.services.email_service import EmailService
-        from users.services.email_preference_service import EmailPreferenceService
 
         # password_reset_url is inside the context dict (allauth 65.x API)
         password_reset_url = context.get('password_reset_url', '')
 
-        # Generate email preferences token
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(user.id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            logger.exception(f"Failed to generate preference_url for user {user.id}: {e}")
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
-        # Build template context
+        # Build template context (preference_url dropped 2026-08-23, same reason as above).
         template_context = {
             'username': user.username or email.split('@')[0],  # Fallback to email prefix
             'password_reset_url': password_reset_url,
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         # Send using EmailService (same as monthly recap emails)

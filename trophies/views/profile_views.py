@@ -796,13 +796,17 @@ class LinkPSNView(LoginRequiredMixin, View):
     Handles profile creation, sync, verification code generation, and final verification.
     """
     template_name = 'account/link_psn.html'
-    login_url = reverse_lazy('login')
+    # 'account_login', NOT 'login' -- no URL carries that name, so the old value turned every
+    # anonymous hit into a NoReverseMatch 500 instead of a login redirect (audit-caught).
+    login_url = reverse_lazy('account_login')
     form_class = LinkPSNForm
 
     def get(self, request):
         if hasattr(request.user, 'profile') and request.user.profile.is_linked:
             messages.info(request, 'This PSN account is already linked to a web account.')
-            return redirect('link_psn')
+            # Home, NOT 'link_psn' -- redirecting back to this same URL was an infinite loop
+            # for every already-linked visitor (audit-caught).
+            return redirect('home')
 
         form = self.form_class()
         context = {'form': form, 'step': 1}

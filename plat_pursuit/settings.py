@@ -261,22 +261,27 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-ACCOUNT_PASSWORD_MIN_LENGTH = 8
+# (ACCOUNT_PASSWORD_MIN_LENGTH was removed in allauth 65.x -- the minimum comes from
+# AUTH_PASSWORD_VALIDATORS' MinimumLengthValidator below, whose default of 8 matches
+# what the removed setting used to say.)
 ACCOUNT_RATE_LIMITS = {
-    'reset_password': '5/m',
-    'confirm_email': '5/m',
+    # Scoped per-IP (the bare '5/m' this used to be was a single GLOBAL bucket: five reset
+    # requests a minute across the whole site, so any burst of forgetful hunters -- or one
+    # abuser -- locked the door for everyone).
+    'reset_password': '5/m/ip',
+    # confirm_email deliberately NOT overridden: allauth's default is a 1-per-3-minutes
+    # per-key resend cooldown, which the old '5/m' override quietly loosened 15x.
     'login_failed': '10/m/ip,5/300s/key',  # 10/min per IP + 5 per 5min per email
     # Tighter than allauth default (20/m/ip). Blunts botnet mass-signup that
     # weaponizes the verification-email send as third-party email bombing.
     'signup': '5/m/ip',
 }
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Plat Pursuit] '
 DEFAULT_FROM_EMAIL = 'Plat Pursuit <no-reply@platpursuit.com>'
-ACCOUNT_LOGOUT_REDIRECT_URL = '/accounts/login'
+ACCOUNT_LOGOUT_REDIRECT_URL = '/accounts/login/'
 ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
 

@@ -488,6 +488,15 @@ urlpatterns = [
 
     path('accounts/link-psn/', LinkPSNView.as_view(), name='link_psn'),
     path('accounts/confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
+    # SHADOW ROUTES (declared before the allauth include, so they win the match):
+    # - password change lives on Settings (its form has field errors + a throttle; two password
+    #   forms was the defect, so the allauth page 302s there rather than getting a restyle).
+    # - /logout/ (navbar POST) is the ONE logout; allauth's GET-confirm page was linked from
+    #   nowhere, so its URL bounces home instead of rendering a dead confirm card.
+    path('accounts/password/change/', RedirectView.as_view(
+        pattern_name='settings', permanent=False), name='account_change_password'),
+    path('accounts/logout/', RedirectView.as_view(
+        url='/', permanent=False), name='account_logout'),
 
     path('monitoring/tokens/', TokenMonitoringView.as_view(), name='token_monitoring'),
 
@@ -552,3 +561,16 @@ class NotFoundView(TemplateView):
 
 
 handler404 = NotFoundView.as_view()
+
+
+class ThrottledView(TemplateView):
+    """429 page that returns its own status. Previously this template rendered only via
+    allauth's fallback rate-limit handler -- declaring it makes the wiring explicit."""
+    template_name = '429.html'
+
+    def render_to_response(self, context, **kwargs):
+        kwargs.setdefault('status', 429)
+        return super().render_to_response(context, **kwargs)
+
+
+handler429 = ThrottledView.as_view()
