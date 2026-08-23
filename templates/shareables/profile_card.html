@@ -123,6 +123,13 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                             <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ total_games|intcomma }}</div>
                             <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Games</div>
                         </div>
+                        {% comment %}Right-aligned so it sits directly under the band's earned
+                        total above: the two figures are one fraction (earned over unearned), and
+                        stacking them on the same edge is what makes that read.{% endcomment %}
+                        <div style="margin-left: auto; text-align: right;">
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #8a939f; line-height: 1; letter-spacing: -0.02em;">{{ total_unearned|intcomma }}</div>
+                            <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Unearned</div>
+                        </div>
                     </div>
 
                     {% comment %}The rarest and latest platinums as MINI CARDS -- real cover art
@@ -241,14 +248,17 @@ Context: core/services/profile_card_service.get_card_data + api/shareable_views.
                         </div>
                         {% endfor %}
                         {% if top_job %}
-                        <div style="width: 47%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid {{ top_job.colour }}66; border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
-                            {% if top_job.icon_paths %}
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ top_job.colour }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ top_job.icon_paths|safe }}</svg>
-                            {% else %}
-                            <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ top_job.colour }}; flex-shrink: 0;"></span>
-                            {% endif %}
-                            <span style="flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: #f0f6fd; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ top_job.name }}</span>
-                            <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: {{ top_job.colour }}; line-height: 1.3; flex-shrink: 0;">Lv {{ top_job.level|intcomma }}</span>
+                        <div style="width: 47%; box-sizing: border-box; padding: 7px 10px; border: 1px solid {{ top_job.colour }}66; border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                {% if top_job.icon_paths %}
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ top_job.colour }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ top_job.icon_paths|safe }}</svg>
+                                {% else %}
+                                <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ top_job.colour }}; flex-shrink: 0;"></span>
+                                {% endif %}
+                                <span style="flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: #f0f6fd; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ top_job.name }}</span>
+                                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: {{ top_job.colour }}; line-height: 1.3; flex-shrink: 0;">Lv {{ top_job.level|intcomma }}</span>
+                            </div>
+                            <div style="font-size: 9px; font-weight: 700; color: {{ top_job.colour }}; letter-spacing: 0.16em; text-transform: uppercase; line-height: 1.2; margin-top: 4px;">Top Job</div>
                         </div>
                         {% endif %}
                     </div>

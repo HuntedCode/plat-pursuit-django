@@ -192,6 +192,7 @@ def get_card_data(profile):
         'total_plats': snap.get('total_plats', 0),
         'total_completes': snap.get('total_completes', 0),
         'total_earned': snap.get('total_earned', 0),
+        'total_unearned': snap.get('total_unearned', 0),
         'trophy_level': snap.get('trophy_level', 0),
         'avg_progress': snap.get('avg_progress') or 0,
         'tier_counts': tier_counts,
