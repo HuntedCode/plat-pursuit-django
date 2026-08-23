@@ -190,9 +190,14 @@
             dots.forEach(function (dot, i) { dot.classList.toggle('is-active', i === index); });
         }
 
+        // The rotation only runs while the carousel is actually ON SCREEN: slides advancing
+        // above the fold before anyone scrolls down would spend the motion where nobody sees
+        // it, and the reader should always arrive on slide one.
+        var inView = false;
+
         function start() {
             // No auto-advance under reduced motion: the dots remain the manual path.
-            if (reduce || timer) { return; }
+            if (reduce || timer || !inView) { return; }
             timer = setInterval(function () { show(index + 1); }, 7000);
         }
         function stop() {
@@ -209,7 +214,19 @@
         host.addEventListener('mouseleave', start);
         host.addEventListener('focusin', stop);
         host.addEventListener('focusout', start);
-        start();
+
+        if ('IntersectionObserver' in window) {
+            var io = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    inView = entry.isIntersecting;
+                    if (inView) { start(); } else { stop(); }
+                });
+            }, { threshold: 0.35 });
+            io.observe(host);
+        } else {
+            inView = true;
+            start();
+        }
     }
 
     function boot() {
