@@ -2,6 +2,7 @@ import logging
 import random
 import time
 
+from django.conf import settings
 from django.contrib.staticfiles.finders import find
 from django.http import HttpResponse
 from django.views.generic import TemplateView, View
@@ -183,6 +184,18 @@ class HomeView(TemplateView):
             and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
         )
 
+    def _team_previewing_syncing(self):
+        """True when a team member asks to SEE the first-sync waiting room
+        (`/?preview=syncing`). A synced team account can otherwise never reach it, and the
+        sync-wait walkthrough is an onboarding surface worth reviewing. Note: a synced
+        previewer has trophies, so `is_initial_sync` renders False -- the DEBUG dev panel on
+        the page covers the initial-sync copy path."""
+        return (
+            self.request.GET.get('preview') == 'syncing'
+            and self.request.user.is_authenticated
+            and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
+        )
+
     def _resolve_state(self):
         """Compute the home-page state for the current request user."""
         request = self.request
@@ -193,6 +206,8 @@ class HomeView(TemplateView):
         profile = getattr(request.user, 'profile', None)
         if profile is None or not profile.is_linked:
             return 'no_psn'
+        if self._team_previewing_syncing():
+            return 'syncing'
         if profile.sync_status != 'synced':
             # Both 'syncing' and 'error' get the in-progress shell rather than
             # an empty dashboard. The shell shows the relevant status messaging.
@@ -261,5 +276,22 @@ class HomeView(TemplateView):
             # Backwards-compat: keep `did_you_know` for the initial render so
             # the template doesn't need a special "first fact" path.
             context['did_you_know'] = facts[0]
+
+            # PSN's own totals land on the profile within seconds of sync start
+            # (psn_api_service.update_profile_from_legacy), long before our per-game walk
+            # finishes -- so the waiting page can greet a first-timer with their real
+            # numbers. None (not a zeroed dict) when the summary hasn't landed yet: the
+            # template branches to generic copy and the poll payload upgrades it live.
+            # get_total_trophies_from_summary() returns None on an empty summary.
+            summary = profile.earned_trophy_summary or {}
+            context['psn_found'] = {
+                'total': profile.get_total_trophies_from_summary() or 0,
+                'plats': summary.get('platinum', 0),
+                'level': profile.trophy_level or 0,
+            } if summary else None
+
+            # DEBUG-only: the walkthrough/finale replay harness (canned event payloads, no
+            # real sync) lives in the template behind this flag.
+            context['sync_dev'] = settings.DEBUG
 
         return context

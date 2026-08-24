@@ -103,6 +103,15 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
         }
 
         if profile.sync_status == 'syncing':
+            # PSN's own totals (written seconds into the sync) ride along so a waiting page
+            # that loaded BEFORE they landed can upgrade its greeting live. Additive key;
+            # None until the summary exists. Zero extra queries -- the profile is loaded.
+            data['psn_found'] = {
+                'total': profile.get_total_trophies_from_summary() or 0,
+                'plats': (profile.earned_trophy_summary or {}).get('platinum', 0),
+                'level': profile.trophy_level or 0,
+            } if profile.earned_trophy_summary else None
+
             # Surface the sync_complete in-progress flag so the UI can show
             # "Finalizing..." instead of leaving the bar parked at 100% while
             # _job_sync_complete runs the post-sync pipeline (health check,
