@@ -486,6 +486,12 @@ MONTHLY_RECAP_SEND_ENABLED = os.getenv('MONTHLY_RECAP_SEND_ENABLED', 'False') ==
 # still send. Same fail-safe pattern as the recap flag above; pause the Render cron too.
 WEEKLY_DIGEST_SEND_ENABLED = os.getenv('WEEKLY_DIGEST_SEND_ENABLED', 'False') == 'True'
 
+# The one-time "PlatPursuit 1.0 is here" announcement: DEFAULT OFF, the house pattern for
+# side-effecting sends. There is no service-level gate in EmailService (the 2026-08 parking was
+# four unrelated mechanisms), so this flag IS the gate for the only user-facing blast we send.
+# Flip it via the environment a few days after launch, run the command (dry-run first), unset.
+LAUNCH_ANNOUNCEMENT_SEND_ENABLED = os.getenv('LAUNCH_ANNOUNCEMENT_SEND_ENABLED', 'False') == 'True'
+
 # Where the weekly subscription-audit cron mails its run report (an OPERATOR email, outside the
 # email parking -- that covered user-facing sends). Empty = no email, which keeps dev runs quiet.
 # NOTE: IS_BETA forces the dummy email backend, so a beta run with this set still sends nothing.

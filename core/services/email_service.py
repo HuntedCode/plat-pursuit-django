@@ -28,6 +28,7 @@ class EmailService:
         log_user=None,
         log_triggered_by='system',
         log_metadata=None,
+        headers=None,
     ):
         """
         Send an HTML email using a Django template.
@@ -78,6 +79,10 @@ class EmailService:
                 body=text_content,
                 from_email=from_email,
                 to=to_emails,
+                # Extra headers (e.g. List-Unsubscribe on the launch announcement). The
+                # SendGrid backend forwards these into the personalization, so they survive
+                # the trip; None keeps every existing caller byte-identical.
+                headers=headers or None,
             )
 
             # Attach HTML version

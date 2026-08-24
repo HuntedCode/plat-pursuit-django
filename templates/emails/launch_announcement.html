@@ -1,0 +1,82 @@
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The one-time "PlatPursuit 1.0 is here" announcement, sent by hand a few days after the cutover
+(core/management/commands/send_launch_announcement.py, dry-run by default, gated on
+LAUNCH_ANNOUNCEMENT_SEND_ENABLED, idempotent per user via EmailLog).
+
+Audience: accounts that existed BEFORE settings.PP_LAUNCH_DATE. Someone who joined after the
+cutover never saw the old site, so an announcement about the new one is noise to them.
+
+Deliberately short. This is the one marketing-adjacent email in the set, so the footer says
+plainly why it arrived and points at Account Settings, and the send attaches a
+List-Unsubscribe header.
+{% endcomment %}
+
+{% block title %}PlatPursuit 1.0 is here{% endblock %}
+
+{% block preheader %}The site you signed up for has been rebuilt from the ground up. Here is what changed.{% endblock %}
+
+{% block header_content %}
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1">PlatPursuit 1.0 is here</h1>
+        <p class="pp-sub">The whole site, rebuilt around the hunt.</p>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, we rebuilt PlatPursuit from the ground up. Every trophy you tracked is still exactly where you left it, and it now feeds a lot more than a list.</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+            <td style="padding: 0 0 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#28EBFE" style="background-color: #28EBFE; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Your history became a Career</p>
+                            <p class="pp-card-c">Twenty-five jobs across five disciplines, contracts to complete, and a Pursuer level your back catalogue already earned. Yours is waiting, levelled up, before you click a thing.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 0 0 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#8FD2EA" style="background-color: #8FD2EA; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Badges became medallions</p>
+                            <p class="pp-card-c">Handcrafted art you can pick up and inspect, earned by platinuming every game in a themed set. Master one and it turns holographic.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 0 0 20px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#E7C25C" style="background-color: #E7C25C; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">A new home, and the rest</p>
+                            <p class="pp-card-c">A rebuilt front page, monthly recaps with share cards, ratings from hunters who actually finished the game, and leaderboards for every badge and job.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+
+    {% include 'emails/_cta_button.html' with url=site_url label="See what changed" %}
+
+    {% comment %} Visible URL: plaintext is strip_tags(html) and keeps no hrefs. {% endcomment %}
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ site_url }}</p>
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #7E8FA3;">Thanks for hunting with us. No trophy can hide.</p>
+{% endblock %}
+
+{% block footer_note %}
+    You're receiving this because you have a PlatPursuit account.<br />
+    <a href="{{ site_url }}{% url 'settings' %}" style="color: #6B7C91; text-decoration: underline;">Manage your account settings</a>.
+{% endblock %}

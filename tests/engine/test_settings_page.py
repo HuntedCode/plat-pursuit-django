@@ -29,6 +29,7 @@ KEPT_EMAIL_TEMPLATES = [
     'subscription_welcome.html', 'payment_failed.html', 'payment_succeeded.html',
     'payment_action_required.html', 'subscription_cancelled.html',
     'donation_receipt.html', 'badge_claim_confirmation.html', 'artwork_complete.html',
+    'launch_announcement.html',
 ]
 
 
