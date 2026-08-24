@@ -103,6 +103,14 @@ the one messages renderer (a second one double-renders every login message).
                                           value="{{ profile.sync_percentage|floatformat:0|default:0 }}"
                                           max="100"
                                           aria-label="Sync progress"></progress>
+                                {% if is_initial_sync %}
+                                {% comment %} The banked tally climbs alongside the bar (syncing.js
+                                ticks it old-to-new off the poll payload's live_tally). {% endcomment %}
+                                <p class="text-xs md:text-sm text-base-content/70 mt-2 font-semibold">
+                                    <b class="text-warning tabular-nums" data-sync-tally data-countup="{{ live_tally|default:0 }}">{{ live_tally|default:0|intcomma }}</b>
+                                    trophies banked so far
+                                </p>
+                                {% endif %}
                                 <p id="home-sync-phase-text" class="text-[10px] md:text-xs text-base-content/40 mt-1.5">
                                     {% if is_initial_sync %}This updates live as we go. The moment everything is in, your Pursuit opens up right here.{% else %}This updates live as we go. The second it flips to synced, we'll take you straight to your Home.{% endif %}
                                 </p>

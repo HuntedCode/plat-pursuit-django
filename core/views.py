@@ -270,6 +270,13 @@ class HomeView(TemplateView):
                 'level': profile.trophy_level or 0,
             } if summary else None
 
+            # The banked-so-far tally (first syncs only; see ProfileSyncStatusView for the
+            # cost story). Server-rendered so the initial paint shows the real number.
+            if context['is_initial_sync']:
+                from trophies.models import EarnedTrophy
+                context['live_tally'] = EarnedTrophy.objects.filter(
+                    profile=profile, earned=True).count()
+
             # DEBUG-only: the syncing hero replay harness (canned event payloads, no
             # real sync) lives in the template behind this flag.
             context['sync_dev'] = settings.DEBUG

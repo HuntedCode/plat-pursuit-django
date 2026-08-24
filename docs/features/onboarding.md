@@ -25,7 +25,12 @@ syncing branch):
    carousel: the landing's real sections (medallion shelf with the 3D inspect modal, the live
    ratings carousel, the showcase Profile Card, the heartbeat band) render below the hero.
    The site's best showcase is the tour, at full fidelity, with zero duplicated upkeep.
-3. **The enter moment.** On a FIRST sync (`is_initial_sync`), the `synced` transition swaps
+3. **The banked-so-far tally.** EarnedTrophy rows land progressively during the per-game
+   walk, so the growing total already exists in the DB. The status payload surfaces it as
+   `live_tally` (one indexed COUNT per poll, FIRST syncs only -- refreshes skip the query and
+   whale cost stays bounded to the first-sync cohort) and the hero ticks it old-to-new with
+   the house count-up alongside the progress bar.
+4. **The enter moment.** On a FIRST sync (`is_initial_sync`), the `synced` transition swaps
    the status card in place: "Your Pursuer has emerged" (the phrase is from
    `docs/design/gamification-plan.md`'s design intent for this exact moment), the final
    trophy counts, and one "Enter your Pursuit" CTA. No auto-reload; the user arrives on the

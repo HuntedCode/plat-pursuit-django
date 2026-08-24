@@ -189,3 +189,46 @@ def test_regular_users_cannot_preview_the_syncing_page(client):
     # data-sync-live is the hero's outer wrapper, present in EVERY syncing sub-state --
     # its absence is what distinguishes "preview denied" from "hero rendered differently".
     assert 'data-sync-live' not in body
+
+
+# --- the banked-so-far tally ---
+
+def test_the_status_payload_tallies_banked_trophies_on_first_syncs(client):
+    """EarnedTrophy rows land progressively during the walk; the payload surfaces the count
+    (one indexed COUNT, first syncs only) so the hero can show the total climbing."""
+    from tests.factories import EarnedTrophyFactory
+
+    client, profile = _syncing_client(client, total_trophies=0)
+    for _ in range(3):
+        EarnedTrophyFactory(profile=profile)
+
+    data = client.get('/api/profile-sync-status/', **CF).json()
+
+    assert data['live_tally'] == 3
+
+
+def test_refresh_syncs_skip_the_tally_query(client):
+    """A refreshing veteran's denorms are already real; the tally is first-sync-only so the
+    whale cost stays bounded to the first-sync cohort."""
+    client, _ = _syncing_client(client, total_trophies=500)
+
+    data = client.get('/api/profile-sync-status/', **CF).json()
+
+    assert 'live_tally' not in data
+
+
+def test_the_tally_line_renders_for_first_syncs_only(client):
+    client, profile = _syncing_client(client, total_trophies=0)
+    from tests.factories import EarnedTrophyFactory
+    for _ in range(2):
+        EarnedTrophyFactory(profile=profile)
+
+    body = client.get('/', **CF).content.decode()
+    assert 'data-sync-tally' in body
+    assert 'trophies banked so far' in body
+    assert 'data-countup="2"' in body, 'the initial paint must show the real server-side count'
+
+    client.logout()
+    client2, _ = _syncing_client(client, total_trophies=500)
+    body = client2.get('/', **CF).content.decode()
+    assert 'data-sync-tally' not in body

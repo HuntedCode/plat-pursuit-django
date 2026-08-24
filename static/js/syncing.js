@@ -40,6 +40,26 @@
         });
     }
 
+    // ── Banked-so-far tally ─────────────────────────────────────────────────
+    function wireTally() {
+        var el = document.querySelector('[data-sync-tally]');
+        if (!el) { return; }   // refreshes and non-initial states render no tally
+        var prev = parseInt(el.dataset.countup, 10) || 0;
+
+        document.addEventListener('platpursuit:sync-progress', function (e) {
+            var tally = e && e.detail && e.detail.live_tally;
+            if (tally == null || tally === prev) { return; }
+            el.dataset.countup = tally;
+            // Old-to-new ticking (countUp's `from`), reduced-motion handled inside it.
+            if (window.PlatPursuit && PlatPursuit.countUp) {
+                PlatPursuit.countUp(el, 600, { from: prev });
+            } else {
+                el.textContent = Number(tally).toLocaleString('en-US');
+            }
+            prev = tally;
+        });
+    }
+
     // ── 3. Enter-moment state machine ───────────────────────────────────────
     function wireFinale() {
         var finale = document.querySelector('[data-sync-complete]');
@@ -127,10 +147,10 @@
             progressBtn.addEventListener('click', function () {
                 step = Math.min(step + 1, 4);
                 var canned = [
-                    { sync_percentage: 15, sync_progress: 61, sync_target: 412, stats: { plats: 4, golds: 40, silvers: 199, bronzes: 820 }, psn_found: { total: 8412, plats: 71, level: 512 } },
-                    { sync_percentage: 55, sync_progress: 227, sync_target: 412, stats: { plats: 31, golds: 301, silvers: 1400, bronzes: 4100 }, psn_found: { total: 8412, plats: 71, level: 512 } },
-                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'health_check', stats: { plats: 60, golds: 700, silvers: 2600, bronzes: 6900 } },
-                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'stats_badges', stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 } }
+                    { sync_percentage: 15, sync_progress: 61, sync_target: 412, live_tally: 1063, stats: { plats: 4, golds: 40, silvers: 199, bronzes: 820 }, psn_found: { total: 8412, plats: 71, level: 512 } },
+                    { sync_percentage: 55, sync_progress: 227, sync_target: 412, live_tally: 4620, stats: { plats: 31, golds: 301, silvers: 1400, bronzes: 4100 }, psn_found: { total: 8412, plats: 71, level: 512 } },
+                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'health_check', live_tally: 8290, stats: { plats: 60, golds: 700, silvers: 2600, bronzes: 6900 } },
+                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'stats_badges', live_tally: 8412, stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 } }
                 ][step - 1];
                 if (canned) { emitProgress(canned); }
             });
@@ -146,6 +166,7 @@
 
     function boot() {
         wirePersonalization();
+        wireTally();
         wireFinale();
         wireDevPanel();
     }

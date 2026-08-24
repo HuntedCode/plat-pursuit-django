@@ -103,6 +103,18 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
         }
 
         if profile.sync_status == 'syncing':
+            # Live tally for the FIRST-sync waiting page: EarnedTrophy rows land progressively
+            # during the per-game walk, so the growing total already exists in the DB -- one
+            # indexed COUNT (the partial (profile, earned) index) per poll surfaces it. First
+            # syncs only: the denorms are 0 until finalize, so `stats` reads 0 the whole way
+            # and the hero would otherwise have nothing to show climbing. Refreshes skip the
+            # query (their denorms are already real) and whale cost stays bounded to the
+            # first-sync cohort at poll cadence. DB-aggregate by rule, never Python iteration.
+            if profile.total_trophies == 0:
+                from ..models import EarnedTrophy
+                data['live_tally'] = EarnedTrophy.objects.filter(
+                    profile=profile, earned=True).count()
+
             # PSN's own totals (written seconds into the sync) ride along so a waiting page
             # that loaded BEFORE they landed can upgrade its greeting live. Additive key;
             # None until the summary exists. Zero extra queries -- the profile is loaded.
