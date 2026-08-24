@@ -132,9 +132,17 @@
                 </svg>
                 <h2 class="text-lg md:text-xl lg:text-2xl font-bold">Career</h2>
             </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-4">
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-2">
                 The {{ career.total }} jobs that make up how you play, across five disciplines.
             </p>
+            {% comment %} Reopens the how-it-works modal: unlike badges there is no long-form
+            page, the modal IS the teaching, so it stays reachable after the first visit. {% endcomment %}
+            <div class="pp-edhint-row mb-4">
+                <button type="button" class="pp-edhint" data-career-open>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    How your Career works
+                </button>
+            </div>
 
             {# Summary stats (aggregates you can't read off the grid) #}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
@@ -1648,7 +1656,16 @@ document.addEventListener('DOMContentLoaded', function () {
 {% if ceremony_debug %}
 {% comment %} DEV-ONLY: claim-ceremony replay harness. Canned payloads (no DB, no accept) so the animation
 can be iterated on endlessly. Gated on settings.DEBUG -- never ships to prod. {% endcomment %}
+{% comment %} ONE dev panel: .ccx-dev is fixed to left/bottom 12px, so a second instance
+stacks on top and eats this one's clicks (the audit-era bug). New dev affordances for this
+page join THIS panel as extra rows. {% endcomment %}
 <div class="ccx-dev" aria-hidden="true">
+    {% if explainer_debug %}
+    <div class="ccx-dev__title">Career explainer</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-explainer-replay>Replay</button>
+    </div>
+    {% endif %}
     <div class="ccx-dev__title">Ceremony replay</div>
     <div class="ccx-dev__row">
         <button type="button" class="ccx-dev__btn" data-ccx="small">Small</button>

@@ -75,34 +75,50 @@ def test_ui_flag_write_preserves_other_flags(linked_client):
     assert user.ui_flags == {'some_future_flag': True, 'career_explainer': True}
 
 
-# --- the render gate on /career/ ---
+# --- the modal + its gates on /career/ ---
 
-def test_career_shows_the_explainer_on_first_visit(linked_client):
+def test_career_auto_opens_the_howto_on_first_visit(linked_client):
+    """The modal renders for everyone (the edhint reopens it) but data-auto -- the auto-open
+    arm -- renders only while the server flag is unset."""
     body = linked_client.get('/career/', **CF).content.decode()
 
-    assert 'data-career-explainer' in body
-    assert 'data-career-explainer hidden' not in body
+    tag = body.split('id="career-howto"')[1].split('>')[0]
+    assert 'data-auto' in tag
+    assert '25 jobs, five disciplines' in body
+    assert 'Contracts' in body and 'Pursuer' in body
 
 
-def test_career_hides_the_explainer_once_flagged(linked_client):
-    """Server-side gate: with the flag set the card must not render visibly. Tests run with
-    DEBUG=False, so this is a full non-render (the DEBUG `hidden` replay target never ships)."""
+def test_career_never_auto_opens_once_flagged(linked_client):
+    """With the flag set the modal stays reachable (edhint) but must not auto-pop."""
     user = linked_client.profile.user
     user.ui_flags = {'career_explainer': True}
     user.save(update_fields=['ui_flags'])
 
     body = linked_client.get('/career/', **CF).content.decode()
 
-    assert 'data-career-explainer' not in body
+    assert 'id="career-howto"' in body, 'the teaching must stay reachable after dismissal'
+    # Scoped to the modal's own tag: 'data-auto' is a substring of unrelated attributes.
+    tag = body.split('id="career-howto"')[1].split('>')[0]
+    assert 'data-auto' not in tag
 
 
-def test_the_explainer_is_not_a_second_page_header():
-    """The hero and Career summary card both wear border-l-primary; the explainer must not."""
+def test_the_summary_card_carries_the_reopen_hint(linked_client):
+    """Career has no long-form how-it-works page; the modal IS the teaching, so the summary
+    card's edhint keeps it reachable forever (the badge howto's one-shot rationale inverts)."""
+    body = linked_client.get('/career/', **CF).content.decode()
+
+    assert 'data-career-open' in body
+    assert 'How your Career works' in body
+
+
+def test_the_explainer_never_grows_its_own_dev_panel():
+    """The bug that shipped: .ccx-dev is fixed to left/bottom 12px, so a second panel stacks
+    on top of the ceremony player and eats its clicks. Dev affordances join career.html's
+    existing panel; this partial must stay panel-free."""
     from pathlib import Path
 
     from django.conf import settings
 
     text = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
             '_career_explainer.html').read_text(encoding='utf-8')
-    assert 'border-l-primary' not in text
-    assert 'border-l-secondary' in text
+    assert 'ccx-dev' not in text

@@ -39,16 +39,24 @@ syncing branch):
 
 See [home-page.md](home-page.md) for the router, the event contract, and the finalize phases.
 
-## Surface 2: the Career first-visit explainer
+## Surface 2: the Career "how it works" modal
 
-`templates/trophies/partials/career/_career_explainer.html`, included between the Pursuer hero
-and the claimable rail. A compact education card with three beats: Pursuer Level, five
-disciplines / 25 jobs, and Contracts (contract teaching folds in here; there is no separate
-Contracts explainer). Dismiss button "Got it".
+`templates/trophies/partials/career/_career_explainer.html`: a first-visit MODAL in the badge
+howto's mold (auto-opens once, focus trap, Escape/scrim/Got-it dismiss), with three beats in
+Jeffrey's own words: 25 jobs / five disciplines, Contracts (curated game sets assigned jobs by
+genre and theme), and Pursuer (complete contracts to earn XP toward jobs and the overall
+level). Jeffrey chose the modal over the earlier inline card ("more in the face" for
+information that matters).
 
-- **Server-side render gate**: `CareerView` passes `show_career_explainer` = the
-  `career_explainer` key is absent from `request.user.ui_flags`. Returning users get a full
-  non-render, never a flash.
+- **Server-side auto-open gate**: the modal markup renders for everyone, but `data-auto` (the
+  auto-open arm) renders only while `career_explainer` is absent from `request.user.ui_flags`.
+- **Reachable forever, unlike badges**: the badge howto is one-shot because its teaching has a
+  fuller home at /badges/how-it-works (a recall button would let two copies drift). Career has
+  no long-form page -- the modal IS the teaching -- so the summary card's `.pp-edhint`
+  ("How your Career works", `data-career-open`) reopens it. One copy, no drift.
+- **ONE dev panel per page**: `.ccx-dev` is fixed to left/bottom 12px, so a second instance
+  stacks over the first and eats its clicks (shipped once, guard-tested now). New dev
+  affordances join the page's existing panel as extra rows.
 - **Career only, by design**: a Collection explainer was explicitly rejected (the badge
   "how badges work" modal already owns that teaching moment).
 
