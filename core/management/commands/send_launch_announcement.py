@@ -14,11 +14,21 @@ Two independent safeties, because an accidental blast cannot be recalled:
      mailing everyone twice. Deliberately NO --force: re-sending a one-time announcement is a
      shell decision (delete the log rows), not a flag someone can fat-finger.
 
-The audience is accounts that existed BEFORE settings.PP_LAUNCH_DATE -- the same instant the
-lobby's launch modal uses to decide "existing user", so the two greetings can never disagree
-about who is new. Without that setting the command refuses to run at all.
+This is the first NON-transactional email the site has sent since the 2026-08 parking, so it
+honours `global_unsubscribe` like every other bulk sender (the preference UI itself is parked
+and unrouted, which is exactly why skipping the check would leave opted-out users with no
+recourse but the List-Unsubscribe mailbox).
+
+The audience is accounts that existed BEFORE settings.PP_LAUNCH_DATE -- the same INSTANT the
+lobby's launch modal uses, so the two can never disagree about who counts as new. They do not
+cover the same POPULATION: the modal needs a linked, synced profile (it lives on the Home
+lobby), while this reaches every active account with an address, including people who signed up
+and never linked. The copy is written to be true for both. Without the setting the command
+refuses to run at all.
 """
 import time
+
+from django.utils import timezone
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -26,6 +36,7 @@ from django.core.management.base import BaseCommand, CommandError
 from core.models import EmailLog
 from core.services.email_service import EmailService
 from users.models import CustomUser
+from users.services.email_preference_service import EmailPreferenceService
 
 SUBJECT = 'PlatPursuit 1.0 is here'
 EMAIL_TYPE = 'launch_announcement'
@@ -66,13 +77,14 @@ class Command(BaseCommand):
             raise CommandError('--limit cannot be negative.')
 
         if send and not getattr(settings, 'LAUNCH_ANNOUNCEMENT_SEND_ENABLED', False):
-            self.stdout.write(self.style.WARNING(
+            # CommandError, not a warning-and-return: an operator who set the flag on the
+            # wrong service would otherwise read a success exit code as "it sent".
+            raise CommandError(
                 'Launch announcement sends are DISABLED '
-                '(settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED is False).\n'
-                'No emails were sent. Set it in the environment when you are ready; '
-                'the dry run still previews the audience.'
-            ))
-            return
+                '(settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED is False). No emails were sent. '
+                'Set it in the environment of THIS service when you are ready; the dry run '
+                'still previews the audience.'
+            )
 
         recipients = (
             CustomUser.objects
@@ -92,6 +104,13 @@ class Command(BaseCommand):
                     f'email address, and have joined before {launch_date.isoformat()}.'
                 )
 
+        if launch_date > timezone.now():
+            self.stdout.write(self.style.WARNING(
+                f'PP_LAUNCH_DATE ({launch_date.isoformat()}) is in the FUTURE, so every '
+                f'account alive today counts as "existing" -- including signups from after '
+                f'the real cutover. Check the value before sending.'
+            ))
+
         already = set(
             EmailLog.objects
             .filter(email_type=EMAIL_TYPE, status='sent')
@@ -103,19 +122,29 @@ class Command(BaseCommand):
         self.stdout.write(f'Cutover instant: {launch_date.isoformat()}')
         self.stdout.write('=' * 70)
 
-        sent = failed = 0
+        sent = failed = opted_out = 0
         # The cap applies to what would actually be SENT, not to the audience: slicing the
         # queryset first meant a resumed `--limit 5` re-selected the same five already-sent
         # accounts and made zero progress while reporting success.
         audience = list(recipients)
-        pending = [u for u in audience if u.id not in already]
-        skipped = len(audience) - len(pending)
+        pending = []
+        for user in audience:
+            if user.id in already:
+                continue
+            # Honour the global opt-out even though the preferences page is parked: a user who
+            # set it before the parking still means it.
+            if not EmailPreferenceService.should_send_email(user, 'admin_announcements'):
+                opted_out += 1
+                continue
+            pending.append(user)
+        skipped = len(audience) - len(pending) - opted_out
         if limit is not None:
             pending = pending[:limit]
 
         if not send:
             self.stdout.write(f'Would send to {len(pending)} account(s).')
             self.stdout.write(f'Already sent (would skip): {skipped}')
+            self.stdout.write(f'Opted out (would skip): {opted_out}')
             for user in pending[:10]:
                 self.stdout.write(f'  {user.email}')
             if len(pending) > 10:
@@ -157,6 +186,7 @@ class Command(BaseCommand):
         self.stdout.write('=' * 70)
         self.stdout.write(self.style.SUCCESS(f'Sent: {sent}'))
         self.stdout.write(f'Already sent (skipped): {skipped}')
+        self.stdout.write(f'Opted out (skipped): {opted_out}')
         if failed:
             self.stdout.write(self.style.WARNING(f'Failed: {failed}'))
 

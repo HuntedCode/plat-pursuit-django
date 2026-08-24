@@ -49,6 +49,7 @@ class EmailService:
             log_user: User instance for the EmailLog entry (nullable)
             log_triggered_by: Origin for the EmailLog entry ('system', 'webhook', 'admin_manual', 'management_command')
             log_metadata: Optional dict of extra metadata for the EmailLog entry
+            headers: Optional dict of extra email headers (e.g. List-Unsubscribe)
 
         Returns:
             int: Number of emails successfully sent (0 or 1)

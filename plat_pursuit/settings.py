@@ -67,14 +67,26 @@ DISCORD_TEST_WEBHOOK_URL = os.getenv('DISCORD_TEST_WEBHOOK_URL')
 DISCORD_INVITE_URL = os.getenv('DISCORD_INVITE_URL', 'https://discord.gg/platpursuit')
 
 # PlatPursuit 1.0 cutover instant (ISO 8601, e.g. '2026-09-01T00:00:00+00:00'). UNSET = every
-# launch-welcome feature stays fully dormant (the safe pre-launch default); it defines
-# "existing user" for BOTH the lobby launch modal and the announcement email's audience, so
-# the two can never disagree. A malformed value FAILS BOOT on purpose: a typo silently
+# launch-welcome feature stays fully dormant (the safe pre-launch default); it is the single
+# instant BOTH the lobby launch modal and the announcement email's audience compare against,
+# so they can never disagree about who counts as new (they cover different populations: the
+# modal needs a synced profile, the email reaches every account). A malformed value FAILS BOOT on purpose: a typo silently
 # disabling the launch greeting is the failure nobody would notice.
+# NOTE: this parses at settings-import time, so a malformed value fails boot on EVERY service
+# (web, worker, crons), not just the greeting -- and setting the var restarts them. Validate
+# before you paste: python -c "from datetime import datetime as d; print(d.fromisoformat('...'))"
+# Date-only ('2026-09-01') is accepted and means midnight UTC.
 _pp_launch_raw = os.getenv('PP_LAUNCH_DATE', '')
 if _pp_launch_raw:
     from datetime import datetime as _dt, timezone as _tz
-    PP_LAUNCH_DATE = _dt.fromisoformat(_pp_launch_raw)
+    try:
+        PP_LAUNCH_DATE = _dt.fromisoformat(_pp_launch_raw)
+    except ValueError as exc:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            f"PP_LAUNCH_DATE={_pp_launch_raw!r} is not ISO 8601. Expected e.g. "
+            f"'2026-09-01T00:00:00+00:00' or '2026-09-01' (midnight UTC)."
+        ) from exc
     if PP_LAUNCH_DATE.tzinfo is None:
         PP_LAUNCH_DATE = PP_LAUNCH_DATE.replace(tzinfo=_tz.utc)
 else:

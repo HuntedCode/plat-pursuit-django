@@ -42,16 +42,17 @@ def test_dry_run_previews_without_the_flag(settings, mailoutbox):
     assert 'DRY RUN' in out.getvalue()
 
 
-def test_send_noops_while_the_flag_is_off(settings, mailoutbox):
+def test_send_refuses_loudly_while_the_flag_is_off(settings, mailoutbox):
+    """CommandError, not a warning: an operator who set the flag on the wrong service would
+    otherwise read exit 0 as "it sent"."""
     settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
     settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = False
     _pre_launch_user()
 
-    out = StringIO()
-    call_command('send_launch_announcement', '--send', stdout=out)
+    with pytest.raises(CommandError):
+        call_command('send_launch_announcement', '--send', stdout=StringIO())
 
     assert len(mailoutbox) == 0
-    assert 'DISABLED' in out.getvalue()
 
 
 def test_it_refuses_without_a_launch_date(settings):
@@ -204,4 +205,35 @@ def test_existing_senders_keep_their_empty_headers(settings, mailoutbox):
     send_welcome_email(profile)
 
     assert mailoutbox[0].extra_headers == {}
+
+
+def test_the_global_opt_out_is_honoured(settings, mailoutbox):
+    """The first non-transactional email since the 2026-08 parking, and the preferences page
+    is unrouted -- skipping this check would leave an opted-out user with no recourse but a
+    human reading the List-Unsubscribe mailbox."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
+    settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = True
+
+    wanted = _pre_launch_user('wanted@example.com')
+    opted_out = _pre_launch_user('nope@example.com')
+    opted_out.email_preferences = {'global_unsubscribe': True}
+    opted_out.save(update_fields=['email_preferences'])
+
+    out = StringIO()
+    call_command('send_launch_announcement', '--send', stdout=out)
+
+    assert [m.to[0] for m in mailoutbox] == [wanted.email]
+    assert 'Opted out (skipped): 1' in out.getvalue()
+
+
+def test_a_future_launch_date_warns(settings):
+    """Set ahead of the real cutover, every account alive today counts as "existing"."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=30)
+    settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = True
+    _pre_launch_user()
+
+    out = StringIO()
+    call_command('send_launch_announcement', stdout=out)
+
+    assert 'FUTURE' in out.getvalue()
 

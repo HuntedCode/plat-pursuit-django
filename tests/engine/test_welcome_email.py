@@ -54,6 +54,17 @@ def test_welcome_carries_the_discord_cta():
     assert 'Come say hello' not in without, 'the community box needs its guard'
 
 
+def test_welcome_never_promises_levels_from_playing(client=None):
+    """XP is banked by CLAIMING a contract; playing grants nothing. The modal was corrected
+    for exactly this and the welcome email carried the same wrong claim. Also: a brand-new
+    hunter is NOT on the XP-filtered boards, which the Career page tells them plainly."""
+    body = _render()
+
+    assert 'levelled by the games you already play' not in body
+    assert 'claim' in body.lower()
+    assert 'You are on them from today' not in body
+
+
 def test_welcome_has_no_em_dash():
     body = _render()
 

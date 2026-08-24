@@ -74,13 +74,20 @@ information that matters).
 
 `templates/trophies/partials/home/_launch_welcome.html`: a one-shot modal on the Home lobby for
 users who existed before the cutover. Three orientation beats (your Career, your Collection, your
-new Home) plus a flourish that is theirs -- their rank, level and discipline ring, computed from
-history they already had. No confetti: particles are the earn vocabulary, and a redesign is an
-announcement, not an achievement.
+new Home) plus a flourish that is theirs: the five disciplines in the Career dossier's own chip
+idiom, and a count of the contracts already sitting claimable against their library. It
+deliberately does NOT quote a Pursuer level -- XP is banked by CLAIMING contracts, so a
+returning hunter is Level 1 here no matter how long their history is, and congratulating them
+on a level they have not earned would be the first thing the new site got wrong. No confetti
+either: particles are the earn vocabulary, and a redesign is an announcement, not an
+achievement.
 
 - **Ships dormant.** `settings.PP_LAUNCH_DATE` (ISO 8601 env var) unset means it never renders.
-  Set at cutover, it defines "existing user" (`date_joined` before the instant) for BOTH this modal
-  and the launch announcement email, so the two greetings can never disagree about who is new. A
+  Set at cutover, it is the single instant BOTH this modal and the launch announcement email
+  compare `date_joined` against, so they can never disagree about who counts as new. They do
+  not cover the same POPULATION: the modal needs a linked, synced profile (it lives on the
+  lobby), while the email reaches every active account with an address, including people who
+  signed up and never linked. The announcement's copy is written to be true for both. A
   malformed value fails boot on purpose: a typo silently disabling the greeting is the failure
   nobody would notice.
 - **Existing users only.** Post-cutover signups get the onboarding built for them; a 1.0 welcome

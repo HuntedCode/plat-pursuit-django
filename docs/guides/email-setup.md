@@ -75,7 +75,7 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Monday 08:00 UTC). Community-focused "This Week in PlatPursuit" newsletter. | `weekly_digest` |
 | `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
 | `welcome` | `emails/welcome.html` | Verification: `VerificationService.link_profile_to_user()` | None (transactional) |
-| `launch_announcement` | `emails/launch_announcement.html` | Manual: `send_launch_announcement --send` (a few days post-cutover) | None; gated by `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` |
+| `launch_announcement` | `emails/launch_announcement.html` | Manual: `send_launch_announcement --send` (a few days post-cutover) | `global_unsubscribe`; also gated by `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` |
 | `admin_announcement` | `emails/broadcast.html` | Admin: Notification Center broadcast | `admin_announcements` |
 | `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) | `subscription_notifications` |
 | `payment_succeeded` | `emails/payment_succeeded.html` | Stripe/PayPal renewal webhook | `subscription_notifications` |
@@ -94,7 +94,7 @@ last child migrates, at which point the legacy base and this table row die toget
 | Base | Children | Notes |
 |------|----------|-------|
 | `base_email_v2.html` | `welcome.html`, `launch_announcement.html` | The target. Extend this for anything new or rebuilt. |
-| `base_email.html` (legacy) | the other 9 kept templates + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
+| `base_email.html` (legacy) | the other 11 kept templates (`email_verification`, `password_reset`, `subscription_welcome`, `payment_succeeded`, `payment_failed`, `payment_action_required`, `subscription_cancelled`, `donation_receipt`, `badge_claim_confirmation`, `artwork_complete`, `badge_earned`) + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
 
 **What v2 provides:**
 - A `role="presentation"` table scaffold with MSO ghost tables, so Outlook renders it.

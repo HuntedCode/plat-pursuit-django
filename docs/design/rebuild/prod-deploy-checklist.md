@@ -862,24 +862,43 @@ The four lanes + closing fixes are all on `rebuild`. After the cutover deploy:
 ## PlatPursuit 1.0 launch welcome (2026-08)
 
 Everything in this lane ships DORMANT and wakes on environment variables, so it can ride to
-prod with the cutover and be switched on deliberately.
+prod with the cutover and be switched on deliberately. ONE exception, below.
 
+- [ ] **The one change that is NOT dormant: the rebuilt welcome email is live the moment this
+      deploys.** It sends on every PSN link with no flag (`verification_service.py`), and it is
+      the first `base_email_v2` child to meet a real inbox. Before cutover, send yourself
+      `python manage.py test_email_system <you@example.com> --free-welcome-preview` from a
+      service with real mail credentials and read it in Gmail AND Outlook.
 - [ ] Apply the `core` migration `0023_alter_emaillog_email_type` (choices-only, no DDL; listed
       so it is not mistaken for a schema change).
-- [ ] **At cutover: set `PP_LAUNCH_DATE`** to the cutover instant, ISO 8601 with an offset
-      (e.g. `2026-09-01T00:00:00+00:00`). It defines "existing user" (`date_joined` before it)
-      for BOTH the lobby's 1.0 greeting modal and the announcement email's audience, so the two
-      can never disagree. A malformed value fails boot on purpose. Unset = both stay dormant.
-- [ ] Verify the greeting on prod as staff via `/?preview=launch-welcome` before real users hit
-      it (the modal renders for existing accounts only, once, then never again).
-- [ ] **A few days AFTER launch** (deliberately, once the dust settles), send the announcement:
-      1. `python manage.py send_launch_announcement` (dry run; prints the audience count and a
-         sample of addresses, sends nothing). Eyeball the count against expectations.
-      2. Set `LAUNCH_ANNOUNCEMENT_SEND_ENABLED=True`.
+- [ ] **Preview BEFORE arming.** `/?preview=launch-welcome` (staff/moderators) works while
+      `PP_LAUNCH_DATE` is unset, so verify the greeting on prod first. Arming first means real
+      users can meet it before you have.
+- [ ] **Then set `PP_LAUNCH_DATE`** to the cutover instant.
+      - Format: `2026-09-01T00:00:00+00:00`. Date-only (`2026-09-01`) is accepted and means
+        midnight UTC. `TIME_ZONE` is UTC and `USE_TZ` is on, so the instant means what it says
+        on both the modal and the email side.
+      - **Set it on EVERY service** (web, worker, crons) via a shared Render Environment Group.
+        It parses at settings-import time, so a service without it cannot compute the audience,
+        and a service with a MALFORMED value fails to boot entirely. Validate first:
+        `python -c "from datetime import datetime as d; print(d.fromisoformat('<value>'))"`.
+      - It is the single instant the greeting and the announcement both compare `date_joined`
+        against. (They cover different populations by design: the greeting needs a synced
+        profile, the email reaches every account.)
+- [ ] **A few days AFTER launch** (deliberately, once the dust settles), send the announcement
+      from a service shell that has both env vars:
+      1. `python manage.py send_launch_announcement` (dry run; prints would-send, already-sent
+         and opted-out counts plus a sample of addresses, sends nothing). Eyeball the counts.
+      2. Set `LAUNCH_ANNOUNCEMENT_SEND_ENABLED=True`. Without it, `--send` raises a
+         CommandError rather than exiting quietly.
       3. Optional canary: `send_launch_announcement --send --limit 5`, check the inboxes.
          (The cap applies to unsent accounts, so a repeat canary advances to the next five.)
-      4. `python manage.py send_launch_announcement --send` for the rest. It is idempotent per
-         user via EmailLog, so a re-run after any interruption finishes rather than repeats.
-      5. **Unset `LAUNCH_ANNOUNCEMENT_SEND_ENABLED`** afterwards.
+      4. `python manage.py send_launch_announcement --send` for the rest.
+      5. **If the run dies mid-flight, re-run the identical command.** It re-derives the pending
+         set from EmailLog, so nobody is mailed twice and failures are retried.
+      6. **Unset `LAUNCH_ANNOUNCEMENT_SEND_ENABLED`** afterwards.
 - [ ] Before that send, confirm `support@platpursuit.com` actually receives (the Cloudflare
-      catch-all): the announcement carries a `List-Unsubscribe` mailto header pointing there.
+      catch-all): the announcement carries a `List-Unsubscribe` mailto pointing there. The
+      announcement honours `global_unsubscribe`, but the preferences PAGE is parked and
+      unrouted, so that mailbox is the only self-service opt-out during the send window.
+      Assign someone to watch it and set the flag by hand for anyone who asks.
