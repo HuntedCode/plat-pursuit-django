@@ -86,6 +86,10 @@ def test_career_auto_opens_the_howto_on_first_visit(linked_client):
     assert 'data-auto' in tag
     assert '25 jobs, five disciplines' in body
     assert 'Contracts' in body and 'Pursuer' in body
+    # The collage strip: three real-object cells (job icons, the cover fan, the ring).
+    assert 'cxp__flow' in body
+    assert 'pp-forge__fan' in body, 'the contract cell must reuse the badge fan classes'
+    assert 'cxp__ring' in body
 
 
 def test_career_never_auto_opens_once_flagged(linked_client):
