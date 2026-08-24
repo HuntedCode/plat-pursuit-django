@@ -144,9 +144,9 @@ def test_the_flourish_never_promises_a_level_they_have_not_earned(client, settin
     assert 'claim' in modal.lower(), 'the flourish must point at claiming'
     # One real job icon per discipline orbits the ring. job_icon renders '' for an unknown
     # Lucide name, so a typo would ship an empty orbit with a green suite.
-    assert modal.count('lwm__dico') == 5, 'a discipline icon stopped resolving'
+    assert modal.count('lwm__disc-ic') == 5, 'a discipline icon stopped resolving'
     for disc in ('combat', 'exploration', 'mind', 'heart', 'finesse'):
-        assert f'lwm__disc--{disc}' in modal
+        assert f'var(--disc-{disc})' in modal, f'{disc} lost its discipline colour'
 
 
 def test_the_flourish_counts_the_waiting_contracts(client, settings):
