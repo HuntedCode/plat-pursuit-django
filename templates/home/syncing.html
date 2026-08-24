@@ -15,9 +15,11 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
 <section class="max-w-4xl mx-auto">
     {% include 'partials/breadcrumb.html' %}
 
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 {% if psn_outage %}border-l-info{% elif profile.sync_status == 'error' %}border-l-error{% else %}border-l-warning{% endif %} shadow-lg shadow-neutral mb-3">
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 {% if psn_outage %}border-l-info{% elif profile.sync_status == 'error' %}border-l-error{% else %}border-l-warning{% endif %} shadow-lg shadow-neutral mb-3" data-sync-card>
         <div class="card-body p-3 md:p-5 lg:p-7">
-            <div class="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+            {% comment %} Everything syncing-related lives inside data-sync-live so the enter
+            finale (first syncs only, below) can swap the card's contents in place. {% endcomment %}
+            <div class="flex flex-col md:flex-row items-center gap-4 md:gap-6" data-sync-live>
 
                 {# Avatar with spinner ring while syncing #}
                 <div class="avatar shrink-0">
@@ -67,7 +69,13 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                         {% elif profile.sync_status == 'error' %}
                             Something tripped up the last sync. Try again from your account menu in the top-right. If it keeps happening, double-check that your PSN "Gaming History" permission is set to "Anyone".
                         {% elif is_initial_sync %}
-                            Welcome aboard, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. First syncs are the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN. This can take 10-30 minutes depending on the size of your library, but every future refresh will be much faster. Stretch, grab a drink, and we'll have you on the dashboard before you know it.
+                            Welcome aboard, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>.
+                            {% comment %} PSN's own totals land seconds into the sync; the page may render
+                            before them. Both sentences ship, JS fills the spans and swaps when the
+                            payload's psn_found arrives (navsync's sync-progress ride-along). {% endcomment %}
+                            <span data-psn-line {% if not psn_found %}hidden{% endif %}>We found <b class="text-base-content/80 tabular-nums" data-psn-found-total>{{ psn_found.total|default:0|intcomma }}</b> trophies and <b class="text-base-content/80 tabular-nums" data-psn-found-plats>{{ psn_found.plats|default:0|intcomma }}</b> platinums on your PSN profile, and we're pulling every single one.</span>
+                            <span data-psn-pending {% if psn_found %}hidden{% endif %}>First syncs are the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN.</span>
+                            This can take 10-30 minutes depending on the size of your library, but every future refresh will be much faster. Stretch, grab a drink, and take the tour below while we work.
                         {% else %}
                             Welcome back, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. Quick refresh in progress, this should only take a moment. The instant we're done, you'll land straight on your dashboard.
                         {% endif %}
@@ -96,12 +104,31 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                                   max="100"
                                   aria-label="Sync progress"></progress>
                         <p id="home-sync-phase-text" class="text-[10px] md:text-xs text-base-content/40 mt-1.5">
-                            This updates live as we go. The second it flips to synced, we'll throw you straight onto your dashboard.
+                            {% if is_initial_sync %}This updates live as we go. The moment everything is in, your Pursuit opens up right here.{% else %}This updates live as we go. The second it flips to synced, we'll throw you straight onto your dashboard.{% endif %}
                         </p>
                     </div>
                     {% endif %}
                 </div>
             </div>
+
+            {% if is_initial_sync %}
+            {% comment %} The enter finale ("Your Pursuer has emerged", gamification-plan.md's
+            phrase for this exact moment). Hidden until syncing.js sees the synced transition;
+            first syncs only -- a returning user mid-quick-refresh keeps the instant reload.
+            Stats fill from the poll payload; the slots render 0 until then. {% endcomment %}
+            <div class="text-center py-2 md:py-4 pp-head-cascade" data-sync-complete hidden aria-live="polite">
+                <p class="text-[0.65rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-success">Sync complete</p>
+                <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">Your Pursuer has emerged</h2>
+                <p class="text-xs md:text-sm text-base-content/60 mt-2">Every trophy counted, every badge weighed, every job leveled. Here is your opening tally.</p>
+                <div class="grid grid-cols-4 gap-2 md:gap-3 max-w-md mx-auto mt-4">
+                    <div class="swf__stat swf__stat--plat"><b class="swf__n tabular-nums" data-complete-stat="plats">0</b><span class="swf__l">Platinum</span></div>
+                    <div class="swf__stat swf__stat--gold"><b class="swf__n tabular-nums" data-complete-stat="golds">0</b><span class="swf__l">Gold</span></div>
+                    <div class="swf__stat swf__stat--silver"><b class="swf__n tabular-nums" data-complete-stat="silvers">0</b><span class="swf__l">Silver</span></div>
+                    <div class="swf__stat swf__stat--bronze"><b class="swf__n tabular-nums" data-complete-stat="bronzes">0</b><span class="swf__l">Bronze</span></div>
+                </div>
+                <a href="{% url 'home' %}" class="btn btn-primary btn-wide mt-5 md:mt-6 font-bold" data-enter-pursuit>Enter your Pursuit</a>
+            </div>
+            {% endif %}
         </div>
     </div>
 </section>
@@ -129,80 +156,93 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
     </div>
 </section>
 
-{# ─── What's Coming When the Sync Finishes ──────────────────────────── #}
+{# ─── The tour: what's waiting once the sync lands ──────────────────── #}
 <section class="max-w-4xl mx-auto">
     <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-7">
             <div class="flex items-center justify-between mb-3">
                 <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="7" height="9"></rect>
-                        <rect x="14" y="3" width="7" height="5"></rect>
-                        <rect x="14" y="12" width="7" height="9"></rect>
-                        <rect x="3" y="16" width="7" height="5"></rect>
+                        <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
                     </svg>
-                    What's Waiting on Your Dashboard
+                    What's Waiting for You
                 </h2>
-                <span class="text-xs text-base-content/40 italic pr-1 hidden md:inline">Yours to make your own.</span>
+                <span class="text-xs text-base-content/40 italic pr-1 hidden md:inline">The tour runs itself. Or swipe.</span>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+            {% comment %} Walkthrough carousel (new-user onboarding): five static panels, one per
+            system. No per-user data on purpose -- mid-sync the visitor has none yet. The pattern
+            is copied from landing.js's ratings carousel (dots, auto-advance, in-view gate,
+            touch swipe); a third consumer is the signal to extract a shared primitive. {% endcomment %}
+            <div class="sw" data-sync-walkthrough style="touch-action: pan-y;">
+                <div class="sw__stack">
 
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-primary/15 border border-primary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                        </svg>
+                    <div class="sw__slide is-active" aria-hidden="false">
+                        <div class="sw__art"><div class="swa-career"><span class="swa-career__lv">Lv</span><i class="swa-dot swa-dot--1"></i><i class="swa-dot swa-dot--2"></i><i class="swa-dot swa-dot--3"></i><i class="swa-dot swa-dot--4"></i><i class="swa-dot swa-dot--5"></i></div></div>
+                        <div class="sw__txt">
+                            <h3 class="sw__title">Build a Career</h3>
+                            <p class="sw__copy">Every trophy you have ever earned feeds a Pursuer Level and 25 jobs across five disciplines. Contracts are the job board: accept one, finish its games, claim the XP. Your history alone will level you up the moment this sync lands.</p>
+                        </div>
                     </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Trophy Snapshot</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">Every plat, gold, silver, and bronze you've ever earned, totaled up and broken out by rarity. The receipts of your hunt.</p>
+
+                    <div class="sw__slide" aria-hidden="true">
+                        <div class="sw__art"><div class="swa-plats"><img src="{% static 'images/plat.png' %}" alt="" width="128" height="128" loading="lazy" decoding="async" /><img src="{% static 'images/plat.png' %}" alt="" width="128" height="128" loading="lazy" decoding="async" /><img src="{% static 'images/plat.png' %}" alt="" width="128" height="128" loading="lazy" decoding="async" /></div></div>
+                        <div class="sw__txt">
+                            <h3 class="sw__title">Chase Badges</h3>
+                            <p class="sw__copy">Badges are themed sets of games with hand-drawn medallion art. Platinum every game in a set to claim its medallion, and finish the whole ladder to turn it holographic. Some of yours may already be earned before you even start.</p>
+                        </div>
                     </div>
+
+                    <div class="sw__slide" aria-hidden="true">
+                        <div class="sw__art"><div class="swa-fan"><i></i><i></i><i></i></div></div>
+                        <div class="sw__txt">
+                            <h3 class="sw__title">Your library, organized</h3>
+                            <p class="sw__copy">Every game you have played becomes a browsable collection with progress, rarity, and community ratings. Rate My Games keeps the verdicts: which platinums were worth it, and how long they really took.</p>
+                        </div>
+                    </div>
+
+                    <div class="sw__slide" aria-hidden="true">
+                        <div class="sw__art"><div class="swa-cards"><i></i><i></i><i></i></div></div>
+                        <div class="sw__txt">
+                            <h3 class="sw__title">Months worth keeping</h3>
+                            <p class="sw__copy">Every month closes with a Monthly Recap of your hunt, and every platinum earns a share card with your scores on it. Made to be posted, built from your real numbers.</p>
+                        </div>
+                    </div>
+
+                    <div class="sw__slide" aria-hidden="true">
+                        <div class="sw__art"><div class="swa-podium"><i class="swa-podium__b swa-podium__b--2"></i><i class="swa-podium__b swa-podium__b--1"></i><i class="swa-podium__b swa-podium__b--3"></i></div></div>
+                        <div class="sw__txt">
+                            <h3 class="sw__title">Boards to climb</h3>
+                            <p class="sw__copy">Global and country leaderboards, plus a board for every badge and every job. Once this sync finishes, you are on them.</p>
+                        </div>
+                    </div>
+
                 </div>
-
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-warning/15 border border-warning/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="8" r="7"></circle>
-                            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Badges Earned</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">Every badge you already earned, plus the ones still in reach, all worked out from games you've actually played.</p>
-                    </div>
-                </div>
-
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 15a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z"></path>
-                            <path d="M8.21 13.89 7 23l5-3 5 3-1.21-9.12"></path>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Career Milestones</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">The long-haul feats of a trophy-hunting career, tallied from everything you've already played. Every rung you clear is yours for good.</p>
-                    </div>
-                </div>
-
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-secondary/15 border border-secondary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="18" y1="20" x2="18" y2="10"></line>
-                            <line x1="12" y1="20" x2="12" y2="4"></line>
-                            <line x1="6" y1="20" x2="6" y2="14"></line>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Stats For Days</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">120+ stats sliced by genre, theme, engine, rarity, and playtime. All built from your library, not someone else's.</p>
-                    </div>
+                <div class="sw__dots" role="tablist" aria-label="Tour panels">
+                    <button type="button" class="sw__dot is-active" data-sw-dot="0" aria-label="Build a Career" aria-current="true"></button>
+                    <button type="button" class="sw__dot" data-sw-dot="1" aria-label="Chase Badges"></button>
+                    <button type="button" class="sw__dot" data-sw-dot="2" aria-label="Your library, organized"></button>
+                    <button type="button" class="sw__dot" data-sw-dot="3" aria-label="Months worth keeping"></button>
+                    <button type="button" class="sw__dot" data-sw-dot="4" aria-label="Boards to climb"></button>
                 </div>
             </div>
         </div>
     </div>
 </section>
+
+{% if sync_dev %}
+{% comment %} Dev-only (settings.DEBUG): drive the whole client state machine without a real
+10-30 minute sync. "Simulate synced" dispatches status-changed BEFORE the trailing progress
+event, exactly navsync's real ordering, so the idempotent stat re-fill is what gets exercised.
+Reuses the Collection's .ccx-dev panel styling; never ships to prod. {% endcomment %}
+<div class="ccx-dev" data-sync-dev>
+    <div class="ccx-dev__title">Sync walkthrough</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-sync-dev-progress>Simulate progress</button>
+        <button type="button" class="ccx-dev__btn" data-sync-dev-synced>Simulate synced</button>
+    </div>
+</div>
+{% endif %}
 
 {# ─── Live Community Pulse (reuses dashboard partial) ──────────────────── #}
 {% include 'home/_built_for_hunters.html' %}
@@ -211,19 +251,13 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
 {% endblock %}
 
 {% block js_scripts %}
+{% comment %} syncing.js owns the walkthrough carousel, the live personalization upgrade, and
+the enter-moment state machine (the old auto-reload-on-synced listener moved there: first
+syncs get the finale, refreshes and errors still reload). The inline block below keeps only
+the server-data-coupled mirrors. {% endcomment %}
+<script src="{% static 'js/syncing.js' %}" defer></script>
 <script>
 (function() {
-    // C1: Auto-refresh on real status transitions. Reload on either 'synced'
-    // (advance to dashboard) OR 'error' (re-render with error styling/messaging).
-    // Both cases let HomeView re-resolve the state instead of leaving the user
-    // staring at a misleading in-progress card.
-    document.addEventListener('platpursuit:sync-status-changed', function(e) {
-        if (!e.detail) return;
-        if (e.detail.status === 'synced' || e.detail.status === 'error') {
-            window.location.reload();
-        }
-    });
-
     // ──────────────────────────────────────────────────────────────────
     // Live progress: navsync.js dispatches 'platpursuit:sync-progress' on
     // every successful poll. Mirror its values into the larger progress

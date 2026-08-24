@@ -54,6 +54,7 @@
 @import "./components/settings-page.css";
 @import "./components/profile-card-tab.css";
 @import "./components/landing.css";
+@import "./components/syncing.css";
 
 /* ------------------------------------------------------------------ */
 /* Self-hosted fonts (SEO Lane 3). Formerly Google Fonts CDN: cache
