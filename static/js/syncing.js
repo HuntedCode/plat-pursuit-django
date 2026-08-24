@@ -46,17 +46,39 @@
         var live = document.querySelector('[data-sync-live]');
         var card = document.querySelector('[data-sync-card]');
         var completed = false;
+        var counted = false;
         var latestStats = null;
+
+        function slots() {
+            return finale ? Array.prototype.slice.call(
+                finale.querySelectorAll('[data-complete-stat]')) : [];
+        }
 
         function fillStats(stats) {
             // Idempotent: runs on completion with the cached (one-poll-stale) figures, then
-            // again from the trailing progress event with the final ones.
+            // again from the trailing progress event with the final ones. Before the count-up
+            // has run, only the data-countup TARGET moves (the visible 0 waits for the
+            // animation); after it, corrections write text directly -- no second animation.
             if (!finale || !stats) { return; }
-            ['plats', 'golds', 'silvers', 'bronzes'].forEach(function (key) {
-                var slot = finale.querySelector('[data-complete-stat="' + key + '"]');
-                if (slot && stats[key] != null) {
-                    slot.textContent = Number(stats[key]).toLocaleString('en-US');
-                }
+            slots().forEach(function (slot) {
+                var value = stats[slot.dataset.completeStat];
+                if (value == null) { return; }
+                slot.dataset.countup = value;
+                if (counted) { slot.textContent = Number(value).toLocaleString('en-US'); }
+            });
+        }
+
+        function startCountUps() {
+            // One frame after the reveal, ON PURPOSE: navsync dispatches the trailing
+            // sync-progress synchronously right after status-changed, so by the time this
+            // frame runs the data-countup targets already hold the FINAL figures -- the
+            // count-up plays once, to the right numbers. countUp itself handles
+            // prefers-reduced-motion (instant set) and reads the target off data-countup.
+            counted = true;
+            var counter = window.PlatPursuit && PlatPursuit.countUp;
+            slots().forEach(function (slot) {
+                if (counter) { counter(slot, 900); }
+                else { slot.textContent = Number(slot.dataset.countup || 0).toLocaleString('en-US'); }
             });
         }
 
@@ -79,6 +101,7 @@
                 live.hidden = true;
                 finale.hidden = false;
                 if (card) { card.classList.add('is-emerged'); }
+                requestAnimationFrame(startCountUps);
                 return;
             }
             if (e.detail.status === 'error') {

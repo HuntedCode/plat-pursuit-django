@@ -134,6 +134,9 @@ def test_the_js_reloads_only_for_errors_and_refreshes():
     assert code.count('window.location.reload') == 2, (
         'expected exactly two reload sites: the quick-refresh fallback and the error branch'
     )
+    assert 'PlatPursuit.countUp' in code, (
+        'the finale stats must ride the house count-up, not snap into place'
+    )
     assert "status === 'synced'" in code.replace('"', "'")
 
 
