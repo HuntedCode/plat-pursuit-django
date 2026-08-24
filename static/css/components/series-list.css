@@ -140,7 +140,10 @@
     background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
     text-align: left;
 }
-.lwm__ring { flex: 0 0 auto; }
+.lwm__ring { flex: 0 0 auto; width: 48px; height: 48px; }
+.lwm__ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.lwm__ring-track { fill: none; stroke: color-mix(in oklab, var(--pp-text) 14%, transparent); stroke-width: 4; }
+.lwm__ring-arc { fill: none; stroke: var(--pp-primary); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 64 100; }
 .lwm__line { font-size: 0.82rem; line-height: 1.55; color: var(--pp-text-dim); }
 .lwm__line b { color: var(--pp-text); }
 @keyframes ppHowtoFadeOut { to { opacity: 0; } }

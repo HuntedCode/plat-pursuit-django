@@ -127,6 +127,9 @@ def test_the_announcement_renders_clean():
     assert 'You&#x27;re receiving this because you have a PlatPursuit account' in body \
         or "You're receiving this because you have a PlatPursuit account" in body
     assert 'Manage your account settings' in body
+    # XP comes from CLAIMING contracts: the email must not promise a level they have not earned.
+    assert 'levelled up, before you click' not in body
+    assert 'claim' in body.lower()
 
 
 def test_a_limited_resume_makes_progress(settings, mailoutbox):

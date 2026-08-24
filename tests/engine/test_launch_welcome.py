@@ -129,17 +129,38 @@ def test_the_home_motion_gate_holds():
     assert '#launch-welcome.is-closing' in css
 
 
-def test_the_flourish_degrades_without_a_hero(client, settings):
-    """home_service degrades hero to None on failure; the modal must still teach."""
+def test_the_flourish_never_promises_a_level_they_have_not_earned(client, settings):
+    """XP comes from CLAIMING contracts, so a returning hunter opens this at Level 1 no matter
+    how long their history is. The greeting points at the claimable pile instead; congratulating
+    them on a level they do not have would be the first thing the new site got wrong."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
+    client, _ = _synced_client(client)
+
+    body = client.get('/', **CF).content.decode()
+    modal = body.split('id="launch-welcome"')[1].split('</script>')[0]
+
+    assert 'Pursuer Level' not in modal
+    assert 'You arrive as' not in modal
+    assert 'claim' in modal.lower(), 'the flourish must point at claiming'
+
+
+def test_the_flourish_counts_the_waiting_contracts(client, settings):
+    """With claimables the greeting names the pile; without them it still teaches where levels
+    come from (and a failed glance degrades to the same line)."""
     from unittest.mock import patch
 
     settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
     client, _ = _synced_client(client)
 
-    with patch('core.services.home_service.build_home_context', return_value={'hero': None}):
-        resp = client.get('/', **CF)
+    with patch('core.services.home_service.contract_service.claimable_summary',
+               return_value={'count': 3, 'total_xp': 1250, 'items': [], 'more': 0}):
+        body = client.get('/', **CF).content.decode()
+    modal = body.split('id="launch-welcome"')[1].split('</script>')[0]
+    assert '3</b> contract' in modal
+    assert '1,250' in modal
 
-    assert resp.status_code == 200
-    body = resp.content.decode()
-    assert 'id="launch-welcome"' in body
-    assert 'You arrive as' not in body
+    with patch('core.services.home_service.contract_service.claimable_summary',
+               return_value={'count': 0, 'total_xp': 0, 'items': [], 'more': 0}):
+        body = client.get('/', **CF).content.decode()
+    modal = body.split('id="launch-welcome"')[1].split('</script>')[0]
+    assert 'That is where every level comes from' in modal
