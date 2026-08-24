@@ -858,3 +858,27 @@ The four lanes + closing fixes are all on `rebuild`. After the cutover deploy:
       `/games/` (the 0.465 -> 0 CLS fix), and one game detail page.
 - [ ] **Watch 404s + redirect hops under `/profiles/*/trophy-case/` for a week** -- the
       closing audit collapsed this two-hop chain; fold into the existing 404-watch line.
+
+## PlatPursuit 1.0 launch welcome (2026-08)
+
+Everything in this lane ships DORMANT and wakes on environment variables, so it can ride to
+prod with the cutover and be switched on deliberately.
+
+- [ ] Apply the `core` migration `0023_alter_emaillog_email_type` (choices-only, no DDL; listed
+      so it is not mistaken for a schema change).
+- [ ] **At cutover: set `PP_LAUNCH_DATE`** to the cutover instant, ISO 8601 with an offset
+      (e.g. `2026-09-01T00:00:00+00:00`). It defines "existing user" (`date_joined` before it)
+      for BOTH the lobby's 1.0 greeting modal and the announcement email's audience, so the two
+      can never disagree. A malformed value fails boot on purpose. Unset = both stay dormant.
+- [ ] Verify the greeting on prod as staff via `/?preview=launch-welcome` before real users hit
+      it (the modal renders for existing accounts only, once, then never again).
+- [ ] **A few days AFTER launch** (deliberately, once the dust settles), send the announcement:
+      1. `python manage.py send_launch_announcement` (dry run; prints the audience count and a
+         sample of addresses, sends nothing). Eyeball the count against expectations.
+      2. Set `LAUNCH_ANNOUNCEMENT_SEND_ENABLED=True`.
+      3. Optional canary: `send_launch_announcement --send --limit 5`, check the inboxes.
+      4. `python manage.py send_launch_announcement --send` for the rest. It is idempotent per
+         user via EmailLog, so a re-run after any interruption finishes rather than repeats.
+      5. **Unset `LAUNCH_ANNOUNCEMENT_SEND_ENABLED`** afterwards.
+- [ ] Before that send, confirm `support@platpursuit.com` actually receives (the Cloudflare
+      catch-all): the announcement carries a `List-Unsubscribe` mailto header pointing there.

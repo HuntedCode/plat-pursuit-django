@@ -94,6 +94,12 @@ The primary constants file (~235 lines). Contains:
 - **Test/live mode isolation**: Stripe and PayPal keys are completely separate per mode. Mixing test keys with live webhook secrets will silently fail webhook verification.
 - **DATABASE_URL priority**: If `DATABASE_URL` is set, individual `DB_*` vars are ignored. Cannot mix them.
 - **Redis single instance**: Both Django cache and raw Redis (Token Keeper) use the same Redis instance but different databases/key prefixes.
+- **Launch-welcome switches ship OFF**: `PP_LAUNCH_DATE` (ISO 8601 with offset) unset means the
+  1.0 greeting modal never renders and `send_launch_announcement` refuses to run; it defines
+  "existing user" for both, so they can never disagree. A malformed value fails boot on purpose.
+  `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` (default False) gates the actual send: there is no
+  service-level gate inside `EmailService`, so that flag IS the gate for the only user-facing
+  blast the site sends. Both are deploy-checklist items.
 - **CORS has no current consumer**: it existed for the React Native Expo dev server, and the mobile API was removed in 2026-08 (see [Mobile App](../guides/mobile-app.md)). The web app is same-origin. Left configured because it is inert without `CORS_ALLOWED_ORIGINS` set, and a mobile rebuild will want it back.
 
 ## Related Docs

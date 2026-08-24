@@ -70,12 +70,36 @@ information that matters).
 - **Career only, by design**: a Collection explainer was explicitly rejected (the badge
   "how badges work" modal already owns that teaching moment).
 
+## Surface 3: the PlatPursuit 1.0 launch greeting
+
+`templates/trophies/partials/home/_launch_welcome.html`: a one-shot modal on the Home lobby for
+users who existed before the cutover. Three orientation beats (your Career, your Collection, your
+new Home) plus a flourish that is theirs -- their rank, level and discipline ring, computed from
+history they already had. No confetti: particles are the earn vocabulary, and a redesign is an
+announcement, not an achievement.
+
+- **Ships dormant.** `settings.PP_LAUNCH_DATE` (ISO 8601 env var) unset means it never renders.
+  Set at cutover, it defines "existing user" (`date_joined` before the instant) for BOTH this modal
+  and the launch announcement email, so the two greetings can never disagree about who is new. A
+  malformed value fails boot on purpose: a typo silently disabling the greeting is the failure
+  nobody would notice.
+- **Existing users only.** Post-cutover signups get the onboarding built for them; a 1.0 welcome
+  for someone who never saw 0.x is noise.
+- **No reopen affordance**, inverting the Career modal's rationale again: a one-time announcement
+  needs no recall, so a flagged user gets a full non-render (the include itself is server-gated).
+- **The choreography gate.** The lobby's count-ups, Horizon fills and ring pace would otherwise
+  play out behind the modal's scrim on the one visit it exists for. The partial publishes
+  `ppAfterLaunchWelcome` synchronously; `home-motion.js` rides it and fires on close (the "look
+  around" payoff), or immediately when no modal renders. The typing-guard skip settles it too.
+- **Team preview**: `/?preview=launch-welcome` (staff/moderators), mirroring the landing and
+  syncing preview doors.
+
 ## The `ui_flags` pattern
 
 `CustomUser.ui_flags` (JSONField, mirrors `browse_defaults`) holds one-shot education flags:
 presence of a key means dismissed. Writes go through the quick-settings API's `ui_flag` branch
 (`api/user_settings_views.py`, whitelist `UI_FLAGS`), a read-modify-write that preserves other
-keys. Adding a new explainer = add its key to `UI_FLAGS`, gate its render server-side, POST on
+keys (`career_explainer`, `launch_welcome`). Adding a new one = add its key to `UI_FLAGS`, gate its render server-side, POST on
 dismiss.
 
 Client discipline (from the badge howto + timezone modal prior art):

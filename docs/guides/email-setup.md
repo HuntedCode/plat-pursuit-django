@@ -75,24 +75,50 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Monday 08:00 UTC). Community-focused "This Week in PlatPursuit" newsletter. | `weekly_digest` |
 | `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
 | `welcome` | `emails/welcome.html` | Verification: `VerificationService.link_profile_to_user()` | None (transactional) |
+| `launch_announcement` | `emails/launch_announcement.html` | Manual: `send_launch_announcement --send` (a few days post-cutover) | None; gated by `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` |
 | `admin_announcement` | `emails/broadcast.html` | Admin: Notification Center broadcast | `admin_announcements` |
 | `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) | `subscription_notifications` |
 | `payment_succeeded` | `emails/payment_succeeded.html` | Stripe/PayPal renewal webhook | `subscription_notifications` |
 | `payment_failed` | `emails/payment_failed.html` | Stripe `invoice.payment_failed` webhook | `subscription_notifications` |
-| `payment_failed_final` | `emails/payment_failed_final.html` | Final retry failure | `subscription_notifications` |
 | `payment_action_required` | `emails/payment_action_required.html` | 3D Secure or action needed | `subscription_notifications` |
 | `subscription_cancelled` | `emails/subscription_cancelled.html` | Cancellation confirmation | `subscription_notifications` |
 | `donation_receipt` | `emails/donation_receipt.html` | Donation completion | None (transactional) |
 | `badge_claim_confirmation` | `emails/badge_claim_confirmation.html` | Fundraiser badge claim | None (transactional) |
 | `artwork_complete` | `emails/artwork_complete.html` | Admin marks artwork done | None (transactional) |
 
-### Email Template Pattern
+### Email Template Pattern: two bases, mid-migration
 
-All email templates extend `templates/emails/base_email.html` which provides:
-- PlatPursuit branding and logo
-- Responsive table-based layout (email client compatible)
-- Footer with unsubscribe link
-- Consistent gradient styling
+Emails are moving onto a rebuilt base one template at a time. Both bases coexist until the
+last child migrates, at which point the legacy base and this table row die together.
+
+| Base | Children | Notes |
+|------|----------|-------|
+| `base_email_v2.html` | `welcome.html`, `launch_announcement.html` | The target. Extend this for anything new or rebuilt. |
+| `base_email.html` (legacy) | the other 9 kept templates + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
+
+**What v2 provides:**
+- A `role="presentation"` table scaffold with MSO ghost tables, so Outlook renders it.
+- A **bulletproof CTA** via `{% include 'emails/_cta_button.html' with url=... label=... %}` (a VML
+  roundrect for Outlook plus an anchor for everyone else). A styled `<a>` alone collapses in Outlook.
+- A **`preheader` block**: the inbox preview line. Write a real sentence (see the plaintext rule below).
+- **Light content body, dark brand bands.** Settled deliberately: Gmail and Outlook force their own
+  transforms in dark mode and are worst on committed-dark email (near-black body with near-white text
+  is what partial inversion mangles into grey-on-grey). A light body transforms predictably; the brand
+  lands in the bands, which survive inversion far better. `color-scheme` is declared light, with a
+  `prefers-color-scheme` tune for Apple Mail.
+- Brand hex converted from the site's `oklch` tokens, which no email client can parse.
+- The system font stack. The site's self-hosted Bricolage and Inter never reach an inbox.
+
+**Blocks:** `title`, `preheader`, `extra_styles`, `header_content`, `content`, `footer_note`.
+A child migrates by changing its `{% extends %}` line and adding a preheader.
+
+### The plaintext rule (load-bearing)
+
+There are no `.txt` templates. The `text/plain` part of every email is `strip_tags(html)`, which
+**discards every href**. So any URL the reader must be able to reach has to appear as **visible
+text**, not only as a link target. `emails/welcome.html` shows the pattern (a CTA button followed by
+"Or paste this into your browser: ..."), and `tests/engine/test_auth_pages.py` pins the same rule for
+the verification link.
 
 ### Badge Earned Email
 
