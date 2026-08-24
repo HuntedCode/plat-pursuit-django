@@ -223,10 +223,9 @@ def _login(client, password='lobby-msg-pass-1', **profile_kwargs):
 ])
 def test_the_login_message_shows_on_the_lobby_exactly_once(client, state, setup):
     """The real reported flow, in every authed router state: sign in, land on `/`, and the
-    'signed in' message renders THERE rather than queuing for the next breadcrumb page.
-    EXACTLY once: the syncing state carries the breadcrumb partial (a second messages
-    renderer), and its first cut double-rendered every message in two visual languages --
-    the count is the assertion that catches that whole class."""
+    'signed in' message renders THERE. EXACTLY once: since the gates merge every pre-synced
+    state shares the landing template and its single _messages.html include -- two means a
+    hero partial grew a second renderer, zero means the message queued for the next page."""
     resp = _login(client, **setup)
 
     assert resp.status_code == 200
@@ -238,21 +237,59 @@ def test_the_login_message_shows_on_the_lobby_exactly_once(client, state, setup)
     )
 
 
-def test_every_router_template_consumes_messages_through_exactly_one_renderer():
-    """The anon landing cannot receive a login message, so the source pin covers it with the
-    rest: each state of `/` consumes the framework through ONE renderer -- three include the
-    shared partial, and syncing gets it via the breadcrumb it already carries (including both
-    was the audit-caught double-render)."""
+def test_the_pre_synced_states_share_one_template_and_one_messages_renderer():
+    """The gates merge (2026-08): every pre-synced state renders home/landing.html, whose
+    single _messages.html include is the one renderer. The legacy shells must stay deleted,
+    and the hero partials must never grow a breadcrumb or a second messages include (the
+    double-render class the exactly-once test counts for)."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2] / 'templates'
-    for name in ('trophies/home.html', 'home/landing.html', 'home/link_psn.html'):
+    for name in ('trophies/home.html', 'home/landing.html'):
         src = (root / name).read_text(encoding='utf-8')
         assert "partials/_messages.html" in src, f'{name} renders messages nowhere'
         assert 'partials/breadcrumb.html' not in src, f'{name} would double-render'
-    syncing = (root / 'home/syncing.html').read_text(encoding='utf-8')
-    assert 'partials/breadcrumb.html' in syncing, 'syncing lost its renderer'
-    assert "partials/_messages.html" not in syncing, 'syncing would double-render'
+    for name in ('home/_hero_no_psn.html', 'home/_hero_syncing.html'):
+        src = (root / name).read_text(encoding='utf-8')
+        assert 'partials/breadcrumb.html' not in src, f'{name} would double-render messages'
+        assert "partials/_messages.html" not in src, f'{name} would double-render messages'
+    for doomed in ('home/link_psn.html', 'home/syncing.html', 'home/_built_for_hunters.html'):
+        assert not (root / doomed).exists(), f'the legacy shell {doomed} came back'
+
+
+def test_the_authed_pre_sync_states_are_noindex(client):
+    """The gates surface serves three states from one URL; only the anon front door may be
+    indexable. The authed variants are personalized and were noindex on their old shells."""
+    profile = ProfileFactory(is_linked=False)
+    client.force_login(profile.user)
+    assert b'noindex, nofollow' in client.get('/', **CF).content
+
+    client.logout()
+    profile2 = ProfileFactory(is_linked=True, sync_status='syncing')
+    client.force_login(profile2.user)
+    assert b'noindex, nofollow' in client.get('/', **CF).content
+
+    client.logout()
+    assert b'content="index, follow"' in client.get('/', **CF).content
+
+
+def test_the_no_psn_state_renders_the_link_hero_on_the_landing_surface(client):
+    """The link hero replaces the legacy shell: greeting, the link CTA, the load-bearing
+    Gaming History warning, and the landing's shared sections below. The search hero is
+    anon-only (SearchSyncProfileView creates unclaimed profiles -- it would compete with
+    the link CTA)."""
+    from django.urls import reverse
+
+    profile = ProfileFactory(is_linked=False)
+    client.force_login(profile.user)
+
+    body = client.get('/', **CF).content.decode()
+
+    assert 'Welcome aboard' in body
+    assert reverse('link_psn') in body
+    assert 'Gaming History' in body and 'Anyone' in body
+    assert 'data-land-carousel' in body, 'the shared landing sections must render for no_psn'
+    assert 'data-land-search' not in body, 'the search hero leaked into an authed state'
 
 
 def test_the_lobby_marks_its_names_like_everywhere_else(client):

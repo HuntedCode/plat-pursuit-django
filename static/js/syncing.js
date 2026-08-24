@@ -1,20 +1,17 @@
 /**
- * The first-sync waiting room (templates/home/syncing.html).
+ * The syncing hero of the gates surface (home/_hero_syncing.html on home/landing.html).
  *
- * Three jobs, all riding navsync.js's poll events (this file NEVER polls; navsync owns the
+ * Two jobs, both riding navsync.js's poll events (this file NEVER polls; navsync owns the
  * network and dispatches `platpursuit:sync-progress` on every poll and
  * `platpursuit:sync-status-changed` once per real transition):
  *
- *   1. The "What's Waiting for You" walkthrough carousel. The pattern is copied from
- *      landing.js's ratings carousel (wireRatingsCarousel) rather than extracted into utils:
- *      two consumers with different DOM contracts don't earn a shared primitive yet -- a
- *      third one does.
- *   2. Live personalization: the page may render before PSN's own totals land on the profile;
+ *   1. Live personalization: the page may render before PSN's own totals land on the profile;
  *      when the poll payload carries `psn_found`, fill the numbers and swap the sentence.
- *   3. The enter-moment state machine: on a FIRST sync (the finale block only renders then),
+ *   2. The enter-moment state machine: on a FIRST sync (the finale block only renders then),
  *      a `synced` transition swaps the status card into "Your Pursuer has emerged" with the
  *      final counts and an "Enter your Pursuit" CTA -- no auto-reload. Quick refreshes and
- *      errors keep the old reload behaviour.
+ *      errors keep the old reload behaviour. (The old five-panel walkthrough carousel is
+ *      gone: the landing's real sections render below the hero and ARE the tour.)
  *
  * Ordering subtlety (load-bearing): navsync dispatches status-changed BEFORE the same poll's
  * sync-progress, so at finale time the cached stats are one poll stale. The stat fill is
@@ -23,84 +20,6 @@
  */
 (function () {
     'use strict';
-
-    // ── 1. Walkthrough carousel ─────────────────────────────────────────────
-    function wireWalkthrough() {
-        var host = document.querySelector('[data-sync-walkthrough]');
-        if (!host) { return; }
-        var slides = Array.prototype.slice.call(host.querySelectorAll('.sw__slide'));
-        var dots = Array.prototype.slice.call(host.querySelectorAll('[data-sw-dot]'));
-        if (slides.length < 2) { return; }
-        var index = 0, timer = null;
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-        function show(next) {
-            index = (next + slides.length) % slides.length;
-            slides.forEach(function (slide, i) {
-                slide.classList.toggle('is-active', i === index);
-                slide.setAttribute('aria-hidden', i === index ? 'false' : 'true');
-            });
-            dots.forEach(function (dot, i) {
-                dot.classList.toggle('is-active', i === index);
-                if (i === index) { dot.setAttribute('aria-current', 'true'); }
-                else { dot.removeAttribute('aria-current'); }
-            });
-        }
-
-        // Advance only while actually on screen; the reader should always arrive on slide one.
-        var inView = false;
-
-        function start() {
-            // No auto-advance under reduced motion: the dots remain the manual path.
-            if (reduce || timer || !inView) { return; }
-            timer = setInterval(function () { show(index + 1); }, 7000);
-        }
-        function stop() {
-            if (timer) { clearInterval(timer); timer = null; }
-        }
-
-        dots.forEach(function (dot) {
-            dot.addEventListener('click', function () {
-                show(parseInt(dot.dataset.swDot, 10) || 0);
-                stop();   // a chosen slide stays chosen; auto-advance resumes on mouse-out
-            });
-        });
-        host.addEventListener('mouseenter', stop);
-        host.addEventListener('mouseleave', start);
-        host.addEventListener('focusin', stop);
-        host.addEventListener('focusout', start);
-
-        // Swipe: touch/pen only (a mouse drag is text selection), horizontal only
-        // (touch-action: pan-y on the host leaves vertical scrolling to the browser),
-        // pointerId-tracked so a wandering drag can never page against a stale origin.
-        var swipeX = null, swipeY = null, swipeId = null;
-        host.addEventListener('pointerdown', function (e) {
-            if (e.pointerType === 'mouse') { return; }
-            swipeId = e.pointerId; swipeX = e.clientX; swipeY = e.clientY;
-        });
-        host.addEventListener('pointerup', function (e) {
-            if (swipeId === null || e.pointerId !== swipeId) { return; }
-            var dx = e.clientX - swipeX, dy = e.clientY - swipeY;
-            swipeId = swipeX = swipeY = null;
-            if (Math.abs(dx) < 44 || Math.abs(dx) < Math.abs(dy) * 1.5) { return; }
-            stop();
-            show(index + (dx < 0 ? 1 : -1));
-        });
-        host.addEventListener('pointercancel', function () { swipeId = swipeX = swipeY = null; });
-
-        if ('IntersectionObserver' in window) {
-            var io = new IntersectionObserver(function (entries) {
-                entries.forEach(function (entry) {
-                    inView = entry.isIntersecting;
-                    if (inView) { start(); } else { stop(); }
-                });
-            }, { threshold: 0.35 });
-            io.observe(host);
-        } else {
-            inView = true;
-            start();
-        }
-    }
 
     // ── 2. Live personalization upgrade ─────────────────────────────────────
     function wirePersonalization() {
@@ -203,7 +122,6 @@
     }
 
     function boot() {
-        wireWalkthrough();
         wirePersonalization();
         wireFinale();
         wireDevPanel();

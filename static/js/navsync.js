@@ -3,7 +3,7 @@
  *
  * Replaces the old hotbar's JS: reuses its proven half (adaptive polling, manual trigger,
  * cooldown countdown, and the `platpursuit:sync-status-changed` / `platpursuit:sync-progress`
- * CustomEvents that home/syncing.html depends on), but drives the house-style panel via data-*
+ * CustomEvents the syncing hero depends on), but drives the house-style panel via data-*
  * hooks instead of DaisyUI badge classes + a <progress> element. The avatar RING carries the
  * live state (green synced / cyan syncing / red error) even while the panel is closed.
  */

@@ -1,9 +1,13 @@
 {% extends 'base.html' %}
-{% load humanize static seo_tags %}
+{% load humanize static seo_tags custom_filters %}
 {% comment %}
-The anonymous landing (2026-08 rebuild, from scratch).
+The gates surface (2026-08 rebuild; the gates merge made it the ONE template for all three
+pre-synced home-router states). home_state drives a per-state HERO and close: 'anonymous' gets
+the search hero, 'no_psn' the link hero (_hero_no_psn.html), 'syncing' the live status hero
+(_hero_syncing.html). The cached sections between them render for every state -- the site's
+best showcase is also the waiting room and the welcome mat.
 
-WHAT THIS PAGE IS: the front door for a stranger, built on the product-identity spine -- the
+WHAT THE ANON PAGE IS: the front door for a stranger, built on the product-identity spine -- the
 moat first (handcrafted Badges, the Pursuer Career), the trustworthy extras after (Ratings from
 finishers, share cards, Discord), with the SEARCH as the hero: the fastest possible route from
 "curious" to "that's my trophy list". Everything it shows is real -- live medallion art, a real
@@ -16,22 +20,26 @@ PSN history through rate-limited workers and takes real time. The hero says so u
 the wait is staged as anticipation (queue line, live dot, then the profile link the moment
 basic ingestion lands) rather than a spinner pretending to be fast.
 
-DATA RULE (landing_service module docstring): cached community reads and cron artifacts only.
-This template must never grow a per-user or uncached-aggregate context need.
+DATA RULE (landing_service module docstring): cached community reads and cron artifacts only
+feed the SHARED sections; landing_service must never grow a per-user provider. The per-state
+heroes' context (profile, psn_found, sync progress) arrives from HomeView's state branches.
 
-Contracts kept from the old page: partials/_messages.html included (logout lands here -- pinned
-by test_lobby), global_banners suppressed, own <main> via main_layout, no breadcrumb ever.
+Contracts: partials/_messages.html is the ONE messages renderer for every state (pinned by
+test_lobby -- the hero partials must never carry the breadcrumb renderer), global_banners
+suppressed for ANON only (authed pre-sync users keep their site/fundraiser banners), own <main>
+via main_layout, no breadcrumb ever.
 {% endcomment %}
 
-{% block title %}Free PlayStation Trophy Tracking{% endblock %}
+{% block title %}{% if home_state == 'no_psn' %}Welcome to Platinum Pursuit{% elif home_state == 'syncing' %}Syncing Your Pursuit{% else %}Free PlayStation Trophy Tracking{% endif %}{% endblock %}
 {% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
 {% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
 {% block twitter_card_type %}summary_large_image{% endblock %}
-{% block meta_description %}Free trophy tracking for PlayStation hunters. Look up any PSN name to pull its full history, earn handcrafted badges, build a career from how you play, and read ratings from hunters who actually finished the platinum.{% endblock %}
+{% block robots %}{% if home_state == 'anonymous' %}{{ block.super }}{% else %}noindex, nofollow{% endif %}{% endblock %}
+{% block meta_description %}{% if home_state == 'no_psn' %}Link your PSN account to Platinum Pursuit and we catch up on everything you've already earned.{% elif home_state == 'syncing' %}Your Platinum Pursuit profile is syncing. We're catching up on your trophy grind.{% else %}Free trophy tracking for PlayStation hunters. Look up any PSN name to pull its full history, earn handcrafted badges, build a career from how you play, and read ratings from hunters who actually finished the platinum.{% endif %}{% endblock %}
 
 {% block extra_head %}
 {{ block.super }}
-{% jsonld_website request %}
+{% if home_state == 'anonymous' %}{% jsonld_website request %}{% endif %}
 <script>
     {% comment %}Arms the section arrival BEFORE first paint (motion.css .pp-arrive): the hidden
     state gates on html.pp-arm, so incremental painting can never flash a section visible before
@@ -40,8 +48,10 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
 </script>
 {% endblock %}
 
-{% comment %}The front door carries no site banners: one message, told in order.{% endcomment %}
-{% block global_banners %}{% endblock %}
+{% comment %}The ANON front door carries no site banners: one message, told in order. Authed
+pre-sync users keep theirs (fundraiser, site notices) -- they are members, not strangers.
+Keyed on home_state, not is_authenticated, so ?preview=landing previews the true anon page.{% endcomment %}
+{% block global_banners %}{% if home_state != 'anonymous' %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block main_layout %}
 <main id="main-content" class="flex-grow">
@@ -52,7 +62,15 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
     </div>
     {% endif %}
 
-    {# ── 1. Hero: the search IS the pitch ── #}
+    {# ── 1. The per-state hero ── #}
+    {% if home_state == 'syncing' %}
+        {% include 'home/_hero_syncing.html' %}
+    {% elif home_state == 'no_psn' %}
+        {% include 'home/_hero_no_psn.html' %}
+    {% else %}
+    {% comment %} Anon: the search IS the pitch. Anon-ONLY on purpose -- SearchSyncProfileView
+    creates unclaimed synced profiles, which would compete with the link CTA for a no_psn
+    member. {% endcomment %}
     <section class="land-hero">
         <div class="container mx-auto px-4">
             <div class="land-hero__inner">
@@ -94,6 +112,7 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
             </div>
         </div>
     </section>
+    {% endif %}
 
     {# ── 2. The heartbeat: live proof, cron-cached ── #}
     {% if site_heartbeat %}
@@ -297,6 +316,22 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
     <section class="land-close pp-arrive">
         <div class="container mx-auto px-4">
             <div class="land-close__inner">
+                {% if home_state == 'no_psn' %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Ready, {{ user.username }}?</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">One link and everything you just saw starts filling in with your real history.</p>
+                <div class="land-close__ctas pp-arrive__it" style="--i: 2;">
+                    <a href="{% url 'link_psn' %}" class="pp-cta land-rise">
+                        <span class="sup-go__rise" aria-hidden="true">
+                            {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                        </span>
+                        <span class="land-rise__lbl">Link my PSN account</span>
+                    </a>
+                    <a href="{% url 'games_list' %}" class="pp-cta pp-cta--ghost">Browse around first</a>
+                </div>
+                {% elif home_state == 'syncing' %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your record is being written.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">This page updates itself. The moment your sync lands, your Pursuit opens right here.</p>
+                {% else %}
                 <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your backlog is not going to hunt itself.</h2>
                 <p class="land-sec__sub pp-arrive__it" style="--i: 1;">Free to use. One search to see your whole history.</p>
                 <div class="land-close__ctas pp-arrive__it" style="--i: 2;">
@@ -308,6 +343,7 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                     </a>
                     <a href="{% url 'account_login' %}" class="pp-cta pp-cta--ghost">Log in</a>
                 </div>
+                {% endif %}
             </div>
         </div>
     </section>
@@ -329,4 +365,82 @@ visitor. Lives in fixed_overlays so it sits outside #page-recede.{% endcomment %
 
 {% block js_scripts %}
 <script src="{% static 'js/landing.js' %}"></script>
+{% if home_state == 'syncing' %}
+{% comment %} syncing.js owns the personalization upgrade + the enter-moment state machine +
+the dev panel. The inline block keeps only the two server-data-coupled mirrors (progress +
+elapsed) riding navsync.js's events -- this page never polls. {% endcomment %}
+<script src="{% static 'js/syncing.js' %}" defer></script>
+<script>
+(function() {
+    // Progress mirror: navsync.js dispatches 'platpursuit:sync-progress' on every poll;
+    // keep the hero card's bar in lockstep with the navbar sync panel.
+    var bar = document.getElementById('home-sync-progress-bar');
+    var text = document.getElementById('home-sync-progress-text');
+    var phaseText = document.getElementById('home-sync-phase-text');
+    var defaultPhaseCopy = phaseText ? phaseText.textContent : '';
+
+    // Friendly labels for the sub-phases _job_sync_complete moves through.
+    var FINALIZE_PHASE_LABELS = {
+        health_check: 'Verifying your trophy data with PSN...',
+        stats_badges: 'Updating stats and awarding badges...',
+        finishing:    'Wrapping things up...'
+    };
+
+    if (bar || text || phaseText) {
+        document.addEventListener('platpursuit:sync-progress', function(e) {
+            var data = (e && e.detail) || {};
+            if (bar && data.sync_percentage != null) {
+                bar.value = parseInt(data.sync_percentage, 10) || 0;
+            }
+            if (text) {
+                if (data.is_finalizing) {
+                    text.textContent = 'Finalizing sync...';
+                } else if (data.sync_target) {
+                    var progress = Number(data.sync_progress || 0).toLocaleString('en-US');
+                    var target = Number(data.sync_target).toLocaleString('en-US');
+                    text.textContent = progress + ' / ' + target + ' tasks';
+                } else {
+                    text.textContent = 'Getting started...';
+                }
+            }
+            if (phaseText) {
+                if (data.is_finalizing && data.finalize_phase && FINALIZE_PHASE_LABELS[data.finalize_phase]) {
+                    phaseText.textContent = FINALIZE_PHASE_LABELS[data.finalize_phase];
+                } else {
+                    phaseText.textContent = defaultPhaseCopy;
+                }
+            }
+        });
+    }
+
+    // Elapsed counter: server seeds data-elapsed; tick once per second, stop at the synced
+    // transition (the finale hides this element).
+    var elapsedEl = document.getElementById('home-sync-elapsed');
+    if (elapsedEl) {
+        var elapsed = parseInt(elapsedEl.dataset.elapsed, 10) || 0;
+
+        function formatElapsed(s) {
+            if (s < 10) return 'Started just now';
+            if (s < 60) return 'Started ' + s + 's ago';
+            var minutes = Math.floor(s / 60);
+            if (minutes < 60) return 'Started ' + minutes + 'm ago';
+            var hours = Math.floor(minutes / 60);
+            var remMin = minutes % 60;
+            return 'Started ' + hours + 'h ' + remMin + 'm ago';
+        }
+
+        function tick() {
+            elapsed += 1;
+            elapsedEl.textContent = formatElapsed(elapsed);
+        }
+
+        elapsedEl.textContent = formatElapsed(elapsed);
+        var elapsedTimer = setInterval(tick, 1000);
+        document.addEventListener('platpursuit:sync-status-changed', function (e) {
+            if (e.detail && e.detail.status === 'synced') { clearInterval(elapsedTimer); }
+        });
+    }
+})();
+</script>
+{% endif %}
 {% endblock %}

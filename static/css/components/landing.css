@@ -642,3 +642,28 @@
    star colour, and the label riding above the stars. */
 .land-rise { position: relative; overflow: hidden; --sup-t: var(--pp-primary); }
 .land-rise__lbl { position: relative; }
+
+/* ── The no-PSN hero's three-step strip (home/_hero_no_psn.html) ─────────────
+   Stacked at 375px, 3-across at md. The warn strip follows .land-search__status's
+   tinted-border pattern in the warning hue. Opacity/transform motion only. */
+.land-steps { display: grid; grid-template-columns: 1fr; gap: 0.9rem; margin-top: 2rem; text-align: left; }
+@media (min-width: 768px) { .land-steps { grid-template-columns: repeat(3, 1fr); gap: 1.1rem; } }
+.land-steps__cell { display: flex; align-items: flex-start; gap: 0.7rem; min-width: 0; }
+.land-steps__num {
+    flex: 0 0 auto; width: 1.7rem; height: 1.7rem; border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 0.85rem;
+    border: 1px solid color-mix(in oklab, var(--color-primary) 45%, transparent);
+    background: color-mix(in oklab, var(--color-primary) 14%, transparent);
+    color: var(--color-primary);
+}
+.land-steps__t { font-weight: 700; font-size: 0.9rem; line-height: 1.3; }
+.land-steps__c { font-size: 0.78rem; line-height: 1.5; opacity: 0.65; margin-top: 0.2rem; }
+.land-steps__warn {
+    display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 1.4rem; text-align: left;
+    padding: 0.7rem 0.9rem; border-radius: 0.6rem;
+    border: 1px solid color-mix(in oklab, var(--color-warning) 35%, transparent);
+    background: color-mix(in oklab, var(--color-warning) 9%, transparent);
+}
+.land-steps__warn svg { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin-top: 0.1rem; color: var(--color-warning); }
+.land-steps__warn p { font-size: 0.78rem; line-height: 1.5; opacity: 0.85; }

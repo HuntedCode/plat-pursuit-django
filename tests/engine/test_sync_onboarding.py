@@ -78,16 +78,19 @@ def test_the_status_payload_psn_found_is_none_without_a_summary(client):
     assert data['psn_found'] is None
 
 
-# --- the walkthrough ---
+# --- the shared landing sections (the tour, since the gates merge) ---
 
-def test_the_walkthrough_renders_every_panel(client):
+def test_the_syncing_state_renders_the_landing_sections(client):
+    """The gates merge retired the five-panel walkthrough carousel: the landing's real
+    sections (ratings carousel, showcase card, medallion shelf) render below the syncing
+    hero and ARE the tour."""
     client, _ = _syncing_client(client)
 
     body = client.get('/', **CF).content.decode()
 
-    assert 'data-sync-walkthrough' in body
-    assert body.count('sw__slide') >= 5
-    assert body.count('data-sw-dot') == 5
+    assert 'data-land-carousel' in body
+    assert 'share-image-content' in body   # the showcase Profile Card (fixture cache-cold)
+    assert 'data-sync-live' in body
 
 
 # --- the enter moment ---
@@ -123,8 +126,8 @@ def test_the_js_reloads_only_for_errors_and_refreshes():
     the template<->JS selector contract."""
     code = _code(Path(settings.BASE_DIR) / 'static' / 'js' / 'syncing.js')
 
-    for selector in ('data-sync-walkthrough', 'data-sync-complete', 'data-sync-live',
-                     'data-sync-card', 'data-psn-pending', 'data-sw-dot'):
+    for selector in ('data-sync-complete', 'data-sync-live',
+                     'data-sync-card', 'data-psn-pending'):
         assert selector in code, f'syncing.js lost its {selector} hook'
     assert code.count('window.location.reload') == 2, (
         'expected exactly two reload sites: the quick-refresh fallback and the error branch'
@@ -151,7 +154,8 @@ def test_staff_can_preview_the_syncing_page(client):
 
     body = client.get('/?preview=syncing', **CF).content.decode()
 
-    assert 'data-sync-walkthrough' in body
+    assert 'data-sync-live' in body
+    assert 'data-land-carousel' in body, 'the landing sections must render under the preview'
     # The preview forces the first-sync view, or it previews almost nothing (audit finding):
     # greeting, progress bar, and finale must all render for a synced previewer.
     assert 'data-psn-line' in body or 'data-psn-pending' in body
@@ -167,7 +171,7 @@ def test_moderators_can_preview_the_syncing_page(client):
 
     body = client.get('/?preview=syncing', **CF).content.decode()
 
-    assert 'data-sync-walkthrough' in body
+    assert 'data-sync-live' in body
 
 
 def test_regular_users_cannot_preview_the_syncing_page(client):
@@ -177,4 +181,5 @@ def test_regular_users_cannot_preview_the_syncing_page(client):
 
     body = client.get('/?preview=syncing', **CF).content.decode()
 
-    assert 'data-sync-walkthrough' not in body
+    assert 'data-sync-complete' not in body
+    assert 'home-sync-progress-bar' not in body

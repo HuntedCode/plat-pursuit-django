@@ -1,5 +1,4 @@
 import logging
-import random
 import time
 
 from django.conf import settings
@@ -13,28 +12,6 @@ from core.services import home_service
 from core.services.site_heartbeat import get_cached_heartbeat
 
 logger = logging.getLogger('psn_api')
-
-
-# Rotating "Did You Know?" facts shown on the syncing page so repeat visits stay
-# fresh. Picked at random server-side per request. Keep these tight, fun, and
-# focused on PlatPursuit features the user can look forward to once their sync
-# finishes.
-SYNCING_DID_YOU_KNOW = [
-    "Every game in your library is auto-tagged with genres, themes, and engines so you can hunt by what you actually love.",
-    "PlatPursuit awards over 100 unique badge series, each with its own tiers, XP, and tracking against your real PSN history.",
-    "The A-to-Z, Calendar, and Genre Challenges turn your backlog into a structured pursuit, complete with progress tracking.",
-    "Your dashboard is yours: rearrange modules, hide what you don't care about, and pin the stats that matter to you.",
-    "Earned a platinum? You can generate a shareable card in seconds and post it to your favorite community.",
-    "Our Monthly Recap is a Spotify-Wrapped-style trip through your trophy year, including your rarest grabs and biggest sessions.",
-    "Roadmaps let you plan a platinum step by step, then watch your progress fill in as you sync.",
-    "The community has flagged thousands of broken, unobtainable, or misbehaving trophies so you know what you're getting into.",
-    "Reviews and ratings come from people who actually completed the game, not random voters, so they're worth reading.",
-    "Game Families group prequels, sequels, and remasters together so your stats reflect the whole journey.",
-    "Discord linking lets PlatBot deliver new platinums, badge unlocks, and challenge updates straight to your server.",
-    "Every stat on the site updates from real PSN data. No fudging, no estimates, no fake leaderboards.",
-    "Premium themes change the entire site's vibe, including the navbar, cards, and your share images.",
-    "Trophy hunting is more fun with friends. Browse profiles, compare stats, and challenge each other for the top spot.",
-]
 
 
 class AdsTxtView(View):
@@ -146,29 +123,30 @@ class HomeView(TemplateView):
     """
     Site home page router.
 
-    A single entry point at / that branches the response based on user state:
+    A single entry point at / that branches the response based on user state. Since the gates
+    merge (2026-08), every PRE-SYNCED state renders the same template -- home/landing.html, the
+    gates surface -- with `home_state` driving a per-state hero, close, and SEO blocks:
 
-    - Anonymous visitors                  -> home/landing.html (marketing pitch)
-    - Logged in, no Profile               -> home/link_psn.html (link your PSN)
-    - Logged in, Profile exists, !linked  -> home/link_psn.html
-    - Linked, sync_status == 'syncing'    -> home/syncing.html (in-progress page)
+    - Anonymous visitors                  -> the search hero (the marketing front door)
+    - Logged in, no/unlinked Profile      -> the link hero (home/_hero_no_psn.html)
+    - Linked, sync_status != 'synced'     -> the live status hero (home/_hero_syncing.html;
+        'error' surfaces in-page rather than throwing the user into a half-empty home)
     - Linked, sync_status == 'synced'     -> trophies/home.html (the gamification Home)
-    - Linked, sync_status == 'error'      -> home/syncing.html (we surface the
-        error in-page rather than throwing the user into a half-empty home)
 
-    The hotbar polls /api/profile-sync-status/ every 2s while syncing; the
-    syncing page listens for a 'platpursuit:sync-status-changed' CustomEvent
-    dispatched by navsync.js and reloads the page when sync transitions to
-    'synced', so users automatically advance to the home.
+    navsync.js owns the sync poll and dispatches the CustomEvents the syncing hero rides;
+    syncing.js turns the 'synced' transition into the enter finale on first syncs and a
+    reload on quick refreshes.
     """
     # template_name is set per-state in get_template_names below.
 
     def get_template_names(self):
         state = self._resolve_state()
+        # The gates merge (2026-08): every pre-synced state renders the landing surface;
+        # home_state drives the hero/close/SEO branches inside the one template.
         return {
             'anonymous': 'home/landing.html',
-            'no_psn':    'home/link_psn.html',
-            'syncing':   'home/syncing.html',
+            'no_psn':    'home/landing.html',
+            'syncing':   'home/landing.html',
             'synced':    'trophies/home.html',
         }[state]
 
@@ -227,15 +205,18 @@ class HomeView(TemplateView):
             context.update(home_service.build_home_context(profile))
             return context
 
-        # All non-dashboard states share the cached site heartbeat for their
+        # All pre-synced states share the cached site heartbeat for their
         # community-stats card. Reused directly so we don't recompute on render.
         context['site_heartbeat'] = get_cached_heartbeat()
 
+        # The gates merge: the landing's cached sections render for EVERY pre-synced state.
+        # Cached community reads + cron-rendered artifacts ONLY (the service's module rule --
+        # no per-user provider may enter it); the per-state hero extras stay in the branches
+        # below, so the anon page keeps its ~free render.
+        from core.services import landing_service
+        context.update(landing_service.build_landing_context())
+
         if state == 'anonymous':
-            # The landing: cached community reads + cron-rendered artifacts ONLY (see the
-            # service's module rule). Adds no per-user work; the page stays ~free.
-            from core.services import landing_service
-            context.update(landing_service.build_landing_context())
             return context
 
         if state == 'syncing':
@@ -275,16 +256,6 @@ class HomeView(TemplateView):
                 except (ValueError, TypeError):
                     elapsed_seconds = 0
             context['sync_elapsed_seconds'] = elapsed_seconds
-
-            # D2: send the full fact list (instead of one randomly chosen) so
-            # the template can rotate them client-side. Shuffle server-side so
-            # different page loads start from a different fact.
-            facts = list(SYNCING_DID_YOU_KNOW)
-            random.shuffle(facts)
-            context['did_you_know_facts'] = facts
-            # Backwards-compat: keep `did_you_know` for the initial render so
-            # the template doesn't need a special "first fact" path.
-            context['did_you_know'] = facts[0]
 
             # PSN's own totals land on the profile within seconds of sync start
             # (psn_api_service.update_profile_from_legacy), long before our per-game walk
