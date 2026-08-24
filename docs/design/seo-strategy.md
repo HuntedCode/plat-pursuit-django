@@ -109,6 +109,12 @@ Deploy checklist carries the re-ping items.
 
 ## Gotchas and Pitfalls
 
+- Company / franchise / genre / theme / job DETAIL pages are indexable but deliberately
+  UNADVERTISED (no sitemap class). They are discoverable through their hubs and the games that
+  link them; a sitemap would advertise thousands of long-tail entity pages ahead of the game
+  and profile sections that earn the crawl budget. Revisit only if GSC shows the hubs indexed
+  but the details not discovered. (Closing audit 2026-08-24: recorded so it reads as a call,
+  not an omission.)
 - Two host sources coexist in seo_tags.py by design: `jsonld_organization`/`jsonld_website` use
   `settings.SITE_URL` (the site entity is prod, whatever host renders it), everything
   request-scoped (canonicals, breadcrumbs, ItemList, VideoGame, ProfilePage) uses
