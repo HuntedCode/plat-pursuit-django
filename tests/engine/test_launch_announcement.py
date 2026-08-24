@@ -127,3 +127,78 @@ def test_the_announcement_renders_clean():
     assert 'You&#x27;re receiving this because you have a PlatPursuit account' in body \
         or "You're receiving this because you have a PlatPursuit account" in body
     assert 'Manage your account settings' in body
+
+
+def test_a_limited_resume_makes_progress(settings, mailoutbox):
+    """The audit's catch: capping the AUDIENCE meant a resumed `--limit` re-selected the same
+    already-sent accounts and mailed nobody while reporting success. The cap belongs on what
+    would actually be sent."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
+    settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = True
+    for i in range(4):
+        _pre_launch_user(f'hunter{i}@example.com')
+
+    call_command('send_launch_announcement', '--send', '--limit', '2', stdout=StringIO())
+    assert len(mailoutbox) == 2
+
+    call_command('send_launch_announcement', '--send', '--limit', '2', stdout=StringIO())
+    assert len(mailoutbox) == 4, 'the second canary batch sent to nobody'
+
+    recipients = {m.to[0] for m in mailoutbox}
+    assert len(recipients) == 4, 'someone got it twice'
+
+
+def test_a_zero_limit_is_not_a_full_blast(settings, mailoutbox):
+    """--limit 0 is falsy: treated as "no limit" it would mail EVERYONE from the one command
+    whose whole design is safe-by-default."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
+    settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = True
+    _pre_launch_user()
+
+    call_command('send_launch_announcement', '--send', '--limit', '0', stdout=StringIO())
+
+    assert len(mailoutbox) == 0
+
+
+def test_a_user_id_outside_the_audience_says_so(settings):
+    """A silent "Sent: 0" reads as done; it actually means the account was never eligible."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
+    settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = True
+    newcomer = _pre_launch_user('new@example.com')
+    newcomer.date_joined = timezone.now() + timedelta(days=2)
+    newcomer.save(update_fields=['date_joined'])
+
+    with pytest.raises(CommandError):
+        call_command('send_launch_announcement', '--send', '--user-id', str(newcomer.id),
+                     stdout=StringIO())
+
+
+def test_the_plaintext_part_leads_with_the_preheader(settings, mailoutbox):
+    """strip_tags removes TAGS, not the CONTENTS of <style>: every v2 email's text/plain part
+    used to open with ~2KB of raw CSS. EmailService drops those elements first now."""
+    settings.PP_LAUNCH_DATE = timezone.now() + timedelta(days=1)
+    settings.LAUNCH_ANNOUNCEMENT_SEND_ENABLED = True
+    _pre_launch_user()
+
+    call_command('send_launch_announcement', '--send', stdout=StringIO())
+
+    plain = mailoutbox[0].body.strip()
+    assert '-webkit-text-size-adjust' not in plain, 'the stylesheet leaked into the plaintext'
+    assert 'mso-table-lspace' not in plain
+    # The <title> leads (it is real text), then the preheader -- both inside the first 200
+    # characters, where a stylesheet used to sit.
+    assert 'The site you signed up for has been rebuilt' in plain[:200], plain[:200]
+
+
+def test_existing_senders_keep_their_empty_headers(settings, mailoutbox):
+    """The headers param must be invisible to every caller that does not pass it."""
+    from core.services.email_service import send_welcome_email
+
+    profile = ProfileFactory(is_linked=True)
+    profile.user.email = 'plain@example.com'
+    profile.user.save(update_fields=['email'])
+
+    send_welcome_email(profile)
+
+    assert mailoutbox[0].extra_headers == {}
+

@@ -114,8 +114,11 @@ A child migrates by changing its `{% extends %}` line and adding a preheader.
 
 ### The plaintext rule (load-bearing)
 
-There are no `.txt` templates. The `text/plain` part of every email is `strip_tags(html)`, which
-**discards every href**. So any URL the reader must be able to reach has to appear as **visible
+There are no `.txt` templates. The `text/plain` part of every email is the HTML with
+`<style>`/`<script>` elements dropped and then `strip_tags` applied, which **discards every href**.
+(Dropping those elements first matters: `strip_tags` removes tags, not their contents, so
+stripping straight from the source used to dump the entire stylesheet into the plaintext part
+before the first sentence.) So any URL the reader must be able to reach has to appear as **visible
 text**, not only as a link target. `emails/welcome.html` shows the pattern (a CTA button followed by
 "Or paste this into your browser: ..."), and `tests/engine/test_auth_pages.py` pins the same rule for
 the verification link.

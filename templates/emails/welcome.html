@@ -19,8 +19,8 @@ systems that actually exist.
 
 {% block header_content %}
     <div style="margin-top: 18px;">
-        <h1 class="pp-h1">Welcome, hunter</h1>
-        <p class="pp-sub">Your PSN profile is linked and your trophies are in.</p>
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Welcome, hunter</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your PSN profile is linked and your trophies are in.</p>
     </div>
 {% endblock %}
 
@@ -120,6 +120,6 @@ systems that actually exist.
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you just linked your PSN profile to PlatPursuit.<br />
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #6B7C91; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because you just linked your PSN profile to PlatPursuit.
+    Manage your account settings from the link above.
 {% endblock %}

@@ -877,6 +877,7 @@ prod with the cutover and be switched on deliberately.
          sample of addresses, sends nothing). Eyeball the count against expectations.
       2. Set `LAUNCH_ANNOUNCEMENT_SEND_ENABLED=True`.
       3. Optional canary: `send_launch_announcement --send --limit 5`, check the inboxes.
+         (The cap applies to unsent accounts, so a repeat canary advances to the next five.)
       4. `python manage.py send_launch_announcement --send` for the rest. It is idempotent per
          user via EmailLog, so a re-run after any interruption finishes rather than repeats.
       5. **Unset `LAUNCH_ANNOUNCEMENT_SEND_ENABLED`** afterwards.

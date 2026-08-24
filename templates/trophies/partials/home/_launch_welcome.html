@@ -18,7 +18,6 @@ the one visit this modal exists for. It runs BEFORE end-of-body home-motion.js b
 include sits at the top of content. Settled on close AND on the typing-guard skip, so the
 numbers never wait on a modal that never opened.
 {% endcomment %}
-{% load humanize %}
 <div class="pp-detail-modal pp-howto" id="launch-welcome" data-auto hidden>
     <div class="pp-detail-modal__scrim" data-launch-close></div>
     <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="launch-welcome-title" tabindex="-1">
@@ -94,8 +93,9 @@ numbers never wait on a modal that never opened.
     var dialog = modal.querySelector('.pp-detail-modal__dialog');
     var SEEN_KEY = 'pp-launch-welcome-seen';
     var lastFocus = null;
-    // Render == armed on this modal (the include itself is server-gated).
-    var armed = true;
+    // Render == armed on this modal (the include itself is server-gated); read the attribute
+    // anyway so the flag write is driven by markup, exactly as the Career modal does.
+    var armed = modal.hasAttribute('data-auto');
 
     function flagPost() {
         if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }

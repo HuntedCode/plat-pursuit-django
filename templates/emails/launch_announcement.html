@@ -18,8 +18,8 @@ List-Unsubscribe header.
 
 {% block header_content %}
     <div style="margin-top: 18px;">
-        <h1 class="pp-h1">PlatPursuit 1.0 is here</h1>
-        <p class="pp-sub">The whole site, rebuilt around the hunt.</p>
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">PlatPursuit 1.0 is here</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">The whole site, rebuilt around the hunt.</p>
     </div>
 {% endblock %}
 
@@ -77,6 +77,6 @@ List-Unsubscribe header.
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you have a PlatPursuit account.<br />
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #6B7C91; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because you have a PlatPursuit account.
+    Manage your account settings from the link above.
 {% endblock %}

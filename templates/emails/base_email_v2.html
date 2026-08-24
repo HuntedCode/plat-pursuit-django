@@ -1,4 +1,4 @@
-{% load static %}<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 {% comment %}
 EMAIL BASE v2 -- the scaffold every rebuilt PlatPursuit email extends.
@@ -22,10 +22,11 @@ DARK brand bands top and bottom.
   few tokens under prefers-color-scheme for Apple Mail (the one major client that honours it
   faithfully).
 
-THE PLAINTEXT RULE (load-bearing, pinned by tests/engine/test_auth_pages.py): the text/plain
-part of every email is `strip_tags(html)` -- there are no .txt templates. strip_tags throws
-away every href, so ANY URL THE READER MUST BE ABLE TO REACH HAS TO APPEAR AS VISIBLE TEXT,
-not only as a link target. The CTA partial (emails/_cta_button.html) carries the same note.
+THE PLAINTEXT RULE (load-bearing, pinned by tests/engine/test_auth_pages.py): there are no
+.txt templates -- the text/plain part of every email is the HTML with <style>/<script>
+elements dropped and then strip_tags applied. strip_tags throws away every href, so ANY URL
+THE READER MUST BE ABLE TO REACH HAS TO APPEAR AS VISIBLE TEXT, not only as a link target.
+The CTA partial (emails/_cta_button.html) carries the same note.
 
 BRAND HEX (converted from the site's oklch tokens in static/css/input.css, which email
 clients cannot parse): primary #28EBFE, substrate #05080C, band text #F0F6FD, metals
@@ -36,8 +37,10 @@ no client loads webfonts reliably. The display character does not survive, and t
 
 BLOCKS (a child migrates by changing its extends line and adding a preheader):
     title           the <title> element
-    preheader       NEW -- the inbox preview line. Write a REAL SENTENCE: strip_tags puts it
-                    first in the plaintext body, so keyword stuffing reads as garbage there.
+    preheader       NEW -- the inbox preview line. Write a REAL SENTENCE: it leads the
+                    plaintext part too (EmailService drops <style> before stripping tags, so
+                    the CSS no longer lands there first), and keyword stuffing reads as
+                    garbage in both places.
     extra_styles    end of <head>, for per-email rules
     header_content  inside the dark header band
     content         the light content area
@@ -72,7 +75,6 @@ BLOCKS (a child migrates by changing its extends line and adding a preheader):
         .pp-card-c { margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768; }
         .pp-small { font-size: 13px; line-height: 1.55; color: #7E8FA3; }
         .pp-band-link { color: #28EBFE; text-decoration: none; font-weight: 600; }
-        .pp-body-link { color: #0E7C93; text-decoration: underline; }
 
         @media screen and (max-width: 620px) {
             .pp-container { width: 100% !important; }
@@ -82,7 +84,7 @@ BLOCKS (a child migrates by changing its extends line and adding a preheader):
         /* Apple Mail honours this faithfully; Gmail and Outlook do their own thing, which is
            precisely why the body is light to begin with. */
         @media (prefers-color-scheme: dark) {
-            .pp-canvas { background-color: #05080C !important; }
+            body, .pp-canvas { background-color: #05080C !important; }
         }
     </style>
     {% block extra_styles %}{% endblock %}

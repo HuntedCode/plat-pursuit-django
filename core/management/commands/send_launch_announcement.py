@@ -62,6 +62,9 @@ class Command(BaseCommand):
                 'audience cannot be computed without it. Set it in the environment first.'
             )
 
+        if limit is not None and limit < 0:
+            raise CommandError('--limit cannot be negative.')
+
         if send and not getattr(settings, 'LAUNCH_ANNOUNCEMENT_SEND_ENABLED', False):
             self.stdout.write(self.style.WARNING(
                 'Launch announcement sends are DISABLED '
@@ -76,12 +79,18 @@ class Command(BaseCommand):
             .filter(is_active=True, date_joined__lt=launch_date)
             .exclude(email='')
             .exclude(email__isnull=True)
+            .select_related('profile')   # _display_name reads it; otherwise one query per send
             .order_by('id')
         )
         if user_id:
             recipients = recipients.filter(id=user_id)
-        if limit:
-            recipients = recipients[:limit]
+            if not recipients.exists():
+                # A silent "Sent: 0" would read as "done" when it actually means "that account
+                # is not in the audience" (post-cutover signup, inactive, or no address).
+                raise CommandError(
+                    f'User {user_id} is not in the audience: they must be active, have an '
+                    f'email address, and have joined before {launch_date.isoformat()}.'
+                )
 
         already = set(
             EmailLog.objects
@@ -94,9 +103,15 @@ class Command(BaseCommand):
         self.stdout.write(f'Cutover instant: {launch_date.isoformat()}')
         self.stdout.write('=' * 70)
 
-        sent = skipped = failed = 0
-        pending = [u for u in recipients if u.id not in already]
-        skipped = recipients.count() - len(pending) if not limit else len(already & {u.id for u in recipients})
+        sent = failed = 0
+        # The cap applies to what would actually be SENT, not to the audience: slicing the
+        # queryset first meant a resumed `--limit 5` re-selected the same five already-sent
+        # accounts and made zero progress while reporting success.
+        audience = list(recipients)
+        pending = [u for u in audience if u.id not in already]
+        skipped = len(audience) - len(pending)
+        if limit is not None:
+            pending = pending[:limit]
 
         if not send:
             self.stdout.write(f'Would send to {len(pending)} account(s).')
@@ -112,7 +127,6 @@ class Command(BaseCommand):
             context = {
                 'username': self._display_name(user),
                 'site_url': settings.SITE_URL,
-                'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
             }
             try:
                 count = EmailService.send_html_email(
@@ -137,7 +151,7 @@ class Command(BaseCommand):
                 self.stderr.write(f'Failed for {user.email}: {exc}')
 
             if batch_size and (index + 1) % batch_size == 0 and index + 1 < len(pending):
-                self.stdout.write(f'  ... {index + 1} sent, pausing {sleep_for}s')
+                self.stdout.write(f'  ... {index + 1} processed, pausing {sleep_for}s')
                 time.sleep(sleep_for)
 
         self.stdout.write('=' * 70)

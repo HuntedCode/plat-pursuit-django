@@ -4,6 +4,7 @@ EmailService - Reusable service for sending HTML emails via SendGrid.
 Provides a consistent interface for sending transactional emails across the application.
 """
 import logging
+import re
 from django.urls import reverse
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -11,6 +12,10 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
 logger = logging.getLogger(__name__)
+
+# <style>/<script> elements INCLUDING their contents: strip_tags would otherwise leave the CSS
+# and JS text sitting in the plaintext part of every email.
+_STYLE_SCRIPT_RE = re.compile(r'(?is)<(style|script)[^>]*>.*?</\1>')
 
 
 class EmailService:
@@ -70,8 +75,11 @@ class EmailService:
             # Render HTML template
             html_content = render_to_string(template_name, context)
 
-            # Generate plain text version by stripping HTML tags
-            text_content = strip_tags(html_content)
+            # Generate the plain text version. strip_tags removes TAGS, not the CONTENTS of
+            # <style>/<script>, so stripping straight from the source dumped the whole
+            # stylesheet into the text/plain part (~2KB of CSS before the first sentence,
+            # which is also what an inbox preview would have read). Drop those elements first.
+            text_content = strip_tags(_STYLE_SCRIPT_RE.sub(' ', html_content))
 
             # Create email message
             email = EmailMultiAlternatives(
