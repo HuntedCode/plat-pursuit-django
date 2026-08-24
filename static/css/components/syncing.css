@@ -10,6 +10,7 @@
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* ── Carousel ── */
+.sw { touch-action: pan-y; }   /* horizontal swipes are ours; vertical scrolling stays the browser's */
 .sw__stack { display: grid; }
 .sw__stack > .sw__slide { grid-area: 1 / 1; }
 .sw__slide {
@@ -37,15 +38,21 @@
     .sw__copy { font-size: 0.85rem; }
 }
 
-.sw__dots { display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.9rem; }
+.sw__dots { display: flex; justify-content: center; margin-top: 0.9rem; }
+/* Each slot is a real >=24px tap target (28x24 button) with the 8px pill as a ::before --
+   the same fix landing.css records for its dots; the first copy of this carousel dropped it. */
 .sw__dot {
-    width: 0.5rem; height: 0.5rem; border-radius: 9999px; border: 0; padding: 0; cursor: pointer;
+    width: 28px; height: 24px; border: 0; padding: 0; cursor: pointer; background: transparent;
+    display: flex; align-items: center; justify-content: center;
+}
+.sw__dot::before {
+    content: ''; width: 0.5rem; height: 0.5rem; border-radius: 9999px;
     background: color-mix(in oklab, currentColor 25%, transparent);
     transition: background 0.2s ease, transform 0.2s ease;
 }
-.sw__dot:hover { background: color-mix(in oklab, currentColor 45%, transparent); }
-.sw__dot.is-active { background: var(--color-primary, currentColor); transform: scale(1.25); }
-.sw__dot:focus-visible { outline: 2px solid var(--color-primary, currentColor); outline-offset: 3px; }
+.sw__dot:hover::before { background: color-mix(in oklab, currentColor 45%, transparent); }
+.sw__dot.is-active::before { background: var(--color-primary, currentColor); transform: scale(1.25); }
+.sw__dot:focus-visible { outline: 2px solid var(--color-primary, currentColor); outline-offset: 2px; border-radius: 6px; }
 
 /* ── Slide art ── */
 /* Career: a level mark orbited by five discipline-colored dots. */

@@ -53,7 +53,7 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                               role="status">
                             {% if psn_outage %}PSN Down{% else %}{{ profile.sync_status|sync_status_display }}{% endif %}
                         </span>
-                        {% if profile.sync_status == 'syncing' and not psn_outage %}
+                        {% if not psn_outage %}{% if profile.sync_status == 'syncing' or preview_syncing %}
                         {# A3: Elapsed timer. JS counts up from data-elapsed every second. #}
                         <span id="home-sync-elapsed"
                               class="text-xs md:text-sm text-base-content/50 font-semibold tabular-nums"
@@ -61,7 +61,7 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                               aria-label="Time elapsed since sync started">
                             Started just now
                         </span>
-                        {% endif %}
+                        {% endif %}{% endif %}
                     </div>
                     <p class="text-xs md:text-sm text-base-content/60 mt-1 italic pr-1">
                         {% if psn_outage %}
@@ -74,14 +74,14 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                             before them. Both sentences ship, JS fills the spans and swaps when the
                             payload's psn_found arrives (navsync's sync-progress ride-along). {% endcomment %}
                             <span data-psn-line {% if not psn_found %}hidden{% endif %}>We found <b class="text-base-content/80 tabular-nums" data-psn-found-total>{{ psn_found.total|default:0|intcomma }}</b> trophies and <b class="text-base-content/80 tabular-nums" data-psn-found-plats>{{ psn_found.plats|default:0|intcomma }}</b> platinums on your PSN profile, and we're pulling every single one.</span>
-                            <span data-psn-pending {% if psn_found %}hidden{% endif %}>First syncs are the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN.</span>
+                            <span data-psn-pending {% if psn_found %}hidden{% endif %}>Your first sync is the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN.</span>
                             This can take 10-30 minutes depending on the size of your library, but every future refresh will be much faster. Stretch, grab a drink, and take the tour below while we work.
                         {% else %}
                             Welcome back, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. Quick refresh in progress, this should only take a moment. The instant we're done, you'll land straight on your dashboard.
                         {% endif %}
                     </p>
 
-                    {% if profile.sync_status == 'syncing' and not psn_outage %}
+                    {% if not psn_outage %}{% if profile.sync_status == 'syncing' or preview_syncing %}
                     {% comment %}
                     Live progress bar. Initial values are server-rendered; navsync.js dispatches
                     'platpursuit:sync-progress' on every poll and the listener below keeps these
@@ -107,7 +107,7 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                             {% if is_initial_sync %}This updates live as we go. The moment everything is in, your Pursuit opens up right here.{% else %}This updates live as we go. The second it flips to synced, we'll throw you straight onto your dashboard.{% endif %}
                         </p>
                     </div>
-                    {% endif %}
+                    {% endif %}{% endif %}
                 </div>
             </div>
 
@@ -174,7 +174,7 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
             system. No per-user data on purpose -- mid-sync the visitor has none yet. The pattern
             is copied from landing.js's ratings carousel (dots, auto-advance, in-view gate,
             touch swipe); a third consumer is the signal to extract a shared primitive. {% endcomment %}
-            <div class="sw" data-sync-walkthrough style="touch-action: pan-y;">
+            <div class="sw" data-sync-walkthrough>
                 <div class="sw__stack">
 
                     <div class="sw__slide is-active" aria-hidden="false">
@@ -218,7 +218,7 @@ message twice (audit-caught in the first cut of the lobby-messages fix). {% endc
                     </div>
 
                 </div>
-                <div class="sw__dots" role="tablist" aria-label="Tour panels">
+                <div class="sw__dots" role="group" aria-label="Tour panels">
                     <button type="button" class="sw__dot is-active" data-sw-dot="0" aria-label="Build a Career" aria-current="true"></button>
                     <button type="button" class="sw__dot" data-sw-dot="1" aria-label="Chase Badges"></button>
                     <button type="button" class="sw__dot" data-sw-dot="2" aria-label="Your library, organized"></button>
@@ -333,7 +333,11 @@ the server-data-coupled mirrors. {% endcomment %}
         }
 
         elapsedEl.textContent = formatElapsed(elapsed);
-        setInterval(tick, 1000);
+        var elapsedTimer = setInterval(tick, 1000);
+        // The finale hides this element; stop counting into the void.
+        document.addEventListener('platpursuit:sync-status-changed', function (e) {
+            if (e.detail && e.detail.status === 'synced') { clearInterval(elapsedTimer); }
+        });
     }
 
     // ──────────────────────────────────────────────────────────────────

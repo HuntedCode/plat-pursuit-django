@@ -249,6 +249,15 @@ class HomeView(TemplateView):
             # total_trophies is reset to 0 on relink.
             context['is_initial_sync'] = (profile.total_trophies == 0)
 
+            # ?preview=syncing renders from a SYNCED team account, which would otherwise fall
+            # into the quick-refresh copy with no progress bar, no greeting, and no finale --
+            # previewing almost nothing. Force the first-sync view: the greeting, the
+            # syncing-only blocks (via preview_syncing in the template's status gates), and
+            # the finale all render, and the DEBUG simulate panel drives the state machine.
+            context['preview_syncing'] = self._team_previewing_syncing()
+            if context['preview_syncing']:
+                context['is_initial_sync'] = True
+
             # Elapsed time: read sync_started_at:{profile_id} from Redis. The
             # API endpoint also exposes this so the JS can keep counting up
             # without re-fetching, but rendering it server-side ensures the

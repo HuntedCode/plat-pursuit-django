@@ -43,7 +43,10 @@ def test_the_syncing_page_personalizes_from_the_psn_summary(client):
     body = client.get('/', **CF).content.decode()
 
     assert '8,412' in body, "PSN's own total never reached the greeting"
-    assert '71' in body
+    # '71' alone appears in hashed filenames and SVG paths; pin the span's rendered value.
+    assert body.split('data-psn-found-plats')[1].split('<')[0].endswith('>71'), (
+        'the platinum span rendered something other than 71'
+    )
     assert 'data-psn-line' in body
 
 
@@ -98,6 +101,10 @@ def test_the_enter_moment_ships_on_first_syncs(client):
     assert 'Your Pursuer has emerged' in body
     assert 'Enter your Pursuit' in body
     assert 'data-enter-pursuit' in body
+    # The TEMPLATE half of the JS contract: without data-sync-live the state machine silently
+    # falls back to a reload and the feature vanishes with every other assertion still green.
+    assert 'data-sync-live' in body
+    assert 'data-complete-stat="plats"' in body
 
 
 def test_quick_refreshes_do_not_get_the_finale(client):
@@ -132,3 +139,42 @@ def test_the_dev_panel_never_ships_to_prod(client):
     body = client.get('/', **CF).content.decode()
 
     assert 'data-sync-dev' not in body
+
+
+# --- the team preview door (mirrors the landing preview pins) ---
+
+def test_staff_can_preview_the_syncing_page(client):
+    profile = ProfileFactory(is_linked=True, sync_status='synced', total_trophies=500)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+    client.force_login(profile.user)
+
+    body = client.get('/?preview=syncing', **CF).content.decode()
+
+    assert 'data-sync-walkthrough' in body
+    # The preview forces the first-sync view, or it previews almost nothing (audit finding):
+    # greeting, progress bar, and finale must all render for a synced previewer.
+    assert 'data-psn-line' in body or 'data-psn-pending' in body
+    assert 'home-sync-progress-bar' in body
+    assert 'data-sync-complete' in body
+
+
+def test_moderators_can_preview_the_syncing_page(client):
+    profile = ProfileFactory(is_linked=True, sync_status='synced', total_trophies=500)
+    profile.user.role = 'moderator'
+    profile.user.save(update_fields=['role'])
+    client.force_login(profile.user)
+
+    body = client.get('/?preview=syncing', **CF).content.decode()
+
+    assert 'data-sync-walkthrough' in body
+
+
+def test_regular_users_cannot_preview_the_syncing_page(client):
+    """The front door must not grow an undocumented public mode."""
+    profile = ProfileFactory(is_linked=True, sync_status='synced', total_trophies=500)
+    client.force_login(profile.user)
+
+    body = client.get('/?preview=syncing', **CF).content.decode()
+
+    assert 'data-sync-walkthrough' not in body

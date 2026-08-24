@@ -64,17 +64,22 @@ naming that class: the guard test scans this file for it.)
     };
 
     // Self-healing: a device that fell back to localStorage (failed POST) hides immediately
-    // and quietly retries the server write, so the flag eventually becomes durable.
+    // and quietly retries the server write, so the flag eventually becomes durable. The hide
+    // is immediate; the re-POST waits for DOMContentLoaded because this inline script runs at
+    // parse time, BEFORE the end-of-body utils.js defines PlatPursuit.API.
     try {
         if (!card.hidden && localStorage.getItem(SEEN_KEY) === '1') {
             card.hidden = true;
-            FLAG_POST().then(function () { localStorage.removeItem(SEEN_KEY); }).catch(function () {});
+            document.addEventListener('DOMContentLoaded', function () {
+                FLAG_POST().then(function () { localStorage.removeItem(SEEN_KEY); }).catch(function () {});
+            });
         }
     } catch (e) { /* private mode */ }
 
     var btn = card.querySelector('[data-explainer-dismiss]');
     if (btn) {
         btn.addEventListener('click', function () {
+            if (card.classList.contains('cxp--leaving')) { return; }   // mid-exit double click
             // No success toast: dismissing a hint should not earn a notification.
             FLAG_POST().catch(function () {
                 try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
