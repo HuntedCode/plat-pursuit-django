@@ -2,7 +2,9 @@
 {% load static %}
 {% load humanize %}
 {% block title %}{{ object.name }} - Games & Trophy Lists{% endblock %}
-{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% comment %} Thin-page rule (SEO Lane 3): a one-game company page answers nothing the game page
+doesn't; thousands of them dilute the crawl. Stays crawlable (follow) so its links pass through. {% endcomment %}
+{% block robots %}{% if request.GET or total_games < 2 %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
 {% block og_description %}All PlayStation games from {{ object.name }} with trophy lists and community ratings.{% endblock %}
 

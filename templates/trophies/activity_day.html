@@ -1,5 +1,9 @@
 {% extends 'base.html' %}
 {% load custom_filters humanize static %}
+{% comment %} Addressable is not indexable (SEO Lane 3): the day URL exists for links, back
+buttons and no-JS visitors, but profiles x dates is an unbounded space of thin slices. The
+profile page is the search surface; days pass their links through. {% endcomment %}
+{% block robots %}noindex, follow{% endblock %}
 {% block title %}{{ profile.display_psn_username|default:profile.psn_username }} &middot; {{ day|date:"M j, Y" }}{% endblock %}
 
 {% comment %} One day of activity as its own PAGE.

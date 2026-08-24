@@ -151,11 +151,9 @@ CONTENT_SECURITY_POLICY = {
         "style-src": [
             "'self'",
             "'unsafe-inline'",                    # Tailwind + dynamic styles
-            "https://fonts.googleapis.com",
         ],
         "font-src": [
-            "'self'",
-            "https://fonts.gstatic.com",               # Google Fonts (preconnected in base.html)
+            "'self'",                                  # Fonts are self-hosted (static/fonts/, SEO Lane 3)
         ],
         "img-src": [
             "'self'",

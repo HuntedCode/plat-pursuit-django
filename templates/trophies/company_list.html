@@ -112,6 +112,7 @@
             </div>
 
             <div class="pp-bgal__advanced" id="co-advanced">
+            {% include 'partials/browse/drawer_precollapse.html' with panel_id='co-advanced' drawer_open=has_advanced_filters only %}
               <div class="pp-bgal__advanced-in">
                 {# ── Platforms ── #}
                 <div class="pp-gbrowse__fsec">

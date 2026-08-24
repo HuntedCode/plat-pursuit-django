@@ -180,8 +180,9 @@ returns.
       loader — including the narrower content column, so the width change will not appear until the purge.
 - [ ] **Watch the CSP report/console for a week.** This deploy REMOVED origins, so the failure mode is the
       opposite of the usual one: something legitimate that quietly rode on an ad origin now gets blocked.
-      Two entries were kept on purpose and are pinned by tests (`fonts.gstatic.com` on `font-src`,
-      `images.igdb.com` on `img-src`); a third, `'wasm-unsafe-eval'`, is gone and would break any future
+      One entry was kept on purpose and is pinned by tests (`images.igdb.com` on `img-src`;
+      `fonts.gstatic.com` was kept then but has since been removed by the SEO Lane 3 font
+      self-hosting, pinned by `test_csp_fonts_are_self_only`); another, `'wasm-unsafe-eval'`, is gone and would break any future
       WebAssembly dependency loudly.
 - [ ] **Re-check `/privacy/` in prod.** It now states as fact that the site serves no advertising and sets
       no advertising cookies. That has to be true the moment it is published, which it is only after the
@@ -796,3 +797,12 @@ the numbering concept is abandoned (his call), so a rollback would come back wit
 - [ ] `collectstatic` after the robots.txt change (WhiteNoise serves staticfiles/).
 - [ ] After cutover: resubmit /sitemap.xml in GSC (the badge section changes model; roadmaps section is withdrawn).
 
+
+## SEO Lane 3 (2026-08-23)
+- [ ] Eyeball the four quantized badge backdrops (static/images/badges/backdrops/) on beta: open a
+  medallion's inspect modal and the Collection. They dropped 1.47 MB -> 172 KB via 256-color dithered
+  quantization; they render at <=400px so banding should be invisible, but the call is visual.
+  Revert candidates via git if any gradient looks stepped.
+- [ ] Post-cutover: re-baseline Lighthouse against PROD (the table in docs/design/seo-strategy.md is
+  dev-lab only) and note the numbers next to it. Fonts now self-host, so also confirm the woff2s serve
+  with long-cache headers from WhiteNoise (immutable far-future, same as other static).

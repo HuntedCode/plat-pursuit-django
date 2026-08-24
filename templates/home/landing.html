@@ -79,7 +79,9 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                 <div class="land-search__status" data-land-status aria-live="polite" hidden>
                     <span class="land-search__dot" data-land-dot aria-hidden="true"></span>
                     <span class="land-search__msg" data-land-msg></span>
-                    <a class="land-search__visit" data-land-visit hidden>Open the profile
+                    {% comment %}The resting href is real (the hunters browse) so the anchor is crawlable;
+                    JS overwrites it with the found profile before unhiding.{% endcomment %}
+                    <a class="land-search__visit" href="{% url 'profiles_list' %}" data-land-visit hidden>Open the profile
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                     </a>
                 </div>
@@ -266,8 +268,14 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
                 <p class="land-sec__sub">Every platinum earns a share card with your scores on it, and every month closes with a recap worth posting. The screenshot era is over.</p>
             </div>
             <div class="land-proof pp-arrive__it" style="--i: 1;">
-                <img src="{% static 'images/showcase/plat_card_example.png' %}" alt="A platinum share card" class="land-proof__img" loading="lazy" />
-                <img src="{% static 'images/showcase/recap_card_example.png' %}" alt="A monthly recap card" class="land-proof__img" loading="lazy" />
+                <picture>
+                    <source srcset="{% static 'images/showcase/plat_card_example.webp' %}" type="image/webp" />
+                    <img src="{% static 'images/showcase/plat_card_example.png' %}" alt="A platinum share card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
+                </picture>
+                <picture>
+                    <source srcset="{% static 'images/showcase/recap_card_example.webp' %}" type="image/webp" />
+                    <img src="{% static 'images/showcase/recap_card_example.png' %}" alt="A monthly recap card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
+                </picture>
             </div>
         </div>
     </section>

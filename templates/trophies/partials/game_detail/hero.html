@@ -17,7 +17,7 @@
 
             <figure class="gd-cover">
                 <img src="{{ game.display_image_url }}" alt="{{ game.title_name }} {% if game.has_cover_art %}cover{% else %}icon{% endif %}"
-                     loading="eager" decoding="async"
+                     loading="eager" decoding="async" fetchpriority="high"
                      class="w-full h-full {% if game.has_cover_art %}object-cover object-top{% else %}object-contain p-4{% endif %}" />
             </figure>
 

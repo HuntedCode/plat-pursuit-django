@@ -28,8 +28,8 @@ CSP is configured via `CONTENT_SECURITY_POLICY` in settings.py using the `django
 |-----------|----------------|
 | `default-src` | `'self'` |
 | `script-src` | `'self'`, `'unsafe-inline'`, `cdn.jsdelivr.net`, `static.cloudflareinsights.com` |
-| `style-src` | `'self'`, `'unsafe-inline'`, `fonts.googleapis.com` |
-| `font-src` | `'self'`, `fonts.gstatic.com` (https only) |
+| `style-src` | `'self'`, `'unsafe-inline'` |
+| `font-src` | `'self'` (fonts self-hosted since SEO Lane 3, 2026-08) |
 | `img-src` | `'self'`, `data:`, PSN domains (http + https), `*.s3.amazonaws.com`, `images.igdb.com` |
 | `frame-src` | `'self'`, YouTube embed domains |
 | `connect-src` | `'self'`, `cdn.jsdelivr.net` (source maps), `cloudflareinsights.com` |
@@ -41,11 +41,12 @@ adservice, `www.gstatic`, `csi.gstatic`), along with **`'wasm-unsafe-eval'`** â€
 app's only WebAssembly consumer â€” and the `http://fonts.gstatic.com` twin, which existed because AdSense
 creatives loaded Google Sans over plain http.
 
-Two entries were deliberately **kept** because they sat beside ad origins without being ones, and deleting
-them breaks the site quietly rather than loudly: `https://fonts.gstatic.com` on `font-src` is our own
-webfont stack, and `images.igdb.com` on `img-src` is our cover art (only its `connect-src` copy was
-AdSense's content-categorization scanner). `tests/engine/test_ads_removed.py` pins both against a future
-over-eager cleanup.
+Two entries were deliberately **kept** at the time because they sat beside ad origins without being
+ones: `https://fonts.gstatic.com` on `font-src` (then our webfont stack) and `images.igdb.com` on
+`img-src` (our cover art; only its `connect-src` copy was AdSense's scanner). The fonts entry has
+since been removed on purpose: SEO Lane 3 (2026-08) self-hosted the fonts into `static/fonts/`, so
+`font-src` is `'self'` alone and `test_csp_fonts_are_self_only` pins that. `images.igdb.com` remains
+pinned by `tests/engine/test_ads_removed.py`.
 
 **Note:** `'unsafe-inline'` is required for scripts (template `<script>` blocks) and styles (Tailwind). A future improvement would be nonce-based script loading to remove `'unsafe-inline'` from `script-src`.
 

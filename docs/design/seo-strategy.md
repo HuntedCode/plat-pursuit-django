@@ -57,6 +57,49 @@ they ever return, revisit -- they carry the site's best long-form markup.
 - **Lane 3 -- content depth + CWV:** thin-page rules beyond Lane 0's floors, image dimensions
   (385 imgs, 0 sized), font self-hosting evaluation, a Lighthouse baseline in docs.
 
+## Lighthouse baseline (2026-08-23, Lane 3)
+
+Method: Lighthouse 12.8 CLI, headless Chrome, mobile emulation, against the local dev stack
+(Docker `web` on :8000). Dev numbers are pessimistic on transfer (unminified JS, no Cloudflare,
+no compression) and the throttled FCP/LCP seconds are lab-relative, NOT what prod users see.
+The value is in the structure: CLS, the audit findings, and movement between runs. Re-baseline
+against prod after the cutover.
+
+| Page | Perf | SEO | A11y | BP | CLS | Notes |
+|---|---|---|---|---|---|---|
+| `/` (anon landing) | 59 | 92 | 96 | 100 | 0 | seo ding = the hidden search anchor (fixed) |
+| `/games/` | 37 -> 57 | 92 | 95 | 96 | **0.465 -> 0** | drawer collapse after paint (fixed, see below) |
+| game detail | 58 | 100 | 96 | 96 | 0 | |
+| profile | 58 | 100 | 97 | 82 | 0.001 | BP ding = dev-only http; legacy `http://` PSN avatar URLs noted |
+
+What the baseline drove (all shipped in Lane 3):
+
+- **The 0.465 CLS on `/games/`**: the advanced filter drawer renders open for no-JS and
+  `filterPanel` collapsed it after parse, shoving the whole grid up. Fixed with a pre-paint
+  inline collapse (`templates/partials/browse/drawer_precollapse.html`) driven by SERVER truth
+  (the view's filter_chips / has_advanced_filters signal -- a querystring re-derivation misread
+  parked range params, the lane audit's HIGH); included on games hub, company list, recently
+  added, and tag detail. Badge gallery deliberately skipped (its open-on-load rule reads JS-side state,
+  not the querystring).
+- **Fonts self-hosted**: Google Fonts CDN dropped (cache partitioning killed the cross-site
+  benefit; it cost two extra origins on every first visit). Variable woff2 subsets in
+  `static/fonts/`, faces in `input.css`, latin preloaded from `base.html`, CSP font-src trimmed
+  to `'self'`. Poppins stays declared but dormant outside Stellar Circuit (unicode-range +
+  nothing else uses it).
+- **Image weight**: the four 1000px badge backdrop PNGs quantized in place (1.47 MB -> 172 KB;
+  they render at <=400px so the dither is invisible -- eyeball after deploy); the two showcase
+  card PNGs get webp siblings behind `<picture>` (943 KB -> 91 KB on-page; PNG stays as the
+  og:image target).
+- **CLS/LCP attributes**: width/height on the showcase cards (landing + link-psn),
+  `fetchpriority="high"` on the two LCP candidates (game-detail cover, profile-header avatar).
+- **Thin-page rules beyond the Lane 0 floors**: day pages are `noindex, follow` (profiles x
+  dates is an unbounded space of thin slices; empty days already 404). One-game company pages
+  are `noindex, follow` (a shovelware publisher's page answers nothing its game page doesn't).
+
+Not chased: `modern-image-formats` on `/media/badges/main/*.png` (badge art is DB/media content
+-- a badge-cutover follow-up, not an SEO lane), `unminified-javascript` (dev-server artifact),
+the `robots-txt` audit failure on one run (lab flake; robots serves 200 and Lane 0 pins it).
+
 ## Measurement
 
 Search Console was never set up. **Jeffrey's action: create a Domain property for platpursuit.com

@@ -34,6 +34,7 @@ swaps only the inner #browse-results grid. {% endcomment %}
 
         {# Collapsible advanced panel (JS-toggled; collapsed on load, opens if a filter is active). #}
         <div class="pp-bgal__advanced" id="radded-advanced">
+        {% include 'partials/browse/drawer_precollapse.html' with panel_id='radded-advanced' drawer_open=has_advanced_filters only %}
           <div class="pp-bgal__advanced-in">
             {# ── Platforms ── #}
             <div class="pp-gbrowse__fsec">

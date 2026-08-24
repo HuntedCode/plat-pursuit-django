@@ -32,10 +32,13 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/favicon-32x32.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/favicon-16x16.png' %}">
     <link rel="apple-touch-icon" sizes="180x180" href="{% static 'images/apple-touch-icon.png' %}">
+    {% comment %} Fonts are self-hosted (SEO Lane 3): faces declared in output.css, files under
+    static/fonts/. Preload the two latin variable fonts nearly every page paints with; latin-ext
+    and Poppins (Stellar Circuit only) load lazily via unicode-range. crossorigin is mandatory on
+    font preloads even same-origin, or the browser fetches twice. {% endcomment %}
+    <link rel="preload" href="{% static 'fonts/bricolage-grotesque-var-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{% static 'fonts/inter-var-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Inter:wght@400;500;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     {% jsonld_organization %}
     {% if breadcrumb %}{% jsonld_breadcrumbs breadcrumb request %}{% endif %}
     <meta name="csrf-token" content="{{ csrf_token }}">

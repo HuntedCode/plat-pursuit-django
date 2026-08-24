@@ -189,12 +189,11 @@ def test_csp_dropped_wasm_unsafe_eval():
     assert "'wasm-unsafe-eval'" not in _directive('script-src')
 
 
-def test_csp_kept_google_fonts_over_https():
-    """Over-reach guard. `http://fonts.gstatic.com` was AdSense (its creatives loaded Google Sans over
-    http); the https origin is our own webfont stack, preconnected in base.html. Deleting both would
-    break every font on the site with only a console warning to show for it."""
-    assert 'https://fonts.gstatic.com' in _directive('font-src')
-    assert 'http://fonts.gstatic.com' not in _directive('font-src')
+def test_csp_fonts_are_self_only():
+    """Historical shape: `http://fonts.gstatic.com` was AdSense; the https origin was our own webfont
+    stack and survived the ads removal. SEO Lane 3 then self-hosted the fonts (static/fonts/), so BOTH
+    are gone now and font-src is 'self' alone -- any gstatic reappearance means a CDN link crept back."""
+    assert _directive('font-src') == ["'self'"]
 
 
 def test_csp_kept_igdb_covers_on_img_src():

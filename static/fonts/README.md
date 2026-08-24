@@ -3,8 +3,10 @@
 These TTFs exist for **one consumer**: `core/services/playwright_renderer.py`, which base64-embeds them
 as `@font-face` rules before handing HTML to Chromium. The renderer runs `page.set_content()` in an
 `about:blank` origin with no filesystem or network access, so a share card can only use a typeface that
-is embedded here. The rest of the site loads the same families from Google Fonts in `base.html`; these
-files are the offline copies.
+is embedded here. The rest of the site self-hosts the same families as the woff2 files
+alongside these (SEO Lane 3): variable latin/latin-ext subsets declared via `@font-face` in
+`static/css/input.css`, preloaded from `base.html`. The TTFs stay because the Playwright renderer
+base64-embeds whole files and its map points at them.
 
 **A font not in this directory cannot appear on a share card**, no matter what the template asks for.
 `_build_font_faces()` holds the filename -> (family, weight) map; adding a weight means dropping the TTF

@@ -1768,6 +1768,11 @@ class RecentlyAddedView(HtmxListMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Applied-filters signal for the pre-paint drawer collapse (category/sort/page are
+        # display state, mirroring the filterPanel skip set in recently-added.js).
+        context['has_advanced_filters'] = any(
+            self.request.GET.getlist(k) for k in ('platform', 'has_platinum', 'hide_shovelware')
+        )
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Games', 'url': reverse_lazy('games_list')},

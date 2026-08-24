@@ -1,0 +1,28 @@
+{% comment %}
+Collapses a server-rendered-open filter drawer BEFORE first paint (SEO Lane 3).
+
+The drawer renders open for the no-JS case; PlatPursuit.filterPanel then collapses it at init
+when nothing is filtering. That init runs after parse, so on the bare hub the whole results grid
+painted low and jumped up: a 0.465 CLS on /games/ in the Lighthouse baseline. This inline script
+runs while the grid below is still unparsed, so hiding the panel here shifts nothing. Closed
+state is the `hidden` attribute, exactly what animatePanel sets.
+
+`drawer_open` is SERVER truth: the view's own applied-filters signal (filter_chips on the pages
+that build chips, has_advanced_filters elsewhere). The first cut re-derived it from
+location.search and misread parked range params (rating_min=0 is a non-empty value but not a
+filter), so filtered URLs kept the after-paint jump. The server already knows; don't re-decide.
+
+Notes: no-JS visitors never run this and keep the open drawer (accepted flip side: if JS later
+fails to load, the drawer stays shut -- degraded either way). On HTMX island swaps that include
+this partial (recently added), the script re-runs against the swapped panel with fresh server
+truth, which is the correct state; the following re-init agrees.
+
+Params (include with `only`): panel_id (the drawer's id), drawer_open (truthy = the page will
+open the drawer on load, so leave it alone).
+{% endcomment %}
+{% if not drawer_open %}
+<script>(function () {
+    var p = document.getElementById('{{ panel_id|escapejs }}');
+    if (p) { p.setAttribute('hidden', ''); }
+})();</script>
+{% endif %}
