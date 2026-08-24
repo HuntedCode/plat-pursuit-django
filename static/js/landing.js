@@ -1,7 +1,9 @@
 /**
- * The anonymous landing (2026-08 rebuild).
+ * The pre-synced home surface (2026-08 rebuild; the gates merge made it the template for the
+ * anonymous, no-PSN, and syncing states -- the hero swaps per state, the sections are shared).
  *
- * Three jobs, all degradable:
+ * Three jobs, all degradable -- the search is ANON-ONLY (the authed heroes drop the form, so
+ * every search hook below must cope with an absent or reshaped hero):
  *  1. The hero search: POST the PSN name to search_sync_profile, then stage the wait honestly --
  *     queue line with a live dot, poll add_sync_status, and surface the profile link the moment
  *     basic ingestion lands (`account_id` truthy). "Error" from the status endpoint covers both
@@ -31,6 +33,9 @@
         var hint = document.querySelector('[data-land-hint]');
         var input = form.querySelector('input[name="psn_username"]');
         var button = form.querySelector('button[type="submit"]');
+        // The form may exist while its satellites don't (a reshaped hero variant): every one of
+        // these is dereferenced unguarded below, so bail as a set rather than throw on submit.
+        if (!statusBox || !msg || !visit || !input || !button) { return; }
         var timer = null, polls = 0;
 
         function setState(state, text) {
