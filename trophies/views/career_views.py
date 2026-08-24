@@ -121,6 +121,10 @@ class CareerView(LoginRequiredMixin, TemplateView):
         # DEBUG-only: the claim-ceremony replay harness (canned payloads, no DB) lives in the template
         # behind this flag so animation iteration never touches real claim state.
         context['ceremony_debug'] = settings.DEBUG
+        # First-visit explainer: server-side render gate so returning users never see a flash.
+        # The flag is written by the quick-settings API's ui_flag branch when dismissed.
+        context['show_career_explainer'] = 'career_explainer' not in (self.request.user.ui_flags or {})
+        context['explainer_debug'] = settings.DEBUG
         return context
 
 

@@ -102,6 +102,9 @@
         </section>
     {% endif %}
 
+    {# ── First-visit explainer: one-shot education card, dismissed into User.ui_flags ── #}
+    {% include 'trophies/partials/career/_career_explainer.html' %}
+
     {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
     {% if claimable.count %}
     <a href="?view=contracts" data-lab-goto="contracts" data-goto-filter="claimable" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 hover:border-primary transition-colors group mb-3">

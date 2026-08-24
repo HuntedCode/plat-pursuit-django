@@ -1,0 +1,128 @@
+{% comment %}
+First-visit explainer for the Career page (new-user onboarding, 2026-08).
+
+One-shot education card: renders only while `career_explainer` is absent from the viewer's
+User.ui_flags (server-side gate, so returning users never see a flash). Dismissing writes the
+flag through the quick-settings API's ui_flag branch; if that write fails the localStorage
+fallback (pp-explainer-career-seen) keeps the card hidden on this device and re-fires the POST
+on the next visit (self-healing).
+
+Under DEBUG the card also renders `hidden` for already-flagged users, purely as a replay target
+for the dev panel below -- prod never renders it once dismissed.
+
+The accent is border-l-secondary ON PURPOSE: the hero and the Career summary card both wear
+the primary left-bar accent, and a third one would read as another page header. (Worded without
+naming that class: the guard test scans this file for it.)
+{% endcomment %}
+{% if show_career_explainer or explainer_debug %}
+<section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-3 cxp"
+         data-career-explainer {% if not show_career_explainer %}hidden{% endif %}>
+    <div class="card-body p-3 md:p-4 pp-head-cascade">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-[0.65rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-secondary">First time here?</p>
+                <h2 class="text-base md:text-lg font-bold leading-tight mt-0.5">Welcome to your Career</h2>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary shrink-0" data-explainer-dismiss>Got it</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3 mt-2">
+            <div class="cxp__beat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="cxp__ico"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <div>
+                    <div class="cxp__label">Pursuer Level</div>
+                    <p class="cxp__copy">One level for everything you do here. Trophies, badges, and contracts all feed the ring above.</p>
+                </div>
+            </div>
+            <div class="cxp__beat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="cxp__ico"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                <div>
+                    <div class="cxp__label">Five disciplines, 25 jobs</div>
+                    <p class="cxp__copy">Every game you play maps to jobs that show how you hunt. Your history already gave them their first levels.</p>
+                </div>
+            </div>
+            <div class="cxp__beat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="cxp__ico"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M19 8v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7z"/><path d="M9 13h6M9 17h4"/></svg>
+                <div>
+                    <div class="cxp__label">Contracts</div>
+                    <p class="cxp__copy">The job board. Accept a contract, finish its games, and claim the XP to level the jobs it names.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+(function () {
+    var card = document.querySelector('[data-career-explainer]');
+    if (!card) { return; }
+    var SEEN_KEY = 'pp-explainer-career-seen';
+    var FLAG_POST = function () {
+        if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+        return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+            setting: 'ui_flag', value: 'career_explainer'
+        });
+    };
+
+    // Self-healing: a device that fell back to localStorage (failed POST) hides immediately
+    // and quietly retries the server write, so the flag eventually becomes durable.
+    try {
+        if (!card.hidden && localStorage.getItem(SEEN_KEY) === '1') {
+            card.hidden = true;
+            FLAG_POST().then(function () { localStorage.removeItem(SEEN_KEY); }).catch(function () {});
+        }
+    } catch (e) { /* private mode */ }
+
+    var btn = card.querySelector('[data-explainer-dismiss]');
+    if (btn) {
+        btn.addEventListener('click', function () {
+            // No success toast: dismissing a hint should not earn a notification.
+            FLAG_POST().catch(function () {
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+            });
+            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduce) { card.hidden = true; return; }
+            card.style.height = card.offsetHeight + 'px';
+            void card.offsetHeight;
+            card.classList.add('cxp--leaving');
+            card.style.height = '0px';
+            card.addEventListener('transitionend', function done(ev) {
+                if (ev.propertyName !== 'height') { return; }
+                card.removeEventListener('transitionend', done);
+                card.hidden = true;
+            });
+        });
+    }
+})();
+</script>
+
+{% if explainer_debug %}
+{% comment %} Dev-only (settings.DEBUG): replay the one-shot card. Reuses the `.ccx-dev` panel
+styling (claim-ceremony.css); never ships to prod. Replay clears the localStorage fallback and
+un-hides the card so the genuine first-visit entrance re-runs. {% endcomment %}
+<div class="ccx-dev">
+    <div class="ccx-dev__title">Career explainer</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-explainer-replay>Replay</button>
+    </div>
+</div>
+<script>
+(function () {
+    var replay = document.querySelector('[data-explainer-replay]');
+    var card = document.querySelector('[data-career-explainer]');
+    if (!replay || !card) { return; }
+    replay.addEventListener('click', function () {
+        try { localStorage.removeItem('pp-explainer-career-seen'); } catch (e) {}
+        card.classList.remove('cxp--leaving');
+        card.style.height = '';
+        card.hidden = false;
+        var body = card.querySelector('.pp-head-cascade');
+        if (body) {   // restart the cascade entrance
+            body.classList.remove('pp-head-cascade');
+            void body.offsetHeight;
+            body.classList.add('pp-head-cascade');
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endif %}

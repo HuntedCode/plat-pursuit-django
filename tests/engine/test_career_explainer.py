@@ -73,3 +73,36 @@ def test_ui_flag_write_preserves_other_flags(linked_client):
 
     user.refresh_from_db()
     assert user.ui_flags == {'some_future_flag': True, 'career_explainer': True}
+
+
+# --- the render gate on /career/ ---
+
+def test_career_shows_the_explainer_on_first_visit(linked_client):
+    body = linked_client.get('/career/', **CF).content.decode()
+
+    assert 'data-career-explainer' in body
+    assert 'data-career-explainer hidden' not in body
+
+
+def test_career_hides_the_explainer_once_flagged(linked_client):
+    """Server-side gate: with the flag set the card must not render visibly. Tests run with
+    DEBUG=False, so this is a full non-render (the DEBUG `hidden` replay target never ships)."""
+    user = linked_client.profile.user
+    user.ui_flags = {'career_explainer': True}
+    user.save(update_fields=['ui_flags'])
+
+    body = linked_client.get('/career/', **CF).content.decode()
+
+    assert 'data-career-explainer' not in body
+
+
+def test_the_explainer_is_not_a_second_page_header():
+    """The hero and Career summary card both wear border-l-primary; the explainer must not."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    text = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
+            '_career_explainer.html').read_text(encoding='utf-8')
+    assert 'border-l-primary' not in text
+    assert 'border-l-secondary' in text

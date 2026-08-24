@@ -1009,3 +1009,19 @@
    the dim rule's specificity and is declared after it, which is what makes it win; a plain
    `.rp-ring__seg.is-linked` loses and looks like the JS is not running. */
 .rp-ring-wrap:has(.rp-ring__seg.is-this) .rp-ring__seg.is-linked { opacity: 1; }
+
+/* ── Career first-visit explainer (.cxp) ─────────────────────────────────────
+   One-shot education card (partials/career/_career_explainer.html). The collapse
+   exit transitions height + opacity on the CARD (a small element, not page-sized),
+   so no filter/backdrop work is involved. */
+.cxp { overflow: hidden; transition: height 0.28s var(--pp-ease, ease), opacity 0.28s var(--pp-ease, ease), margin-bottom 0.28s var(--pp-ease, ease), border-width 0.28s var(--pp-ease, ease); }
+.cxp--leaving { opacity: 0; margin-bottom: 0; border-width: 0; }
+.cxp__beat { display: flex; align-items: flex-start; gap: 0.6rem; min-width: 0; }
+.cxp__ico { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; margin-top: 0.1rem; color: currentColor; opacity: 0.75; }
+.cxp__label { font-size: 0.75rem; font-weight: 700; line-height: 1.2; }
+.cxp__copy { font-size: 0.72rem; line-height: 1.45; opacity: 0.65; margin-top: 0.15rem; }
+@media (min-width: 768px) {
+  .cxp__label { font-size: 0.8rem; }
+  .cxp__copy { font-size: 0.76rem; }
+}
+@media (prefers-reduced-motion: reduce) { .cxp { transition: none; } }
