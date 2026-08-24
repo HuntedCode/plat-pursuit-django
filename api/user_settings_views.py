@@ -70,6 +70,8 @@ class UpdateQuickSettingsAPIView(APIView):
 
     PROFILE_BOOL_SETTINGS = {'hide_hiddens', 'hide_zeros'}
     USER_BOOL_SETTINGS = {'use_24hr_clock'}
+    # One-shot education flags a surface may mark as seen (users.CustomUser.ui_flags keys).
+    UI_FLAGS = ('career_explainer',)
 
     def post(self, request):
         setting = request.data.get('setting', '').strip()
@@ -123,6 +125,16 @@ class UpdateQuickSettingsAPIView(APIView):
                 defaults.pop(page, None)
             request.user.browse_defaults = defaults
             request.user.save(update_fields=['browse_defaults'])
+
+        # One-shot UI education flags (first-visit explainers). Write-only and sticky by
+        # design: dismissing a hint is not something a user should have to manage later.
+        elif setting == 'ui_flag':
+            if not isinstance(value, str) or value not in self.UI_FLAGS:
+                return Response({'error': 'Unknown UI flag.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            flags = request.user.ui_flags or {}
+            flags[value] = True
+            request.user.ui_flags = flags
+            request.user.save(update_fields=['ui_flags'])
 
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)
