@@ -3,7 +3,6 @@
 {% load humanize %}
 {% block title %}{{ object.name }} {% if is_series %}Series{% else %}Franchise{% endif %} Trophy Lists{% endblock %}
 {% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
-{% block meta_description %}Explore every PlayStation trophy list in the {{ object.name }} {% if is_series %}series{% else %}franchise{% endif %}. Track platinum progress across all games on Platinum Pursuit.{% endblock %}
 {% block og_type %}video.other{% endblock %}
 {% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
 {% block og_description %}Every PlayStation game in the {{ object.name }} {% if is_series %}series{% else %}franchise{% endif %} with trophy lists, ratings, and community progress.{% endblock %}

@@ -348,12 +348,15 @@ def test_xhr_past_end_page_404s(client):
     assert resp.status_code == 404
 
 
-def test_bare_games_redirects_to_defaults(client):
-    """A bare /games/ (no query) 302-redirects to the modern-platform defaults."""
+def test_bare_games_renders_defaults_in_place(client):
+    """A bare /games/ renders the modern-platform default view as a 200 (SEO Lane 1: the old
+    force-302 meant the hub's canonical URL never returned a page). The defaults still apply --
+    the form binds them and the template surfaces them via history.replaceState. The signed-in
+    saved-defaults redirect survives, pinned in test_seo_lane1."""
     resp = client.get(reverse('games_list'))
 
-    assert resp.status_code == 302
-    assert 'platform=' in resp['Location']
+    assert resp.status_code == 200
+    assert 'history.replaceState' in resp.content.decode()
 
 
 def test_site_heartbeat_has_catalog_coverage():

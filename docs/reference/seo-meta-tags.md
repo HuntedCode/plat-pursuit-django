@@ -1,5 +1,11 @@
 # SEO & Meta Tags
 
+> **Strategy of record: [docs/design/seo-strategy.md](../design/seo-strategy.md)** (the five
+> structural decisions, 2026-08-23). This reference describes the MACHINERY; the strategy doc
+> says why. Brought current with SEO Lanes 0-1 on 2026-08-23 -- it had drifted through four URL
+> migrations and a sitemap rework.
+
+
 The SEO system provides dynamic meta tags, structured data (JSON-LD), sitemaps, and robots directives across all pages. Built on Django's template block system with no external packages.
 
 ## Architecture Overview
@@ -28,7 +34,7 @@ The design prioritizes DRY: views set a single `seo_description` string and it f
 | `title` | Falls back to `{{ title }}` context var or "Platinum Pursuit". Auto-appends " - Platinum Pursuit" suffix. | Always set for named pages |
 | `meta_description` | Uses `{{ seo_description }}` context var, falls back to site tagline | Set via `seo_description` in views, or override block for static pages |
 | `robots` | `index, follow` | Override with `noindex, nofollow` for auth/personal/edit pages |
-| `canonical_url` | `{{ request.build_absolute_uri }}` | Rarely needs override |
+| `canonical_url` | scheme://host/PATH (querystring STRIPPED, Lane 0) | Override when another URL is the canonical (game detail points siblings at the concept's elected SKU); condition must live INSIDE the block with `{{ block.super }}` -- a block wrapped in `{% if %}` overrides unconditionally |
 | `og_title` | Uses `{{ seo_title }}` or `{{ title }}` context var | Only if OG title should differ from page title |
 | `og_description` | Uses `{{ seo_description }}` context var | Only if OG description should differ from meta description |
 | `og_type` | `website` | Override: `profile` for profile pages, `article` for guides |
@@ -77,17 +83,22 @@ Load with `{% load seo_tags %}`.
 
 ## Sitemaps (`core/sitemaps.py`)
 
+Registered (see `plat_pursuit/urls.py` -- registration is explicit, and so is the index):
+
 | Class | Content | Priority | Frequency |
 |-------|---------|----------|-----------|
-| `StaticViewSitemap` | Homepage, about, privacy, terms, contact, browse pages | 0.8 | weekly |
-| `GameSitemap` | All games with `np_communication_id` | 0.6 | weekly |
-| `ProfileSitemap` | All profiles with `psn_username` | 0.5 | daily |
-| `BadgeSitemap` | Tier-1 active badges | 0.6 | weekly |
-| `GuideSitemap` | Published checklists/guides | 0.5 | weekly |
-| `GameListSitemap` | Public game lists | 0.4 | weekly |
-| `ChallengeSitemap` | Non-deleted challenges (A-Z, Calendar, Genre) | 0.4 | daily |
+| `StaticViewSitemap` | Homepage, copy pages, browse hubs | 0.8 | weekly |
+| `GameSitemap` | CONCEPT-CANONICAL games only (`concept_canonicals()` window election), shovelware excluded | 0.6 | weekly |
+| `ProfileSitemap` | Quality-floored profiles: public history + trophies > 0; `lastmod` = `last_synced` | 0.5 | daily |
+| `BadgeSitemap` | `BadgeSeries` with a live `GroupBadge` edition (the set BadgeDetailView serves) | 0.6 | weekly |
 
-Django auto-generates a sitemap index when multiple sections exist. Pagination is handled automatically (50,000 URLs per file).
+Withdrawn/unregistered: `RoadmapSitemap` (Roadmaps hidden, no return promised -- 2026-08-23),
+`GameListSitemap` (Lists hidden). The old `GuideSitemap` and a documented-but-never-built
+`ChallengeSitemap` are gone with their systems.
+
+The index at `/sitemap.xml` and per-section pages are wired EXPLICITLY in urls.py with
+`limit = 5000` per page (not Django's 50,000 default -- sized for origin cost). Every
+`get_latest_lastmod` is an ORDER BY ... LIMIT 1 (the May-2026 OOM fix); keep it that way.
 
 ### Adding a New Sitemap
 
@@ -102,7 +113,7 @@ Profile-scoped detail URLs require authentication. They're the most expensive re
 | Anonymous request | Response |
 |-------------------|----------|
 | `/games/<np_id>/<username>/` | 302 → `/games/<np_id>/?from_profile=<username>` |
-| `/my-pursuit/badges/<slug>/<username>/` | 302 → `/my-pursuit/badges/<slug>/?from_profile=<username>` |
+| `/my-pursuit/badges/<slug>/<username>/` | 302 → `/badges/<slug>/?from_profile=<username>` |
 | `/badges/<slug>/<username>/` (legacy) | Existing legacy 301 chain → then gated same way |
 
 Logic lives in `GameDetailView.dispatch` and `BadgeDetailView.dispatch`. The `from_profile` query param surfaces a dismissible sign-up banner on the canonical page via `templates/partials/anon_profile_banner.html`, turning the moment into a soft sign-up pitch instead of a wall — the visitor still gets a useful page about the game or badge they wanted to see.
@@ -127,15 +138,15 @@ Logic lives in `GameDetailView.dispatch` and `BadgeDetailView.dispatch`. The `fr
 | Bot request | Canonical target |
 |-------------|------------------|
 | `/games/<np_id>/<username>/` | `/games/<np_id>/` |
-| `/my-pursuit/badges/<slug>/<username>/` | `/my-pursuit/badges/<slug>/` |
-| `/badges/<slug>/<username>/` (legacy) | `/my-pursuit/badges/<slug>/` |
-| `/achievements/badges/<slug>/<username>/` (legacy) | `/my-pursuit/badges/<slug>/` |
+| `/my-pursuit/badges/<slug>/<username>/` (legacy prefix) | `/badges/<slug>/` |
+| `/badges/<slug>/<username>/` | `/badges/<slug>/` |
+| `/achievements/badges/<slug>/<username>/` (legacy prefix) | `/badges/<slug>/` |
 
 Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirect. Legacy badge prefixes are caught directly rather than falling through the non-bot 301 chain in `plat_pursuit/urls.py`, which avoids a two-hop redirect when crawlers follow old backlinks.
 
 ### Why this exists
 
-`static/robots.txt` already `Disallow`s `/games/*/*` and `/my-pursuit/badges/*/*` for everyone, because profile-scoped pages are near-duplicates of canonical pages on the `<username>` axis (only per-profile progress stats and pfp differ; all `og:*` / JSON-LD metadata is profile-independent). However, some crawlers (Meta's `meta-webindexer` in particular) ignore `Disallow` rules, and parallel fan-out of expensive profile-scoped renders has caused origin memory spikes and worker saturation. This middleware enforces the `robots.txt` intent for those crawlers at request-entry, before any session/auth/ORM work runs.
+`static/robots.txt` used to `Disallow` `/games/*/*`-style patterns for the profile-scoped variants -- REMOVED in SEO Lane 0 (2026-08-23): robots `*` matches zero-or-more characters, so those rules also blocked every canonical detail page (there is no robots pattern for "exactly two segments"). The variants' defense is this middleware plus the anon gate; robots handles only the profile `?`-permutations and fragment endpoints. However, some crawlers (Meta's `meta-webindexer` in particular) ignore `Disallow` rules, and parallel fan-out of expensive profile-scoped renders has caused origin memory spikes and worker saturation. This middleware enforces the `robots.txt` intent for those crawlers at request-entry, before any session/auth/ORM work runs.
 
 ### Gotchas
 
@@ -161,13 +172,13 @@ Deliberately narrow — only the profile-scoped patterns covered by `_CLOUDFLARE
 | Path pattern | Behavior without `CF-Ray` |
 |--------------|---------------------------|
 | `/games/<np_id>/<username>/` | 302 → `https://platpursuit.com/<path>` |
-| `/my-pursuit/badges/<slug>/<username>/` | 302 → `https://platpursuit.com/<path>` |
+| `/badges/<slug>/<username>/` (+ legacy prefixes) | 302 → `https://platpursuit.com/<path>` |
 | `/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
 | `/achievements/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
-| `/profiles/<username>/` (+ sub-pages such as `/trophy-case/`) | 302 → `https://platpursuit.com/<path>` |
-| Everything else (`/`, static, browse, `/profiles/`, etc.) | Unaffected — passes through |
+| `/hunters/<username>/` (+ sub-pages; legacy /profiles/ spellings too) | 302 → `https://platpursuit.com/<path>` |
+| Everything else (`/`, static, browse, `/hunters/`, etc.) | Unaffected — passes through |
 
-The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts. The profile LIST page (`/profiles/`, no trailing username) is deliberately outside the guard: it is cheap and paginated, and it is the page a legitimate crawler should be walking.
+The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts. The profile LIST page (`/hunters/`, no trailing username) is deliberately outside the guard: it is cheap and paginated, and it is the page a legitimate crawler should be walking.
 
 Profiles joined this list after 2026-08-09. Because the profile page has no canonical variant to redirect to, the origin guard is the ONLY request-entry protection it can have — everything else has to come from making the render itself cheap.
 
@@ -244,3 +255,15 @@ These flow through the standard `plat_pursuit` logger → console handler → st
 
 - [Data Model](../architecture/data-model.md): Game, Profile, Badge, Challenge models (Checklist tables retained in schema but the system was retired)
 - [JS Utilities](js-utilities.md): Frontend utilities
+
+## Lane 1 behaviors (2026-08-23)
+
+- **Concept-canonical election**: `canonical_election_order()` (trophies/managers.py) is THE
+  ordering; `GameQuerySet.concept_canonicals()` (the sitemap's window) and
+  `Game.canonical_sibling()` (the page's rel=canonical + og:url) share it AND the same floor
+  (shovelware excluded, np-less rows excluded) -- the two electors must never diverge in
+  ordering OR population.
+- **The games hub returns 200 bare**: anon hits bind the platform defaults into the form and
+  the template history.replaceState()s them into the URL (no redirect); signed-in hunters with
+  saved browse defaults keep their personalization redirect.
+- **Profile casing**: `/hunters/<Name>/` (+ the day pages) 301 to the lowercase stored form.

@@ -5,7 +5,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Count, Subquery, OuterRef
 from django.db.models.functions import Lower
-from django.http import Http404, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -183,6 +183,17 @@ class ProfileDetailView(DetailView):
     slug_field = 'psn_username'
     slug_url_kwarg = 'psn_username'
     context_object_name = 'profile'
+
+    def dispatch(self, request, *args, **kwargs):
+        # One casing, one URL (SEO Lane 1): /hunters/Foo/, /hunters/foo/ and /hunters/FOO/ all
+        # returned 200 with three different self-canonicals. The stored form is lowercase, so
+        # any other casing 301s to it, querystring intact.
+        name = kwargs.get(self.slug_url_kwarg, '')
+        if name != name.lower():
+            target = reverse('profile_detail', kwargs={'psn_username': name.lower()})
+            qs = request.META.get('QUERY_STRING', '')
+            return HttpResponsePermanentRedirect(target + ('?' + qs if qs else ''))
+        return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
         psn_username = self.kwargs[self.slug_url_kwarg].lower()
@@ -800,6 +811,11 @@ class ProfileDayView(View):
     """
 
     def get(self, request, psn_username, day):
+        # Same casing rule as the profile page (SEO Lane 1): one casing, one URL.
+        if psn_username != psn_username.lower():
+            return HttpResponsePermanentRedirect(
+                reverse('profile_day', kwargs={'psn_username': psn_username.lower(), 'day': day})
+            )
         from datetime import date
         from trophies.services.activity_service import day_sessions
 

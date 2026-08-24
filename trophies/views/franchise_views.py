@@ -292,10 +292,12 @@ class FranchiseDetailView(DetailView):
         context['related_entries_label'] = 'Series' if opposite_type == 'collection' else 'Franchises'
         context['user_progress_stats'] = user_progress_stats
 
+        kind = 'series' if context.get('is_series') else 'franchise'
         context['seo_description'] = (
-            f"Explore the {franchise.name} franchise on Platinum Pursuit. "
+            f"Explore every PlayStation trophy list in the {franchise.name} {kind}: "
             f"{len(groups)} game{'s' if len(groups) != 1 else ''}, "
-            f"{versions_count} version{'s' if versions_count != 1 else ''}."
+            f"{versions_count} version{'s' if versions_count != 1 else ''}. "
+            f"Track platinum progress on Platinum Pursuit."
         )
 
         return context

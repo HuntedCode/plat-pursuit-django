@@ -407,6 +407,13 @@
 {% endblock %}
 
 {% block js_scripts %}
+{% if applied_default_query %}
+{% comment %}The bare hub rendered with bound defaults (SEO Lane 1): surface them in the URL
+without a redirect, so the scroller/pagination/filters -- which all read location.search --
+behave exactly as the old redirected flow. Crawlers never run this and index the bare 200.
+{% endcomment %}
+<script>if (!window.location.search) { history.replaceState(null, '', '?{{ applied_default_query|escapejs }}'); }</script>
+{% endif %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script>
     // Owns the page's motion + chrome: header count-up, the animated collapsible Filters panel (toggle +

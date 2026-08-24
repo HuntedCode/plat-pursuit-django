@@ -185,21 +185,30 @@ class GamesListView(HtmxListMixin, ListView):
 
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
-            self._filter_form = GameSearchForm(self.request.GET)
+            data = self.request.GET
+            if not data:
+                # A bare hit renders the default view IN PLACE (SEO Lane 1): the old force-302
+                # to ?platform=... meant the hub's canonical URL never returned a page, so the
+                # site's largest hub had no indexable front door. The form binds the same
+                # defaults the redirect used to carry; the template then history.replaceState()s
+                # the params into the URL, so the scroller, pagination and filter form all
+                # carry them exactly as the redirected flow did (the audit's find: without
+                # that, page 2 silently dropped the platform filter and duplicated cards).
+                data = {'platform': MODERN_PLATFORMS}
+                self._applied_defaults = True
+            self._filter_form = GameSearchForm(data)
         return self._filter_form
 
     def dispatch(self, request, *args, **kwargs):
-        if not request.GET:
-            if request.user.is_authenticated:
-                defaults = (request.user.browse_defaults or {}).get('games', {})
-                if defaults:
-                    return HttpResponseRedirect(
-                        reverse('games_list') + '?' + urlencode(defaults, doseq=True)
-                    )
-            # Anonymous or no saved defaults: modern platforms only
-            return HttpResponseRedirect(
-                reverse('games_list') + '?' + urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
-            )
+        # Personalization keeps its redirect: a signed-in hunter with saved browse defaults
+        # lands on them explicitly (the URL should SHOW their filter state). Crawlers are
+        # anonymous, so the hub itself stays a 200.
+        if not request.GET and request.user.is_authenticated:
+            defaults = (request.user.browse_defaults or {}).get('games', {})
+            if defaults:
+                return HttpResponseRedirect(
+                    reverse('games_list') + '?' + urlencode(defaults, doseq=True)
+                )
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -236,7 +245,15 @@ class GamesListView(HtmxListMixin, ListView):
         form = self.get_filter_form()
         context['form'] = form
         context.update(get_active_filter_chips(self.request, form))   # dismissable active-filter chips
-        context['selected_platforms'] = self.request.GET.getlist('platform')
+        # From the FORM, not request.GET: on a bare-defaulted hit the GET is empty while the
+        # queryset IS filtered, and unchecked boxes would submit no platform on first touch.
+        form = self.get_filter_form()
+        context['selected_platforms'] = (
+            form.cleaned_data.get('platform', []) if form.is_valid()
+            else self.request.GET.getlist('platform')
+        )
+        if getattr(self, '_applied_defaults', False):
+            context['applied_default_query'] = urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
@@ -1490,6 +1507,11 @@ class GameDetailView(DetailView):
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
+
+        # The elected canonical sibling (SEO Lane 1): when this SKU is not the concept's
+        # representative, the template points rel=canonical at the one that is. Bounded query
+        # over the concept's handful of sibling rows.
+        context['canonical_game'] = game.canonical_sibling()
 
         context['seo_description'] = (
             f"{game.title_name} on {game.platforms_display}. "

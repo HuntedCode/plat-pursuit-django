@@ -5,7 +5,6 @@
 {% load job_icons %}
 {% block title %}{{ tag_name }} PlayStation Games & Trophy Lists{% endblock %}
 {% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
-{% block meta_description %}PlayStation games tagged {{ tag_name }} with trophy lists, community ratings, and platinum roadmaps on Platinum Pursuit.{% endblock %}
 {% block og_title %}{{ tag_name }} Games on Platinum Pursuit{% endblock %}
 {% block og_description %}Browse PlayStation trophy lists for {{ tag_name }} games.{% endblock %}
 

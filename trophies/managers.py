@@ -78,6 +78,25 @@ class ProfileManager(models.Manager):
         return self.get_queryset().verified()
 
 
+# The concept-canonical ELECTION ORDER (SEO Lane 1, the "light version" -- his call: no FK, no
+# cron, no absorb() branch). One deterministic ordering names the SKU that represents a concept
+# in search: has trophy data first, then the SKU most of our hunters actually own
+# (played_count), then id for stability. Self-healing: the election is computed, never stored.
+def canonical_election_order():
+    """The ordering expressions; kept as one function so the sitemap's window and the
+    per-concept pick can never disagree about who the canonical sibling is."""
+    from django.db.models import Case, IntegerField, Value, When
+    return [
+        # NOTE: emptiness, not counts -- a malformed {'bronze': 0} blob scores as having
+    # trophies. Accepted: played_count dominates in practice, and JSON-sum ordering is not
+    # worth the SQL. Revisit only if a real mis-election shows up.
+    Case(When(defined_trophies={}, then=Value(1)), default=Value(0),
+             output_field=IntegerField()),
+        models.F('played_count').desc(),
+        models.F('id').asc(),
+    ]
+
+
 class GameQuerySet(models.QuerySet):
     """Custom queryset for Game model with filtering utilities."""
 
@@ -91,6 +110,25 @@ class GameQuerySet(models.QuerySet):
             QuerySet: Games that can still be obtained
         """
         return self.filter(is_obtainable=True)
+
+    def concept_canonicals(self):
+        """One Game per Concept -- the elected canonical SKU -- plus every concept-less row
+        (each stands for itself). Window-ranked with canonical_election_order() so this and
+        Game.canonical_sibling() cannot drift. Django 4.2+ emulates filtering on window
+        annotations via a subquery (QUALIFY-style), so this stays one queryset the sitemap
+        can slice."""
+        from django.db.models import Q, Window
+        from django.db.models.functions import RowNumber
+        return (
+            self.annotate(
+                _election_rank=Window(
+                    expression=RowNumber(),
+                    partition_by=[models.F('concept_id')],
+                    order_by=canonical_election_order(),
+                )
+            )
+            .filter(Q(_election_rank=1) | Q(concept__isnull=True))
+        )
 
     def exclude_shovelware(self):
         """
@@ -183,6 +221,11 @@ class GameManager(models.Manager):
     def obtainable(self):
         """Proxy to queryset method."""
         return self.get_queryset().obtainable()
+
+    def concept_canonicals(self):
+        """Proxy to GameQuerySet.concept_canonicals -- one implementation, like every other
+        method on this manager."""
+        return self.get_queryset().concept_canonicals()
 
     def exclude_shovelware(self):
         """Proxy to queryset method."""

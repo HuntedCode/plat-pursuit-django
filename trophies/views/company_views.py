@@ -402,7 +402,8 @@ class CompanyDetailView(DetailView):
         context['user_progress_stats'] = user_progress_stats
 
         context['seo_description'] = (
-            f"View games developed and published by {company.name} on Platinum Pursuit."
+            f"PlayStation games developed, published, or ported by {company.name}. "
+            f"Browse trophy lists, community ratings, and platinum progress on Platinum Pursuit."
         )
 
         return context

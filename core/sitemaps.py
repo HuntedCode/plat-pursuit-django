@@ -52,6 +52,10 @@ class GameSitemap(Sitemap):
             Game.objects
             .exclude_shovelware()
             .filter(np_communication_id__isnull=False)
+            # One URL per CONCEPT (SEO Lane 1): the elected canonical SKU. Regional/platform
+            # siblings point their rel=canonical here and are not advertised -- ~35k rows
+            # collapse toward ~18-20k, each consolidating its siblings' signals.
+            .concept_canonicals()
             .only('np_communication_id', 'created_at')
             .order_by('-id')
         )

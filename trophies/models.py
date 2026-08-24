@@ -704,6 +704,24 @@ class Game(models.Model):
         """Whether this game is flagged as shovelware (auto or manual)."""
         return self.shovelware_status in ('auto_flagged', 'manually_flagged')
 
+    def canonical_sibling(self):
+        """The SKU that represents this game's concept in search (SEO Lane 1) -- self when
+        concept-less or when this row wins the election. Bounded: a concept holds a handful of
+        sibling rows. Same ordering AND the same floor as the sitemap's window (shovelware and
+        np-less rows cannot win here while being absent there -- the audit's split-population
+        find: a flagged winner made the page canonicalize to a URL the sitemap withheld, and a
+        null-np winner made {% url %} silently mint /games/None/)."""
+        if not self.concept_id:
+            return self
+        from trophies.managers import canonical_election_order
+        return (
+            Game.objects.exclude_shovelware()
+            .filter(concept_id=self.concept_id, np_communication_id__isnull=False)
+            .order_by(*canonical_election_order())
+            .only('np_communication_id')
+            .first()
+        ) or self
+
     def get_total_defined_trophies(self):
         # Tolerate a missing/partial defined_trophies blob. It defaults to {} on the model, so indexing the
         # tiers directly raised KeyError and 500'd any page that summarises a not-yet-synced game.

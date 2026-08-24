@@ -311,8 +311,8 @@ class GenreDetailView(TagDetailBaseView):
             {'text': self.genre.name},
         ]
         context['seo_description'] = (
-            f"Browse {self.genre.name} games on Platinum Pursuit. "
-            f"Find trophies, track progress, and discover new games."
+            f"PlayStation games in the {self.genre.name} genre, with trophy lists and "
+            f"community ratings from hunters who finished them. Platinum Pursuit."
         )
         context = self.get_shared_context(context)
         return context
@@ -354,7 +354,8 @@ class ThemeDetailView(TagDetailBaseView):
             {'text': self.theme.name},
         ]
         context['seo_description'] = (
-            f"Browse {self.theme.name} themed games on Platinum Pursuit."
+            f"PlayStation games with the {self.theme.name} theme, with trophy lists and "
+            f"community ratings from hunters who finished them. Platinum Pursuit."
         )
         context = self.get_shared_context(context)
         return context
