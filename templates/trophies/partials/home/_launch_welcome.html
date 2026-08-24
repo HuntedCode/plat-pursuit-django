@@ -21,7 +21,7 @@ the one visit this modal exists for. It runs BEFORE end-of-body home-motion.js b
 include sits at the top of content. Settled on close AND on the typing-guard skip, so the
 numbers never wait on a modal that never opened.
 {% endcomment %}
-{% load humanize %}
+{% load humanize job_icons %}
 <div class="pp-detail-modal pp-howto" id="launch-welcome" data-auto hidden>
     <div class="pp-detail-modal__scrim" data-launch-close></div>
     <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="launch-welcome-title" tabindex="-1">
@@ -63,11 +63,19 @@ numbers never wait on a modal that never opened.
             they have not earned yet. Falls back to a plain nudge when nothing is claimable
             (a brand-new or fully-claimed account) or the glance failed. {% endcomment %}
             <div class="lwm__standing" aria-label="Waiting for you">
-                <span class="lwm__ring" aria-hidden="true">
-                    <svg viewBox="0 0 48 48" width="48" height="48">
+                {% comment %} One real job icon per discipline, orbiting the ring in its own
+                --disc-* colour: the five axes a Career is built from, in the same icon
+                vocabulary the Career page and its howto modal use. {% endcomment %}
+                <span class="lwm__orbit" aria-hidden="true">
+                    <svg class="lwm__ring" viewBox="0 0 48 48">
                         <circle class="lwm__ring-track" cx="24" cy="24" r="20" pathLength="100"></circle>
                         <circle class="lwm__ring-arc" cx="24" cy="24" r="20" pathLength="100"></circle>
                     </svg>
+                    <span class="lwm__disc lwm__disc--combat">{% job_icon 'swords' 'lwm__dico' %}</span>
+                    <span class="lwm__disc lwm__disc--exploration">{% job_icon 'compass' 'lwm__dico' %}</span>
+                    <span class="lwm__disc lwm__disc--mind">{% job_icon 'brain' 'lwm__dico' %}</span>
+                    <span class="lwm__disc lwm__disc--heart">{% job_icon 'wand-sparkles' 'lwm__dico' %}</span>
+                    <span class="lwm__disc lwm__disc--finesse">{% job_icon 'gauge' 'lwm__dico' %}</span>
                 </span>
                 {% if glances.claimable.count %}
                 <p class="lwm__line"><b>{{ glances.claimable.count }}</b> contract{{ glances.claimable.count|pluralize }} already finished and waiting to be claimed, worth <b>{{ glances.claimable.total_xp|intcomma }}</b> XP toward your jobs. Your back catalogue did the work; the claiming is the fun part.</p>
