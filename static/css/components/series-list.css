@@ -132,40 +132,6 @@
     #launch-welcome.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 
-/* The greeting's standing flourish: ring + one line, centered. */
-.lwm__standing {
-    display: flex; align-items: center; justify-content: center; gap: 0.9rem;
-    margin-top: 1.1rem; padding: 0.8rem 0.9rem; border-radius: 0.7rem;
-    border: 1px solid color-mix(in oklab, var(--pp-primary) 25%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
-    text-align: left;
-}
-/* The five disciplines, in the Career dossier band's own chip idiom (.jdoss__ic): a
-   disc-tinted rounded square with the icon in that discipline's colour, name beneath.
-   Five across at every width -- they are the axes, and a wrapped axis reads as a list. */
-.lwm__standing--stack { flex-direction: column; align-items: stretch; gap: 0.75rem; }
-.lwm__discs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem; }
-.lwm__disc { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-width: 0; }
-.lwm__disc-ic {
-    width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
-    background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2));
-    border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent);
-    color: var(--disc);
-}
-.lwm__disc-ic svg { width: 18px; height: 18px; }
-.lwm__disc-n {
-    font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 10px;
-    letter-spacing: 0.03em; color: var(--disc); text-align: center; line-height: 1.1;
-}
-@media (min-width: 768px) {
-    .lwm__disc-ic { width: 38px; height: 38px; }
-    .lwm__disc-ic svg { width: 21px; height: 21px; }
-    .lwm__disc-n { font-size: 11.5px; }
-}
-.lwm__ring-track { fill: none; stroke: color-mix(in oklab, var(--pp-text) 14%, transparent); stroke-width: 4; }
-.lwm__ring-arc { fill: none; stroke: var(--pp-primary); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 64 100; }
-.lwm__line { font-size: 0.82rem; line-height: 1.55; color: var(--pp-text-dim); }
-.lwm__line b { color: var(--pp-text); }
 @keyframes ppHowtoFadeOut { to { opacity: 0; } }
 @keyframes ppHowtoDialogOut { to { transform: translateY(8px) scale(0.985); } }
 
