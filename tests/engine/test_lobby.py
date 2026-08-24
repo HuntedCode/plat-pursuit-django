@@ -292,6 +292,28 @@ def test_the_no_psn_state_renders_the_link_hero_on_the_landing_surface(client):
     assert 'data-land-search' not in body, 'the search hero leaked into an authed state'
 
 
+def test_the_website_jsonld_is_anon_only(client):
+    """The WebSite/SearchAction schema is marketing structured data for the indexable front
+    door; the authed variants are noindex and must not carry it. The generic
+    application/ld+json pin cannot catch this (the Organization schema renders everywhere)."""
+    assert '"@type": "WebSite"' in client.get('/', **CF).content.decode()
+
+    profile = ProfileFactory(is_linked=False)
+    client.force_login(profile.user)
+    assert '"@type": "WebSite"' not in client.get('/', **CF).content.decode()
+
+
+def test_the_banner_suppression_is_anon_only():
+    """Source pin (banners only render when one is ACTIVE, so a response assert cannot see
+    the gate): the landing suppresses global banners for the anon state only -- authed
+    pre-sync members keep their site/fundraiser banners, and an UNKNOWN home_state falls
+    through to the anon behaviour on every gate (the split-brain the audit flagged)."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[2] / 'templates' / 'home' / 'landing.html').read_text(encoding='utf-8')
+    assert "{% block global_banners %}{% if home_state == 'no_psn' or home_state == 'syncing' %}{{ block.super }}{% endif %}{% endblock %}" in src
+
+
 def test_the_lobby_marks_its_names_like_everywhere_else(client):
     """The two name renders (welcome header + Career moat) wear the display mark, consistent
     with every other surface. A supporter's stars must show in both spots."""

@@ -1,8 +1,9 @@
-"""The sync-wait walkthrough + enter finale (new-user onboarding, 2026-08).
+"""The syncing hero on the gates surface (new-user onboarding, 2026-08).
 
-The first-sync waiting page greets the user with their real PSN numbers (available seconds
-into the sync), runs a five-panel tour of the site's systems, and ends in an in-place
-"Your Pursuer has emerged" moment instead of a silent reload. Doc: docs/features/onboarding.md.
+The syncing state renders on home/landing.html: a live status hero greets the user with their
+real PSN numbers (available seconds into the sync), the landing's real sections play the tour
+below, and a first sync ends in an in-place "Your Pursuer has emerged" moment instead of a
+silent reload. Doc: docs/features/onboarding.md.
 """
 import re
 from pathlib import Path
@@ -91,6 +92,7 @@ def test_the_syncing_state_renders_the_landing_sections(client):
     assert 'data-land-carousel' in body
     assert 'share-image-content' in body   # the showcase Profile Card (fixture cache-cold)
     assert 'data-sync-live' in body
+    assert 'data-land-search' not in body, 'the search hero leaked into the syncing state'
 
 
 # --- the enter moment ---
@@ -181,5 +183,6 @@ def test_regular_users_cannot_preview_the_syncing_page(client):
 
     body = client.get('/?preview=syncing', **CF).content.decode()
 
-    assert 'data-sync-complete' not in body
-    assert 'home-sync-progress-bar' not in body
+    # data-sync-live is the hero's outer wrapper, present in EVERY syncing sub-state --
+    # its absence is what distinguishes "preview denied" from "hero rendered differently".
+    assert 'data-sync-live' not in body

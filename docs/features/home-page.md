@@ -37,8 +37,8 @@ Two team-preview doors exist for reviewing states an account can't naturally rea
 
 | File | Purpose |
 |------|---------|
-| `core/views.py` | `HomeView` smart router + `SYNCING_DID_YOU_KNOW` rotating fact list |
-| `templates/home/landing.html` | Anonymous marketing page (search-first hero, systems tour, live demos) |
+| `core/views.py` | `HomeView` smart router |
+| `templates/home/landing.html` | The gates surface: every pre-synced state (anon search hero inline; authed heroes via partials) |
 | `templates/home/_hero_no_psn.html` | The no-PSN hero: greeting, link CTA, 3-step preview, privacy warning |
 | `templates/home/_hero_syncing.html` | The syncing hero: status card, live progress, enter finale, dev panel |
 | `templates/trophies/home.html` | Fully-synced state: the gamification Home |
@@ -100,13 +100,13 @@ The home shells deliberately reuse existing pieces instead of building parallel 
 
 - **`'error'` is treated like `'syncing'`**: A user whose sync errored sees the in-progress shell, not the Home. This is intentional but easy to miss when debugging "why isn't the Home rendering for this user." Check `profile.sync_status` first.
 - **Profile may not exist**: `_resolve_state()` uses `getattr(request.user, 'profile', None)`, not `request.user.profile`, because the `OneToOneField` raises `RelatedObjectDoesNotExist` when no profile exists. Don't change to direct attribute access without the safety net; the `no_psn` state covers the no-profile case.
-- **The `home_state` context key**: every shell receives `context['home_state']` set to the resolved state string. Useful for adding state-specific JS or styling in `base.html` later if needed (not currently used).
+- **The `home_state` context key is load-bearing**: the gates surface's hero, close, robots, banners, and JSON-LD branches all key off it. An unknown or missing value falls through to the ANON behaviour on every gate (pinned by test_the_banner_suppression_is_anon_only).
 - **`/dashboard/` is a permanent redirect**: anything linking to `/dashboard/` will 301 to `/`. This is enforced by `RedirectView.as_view(pattern_name='home', permanent=True)` in `urls.py`. Update internal links to use `{% url 'home' %}` instead of `{% url 'dashboard' %}` going forward.
-- **The site heartbeat partial silently hides if its cache is empty**: if the `refresh_homepage_hourly` cron is broken for more than two hours (the partial falls back one hour), the entire community-pulse section disappears from all four home states. Check the cron and the `site_heartbeat_*` cache keys if it goes missing.
+- **The site heartbeat partial silently hides if its cache is empty**: if the `refresh_homepage_hourly` cron is broken for more than two hours (the partial falls back one hour), the entire community-pulse section disappears from every pre-synced state. Check the cron and the `site_heartbeat_*` cache keys if it goes missing.
 
 ## Related Docs
 
-- [Onboarding](onboarding.md): the sync-wait walkthrough, the enter moment, and the Career first-visit explainer.
+- [Onboarding](onboarding.md): the syncing hero, the enter moment, and the Career first-visit explainer.
 - [Navigation](navigation.md): how the site's mega-menus link out from the home shells.
 - [Design System](../reference/design-system.md): card anatomy, tokens, and patterns the shells use.
 - [Template Architecture](../reference/template-architecture.md): `base.html` blocks, the zoom wrapper, and context processors.

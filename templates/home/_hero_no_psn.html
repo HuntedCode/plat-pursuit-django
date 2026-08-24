@@ -1,3 +1,4 @@
+{% load mark_tags %}
 {% comment %}
 The no-PSN hero of the gates surface (home/landing.html renders this when home_state ==
 'no_psn': logged in, no linked profile). Replaces the retired home/link_psn.html shell, whose
@@ -13,7 +14,7 @@ cached sections render below this hero, so the pitch needs no feature grid of it
     <div class="container mx-auto px-4">
         <div class="land-hero__inner">
             <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>One step from the record</p>
-            <h1 class="land-hero__h1">Welcome aboard, {{ user.username }}.</h1>
+            <h1 class="land-hero__h1">Welcome aboard, {% name_mark name=user.username mark=user.profile.display_mark %}.</h1>
             <p class="land-hero__sub">Link your PSN and we catch up on everything you've already earned: every game, every trophy, every platinum. A first sync pulls your entire history, and that takes a little while. We think it's worth the wait.</p>
 
             <div class="land-close__ctas">
@@ -25,21 +26,21 @@ cached sections render below this hero, so the pitch needs no feature grid of it
                 <div class="land-steps__cell pp-arrive__it" style="--i: 0;">
                     <span class="land-steps__num" aria-hidden="true">1</span>
                     <div>
-                        <h2 class="land-steps__t">Enter your PSN ID</h2>
+                        <h3 class="land-steps__t">Enter your PSN ID</h3>
                         <p class="land-steps__c">The name you sign in to PlayStation with. That's all we need to find you.</p>
                     </div>
                 </div>
                 <div class="land-steps__cell pp-arrive__it" style="--i: 1;">
                     <span class="land-steps__num" aria-hidden="true">2</span>
                     <div>
-                        <h2 class="land-steps__t">Verify with a code</h2>
+                        <h3 class="land-steps__t">Verify with a code</h3>
                         <p class="land-steps__c">Drop a six-digit code into your PSN About Me. It proves the account is yours, and it comes right back out after.</p>
                     </div>
                 </div>
                 <div class="land-steps__cell pp-arrive__it" style="--i: 2;">
                     <span class="land-steps__num" aria-hidden="true">3</span>
                     <div>
-                        <h2 class="land-steps__t">Sit back and sync</h2>
+                        <h3 class="land-steps__t">Sit back and sync</h3>
                         <p class="land-steps__c">We pull every game, every trophy, every platinum. Your Pursuit takes shape on its own.</p>
                     </div>
                 </div>
@@ -47,7 +48,7 @@ cached sections render below this hero, so the pitch needs no feature grid of it
 
             {% comment %} Load-bearing: the wrong privacy setting is the number one reason a link
             fails, and finding that out mid-flow is miserable. Say it before the flow starts. {% endcomment %}
-            <div class="land-steps__warn pp-arrive">
+            <div class="land-steps__warn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <p>Heads up: your PSN <b>Gaming History</b> privacy setting must be set to <b>"Anyone"</b> or we can't see your trophies. We'll walk you through it during linking.</p>
             </div>

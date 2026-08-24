@@ -165,7 +165,7 @@ class HomeView(TemplateView):
     def _team_previewing_syncing(self):
         """True when a team member asks to SEE the first-sync waiting room
         (`/?preview=syncing`). A synced team account can otherwise never reach it, and the
-        sync-wait walkthrough is an onboarding surface worth reviewing. Note: a synced
+        syncing hero is an onboarding surface worth reviewing. Note: a synced
         previewer has trophies, so `is_initial_sync` renders False -- the DEBUG dev panel on
         the page covers the initial-sync copy path."""
         return (
@@ -270,7 +270,7 @@ class HomeView(TemplateView):
                 'level': profile.trophy_level or 0,
             } if summary else None
 
-            # DEBUG-only: the walkthrough/finale replay harness (canned event payloads, no
+            # DEBUG-only: the syncing hero replay harness (canned event payloads, no
             # real sync) lives in the template behind this flag.
             context['sync_dev'] = settings.DEBUG
 

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load humanize static seo_tags custom_filters %}
+{% load humanize static seo_tags mark_tags %}
 {% comment %}
 The gates surface (2026-08 rebuild; the gates merge made it the ONE template for all three
 pre-synced home-router states). home_state drives a per-state HERO and close: 'anonymous' gets
@@ -31,15 +31,17 @@ via main_layout, no breadcrumb ever.
 {% endcomment %}
 
 {% block title %}{% if home_state == 'no_psn' %}Welcome to Platinum Pursuit{% elif home_state == 'syncing' %}Syncing Your Pursuit{% else %}Free PlayStation Trophy Tracking{% endif %}{% endblock %}
+{% comment %} og/twitter blocks deliberately do NOT branch on home_state: the authed variants
+are auth-gated + noindex, so the share image only ever matters for the anon front door. {% endcomment %}
 {% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
 {% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
 {% block twitter_card_type %}summary_large_image{% endblock %}
-{% block robots %}{% if home_state == 'anonymous' %}{{ block.super }}{% else %}noindex, nofollow{% endif %}{% endblock %}
+{% block robots %}{% if home_state == 'no_psn' or home_state == 'syncing' %}noindex, nofollow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block meta_description %}{% if home_state == 'no_psn' %}Link your PSN account to Platinum Pursuit and we catch up on everything you've already earned.{% elif home_state == 'syncing' %}Your Platinum Pursuit profile is syncing. We're catching up on your trophy grind.{% else %}Free trophy tracking for PlayStation hunters. Look up any PSN name to pull its full history, earn handcrafted badges, build a career from how you play, and read ratings from hunters who actually finished the platinum.{% endif %}{% endblock %}
 
 {% block extra_head %}
 {{ block.super }}
-{% if home_state == 'anonymous' %}{% jsonld_website request %}{% endif %}
+{% if home_state != 'no_psn' and home_state != 'syncing' %}{% jsonld_website request %}{% endif %}
 <script>
     {% comment %}Arms the section arrival BEFORE first paint (motion.css .pp-arrive): the hidden
     state gates on html.pp-arm, so incremental painting can never flash a section visible before
@@ -51,7 +53,7 @@ via main_layout, no breadcrumb ever.
 {% comment %}The ANON front door carries no site banners: one message, told in order. Authed
 pre-sync users keep theirs (fundraiser, site notices) -- they are members, not strangers.
 Keyed on home_state, not is_authenticated, so ?preview=landing previews the true anon page.{% endcomment %}
-{% block global_banners %}{% if home_state != 'anonymous' %}{{ block.super }}{% endif %}{% endblock %}
+{% block global_banners %}{% if home_state == 'no_psn' or home_state == 'syncing' %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block main_layout %}
 <main id="main-content" class="flex-grow">
@@ -317,7 +319,7 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
         <div class="container mx-auto px-4">
             <div class="land-close__inner">
                 {% if home_state == 'no_psn' %}
-                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Ready, {{ user.username }}?</h2>
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Ready, {% name_mark name=user.username mark=user.profile.display_mark %}?</h2>
                 <p class="land-sec__sub pp-arrive__it" style="--i: 1;">One link and everything you just saw starts filling in with your real history.</p>
                 <div class="land-close__ctas pp-arrive__it" style="--i: 2;">
                     <a href="{% url 'link_psn' %}" class="pp-cta land-rise">
@@ -329,8 +331,18 @@ Keyed on home_state, not is_authenticated, so ?preview=landing previews the true
                     <a href="{% url 'games_list' %}" class="pp-cta pp-cta--ghost">Browse around first</a>
                 </div>
                 {% elif home_state == 'syncing' %}
+                {% comment %} The syncing state covers three sub-states; the close must not
+                promise motion while the sync is parked or broken. {% endcomment %}
+                {% if psn_outage %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Paused, not lost.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">The moment PSN is back, your sync picks up right where it left off.</p>
+                {% elif profile.sync_status == 'error' %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">We'll get it sorted.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">Retry the sync from your account menu, and your record picks up right here.</p>
+                {% else %}
                 <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your record is being written.</h2>
                 <p class="land-sec__sub pp-arrive__it" style="--i: 1;">This page updates itself. The moment your sync lands, your Pursuit opens right here.</p>
+                {% endif %}
                 {% else %}
                 <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your backlog is not going to hunt itself.</h2>
                 <p class="land-sec__sub pp-arrive__it" style="--i: 1;">Free to use. One search to see your whole history.</p>
