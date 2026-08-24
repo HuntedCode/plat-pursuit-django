@@ -1,192 +1,125 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The free welcome email, sent once when a hunter links their PSN profile
+(core.services.email_service.send_welcome_email, idempotent via EmailLog).
 
-{% block extra_styles %}
-    <style>
-        .welcome-hero {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 25px 0;
-            color: #ffffff;
-            text-align: center;
-        }
+The first child rebuilt onto base v2, and the reference for the rest: dark brand bands, light
+content, feature rows built from table cells rather than a per-email <style> dump, and the CTA
+through the bulletproof partial WITH the URL printed as visible text (the plaintext part is
+strip_tags(html), which discards every href).
 
-        .welcome-hero .welcome-icon {
-            font-size: 42px;
-            margin-bottom: 10px;
-            display: block;
-        }
+Its five feature cards used to sell Challenges, Checklists, Reviews, a 40+ series badge model
+and a dashboard -- every one of them retired or rebuilt past recognition. These five are the
+systems that actually exist.
+{% endcomment %}
 
-        .welcome-hero h2 {
-            margin: 0 0 10px 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
+{% block title %}Welcome to PlatPursuit{% endblock %}
 
-        .welcome-hero p {
-            margin: 0;
-            font-size: 15px;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
-
-        .features-grid {
-            margin: 25px 0;
-        }
-
-        .feature-card {
-            background-color: #f8f9ff;
-            border-radius: 8px;
-            padding: 16px 20px;
-            margin-bottom: 12px;
-            border-left: 4px solid #667eea;
-        }
-
-        .feature-card-icon {
-            font-size: 20px;
-            margin-bottom: 6px;
-            display: block;
-        }
-
-        .feature-card-name {
-            font-size: 15px;
-            font-weight: 700;
-            color: #333333;
-            margin: 0 0 4px 0;
-        }
-
-        .feature-card-desc {
-            font-size: 13px;
-            color: #555555;
-            margin: 0;
-            line-height: 1.5;
-        }
-
-        .community-box {
-            background-color: #f0f4ff;
-            border-radius: 8px;
-            padding: 20px 25px;
-            margin: 25px 0;
-            text-align: center;
-        }
-
-        .community-box h3 {
-            margin: 0 0 8px 0;
-            font-size: 16px;
-            color: #333333;
-        }
-
-        .community-box p {
-            margin: 0;
-            font-size: 14px;
-            color: #555555;
-            line-height: 1.6;
-        }
-
-        .community-box a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .welcome-hero { padding: 20px 15px; }
-            .feature-card { padding: 12px 15px; }
-        }
-    </style>
-{% endblock %}
-
-{% block title %}Welcome to PlatPursuit!{% endblock %}
+{% block preheader %}Your trophies are synced. Here is what your PlayStation history just unlocked.{% endblock %}
 
 {% block header_content %}
-    <h1>Welcome, Hunter!</h1>
-    <p>Your trophy journey just got an upgrade</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1">Welcome, hunter</h1>
+        <p class="pp-sub">Your PSN profile is linked and your trophies are in.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, you are in. Everything you have already earned came with you, and it is busy turning into a career, a collection, and a place on the boards. Here is what is waiting.</p>
 
-    <div class="welcome-hero">
-        <span class="welcome-icon">&#127942;</span>
-        <h2>Your profile is synced and ready!</h2>
-        <p>
-            We have pulled in your trophy collection and you are officially part of the pursuit.
-            Here is what you can do now:
-        </p>
-    </div>
-
-    <div class="features-grid">
-        <div class="feature-card">
-            <span class="feature-card-icon">&#127941;</span>
-            <div class="feature-card-name">Badge System</div>
-            <div class="feature-card-desc">
-                Earn badges across 40+ series by platinuming games. Each badge has four tiers to climb.
-            </div>
-        </div>
-
-        <div class="feature-card">
-            <span class="feature-card-icon">&#128202;</span>
-            <div class="feature-card-name">Challenges</div>
-            <div class="feature-card-desc">
-                Take on the A-Z Challenge, Calendar Challenge, or Genre Challenge to test your range.
-            </div>
-        </div>
-
-        <div class="feature-card">
-            <span class="feature-card-icon">&#9989;</span>
-            <div class="feature-card-name">Checklists</div>
-            <div class="feature-card-desc">
-                Follow community-made platinum guides or create your own to help fellow hunters.
-            </div>
-        </div>
-
-        <div class="feature-card">
-            <span class="feature-card-icon">&#11088;</span>
-            <div class="feature-card-name">Reviews & Ratings</div>
-            <div class="feature-card-desc">
-                Rate the games you have platted and write reviews to help the community pick their next hunt.
-            </div>
-        </div>
-
-        <div class="feature-card">
-            <span class="feature-card-icon">&#127895;</span>
-            <div class="feature-card-name">Milestones</div>
-            <div class="feature-card-desc">
-                Track your progress across 200+ milestones and unlock exclusive titles for your profile.
-            </div>
-        </div>
-    </div>
+    {# ── The five systems, one table row each: a left accent bar, a title, a line ── #}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+            <td style="padding: 0 0 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#28EBFE" style="background-color: #28EBFE; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Your Career</p>
+                            <p class="pp-card-c">Twenty-five jobs across five disciplines, levelled by the games you already play. Complete contracts to earn XP and raise your Pursuer level.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 0 0 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#8FD2EA" style="background-color: #8FD2EA; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Your Collection</p>
+                            <p class="pp-card-c">Badges are handcrafted medallions, earned by platinuming every game in a themed set. Some of yours may already be waiting.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 0 0 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#E7C25C" style="background-color: #E7C25C; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Rate My Games</p>
+                            <p class="pp-card-c">Score the platinums you finished and say whether they were worth it. Ratings here come from people who actually completed the game.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 0 0 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#CF9160" style="background-color: #CF9160; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Monthly Recap</p>
+                            <p class="pp-card-c">Every month closes with your hunt wrapped up, and every platinum earns a share card with your scores on it.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 0 0 20px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="#B9C6D6" style="background-color: #B9C6D6; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 14px 16px;">
+                            <p class="pp-card-t">Leaderboards</p>
+                            <p class="pp-card-c">Global and country boards, plus one for every badge and every job. You are on them from today.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 
     {% if discord_url %}
-        <div class="community-box">
-            <h3>Join the Community</h3>
-            <p>
-                Our Discord server is where hunters hang out, share tips, and participate in events.
-                <br>
-                <a href="{{ discord_url }}">Join the PlatPursuit Discord</a>
-            </p>
-        </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 22px;">
+        <tr>
+            <td style="padding: 14px 16px; background-color: #0F1720; border-radius: 8px;">
+                <p style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #F0F6FD;">Come say hello</p>
+                <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #9FB3C8;">
+                    The community lives on Discord: help with tricky platinums, badge news, and the occasional argument about which grind was worse.
+                    <a href="{{ discord_url }}" style="color: #28EBFE; text-decoration: underline;">{{ discord_url }}</a>
+                </p>
+            </td>
+        </tr>
+    </table>
     {% endif %}
 
-    <div class="cta-container">
-        <a href="{{ profile_url }}" class="cta-button">View Your Profile</a>
-    </div>
+    {% include 'emails/_cta_button.html' with url=profile_url label="View your profile" %}
 
-    <p class="flavor-text">
-        No trophy can hide from us. Welcome to the pursuit!
-    </p>
+    {% comment %} The URL in visible text: the plaintext part is strip_tags(html) and would
+    otherwise carry a button that leads nowhere. {% endcomment %}
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ profile_url }}</p>
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #7E8FA3;">No trophy can hide from us. Welcome to the pursuit.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you just linked your PSN profile to PlatPursuit.<br>
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #999999; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because you just linked your PSN profile to PlatPursuit.<br />
+    <a href="{{ site_url }}{% url 'settings' %}" style="color: #6B7C91; text-decoration: underline;">Manage your account settings</a>.
 {% endblock %}

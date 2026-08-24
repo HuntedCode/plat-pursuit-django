@@ -839,19 +839,11 @@ class Command(BaseCommand):
 
         self.stdout.write("\nSending free user welcome email preview...")
 
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception:
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
         context = {
             'username': 'TestUser',
             'profile_url': f'{settings.SITE_URL}/profile/TestUser/',
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', 'https://discord.gg/example'),
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:

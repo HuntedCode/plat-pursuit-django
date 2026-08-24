@@ -255,7 +255,6 @@ def send_welcome_email(profile):
     No preference gate (transactional one-time email).
     """
     from core.models import EmailLog
-    from users.services.email_preference_service import EmailPreferenceService
 
     user = profile.user
     if not user or not user.email:
@@ -266,9 +265,6 @@ def send_welcome_email(profile):
         return
 
     try:
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-
         context = {
             'username': profile.display_psn_username or profile.psn_username,
             # reverse(), not a hardcoded path: this link goes out in EMAIL and outlives any redirect we
@@ -276,7 +272,6 @@ def send_welcome_email(profile):
             'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[profile.psn_username])}",
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         EmailService.send_html_email(
