@@ -5,6 +5,7 @@
 {% load job_icons %}
 {% block title %}Browse Games{% endblock %}
 {% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block extra_head %}{% load seo_tags %}{% jsonld_item_list request seo_item_list %}{% endblock %}
 
 {% block content %}
 <div class="pp-gbrowse">

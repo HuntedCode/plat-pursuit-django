@@ -23,20 +23,33 @@ def _get_site_url():
 
 
 def _render_jsonld(data):
-    """Render a Python dict as a JSON-LD script tag."""
-    json_str = json.dumps(data, ensure_ascii=False, default=str)
+    """Render a Python dict as a JSON-LD script tag.
+
+    `<`, `>` and `&` are emitted as unicode escapes (the json_script hardening): a marked-up
+    string containing `</script>` would otherwise TERMINATE the script element during HTML
+    parsing and turn everything after it into live markup. Central here so every tag -- game
+    titles, profile names, the hub ItemList -- is covered at once.
+    """
+    json_str = (
+        json.dumps(data, ensure_ascii=False, default=str)
+        .replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    )
     return mark_safe(f'<script type="application/ld+json">{json_str}</script>')
 
 
 @register.simple_tag
 def jsonld_organization():
-    """Site-wide Organization schema."""
+    """Site-wide Organization schema. sameAs links the social graph (SEO Lane 2)."""
     return _render_jsonld({
         "@context": "https://schema.org",
         "@type": "Organization",
         "name": "Platinum Pursuit",
         "url": _get_site_url(),
         "logo": f"{_get_site_url()}/static/images/logo.png",
+        "sameAs": [
+            getattr(settings, 'DISCORD_INVITE_URL', 'https://discord.gg/platpursuit'),
+            "https://x.com/platpursuit",
+        ],
     })
 
 
@@ -56,6 +69,29 @@ def jsonld_website(request):
             },
             "query-input": "required name=search_term_string",
         },
+    })
+
+
+@register.simple_tag
+def jsonld_item_list(request, items):
+    """ItemList schema for browse hubs (SEO Lane 2). `items` is a view-prepared list of
+    {'name', 'url'} dicts (relative urls fine -- absolutized here), bounded by the page size.
+    Empty -> no block."""
+    if not items:
+        return ''
+    base_url = f"{request.scheme}://{request.get_host()}"
+    return _render_jsonld({
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": i + 1,
+                "name": item['name'],
+                "url": item['url'] if item['url'].startswith('http') else f"{base_url}{item['url']}",
+            }
+            for i, item in enumerate(items)
+        ],
     })
 
 
@@ -96,8 +132,14 @@ def jsonld_breadcrumbs(breadcrumb, request):
 
 
 @register.simple_tag
-def jsonld_game(game, concept, request):
-    """VideoGame schema for game detail pages."""
+def jsonld_game(game, concept, request, averages=None):
+    """VideoGame schema for game detail pages.
+
+    `averages` (SEO Lane 2): the base group's cached community-rating aggregate
+    (RatingService._compute_averages shape). Real ratings become an AggregateRating -- the
+    structured data Google renders as star snippets. Only ever emitted from genuine data:
+    no ratings, no block.
+    """
     if not game or not getattr(game, 'title_name', None):
         return ''
     base_url = f"{request.scheme}://{request.get_host()}"
@@ -107,6 +149,20 @@ def jsonld_game(game, concept, request):
         "name": game.title_name,
         "url": request.build_absolute_uri(request.path),
     }
+
+    if averages and averages.get('count') and averages.get('avg_rating') is not None:
+        from decimal import ROUND_HALF_UP, Decimal
+        # HALF_UP to one decimal -- the same rounding |floatformat:1 shows on the page. Python's
+        # round() is banker's, and a 4.25 average would mark up 4.2 under a visible 4.3, which
+        # Google's review-snippet policy treats as a mismatch.
+        shown = float(Decimal(str(averages['avg_rating'])).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+        data["aggregateRating"] = {
+            "@type": "AggregateRating",
+            "ratingValue": shown,
+            "ratingCount": averages['count'],
+            "bestRating": 5,
+            "worstRating": 0.5,
+        }
 
     # Image
     image_url = game.image_url

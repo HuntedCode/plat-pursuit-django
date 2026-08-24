@@ -193,7 +193,8 @@ def test_the_search_action_advertises_a_working_endpoint(client):
     this test walks them end to end."""
     body = client.get('/', **CF).content.decode()
 
-    assert '/search/?type=game&amp;query=' in body or '/search/?type=game&query=' in body
+    # The JSON-LD hardening (Lane 2) emits & as \\u0026 -- same URL once parsed.
+    assert '/search/?type=game\\u0026query=' in body
 
     resp = client.get('/search/?type=game&query=elden')
     assert resp.status_code == 302

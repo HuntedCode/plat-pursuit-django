@@ -254,6 +254,12 @@ class GamesListView(HtmxListMixin, ListView):
         )
         if getattr(self, '_applied_defaults', False):
             context['applied_default_query'] = urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
+        # ItemList schema rows for this page (SEO Lane 2) -- bounded by paginate_by.
+        context['seo_item_list'] = [
+            {'name': g.title_name,
+             'url': reverse('game_detail', kwargs={'np_communication_id': g.np_communication_id})}
+            for g in context.get('page_obj').object_list if g.np_communication_id
+        ] if context.get('page_obj') else []
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['view_type'] = self.request.GET.get('view', 'grid')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
@@ -957,6 +963,10 @@ class GameDetailView(DetailView):
 
             community_tabs.append(tab_data)
         context['community_tabs'] = community_tabs
+        # The BASE group's aggregate, for the VideoGame schema's AggregateRating (SEO Lane 2).
+        # community_tabs[0] is the default group by the CTG ordering above; guarded anyway.
+        base_tab = next((t for t in community_tabs if t['ctg'].trophy_group_id == 'default'), None)
+        context['base_rating_averages'] = base_tab['averages'] if base_tab else None
         # Show a per-group title on the verdict card only when there's DLC to disambiguate (base game only = obvious).
         context['has_dlc'] = len(ctgs) > 1
         # Lets each blurb card mark the viewer's own (You pill, no self-report) without a per-row query.

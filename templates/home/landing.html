@@ -24,6 +24,9 @@ by test_lobby), global_banners suppressed, own <main> via main_layout, no breadc
 {% endcomment %}
 
 {% block title %}Free PlayStation Trophy Tracking{% endblock %}
+{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
+{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
+{% block twitter_card_type %}summary_large_image{% endblock %}
 {% block meta_description %}Free trophy tracking for PlayStation hunters. Look up any PSN name to pull its full history, earn handcrafted badges, build a career from how you play, and read ratings from hunters who actually finished the platinum.{% endblock %}
 
 {% block extra_head %}

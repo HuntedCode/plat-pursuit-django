@@ -1,6 +1,11 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 {% block title %}{{ series.name }} Badge Series{% endblock %}
+{% comment %}The badge's own handcrafted subject art as the social image (SEO Lane 2) -- every
+badge page shared the 128px site logo while sitting on bespoke medallion art. Subject = the
+LAST art layer (backdrop first); square art on a summary card reads perfectly.{% endcomment %}
+{% block og_image %}{% with art=detail.groups.0.frame.art_layers|last %}{% if art %}{% if 'http' in art|slice:':4' %}{{ art }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ art }}{% endif %}{% else %}{{ block.super }}{% endif %}{% endwith %}{% endblock %}
+{% block twitter_image %}{% with art=detail.groups.0.frame.art_layers|last %}{% if art %}{% if 'http' in art|slice:':4' %}{{ art }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ art }}{% endif %}{% else %}{{ block.super }}{% endif %}{% endwith %}{% endblock %}
 
 {% comment %}
 Badge series detail (rebuild, Phase 1 core). A series is N PARALLEL platform-group badges (Legacy HD /
