@@ -792,7 +792,25 @@ the numbering concept is abandoned (his call), so a rollback would come back wit
 - [ ] Confirm `refresh_homepage_hourly` cron logs "Landing showcase card cached" after the first run.
 
 ## SEO Lane 0 (2026-08-23)
-- [ ] Jeffrey: create a Google Search Console DOMAIN property for platpursuit.com (DNS TXT verification), submit /sitemap.xml, add a monthly look to the routine. Every SEO lane's success is measured there.
+- [ ] **Jeffrey: set up Google Search Console** (first time; every SEO lane's success is measured
+      there). Step by step:
+      1. Go to search.google.com/search-console and sign in with the Google account that should
+         own the property (this is hard to change later; use the real project account).
+      2. Choose **Domain** property (NOT "URL prefix") and enter `platpursuit.com`. Domain
+         covers www/non-www and http/https in one property.
+      3. GSC shows a TXT record (looks like `google-site-verification=...`). Add it in
+         **Cloudflare -> DNS -> Records**: type TXT, name `@`, content = the string GSC gave
+         you. Proxy status doesn't apply to TXT; just save.
+      4. Back in GSC hit **Verify**. DNS can take a few minutes to propagate; if it fails,
+         wait five minutes and retry rather than re-adding the record.
+      5. Once verified: **Sitemaps** (left rail) -> enter `sitemap.xml` -> Submit. Status
+         should read Success within a day; the sections (static/games/profiles/badges) appear
+         under it.
+      6. Add a **monthly look** to the routine: Pages (indexed vs not, and WHY not),
+         Performance (impressions/clicks trend), and after any deploy the items in the
+         "SEO closing audit -- post-cutover verification" section below.
+      Doing steps 1-5 BEFORE the cutover is fine and useful: it starts collecting baseline
+      data on the old site, so the cutover's effect is visible as a step change.
 - [ ] SEO Lane 0 ships WITH the cutover (his call 2026-08-23: no early cherry-pick). Known cost accepted: prod's robots.txt keeps blocking canonical game/badge/jobs pages until then, so expect index recovery to START at cutover, not before. After cutover, verify in GSC that /games/<np>/ pages report Allowed under the robots tester.
 - [ ] `collectstatic` after the robots.txt change (WhiteNoise serves staticfiles/).
 - [ ] After cutover: resubmit /sitemap.xml in GSC (the badge section changes model; roadmaps section is withdrawn).
