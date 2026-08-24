@@ -210,7 +210,7 @@ The tutorial endpoints are not currently routed.
 | GET | `/api/v1/youtube/attribution-lookup` | Staff | Resolve a YouTube video's attribution |
 | GET | `/api/v1/games/search` | Login | Game search (autocomplete/typeahead) |
 | GET | `/api/v1/games/<np_communication_id>/players` | No | Players of a game, for the game-detail panel |
-| POST | `/api/v1/user/quick-settings/` | Login | Toggle the profile quick-settings (hide hiddens / zeros) |
+| POST | `/api/v1/user/quick-settings/` | Login | Single-setting writes: profile toggles (hide hiddens / zeros), 24hr clock, timezone, browse defaults, and one-shot `ui_flag` education flags (see [onboarding.md](../features/onboarding.md)) |
 
 ## Rate Limits
 
