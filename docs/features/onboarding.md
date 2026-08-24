@@ -7,10 +7,13 @@ chrome rebuild, and this is its rebuilt-from-scratch replacement in a different 
 spotlight tours: the sync wait is a captive window, and in-context cards teach at the moment
 of curiosity).
 
-## Surface 1: the sync-wait walkthrough (`templates/home/syncing.html`)
+## Surface 1: the syncing hero on the gates surface (`templates/home/_hero_syncing.html`)
 
-A first sync takes 10-30 minutes and the user has nothing to do but wait. The page uses that
-window three ways (all wiring in `static/js/syncing.js` + `static/css/components/syncing.css`):
+Since the gates merge, the syncing state renders on `home/landing.html` with a live status hero
+above the landing's real sections. A first sync takes 10-30 minutes and the user has nothing to
+do but wait. The page uses that window three ways (hero wiring in `static/js/syncing.js` +
+`static/css/components/syncing.css`; the progress/elapsed mirrors are inline in the landing's
+syncing branch):
 
 1. **Personalized greeting.** PSN's own trophy totals (`Profile.earned_trophy_summary`,
    `trophy_level`) land seconds into the sync via `update_profile_from_legacy`, long before the
@@ -18,11 +21,10 @@ window three ways (all wiring in `static/js/syncing.js` + `static/css/components
    and the greeting says "We found 8,412 trophies and 71 platinums on your PSN profile". Both
    sentence variants render server-side (`data-psn-line` / `data-psn-pending`); the poll
    payload's additive `psn_found` key upgrades a too-early page live.
-2. **The walkthrough carousel.** Five static panels (Build a Career, Chase Badges, Your
-   library organized, Months worth keeping, Boards to climb) with CSS slide art. Auto-advance
-   7s, dots, touch swipe, in-view gate, reduced-motion aware. Deliberately no per-user data:
-   mid-sync the visitor has none yet. The carousel pattern is copied from landing.js's ratings
-   carousel; a third consumer is the signal to extract a shared primitive into utils.js.
+2. **The tour is the landing itself.** The gates merge retired the bespoke walkthrough
+   carousel: the landing's real sections (medallion shelf with the 3D inspect modal, the live
+   ratings carousel, the showcase Profile Card, the heartbeat band) render below the hero.
+   The site's best showcase is the tour, at full fidelity, with zero duplicated upkeep.
 3. **The enter moment.** On a FIRST sync (`is_initial_sync`), the `synced` transition swaps
    the status card in place: "Your Pursuer has emerged" (the phrase is from
    `docs/design/gamification-plan.md`'s design intent for this exact moment), the final
@@ -63,8 +65,9 @@ Client discipline (from the badge howto + timezone modal prior art):
 
 ## Dev affordances
 
-- **`/?preview=syncing`**: staff/moderators see the sync-wait page from a synced account
-  (mirrors `/?preview=landing`). `is_initial_sync` renders False for a synced previewer.
+- **`/?preview=syncing`**: staff/moderators see the syncing state from a synced account
+  (mirrors `/?preview=landing`). The preview forces the first-sync view, so the greeting,
+  progress bar, and finale all render.
 - **DEBUG simulate panel** on the syncing page (`data-sync-dev`, `.ccx-dev` styling):
   "Simulate progress" steps canned poll payloads; "Simulate synced" dispatches the
   status-changed event BEFORE a trailing progress event, which is navsync's real ordering, so

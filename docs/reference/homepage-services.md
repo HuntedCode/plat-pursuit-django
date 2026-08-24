@@ -41,9 +41,12 @@ The `always` group renders as the four primary stat tiles. The `expanded` group 
 
 ## How It's Read
 
-`HomeView` (and `DashboardView` for the legacy `/dashboard/` redirect path) call `_get_site_heartbeat()` from `trophies/views/dashboard_views.py`, which reads the current hour's cache key and falls back to the previous hour if the current one is missing. The result is attached to the template context as `site_heartbeat`. The `built_for_hunters.html` partial under `templates/trophies/partials/dashboard/` renders it.
-
-All four home states (`landing.html`, `link_psn.html`, `syncing.html`, `dashboard.html`) include this partial, so the visual is consistent across the user journey. If the cache is missing for two consecutive hours (i.e. both the current and the fallback bucket are empty), the partial silently hides itself rather than showing zeros. Check `refresh_homepage_hourly` if it disappears.
+`HomeView` reads the cached heartbeat via `get_cached_heartbeat()` and attaches it to the
+template context as `site_heartbeat` for every pre-synced state. The landing's `land-pulse`
+band renders it (the old `_built_for_hunters.html` ribbon partial was deleted with the gates
+merge; `home/landing.html` is the one pre-synced template now). If the cache is missing, the
+band hides itself rather than showing zeros ({% if site_heartbeat %}). Check
+`refresh_homepage_hourly` if it disappears.
 
 ## Refresh Job
 

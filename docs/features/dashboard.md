@@ -34,7 +34,7 @@ It was also the origin of two production incidents, both worth carrying forward:
 | Piece | Where it went |
 |---|---|
 | The design language it seeded | The Career page is the reference standard now; see [career-reference-standard.md](../design/rebuild/career-reference-standard.md) |
-| `_built_for_hunters.html` | Rehomed to `templates/home/` -- the syncing lobby is its only consumer |
+| `_built_for_hunters.html` | Deleted with the gates merge (2026-08); the landing's `land-pulse` band covers the heartbeat for every pre-synced state |
 | Badge progress module | `collection_service.closest_badge`, read by Home's Collection CTA |
 | `/dashboard/` URL | Still a permanent redirect to `/`, so old bookmarks keep working |
 

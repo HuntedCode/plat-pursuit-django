@@ -8,7 +8,15 @@ The site root (`/`) is a smart router that branches the response based on user s
 
 For fully-synced users the router renders `templates/trophies/home.html`, the gamification Home (the dashboard was deleted in the 2026-08 cutover; `/dashboard/` 301s to `/`).
 
-The four-state model exists because the synced Home assumes real data. Showing it to a user whose sync hasn't finished would render empty blocks and feel broken. The intermediate `link_psn` and `syncing` shells fix that while still feeling like the same app: they reuse the design tokens, the site heartbeat ribbon partial, and the navbar's live sync panel. The syncing shell doubles as the new-user onboarding surface (see [onboarding.md](onboarding.md)): a first sync is a captive 10-30 minute window, so the page greets the user with their real PSN numbers, runs a walkthrough of the site's systems, and ends in an in-place "Your Pursuer has emerged" moment.
+The four-state model exists because the synced Home assumes real data. Since the gates merge
+(2026-08), every PRE-SYNCED state renders the same template -- `home/landing.html`, the gates
+surface -- with `home_state` driving a per-state hero, close section, and SEO blocks. The
+landing's cached sections (heartbeat band, medallion shelf, showcase card, ratings carousel)
+render for all three states: the site's best showcase is also the welcome mat and the waiting
+room. The syncing state doubles as the new-user onboarding surface (see
+[onboarding.md](onboarding.md)): a first sync is a captive 10-30 minute window, so the hero
+greets the user with their real PSN numbers and ends in an in-place "Your Pursuer has emerged"
+moment while the landing's sections play the tour below.
 
 ## State Resolution
 
@@ -17,13 +25,13 @@ The four-state model exists because the synced Home assumes real data. Showing i
 | State | Detection | Template |
 |-------|-----------|----------|
 | `anonymous` | `not request.user.is_authenticated` | `home/landing.html` |
-| `no_psn` | No `Profile` attached, OR `profile.is_linked == False` | `home/link_psn.html` |
-| `syncing` | Linked but `profile.sync_status != 'synced'` (covers both `'syncing'` and `'error'`) | `home/syncing.html` |
+| `no_psn` | No `Profile` attached, OR `profile.is_linked == False` | `home/landing.html` (link hero) |
+| `syncing` | Linked but `profile.sync_status != 'synced'` (covers both `'syncing'` and `'error'`) | `home/landing.html` (status hero) |
 | `synced` | Linked and `profile.sync_status == 'synced'` | `trophies/home.html` |
 
-`'error'` is intentionally bucketed with `'syncing'` rather than `'synced'`. A user whose last sync errored should not land on a Home built from stale or partial data; the syncing shell surfaces the error state explicitly with messaging that points them at the account menu's retry.
+`'error'` is intentionally bucketed with `'syncing'` rather than `'synced'`. A user whose last sync errored should not land on a Home built from stale or partial data; the status hero surfaces the error state explicitly with messaging that points them at the account menu's retry.
 
-Two team-preview doors exist for reviewing states an account can't naturally reach: `/?preview=landing` (staff/moderators see the anonymous landing) and `/?preview=syncing` (staff/moderators see the sync-wait walkthrough; note `is_initial_sync` renders False for a synced previewer, and the page's DEBUG simulate panel covers the first-sync paths).
+Two team-preview doors exist for reviewing states an account can't naturally reach: `/?preview=landing` (staff/moderators see the anonymous landing) and `/?preview=syncing` (staff/moderators see the syncing state; the preview forces the first-sync view so the greeting, progress bar, and finale all render, and the DEBUG simulate panel drives the state machine).
 
 ## File Map
 
@@ -31,17 +39,16 @@ Two team-preview doors exist for reviewing states an account can't naturally rea
 |------|---------|
 | `core/views.py` | `HomeView` smart router + `SYNCING_DID_YOU_KNOW` rotating fact list |
 | `templates/home/landing.html` | Anonymous marketing page (search-first hero, systems tour, live demos) |
-| `templates/home/link_psn.html` | Logged-in but no PSN linked (welcome, 3-step preview, "what you'll unlock") |
-| `templates/home/syncing.html` | Sync in progress / error (status card + enter finale, Did You Know, walkthrough) |
+| `templates/home/_hero_no_psn.html` | The no-PSN hero: greeting, link CTA, 3-step preview, privacy warning |
+| `templates/home/_hero_syncing.html` | The syncing hero: status card, live progress, enter finale, dev panel |
 | `templates/trophies/home.html` | Fully-synced state: the gamification Home |
 | `static/js/navsync.js` | Owns the poll; dispatches `platpursuit:sync-status-changed` on transitions and `platpursuit:sync-progress` on every poll |
-| `static/js/syncing.js` | The syncing shell's walkthrough carousel, live personalization, and enter-moment state machine (event consumer only, never polls) |
-| `static/css/components/syncing.css` | Carousel, slide art, and finale styles |
-| `templates/home/_built_for_hunters.html` | Site heartbeat ribbon, included by the home shells |
+| `static/js/syncing.js` | The syncing hero's live personalization + enter-moment state machine (event consumer only, never polls) |
+| `static/css/components/syncing.css` | The enter finale's styles |
 
 ## Auto-Refresh on Sync Status Change
 
-The syncing shell's transition handling lives in `static/js/syncing.js` and branches three ways on `platpursuit:sync-status-changed`:
+The syncing hero's transition handling lives in `static/js/syncing.js` and branches three ways on `platpursuit:sync-status-changed`:
 
 - **`synced` on a FIRST sync** (the finale block only renders when `is_initial_sync`): no reload. The status card swaps in place to the enter moment ("Your Pursuer has emerged" + the final trophy counts + one "Enter your Pursuit" CTA to `/`). The user arrives on the Home on purpose.
 - **`synced` on a quick refresh**: `window.location.reload()` as before; `HomeView` re-resolves to the synced Home.
@@ -51,14 +58,14 @@ Ordering note (load-bearing): navsync dispatches `status-changed` BEFORE the sam
 
 `navsync.js` polls `/api/profile-sync-status/` every 2 seconds while a sync is in progress (extended to 10 seconds after a minute). When it detects a real transition, it dispatches the CustomEvent on `document` exactly once. This means:
 
-- A first-time user on `home/syncing.html` gets the in-place enter moment when the sync finishes; a refreshing user advances to the Home automatically.
+- A first-time user on the syncing state gets the in-place enter moment when the sync finishes; a refreshing user advances to the Home automatically.
 - A user who triggers a manual sync from the account menu keeps their current page; the navbar's sync panel shows the live progress (the synced Home does not watch for de-sync transitions).
 
 `lastSyncStatus` is a closure variable in `navsync.js` initialized from the navbar sync panel's `data-sync-status` attribute and updated only on real transitions, so the event fires once per change rather than once per poll. The polling itself only runs when there is something to watch (initial syncing state on page load, or after the user triggers a sync), so a synced user browsing the site does not poll until they ask for a sync.
 
 ## Live Progress Mirroring (`platpursuit:sync-progress`)
 
-The syncing shell renders its own larger progress card for prominence, but it does not poll. Instead, `navsync.js` dispatches a second CustomEvent, `platpursuit:sync-progress`, after every successful poll, carrying the full sync status payload (`sync_status`, `sync_progress`, `sync_target`, `sync_percentage`, `queue_position`, `is_finalizing`, etc.). The syncing shell registers a listener that mirrors `sync_percentage` into `#home-sync-progress-bar` and the count text into `#home-sync-progress-text`, so the larger card stays in lockstep with the navbar panel without doing any extra network work. The payload also carries the additive `psn_found` key (PSN's own totals) while syncing, which drives the greeting's live personalization upgrade.
+The syncing hero renders its own larger progress card for prominence, but it does not poll. Instead, `navsync.js` dispatches a second CustomEvent, `platpursuit:sync-progress`, after every successful poll, carrying the full sync status payload (`sync_status`, `sync_progress`, `sync_target`, `sync_percentage`, `queue_position`, `is_finalizing`, etc.). An inline mirror in the landing template's syncing branch mirrors `sync_percentage` into `#home-sync-progress-bar` and the count text into `#home-sync-progress-text`, so the larger card stays in lockstep with the navbar panel without doing any extra network work. The payload also carries the additive `psn_found` key (PSN's own totals) while syncing, which drives the greeting's live personalization upgrade.
 
 This split keeps the navbar panel as the single polling source of truth while letting other parts of the page subscribe to live updates declaratively. New consumers should listen to `platpursuit:sync-progress` rather than starting their own polling loop.
 
@@ -72,29 +79,27 @@ If the health check finds a trophy count mismatch and re-queues child jobs, the 
 
 ## Syncing Shell UX Features
 
-The syncing shell (`templates/home/syncing.html`) layers several pieces of context on top of the basic progress card so the page never feels frozen, regardless of how long the sync takes:
+The syncing state layers several pieces of context on top of the basic progress card so the page never feels frozen, regardless of how long the sync takes:
 
 - **Initial vs incremental sync detection**: `HomeView.get_context_data` sets `is_initial_sync = (profile.total_trophies == 0)`. First-timers get a different H1 ("Setting up your Pursuit...") and friendlier copy explaining that first syncs take 10-30 minutes; returning users get a tighter "Quick refresh in progress" message. The signal is also correct after an unlink/relink because `total_trophies` resets to 0 on relink.
 - **Elapsed time counter**: `HomeView` reads `sync_started_at:{profile_id}` from Redis, computes initial elapsed seconds, and renders them into `#home-sync-elapsed` via `data-elapsed`. A `setInterval` in the page script counts up every second with progressive formatting (`Started just now` → `Started 23s ago` → `Started 4m ago` → `Started 1h 23m ago`). Note: the `sync_started_at` key is cleared in the `_job_sync_complete()` `finally` block, so on the rare mismatch-retry path the counter resets to 0 between rounds. Acceptable trade-off: changing the cleanup behavior would also affect queue position and stuck-sync detection.
 - **PSN outage state**: when the `psn_outage` context flag is set, the card swaps to `info` styling (no pulse), shows "Sync paused" as the H1 with a "PSN Down" badge, hides the elapsed timer and progress bar, and explains that the sync will resume automatically when PSN comes back. The site-wide outage banner already covers the global state but the shell card now matches it instead of pretending the sync is still running.
 - **Personalized greeting (`psn_found`)**: PSN's own totals (`Profile.earned_trophy_summary` + `trophy_level`) land seconds into the sync, long before our per-game walk finishes. The view passes `psn_found` (or `None` before the summary lands; `get_total_trophies_from_summary()` returns None on empty, so never render it raw) and the template ships BOTH sentence variants; `syncing.js` fills the numbers and swaps when the poll payload's additive `psn_found` key arrives.
-- **The walkthrough**: five static panels (Career, Badges, Library/Rate My Games, Recap, Leaderboards) in a carousel copied from landing.js's ratings carousel (a third consumer is the signal to extract a shared primitive). No per-user data on purpose: mid-sync the visitor has none yet.
+- **The tour is the landing itself**: the gates merge retired the bespoke walkthrough carousel; the landing's real sections (medallion shelf with the 3D inspect, the live ratings carousel, the showcase card) render below the hero for every pre-synced state.
 - **Error transition**: reloads so users never stare at a misleading in-progress card after a mid-sync failure (the shell re-renders with error styling server-side).
-- **Rotating "Did You Know?" facts**: `HomeView` shuffles the full `SYNCING_DID_YOU_KNOW` list per request and renders the first one server-side via `did_you_know`. The full shuffled list is also embedded via `{{ did_you_know_facts|json_script:"did-you-know-facts" }}`, and a JS interval cycles through them every 30 seconds with a 500ms fade transition. Each visit starts from a different fact thanks to the per-request shuffle.
 - **Labeled progress count**: the `X / Y` count text is suffixed with "tasks" so users intuit what the numbers mean (each unit is a per-game sync job, not a trophy or game).
 
 ## Reused Infrastructure
 
 The home shells deliberately reuse existing pieces instead of building parallel ones:
 
-- **Site heartbeat ribbon** (`_built_for_hunters.html`): cached hourly by the `refresh_homepage_hourly` cron, read across the home shells, so the visual is consistent and there is no extra query cost.
+- **Site heartbeat band** (the landing's `land-pulse` section): cached hourly by the `refresh_homepage_hourly` cron, rendered for every pre-synced state. The old `_built_for_hunters.html` ribbon partial was deleted with the gates merge.
 - **Navbar sync panel** (`#nav-sync`, fed by `navsync.js`): the syncing shell does NOT reimplement sync polling. The navbar owns the poll and the shell subscribes to its events; killing or restructuring `#nav-sync` on this page freezes the progress bar and the enter moment never fires.
 
 ## Gotchas and Pitfalls
 
 - **`'error'` is treated like `'syncing'`**: A user whose sync errored sees the in-progress shell, not the Home. This is intentional but easy to miss when debugging "why isn't the Home rendering for this user." Check `profile.sync_status` first.
 - **Profile may not exist**: `_resolve_state()` uses `getattr(request.user, 'profile', None)`, not `request.user.profile`, because the `OneToOneField` raises `RelatedObjectDoesNotExist` when no profile exists. Don't change to direct attribute access without the safety net; the `no_psn` state covers the no-profile case.
-- **`SYNCING_DID_YOU_KNOW` is shuffled server-side per request**: every page load reshuffles the full list and embeds it via `json_script` so the page can rotate through facts client-side every 30 seconds. The first fact is rendered server-side as `did_you_know` for the initial paint; the JS interval picks up from index 1 onward. Each visit starts from a different fact thanks to the per-request shuffle.
 - **The `home_state` context key**: every shell receives `context['home_state']` set to the resolved state string. Useful for adding state-specific JS or styling in `base.html` later if needed (not currently used).
 - **`/dashboard/` is a permanent redirect**: anything linking to `/dashboard/` will 301 to `/`. This is enforced by `RedirectView.as_view(pattern_name='home', permanent=True)` in `urls.py`. Update internal links to use `{% url 'home' %}` instead of `{% url 'dashboard' %}` going forward.
 - **The site heartbeat partial silently hides if its cache is empty**: if the `refresh_homepage_hourly` cron is broken for more than two hours (the partial falls back one hour), the entire community-pulse section disappears from all four home states. Check the cron and the `site_heartbeat_*` cache keys if it goes missing.
