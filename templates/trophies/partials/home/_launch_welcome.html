@@ -1,0 +1,172 @@
+{% comment %}
+"Welcome to PlatPursuit 1.0" -- the one-shot launch greeting for EXISTING users on the Home
+lobby. Server-gated ENTIRELY (home.html includes this only when show_launch_welcome: joined
+before settings.PP_LAUNCH_DATE, launch_welcome absent from ui_flags, feature dormant while the
+date is unset). Render == armed: unlike the Career howto there is NO reopen affordance -- a
+one-time announcement needs no recall, so a flagged user gets a full non-render.
+
+Orientation-first, no confetti: particles are the earn vocabulary and a redesign is an
+announcement, not an achievement. The flourish is THEIRS (their rank, level, and discipline
+ring), so the moment is about the user, not us.
+
+No dev panel here (the guard convention from the Career modal holds: one panel per page, and
+this page has none). Retest via /?preview=launch-welcome (team-gated) or a shell flag clear.
+
+This inline script also publishes the on-load choreography gate (ppAfterLaunchWelcome): the
+lobby's count-ups, Horizon fills, and ring pace would otherwise play out behind the scrim on
+the one visit this modal exists for. It runs BEFORE end-of-body home-motion.js because the
+include sits at the top of content. Settled on close AND on the typing-guard skip, so the
+numbers never wait on a modal that never opened.
+{% endcomment %}
+{% load humanize %}
+<div class="pp-detail-modal pp-howto" id="launch-welcome" data-auto hidden>
+    <div class="pp-detail-modal__scrim" data-launch-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="launch-welcome-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-launch-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <h2 class="pp-howto__title" id="launch-welcome-title">
+                <svg class="pp-howto__title-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg>
+                Welcome to PlatPursuit 1.0
+            </h2>
+            <p class="pp-forge__lede">We rebuilt the whole site around the hunt. Everything you tracked is still here, and it has a lot more company now. The quick tour:</p>
+
+            <div class="cxp__stack">
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">1</span>
+                    <div>
+                        <div class="cxp__label">Your Career</div>
+                        <p class="cxp__copy">Your history became a career: 25 jobs across five disciplines, contracts to complete, and a Pursuer level that grows with everything you do. It lives at Career under My Pursuit.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">2</span>
+                    <div>
+                        <div class="cxp__label">Your Collection</div>
+                        <p class="cxp__copy">Badges became medallions with handcrafted art, yours to pick up and inspect. Your earned ones are already waiting in the Collection.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">3</span>
+                    <div>
+                        <div class="cxp__label">Your new Home</div>
+                        <p class="cxp__copy">This page. Fresh sync, your headline numbers, and doors to everything: recaps, leaderboards, ratings, and the rest.</p>
+                    </div>
+                </div>
+            </div>
+
+            {% if hero %}
+            {% comment %} The flourish: their own standing, computed from the history they already
+            have. The ring include is the same one Career and the lobby moat render. {% endcomment %}
+            <div class="lwm__standing" aria-label="Your Pursuer standing">
+                {% if hero.ring %}
+                <span class="lwm__ring">{% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level compact=True %}</span>
+                {% endif %}
+                <p class="lwm__line">You arrive as {% if hero.pursuer_rank %}a <b>{{ hero.pursuer_rank.name }}</b>, {% endif %}Level <b>{{ hero.pursuer_level }}</b>. Your history earned that before you ever clicked a thing.</p>
+            </div>
+            {% endif %}
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-launch-close>Look around</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('launch-welcome');
+
+    // The choreography gate publishes even if the modal element were missing: consumers use
+    // the fail-open passthrough, so an unpublished gate can never freeze the page.
+    window.ppLaunchWelcomePending = false;
+    function settleChoreography() {
+        if (!window.ppLaunchWelcomePending) { return; }
+        window.ppLaunchWelcomePending = false;
+        document.dispatchEvent(new CustomEvent('launch-welcome:settled'));
+    }
+    window.ppAfterLaunchWelcome = function (fn) {
+        if (window.ppLaunchWelcomePending) {
+            document.addEventListener('launch-welcome:settled', function () { fn(); }, { once: true });
+        } else { fn(); }
+    };
+
+    if (!modal) { return; }
+    var dialog = modal.querySelector('.pp-detail-modal__dialog');
+    var SEEN_KEY = 'pp-launch-welcome-seen';
+    var lastFocus = null;
+    // Render == armed on this modal (the include itself is server-gated).
+    var armed = true;
+
+    function flagPost() {
+        if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+        return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+            setting: 'ui_flag', value: 'launch_welcome'
+        });
+    }
+    function isEditable(el) {
+        if (!el) { return false; }
+        var t = el.tagName;
+        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+    }
+
+    function open(trigger) {
+        if (!modal.hidden) { return; }
+        lastFocus = trigger || document.activeElement;
+        modal.hidden = false;
+        if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+    }
+    function close() {
+        if (modal.hidden) { return; }
+        // Greeted, durably: the server flag ends the greeting on every device. No success
+        // toast; on failure the localStorage fallback keeps this device quiet and the
+        // self-heal below retries once utils.js is up.
+        if (armed) {
+            armed = false;
+            flagPost().catch(function () {
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+            });
+        }
+        modal.classList.add('is-closing');
+        window.setTimeout(function () {
+            modal.hidden = true;
+            modal.classList.remove('is-closing');
+            if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+            settleChoreography();   // the lobby's motion pass is the "look around" payoff
+        }, 200);
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest) { return; }
+        if (!modal.hidden && e.target.closest('[data-launch-close]')) { e.preventDefault(); close(); }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (modal.hidden) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key !== 'Tab' || !dialog) { return; }
+        var f = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])');
+        var list = Array.prototype.filter.call(f, function (el) { return el.offsetParent !== null; });
+        if (!list.length) { return; }
+        var first = list[0], last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    // The device fallback: a prior visit whose flag POST failed hides the greeting here and
+    // quietly retries the write; otherwise auto-open once, after paint.
+    var seen = false;
+    try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch (e) {}
+    if (seen) {
+        document.addEventListener('DOMContentLoaded', function () {
+            flagPost().then(function () { try { localStorage.removeItem(SEEN_KEY); } catch (e) {} }).catch(function () {});
+        });
+    } else {
+        window.ppLaunchWelcomePending = true;
+        window.setTimeout(function () {
+            // The skipped auto-open settles the gate too: the lobby's numbers must never
+            // wait on a modal that never opened.
+            if (isEditable(document.activeElement)) { settleChoreography(); return; }
+            open(null);
+        }, 450);
+    }
+})();
+</script>

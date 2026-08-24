@@ -122,16 +122,22 @@
     }
 
     function run() {
-        wireSyncNow();
+        wireSyncNow();   // an affordance, never gated
         if (STILL) { return; }
 
-        // Left-to-right, top-to-bottom: DOM order IS reading order here, so a flat per-index step reads
-        // as a cascade without measuring anything. Capped so a long stat row never trickles.
-        wireRingPace();
-        var primed = primeHorizons();          // zero them NOW, before anything paints full
-        var nums = document.querySelectorAll('[data-countup]');
-        for (var i = 0; i < nums.length; i++) { tickUp(nums[i], 900, Math.min(i * 55, 500)); }
-        releaseHorizons(primed, Math.min(nums.length * 55, 500) + 120);
+        // Gated on the 1.0 launch greeting: on the one visit that modal auto-opens, the whole
+        // motion pass would play out behind its scrim. Behind the gate the server-rendered
+        // values stand (correct for no-JS and reduced motion too); on "Look around" the pass
+        // plays as the payoff. Fail-open: no gate published = run immediately.
+        (window.ppAfterLaunchWelcome || function (f) { f(); })(function () {
+            // Left-to-right, top-to-bottom: DOM order IS reading order here, so a flat per-index step reads
+            // as a cascade without measuring anything. Capped so a long stat row never trickles.
+            wireRingPace();
+            var primed = primeHorizons();          // zero them NOW, at settle, before the pass paints
+            var nums = document.querySelectorAll('[data-countup]');
+            for (var i = 0; i < nums.length; i++) { tickUp(nums[i], 900, Math.min(i * 55, 500)); }
+            releaseHorizons(primed, Math.min(nums.length * 55, 500) + 120);
+        });
     }
 
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', run); }

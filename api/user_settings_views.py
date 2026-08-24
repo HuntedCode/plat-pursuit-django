@@ -71,7 +71,7 @@ class UpdateQuickSettingsAPIView(APIView):
     PROFILE_BOOL_SETTINGS = {'hide_hiddens', 'hide_zeros'}
     USER_BOOL_SETTINGS = {'use_24hr_clock'}
     # One-shot education flags a surface may mark as seen (users.CustomUser.ui_flags keys).
-    UI_FLAGS = ('career_explainer',)
+    UI_FLAGS = ('career_explainer', 'launch_welcome')
 
     def post(self, request):
         setting = request.data.get('setting', '').strip()

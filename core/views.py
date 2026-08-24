@@ -203,6 +203,20 @@ class HomeView(TemplateView):
             profile = self.request.user.profile
             context['profile'] = profile
             context.update(home_service.build_home_context(profile))
+
+            # PlatPursuit 1.0 greeting for EXISTING users: joined before the cutover instant,
+            # not yet greeted (ui_flags), fully dormant while PP_LAUNCH_DATE is unset.
+            # ?preview=launch-welcome (team-gated, mirroring the other preview doors) forces
+            # it so the modal can be reviewed on prod without shell surgery.
+            user = self.request.user
+            context['show_launch_welcome'] = bool(
+                settings.PP_LAUNCH_DATE
+                and user.date_joined < settings.PP_LAUNCH_DATE
+                and 'launch_welcome' not in (user.ui_flags or {})
+            ) or (
+                self.request.GET.get('preview') == 'launch-welcome'
+                and (user.is_staff or getattr(user, 'is_moderator', False))
+            )
             return context
 
         # All pre-synced states share the cached site heartbeat for their

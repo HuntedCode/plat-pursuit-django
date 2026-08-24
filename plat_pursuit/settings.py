@@ -66,6 +66,20 @@ DISCORD_TEST_WEBHOOK_URL = os.getenv('DISCORD_TEST_WEBHOOK_URL')
 # never configured anywhere, which left the welcome email's Discord CTA dead in production.
 DISCORD_INVITE_URL = os.getenv('DISCORD_INVITE_URL', 'https://discord.gg/platpursuit')
 
+# PlatPursuit 1.0 cutover instant (ISO 8601, e.g. '2026-09-01T00:00:00+00:00'). UNSET = every
+# launch-welcome feature stays fully dormant (the safe pre-launch default); it defines
+# "existing user" for BOTH the lobby launch modal and the announcement email's audience, so
+# the two can never disagree. A malformed value FAILS BOOT on purpose: a typo silently
+# disabling the launch greeting is the failure nobody would notice.
+_pp_launch_raw = os.getenv('PP_LAUNCH_DATE', '')
+if _pp_launch_raw:
+    from datetime import datetime as _dt, timezone as _tz
+    PP_LAUNCH_DATE = _dt.fromisoformat(_pp_launch_raw)
+    if PP_LAUNCH_DATE.tzinfo is None:
+        PP_LAUNCH_DATE = PP_LAUNCH_DATE.replace(tzinfo=_tz.utc)
+else:
+    PP_LAUNCH_DATE = None
+
 # The profile whose REAL Profile Card the anon landing showcases (rendered hourly by
 # refresh_homepage_hourly, never on the request path). Unset -> the landing's literal fixture.
 LANDING_SHOWCASE_PSN = os.getenv('LANDING_SHOWCASE_PSN', '')

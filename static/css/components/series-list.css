@@ -124,6 +124,25 @@
 @media (prefers-reduced-motion: no-preference) {
     #career-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
+
+/* The 1.0 launch greeting exits the same way (every pp-howto clone needs its ID here or it
+   inherits badge-inspect's unscoped close -- chrome dissolving around still-solid text). */
+#launch-welcome.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }
+@media (prefers-reduced-motion: no-preference) {
+    #launch-welcome.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+
+/* The greeting's standing flourish: ring + one line, centered. */
+.lwm__standing {
+    display: flex; align-items: center; justify-content: center; gap: 0.9rem;
+    margin-top: 1.1rem; padding: 0.8rem 0.9rem; border-radius: 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 25%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
+    text-align: left;
+}
+.lwm__ring { flex: 0 0 auto; }
+.lwm__line { font-size: 0.82rem; line-height: 1.55; color: var(--pp-text-dim); }
+.lwm__line b { color: var(--pp-text); }
 @keyframes ppHowtoFadeOut { to { opacity: 0; } }
 @keyframes ppHowtoDialogOut { to { transform: translateY(8px) scale(0.985); } }
 

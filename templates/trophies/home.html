@@ -25,6 +25,10 @@ community, recent, profile_url.
 {% endcomment %}
 
 {% block content %}
+{% comment %} The 1.0 launch greeting for existing users (server-gated; see the partial). Sits
+first so its inline script publishes the choreography gate before end-of-body home-motion.js. {% endcomment %}
+{% if show_launch_welcome %}{% include 'trophies/partials/home/_launch_welcome.html' %}{% endif %}
+
 
 {% include 'partials/_messages.html' %}
 
