@@ -244,8 +244,12 @@ def test_kept_transactional_footers_point_at_settings_not_preferences():
         body = (ROOT / 'templates' / 'emails' / name).read_text(encoding='utf-8')
         assert 'Manage your account settings' in body, f'{name} lost its footer'
         assert 'Manage your email preferences' not in body, f'{name} still sells the parked page'
-    base = (ROOT / 'templates' / 'emails' / 'base_email.html').read_text(encoding='utf-8')
-    assert 'Account Settings' in base and '{{ preference_url }}' not in base
+    # Both bases: the contract ("the footer sells Account Settings, never the parked
+    # preferences page") is base-agnostic, and v2 must be born compliant.
+    for base_name in ('base_email.html', 'base_email_v2.html'):
+        base = (ROOT / 'templates' / 'emails' / base_name).read_text(encoding='utf-8')
+        assert 'Account Settings' in base, f'{base_name} lost its settings link'
+        assert '{{ preference_url }}' not in base, f'{base_name} sells the parked page'
 
 
 def test_default_region_is_gone_from_the_user_model():
