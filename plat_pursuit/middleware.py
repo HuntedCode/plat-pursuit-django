@@ -133,10 +133,12 @@ _BOT_UA_RE = re.compile(
 # circuiting to the canonical target in one hop avoids a two-hop redirect chain
 # through the existing legacy 301s in plat_pursuit/urls.py.
 _BOT_REDIRECT_RULES = (
-    # The negative lookahead spares the REAL sub-pages that share the two-segment shape:
-    # /games/<np>/leaderboard/ is live content, and /games/<np>/roadmap/ is routed (hidden).
-    # Without it, Googlebot was 301'd off both before the view ever ran (SEO Lane 0).
-    (re.compile(r'^/games/([^/]+)/(?!roadmap(?:/|$)|leaderboard(?:/|$))[^/]+/?$'), '/games/{slug}/'),
+    # The negative lookahead spares the REAL sub-page that shares the two-segment shape:
+    # /games/<np>/roadmap/ is routed (hidden). Leaderboard was spared in Lane 0 as "live
+    # content", but the closing audit found it serves a HEADLESS fragment (the HTMX panel, no
+    # head at all) and is the most expensive query on the site -- so bots now 301 to the game
+    # page, and robots.txt blocks it for the crawlers that ask first.
+    (re.compile(r'^/games/([^/]+)/(?!roadmap(?:/|$))[^/]+/?$'), '/games/{slug}/'),
     (
         re.compile(r'^/(?:my-pursuit/badges|badges|achievements/badges)/([^/]+)/[^/]+/?$'),
         '/badges/{slug}/',

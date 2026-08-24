@@ -806,3 +806,37 @@ the numbering concept is abandoned (his call), so a rollback would come back wit
 - [ ] Post-cutover: re-baseline Lighthouse against PROD (the table in docs/design/seo-strategy.md is
   dev-lab only) and note the numbers next to it. Fonts now self-host, so also confirm the woff2s serve
   with long-cache headers from WhiteNoise (immutable far-future, same as other static).
+
+## SEO closing audit (2026-08-24) -- post-cutover verification
+
+The four lanes + closing fixes are all on `rebuild`. After the cutover deploy:
+
+- [ ] **GSC robots tester on the fragment shapes, not just `/games/<np>/`.** Paste
+      `/badge-ranks/x/`, `/leaderboards/rows/`, `/group-badge-peek/1/`,
+      `/group-badge-progress-peek/someone/1/`, `/jobs/x/ranks/`,
+      `/career/contracts/x/preview/`, and `/games/NPWR00001_00/leaderboard/` -- every one must
+      report Blocked. (The last three joined robots.txt in the closing audit.)
+- [ ] **Sitemap fetch status per section, not just the index.** In GSC open each section
+      (static, games, profiles, badges) and record Discovered vs Indexed + fetch status. A
+      section whose <lastmod> vanished or whose URLs 301 fails silently at the index level.
+- [ ] **Spot-check 10 sitemap URLs by hand**: five games, five profiles, straight from the live
+      XML: `curl -sI <url>` must return 200, not 301/302. (Pinned in CI by
+      test_seo_closing.py for the static section; this is the live-data double-check.)
+- [ ] **Rich Results test on a game detail URL with 3+ community ratings** (an unrated game
+      proves nothing: AggregateRating only emits from real data). VideoGame + AggregateRating +
+      BreadcrumbList must validate, and the ratingValue must equal the number shown on the page.
+- [ ] **Rich Results test on one profile URL and `/games/`** (ProfilePage, ItemList).
+- [ ] **Cache headers, with the expected values written down**:
+      `curl -sI https://platpursuit.com/static/css/output.<hash>.css | grep -i cache-control`
+      must read `max-age=315360000, immutable` (or similar far-future) -- the manifest storage
+      switch is what earns this; the UNhashed twin (`/static/css/output.css`) correctly stays
+      short-cache. Same check on a hashed woff2.
+- [ ] **Cloudflare: purge `/static/*` after every deploy that changes assets.** Hashed names
+      make stale-CSS impossible for hashed references, but the unhashed originals (robots.txt,
+      literal /static/ paths in JS, DB-stored badge layer paths) reuse their URLs across
+      deploys and CAN be served stale from the edge.
+- [ ] **CrUX / Core Web Vitals read at 28 days, not on cutover day** (CrUX is a trailing
+      28-day window; a cutover-day look reports the old site). Record LCP/CLS/INP for `/`,
+      `/games/` (the 0.465 -> 0 CLS fix), and one game detail page.
+- [ ] **Watch 404s + redirect hops under `/profiles/*/trophy-case/` for a week** -- the
+      closing audit collapsed this two-hop chain; fold into the existing 404-watch line.

@@ -44,9 +44,11 @@ def test_every_legacy_path_lands_on_the_same_hunter(client, legacy, suffix):
     resp = client.get(f'{legacy}/{profile.psn_username}/{suffix}', **THROUGH_CLOUDFLARE)
 
     assert resp.status_code == 301
-    assert resp['Location'] == f'/hunters/{profile.psn_username}/{suffix}'
-    # The trophy-case door closed 2026-08-23 (SEO Lane 0): its hop lands on the profile via a
-    # second redirect. Either way the chain must end 200 on the SAME hunter.
+    # The trophy-case door closed 2026-08-23 (SEO Lane 0), and the closing audit collapsed the
+    # chain: legacy trophy-case paths now land straight on the profile in ONE hop instead of
+    # bouncing through the trophy_case 302. Bare profile paths keep their suffix-less target.
+    expected = f'/hunters/{profile.psn_username}/' if suffix else f'/hunters/{profile.psn_username}/{suffix}'
+    assert resp['Location'] == expected
     final = client.get(resp['Location'], follow=True, **THROUGH_CLOUDFLARE)
     assert final.status_code == 200
     assert f'/hunters/{profile.psn_username}/' in final.request['PATH_INFO']

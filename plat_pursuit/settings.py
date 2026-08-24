@@ -525,7 +525,13 @@ STORAGES = {
         } if not DEBUG else {},
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+        # Manifest variant (SEO closing audit): content-hashed names are what let WhiteNoise
+        # emit far-future immutable Cache-Control. Without it EVERY asset -- output.css, the
+        # self-hosted fonts -- revalidated at max-age=60 on the critical path. Unhashed
+        # originals still collect + serve (short cache), so literal /static/ paths in JS and
+        # cached badge layer data keep resolving. Tests override to plain storage. See
+        # plat_pursuit/storage.py for why the forgiving subclass exists.
+        "BACKEND": "plat_pursuit.storage.ForgivingManifestStaticFilesStorage",
     },
 }
 

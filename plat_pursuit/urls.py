@@ -197,8 +197,10 @@ urlpatterns = [
         pattern_name='profiles_list', permanent=True, query_string=True)),
     path('community/profiles/<str:psn_username>/', RedirectView.as_view(
         pattern_name='profile_detail', permanent=True, query_string=True)),
+    # Straight to the profile, NOT pattern_name='trophy_case': trophy_case itself 302s to the
+    # profile now, and routing through it made this a two-hop chain (closing audit).
     path('community/profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(
-        pattern_name='trophy_case', permanent=True, query_string=True)),
+        pattern_name='profile_detail', permanent=True, query_string=True)),
 
     # My Pursuit hub: the personal Pursuer surfaces (canonical paths under /my-pursuit/).
     # The badge CATALOG (list + detail) was re-homed to the Browse hub at /badges/ -- it is a
@@ -417,7 +419,8 @@ urlpatterns = [
     # canonical to /hunters/ is what made them both reachable AND correct. Do not "tidy" them away; they
     # are now the only thing catching the old profile-detail URLs, which are the site's largest indexed set.
     path('profiles/<str:psn_username>/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
-    path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='trophy_case', permanent=True, query_string=True)),
+    # Same one-hop rule as its sibling above: trophy_case 302s onward, so aim at the profile.
+    path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
 
     # My Pursuit hub legacy paths. The badge CATALOG re-homed to Browse /badges/, so the
     # Phase-10a /my-pursuit/badges/* paths now 301 to it. (The pre-Phase-10 /badges/* paths

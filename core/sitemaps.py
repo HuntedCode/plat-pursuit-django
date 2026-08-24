@@ -12,6 +12,11 @@ class StaticViewSitemap(Sitemap):
             'home', 'privacy', 'terms', 'about', 'contact',
             'games_list', 'profiles_list', 'badges_list',
             'overall_badge_leaderboards',
+            # The rest of the indexable, nav-linked hub set (closing audit): live pages the
+            # sitemap simply never advertised.
+            'companies_list', 'franchises_list', 'genres_list',
+            'jobs_browse', 'recently_added', 'badge_how_it_works',
+            'milestones_list', 'support_hub', 'support_roadmap',
         ]
 
     def location(self, item):
@@ -67,8 +72,12 @@ class GameSitemap(Sitemap):
         return obj.created_at
 
     def get_latest_lastmod(self):
+        # Same floor as items(): without exclude_shovelware, the advertised lastmod could be
+        # the timestamp of a row the section never lists. (concept_canonicals is skipped here
+        # on purpose -- a window function for a max() would cost more than it disambiguates,
+        # and any elected row's created_at is bounded by this max anyway.)
         return (
-            Game.objects.filter(np_communication_id__isnull=False)
+            Game.objects.exclude_shovelware().filter(np_communication_id__isnull=False)
             .order_by('-created_at')
             .values_list('created_at', flat=True)
             .first()
@@ -101,6 +110,8 @@ class ProfileSitemap(Sitemap):
         return obj.last_synced
 
     def get_latest_lastmod(self):
+        # last_synced is NOT NULL at the schema level (default=timezone.now), so the
+        # NULLS-FIRST-on-DESC trap the closing audit worried about cannot occur here.
         return (
             Profile.objects
             .filter(psn_username__isnull=False, psn_history_public=True, total_trophies__gt=0)

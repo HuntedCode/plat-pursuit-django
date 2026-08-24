@@ -2,7 +2,8 @@
 {% load static %}
 {% load humanize %}
 {% block title %}{{ object.name }} {% if is_series %}Series{% else %}Franchise{% endif %} Trophy Lists{% endblock %}
-{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% comment %} Thin-page rule (closing audit): one game = the game page already answers it. {% endcomment %}
+{% block robots %}{% if request.GET or total_games < 2 %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block og_type %}video.other{% endblock %}
 {% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
 {% block og_description %}Every PlayStation game in the {{ object.name }} {% if is_series %}series{% else %}franchise{% endif %} with trophy lists, ratings, and community progress.{% endblock %}

@@ -40,8 +40,8 @@ they ever return, revisit -- they carry the site's best long-form markup.
 
 ## Lanes
 
-- **Lane 0 -- triage (DONE on `rebuild`; robots/middleware/canonical fixes cherry-picked to `main`
-  for prod):** the wrong-today list. robots.txt wildcard rules that blocked every canonical
+- **Lane 0 -- triage (DONE on `rebuild`; ships WITH the cutover -- his call 2026-08-23, no early
+  cherry-pick; prod keeps its broken robots until then):** the wrong-today list. robots.txt wildcard rules that blocked every canonical
   game/badge/jobs detail page; the bot-canonical 301 that swallowed `/games/<np>/leaderboard/`
   (and roadmap) sub-pages; querystring-dirty canonicals site-wide; the badge sitemap reading the
   retired Badge model; the roadmap sitemap advertising hidden pages; shovelware + no-floor profiles
@@ -108,6 +108,12 @@ checked against GSC impressions/coverage a month after shipping; without it we a
 Deploy checklist carries the re-ping items.
 
 ## Gotchas and Pitfalls
+
+- Two host sources coexist in seo_tags.py by design: `jsonld_organization`/`jsonld_website` use
+  `settings.SITE_URL` (the site entity is prod, whatever host renders it), everything
+  request-scoped (canonicals, breadcrumbs, ItemList, VideoGame, ProfilePage) uses
+  `request.get_host()`. On prod they agree; on beta they diverge, which is inert because beta
+  sends `X-Robots-Tag: noindex` globally. Recorded so the next audit doesn't re-open it.
 
 - robots.txt wildcards: `*` matches ZERO or more characters -- `/games/*/*` matches
   `/games/<np>/`. There is no robots pattern for "exactly two path segments." That is WHY the

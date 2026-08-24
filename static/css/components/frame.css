@@ -6,8 +6,10 @@
  * renders. See docs/reference/frame-component.md for the full
  * data contract, public API, and integration notes.
  *
- * Bundled into output.css via @import "./components/frame.css"
- * in static/css/input.css. Namespace: .pp-frame, .pp-earn-*,
+ * Bundled into output.css via the components/frame.css import
+ * in static/css/input.css. (Worded to dodge Django's manifest
+ * post-processor: its @import regex reads comments too, and a
+ * quoted path here resolves against THIS file's directory.) Namespace: .pp-frame, .pp-earn-*,
  * .pp-spark, .pp-anim-weld, .pp-hover-a.
  *
  * Sections:

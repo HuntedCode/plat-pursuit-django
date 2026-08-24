@@ -62,7 +62,6 @@ def test_canonical_detail_pages_are_crawlable():
     assert r.can_fetch('*', '/games/NPWR12345_00/'), 'game detail is robots-blocked again'
     assert r.can_fetch('*', '/badges/some-series/'), 'badge detail is robots-blocked again'
     assert r.can_fetch('*', '/jobs/some-job/'), 'job detail is robots-blocked again'
-    assert r.can_fetch('*', '/games/NPWR12345_00/leaderboard/'), 'the game leaderboard is blocked'
 
 
 def test_fragment_endpoints_are_not_crawlable():
@@ -73,6 +72,13 @@ def test_fragment_endpoints_are_not_crawlable():
     assert not r.can_fetch('*', '/leaderboards/rows/')
     assert not r.can_fetch('*', '/group-badge-peek/123/')
     assert not r.can_fetch('*', '/jobs/some-job/ranks/')
+    # The closing audit's three: the profile-aware peek sibling (prefix rules do NOT cover it:
+    # 'peek' vs 'progress-peek' diverge), the public contract preview, and the per-game
+    # leaderboard (a headless HTMX panel on ~35k URLs -- Lane 0 spared it as 'live content'
+    # before the audit found it has no head at all).
+    assert not r.can_fetch('*', '/group-badge-progress-peek/someone/123/')
+    assert not r.can_fetch('*', '/career/contracts/some-contract/preview/')
+    assert not r.can_fetch('*', '/games/NPWR12345_00/leaderboard/')
 
 
 def test_profile_query_variants_stay_throttled():
@@ -89,8 +95,10 @@ def test_profile_query_variants_stay_throttled():
 # --- the bot canonical 301 ---
 
 def test_bots_are_bounced_off_profile_variants_but_not_real_subpages(client):
-    """The lookahead fix: /games/<np>/<username>/ still 301s bots to the canonical, but the REAL
-    sub-pages sharing the two-segment shape (leaderboard, roadmap) reach their views."""
+    """The lookahead fix: /games/<np>/<username>/ still 301s bots to the canonical, and the one
+    REAL sub-page sharing the two-segment shape (roadmap) reaches its view. Leaderboard was
+    spared in Lane 0 but the closing audit found it serves a HEADLESS fragment -- bots are
+    bounced off it again, deliberately this time (robots.txt also blocks it)."""
     # CF-Ray rides along: the origin guard runs first and would 302 the request to prod.
     ua = {'HTTP_USER_AGENT': 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'HTTP_CF_RAY': '8f0000000000abcd-LHR'}
 
@@ -99,7 +107,9 @@ def test_bots_are_bounced_off_profile_variants_but_not_real_subpages(client):
     assert resp['Location'] == '/games/NPWR12345_00/'
 
     resp = client.get('/games/NPWR12345_00/leaderboard/', **ua)
-    assert resp.status_code != 301, 'Googlebot is being 301d off the leaderboard again'
+    assert resp.status_code == 301 and resp['Location'] == '/games/NPWR12345_00/', (
+        'the headless leaderboard fragment is reachable by bots again'
+    )
 
     resp = client.get('/games/NPWR12345_00/roadmap/', **ua)
     assert resp.status_code != 301, 'Googlebot is being 301d off the roadmap page again'
@@ -221,11 +231,16 @@ def test_the_bot_301_spares_the_noslash_subpage_forms(client):
     ua = {'HTTP_USER_AGENT': 'Mozilla/5.0 (compatible; Googlebot/2.1)',
           'HTTP_CF_RAY': '8f0000000000abcd-LHR'}
 
-    # The no-slash form 301s -- but to the SLASHED sub-page (CommonMiddleware's APPEND_SLASH,
-    # running after our spared lookahead), never to the bare game page.
+    # The no-slash roadmap form 301s -- but to the SLASHED sub-page (CommonMiddleware's
+    # APPEND_SLASH, running after our spared lookahead), never to the bare game page.
+    # (Leaderboard left this club with the closing audit: bots bounce off both its forms.)
+    resp = client.get('/games/NPWR12345_00/roadmap', **ua)
+    assert resp.status_code == 301 and resp['Location'].endswith('/roadmap/'), (
+        'the no-slash roadmap was bounced to the game page'
+    )
     resp = client.get('/games/NPWR12345_00/leaderboard', **ua)
-    assert resp.status_code == 301 and resp['Location'].endswith('/leaderboard/'), (
-        'the no-slash leaderboard was bounced to the game page'
+    assert resp.status_code == 301 and resp['Location'] == '/games/NPWR12345_00/', (
+        'the no-slash leaderboard fragment is reachable by bots again'
     )
     # And a hunter whose name merely STARTS with a reserved word is still bounced.
     resp = client.get('/games/NPWR12345_00/roadmapfan/', **ua)

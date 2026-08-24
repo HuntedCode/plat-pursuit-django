@@ -132,22 +132,33 @@ def jsonld_breadcrumbs(breadcrumb, request):
 
 
 @register.simple_tag
-def jsonld_game(game, concept, request, averages=None):
+def jsonld_game(game, concept, request, averages=None, canonical_game=None):
     """VideoGame schema for game detail pages.
 
     `averages` (SEO Lane 2): the base group's cached community-rating aggregate
     (RatingService._compute_averages shape). Real ratings become an AggregateRating -- the
     structured data Google renders as star snippets. Only ever emitted from genuine data:
     no ratings, no block.
+
+    `canonical_game` (closing audit): the concept-canonical sibling the page's rel=canonical
+    points at. The VideoGame node's url must agree with it -- on a non-elected SKU or the
+    /<user>/ variant, a request-path url beside a sibling canonical reads as two conflicting
+    identity claims for a star-snippet-eligible node.
     """
     if not game or not getattr(game, 'title_name', None):
         return ''
     base_url = f"{request.scheme}://{request.get_host()}"
+    from django.urls import reverse
+    if canonical_game is not None and getattr(canonical_game, 'np_communication_id', None):
+        node_url = base_url + reverse(
+            'game_detail', kwargs={'np_communication_id': canonical_game.np_communication_id})
+    else:
+        node_url = request.build_absolute_uri(request.path)
     data = {
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": game.title_name,
-        "url": request.build_absolute_uri(request.path),
+        "url": node_url,
     }
 
     if averages and averages.get('count') and averages.get('avg_rating') is not None:

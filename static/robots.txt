@@ -50,7 +50,6 @@ User-agent: *
 Allow: /
 Crawl-delay: 5
 
-Sitemap: https://platpursuit.com/sitemap.xml
 
 # Admin and API endpoints
 Disallow: /admin/
@@ -82,6 +81,11 @@ Disallow: /jobs/*/contracts/
 Disallow: /badge-ranks/
 Disallow: /leaderboards/rows/
 Disallow: /group-badge-peek/
+Disallow: /group-badge-progress-peek/
+Disallow: /career/contracts/
+# The per-game leaderboard URL serves a headless HTML fragment (the HTMX panel) -- no head, no
+# canonical, and the most expensive query on the site. ~35k URLs a crawler has no use for.
+Disallow: /games/*/leaderboard/
 
 # Filtered / paginated / tabbed variants of a profile. The canonical
 # /profiles/<username>/ page stays crawlable -- profiles are the free floor of
@@ -103,3 +107,7 @@ Disallow: /group-badge-peek/
 Disallow: /hunters/*/?*
 Disallow: /profiles/*/?*
 Disallow: /community/profiles/*/?*
+
+# Below the group on purpose: Sitemap is a non-group directive, and mid-group placement is the
+# one structure in this file that leans on parser generosity rather than being unambiguous.
+Sitemap: https://platpursuit.com/sitemap.xml

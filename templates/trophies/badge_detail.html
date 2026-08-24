@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 {% block title %}{{ series.name }} Badge Series{% endblock %}
+{% comment %} The /<user>/ profile variant carries an identical head; canonicalize both onto the
+base badge URL, as game_detail does for its profile variant. {% endcomment %}
+{% block canonical_url %}{{ request.scheme }}://{{ request.get_host }}{% url 'badge_detail' series_slug=series.series_slug %}{% endblock %}
+{% block og_url %}{{ request.scheme }}://{{ request.get_host }}{% url 'badge_detail' series_slug=series.series_slug %}{% endblock %}
 {% comment %}The badge's own handcrafted subject art as the social image (SEO Lane 2) -- every
 badge page shared the 128px site logo while sitting on bespoke medallion art. Subject = the
 LAST art layer (backdrop first); square art on a summary card reads perfectly.{% endcomment %}
