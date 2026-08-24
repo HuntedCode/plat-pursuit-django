@@ -155,6 +155,33 @@
                 if (canned) { emitProgress(canned); }
             });
         }
+        // "Simulate live sync": a paced run of poll payloads (one every 1.2s, ~24s total)
+        // with the tally and bar climbing together -- the closest feel to a real first sync
+        // without waiting on one. Re-click restarts. Does NOT auto-finish; hit Simulate
+        // synced when you want the finale.
+        var liveBtn = panel.querySelector('[data-sync-dev-live]');
+        var liveTimer = null;
+        if (liveBtn) {
+            liveBtn.addEventListener('click', function () {
+                if (liveTimer) { clearInterval(liveTimer); }
+                var TICKS = 20, TARGET_TASKS = 412, TARGET_TALLY = 8412;
+                var i = 0;
+                liveTimer = setInterval(function () {
+                    i += 1;
+                    // Ease the climb so late-sync gains feel smaller, like real per-game jobs.
+                    var p = 1 - Math.pow(1 - i / TICKS, 2);
+                    emitProgress({
+                        sync_percentage: Math.round(p * 100),
+                        sync_progress: Math.round(p * TARGET_TASKS),
+                        sync_target: TARGET_TASKS,
+                        live_tally: Math.round(p * TARGET_TALLY),
+                        stats: { plats: 0, golds: 0, silvers: 0, bronzes: 0 },
+                        psn_found: { total: 8412, plats: 71, level: 512 }
+                    });
+                    if (i >= TICKS) { clearInterval(liveTimer); liveTimer = null; }
+                }, 1200);
+            });
+        }
         if (syncedBtn) {
             syncedBtn.addEventListener('click', function () {
                 // Real ordering: status-changed FIRST, trailing progress with final stats after.
