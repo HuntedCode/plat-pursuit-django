@@ -193,33 +193,29 @@ def test_regular_users_cannot_preview_the_syncing_page(client):
 
 # --- the banked-so-far tally ---
 
-def test_the_status_payload_tallies_banked_trophies_on_first_syncs(client):
-    """EarnedTrophy rows land progressively during the walk; the payload surfaces the count
-    (one indexed COUNT, first syncs only) so the hero can show the total climbing."""
+def test_the_payload_stats_climb_during_the_walk(client):
+    """The tally mechanism (audit-corrected): the per-type denorms climb LIVE via the
+    EarnedTrophy post_save signal, so the payload's stats block IS the growing tally --
+    no bespoke query, no bespoke key. Unearned rows must not count."""
     from tests.factories import EarnedTrophyFactory
 
     client, profile = _syncing_client(client, total_trophies=0)
     for _ in range(3):
         EarnedTrophyFactory(profile=profile)
+    EarnedTrophyFactory(profile=profile, earned=False)
 
     data = client.get('/api/profile-sync-status/', **CF).json()
 
-    assert data['live_tally'] == 3
-
-
-def test_refresh_syncs_skip_the_tally_query(client):
-    """A refreshing veteran's denorms are already real; the tally is first-sync-only so the
-    whale cost stays bounded to the first-sync cohort."""
-    client, _ = _syncing_client(client, total_trophies=500)
-
-    data = client.get('/api/profile-sync-status/', **CF).json()
-
-    assert 'live_tally' not in data
+    stats = data['stats']
+    assert stats['plats'] + stats['golds'] + stats['silvers'] + stats['bronzes'] == 3
+    assert 'live_tally' not in data, 'the bespoke key is retired; stats are the tally'
 
 
 def test_the_tally_line_renders_for_first_syncs_only(client):
-    client, profile = _syncing_client(client, total_trophies=0)
+    """Server-rendered from the live per-type denorms (zero queries), first syncs only."""
     from tests.factories import EarnedTrophyFactory
+
+    client, profile = _syncing_client(client, total_trophies=0)
     for _ in range(2):
         EarnedTrophyFactory(profile=profile)
 
@@ -229,6 +225,19 @@ def test_the_tally_line_renders_for_first_syncs_only(client):
     assert 'data-countup="2"' in body, 'the initial paint must show the real server-side count'
 
     client.logout()
-    client2, _ = _syncing_client(client, total_trophies=500)
-    body = client2.get('/', **CF).content.decode()
+    refresh_client, _ = _syncing_client(client, total_trophies=500)
+    body = refresh_client.get('/', **CF).content.decode()
     assert 'data-sync-tally' not in body
+
+
+def test_the_tally_and_finale_wiring_survives(client):
+    """Source pins for the audit-caught races: landing.js must not claim the tally element
+    (a second uncancellable countUp loop parks it on a stale number), the finale count-up
+    must wait a frame for the trailing stats event, and a re-sync from the finale must not
+    replay the reveal."""
+    landing = _code(Path(settings.BASE_DIR) / 'static' / 'js' / 'landing.js')
+    assert ':not([data-sync-tally])' in landing, 'the global count-up sweep claims the tally again'
+
+    syncing = _code(Path(settings.BASE_DIR) / 'static' / 'js' / 'syncing.js')
+    assert 'requestAnimationFrame(startCountUps)' in syncing
+    assert 'if (completed) { return; }' in syncing, 'a second synced transition replays the finale'

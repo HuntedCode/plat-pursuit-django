@@ -47,8 +47,14 @@
         var prev = parseInt(el.dataset.countup, 10) || 0;
 
         document.addEventListener('platpursuit:sync-progress', function (e) {
-            var tally = e && e.detail && e.detail.live_tally;
-            if (tally == null || tally === prev) { return; }
+            // The payload's stats ARE the tally: the per-type denorms climb live during the
+            // walk (post_save signal), and summing them keeps this number definitionally
+            // consistent with the finale's four figures.
+            var stats = e && e.detail && e.detail.stats;
+            if (!stats) { return; }
+            var tally = (stats.plats || 0) + (stats.golds || 0)
+                      + (stats.silvers || 0) + (stats.bronzes || 0);
+            if (tally === prev) { return; }
             el.dataset.countup = tally;
             // Old-to-new ticking (countUp's `from`), reduced-motion handled inside it.
             if (window.PlatPursuit && PlatPursuit.countUp) {
@@ -111,6 +117,7 @@
         document.addEventListener('platpursuit:sync-status-changed', function (e) {
             if (!e.detail) { return; }
             if (e.detail.status === 'synced') {
+                if (completed) { return; }   // a re-sync from the finale must not replay it
                 if (!finale || !live) {
                     // Quick refresh (no finale block rendered): the old behaviour -- straight in.
                     window.location.reload();
@@ -147,10 +154,10 @@
             progressBtn.addEventListener('click', function () {
                 step = Math.min(step + 1, 4);
                 var canned = [
-                    { sync_percentage: 15, sync_progress: 61, sync_target: 412, live_tally: 1063, stats: { plats: 4, golds: 40, silvers: 199, bronzes: 820 }, psn_found: { total: 8412, plats: 71, level: 512 } },
-                    { sync_percentage: 55, sync_progress: 227, sync_target: 412, live_tally: 4620, stats: { plats: 31, golds: 301, silvers: 1400, bronzes: 4100 }, psn_found: { total: 8412, plats: 71, level: 512 } },
-                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'health_check', live_tally: 8290, stats: { plats: 60, golds: 700, silvers: 2600, bronzes: 6900 } },
-                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'stats_badges', live_tally: 8412, stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 } }
+                    { sync_percentage: 15, sync_progress: 61, sync_target: 412, stats: { plats: 4, golds: 40, silvers: 199, bronzes: 820 }, psn_found: { total: 8412, plats: 71, level: 512 } },
+                    { sync_percentage: 55, sync_progress: 227, sync_target: 412, stats: { plats: 31, golds: 301, silvers: 1400, bronzes: 4100 }, psn_found: { total: 8412, plats: 71, level: 512 } },
+                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'health_check', stats: { plats: 60, golds: 700, silvers: 2600, bronzes: 6900 } },
+                    { sync_percentage: 100, sync_progress: 412, sync_target: 412, is_finalizing: true, finalize_phase: 'stats_badges', stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 } }
                 ][step - 1];
                 if (canned) { emitProgress(canned); }
             });
@@ -170,12 +177,15 @@
                     i += 1;
                     // Ease the climb so late-sync gains feel smaller, like real per-game jobs.
                     var p = 1 - Math.pow(1 - i / TICKS, 2);
+                    // The stats ARE the tally: split the climb across the four metals so
+                    // both the tally line and (post-synced) the finale read sensibly.
+                    var t = Math.round(p * TARGET_TALLY);
                     emitProgress({
                         sync_percentage: Math.round(p * 100),
                         sync_progress: Math.round(p * TARGET_TASKS),
                         sync_target: TARGET_TASKS,
-                        live_tally: Math.round(p * TARGET_TALLY),
-                        stats: { plats: 0, golds: 0, silvers: 0, bronzes: 0 },
+                        stats: { plats: Math.round(t * 0.008), golds: Math.round(t * 0.1),
+                                 silvers: Math.round(t * 0.3), bronzes: t - Math.round(t * 0.008) - Math.round(t * 0.1) - Math.round(t * 0.3) },
                         psn_found: { total: 8412, plats: 71, level: 512 }
                     });
                     if (i >= TICKS) { clearInterval(liveTimer); liveTimer = null; }
@@ -184,6 +194,7 @@
         }
         if (syncedBtn) {
             syncedBtn.addEventListener('click', function () {
+                if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
                 // Real ordering: status-changed FIRST, trailing progress with final stats after.
                 document.dispatchEvent(new CustomEvent('platpursuit:sync-status-changed', { detail: { status: 'synced' } }));
                 emitProgress({ sync_percentage: 100, stats: { plats: 71, golds: 841, silvers: 2500, bronzes: 5000 } });

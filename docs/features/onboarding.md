@@ -25,11 +25,12 @@ syncing branch):
    carousel: the landing's real sections (medallion shelf with the 3D inspect modal, the live
    ratings carousel, the showcase Profile Card, the heartbeat band) render below the hero.
    The site's best showcase is the tour, at full fidelity, with zero duplicated upkeep.
-3. **The banked-so-far tally.** EarnedTrophy rows land progressively during the per-game
-   walk, so the growing total already exists in the DB. The status payload surfaces it as
-   `live_tally` (one indexed COUNT per poll, FIRST syncs only -- refreshes skip the query and
-   whale cost stays bounded to the first-sync cohort) and the hero ticks it old-to-new with
-   the house count-up alongside the progress bar.
+3. **The banked-so-far tally.** The per-type denorms (total_plats/golds/silvers/bronzes)
+   climb LIVE during the walk via the EarnedTrophy post_save signal (only total_trophies
+   waits for finalize), so the payload's existing `stats` block already carries the growing
+   tally at zero extra cost. The hero sums the four figures and ticks the total old-to-new
+   with the house count-up alongside the progress bar; being stats-derived also keeps it
+   definitionally consistent with the finale's numbers.
 4. **The enter moment.** On a FIRST sync (`is_initial_sync`), the `synced` transition swaps
    the status card in place: "Your Pursuer has emerged" (the phrase is from
    `docs/design/gamification-plan.md`'s design intent for this exact moment), the final
@@ -74,7 +75,9 @@ Client discipline (from the badge howto + timezone modal prior art):
   (mirrors `/?preview=landing`). The preview forces the first-sync view, so the greeting,
   progress bar, and finale all render.
 - **DEBUG simulate panel** on the syncing page (`data-sync-dev`, `.ccx-dev` styling):
-  "Simulate progress" steps canned poll payloads; "Simulate synced" dispatches the
+  "Simulate progress" steps canned poll payloads; "Simulate live sync" runs 20 eased ticks
+  over ~24 seconds with the bar and tally climbing together (re-click restarts, never
+  auto-finishes); "Simulate synced" dispatches the
   status-changed event BEFORE a trailing progress event, which is navsync's real ordering, so
   the idempotent stat re-fill is what gets exercised. Drives the whole client state machine
   without a real sync.

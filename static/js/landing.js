@@ -133,7 +133,10 @@
     // --- 3. Count-ups when the numbers scroll in -------------------------------------------
 
     function wireCountUps() {
-        var els = Array.prototype.slice.call(document.querySelectorAll('[data-countup]'));
+        // :not([data-sync-tally]): the syncing hero's tally is OWNED by syncing.js, which
+        // ticks it old-to-new off the poll payload. Sweeping it here would race that with a
+        // second, uncancellable countUp loop (and defeat the server-rendered first paint).
+        var els = Array.prototype.slice.call(document.querySelectorAll('[data-countup]:not([data-sync-tally])'));
         if (!els.length || !window.PlatPursuit || !PlatPursuit.countUp) { return; }
         if (!('IntersectionObserver' in window)) { return; }   // numbers are already rendered
         var io = new IntersectionObserver(function (entries) {

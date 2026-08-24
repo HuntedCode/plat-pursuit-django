@@ -270,12 +270,13 @@ class HomeView(TemplateView):
                 'level': profile.trophy_level or 0,
             } if summary else None
 
-            # The banked-so-far tally (first syncs only; see ProfileSyncStatusView for the
-            # cost story). Server-rendered so the initial paint shows the real number.
+            # The banked-so-far tally, server-rendered so the initial paint shows the real
+            # number. Free: the per-type denorms climb live during the walk (EarnedTrophy
+            # post_save signal); only total_trophies waits for finalize, which is exactly why
+            # it stays the is_initial_sync gate while these four are safe to sum.
             if context['is_initial_sync']:
-                from trophies.models import EarnedTrophy
-                context['live_tally'] = EarnedTrophy.objects.filter(
-                    profile=profile, earned=True).count()
+                context['live_tally'] = (profile.total_plats + profile.total_golds
+                                         + profile.total_silvers + profile.total_bronzes)
 
             # DEBUG-only: the syncing hero replay harness (canned event payloads, no
             # real sync) lives in the template behind this flag.
