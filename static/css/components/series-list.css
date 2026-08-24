@@ -75,6 +75,7 @@
  * Deliberately quiet -- text-mute until hover. It answers a question a minority of readers have, and it
  * sits beside controls that must stay the loudest thing in their row. */
 .pp-edhint {
+    cursor: pointer;   /* also a <button> now (the Career reopen); preflight gives buttons no pointer */
     display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;
     font-size: 11px; font-weight: 700; letter-spacing: 0.02em; line-height: 1;
     color: var(--pp-text-mute); text-decoration: none;
@@ -114,6 +115,14 @@
    reduced-motion `animation: none`, which would otherwise leak the motion back in for those users). */
 @media (prefers-reduced-motion: no-preference) {
     #badge-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+
+/* The Career howto exits the same way (audit-caught: without these ID-scoped rules it inherited
+   badge-inspect's unscoped is-closing treatment, which dissolves the dialog chrome around
+   still-opaque text instead of fading the whole modal). */
+#career-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }
+@media (prefers-reduced-motion: no-preference) {
+    #career-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 @keyframes ppHowtoFadeOut { to { opacity: 0; } }
 @keyframes ppHowtoDialogOut { to { transform: translateY(8px) scale(0.985); } }

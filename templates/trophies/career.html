@@ -102,9 +102,6 @@
         </section>
     {% endif %}
 
-    {# ── First-visit explainer: one-shot education card, dismissed into User.ui_flags ── #}
-    {% include 'trophies/partials/career/_career_explainer.html' %}
-
     {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
     {% if claimable.count %}
     <a href="?view=contracts" data-lab-goto="contracts" data-goto-filter="claimable" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 hover:border-primary transition-colors group mb-3">
@@ -122,6 +119,12 @@
     {% endif %}
 
     {% if career %}
+    {% comment %} First-visit "how it works" modal (auto-open server-gated via ui_flags,
+    reopenable from the edhint below). Inside the career gate ON PURPOSE: the degraded
+    no-career fallback renders no edhint, so an auto-open there would burn the one-shot
+    flag on a broken page with no way back in. {% endcomment %}
+    {% include 'trophies/partials/career/_career_explainer.html' %}
+
     {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
     this section. Stacked chrome per the site-wide rule; the tabs + panels below flow FREE (not carded). {% endcomment %}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
@@ -930,7 +933,10 @@ function ppCountUp(el, dur) {
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(e.target); io.unobserve(e.target); } });
     }, { threshold: 0.4 });
-    els.forEach(function (el) { io.observe(el); });
+    // Gated on the first-visit modal: numbers hold at 0 behind its scrim and tick on close.
+    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+        els.forEach(function (el) { io.observe(el); });
+    });
 })();
 
 // Premium: the hero rank ladder's "X to next" counts DOWN from the from-zero distance (the next
@@ -958,7 +964,7 @@ function ppCountUp(el, dur) {
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(); io.unobserve(e.target); } });
     }, { threshold: 0.4 });
-    io.observe(el);
+    (window.ppAfterCareerHowto || function (f) { f(); })(function () { io.observe(el); });
 })();
 
 // Premium: hover a legend row (or arc) -> spotlight its discipline arc, dim the rest, pause the spin.
@@ -1018,7 +1024,9 @@ function ppCountUp(el, dur) {
             }, i * 90);
         });
     }, { threshold: 0.2 });
-    bands.forEach(function (b) { io.observe(b); });
+    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+        bands.forEach(function (b) { io.observe(b); });
+    });
 })();
 
 // Premium: cursor-tracking 3D tilt on the dossier job tiles (hover-capable, motion-OK devices only).

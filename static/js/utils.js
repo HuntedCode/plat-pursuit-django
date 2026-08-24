@@ -3414,6 +3414,9 @@ document.addEventListener('keydown', function (e) {
     if (!cmdK && !slash) { return; }
     var t = e.target;
     if (slash && t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) { return; }
+    // An open detail modal owns the keyboard: focusing a page search behind its scrim would
+    // yank focus out of the trap (audit-caught via the Career howto over ?view=contracts).
+    if (document.querySelector('.pp-detail-modal:not([hidden])')) { return; }
     // Pick the first VISIBLE data-page-search (a page may have hidden ones, e.g. an inactive tab/view);
     // fall back to a [data-browse-form] search input (the ~18 browse pages don't all carry data-page-search).
     var input = null;

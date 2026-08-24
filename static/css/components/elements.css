@@ -1031,7 +1031,9 @@
 .cxp__flow { display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-top: 1.1rem; }
 .cxp__cell { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; min-width: 0; }
 .cxp__flowcap { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-dim); text-align: center; }
-.cxp__chev { flex: 0 0 auto; width: 1rem; height: 1rem; color: color-mix(in oklab, var(--pp-text) 35%, transparent); margin-bottom: 1.1rem; }
+/* align-self + margin-top center the chevron on the 62px ART row, not the cell -- a wrapped
+   caption ('Complete contracts' at 375px) would otherwise push it off-center. */
+.cxp__chev { flex: 0 0 auto; align-self: flex-start; width: 1rem; height: 1rem; margin-top: 23px; color: color-mix(in oklab, var(--pp-text) 35%, transparent); }
 .cxp__chev svg { width: 100%; height: 100%; }
 .cxp__jobgrid {
     display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.3rem;

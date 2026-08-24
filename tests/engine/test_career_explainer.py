@@ -1,8 +1,8 @@
-"""The Career first-visit explainer + the ui_flags one-shot education mechanism.
+"""The Career "how it works" modal + the ui_flags one-shot education mechanism.
 
-New-user onboarding (2026-08-24): a dismissible education card on /career/ remembered
-server-side per user via CustomUser.ui_flags, written through the quick-settings API's
-ui_flag branch. Plan: onboarding initiative; doc: docs/features/onboarding.md.
+New-user onboarding (2026-08): a first-visit modal on /career/ (auto-open remembered
+server-side via CustomUser.ui_flags, written through the quick-settings API's ui_flag
+branch; reopenable forever from the summary card's edhint). Doc: docs/features/onboarding.md.
 """
 import pytest
 from django.urls import reverse
@@ -90,6 +90,29 @@ def test_career_auto_opens_the_howto_on_first_visit(linked_client):
     assert 'cxp__flow' in body
     assert 'pp-forge__fan' in body, 'the contract cell must reuse the badge fan classes'
     assert 'cxp__ring' in body
+    # job_icon renders '' for an unknown Lucide name: a typo'd icon ships an empty quad
+    # with a green suite unless the rendered count is pinned.
+    assert body.count('cxp__jico') == 4, 'a job icon name stopped resolving'
+    assert 'from open worlds to the arcade and everything in between' in body
+
+
+def test_the_collage_motion_contract_holds():
+    """Source pins: classless markup is the FINAL state (arm-then-light restarts each
+    open), and the page's on-load choreography gates on the modal (numbers behind the
+    scrim wait for close). Both were audit commitments."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    partial = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
+               '_career_explainer.html').read_text(encoding='utf-8')
+    assert 'restartCollage' in partial and 'is-armed' in partial
+    assert 'ppAfterCareerHowto' in partial and 'career-howto:settled' in partial
+
+    career = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    assert career.count('ppAfterCareerHowto') == 3, (
+        'the three on-load choreography kick-offs must all ride the modal gate'
+    )
 
 
 def test_career_never_auto_opens_once_flagged(linked_client):

@@ -53,7 +53,17 @@ information that matters).
 - **Reachable forever, unlike badges**: the badge howto is one-shot because its teaching has a
   fuller home at /badges/how-it-works (a recall button would let two copies drift). Career has
   no long-form page -- the modal IS the teaching -- so the summary card's `.pp-edhint`
-  ("How your Career works", `data-career-open`) reopens it. One copy, no drift.
+  ("How does my Career work?", `data-career-open`) reopens it. One copy, no drift. Reopens
+  close silently: only an armed (first-visit) dismissal writes the flag.
+- **The collage**: below the beats, the three ideas as objects with chevrons between them --
+  a quad of real job icons, the badge howto's own cover fan (a contract IS a set of games),
+  and a Pursuer ring. Arm-then-light choreography replays on every open (fan snaps open,
+  arc sweeps); classless markup is the FINAL state, so no-JS and reduced-motion always see
+  the finished collage.
+- **The choreography gate**: Career's own on-load motion (count-ups, rank count-down,
+  dossier reveals) would play out behind the auto-opened modal's scrim on the one visit it
+  exists for. The partial publishes `ppAfterCareerHowto` synchronously; the page's three
+  kick-offs ride it and fire on close (or immediately when no auto-open will happen).
 - **ONE dev panel per page**: `.ccx-dev` is fixed to left/bottom 12px, so a second instance
   stacks over the first and eats its clicks (shipped once, guard-tested now). New dev
   affordances join the page's existing panel as extra rows.

@@ -46,7 +46,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
                     <span class="cxp__num" aria-hidden="true">3</span>
                     <div>
                         <div class="cxp__label">Pursuer</div>
-                        <p class="cxp__copy">Complete contracts (finish the games and log the contract) to earn XP toward your jobs and your overall Pursuer level.</p>
+                        <p class="cxp__copy">Complete contracts (finish the games, then claim the contract) to earn XP toward your jobs and your overall Pursuer level.</p>
                     </div>
                 </div>
             </div>
@@ -103,6 +103,9 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
     var collage = modal.querySelector('[data-collage]');
     var SEEN_KEY = 'pp-explainer-career-seen';
     var lastFocus = null;
+    // Armed = this render carried the auto-open (the server flag was unset). Only an armed
+    // dismissal writes the flag; an edhint reopen on a flagged account closes silently.
+    var armed = modal.hasAttribute('data-auto');
     var reduce = false;
     try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
 
@@ -143,10 +146,14 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         if (modal.hidden) { return; }
         // Dismissed = greeted, durably: the server flag ends the auto-open on every device.
         // No success toast; on failure the localStorage fallback keeps this device quiet and
-        // the self-heal below retries the write on the next visit.
-        flagPost().catch(function () {
-            try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
-        });
+        // the self-heal below retries the write on the next visit. Armed dismissals only:
+        // an edhint reopen on an already-flagged account closes without a write.
+        if (armed) {
+            armed = false;
+            flagPost().catch(function () {
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+            });
+        }
         modal.classList.add('is-closing');
         window.setTimeout(function () {
             modal.hidden = true;
@@ -161,8 +168,11 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         if (e.target.closest('[data-career-open]')) { e.preventDefault(); open(e.target.closest('[data-career-open]')); return; }
         {% if explainer_debug %}
         // Dev-only replay (button lives in the shared ceremony panel), render-gated so the
-        // handler never ships to prod. Clears the device fallback so the run exercises the
-        // genuine first-visit gating; the server flag re-arms via the replay being explicit.
+        // handler never ships to prod. Replays the OPEN (choreography included); the genuine
+        // auto-open path only runs while the server flag is unset, and a real dismissal
+        // burns that flag durably -- clear `career_explainer` from ui_flags in a shell to
+        // retest the true first visit. The localStorage clear below keeps the device
+        // fallback from muddying that retest.
         if (e.target.closest('[data-explainer-replay]')) {
             e.preventDefault();
             try { localStorage.removeItem(SEEN_KEY); } catch (err) {}
@@ -185,6 +195,26 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
 
+    // The on-load choreography gate (audit-caught): the Career page's count-ups, rank
+    // count-down and dossier reveals fire from IntersectionObservers the moment the page
+    // loads -- on the ONE visit the modal auto-opens, they'd all play out behind the scrim.
+    // This script runs before the page's scripts (the include sits at the top of content),
+    // so it publishes the gate synchronously; the page wraps its kick-offs in it. Settled
+    // on close, or immediately when no auto-open will happen.
+    window.ppCareerHowtoPending = false;
+    function settleChoreography() {
+        if (!window.ppCareerHowtoPending) { return; }
+        window.ppCareerHowtoPending = false;
+        document.dispatchEvent(new CustomEvent('career-howto:settled'));
+    }
+    window.ppAfterCareerHowto = function (fn) {
+        if (window.ppCareerHowtoPending) {
+            document.addEventListener('career-howto:settled', function () { fn(); }, { once: true });
+        } else { fn(); }
+    };
+    var _origClose = close;
+    close = function () { _origClose(); settleChoreography(); };
+
     // First visit (server-gated via data-auto): open once, after paint. The localStorage
     // fallback suppresses a device whose flag POST failed, and self-heals by retrying the
     // write once utils.js is up (this inline script runs before end-of-body scripts).
@@ -196,8 +226,11 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
                 flagPost().then(function () { try { localStorage.removeItem(SEEN_KEY); } catch (e) {} }).catch(function () {});
             });
         } else {
+            window.ppCareerHowtoPending = true;
             window.setTimeout(function () {
-                if (isEditable(document.activeElement)) { return; }
+                // Typing guard: the skipped auto-open must settle the gate too, or the
+                // page's numbers would wait forever on a modal that never opened.
+                if (isEditable(document.activeElement)) { settleChoreography(); return; }
                 open(null);
             }, 450);
         }
