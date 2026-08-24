@@ -32,7 +32,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
                     <span class="cxp__num" aria-hidden="true">1</span>
                     <div>
                         <div class="cxp__label">25 jobs, five disciplines</div>
-                        <p class="cxp__copy">Each job captures a different niche in gaming, from bosses felled to worlds explored.</p>
+                        <p class="cxp__copy">Each job captures a different niche in gaming, from open worlds to the arcade and everything in between.</p>
                     </div>
                 </div>
                 <div class="cxp__beat">
@@ -55,7 +55,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
             via the inline Lucide tag, the cover-fan classes the badge howto draws its game
             sets with -- a contract IS a set of games -- and a Pursuer ring). Decorative:
             captions carry the words, art is aria-hidden. {% endcomment %}
-            <div class="cxp__flow" aria-hidden="true">
+            <div class="cxp__flow" aria-hidden="true" data-collage>
                 <div class="cxp__cell">
                     <span class="cxp__jobgrid">
                         {% job_icon 'swords' 'cxp__jico' %}{% job_icon 'compass' 'cxp__jico' %}{% job_icon 'brain' 'cxp__jico' %}{% job_icon 'wand-sparkles' 'cxp__jico' %}
@@ -100,8 +100,24 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
     var modal = document.getElementById('career-howto');
     if (!modal) { return; }
     var dialog = modal.querySelector('.pp-detail-modal__dialog');
+    var collage = modal.querySelector('[data-collage]');
     var SEEN_KEY = 'pp-explainer-career-seen';
     var lastFocus = null;
+    var reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+    // The badge forge's arm-then-light restart: default (classless) markup IS the final
+    // state, so no-JS and reduced-motion always see the finished collage. Arming holds the
+    // hidden start states; re-adding is-live after a forced reflow restarts the run on
+    // every open.
+    function restartCollage() {
+        if (!collage) { return; }
+        collage.classList.remove('is-live', 'is-armed');
+        if (reduce) { return; }
+        collage.classList.add('is-armed');
+        void collage.offsetWidth;
+        collage.classList.add('is-live');
+    }
 
     function flagPost() {
         if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
@@ -121,6 +137,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         modal.hidden = false;
         // Take focus EXCEPT on a silent auto-open while the visitor is typing.
         if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+        restartCollage();
     }
     function close() {
         if (modal.hidden) { return; }
@@ -134,6 +151,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         window.setTimeout(function () {
             modal.hidden = true;
             modal.classList.remove('is-closing');
+            if (collage) { collage.classList.remove('is-live', 'is-armed'); }
             if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
         }, 200);
     }

@@ -1048,3 +1048,37 @@
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 0.95rem; letter-spacing: 0.02em;
 }
+
+/* ── Collage choreography (the badge forge's arm-then-light pattern) ─────────
+   Classless markup = the FINAL state (no-JS and reduced-motion see the finished
+   collage; the modal JS skips arming under reduced motion). is-armed holds the
+   start states, is-live transitions everything in on a staggered clock:
+   jobs tile -> chevron -> fan (covers spread) -> chevron -> ring (arc sweeps).
+   Opacity/transform/stroke-dasharray only; no filters, no color-mix keyframes. */
+.cxp__flow.is-armed .cxp__cell,
+.cxp__flow.is-armed .cxp__chev { opacity: 0; transform: translateY(7px); }
+.cxp__flow.is-armed .pp-forge__cover:nth-child(1),
+.cxp__flow.is-armed .pp-forge__cover:nth-child(3) { transform: rotate(0deg) translateY(0); }
+.cxp__flow.is-armed .cxp__ring-arc { stroke-dasharray: 0 100; }
+.cxp__flow.is-live .cxp__cell,
+.cxp__flow.is-live .cxp__chev { opacity: 1; transform: none; }
+.cxp__flow.is-live .pp-forge__cover:nth-child(1) { transform: rotate(-15deg) translateY(2px); }
+.cxp__flow.is-live .pp-forge__cover:nth-child(3) { transform: rotate(15deg) translateY(2px); }
+.cxp__flow.is-live .cxp__ring-arc { stroke-dasharray: 72 100; }
+.cxp__flow.is-live .cxp__cell,
+.cxp__flow.is-live .cxp__chev {
+    transition: opacity 0.4s var(--pp-ease, ease), transform 0.4s var(--pp-ease, ease);
+}
+.cxp__flow.is-live .cxp__cell:nth-child(1) { transition-delay: 0.05s; }
+.cxp__flow.is-live .cxp__chev:nth-child(2) { transition-delay: 0.3s; }
+.cxp__flow.is-live .cxp__cell:nth-child(3) { transition-delay: 0.4s; }
+.cxp__flow.is-live .cxp__chev:nth-child(4) { transition-delay: 0.65s; }
+.cxp__flow.is-live .cxp__cell:nth-child(5) { transition-delay: 0.75s; }
+.cxp__flow.is-live .pp-forge__cover {
+    transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);   /* a little overshoot: the fan snaps open */
+    transition-delay: 0.62s;
+}
+.cxp__flow.is-live .cxp__ring-arc {
+    transition: stroke-dasharray 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: 0.95s;
+}

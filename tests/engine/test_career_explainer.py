@@ -112,7 +112,7 @@ def test_the_summary_card_carries_the_reopen_hint(linked_client):
     body = linked_client.get('/career/', **CF).content.decode()
 
     assert 'data-career-open' in body
-    assert 'How your Career works' in body
+    assert 'How does my Career work?' in body
 
 
 def test_the_explainer_never_grows_its_own_dev_panel():
