@@ -15,6 +15,7 @@ index seek even for a whale with 250k ProfileTrophyGroups.
 """
 from collections import defaultdict
 
+from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 
 from trophies.models import (
@@ -114,7 +115,10 @@ def recompute_required_stages(catalog) -> int:
     for gb in stale:
         gb.required_stages = counts[gb.id]
     if stale:
-        GroupBadge.objects.bulk_update(stale, ['required_stages'], batch_size=500)
+        # Atomic: batch_size splits this into several statements, and a failure part-way through would
+        # otherwise leave the catalogue half-updated -- some cards showing a real count, others still 0.
+        with transaction.atomic():
+            GroupBadge.objects.bulk_update(stale, ['required_stages'], batch_size=500)
     return len(stale)
 
 

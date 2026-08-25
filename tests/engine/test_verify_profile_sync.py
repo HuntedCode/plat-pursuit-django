@@ -124,7 +124,7 @@ def test_it_catches_a_held_badge_with_no_standing_row():
         _run(profile)
 
 
-def test_it_writes_nothing(django_assert_num_queries):
+def test_it_writes_nothing():
     """A verifier that repairs what it measures cannot be trusted to measure. It also has to be safe
     to point at a live profile."""
     from django.db import connection

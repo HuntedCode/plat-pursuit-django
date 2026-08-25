@@ -5,6 +5,7 @@ Provides Redis client configuration and utility functions for caching.
 """
 import os
 import logging
+import time
 import redis
 import hashlib
 import requests
@@ -39,6 +40,11 @@ redis_client = get_redis_client()
 #: re-resolving per call bought nothing.
 _EGRESS_IP_TTL = 3600
 _EGRESS_IP_KEY = 'tokenkeeper:egress_ip'
+#: A failed lookup is cached briefly too, so an outage costs one request a minute rather
+#: than one per API call.
+_EGRESS_IP_FAIL_TTL = 60
+#: Survives a Redis outage, which a Redis-only cache by definition does not.
+_LOCAL_IP = {'value': None, 'expires': 0.0}
 
 
 def _machine_id():
@@ -47,12 +53,36 @@ def _machine_id():
     return os.getenv("MACHINE_ID", "default")
 
 
+def _max_calls():
+    """The rate-limit cap, read from the same env var `token_keeper.py` reads (`MAX_CALLS_PER_WINDOW`).
+    Hardcoding 300 here meant changing it there made this column lie again."""
+    try:
+        return int(os.getenv("MAX_CALLS_PER_WINDOW", 300))
+    except (TypeError, ValueError):
+        return 300
+
+
+def _window_seconds():
+    try:
+        return int(os.getenv("WINDOW_SECONDS", 900))
+    except (TypeError, ValueError):
+        return 900
+
+
 def _calls_in_window(token):
     """Calls this machine has made on `token` inside the rolling window, from the key the TokenKeeper
-    actually writes. Never raises: a Redis blip must not cost the audit row (or the API call that is
-    logging it)."""
+    actually writes.
+
+    `zcount` over the window rather than a bare `zcard`: the zset has no TTL and the keeper only prunes
+    it in `_get_calls_in_window`, so counting every member counts calls that expired out of the window
+    long ago and under-reports what is left. `zcount` is read-only, so this never mutates state the
+    keeper owns.
+
+    Never raises: a Redis blip must not cost the audit row, let alone the API call that is logging it.
+    """
     try:
-        return int(redis_client.zcard(f"token:{token}:{_machine_id()}:timestamps") or 0)
+        floor = time.time() - _window_seconds()
+        return int(redis_client.zcount(f"token:{token}:{_machine_id()}:timestamps", floor, '+inf') or 0)
     except Exception:
         return 0
 
@@ -73,18 +103,34 @@ def _egress_ip():
 
     Now cached, and it swallows its own failures: an unknown IP is a worse audit row, not a lost sync.
     """
+    now = time.time()
+    # PROCESS-LOCAL FIRST, and this is not an optimisation. With Redis down, a Redis-only cache never
+    # populates, so every single API call fell through to the blocking request again -- the original
+    # bug, minus the raise. The local cache holds even when Redis does not.
+    if _LOCAL_IP['value'] and now < _LOCAL_IP['expires']:
+        return _LOCAL_IP['value']
+
     try:
         cached = redis_client.get(_EGRESS_IP_KEY)
         if cached:
-            return cached.decode() if isinstance(cached, bytes) else str(cached)
+            ip = cached.decode() if isinstance(cached, bytes) else str(cached)
+            _LOCAL_IP.update(value=ip, expires=now + _EGRESS_IP_TTL)
+            return ip
     except Exception:
         pass
 
     try:
-        ip = requests.get("https://api.ipify.org", timeout=5).text.strip()[:45]
+        response = requests.get("https://api.ipify.org", timeout=5)
+        response.raise_for_status()
+        ip = response.text.strip()[:45]
     except Exception:
-        return "unknown"
+        # CACHE THE FAILURE, briefly. Returning "unknown" without caching meant every call retried
+        # with a 5s timeout while ipify was down: the sync stopped failing and became unusable
+        # instead, which is not an improvement.
+        _LOCAL_IP.update(value='unknown', expires=now + _EGRESS_IP_FAIL_TTL)
+        return 'unknown'
 
+    _LOCAL_IP.update(value=ip, expires=now + _EGRESS_IP_TTL)
     try:
         redis_client.set(_EGRESS_IP_KEY, ip, ex=_EGRESS_IP_TTL)
     except Exception:
@@ -109,16 +155,29 @@ def log_api_call(endpoint, token, profile_id, status_code, response_time, error_
     """
     from trophies.models import APIAuditLog, Profile
 
-    # Validate profile_id exists in database before creating the log entry
-    # This prevents foreign key constraint violations
-    validated_profile_id = None
-    if profile_id is not None:
-        if Profile.objects.filter(id=profile_id).exists():
-            validated_profile_id = profile_id
-
     logger = logging.getLogger(__name__)
+
+    # NOTHING IN HERE MAY RAISE. This runs from inside `_execute_api_call`'s try, on the SUCCESS path,
+    # so anything that escapes turns a completed PSN call into an exception -- which lands in that
+    # method's `except Exception`, which calls this function again, which raises again. The second
+    # raise escapes into the job worker's broad handler, whose `finally` still marks the job complete.
+    # That is how a failure here becomes a silently-failed sync that reports success. The audit-log
+    # write below was already guarded; the profile lookup and the token hash were not, and an
+    # `OperationalError` from a recycled connection or an exhausted pool is entirely ordinary.
+    validated_profile_id = None
+    try:
+        if profile_id is not None and Profile.objects.filter(id=profile_id).exists():
+            validated_profile_id = profile_id
+    except Exception:
+        logger.warning("log_api_call: could not validate profile_id %s", profile_id)
+
+    try:
+        token_id = hashlib.sha256(token.encode()).hexdigest()[:64]
+    except Exception:
+        token_id = ''      # a None/bytes token must not cost the call that is being logged
+
     log_kwargs = dict(
-        token_id=hashlib.sha256(token.encode()).hexdigest()[:64],
+        token_id=token_id,
         ip_used=_egress_ip(),
         endpoint=endpoint,
         profile_id=validated_profile_id,
@@ -129,8 +188,9 @@ def log_api_call(endpoint, token, profile_id, status_code, response_time, error_
         # same key, so throttling has always been correct) -- while this read omitted the machine
         # component. Nothing writes the machine-less key, so zcard returned 0 every time and EVERY row
         # ever written recorded the full 300. The column that tells you how close a token is running
-        # was a constant.
-        calls_remaining=max(0, 300 - _calls_in_window(token)),
+        # was a constant. The cap comes from the same env var the keeper reads, so changing it there
+        # does not silently make this lie again.
+        calls_remaining=max(0, _max_calls() - _calls_in_window(token)),
     )
 
     try:

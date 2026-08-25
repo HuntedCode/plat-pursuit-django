@@ -43,7 +43,11 @@ def test_the_drift_nets_are_scheduled():
     assert 'recompute_milestones' in commands, 'milestones have no drift net'
 
     contracts = next(kw for _l, cmd, kw in STEPS if cmd == 'process_contracts')
-    assert contracts.get('all') is True, 'a per-user sweep is not a net'
+    assert contracts.get('all_profiles') is True, 'a per-user sweep is not a net'
+    # Incremental keeps the nightly cost near zero AND still forces a full pass weekly. Dropping the
+    # flag restores an O(contracts x candidates) sweep on top of step 1's pass over every profile,
+    # which is what put this chain past its window.
+    assert contracts.get('incremental') is True, 'a full sweep every night is not affordable'
 
 
 def test_contract_detection_runs_AFTER_the_dlc_sweep():

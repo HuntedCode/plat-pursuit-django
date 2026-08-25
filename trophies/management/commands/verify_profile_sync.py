@@ -175,14 +175,20 @@ class Command(BaseCommand):
         # Same two calls `mark_contract_reached` makes, minus the write: detection is pure, so
         # running it here tells us what the stamped state SHOULD be without changing anything.
         for contract in Contract.objects.filter(is_live=True).prefetch_related('bundles__concepts'):
+            # `member_concept_ids()` is a query per contract and `_detect_tiers` a few more, so this
+            # scales with the contract catalogue rather than the profile. Fine at the current 25-job
+            # catalogue; if that grows into the hundreds this wants batching before it stays "safe to
+            # point at a live profile".
             member_ids = contract.member_concept_ids()
             platinum_reached, full_reached = _detect_tiers(profile, contract, member_ids)
             if not (platinum_reached or full_reached):
                 continue
+            # ONE per contract, not per tier: the check is labelled "contracts", and a contract with
+            # both tiers unstamped is one thing to fix, not two.
             ec = earned.get(contract.id)
-            if platinum_reached and not (ec and ec.platinum_reached_at):
-                stale += 1
-            elif full_reached and not (ec and ec.full_reached_at):
+            missing_platinum = platinum_reached and not (ec and ec.platinum_reached_at)
+            missing_full = full_reached and not (ec and ec.full_reached_at)
+            if missing_platinum or missing_full:
                 stale += 1
 
         return [Check(

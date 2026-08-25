@@ -19,12 +19,30 @@ actually completed a member game (a couple of bounded DB queries), then runs the
 engine detection (`mark_contract_reached`) for just those candidates -- it never scans the
 whole userbase per Contract.
 """
+import logging
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from trophies.models import (
     Contract, EarnedContract, EarnedTrophy, Profile, ProfileGame,
 )
 from trophies.services.contract_service import _detect_tiers, mark_contract_reached
+from trophies.util_modules.cache import redis_client
+
+logger = logging.getLogger(__name__)
+
+
+#: How often the incremental mode still does a FULL pass. A Contract's own `updated_at` does not move
+#: when its MEMBERSHIP changes: members are derived from IGDB matches (`member_concept_ids`), which the
+#: sync's igdb_enrich phase writes. So a concept anchored today can join an untouched Contract, and only
+#: a full pass will see it. Weekly keeps the nightly cost near zero without letting that case rot.
+FULL_SWEEP_INTERVAL = timedelta(days=7)
+WATERMARK_KEY = 'contract_detection:last_run'
+FULL_WATERMARK_KEY = 'contract_detection:last_full_run'
 
 
 class Command(BaseCommand):
@@ -34,6 +52,11 @@ class Command(BaseCommand):
         parser.add_argument('--user', type=str, help='psn_username of a single profile to process.')
         parser.add_argument('--all', action='store_true', dest='all_profiles', help='Process every eligible profile.')
         parser.add_argument('--dry-run', action='store_true', help='Report what would change; write nothing.')
+        parser.add_argument(
+            '--incremental', action='store_true',
+            help='With --all: sweep only Contracts changed since the last run, plus a full pass if '
+                 'the last full pass is older than the refresh interval. This is the nightly mode.',
+        )
 
     def handle(self, *args, **options):
         username = options.get('user')
@@ -43,13 +66,25 @@ class Command(BaseCommand):
 
         # Member concepts are igdb-derived (no stored `memberships` relation to prefetch);
         # member_concept_ids() resolves them per contract. Only the episodic bundles prefetch.
-        contracts = list(
-            Contract.objects.filter(is_live=True)
-            .prefetch_related('bundles__concepts')
-            .order_by('name')
-        )
+        live = Contract.objects.filter(is_live=True).prefetch_related('bundles__concepts').order_by('name')
+
+        full_sweep = True
+        if options.get('incremental') and options.get('all_profiles') and not username:
+            watermark = self._get_watermark()
+            full_sweep = watermark is None or (timezone.now() - watermark) >= FULL_SWEEP_INTERVAL
+            if not full_sweep:
+                live = live.filter(updated_at__gt=watermark)
+
+        contracts = list(live)
         if not contracts:
-            self.stderr.write(self.style.ERROR("No live Contracts to process."))
+            # Not an error in incremental mode: no Contract changed since the last run is the normal
+            # nightly outcome, and the whole point of the mode.
+            msg = "No Contracts changed since the last run."
+            if full_sweep:
+                self.stderr.write(self.style.ERROR("No live Contracts to process."))
+            else:
+                self.stdout.write(msg)
+                self._set_watermark(timezone.now(), full=False)
             return
 
         if username:
@@ -62,7 +97,11 @@ class Command(BaseCommand):
             return
 
         if options.get('all_profiles'):
+            scope = 'FULL sweep' if full_sweep else f'incremental ({len(contracts)} changed)'
+            self.stdout.write(self.style.MIGRATE_HEADING(f"Contract reach detection: {scope}"))
             self._process_all(contracts, dry_run)
+            if options.get('incremental') and not dry_run:
+                self._set_watermark(timezone.now(), full=full_sweep)
             return
 
         self.stderr.write(self.style.ERROR("Provide --user <psn_username> or --all."))
@@ -86,17 +125,16 @@ class Command(BaseCommand):
         total_tier_marks = 0
         for contract in contracts:
             member_ids = contract.member_concept_ids()
-            candidate_ids = self._candidate_profile_ids(contract, member_ids)
-            marks = 0
-            if candidate_ids:
-                for profile in Profile.objects.filter(id__in=candidate_ids).iterator(chunk_size=500):
-                    newly = self._apply(profile, contract, member_ids, dry_run)
-                    if newly:
-                        marks += len(newly)
-                        profiles_touched.add(profile.id)
+            marks = candidates = 0
+            for profile in self._candidate_profiles(contract, member_ids):
+                candidates += 1
+                newly = self._apply(profile, contract, member_ids, dry_run)
+                if newly:
+                    marks += len(newly)
+                    profiles_touched.add(profile.id)
             total_tier_marks += marks
             self.stdout.write(
-                f"  {contract.name}: {len(candidate_ids)} candidate(s) -> {marks} new tier mark(s)."
+                f"  {contract.name}: {candidates} candidate(s) -> {marks} new tier mark(s)."
             )
         verb = "would mark" if dry_run else "marked"
         self.stdout.write(self.style.SUCCESS(
@@ -104,30 +142,40 @@ class Command(BaseCommand):
         ))
 
     @staticmethod
-    def _candidate_profile_ids(contract, member_ids):
-        """Profile ids that already have completion relevant to this Contract -- the only
-        ones worth running detection on. Bounded DB queries, never a full userbase scan."""
-        ids = set()
+    def _candidate_profiles(contract, member_ids):
+        """Profiles with completion relevant to this Contract -- the only ones worth running
+        detection on. Streams; never materialises the id set in Python.
+
+        THIS USED TO BUILD A PYTHON SET and pass it to `Profile.objects.filter(id__in=ids)`. Two
+        things wrong with that. It is the "per-user querysets must DB-aggregate" rule inverted: a
+        profile-scaled result pulled into memory. And on psycopg3 (server-side binding) PostgreSQL
+        caps a statement at 65,535 parameters, and Django emits one placeholder per element -- so a
+        Contract on a widely-platinumed game did not merely run slowly, it raised
+        `the number of query arguments cannot exceed 65535`, which `nightly` then swallowed as a
+        failed step every night. Subqueries keep the ids on the server, where the count does not
+        matter.
+
+        `.only('id')`: `_detect_tiers` and `mark_contract_reached` read nothing else off Profile,
+        and hydrating full rows for every candidate was pure waste.
+        """
+        q = Q(pk__in=[])
         if member_ids:
-            ids |= set(
-                ProfileGame.objects
-                .filter(game__concept_id__in=member_ids, progress=100)
-                .values_list('profile_id', flat=True)
-            )
-            ids |= set(
-                EarnedTrophy.objects
-                .filter(earned=True, trophy__trophy_type='platinum', trophy__game__concept_id__in=member_ids)
-                .values_list('profile_id', flat=True)
-            )
+            q |= Q(pk__in=ProfileGame.objects
+                   .filter(game__concept_id__in=member_ids, progress=100)
+                   .values('profile_id'))
+            q |= Q(pk__in=EarnedTrophy.objects
+                   .filter(earned=True, trophy__trophy_type='platinum',
+                           trophy__game__concept_id__in=member_ids)
+                   .values('profile_id'))
         for bundle in contract.bundles.all():
-            bundle_ids = list(bundle.concepts.values_list('id', flat=True))
+            # list(...) rather than values_list: `bundles__concepts` is prefetched, and values_list
+            # on a related manager issues a fresh query, silently bypassing the prefetch.
+            bundle_ids = [c.id for c in bundle.concepts.all()]
             if bundle_ids:
-                ids |= set(
-                    ProfileGame.objects
-                    .filter(game__concept_id__in=bundle_ids, progress=100)
-                    .values_list('profile_id', flat=True)
-                )
-        return ids
+                q |= Q(pk__in=ProfileGame.objects
+                       .filter(game__concept_id__in=bundle_ids, progress=100)
+                       .values('profile_id'))
+        return Profile.objects.filter(q).only('id').iterator(chunk_size=500)
 
     @staticmethod
     def _apply(profile, contract, member_ids, dry_run):
@@ -145,3 +193,28 @@ class Command(BaseCommand):
         if newly and not dry_run:
             mark_contract_reached(profile, contract)
         return newly
+
+    # -- incremental-mode watermarks -------------------------------------------------------------
+
+    @staticmethod
+    def _get_watermark():
+        """When the last FULL pass ran. Incremental scoping keys off this, not the last run of any
+        kind, so a week of incremental runs cannot postpone the full pass indefinitely."""
+        try:
+            raw = redis_client.get(FULL_WATERMARK_KEY)
+        except Exception:
+            logger.warning("process_contracts: redis unavailable for watermark read")
+            return None            # unreadable watermark -> full sweep, which is the safe direction
+        if not raw:
+            return None
+        parsed = parse_datetime(raw.decode() if isinstance(raw, bytes) else raw)
+        return parsed if parsed and timezone.is_aware(parsed) else None
+
+    @staticmethod
+    def _set_watermark(when, *, full):
+        try:
+            redis_client.set(WATERMARK_KEY, when.isoformat())
+            if full:
+                redis_client.set(FULL_WATERMARK_KEY, when.isoformat())
+        except Exception:
+            logger.warning("process_contracts: redis unavailable for watermark write")

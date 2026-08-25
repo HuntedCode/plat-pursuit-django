@@ -18,6 +18,7 @@ name, without executing anything. It is the cheap general form of the specific g
 the sync path is barely reachable from tests, so its imports need checking some other way.
 """
 import ast
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -67,18 +68,41 @@ DEFERRED_IMPORT_HEAVY = [
 ]
 
 
+#: First-party top-level packages. Matched on the FIRST DOTTED SEGMENT, not `startswith`: a raw prefix
+#: match makes 'api' swallow a third-party `apiclient` and 'core' swallow `coreapi`.
+FIRST_PARTY = {'trophies', 'core', 'api', 'notifications', 'users', 'milestones', 'fundraiser',
+               'art_reveal', 'plat_pursuit', 'payments'}
+
+
+def _is_first_party(module_name):
+    return module_name.split('.')[0] in FIRST_PARTY
+
+
 def _imports(path):
-    """Every (module, [names]) imported in the file, module-level and function-level alike."""
+    """Every (module, [names]) imported in the file, module-level and function-level alike.
+
+    RELATIVE IMPORTS ARE RESOLVED, not skipped. They used to be dropped with a comment claiming the
+    project did not use them in these files -- it does: `token_keeper.py` imports `.models`,
+    `.services.psn_api_service` and `.psn_manager`, and BOTH of `milestones/services.py`'s
+    first-party imports are relative, so that file contributed essentially zero real checks while
+    appearing in the list.
+    """
     tree = ast.parse(path.read_text(encoding='utf-8'))
+    package = path.relative_to(ROOT).parts[:-1]
     out = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             out.extend((a.name, []) for a in node.names)
         elif isinstance(node, ast.ImportFrom):
-            # `from . import x` has no module and resolves relative to the package; out of scope here,
-            # and the project does not use it in these files.
-            if node.module and not node.level:
-                out.append((node.module, [a.name for a in node.names]))
+            names = [a.name for a in node.names]
+            if node.level:
+                base = package[:len(package) - (node.level - 1)] if node.level > 1 else package
+                if not base:
+                    continue          # escaped the repo root; nothing to resolve against
+                module = '.'.join(base + ((node.module,) if node.module else ()))
+                out.append((module, names) if node.module else (module, names))
+            elif node.module:
+                out.append((node.module, names))
     return out
 
 
@@ -158,14 +182,21 @@ def test_every_module_a_hot_path_imports_still_exists(rel):
     if not path.exists():
         pytest.skip(f'{rel} has been deleted')
 
-    first_party = ('trophies', 'core', 'api', 'notifications', 'users', 'milestones', 'fundraiser',
-                   'art_reveal', 'plat_pursuit', 'payments')
     missing = []
     for name, _ in _imports(path):
-        # Third-party and stdlib resolution is their problem; a missing one fails at startup anyway.
-        if not name.startswith(first_party):
+        if _is_first_party(name):
+            if _module_path(name) is None:
+                missing.append(name)
             continue
-        if _module_path(name) is None:
+        # THIRD-PARTY IS CHECKED TOO. A previous version skipped it, reasoning that a missing package
+        # "fails at startup anyway" -- which is false for the DEFERRED imports that are this test's
+        # whole subject. `token_keeper.py` imports `dotenv` inside `__init__`; drop the package and
+        # startup stays green. find_spec is safe here: the hazard it posed was importing Django app
+        # packages under unconfigured settings, which does not apply to third-party or stdlib.
+        try:
+            if importlib.util.find_spec(name) is None:
+                missing.append(name)
+        except (ImportError, ModuleNotFoundError, ValueError):
             missing.append(name)
 
     assert not missing, (
@@ -189,11 +220,9 @@ def test_every_name_a_hot_path_imports_still_exists(rel):
     if not path.exists():
         pytest.skip(f'{rel} has been deleted')
 
-    first_party = ('trophies', 'core', 'api', 'notifications', 'users', 'milestones', 'fundraiser',
-                   'art_reveal', 'plat_pursuit')
     missing = []
     for module_name, names in _imports(path):
-        if not names or not module_name.startswith(first_party):
+        if not names or not _is_first_party(module_name):
             continue
         defined = _top_level_names(module_name)
         if defined is None:

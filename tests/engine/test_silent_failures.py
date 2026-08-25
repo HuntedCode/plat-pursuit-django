@@ -37,14 +37,14 @@ def test_markdown_degrades_to_escaped_text_instead_of_500(monkeypatch):
 def test_calls_remaining_reads_the_key_the_keeper_actually_writes(monkeypatch):
     """The TokenKeeper records timestamps under `token:{token}:{machine_id}:timestamps` and enforces
     its window off that same key, so throttling was always right. This read omitted the machine
-    component, so zcard always returned 0 and every APIAuditLog row recorded the full 300."""
+    component, so the count always came back 0 and every APIAuditLog row recorded the full 300."""
     from trophies.util_modules import cache as cache_mod
 
     monkeypatch.setenv('MACHINE_ID', 'worker-7')
     seen = {}
 
     class FakeRedis:
-        def zcard(self, key):
+        def zcount(self, key, floor, ceil):
             seen['key'] = key
             return 12
 
@@ -60,7 +60,7 @@ def test_calls_in_window_survives_a_redis_outage(monkeypatch):
     from trophies.util_modules import cache as cache_mod
 
     class DeadRedis:
-        def zcard(self, key):
+        def zcount(self, key, floor, ceil):
             raise ConnectionError('redis is gone')
 
     monkeypatch.setattr(cache_mod, 'redis_client', DeadRedis())
@@ -68,6 +68,15 @@ def test_calls_in_window_survives_a_redis_outage(monkeypatch):
 
 
 # --- the third-party call on the sync hot path --------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _reset_local_ip():
+    """The process-local IP cache is module state; without this it leaks between tests."""
+    from trophies.util_modules import cache as cache_mod
+    cache_mod._LOCAL_IP.update(value=None, expires=0.0)
+    yield
+    cache_mod._LOCAL_IP.update(value=None, expires=0.0)
+
 
 def test_the_egress_ip_is_fetched_once_not_per_api_call(monkeypatch):
     """This was a blocking `requests.get` to a third-party IP echo on EVERY successful PSN call. A
@@ -86,6 +95,9 @@ def test_the_egress_ip_is_fetched_once_not_per_api_call(monkeypatch):
 
     class FakeResponse:
         text = ' 203.0.113.7 '
+
+        def raise_for_status(self):
+            return None
 
     def fake_get(url, timeout=None):
         calls.append(url)
@@ -125,13 +137,128 @@ def test_an_ip_lookup_outage_cannot_break_a_sync(monkeypatch):
     assert cache_mod._egress_ip() == 'unknown', 'an unknown IP is a worse audit row, not a lost sync'
 
 
+def test_the_egress_ip_survives_a_redis_outage_without_hammering(monkeypatch):
+    """With Redis down a Redis-only cache never populates, so EVERY call fell through to the blocking
+    request again -- the original bug minus the raise. The process-local cache holds regardless."""
+    from trophies.util_modules import cache as cache_mod
+
+    calls = []
+
+    class DeadRedis:
+        def get(self, key):
+            raise ConnectionError('redis is gone')
+
+        def set(self, key, value, ex=None):
+            raise ConnectionError('redis is gone')
+
+    class FakeResponse:
+        text = '203.0.113.9'
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(cache_mod, 'redis_client', DeadRedis())
+    monkeypatch.setattr(cache_mod.requests, 'get',
+                        lambda url, timeout=None: calls.append(url) or FakeResponse())
+
+    for _ in range(20):
+        assert cache_mod._egress_ip() == '203.0.113.9'
+
+    assert len(calls) == 1, f'hit the network {len(calls)} times with Redis down'
+
+
+def test_an_ip_outage_is_cached_so_it_does_not_retry_every_call(monkeypatch):
+    """Returning "unknown" without caching meant every call retried with a 5s timeout while ipify was
+    down. The sync stopped failing and became unusable instead, which is not an improvement."""
+    from trophies.util_modules import cache as cache_mod
+
+    calls = []
+
+    class FakeRedis:
+        def get(self, key):
+            return None
+
+        def set(self, key, value, ex=None):
+            return None
+
+    def dead_get(url, timeout=None):
+        calls.append(url)
+        raise OSError('api.ipify.org unreachable')
+
+    monkeypatch.setattr(cache_mod, 'redis_client', FakeRedis())
+    monkeypatch.setattr(cache_mod.requests, 'get', dead_get)
+
+    for _ in range(15):
+        assert cache_mod._egress_ip() == 'unknown'
+
+    assert len(calls) == 1, f'retried a dead endpoint {len(calls)} times'
+
+
+def test_an_error_page_is_not_cached_as_an_ip(monkeypatch):
+    """Without raise_for_status a 5xx HTML body gets truncated to 45 chars and cached for an hour."""
+    from trophies.util_modules import cache as cache_mod
+
+    class FakeRedis:
+        def get(self, key):
+            return None
+
+        def set(self, key, value, ex=None):
+            return None
+
+    class ErrorPage:
+        text = '<html><head><title>502 Bad Gateway</title></head>'
+
+        def raise_for_status(self):
+            raise OSError('502')
+
+    monkeypatch.setattr(cache_mod, 'redis_client', FakeRedis())
+    monkeypatch.setattr(cache_mod.requests, 'get', lambda url, timeout=None: ErrorPage())
+
+    assert cache_mod._egress_ip() == 'unknown'
+
+
+def test_the_rate_limit_cap_follows_the_keepers_env_var(monkeypatch):
+    """Hardcoding 300 here meant changing MAX_CALLS_PER_WINDOW made the column lie again."""
+    from trophies.util_modules import cache as cache_mod
+
+    monkeypatch.setenv('MAX_CALLS_PER_WINDOW', '500')
+    assert cache_mod._max_calls() == 500
+
+
+def test_calls_in_window_ignores_calls_that_aged_out(monkeypatch):
+    """The zset has no TTL and only the keeper prunes it, so counting every member counts calls that
+    left the window long ago and under-reports what is left."""
+    from trophies.util_modules import cache as cache_mod
+
+    seen = {}
+
+    class FakeRedis:
+        def zcount(self, key, floor, ceil):
+            seen.update(key=key, floor=floor, ceil=ceil)
+            return 7
+
+    monkeypatch.setenv('MACHINE_ID', 'worker-3')
+    monkeypatch.setenv('WINDOW_SECONDS', '900')
+    monkeypatch.setattr(cache_mod, 'redis_client', FakeRedis())
+
+    assert cache_mod._calls_in_window('tok') == 7
+    assert seen['key'] == 'token:tok:worker-3:timestamps'
+    assert seen['ceil'] == '+inf', 'a bare zcard would count expired members'
+
+
 # --- the watermark that skipped past a failure forever ------------------------------------------
 
 @pytest.mark.django_db
-def test_the_dlc_watermark_is_held_when_a_series_fails(monkeypatch):
-    """The per-series handler catches and carries on, so the watermark advanced regardless -- and the
-    next run only scans groups created AFTER it. A series that raised was never swept again, and its
-    owners kept a false "100% complete" permanently, evidenced by one ERROR line in a nightly log."""
+def test_a_failed_series_is_retried_by_name_not_by_holding_the_window(monkeypatch):
+    """The per-series handler catches and carries on, so a failure used to be swept away silently.
+
+    The first fix held the watermark, and that was a runaway: the scan window grows a day every night
+    forever, every affected series is re-swept over everyone who played it, and `_recompute_completion`
+    becomes the blanket historical backfill its own docstring forbids -- overwriting PSN's exact
+    grade-weighted progress with the count-based approximation, nightly, on a growing game set.
+
+    So the watermark ADVANCES and the failure is queued by name. Nothing is dropped; nothing grows.
+    """
     from datetime import timedelta
 
     from django.utils import timezone
@@ -145,7 +272,6 @@ def test_the_dlc_watermark_is_held_when_a_series_fails(monkeypatch):
     watermark = timezone.now() - timedelta(days=1)
     concept = ConceptFactory()
     game = GameFactory(concept=concept)
-    # The game predates the window (so the new group reads as DLC rather than a brand-new game).
     TrophyGroupFactory(game=game, trophy_group_id='default',
                        created_at=watermark - timedelta(days=30))
     TrophyGroupFactory(game=game, trophy_group_id='001', created_at=timezone.now())
@@ -155,8 +281,10 @@ def test_the_dlc_watermark_is_held_when_a_series_fails(monkeypatch):
     stage.concepts.add(concept)
     GroupBadgeFactory(series=series)
 
-    written = []
+    written, queued = [], []
     monkeypatch.setattr(mod.Command, '_set_watermark', lambda self, when: written.append(when))
+    monkeypatch.setattr(mod.Command, '_queue_retries', lambda self, slugs: queued.extend(slugs))
+    monkeypatch.setattr(mod.Command, '_take_retries', lambda self: set())
     monkeypatch.setattr(mod, 'evaluate_and_apply_batch',
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError('evaluation blew up')))
 
@@ -164,7 +292,52 @@ def test_the_dlc_watermark_is_held_when_a_series_fails(monkeypatch):
         call_command('detect_dlc_and_refresh', since=watermark.isoformat(),
                      stdout=io.StringIO(), stderr=io.StringIO())
 
-    assert not written, 'the watermark advanced past a series that never got swept'
+    assert len(written) == 1, 'holding the watermark is the runaway this replaced'
+    assert queued == [series.series_slug], 'the failure was dropped instead of retried'
+
+
+@pytest.mark.django_db
+def test_a_queued_retry_is_swept_even_when_the_window_is_empty(monkeypatch):
+    """The other half of the contract: retrying by name only works if the retry actually runs on a
+    night when nothing new appeared, which is the normal case."""
+    from trophies.management.commands import detect_dlc_and_refresh as mod
+    from tests.factories import BadgeSeriesFactory, GroupBadgeFactory
+
+    series = BadgeSeriesFactory()
+    GroupBadgeFactory(series=series)
+
+    swept = []
+    monkeypatch.setattr(mod.Command, '_set_watermark', lambda self, when: None)
+    monkeypatch.setattr(mod.Command, '_take_retries', lambda self: {series.series_slug})
+    monkeypatch.setattr(mod, 'evaluate_and_apply_batch',
+                        lambda profiles, badges, *a, **k: swept.append(badges) or
+                        {'awarded': 0, 'revoked': 0, 'updated': 0})
+
+    call_command('detect_dlc_and_refresh', stdout=io.StringIO(), stderr=io.StringIO())
+
+    assert swept, 'a queued retry never ran, so the failure really was dropped'
+
+
+def test_the_scan_window_is_clamped(monkeypatch):
+    """However old the stored watermark is. An unclamped window is what made holding it a runaway."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from trophies.management.commands.detect_dlc_and_refresh import Command, MAX_LOOKBACK
+
+    now = timezone.now()
+    ancient = (now - timedelta(days=400)).isoformat()
+
+    class FakeRedis:
+        def get(self, key):
+            return ancient.encode()
+
+    monkeypatch.setattr('trophies.management.commands.detect_dlc_and_refresh.redis_client', FakeRedis())
+
+    resolved = Command()._resolve_watermark(None, now)
+
+    assert resolved >= now - MAX_LOOKBACK - timedelta(seconds=5)
 
 
 @pytest.mark.django_db
@@ -215,5 +388,9 @@ def test_the_hourly_refresh_exits_non_zero_when_a_step_fails(monkeypatch):
          'func': lambda: (_ for _ in ()).throw(RuntimeError('boom'))},
     ])
 
-    with pytest.raises(CommandError):
+    with pytest.raises(CommandError) as exc:
         call_command('refresh_homepage_hourly', stdout=io.StringIO(), stderr=io.StringIO())
+
+    # Named, because the landing-showcase block can append to `failed` independently: without this the
+    # test passes when the showcase fails and the step under test quietly succeeded.
+    assert 'Site Heartbeat' in str(exc.value)

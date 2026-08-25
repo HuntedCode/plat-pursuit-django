@@ -1513,7 +1513,7 @@ class TokenKeeper:
             # `dashboard_service` import lived in a broad try here, so a ModuleNotFoundError became one
             # log line and every sync silently skipped the rest of the job. The guard below is for
             # RUNTIME failures in detection; a missing module is a deploy error and must be loud.
-            from trophies.models import ProfileGame
+            # (ProfileGame is already imported at module level; only the service needs hoisting.)
             from trophies.services.contract_service import check_profile_contracts
             try:
                 touched_concept_ids = [

@@ -136,13 +136,20 @@ class Command(BaseCommand):
             # changed and would leave every unchanged badge at its default 0 forever). Browse Badges reads
             # it as the medallion's "X / Y" count, and a 0 hides that count entirely rather than showing
             # "0 / 0", which is why it went unnoticed.
+            # Scoped to catalogue-wide runs. `evaluate_badges <one-username>` resolves group_badges to
+            # ALL live badges, so without this a single-profile debug run silently rewrote
+            # required_stages across the whole catalogue -- a global write side effect from a local
+            # command, which is not a thing a debug run should do.
             resolved = resolve_group_badges(group_badges)
-            changed = recompute_required_stages(build_catalog(resolved))
-            if changed:
-                self.stdout.write(f"required_stages refreshed on {changed} group badge(s).")
+            if opts['all'] or opts['series']:
+                changed = recompute_required_stages(build_catalog(resolved))
+                if changed:
+                    self.stdout.write(f"required_stages refreshed on {changed} group badge(s).")
 
-            # Batch write: awards are stamped in completion-date order, so earn_rank reflects who finished first.
-            totals = evaluate_and_apply_batch(profiles, group_badges)
+            # Batch write: awards are stamped in completion-date order, so earn_rank reflects who
+            # finished first. `resolved` is threaded through so the batch does not resolve and build
+            # the catalog a second time.
+            totals = evaluate_and_apply_batch(profiles, resolved)
 
         verb = "Would" if dry else "Did"
         self.stdout.write(self.style.SUCCESS(

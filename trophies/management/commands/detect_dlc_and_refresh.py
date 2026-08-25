@@ -38,6 +38,15 @@ logger = logging.getLogger('psn_api')
 
 WATERMARK_KEY = 'dlc_detection:last_run'
 DEFAULT_LOOKBACK = timedelta(days=3)  # used when the watermark is missing (Redis flush, first run)
+#: Hard ceiling on how far back a run will scan, however old the stored watermark is. Without it a
+#: persistently failing series holds the watermark forever and the window grows by a day every night:
+#: the scan re-walks it all, every affected series is re-swept over everyone who played it, and
+#: `_recompute_completion` becomes the blanket historical backfill its own docstring forbids,
+#: overwriting PSN's exact grade-weighted progress with the count-based approximation nightly.
+MAX_LOOKBACK = timedelta(days=14)
+#: Series that failed their refresh, retried on the next run REGARDLESS of the watermark. This is
+#: what lets the watermark keep advancing: the retry rides an explicit list instead of a held window.
+RETRY_KEY = 'dlc_detection:retry_series'
 
 
 class Command(BaseCommand):
@@ -94,6 +103,9 @@ class Command(BaseCommand):
             self.stdout.write(f"  would recompute owner completion for {len(affected_game_ids)} game(s).")
             self.stdout.write(self.style.WARNING("Dry run -- no refresh, watermark unchanged."))
             return
+
+        # Series that failed a previous run come back regardless of what the window turned up.
+        affected |= self._take_retries()
 
         failed = []
         for slug in sorted(affected):
@@ -153,14 +165,21 @@ class Command(BaseCommand):
         # Holding the watermark means the next run re-scans the same window and retries; raising makes
         # `nightly` mark the step failed and exit non-zero, so a persistent failure surfaces as a red run
         # rather than as a window that quietly grows.
+        # The watermark ADVANCES either way, and failures are retried by name. Holding it was the
+        # first attempt and it is a runaway: the window grows a day per night forever, re-sweeping
+        # every affected series over everyone who played it, and turning `_recompute_completion` into
+        # the blanket backfill it must not be. Retrying an explicit list preserves the point (nothing
+        # is dropped) without letting the window and the completion rewrite grow without bound.
+        self._set_watermark(now)
+
         if failed:
+            self._queue_retries(failed)
             self.stdout.write(self.style.ERROR(
-                f"Watermark HELD at the previous value: {len(failed)} series failed "
-                f"({', '.join(failed)}). The next run re-scans this window."
+                f"{len(failed)} series failed ({', '.join(failed)}); queued for retry on the next run. "
+                f"Watermark -> {now.isoformat()}"
             ))
             raise CommandError(f"detect_dlc_and_refresh: {len(failed)} series failed: {', '.join(failed)}")
 
-        self._set_watermark(now)
         self.stdout.write(self.style.SUCCESS(f"DLC scan complete. Watermark -> {now.isoformat()}"))
 
     def _recompute_completion(self, game_ids):
@@ -205,8 +224,29 @@ class Command(BaseCommand):
         if raw:
             parsed = parse_datetime(raw.decode() if isinstance(raw, bytes) else raw)
             if parsed:
-                return parsed
+                # Clamped: a stored watermark older than MAX_LOOKBACK means something has been wrong
+                # for a while, and re-walking an ever-growing window every night makes it worse rather
+                # than better. Failed series are retried through RETRY_KEY instead.
+                return max(parsed, now - MAX_LOOKBACK)
         return now - DEFAULT_LOOKBACK
+
+    @staticmethod
+    def _take_retries():
+        """Series queued by a previous failed run. Read AND cleared: a series that fails again is
+        re-queued by `_queue_retries`, so the set never grows unless failures keep happening."""
+        try:
+            raw = redis_client.spop(RETRY_KEY, 500) or []
+        except Exception:
+            logger.warning("detect_dlc_and_refresh: redis unavailable for retry read")
+            return set()
+        return {r.decode() if isinstance(r, bytes) else r for r in raw}
+
+    @staticmethod
+    def _queue_retries(slugs):
+        try:
+            redis_client.sadd(RETRY_KEY, *slugs)
+        except Exception:
+            logger.warning("detect_dlc_and_refresh: redis unavailable for retry write")
 
     def _set_watermark(self, when):
         try:

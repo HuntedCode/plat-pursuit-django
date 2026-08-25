@@ -40,10 +40,16 @@ from django.core.management.base import BaseCommand
 #: game is invisible to them forever without a sweep. `evaluate_badges --all` has always been badges'
 #: net; contracts and milestones had none. A Contract published for a game 10,000 hunters already
 #: platinumed reached exactly zero of them until this ran.
+#:
+#: Step 3 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 1's
+#: pass over every profile, put this chain past any plausible window. Incremental sweeps only Contracts
+#: whose `updated_at` moved since the last run -- usually none -- and still forces a full pass weekly,
+#: because a Contract's membership is derived from IGDB matches and can change without the row being
+#: touched. Nightly cost is near zero; the weekly pass is the real net.
 STEPS = [
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
-    ('contract detection', 'process_contracts', {'all': True}),
+    ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),
     ('milestone recompute', 'recompute_milestones', {}),
     ('badge coverage audit', 'audit_badge_coverage', {}),
 ]

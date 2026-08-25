@@ -195,8 +195,11 @@ has a `SeriesBadgeStanding` row (the Collection reads standings and never live-e
 without one is simply absent from the page); and contracts whose games are complete but which are not
 stamped reachable (the gap `process_contracts`, nightly step 3, exists to close).
 
-Note `total_trophies` is filter-respecting: a mismatch is expected when `hide_hiddens` / `hide_zeros`
-is on, and the output says so.
+All three library totals are filter-respecting, and the two writers do not use the same filters:
+`update_profile_games` honours `hide_hiddens` alone, `update_profile_trophy_counts` honours
+`hide_hiddens` AND `hide_zeros`. The command mirrors both exactly, so a hunter with either toggle on
+still passes cleanly. (It did not at first, and reported DRIFT on healthy profiles -- a verifier that
+cries wolf gets ignored, which is worse than not having one.)
 
 ## Diagnostics
 
