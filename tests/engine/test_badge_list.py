@@ -93,7 +93,8 @@ def test_build_list_cards_query_count_is_flat():
     count_for(2)
     few, many = count_for(3), count_for(30)
     assert few == many, f'query count grew with card count: {few} -> {many}'
-    assert many <= 6, f'flat, but {many} bulk queries per page is more than this page should need'
+    # Measured cost is 3 (queryset eval + holds + standings; community_size is cached).
+    assert many <= 4, f'flat, but {many} bulk queries per page is more than this page needs'
 
 
 # ------------------------------------------------------------------ Gallery: render + links --------------
@@ -305,7 +306,7 @@ def test_build_series_items_query_count_is_flat():
     count_for(2, 'warm')
     few, many = count_for(3, 'few'), count_for(20, 'many')
     assert few == many, f'query count grew with series count: {few} -> {many}'
-    assert many <= 6
+    assert many <= 4
 
 
 # ------------------------------------------------------------------ render + links -----------------------

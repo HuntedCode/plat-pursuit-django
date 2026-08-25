@@ -67,8 +67,11 @@ def test_the_display_filters_do_not_look_like_drift(flags):
                        earned_trophies_count=12, user_hidden=False)
     ProfileGameFactory(profile=profile, game=GameFactory(), progress=40,
                        earned_trophies_count=3, user_hidden=True)
+    # The zero-trophy game carries UNEARNED trophies on purpose. Without that, excluding it changes
+    # no aggregate the verifier checks, and the hide_zeros half of this test cannot fail whatever the
+    # fixture numbers are -- removing rows worth 0 from a Sum of that column is a no-op by algebra.
     ProfileGameFactory(profile=profile, game=GameFactory(), progress=0,
-                       earned_trophies_count=0, user_hidden=False)
+                       earned_trophies_count=0, unearned_trophies_count=40, user_hidden=False)
 
     # Exactly what sync_complete does, so the stored values are correct BY CONSTRUCTION.
     update_profile_games(profile)

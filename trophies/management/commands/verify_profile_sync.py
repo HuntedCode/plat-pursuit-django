@@ -128,15 +128,25 @@ class Command(BaseCommand):
             n=Count('id'),
             complete=Count('id', filter=Q(progress=100)),
         )
-        earned = trophies.aggregate(earned=Sum('earned_trophies_count'))['earned'] or 0
+        sums = trophies.aggregate(
+            earned=Sum('earned_trophies_count'),
+            unearned=Sum('unearned_trophies_count'),
+        )
 
         return [
             Check('Profile.total_games', profile.total_games, counts['n'],
                   'The home trophy card and the milestones metrics read this.'),
             Check('Profile.total_completes', profile.total_completes, counts['complete'],
                   'Feeds the full_completions milestone ladder.'),
-            Check('Profile.total_trophies', profile.total_trophies, earned,
+            Check('Profile.total_trophies', profile.total_trophies, sums['earned'] or 0,
                   'The profile header, Browse Hunters and the lifetime_trophies ladder read this.'),
+            # total_unearned is where hide_zeros ACTUALLY bites. Excluding rows whose
+            # earned_trophies_count is 0 from a Sum of that same column is a provable no-op, so the
+            # filter cannot change total_trophies -- but a zero-trophy game can carry a large
+            # unearned count, so it changes this one. Leaving it unreconciled meant the only place
+            # the hide_zeros mirroring is observable was untested by construction.
+            Check('Profile.total_unearned', profile.total_unearned, sums['unearned'] or 0,
+                  'Feeds avg_progress and the completion figure on the profile header.'),
         ]
 
     def _badge_standings(self, profile):

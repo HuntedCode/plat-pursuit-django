@@ -67,8 +67,9 @@ def _edition_progress(gb, held, progress):
 def build_list_cards(group_badges, profile) -> list:
     """Cards for a page of GroupBadges (already select_related'd on series + platform_group), in the SAME order.
     Each card: {group_badge, series, platform_group, frame, rarity_pct, rarity_class, earned, is_holo,
-    earned_count}. THREE bulk queries beyond the caller's queryset (community size, the viewer's holds,
-    and the viewer's standings for the stage count) -- whale-safe regardless of page size."""
+    earned_count}. TWO bulk queries beyond the caller's queryset for a signed-in viewer (their holds,
+    and their per-edition standings), ZERO for an anonymous one -- whale-safe regardless of page size.
+    The community-size denominator is a cached scalar, so it usually costs no query at all."""
     group_badges = list(group_badges)
     if not group_badges:
         return []

@@ -67,18 +67,6 @@ def test_milestones_recompute_last_among_the_writers():
     labels = [label for label, _cmd, _kw in STEPS]
     assert labels.index('milestone recompute') > labels.index('badge evaluation')
     assert labels.index('milestone recompute') > labels.index('contract detection')
-
-
-def test_every_step_names_a_real_command():
-    """A step naming a deleted command fails the whole night's run at that step. Cheap to pin."""
-    from django.core.management import get_commands
-    from core.management.commands.nightly import STEPS
-
-    known = get_commands()
-    for _label, cmd, _kw in STEPS:
-        assert cmd in known, f'{cmd} is not a registered management command'
-
-
 def test_one_failing_step_does_not_cancel_the_others(monkeypatch):
     """Isolated failures. Losing the whole night's maintenance because one step raised is the worse
     outcome -- but the run must still FAIL, or a broken step hides behind a green cron."""

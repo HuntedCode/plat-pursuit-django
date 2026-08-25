@@ -111,6 +111,9 @@ def test_the_egress_ip_is_fetched_once_not_per_api_call(monkeypatch):
         cache_mod._egress_ip()
 
     assert len(calls) == 1, f'resolved the egress IP {len(calls)} times'
+    # The SHARED layer specifically. Without this the test survives deleting either cache on its own
+    # (the other covers for it), so removing cross-process sharing entirely would stay green.
+    assert cache_mod._EGRESS_IP_KEY in store, 'nothing was written for other workers to reuse'
 
 
 def test_an_ip_lookup_outage_cannot_break_a_sync(monkeypatch):
@@ -198,12 +201,14 @@ def test_an_error_page_is_not_cached_as_an_ip(monkeypatch):
     """Without raise_for_status a 5xx HTML body gets truncated to 45 chars and cached for an hour."""
     from trophies.util_modules import cache as cache_mod
 
+    written = {}
+
     class FakeRedis:
         def get(self, key):
             return None
 
         def set(self, key, value, ex=None):
-            return None
+            written[key] = value
 
     class ErrorPage:
         text = '<html><head><title>502 Bad Gateway</title></head>'
@@ -215,6 +220,7 @@ def test_an_error_page_is_not_cached_as_an_ip(monkeypatch):
     monkeypatch.setattr(cache_mod.requests, 'get', lambda url, timeout=None: ErrorPage())
 
     assert cache_mod._egress_ip() == 'unknown'
+    assert not written, 'an error page was cached as the egress IP for an hour'
 
 
 def test_the_rate_limit_cap_follows_the_keepers_env_var(monkeypatch):

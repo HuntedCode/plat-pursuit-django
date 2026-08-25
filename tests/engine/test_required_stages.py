@@ -245,13 +245,22 @@ def test_a_malformed_read_model_row_does_not_break_the_wall():
 
 
 def test_the_browse_card_carries_both_halves_of_the_count():
-    """Either both or neither: a total without a done is the bug above."""
+    """Either both or neither: a total without a done is the bug above.
+
+    Asserts the VALUES. A key-presence check passes on `stages_done: 0` alongside `stages_total: 4`,
+    which is precisely the regression -- the same "the key is there, the value is wrong" shape that
+    made an earlier pin in this session unfailable.
+    """
     series = _series_with_stages(4)
     gb = GroupBadgeFactory(series=series)
     _recompute([gb])
     gb.refresh_from_db()
 
-    frame = _card(gb, ProfileFactory())['frame']
+    fresh = _card(gb, ProfileFactory())['frame']
+    assert fresh['stages_total'] == 4
+    assert fresh['stages_done'] == 0, 'no standing row means genuinely no progress'
 
-    assert frame['stages_total'] == 4
-    assert 'stages_done' in frame, 'the medallion defaults this to 0 and renders "0 / N"'
+    holder = ProfileFactory()
+    UserGroupBadge.objects.create(profile=holder, group_badge=gb)
+    held = _card(gb, holder)['frame']
+    assert held['stages_done'] == held['stages_total'], 'a held badge is complete by definition'

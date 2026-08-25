@@ -105,7 +105,7 @@ def _imports(path):
                 if not base:
                     continue          # escaped the repo root; nothing to resolve against
                 module = '.'.join(base + ((node.module,) if node.module else ()))
-                out.append((module, names) if node.module else (module, names))
+                out.append((module, names))
             elif node.module:
                 out.append((node.module, names))
     return out
@@ -183,8 +183,15 @@ def _top_level_names(module_name):
 
 @pytest.mark.parametrize('rel', DEFERRED_IMPORT_HEAVY)
 def test_every_module_a_hot_path_imports_still_exists(rel):
-    """Resolves each imported module WITHOUT importing it -- `find_spec` reads the finder, so a module
-    with side effects is not executed by this test."""
+    """Resolves every imported module: first-party by walking the tree (never importing anything),
+    third-party via `find_spec`.
+
+    The split is deliberate. `find_spec` on a DOTTED name imports the parent package, which under
+    Django drags in app modules and reported false positives for live first-party imports -- that is
+    why this guard was stuck at seven files. It is safe for third-party and stdlib, where the parent
+    is already imported and the alternative is skipping them entirely (a deferred `from dotenv import
+    load_dotenv` would otherwise stay green with the package uninstalled).
+    """
     path = ROOT / rel
     if not path.exists():
         pytest.skip(f'{rel} has been deleted')
