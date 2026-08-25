@@ -27,6 +27,15 @@ from trophies.services.badge_engine import (
 
 _GAME_FIELDS = ('id', 'title_platform', 'is_obtainable', 'is_delisted', 'concept_id')
 
+#: At or above this many catalogue games, the per-profile completion reads filter on SUBQUERIES rather
+#: than on the precomputed id list. See `build_catalog` for why neither shape wins in both regimes.
+#:
+#: PROVISIONAL. It sits between the two measured points (inlining wins at ~400 catalogue games; the
+#: subquery wins by ~15x at ~2,000), but the real crossover depends on the live catalogue size and the
+#: distribution of library sizes, neither of which has been measured against production data. To tune
+#: it: `len(build_catalog(resolve_group_badges(None))['game_ids'])` gives the catalogue size.
+CATALOG_SUBQUERY_THRESHOLD = 1000
+
 
 def _game_prefetch():
     """Prefetch a stage/bundle's concepts -> games with only the fields the engine reads."""
@@ -69,27 +78,39 @@ def build_catalog(group_badges):
         TrophyGroup.objects.filter(game_id__in=game_ids, trophy_group_id='default').values_list('id', flat=True)
     )
 
-    # THE SAME TWO ID SETS AS SUBQUERIES, for the per-profile reads only.
+    # HOW THE PER-PROFILE READS FILTER, chosen by catalogue size. NEITHER SHAPE WINS IN BOTH REGIMES,
+    # which is why this branches instead of picking one:
     #
-    # THE INVARIANT: a per-profile query's SQL TEXT must be constant-size. It was not. The two reads in
-    # `evaluate_with_catalog` passed the Python collections above straight into `__in`, which Django
-    # renders as one placeholder per element -- so every one of ~300,000 profiles in a nightly
-    # `evaluate_badges --all` re-sent a statement carrying the entire live badge catalogue's game ids.
-    # Django disables prepared statements (`prepare_threshold=None`), so each of those was parsed and
-    # planned from scratch: a ~140 KB statement, twice per profile, ~600,000 times.
+    #   Inlining the id list sends one bound parameter per game. On `evaluate_badges --all` the
+    #   catalogue is every live badge, so each of ~300,000 profiles re-sent a statement carrying the
+    #   whole thing: measured ~440 ms per profile for these two reads, which is over a day of wall
+    #   clock for the nightly run.
     #
-    # The Python `game_ids` set stays -- it is catalogue-bounded, built once, and the in-memory
-    # `game_state` lookups need it. Only the FILTER ARGUMENT moves server-side.
-    in_series = (Q(concept__stages__series_slug__in=series_slugs)
-                 | Q(concept__bundles__stage__series_slug__in=series_slugs))
-    game_ids_qs = Game.objects.filter(in_series).values('id')
-    default_tg_qs = TrophyGroup.objects.filter(
-        game_id__in=game_ids_qs, trophy_group_id='default',
-    ).values('id')
+    #   Filtering on a SUBQUERY makes that statement constant-size and is ~60x faster at a large
+    #   catalogue. But Postgres pulls the `IN` up into a semi-join rather than hashing it once, so the
+    #   subquery's whole join tree is paid per statement -- and on a SMALL catalogue against a profile
+    #   with a large library that is ~12x SLOWER than inlining (measured 98 ms vs 8 ms).
+    #
+    # The small-catalogue regime is the common one, not an edge case: three of the four `build_catalog`
+    # callers are series-scoped and evaluate a single profile -- `evaluate_for_touched_games` on every
+    # sync, `get_badge_detail` on the badge-page REQUEST PATH, and `evaluate_badges --series`. Only
+    # `--all` has the big catalogue. Optimising for it alone slowed down every sync and every badge
+    # page view, which is how the first version of this went in.
+    use_subquery = len(game_ids) >= CATALOG_SUBQUERY_THRESHOLD
+    if use_subquery:
+        in_series = (Q(concept__stages__series_slug__in=series_slugs)
+                     | Q(concept__bundles__stage__series_slug__in=series_slugs))
+        game_filter = Game.objects.filter(in_series).values('id')
+        tg_filter = TrophyGroup.objects.filter(
+            game_id__in=game_filter, trophy_group_id='default',
+        ).values('id')
+    else:
+        game_filter, tg_filter = game_ids, default_tg_ids
 
+    # `game_ids` (the Python set) stays regardless: it is catalogue-bounded, built once, and both the
+    # in-memory game_state lookups and badge_detail_service read it.
     return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids,
-            'default_tg_ids': default_tg_ids,
-            'game_ids_qs': game_ids_qs, 'default_tg_qs': default_tg_qs}
+            'game_filter': game_filter, 'tg_filter': tg_filter, 'uses_subquery': use_subquery}
 
 
 def recompute_required_stages(catalog) -> int:
@@ -160,20 +181,21 @@ def _catalog_game_state(g):
 def evaluate_with_catalog(profile, catalog):
     """Evaluate one profile against a PRE-BUILT catalog. The ONLY per-profile DB work is the two completion
     reads, both bounded to catalog games (whale-safe). Returns {group_badge_id: GroupBadgeResult}."""
-    # SUBQUERIES, not the Python id collections -- see the note in build_catalog. These two statements
-    # run once per profile across the whole userbase, so their SQL text has to be constant-size.
+    # `game_filter` / `tg_filter` are either the precomputed id collections or subqueries selecting the
+    # same rows, chosen by catalogue size in build_catalog -- see the note there. Only the query SHAPE
+    # differs; both select identically.
     full_map = {
         gid: (prog, last)
         for gid, prog, last in ProfileGame.objects.filter(
-            profile=profile, game_id__in=catalog['game_ids_qs'],
+            profile=profile, game_id__in=catalog['game_filter'],
         ).values_list('game_id', 'progress', 'most_recent_trophy_date')
     }
-    # Still small-side-first: the subquery resolves the default trophy groups, and the outer filter is
-    # a bounded seek on PTG (profile, trophy_group).
+    # Small-side-first either way: the filter resolves the DEFAULT trophy groups, so the outer read
+    # stays a bounded seek on PTG (profile, trophy_group) even for a 250k-row whale.
     base_map = {
         gid: (prog, last)
         for gid, prog, last in ProfileTrophyGroup.objects.filter(
-            profile=profile, trophy_group_id__in=catalog['default_tg_qs'],
+            profile=profile, trophy_group_id__in=catalog['tg_filter'],
         ).values_list('trophy_group__game_id', 'progress', 'last_trophy_at')
     }
 

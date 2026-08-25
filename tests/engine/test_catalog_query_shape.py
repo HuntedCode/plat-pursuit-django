@@ -1,21 +1,23 @@
-"""The per-profile reads in `evaluate_with_catalog` must have CONSTANT-SIZE SQL.
+"""How the per-profile completion reads filter, and that both shapes select the same rows.
 
-This is an invariant test, not a regression test: it is written from the requirement rather than from
-any particular bug, which is the thing that was missing when this subsystem was fixed three times.
+`evaluate_with_catalog` runs once per profile -- ~300,000 times on `evaluate_badges --all`, once per
+sync in `evaluate_for_touched_games`, and once per badge-page render in `get_badge_detail`. It decides
+which badges every hunter has earned, so a filter that selects the wrong rows is silently wrong for
+the whole userbase and nothing crashes.
 
-THE REQUIREMENT. `evaluate_badges --all` runs `evaluate_with_catalog` once per profile with a PSN
-username, ~300,000 of them. Anything those two queries carry per-element is multiplied by 300,000.
-They passed the catalogue's game-id collection into `__in`, and Django renders that as one bound
-parameter per element -- so each profile re-sent a statement carrying every game in the live badge
-catalogue. Django sets `prepare_threshold=None`, so prepared statements are off and every one of
-those was parsed and planned from scratch.
+TWO SHAPES, because neither wins in both regimes. Inlining the catalogue's id list sends one bound
+parameter per game: fine for one series, ruinous for the whole catalogue (~440 ms per profile, over a
+day of wall clock across the userbase). A subquery makes that constant-size and is ~60x faster there,
+but Postgres semi-joins it rather than hashing it once, so on a small catalogue against a large
+library it is ~12x SLOWER. `build_catalog` picks by size.
 
-So the invariant is: **the number of bound parameters in a per-profile read must not grow with the
-catalogue.** Not "should be small" -- must not GROW. That is a property a test can hold onto, and a
-count-based assertion would rot the moment the catalogue did.
+These tests pin the property rather than either implementation: whichever shape is chosen the rows
+must be identical, and the large-catalogue shape must not grow with the game count.
 """
 import pytest
 
+from trophies.models import ConceptBundle, Game, ProfileGame, ProfileTrophyGroup, TrophyGroup
+from trophies.services import badge_orchestrator
 from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
 from tests.factories import (
     BadgeSeriesFactory, ConceptFactory, GameFactory, GroupBadgeFactory, ProfileFactory,
@@ -25,20 +27,49 @@ from tests.factories import (
 pytestmark = pytest.mark.django_db
 
 
-def _series_with_games(n_games):
-    """One series whose single stage carries `n_games` games, each on its own concept."""
+@pytest.fixture
+def force_subquery(monkeypatch):
+    """Take the subquery branch whatever the fixture's size. Building a 1,000-game catalogue in a test
+    would be slow and would pin the threshold rather than the behaviour."""
+    monkeypatch.setattr(badge_orchestrator, 'CATALOG_SUBQUERY_THRESHOLD', 1)
+
+
+@pytest.fixture
+def force_inline(monkeypatch):
+    monkeypatch.setattr(badge_orchestrator, 'CATALOG_SUBQUERY_THRESHOLD', 10 ** 9)
+
+
+def _series_with_games(n_games, *, with_dlc=False):
+    """One series, one stage, `n_games` games each on their own concept.
+
+    `with_dlc` adds a NON-default trophy group. Without one, dropping the `trophy_group_id='default'`
+    filter is invisible -- and that mutation awards badges nobody earned, because base_map is keyed on
+    the group's GAME id, so a finished DLC group would mark the base game complete.
+    """
     series = BadgeSeriesFactory()
     stage = StageFactory(series_slug=series.series_slug, stage_number=1)
     for _ in range(n_games):
         concept = ConceptFactory()
         game = GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
         TrophyGroupFactory(game=game, trophy_group_id='default')
+        if with_dlc:
+            TrophyGroupFactory(game=game, trophy_group_id='001')
         stage.concepts.add(concept)
     return GroupBadgeFactory(series=series)
 
 
+def _add_bundle(series, stage_number=2):
+    """A bundled game reaches the catalogue by a different join path than a direct stage concept."""
+    stage = StageFactory(series_slug=series.series_slug, stage_number=stage_number)
+    bundle = ConceptBundle.objects.create(stage=stage, label='Episodes')
+    concept = ConceptFactory()
+    game = GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
+    TrophyGroupFactory(game=game, trophy_group_id='default')
+    bundle.concepts.add(concept)
+    return game
+
+
 def _per_profile_sql(gb, profile):
-    """The SQL the two per-profile reads actually issue."""
     from django.db import connection
     from django.test.utils import CaptureQueriesContext
 
@@ -48,106 +79,145 @@ def _per_profile_sql(gb, profile):
     return [q['sql'] for q in ctx.captured_queries]
 
 
-def test_the_per_profile_sql_does_not_grow_with_the_catalogue():
-    """THE invariant. A catalogue ten times the size must not produce a longer statement.
+# --- the large-catalogue shape must not grow ----------------------------------------------------
 
-    Measured as a comparison rather than a threshold: any fixed number would either be wrong for a
-    real catalogue or stop meaning anything as the catalogue grew.
-    """
+def test_the_subquery_shape_does_not_grow_with_the_game_count(force_subquery):
+    """Compared PAIRWISE. Taking the max length across the two reads hides the failure entirely: they
+    differ in length, so inlining the ids back into the shorter one leaves the max untouched."""
     profile = ProfileFactory()
 
     small = _per_profile_sql(_series_with_games(2), profile)
     large = _per_profile_sql(_series_with_games(60), profile)
 
     assert len(small) == len(large), 'the query COUNT grew with the catalogue'
-
-    # PAIRWISE, not max. Comparing the largest query in each set hides the failure entirely: these two
-    # reads differ in length, so inlining the ids back into the SHORTER one leaves the max untouched
-    # and the assertion green. That is what the first version of this test did.
     for i, (a, b) in enumerate(zip(small, large)):
-        # Slack is deliberately tight. 60 inlined ids is ~350 characters, so a generous allowance
-        # would let the original bug straight back in.
+        # Tight on purpose: 60 inlined ids is ~350 characters, so a generous allowance lets the
+        # original bug straight back in. An earlier 200-char allowance did exactly that.
         assert len(b) < len(a) + 80, (
             f'per-profile query {i} grew from {len(a)} to {len(b)} chars for 30x the games -- the id '
-            f'list is being inlined again, and this runs once per profile across the whole userbase'
+            f'list is being inlined again, and this runs once per profile across the userbase'
         )
 
 
-def test_the_evaluation_still_reads_the_right_completion_state():
-    """The invariant above is worthless if the subquery selects a different set than the Python one
-    did. This pins the OUTCOME, so a subquery whose joins are subtly wrong shows up as a wrong
-    evaluation rather than as a fast wrong answer."""
-    from trophies.models import ProfileGame, ProfileTrophyGroup
+def test_the_series_slug_list_is_the_remaining_growth_axis(force_subquery):
+    """Honest about what is NOT fixed. The slug set is still inlined, so SQL still grows with SERIES
+    count even though it no longer grows with game count -- and on `--all` the slug list is the axis
+    that actually scales. Recorded rather than left for the docstring to overstate."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
 
     profile = ProfileFactory()
-    gb = _series_with_games(3)
-    catalog = build_catalog([gb])
+    one = _per_profile_sql(_series_with_games(2), profile)
 
-    game = ProfileGame.objects.none()
-    from trophies.models import Game
-    games = list(Game.objects.filter(id__in=catalog['game_ids']).order_by('id'))
-    assert len(games) == 3, 'the catalogue itself is wrong, before any subquery is involved'
+    many_badges = [_series_with_games(1) for _ in range(12)]
+    catalog = build_catalog(many_badges)
+    with CaptureQueriesContext(connection) as ctx:
+        evaluate_with_catalog(profile, catalog)
+    many = [q['sql'] for q in ctx.captured_queries]
 
-    # Complete the base list on one game.
-    ProfileGame.objects.create(profile=profile, game=games[0], progress=100,
-                               earned_trophies_count=1)
-    tg = games[0].trophy_groups.get(trophy_group_id='default')
-    ProfileTrophyGroup.objects.create(profile=profile, trophy_group=tg, progress=100)
-
-    results = evaluate_with_catalog(profile, catalog)
-
-    result = results[gb.id]
-    assert result.gating_count == 1, 'one stage gates this edition'
-    assert result.base_satisfied_count == 1, 'the completed game was not seen through the subquery'
+    assert max(len(q) for q in many) > max(len(q) for q in one), (
+        'if this stops being true the slug list was hoisted server-side too, and this test should '
+        'become the stronger assertion that nothing grows at all'
+    )
 
 
-def test_a_bundle_game_is_reachable_through_the_subquery():
-    """Bundle concepts reach games by a different path (`concept__bundles__stage`) than direct stage
-    concepts (`concept__stages`). The Python walk covered both; a subquery that covers only the first
-    silently drops every episodic series, and nothing else in the suite would notice."""
-    from trophies.models import ConceptBundle, Game
+# --- both shapes must select the same rows ------------------------------------------------------
 
-    series = BadgeSeriesFactory()
-    stage = StageFactory(series_slug=series.series_slug, stage_number=1)
-    bundle = ConceptBundle.objects.create(stage=stage, label='Episodes')
-    concept = ConceptFactory()
-    bundled = GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
-    TrophyGroupFactory(game=bundled, trophy_group_id='default')
-    bundle.concepts.add(concept)
-
-    gb = GroupBadgeFactory(series=series)
-    catalog = build_catalog([gb])
-
-    assert bundled.id in catalog['game_ids'], 'the Python walk missed the bundle'
-    assert bundled.id in set(
-        Game.objects.filter(id__in=catalog['game_ids_qs']).values_list('id', flat=True)
-    ), 'the subquery missed the bundle, so every episodic series evaluates as empty'
-
-
-def test_both_id_sets_agree():
-    """The Python collection and its subquery twin must select the same rows. They are built by
-    different traversals of the same graph, so nothing but a test keeps them honest.
-
-    The fixture carries a BUNDLE as well as direct stage concepts. Without one the two traversals
-    cannot disagree, and this passed with the bundle arm of the subquery deleted.
-    """
-    from trophies.models import ConceptBundle, Game, TrophyGroup
+@pytest.mark.parametrize('shape', ['force_subquery', 'force_inline'])
+def test_the_two_shapes_agree_on_the_catalogue(shape, request):
+    request.getfixturevalue(shape)
 
     gb = _series_with_games(5)
-    stage = StageFactory(series_slug=gb.series.series_slug, stage_number=2)
-    bundle = ConceptBundle.objects.create(stage=stage, label='Episodes')
-    concept = ConceptFactory()
-    bundled = GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
-    TrophyGroupFactory(game=bundled, trophy_group_id='default')
-    bundle.concepts.add(concept)
-
+    bundled = _add_bundle(gb.series)
     catalog = build_catalog([gb])
-    assert bundled.id in catalog['game_ids'], 'the fixture did not actually add a bundled game'
 
-    from_qs = set(Game.objects.filter(id__in=catalog['game_ids_qs']).values_list('id', flat=True))
-    assert from_qs == set(catalog['game_ids'])
+    assert bundled.id in catalog['game_ids'], 'the fixture did not add a bundled game'
 
-    tg_from_qs = set(
-        TrophyGroup.objects.filter(id__in=catalog['default_tg_qs']).values_list('id', flat=True)
+    selected = set(
+        Game.objects.filter(id__in=catalog['game_filter']).values_list('id', flat=True)
     )
-    assert tg_from_qs == set(catalog['default_tg_ids'])
+    assert selected == set(catalog['game_ids'])
+
+    tg_selected = set(
+        TrophyGroup.objects.filter(id__in=catalog['tg_filter']).values_list('id', flat=True)
+    )
+    expected = set(
+        TrophyGroup.objects.filter(game_id__in=catalog['game_ids'], trophy_group_id='default')
+        .values_list('id', flat=True)
+    )
+    assert tg_selected == expected
+
+
+def test_a_bundle_game_is_reachable_through_the_subquery(force_subquery):
+    """Bundle concepts reach games via `concept__bundles__stage`, direct ones via `concept__stages`.
+    A subquery covering only the first silently drops every episodic series."""
+    series = BadgeSeriesFactory()
+    stage = StageFactory(series_slug=series.series_slug, stage_number=1)
+    concept = ConceptFactory()
+    direct = GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
+    TrophyGroupFactory(game=direct, trophy_group_id='default')
+    stage.concepts.add(concept)
+    bundled = _add_bundle(series)
+
+    catalog = build_catalog([GroupBadgeFactory(series=series)])
+    selected = set(
+        Game.objects.filter(id__in=catalog['game_filter']).values_list('id', flat=True)
+    )
+
+    assert {direct.id, bundled.id} <= selected
+
+
+# --- and the evaluation must still be right -----------------------------------------------------
+
+@pytest.mark.parametrize('shape', ['force_subquery', 'force_inline'])
+def test_the_base_read_is_what_decides_base_completion(shape, request):
+    """Pins the trophy-group read specifically.
+
+    The first version set `progress=100` on the ProfileGame, which makes `full_complete` true -- and
+    `base_complete = base_prog == 100 or full_complete`, so it passed even with the trophy-group
+    filter returning nothing at all. The ProfileTrophyGroup row was dead fixture in a test named for
+    reading completion state. `progress=50` forces base completion to come from the group read alone.
+    """
+    request.getfixturevalue(shape)
+
+    profile = ProfileFactory()
+    gb = _series_with_games(1)
+    catalog = build_catalog([gb])
+    game = Game.objects.get(id=next(iter(catalog['game_ids'])))
+
+    ProfileGame.objects.create(profile=profile, game=game, progress=50, earned_trophies_count=1)
+    ProfileTrophyGroup.objects.create(
+        profile=profile, trophy_group=game.trophy_groups.get(trophy_group_id='default'), progress=100,
+    )
+
+    result = evaluate_with_catalog(profile, catalog)[gb.id]
+
+    assert result.gating_count == 1
+    assert result.base_satisfied_count == 1, 'the base read did not see the completed trophy group'
+    assert result.holo_satisfied_count == 0, 'the game is not at 100%, so nothing is mastered'
+
+
+@pytest.mark.parametrize('shape', ['force_subquery', 'force_inline'])
+def test_a_finished_dlc_group_does_not_complete_the_base_game(shape, request):
+    """`base_map` is keyed on the trophy group's GAME id, so dropping the `default` filter files a
+    finished DLC group under the base game and marks it complete. Hunters would gain badges they never
+    earned, with nothing to notice."""
+    request.getfixturevalue(shape)
+
+    profile = ProfileFactory()
+    gb = _series_with_games(1, with_dlc=True)
+    catalog = build_catalog([gb])
+    game = Game.objects.get(id=next(iter(catalog['game_ids'])))
+
+    ProfileGame.objects.create(profile=profile, game=game, progress=40, earned_trophies_count=3)
+    # The DLC group is finished; the base list is not.
+    ProfileTrophyGroup.objects.create(
+        profile=profile, trophy_group=game.trophy_groups.get(trophy_group_id='001'), progress=100,
+    )
+    ProfileTrophyGroup.objects.create(
+        profile=profile, trophy_group=game.trophy_groups.get(trophy_group_id='default'), progress=40,
+    )
+
+    result = evaluate_with_catalog(profile, catalog)[gb.id]
+
+    assert result.base_satisfied_count == 0, 'a finished DLC group completed the base game'
