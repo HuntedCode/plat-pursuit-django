@@ -25,7 +25,6 @@ from django.utils import timezone
 
 from core.services.email_service import EmailService
 from fundraiser.models import Donation, DonationBadgeClaim, Fundraiser
-from users.services.email_preference_service import EmailPreferenceService
 
 logger = logging.getLogger(__name__)
 
@@ -412,19 +411,33 @@ class DonationService:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def _build_email_base_context(user):
-        """Build shared context variables required by base_email.html."""
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(user.id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception:
-            logger.exception(f"Failed to generate preference_url for user {user.id}")
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+    def _build_email_base_context(profile=None):
+        """Shared context for the three fundraiser emails on base_email_v2.
 
+        Greets by PSN name rather than `user.first_name`: signup collects no name, so the old
+        `first_name|default:user.email` greeting addressed almost every donor by their raw email
+        address on the one email they are most likely to keep.
+
+        (This used to mint a signed email-preference token as well. None of the three templates
+        read it; the preferences page is parked, and the base band links to Settings.)
+        """
         return {
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
+            'username': (
+                (profile.display_psn_username or profile.psn_username) if profile else 'trophy hunter'
+            ),
         }
+
+    @staticmethod
+    def _claim_series_name(claim):
+        """The series name for a claim's subject line and hero.
+
+        `series_slug` / `series_name` are denormalized at claim time so a renamed series cannot
+        rewrite the record, but `series_name` is `blank=True`: an empty one produced the subject
+        "Badge claimed: " over an email that never named the badge. Falls back to the live series,
+        then to a phrase that at least reads as a sentence.
+        """
+        return claim.series_name or (claim.series.name if claim.series_id else '') or 'your badge series'
 
     @staticmethod
     def _send_donation_receipt_email(donation):
@@ -434,8 +447,7 @@ class DonationService:
 
         try:
             context = {
-                **DonationService._build_email_base_context(donation.user),
-                'user': donation.user,
+                **DonationService._build_email_base_context(donation.profile),
                 'donation': donation,
                 'fundraiser': donation.fundraiser,
                 'badge_picks_earned': donation.badge_picks_earned,
@@ -466,16 +478,19 @@ class DonationService:
         if not user or not user.email:
             return
 
+        series_name = DonationService._claim_series_name(claim)
+
         try:
             context = {
-                **DonationService._build_email_base_context(user),
-                'user': user,
+                **DonationService._build_email_base_context(claim.profile),
                 'claim': claim,
-                'badge_url': f"{settings.SITE_URL}/badges/{claim.series_slug}/",
+                'series_name': series_name,
+                'badge_url': f"{settings.SITE_URL}"
+                             f"{reverse('badge_detail', kwargs={'series_slug': claim.series_slug})}",
             }
 
             EmailService.send_html_email(
-                subject=f"Badge claimed: {claim.series_name}",
+                subject=f"Badge claimed: {series_name}",
                 to_emails=user.email,
                 template_name='emails/badge_claim_confirmation.html',
                 context=context,
@@ -525,16 +540,19 @@ class DonationService:
         if not user or not user.email:
             return
 
+        series_name = DonationService._claim_series_name(claim)
+
         try:
             context = {
-                **DonationService._build_email_base_context(user),
-                'user': user,
+                **DonationService._build_email_base_context(claim.profile),
                 'claim': claim,
-                'badge_url': f"{settings.SITE_URL}/badges/{claim.series_slug}/",
+                'series_name': series_name,
+                'badge_url': f"{settings.SITE_URL}"
+                             f"{reverse('badge_detail', kwargs={'series_slug': claim.series_slug})}",
             }
 
             EmailService.send_html_email(
-                subject=f"New artwork is live: {claim.series_name}!",
+                subject=f"New artwork is live: {series_name}!",
                 to_emails=user.email,
                 template_name='emails/artwork_complete.html',
                 context=context,

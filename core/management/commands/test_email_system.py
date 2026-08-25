@@ -25,9 +25,12 @@ Usage:
     python manage.py test_email_system your.email@example.com --broadcast-preview
     python manage.py test_email_system your.email@example.com --weekly-digest-preview
 """
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse
 from django.conf import settings
+from django.utils import timezone
 from core.services.email_service import EmailService
 from users.constants import PREMIUM_PERKS
 
@@ -540,35 +543,31 @@ class Command(BaseCommand):
 
     def _send_donation_receipt_preview(self, recipient_email):
         """Send a preview of the fundraiser donation receipt email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending donation receipt email preview...")
 
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
         # Build a mock donation-like object for template rendering
         class MockDonation:
-            amount = '25.00'
-            provider = 'stripe'
+            amount = Decimal('25.50')  # the .5 is deliberate: it catches a missing floatformat
+            provider = 'paypal'
+            provider_transaction_id = 'cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0'
+            completed_at = timezone.now()
+            created_at = completed_at
+
+            def get_provider_display(self):
+                return 'PayPal'
 
         class MockFundraiser:
             name = 'Badge Artwork Fund'
             slug = 'badge-artwork-fund'
 
         context = {
-            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'username': 'TestHunter',
             'donation': MockDonation(),
             'fundraiser': MockFundraiser(),
             'badge_picks_earned': 2,
             'claim_url': f'{settings.SITE_URL}/fundraiser/badge-artwork-fund/',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -598,28 +597,20 @@ class Command(BaseCommand):
 
     def _send_badge_claim_preview(self, recipient_email):
         """Send a preview of the badge claim confirmation email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending badge claim confirmation email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         class MockClaim:
             series_name = 'Trophy Hunter'
             series_slug = 'trophy-hunter'
 
         context = {
-            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'username': 'TestHunter',
             'claim': MockClaim(),
-            'badge_url': f'{settings.SITE_URL}/badges/trophy-hunter/',
+            'series_name': MockClaim.series_name,
+            'badge_url': f"{settings.SITE_URL}"
+                         f"{reverse('badge_detail', kwargs={'series_slug': 'trophy-hunter'})}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -649,28 +640,20 @@ class Command(BaseCommand):
 
     def _send_artwork_complete_preview(self, recipient_email):
         """Send a preview of the badge artwork complete notification email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending artwork complete email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         class MockClaim:
             series_name = 'Trophy Hunter'
             series_slug = 'trophy-hunter'
 
         context = {
-            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'username': 'TestHunter',
             'claim': MockClaim(),
-            'badge_url': f'{settings.SITE_URL}/badges/trophy-hunter/',
+            'series_name': MockClaim.series_name,
+            'badge_url': f"{settings.SITE_URL}"
+                         f"{reverse('badge_detail', kwargs={'series_slug': 'trophy-hunter'})}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:

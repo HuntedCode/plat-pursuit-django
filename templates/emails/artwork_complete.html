@@ -1,100 +1,55 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The artwork-complete payoff, sent by donation_service.send_artwork_complete_email (via
+complete_badge_claim, which is the one path that stamps a claim done).
 
-{% block extra_styles %}
-    <style>
-        .complete-box {
-            background-color: #667eea;
-            background: linear-gradient(135deg, #2ECC71 0%, #1abc9c 50%, #667eea 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 25px 0;
-            color: #ffffff;
-            text-align: center;
-        }
+Twin of badge_claim_confirmation.html: same context, same shape, kept as two files on purpose.
+That one says "we have your pick"; this one says "it is drawn". Keep the two hero shapes in step.
 
-        .complete-box .complete-icon {
-            font-size: 42px;
-            margin-bottom: 10px;
-            display: block;
-        }
+This is the last email a donor gets in the arc and the only one that is purely good news, so it
+stays short: the name, the fact that it is live, and a way to go look at it.
 
-        .complete-box h2 {
-            margin: 0 0 10px 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
+`series_name` is derived in the sender (see the twin) because the denormalized name is allowed to
+be blank, and an empty one emptied both the subject and the hero.
+{% endcomment %}
 
-        .complete-box p {
-            margin: 0;
-            font-size: 15px;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
+{% block title %}New artwork: {{ series_name }}{% endblock %}
 
-        .complete-box .badge-name {
-            font-size: 24px;
-            font-weight: 700;
-            margin: 15px 0;
-            display: block;
-        }
-
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .complete-box {
-                padding: 20px 15px;
-            }
-            .complete-box .badge-name {
-                font-size: 20px;
-            }
-        }
-    </style>
-{% endblock %}
-
-{% block title %}New Artwork: {{ claim.series_name }}{% endblock %}
+{% block preheader %}The badge series you commissioned is drawn and live on the site.{% endblock %}
 
 {% block header_content %}
-    <h1>Artwork Complete!</h1>
-    <p>Your claimed badge has a new look</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Artwork complete</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">The badge you claimed has a new look.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ user.first_name|default:user.email }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, it is drawn. Go and look at it.</p>
 
-    <div class="complete-box">
-        <span class="complete-icon">&#127912;</span>
-        <h2>Fresh artwork is live!</h2>
-        <span class="badge-name">{{ claim.series_name }}</span>
-        <p>
-            The badge series you helped commission now has professional artwork.
-            All tiers of this badge have been updated with the new design.
-            Go check it out!
-        </p>
-    </div>
+    {% comment %} Same hero shape as the claim confirmation, in the finished colour: teal-green
+    for a thing completed, against the claim's gold for a thing staked. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#2E9E6B" style="background-color: #2E9E6B; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 16px 18px; background-color: #F2FAF6; border-radius: 0 8px 8px 0;">
+                <p style="margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4A5768;">Now live</p>
+                <p style="margin: 0; font-size: 24px; line-height: 1.25; font-weight: 800; color: #10151C;">{{ series_name }}</p>
+                <p class="pp-card-c" style="margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: #4A5768;">Every tier in the series has been redrawn, and your name is on the series as the hunter who paid for it.</p>
+            </td>
+        </tr>
+    </table>
 
-    <p class="intro">
-        Thanks to your generous donation, this badge series now has custom artwork
-        that the entire PlatPursuit community can enjoy. Your contribution made
-        this possible!
-    </p>
+    <p class="pp-p">This one exists because you paid for it. Anyone who earns it from here on gets your artwork, which is a fairly permanent way to leave a mark on a trophy site.</p>
 
-    <div class="cta-container">
-        <a href="{{ badge_url }}" class="cta-button">See the New Artwork</a>
-    </div>
+    {% include 'emails/_cta_button.html' with url=badge_url label="See the new artwork" %}
 
-    <p class="flavor-text">
-        Another badge brought to life. The pursuit continues!
-    </p>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ badge_url }}</p>
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #627488;">Another badge brought to life. The pursuit continues.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you claimed this badge series on PlatPursuit.<br>
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #999999; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because you claimed this badge series on PlatPursuit.
+    Manage your account settings from the link above.
 {% endblock %}

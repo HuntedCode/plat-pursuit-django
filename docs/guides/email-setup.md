@@ -82,7 +82,7 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | `payment_failed` | `emails/payment_failed.html` | Stripe `invoice.payment_failed` webhook | `subscription_notifications` |
 | `payment_action_required` | `emails/payment_action_required.html` | 3D Secure or action needed | `subscription_notifications` |
 | `subscription_cancelled` | `emails/subscription_cancelled.html` | Cancellation confirmation | `subscription_notifications` |
-| `donation_receipt` | `emails/donation_receipt.html` | Donation completion | None (transactional) |
+| `donation_receipt` | `emails/donation_receipt.html` | Donation completion | None (transactional). Carries the amount, campaign, provider display name, date and `provider_transaction_id`: it is the record a donor quotes back at us, so it has to be quotable. |
 | `badge_claim_confirmation` | `emails/badge_claim_confirmation.html` | Fundraiser badge claim | None (transactional) |
 | `artwork_complete` | `emails/artwork_complete.html` | Admin marks artwork done | None (transactional) |
 
@@ -93,8 +93,8 @@ last child migrates, at which point the legacy base and this table row die toget
 
 | Base | Children | Notes |
 |------|----------|-------|
-| `base_email_v2.html` | `welcome.html`, `launch_announcement.html`, `email_verification.html`, `password_reset.html`, `payment_action_required.html`, `payment_succeeded.html`, `subscription_welcome.html`, `subscription_cancelled.html`, `payment_failed.html` | The target. Extend this for anything new or rebuilt. |
-| `base_email.html` (legacy) | the remaining kept templates (`donation_receipt`, `badge_claim_confirmation`, `artwork_complete`) + `badge_earned` (no sender) + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
+| `base_email_v2.html` | every template with a live sender: `welcome.html`, `launch_announcement.html`, `email_verification.html`, `password_reset.html`, `payment_action_required.html`, `payment_succeeded.html`, `subscription_welcome.html`, `subscription_cancelled.html`, `payment_failed.html`, `donation_receipt.html`, `badge_claim_confirmation.html`, `artwork_complete.html` | The target. Extend this for anything new or rebuilt. |
+| `base_email.html` (legacy) | `badge_earned` (no sender) + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Nothing that currently sends still rides it; the four remaining children go when the systems behind them are rebuilt, and the legacy base dies with the last one. |
 
 **What v2 provides:**
 - A `role="presentation"` table scaffold with MSO ghost tables, so Outlook renders it.
@@ -226,6 +226,8 @@ For email to work correctly, the domain needs:
 - **Suppressed emails**: If a user opts out via `EmailPreferenceService`, use `log_suppressed()` to record that the email was intentionally not sent.
 - **PayPal double-email guard**: For payment_succeeded emails, the system checks for a recent `subscription_welcome` EmailLog to prevent sending both welcome + payment emails on initial subscription.
 - **Receipt amounts come from `format_charge`** (`users/services/subscription_service.py`): Stripe reports most currencies in minor units but zero-decimal ones (JPY, KRW) in major units, so the helper branches rather than always dividing by 100, and it only attaches a dollar sign to USD. It returns `None` when there is no invoice in hand (the PayPal renewal path and admin resends), and both receipt rows are `{% if %}`-guarded so an absent value omits the row instead of printing "None" to a paying customer.
+- **Blank `series_name` on a badge claim**: the denormalized name on `DonationBadgeClaim` is `blank=True` and fed the subject line directly, so an empty one shipped "Badge claimed: " over an email that never named the badge. Both twins now take a `series_name` derived by `DonationService._claim_series_name` (denorm, then the live series, then a phrase).
+- **The fundraiser emails greet by PSN name**: signup collects no name, so the old `first_name|default:user.email` greeting addressed nearly every donor by their raw email address. `_build_email_base_context` takes the donor's Profile and resolves `display_psn_username or psn_username`.
 - **SendGrid rate limits**: Bulk email commands use `--batch-size` (default 100) to avoid hitting SendGrid's API limits.
 - **Broadcast emails iterate individually**: Each recipient gets a personalized email (with their name and preference token). This uses `iterator(chunk_size=200)` to avoid loading all users into memory at once.
 - **Badge email consolidation**: One email per sync cycle, matching the in-app notification consolidation pattern. All badges earned in that sync are listed in a single email.

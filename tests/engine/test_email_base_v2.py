@@ -16,7 +16,9 @@ V2_CHILDREN = ('welcome.html', 'launch_announcement.html',
                'email_verification.html', 'password_reset.html',
                'payment_action_required.html', 'payment_succeeded.html',
                'subscription_welcome.html', 'subscription_cancelled.html',
-               'payment_failed.html')   # grows as templates migrate
+               'payment_failed.html',
+               'donation_receipt.html', 'badge_claim_confirmation.html',
+               'artwork_complete.html')   # grows as templates migrate
 
 
 def _src(path):

@@ -1,151 +1,93 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The donation receipt, sent by donation_service._send_donation_receipt_email.
 
-{% block extra_styles %}
-    <style>
-        .donation-box {
-            background-color: #667eea;
-            background: linear-gradient(135deg, #2ECC71 0%, #27ae60 50%, #667eea 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 25px 0;
-            color: #ffffff;
-            text-align: center;
-        }
+This is the only email in the family that is a RECORD as well as a thank-you: it is what a donor
+keeps, and what they quote back at us if a charge is ever queried. The detail table therefore
+carries the transaction id and the date, which the previous version did not print at all.
 
-        .donation-box .donation-icon {
-            font-size: 42px;
-            margin-bottom: 10px;
-            display: block;
-        }
+`badge_picks_earned` forks the closing half and MUST be preserved: above zero it is the only
+place a donor is told they have picks waiting to spend, and the CTA changes with it.
 
-        .donation-box h2 {
-            margin: 0 0 10px 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
-
-        .donation-box p {
-            margin: 0;
-            font-size: 15px;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
-
-        .donation-box .amount {
-            font-size: 36px;
-            font-weight: 700;
-            margin: 15px 0;
-            display: block;
-        }
-
-        .details-box {
-            background-color: #f0f4ff;
-            border-radius: 8px;
-            padding: 20px 25px;
-            margin: 25px 0;
-            border-left: 4px solid #2ECC71;
-        }
-
-        .details-box h3 {
-            margin: 0 0 12px 0;
-            font-size: 16px;
-            color: #333333;
-        }
-
-        .details-box ul {
-            margin: 0;
-            padding-left: 20px;
-            color: #555555;
-        }
-
-        .details-box li {
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-
-        .details-box li strong {
-            color: #333333;
-        }
-
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .donation-box {
-                padding: 20px 15px;
-            }
-            .donation-box .amount {
-                font-size: 28px;
-            }
-        }
-    </style>
-{% endblock %}
+The amount keeps `floatformat:2` -- `amount` is a Decimal, and Decimal('25.5') renders as "25.5"
+without it, which reads as a truncated number on a receipt. `get_provider_display` comes from the
+model's own choices; the old `|title` filter rendered PayPal as "Paypal".
+{% endcomment %}
 
 {% block title %}Thank you for your donation!{% endblock %}
 
+{% block preheader %}Your donation to the {{ fundraiser.name }} is in. Here is your receipt.{% endblock %}
+
 {% block header_content %}
-    <h1>Thank You!</h1>
-    <p>Your donation has been received</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Thank you</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your donation has been received.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ user.first_name|default:user.email }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, you just helped pay an artist. That is the whole of it.</p>
 
-    <div class="donation-box">
-        <span class="donation-icon">&#10084;&#65039;</span>
-        <h2>You are amazing!</h2>
-        <span class="amount">${{ donation.amount|floatformat:2 }}</span>
-        <p>
-            Your generous donation to the <strong>{{ fundraiser.name }}</strong>
-            helps bring our badge artwork to life. Thank you for supporting our community!
-        </p>
-    </div>
+    {% comment %} The figure, given room to be the figure. Success green, the same accent the
+    renewal receipt uses for a completed payment. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#2E9E6B" style="background-color: #2E9E6B; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 16px 18px; background-color: #F2FAF6; border-radius: 0 8px 8px 0;">
+                <p style="margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4A5768;">Donation received</p>
+                <p style="margin: 0; font-size: 32px; line-height: 1.15; font-weight: 800; color: #10151C;">${{ donation.amount|floatformat:2 }}</p>
+                <p class="pp-card-c" style="margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: #4A5768;">to the {{ fundraiser.name }}</p>
+            </td>
+        </tr>
+    </table>
 
-    <div class="details-box">
-        <h3>Donation Details:</h3>
-        <ul>
-            <li><strong>Amount:</strong> ${{ donation.amount|floatformat:2 }} USD</li>
-            <li><strong>Campaign:</strong> {{ fundraiser.name }}</li>
-            <li><strong>Payment Method:</strong> {{ donation.provider|title }}</li>
-            {% if badge_picks_earned > 0 %}
-                <li><strong>Badge Artwork Picks Earned:</strong> {{ badge_picks_earned }}</li>
-            {% endif %}
-        </ul>
-    </div>
+    {% comment %} The record. A real two-column table, so the label/value pairs survive Outlook's
+    Word engine (which ignores the flex the old version leaned on). {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px; background-color: #F5F8FC; border-radius: 8px;">
+        <tr>
+            <td style="padding: 14px 16px 6px; font-size: 14px; line-height: 1.5; color: #4A5768;">Amount</td>
+            <td align="right" style="padding: 14px 16px 6px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">${{ donation.amount|floatformat:2 }} USD</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #4A5768;">Campaign</td>
+            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ fundraiser.name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #4A5768;">Payment method</td>
+            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ donation.get_provider_display }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #4A5768;">Date</td>
+            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ donation.completed_at|default:donation.created_at|date:"F j, Y" }}</td>
+        </tr>
+        {% if badge_picks_earned > 0 %}
+        <tr>
+            <td style="padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #4A5768;">Badge artwork picks earned</td>
+            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ badge_picks_earned }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td style="padding: 6px 16px 14px; font-size: 13px; line-height: 1.5; color: #4A5768;">Transaction</td>
+            <td align="right" style="padding: 6px 16px 14px; font-size: 13px; line-height: 1.5; color: #4A5768; word-break: break-all;">{{ donation.provider_transaction_id }}</td>
+        </tr>
+    </table>
 
     {% if badge_picks_earned > 0 %}
-        <p class="intro">
-            You have earned <strong>{{ badge_picks_earned }} badge artwork pick{{ badge_picks_earned|pluralize }}</strong>!
-            Head to the fundraiser page to choose which badge series you would like to see
-            with professional artwork.
-        </p>
+    <p class="pp-p">You have earned <strong>{{ badge_picks_earned }} badge artwork pick{{ badge_picks_earned|pluralize }}</strong>. Head to the fundraiser to choose which badge series gets drawn next, and your name goes on it.</p>
 
-        <div class="cta-container">
-            <a href="{{ claim_url }}" class="cta-button">Claim Your Badge Picks</a>
-        </div>
+    {% include 'emails/_cta_button.html' with url=claim_url label="Claim your badge picks" %}
     {% else %}
-        <p class="intro">
-            Every dollar counts and brings us closer to professional artwork for our badges.
-            Thank you for being part of this journey.
-        </p>
+    <p class="pp-p">Every dollar goes to the same place: an artist drawing badges for this site. You can watch the total climb, and see which series have already been claimed, on the fundraiser page.</p>
 
-        <div class="cta-container">
-            <a href="{{ claim_url }}" class="cta-button">View the Fundraiser</a>
-        </div>
+    {% include 'emails/_cta_button.html' with url=claim_url label="View the fundraiser" %}
     {% endif %}
 
-    <p class="flavor-text">
-        Your support keeps the hunt alive. Thank you, trophy hunter!
-    </p>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ claim_url }}</p>
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #627488;">Your support keeps the hunt alive. Thank you, trophy hunter.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you made a donation on PlatPursuit.<br>
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #999999; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because you made a donation on PlatPursuit.
+    Manage your account settings from the link above.
 {% endblock %}

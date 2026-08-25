@@ -42,8 +42,10 @@ def _content(body):
 
     The preheader paraphrases the body, so a copy assertion run against the whole render can be
     satisfied by the preview line alone while the sentence it names is gone from the page.
+    Everything before <body> goes with it: the <title> repeats the headline.
     """
-    return re.sub(r'<div style="display: none;.*?</div>', '', body, count=1, flags=re.S)
+    visible = body.split('<body', 1)[-1]
+    return re.sub(r'<div style="display: none;.*?</div>', '', visible, count=1, flags=re.S)
 
 
 def _render(name, **ctx):
