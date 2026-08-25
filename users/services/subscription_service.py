@@ -1090,26 +1090,33 @@ class SubscriptionService:
     # ── Positive lifecycle emails ─────────────────────────────────────────
 
     @staticmethod
-    def _welcome_supporter_mark(profile):
+    def _welcome_supporter_mark(user):
         """The supporter mark to SHOW in the welcome email, or None to skip the panel.
 
-        Reads the `display_mark` denorm rather than re-deriving from the tier, so the email shows
-        what the site will actually render beside their name. Two cases return None on purpose:
+        Two decisions, each made where the site already makes it:
 
-          - a staff or mod subscriber. Service marks outrank the ladder in `resolve_display_mark`,
-            so they keep wearing the wrench or the shield; showing them supporter stars would
-            promise something no page will ever draw.
-          - no profile, or an unmapped tier.
+        GATE on the `display_mark` denorm, so the panel appears only when the site will really
+        draw stars beside this name. Service marks outrank the ladder in `resolve_display_mark`,
+        so a staff or mod subscriber keeps wearing the wrench or the shield, and showing them
+        stars would promise a mark no page will ever draw. (Ordering: activate_subscription runs
+        `reconcile_premium`, which refreshes the denorm, inside its transaction and sends this
+        email after, so the mark is written by the time this reads it.)
 
-        Ordering note: activate_subscription runs `reconcile_premium` (which refreshes the denorm)
-        inside its transaction and sends this email after, so the mark is already written.
+        DISPLAY from `worn_level_dict`, the shape every other level-tinted surface consumes, so
+        the legacy naming rule comes along for free: a grandfathered tier wears the price-nearest
+        level's colour and stars but keeps the name it BOUGHT. Deriving the name from the worn
+        slug instead would tell a `supporter` subscriber they are a "Sponsor", a tier they never
+        bought and whose price they never paid.
         """
-        from users.services.marks import mark_style
+        from users.services.marks import mark_style, worn_level_dict
 
+        profile = getattr(user, 'profile', None)
         if profile is None:
             return None
         mark = mark_style(profile.display_mark)
-        return mark if mark and mark.get('kind') == 'supporter' else None
+        if not mark or mark.get('kind') != 'supporter':
+            return None
+        return worn_level_dict(user.premium_tier)
 
     @staticmethod
     def _send_subscription_welcome_email(user, tier_name: str, triggered_by: str = 'webhook') -> bool:
@@ -1155,7 +1162,7 @@ class SubscriptionService:
             # The "Site-wide marker" perk, shown rather than described. None for a staff or mod
             # subscriber: service marks take precedence over the ladder, so what they WEAR is
             # still the wrench or the shield, and showing them stars would be a lie.
-            'mark': SubscriptionService._welcome_supporter_mark(profile),
+            'mark': SubscriptionService._welcome_supporter_mark(user),
         }
 
         try:

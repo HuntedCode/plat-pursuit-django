@@ -47,7 +47,12 @@ perk's own colour drives its accent bar, which is the one place that bar carries
             <td align="center" style="padding: 20px 18px; background-color: #0F1720; border-radius: 8px;">
                 <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9FB3C8;">Your mark</p>
                 <p style="margin: 0; font-size: 20px; line-height: 1.3; font-weight: 700; color: {{ mark.colour }};">{{ username }}&nbsp;{% for _ in mark.star_range %}{% if mark.outline %}&#9734;{% else %}&#9733;{% endif %}{% endfor %}</p>
-                <p style="margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: #9FB3C8;">{{ mark.label }}. It rides along everywhere your name appears: leaderboards, comments, your profile.</p>
+                {% comment %} The naming rule is the welcome page's (templates/support/welcome.html):
+                a grandfathered tier keeps the name it BOUGHT and wears the price-nearest level's
+                mark. Deriving this from the worn slug would call a `supporter` subscriber a
+                "Sponsor", which is a tier they never bought. {% endcomment %}
+                <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.4; font-weight: 700; color: #F0F6FD;">{% if mark.is_legacy %}{{ mark.display_name }}{% else %}PlatPursuit {{ mark.name }}{% endif %}</p>
+                <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: #9FB3C8;">{% if mark.is_legacy %}A founding tier, wearing the {{ mark.name }} mark. It rides{% else %}It rides{% endif %} along everywhere your name appears: leaderboards, comments, your profile.</p>
             </td>
         </tr>
     </table>

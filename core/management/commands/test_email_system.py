@@ -33,7 +33,7 @@ from django.conf import settings
 from django.utils import timezone
 from core.services.email_service import EmailService
 from users.constants import PREMIUM_PERKS
-from users.services.marks import mark_style
+from users.services.marks import worn_level_dict
 
 
 class Command(BaseCommand):
@@ -439,9 +439,9 @@ class Command(BaseCommand):
             'site_url': settings.SITE_URL,
             'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=['TestUser'])}",
             'premium_perks': PREMIUM_PERKS,
-            # Patron: mid-ladder, two filled stars. mark_style is the same helper the
-            # sender uses, so the preview cannot drift from what a member receives.
-            'mark': mark_style('patron'),
+            # Patron: mid-ladder, two filled stars. worn_level_dict is the same helper
+            # the sender uses, so the preview cannot drift from what a member receives.
+            'mark': worn_level_dict('patron'),
         }
 
         try:

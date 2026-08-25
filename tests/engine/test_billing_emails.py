@@ -14,7 +14,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
 from users.constants import PREMIUM_PERKS
-from users.services.marks import mark_style
+from users.services.marks import worn_level_dict
 from users.services.subscription_service import format_charge
 
 SITE = 'https://platpursuit.com'
@@ -267,7 +267,7 @@ def _mark_panel(body):
 
 def test_the_welcome_shows_the_mark_it_just_granted():
     """The "Site-wide marker" perk, shown rather than described."""
-    body = _content(_welcome(mark_style('patron')))
+    body = _content(_welcome(worn_level_dict('patron')))
     panel = _mark_panel(body)
 
     assert 'Your mark' in panel
@@ -279,7 +279,7 @@ def test_the_welcome_shows_the_mark_it_just_granted():
 def test_the_mark_panel_draws_stars_as_text_not_svg():
     """Gmail strips <svg> outright and Outlook's Word engine cannot draw it, so the site's real
     glyph would render as NOTHING for most of the people this email is for."""
-    body = _welcome(mark_style('patron'))
+    body = _welcome(worn_level_dict('patron'))
 
     assert '<svg' not in body
     assert chr(9733) in _plain(body), 'the stars must survive into the plaintext part too'
@@ -288,8 +288,8 @@ def test_the_mark_panel_draws_stars_as_text_not_svg():
 def test_the_first_ladder_level_wears_a_hollow_star():
     """Backer is `outline: True` -- the site strokes the SVG instead of filling it, and the
     email needs the same distinction or level 1 and level 2 look identical."""
-    backer = _mark_panel(_welcome(mark_style('backer')))
-    contributor = _mark_panel(_welcome(mark_style('contributor')))
+    backer = _mark_panel(_welcome(worn_level_dict('backer')))
+    contributor = _mark_panel(_welcome(worn_level_dict('contributor')))
 
     assert '&#9734;' in backer and '&#9733;' not in backer
     assert '&#9733;' in contributor and '&#9734;' not in contributor
@@ -298,7 +298,7 @@ def test_the_first_ladder_level_wears_a_hollow_star():
 def test_the_mark_panel_stays_on_a_dark_ground():
     """Not a style preference: every ladder colour fails AA on the white content body (2.15:1 to
     3.91:1) and passes on this panel (4.61:1 to 8.38:1)."""
-    assert _mark_panel(_welcome(mark_style('backer'))), 'the mark panel lost its dark ground'
+    assert _mark_panel(_welcome(worn_level_dict('backer'))), 'the mark panel lost its dark ground'
 
 
 def test_the_welcome_skips_the_panel_when_there_is_no_supporter_mark():
@@ -310,21 +310,44 @@ def test_the_welcome_skips_the_panel_when_there_is_no_supporter_mark():
     assert PREMIUM_PERKS[0]['name'] in body, 'the rest of the email is unaffected'
 
 
+class _User:
+    """Only what the helper reads: the worn-mark denorm and the tier that was bought."""
+    def __init__(self, display_mark, premium_tier):
+        self.premium_tier = premium_tier
+        self.profile = type('P', (), {'display_mark': display_mark})()
+
+
 def test_the_sender_only_shows_a_mark_the_site_will_actually_draw():
-    from users.services.subscription_service import SubscriptionService
+    from users.services.subscription_service import SubscriptionService as S
 
-    class _Profile:
-        display_mark = 'patron'
+    assert S._welcome_supporter_mark(_User('patron', 'patron'))['slug'] == 'patron'
 
-    profile = _Profile()
-    assert SubscriptionService._welcome_supporter_mark(profile)['key'] == 'patron'
+    assert S._welcome_supporter_mark(_User('staff', 'patron')) is None, 'staff wear the wrench'
+    assert S._welcome_supporter_mark(_User('mod', 'patron')) is None, 'mods wear the shield'
+    assert S._welcome_supporter_mark(_User('', None)) is None
+    assert S._welcome_supporter_mark(type('U', (), {'premium_tier': 'patron'})()) is None, 'no profile'
 
-    profile.display_mark = 'staff'
-    assert SubscriptionService._welcome_supporter_mark(profile) is None, 'staff wear the wrench'
 
-    profile.display_mark = 'mod'
-    assert SubscriptionService._welcome_supporter_mark(profile) is None, 'mods wear the shield'
+def test_a_grandfathered_member_keeps_the_tier_name_they_bought():
+    """The welcome page's rule (templates/support/welcome.html): a legacy tier wears the
+    price-nearest level's colour and stars but displays its REAL name. Naming the panel from the
+    worn slug instead would call a `supporter` subscriber a "Sponsor", which they never bought."""
+    from users.services.subscription_service import SubscriptionService as S
 
-    profile.display_mark = ''
-    assert SubscriptionService._welcome_supporter_mark(profile) is None
-    assert SubscriptionService._welcome_supporter_mark(None) is None
+    mark = S._welcome_supporter_mark(_User('sponsor', 'supporter'))
+    assert mark['display_name'] == 'Supporter' and mark['name'] == 'Sponsor'
+    assert mark['is_legacy'] is True
+
+    panel = _mark_panel(_welcome(mark))
+    assert 'Supporter' in panel
+    assert 'PlatPursuit Sponsor' not in panel, 'a tier they never bought'
+    assert 'wearing the Sponsor mark' in panel, 'but the mark they wear is still named'
+
+
+def test_a_ladder_member_is_named_for_their_level():
+    from users.services.subscription_service import SubscriptionService as S
+
+    panel = _mark_panel(_welcome(S._welcome_supporter_mark(_User('patron', 'patron'))))
+
+    assert 'PlatPursuit Patron' in panel
+    assert 'founding tier' not in panel
