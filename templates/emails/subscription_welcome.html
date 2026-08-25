@@ -32,21 +32,36 @@ perk's own colour drives its accent bar, which is the one place that bar carries
 
     ON A DARK GROUND ON PURPOSE, and this is not a style preference. The six ladder colours are a
     measured ramp tuned for the site's dark surfaces: against #FFFFFF they run 2.15:1 (Backer) to
-    3.91:1 (Patron), so EVERY level fails AA on the light content body. On this panel they run
-    4.61:1 to 8.38:1, all passing. Moving this block onto white would make the one personal thing
-    in the email the least readable thing in it.
+    3.91:1 (Patron); on this panel, 4.61:1 to 8.38:1. The name renders at 20px bold, which is WCAG
+    large text, so the bar it must clear on white is 3:1 rather than 4.5:1 -- and Backer (2.15),
+    Contributor (2.31) and Cornerstone (2.82) fail even that. Half the ladder illegible is enough:
+    on white, the one personal thing in this email would be the least readable thing in it.
+
+    #0F1720 IS A HARD NUMBER, not "some dark". Patron clears AA on it by 0.11 (4.61 vs 4.50), so
+    lightening the ground even to #1B2430 -- a hex already in this file's own stylesheet -- drops
+    Patron to 4.00 and fails. Re-measure the whole ramp before touching this hex.
 
     STARS ARE UNICODE, not the site's SVG path (components/_mark_glyphs_inline.html). Gmail strips
     <svg> outright and Outlook's Word engine cannot draw it either, so the real glyph would render
     as nothing for most of the people this email is FOR. &#9733;/&#9734; render everywhere, survive
     image blocking, cost no requests, and come through the plaintext part as stars rather than as
     an empty gap. The outline star carries Backer's outline:True the way the SVG's stroke does.
+    (U+2605/U+2606 are deliberately NOT the emoji star U+2B50: an emoji-set character renders as a
+    colour glyph that ignores the CSS colour, and the level's hue IS the mark.)
+
+    The run is aria-hidden because the tier line below names the mark in text. On the site the glyph
+    run carries role="img" + aria-label instead (components/name_mark.html); here the label would be
+    redundant with the very next line, and an unnamed glyph run reads as noise.
+
+    `mark.colour` lands inside a style attribute. Django escapes HTML, not CSS, so this is safe by
+    PROVENANCE: the only writer is the SUPPORT_TIERS literal via worn_level_dict. Never make it
+    user-settable without escaping it.
     {% endcomment %}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 22px;">
         <tr>
-            <td align="center" style="padding: 20px 18px; background-color: #0F1720; border-radius: 8px;">
+            <td align="center" bgcolor="#0F1720" style="padding: 20px 18px; background-color: #0F1720; border-radius: 8px;">
                 <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9FB3C8;">Your mark</p>
-                <p style="margin: 0; font-size: 20px; line-height: 1.3; font-weight: 700; color: {{ mark.colour }};">{{ username }}&nbsp;{% for _ in mark.star_range %}{% if mark.outline %}&#9734;{% else %}&#9733;{% endif %}{% endfor %}</p>
+                <p style="margin: 0; font-size: 20px; line-height: 1.3; font-weight: 700; color: {{ mark.colour }};">{{ username }}&nbsp;<span aria-hidden="true">{% for _ in mark.star_range %}{% if mark.outline %}&#9734;{% else %}&#9733;{% endif %}{% endfor %}</span></p>
                 {% comment %} The naming rule is the welcome page's (templates/support/welcome.html):
                 a grandfathered tier keeps the name it BOUGHT and wears the price-nearest level's
                 mark. Deriving this from the worn slug would call a `supporter` subscriber a
@@ -87,7 +102,7 @@ perk's own colour drives its accent bar, which is the one place that bar carries
     {% if discord_url %}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0 0;">
         <tr>
-            <td style="padding: 14px 16px; background-color: #0F1720; border-radius: 8px;">
+            <td bgcolor="#0F1720" style="padding: 14px 16px; background-color: #0F1720; border-radius: 8px;">
                 <p style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #F0F6FD;">Join the Discord</p>
                 <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #9FB3C8;">
                     Your supporter role and #supporter-chat are ready when you are.

@@ -1098,9 +1098,15 @@ class SubscriptionService:
         GATE on the `display_mark` denorm, so the panel appears only when the site will really
         draw stars beside this name. Service marks outrank the ladder in `resolve_display_mark`,
         so a staff or mod subscriber keeps wearing the wrench or the shield, and showing them
-        stars would promise a mark no page will ever draw. (Ordering: activate_subscription runs
-        `reconcile_premium`, which refreshes the denorm, inside its transaction and sends this
-        email after, so the mark is written by the time this reads it.)
+        stars would promise a mark no page will ever draw.
+
+        Ordering, and it is NOT universal: `activate_subscription` runs `reconcile_premium` (which
+        refreshes the denorm) inside its transaction and sends this email after, so both webhook
+        paths are correct. The admin resend in `api/subscription_admin_views.py` runs no reconcile,
+        so if a tier was set by hand without the premium flag following, `display_mark` is still ''
+        and the panel is skipped. That errs the right way -- the site draws no mark for that member
+        either, so a missing panel is the truth -- but do not read this as "the denorm is always
+        fresh".
 
         DISPLAY from `worn_level_dict`, the shape every other level-tinted surface consumes, so
         the legacy naming rule comes along for free: a grandfathered tier wears the price-nearest

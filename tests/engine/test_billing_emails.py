@@ -52,6 +52,10 @@ def _content(body):
 def _render(name, **ctx):
     ctx.setdefault('site_url', SITE)
     ctx.setdefault('username', 'TestHunter')
+    if name == 'subscription_welcome.html':
+        # Without this the {% if mark %} panel is skipped, and every house-rule guard that renders
+        # this template (no em dash, no dead purple, inline headline colour) silently never sees it.
+        ctx.setdefault('mark', worn_level_dict('patron'))
     return render_to_string('emails/' + name, ctx)
 
 
@@ -249,20 +253,31 @@ def test_the_perk_previews_are_fed_the_constant():
 
 # --- the mark preview: the one personal thing in the welcome ---
 
-def _welcome(mark):
+def _welcome(mark, discord_url=''):
     return _render('subscription_welcome.html', tier_name='Patron', premium_perks=PREMIUM_PERKS,
-                   profile_url=f'{SITE}/hunters/t/', discord_url='', mark=mark)
+                   profile_url=f'{SITE}/hunters/t/', discord_url=discord_url, mark=mark)
 
 
 def _mark_panel(body):
-    """Just the mark panel's cell.
+    """Just the mark panel's cell, or '' when there is no panel.
 
     Scoped deliberately: the ladder colours are ALSO the perk-list accent colours (Patron's
     #6875ee is the "Site-wide marker" perk's own bar), so a colour assertion against the whole
     body is satisfied by the perk list even with the panel rendering in flat black.
+
+    Anchored on the eyebrow rather than on the panel's #0F1720 ground, because the DISCORD block
+    is the same hex: anchoring on the colour matched the Discord cell as soon as a caller passed
+    a discord_url, which would have quietly made every pin below vacuous.
+
+    KNOWN LIMIT: this proves markup is PRESENT, not that a reader sees it. A panel wrapped in
+    display:none satisfies every substring assertion here, which is not hypothetical in email --
+    it is exactly how the preheader hides. test_the_mark_panel_stays_on_a_dark_ground checks it.
     """
-    match = re.search(r'background-color: #0F1720.*?</table>', body, re.S)
-    return match.group(0) if match else ''
+    match = re.search(r'<td[^>]*>\s*<p[^>]*>Your mark</p>.*?</table>', body, re.S)
+    if match:
+        start = body.rindex('<td', 0, match.start() + 1)
+        return body[start:match.end()]
+    return ''
 
 
 def test_the_welcome_shows_the_mark_it_just_granted():
@@ -285,6 +300,17 @@ def test_the_mark_panel_draws_stars_as_text_not_svg():
     assert chr(9733) in _plain(body), 'the stars must survive into the plaintext part too'
 
 
+def test_the_star_run_is_decorative_not_announced():
+    """On the site the glyph run carries role="img" + aria-label (components/name_mark.html).
+    Here the tier line names the mark in text on the very next line, so a label would be
+    redundant and an unnamed run of symbols reads as noise to a screen reader."""
+    panel = _mark_panel(_welcome(worn_level_dict('cornerstone')))
+
+    stars = re.search(r'<span[^>]*>(?:&#9733;|&#9734;)+</span>', panel)
+    assert stars, 'the star run lost its wrapper'
+    assert 'aria-hidden="true"' in stars.group(0)
+
+
 def test_the_first_ladder_level_wears_a_hollow_star():
     """Backer is `outline: True` -- the site strokes the SVG instead of filling it, and the
     email needs the same distinction or level 1 and level 2 look identical."""
@@ -298,7 +324,11 @@ def test_the_first_ladder_level_wears_a_hollow_star():
 def test_the_mark_panel_stays_on_a_dark_ground():
     """Not a style preference: every ladder colour fails AA on the white content body (2.15:1 to
     3.91:1) and passes on this panel (4.61:1 to 8.38:1)."""
-    assert _mark_panel(_welcome(worn_level_dict('backer'))), 'the mark panel lost its dark ground'
+    panel = _mark_panel(_welcome(worn_level_dict('backer'), discord_url='https://discord.gg/pp'))
+
+    assert 'bgcolor="#0F1720"' in panel and 'background-color: #0F1720' in panel
+    # Present is not the same as seen: display:none satisfies every other pin in this file.
+    assert 'display:none' not in panel.replace(' ', '')
 
 
 def test_the_welcome_skips_the_panel_when_there_is_no_supporter_mark():
@@ -326,6 +356,11 @@ def test_the_sender_only_shows_a_mark_the_site_will_actually_draw():
     assert S._welcome_supporter_mark(_User('mod', 'patron')) is None, 'mods wear the shield'
     assert S._welcome_supporter_mark(_User('', None)) is None
     assert S._welcome_supporter_mark(type('U', (), {'premium_tier': 'patron'})()) is None, 'no profile'
+
+    # The gate and the display read DIFFERENT fields, so they can disagree: a supporter denorm
+    # over a tier worn_level_dict cannot map returns None, and the {% if mark %} guard absorbs it.
+    assert S._welcome_supporter_mark(_User('patron', None)) is None
+    assert S._welcome_supporter_mark(_User('patron', 'ad_free')) is None, 'a retired non-feature tier'
 
 
 def test_a_grandfathered_member_keeps_the_tier_name_they_bought():

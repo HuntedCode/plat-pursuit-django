@@ -433,15 +433,22 @@ class Command(BaseCommand):
 
         self.stdout.write("\nSending subscription welcome email preview...")
 
+        # ONE tier drives both the header name and the mark panel, because decoupling them let the
+        # preview render a state no member can be in: "Your Premium Monthly membership is active"
+        # over a Patron mark. `premium_monthly` is chosen on purpose -- it is a grandfathered tier,
+        # so the preview exercises the legacy branch (bought name + price-nearest level's mark),
+        # which is the half of this panel most likely to be got wrong.
+        level = worn_level_dict('premium_monthly')
+
         context = {
             'username': 'TestUser',
-            'tier_name': 'Premium Monthly',
+            'tier_name': level['display_name'],
             'site_url': settings.SITE_URL,
             'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=['TestUser'])}",
             'premium_perks': PREMIUM_PERKS,
-            # Patron: mid-ladder, two filled stars. worn_level_dict is the same helper
-            # the sender uses, so the preview cannot drift from what a member receives.
-            'mark': worn_level_dict('patron'),
+            'mark': level,
+            # Every production welcome carries this block; without it the preview hides it.
+            'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
         }
 
         try:
