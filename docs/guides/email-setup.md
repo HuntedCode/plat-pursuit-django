@@ -94,7 +94,7 @@ last child migrates, at which point the legacy base and this table row die toget
 | Base | Children | Notes |
 |------|----------|-------|
 | `base_email_v2.html` | `welcome.html`, `launch_announcement.html`, `email_verification.html`, `password_reset.html`, `payment_action_required.html`, `payment_succeeded.html`, `subscription_welcome.html`, `subscription_cancelled.html`, `payment_failed.html` | The target. Extend this for anything new or rebuilt. |
-| `base_email.html` (legacy) | the remaining kept templates (`donation_receipt`, `badge_claim_confirmation`, `artwork_complete`) + `badge_earned` (no sender) + the parked recap/digest/broadcast + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
+| `base_email.html` (legacy) | the remaining kept templates (`donation_receipt`, `badge_claim_confirmation`, `artwork_complete`) + `badge_earned` (no sender) + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
 
 **What v2 provides:**
 - A `role="presentation"` table scaffold with MSO ghost tables, so Outlook renders it.
@@ -225,6 +225,7 @@ For email to work correctly, the domain needs:
 - **EmailLog vs email sending**: `log_email_type` creates an audit record. The email still sends even without it, but you lose tracking.
 - **Suppressed emails**: If a user opts out via `EmailPreferenceService`, use `log_suppressed()` to record that the email was intentionally not sent.
 - **PayPal double-email guard**: For payment_succeeded emails, the system checks for a recent `subscription_welcome` EmailLog to prevent sending both welcome + payment emails on initial subscription.
+- **Receipt amounts come from `format_charge`** (`users/services/subscription_service.py`): Stripe reports most currencies in minor units but zero-decimal ones (JPY, KRW) in major units, so the helper branches rather than always dividing by 100, and it only attaches a dollar sign to USD. It returns `None` when there is no invoice in hand (the PayPal renewal path and admin resends), and both receipt rows are `{% if %}`-guarded so an absent value omits the row instead of printing "None" to a paying customer.
 - **SendGrid rate limits**: Bulk email commands use `--batch-size` (default 100) to avoid hitting SendGrid's API limits.
 - **Broadcast emails iterate individually**: Each recipient gets a personalized email (with their name and preference token). This uses `iterator(chunk_size=200)` to avoid loading all users into memory at once.
 - **Badge email consolidation**: One email per sync cycle, matching the in-app notification consolidation pattern. All badges earned in that sync are listed in a single email.

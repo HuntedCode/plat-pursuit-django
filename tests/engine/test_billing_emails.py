@@ -14,6 +14,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
 from users.constants import PREMIUM_PERKS
+from users.services.subscription_service import format_charge
 
 SITE = 'https://platpursuit.com'
 PORTAL = 'https://billing.stripe.com/p/session/live_YWNjdF8xMjM0/abcdef123456'
@@ -24,6 +25,25 @@ EMAILS = Path(settings.BASE_DIR) / 'templates' / 'emails'
 def _plain(body):
     stripped = re.sub(r'(?is)<(style|script)[^>]*>.*?</\1>', ' ', body)
     return _html.unescape(strip_tags(stripped))
+
+
+def _preheader(body):
+    """The hidden inbox preview line, pulled out of the base's mso-hide div.
+
+    Slicing the first N characters of the plaintext gets this too, but only until a longer
+    headline pushes the sentence past N and breaks a passing test for the wrong reason.
+    """
+    match = re.search(r'mso-hide: all[^>]*>(.*?)&zwnj;', body, re.S)
+    return _html.unescape(match.group(1)).strip() if match else ''
+
+
+def _content(body):
+    """Everything the reader actually sees, with the hidden preheader removed.
+
+    The preheader paraphrases the body, so a copy assertion run against the whole render can be
+    satisfied by the preview line alone while the sentence it names is gone from the page.
+    """
+    return re.sub(r'<div style="display: none;.*?</div>', '', body, count=1, flags=re.S)
 
 
 def _render(name, **ctx):
@@ -81,7 +101,8 @@ def test_the_cancellation_promises_the_data_is_safe():
     body = _render('subscription_cancelled.html', tier_name='Patron',
                    premium_perks=PREMIUM_PERKS, subscribe_url=f'{SITE}/support/')
 
-    assert 'trophies' in body and 'stay exactly as they are' in body
+    # Body, not preheader: the preview line also says "trophies are untouched".
+    assert 'trophies' in _content(body) and 'stay exactly as they are' in _content(body)
 
 
 def test_the_membership_welcome_keeps_its_discord_cta():
@@ -105,17 +126,19 @@ def test_the_two_dunning_tones_stay_distinct():
     assert '#D9903B' in first and '#D6453D' not in first
     assert '#D6453D' in final and '#D9903B' not in final
 
-    # The reassurance that keeps a first failure from reading as a cancellation.
-    assert 'premium access remains active' in first
-    assert 'will be cancelled unless' in final
+    # The reassurance that keeps a first failure from reading as a cancellation. Checked against
+    # the visible body: the preheader paraphrases both of these and would satisfy the pin alone.
+    assert 'premium access remains active' in _content(first)
+    assert 'will be cancelled unless' in _content(final)
 
     # The loss list appears ONLY on the final warning.
     assert PREMIUM_PERKS[0]['name'] in final
     assert PREMIUM_PERKS[0]['name'] not in first
 
     # Distinct preheaders (the preview line, and the first thing in the plaintext part).
-    assert 'retry' in _plain(first)[:200]
-    assert 'cancelled' in _plain(final)[:200]
+    assert 'retry' in _preheader(first)
+    assert 'cancelled' in _preheader(final)
+    assert _preheader(first) and _preheader(first) != _preheader(final)
 
 
 # --- the plaintext lifeline on every CTA ---
@@ -147,9 +170,14 @@ def test_the_receipt_states_the_amount_when_it_has_one():
 
 def test_the_receipt_omits_rows_it_cannot_fill():
     """PayPal renewals and admin resends carry no invoice: an unguarded row would print
-    'Next billing date: None' to a paying customer."""
+    'Next billing date: None' to a paying customer.
+
+    The keys are passed as None rather than left out, because that is what the sender does --
+    omitting them renders '' and the 'None' pin below cannot fail.
+    """
     body = _render('payment_succeeded.html', tier_name='Patron',
-                   manage_url=f'{SITE}/users/subscription/')
+                   manage_url=f'{SITE}/users/subscription/',
+                   amount=None, next_billing_date=None)
 
     assert 'None' not in _plain(body)
     assert 'Amount charged' not in body
@@ -157,10 +185,57 @@ def test_the_receipt_omits_rows_it_cannot_fill():
     assert 'Patron' in body, 'the subscription row is unconditional'
 
 
+# --- the money itself ---
+
+def test_the_charge_is_formatted_from_the_invoice_minor_unit():
+    assert format_charge(499, 'usd') == '$4.99 USD'
+    assert format_charge(2500, 'USD') == '$25.00 USD'
+    assert format_charge(499) == '$4.99 USD', 'currency defaults to the only one we mint'
+
+
+def test_the_charge_does_not_divide_a_zero_decimal_currency():
+    """Stripe sends JPY and friends in MAJOR units. Dividing by 100 understates the charge on a
+    receipt by 100x, which is the worst direction for that error to run."""
+    assert format_charge(500, 'jpy') == '500 JPY'
+    assert format_charge(50000, 'KRW') == '50000 KRW'
+
+
+def test_the_charge_never_puts_a_dollar_sign_on_another_currency():
+    """"$4.99 EUR" gives the reader two contradictory currencies to choose between."""
+    assert format_charge(499, 'eur') == '4.99 EUR'
+    assert '$' not in format_charge(499, 'gbp')
+
+
+def test_the_charge_is_omitted_rather_than_guessed():
+    """No invoice in hand (PayPal, admin resend) must leave the receipt row out entirely."""
+    assert format_charge(None, 'usd') is None
+    assert format_charge('oops', 'usd') is None
+
+
 def test_the_billing_senders_dropped_the_dead_preference_token():
     """It was minted (signed, per send) for a page that is parked and a template that never
-    read it."""
-    src = (Path(settings.BASE_DIR) / 'users' / 'services' / 'subscription_service.py').read_text(encoding='utf-8')
+    read it. The preview command minted its own copy for the same five templates."""
+    root = Path(settings.BASE_DIR)
+    src = (root / 'users' / 'services' / 'subscription_service.py').read_text(encoding='utf-8')
 
     assert 'preference_url' not in src
     assert 'SITE_URL}/support/' not in src, 'literal URL should be reverse()'
+
+    preview = (root / 'core' / 'management' / 'commands' / 'test_email_system.py').read_text(encoding='utf-8')
+    for name in ('payment_failed', 'subscription_cancelled', 'subscription_welcome',
+                 'payment_succeeded', 'payment_action_required'):
+        start = preview.index("template_name='emails/" + name + ".html'")
+        context = preview.rindex('context = {', 0, start)
+        assert 'preference_url' not in preview[context:start], f'{name} preview still mints it'
+
+
+def test_the_perk_previews_are_fed_the_constant():
+    """The three perk-list previews rendered an empty loop, so the operator eyeballing a final
+    warning saw a dangling colon where the loss list belongs."""
+    preview = (Path(settings.BASE_DIR) / 'core' / 'management' / 'commands'
+               / 'test_email_system.py').read_text(encoding='utf-8')
+
+    for name in ('payment_failed', 'subscription_cancelled', 'subscription_welcome'):
+        start = preview.index("template_name='emails/" + name + ".html'")
+        context = preview.rindex('context = {', 0, start)
+        assert 'premium_perks' in preview[context:start], f'{name} preview renders an empty list'

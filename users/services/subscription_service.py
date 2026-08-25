@@ -24,11 +24,37 @@ from users.constants import (
     PREMIUM_DISCORD_ROLE_TIERS,
     SUPPORTER_DISCORD_ROLE_TIERS,
     ACTIVE_PREMIUM_TIERS,
+    PREMIUM_PERKS,
 )
 from trophies.discord_utils.discord_notifications import send_subscription_notification
 from trophies.services.discord_roles import notify_bot_role_earned
 
 logger = logging.getLogger('users.services.subscription')
+
+#: Currencies Stripe reports in MAJOR units rather than minor ones. Dividing one of these by 100
+#: understates the charge by 100x on a receipt, which is the worst direction for that error.
+ZERO_DECIMAL_CURRENCIES = frozenset({
+    'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA',
+    'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+})
+
+
+def format_charge(amount_minor, currency: str = 'usd') -> Optional[str]:
+    """Render a Stripe invoice amount for a receipt, or None when it is not a number.
+
+    Every price this account mints is USD (bootstrap_support_skus), so the dollar sign is
+    attached to the one currency it is known to fit and omitted for anything else: a EUR invoice
+    reading "$4.99 EUR" gives the reader two contradictory currencies to pick from.
+    """
+    code = (currency or 'usd').upper()
+    try:
+        if code in ZERO_DECIMAL_CURRENCIES:
+            major = f"{int(amount_minor):d}"
+        else:
+            major = f"{amount_minor / 100:.2f}"
+    except (TypeError, ValueError):
+        return None
+    return f"${major} USD" if code == 'USD' else f"{major} {code}"
 
 
 class MembershipStatus(NamedTuple):
@@ -784,8 +810,6 @@ class SubscriptionService:
         tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
 
-
-        from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'is_final_warning': is_final_warning,
@@ -892,7 +916,6 @@ class SubscriptionService:
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
 
-        from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'tier_name': tier_name,
@@ -1091,7 +1114,6 @@ class SubscriptionService:
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
 
-        from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'tier_name': tier_name,
@@ -1214,13 +1236,8 @@ class SubscriptionService:
                     pass
 
         # The charge itself: a renewal receipt that states no amount is the kind of thing that
-        # generates support mail. amount_paid is in the currency's minor unit.
-        amount = None
-        try:
-            currency = (invoice_data.get('currency') or 'usd').upper()
-            amount = f"${amount_paid / 100:.2f} {currency}"
-        except (TypeError, ValueError):
-            pass
+        # generates support mail. Returns None on the PayPal path, where there is no invoice.
+        amount = format_charge(amount_paid, invoice_data.get('currency'))
 
         SubscriptionService._send_payment_succeeded_email(
             user, tier_name, next_billing_date, amount=amount)

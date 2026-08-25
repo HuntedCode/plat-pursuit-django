@@ -87,9 +87,11 @@ cannot reach the portal loses their subscription.
         </tr>
     </table>
 
-    <p class="pp-p">Nothing has been lost. <strong>Your premium access remains active</strong>, and we will retry the payment automatically in a few days. Updating your card now just saves the retry.</p>
+    <p class="pp-p">Nothing has been lost. <strong>Your premium access remains active</strong>, and we will retry the payment automatically in a few days. We do recommend updating your payment method now so there is no interruption if the retry fails too.</p>
 
-    {% include 'emails/_cta_button.html' with url=portal_url label="Update payment method" %}
+    <div style="margin-top: 18px;">
+        {% include 'emails/_cta_button.html' with url=portal_url label="Update payment method" %}
+    </div>
     {% endif %}
 
     {% comment %} The plaintext lifeline. This link is the only way to fix the problem, so it
