@@ -176,7 +176,29 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `recalculate_profile_counts` | Full profile trophy count recalculation |
 | `recalc_earn_rates` | Recalculate played_count + community stats, earned_count, earn_rate |
 
-### Diagnostics
+### verify_profile_sync
+
+`python manage.py verify_profile_sync <psn_username> [--verbose]`
+
+Reconciles ONE profile's denormalized state against ground truth. **Read-only** (a test pins that it
+issues no INSERT/UPDATE/DELETE), and exits non-zero when anything drifted, so it can gate a smoke test.
+
+Run a real sync, then run this. It answers "did the sync actually land" in one place, which previously
+took four tools and some squinting. Every value a rebuilt page renders is a denorm written by the sync
+path or the nightly chain, and a broken writer shows up as a plausible zero rather than an error -- so
+the failure mode it exists to catch is "the page looks fine and is wrong".
+
+Checks: the four trophy-type counters against `EarnedTrophy` (signal-maintained, so drift means a
+signal did not fire); `total_games` / `total_completes` / `total_trophies` against `ProfileGame` (no
+cron reconciles these, so a missed write persists until the next sync); every series with a held badge
+has a `SeriesBadgeStanding` row (the Collection reads standings and never live-evaluates, so a hold
+without one is simply absent from the page); and contracts whose games are complete but which are not
+stamped reachable (the gap `process_contracts`, nightly step 3, exists to close).
+
+Note `total_trophies` is filter-respecting: a mismatch is expected when `hide_hiddens` / `hide_zeros`
+is on, and the output says so.
+
+## Diagnostics
 
 Commands for debugging and monitoring. These do not modify data (except where noted).
 
