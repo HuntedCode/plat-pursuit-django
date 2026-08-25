@@ -25,7 +25,9 @@ from django.db.models import Q, Max
 
 from trophies.models import Profile, GroupBadge, BadgeSeries, Game, ProfileGame, UserBadge
 from trophies.services.badge_apply import plan, evaluate_and_apply_batch
-from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
+from trophies.services.badge_orchestrator import (
+    build_catalog, evaluate_with_catalog, recompute_required_stages, resolve_group_badges,
+)
 
 # diff action -> the apply-summary key, so dry-run and write share one totals dict.
 _ACTION_TOTAL = {'award': 'awarded', 'revoke': 'revoked', 'update': 'updated'}
@@ -128,6 +130,17 @@ class Command(BaseCommand):
                     self.stdout.write(f"    {ch.action}: {gb.series.name} - {gb.platform_group.name}")
                     totals[_ACTION_TOTAL[ch.action]] += 1
         else:
+            # The catalog-level denorm, refreshed before the per-profile work. `required_stages` is a pure
+            # function of the stage graph and the group's platform routing -- no profile involved -- so it
+            # belongs to a catalog pass, not to apply_changes (which only visits badges whose HELD state
+            # changed and would leave every unchanged badge at its default 0 forever). Browse Badges reads
+            # it as the medallion's "X / Y" count, and a 0 hides that count entirely rather than showing
+            # "0 / 0", which is why it went unnoticed.
+            resolved = resolve_group_badges(group_badges)
+            changed = recompute_required_stages(build_catalog(resolved))
+            if changed:
+                self.stdout.write(f"required_stages refreshed on {changed} group badge(s).")
+
             # Batch write: awards are stamped in completion-date order, so earn_rank reflects who finished first.
             totals = evaluate_and_apply_batch(profiles, group_badges)
 

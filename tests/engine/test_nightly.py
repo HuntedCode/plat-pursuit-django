@@ -30,6 +30,51 @@ def test_the_dlc_sweep_runs_AFTER_the_badge_evaluation():
     )
 
 
+def test_the_drift_nets_are_scheduled():
+    """THE regression this pins. Sync only evaluates what a sync TOUCHED, so anything authored after a
+    hunter last touched the relevant game never reaches them without a sweep. Badges have always had
+    `evaluate_badges --all`; contracts and milestones had no net at all, and `process_contracts` sat
+    written, whale-safe and scheduled NOWHERE. A Contract published for a game 10,000 hunters had
+    already platinumed reached exactly zero of them."""
+    from core.management.commands.nightly import STEPS
+
+    commands = [cmd for _label, cmd, _kw in STEPS]
+    assert 'process_contracts' in commands, 'contracts have no drift net'
+    assert 'recompute_milestones' in commands, 'milestones have no drift net'
+
+    contracts = next(kw for _l, cmd, kw in STEPS if cmd == 'process_contracts')
+    assert contracts.get('all') is True, 'a per-user sweep is not a net'
+
+
+def test_contract_detection_runs_AFTER_the_dlc_sweep():
+    """`detect_dlc_and_refresh` rewrites `ProfileGame.progress` for games that gained DLC, dropping
+    owners back below 100%. `process_contracts` reads that same progress to decide a contract is
+    reached, so running it first would stamp reaches the DLC sweep immediately invalidates."""
+    from core.management.commands.nightly import STEPS
+
+    labels = [label for label, _cmd, _kw in STEPS]
+    assert labels.index('contract detection') > labels.index('DLC detection')
+
+
+def test_milestones_recompute_last_among_the_writers():
+    """Milestone metrics read badge standings and ProfileJobXP, both written earlier in this chain."""
+    from core.management.commands.nightly import STEPS
+
+    labels = [label for label, _cmd, _kw in STEPS]
+    assert labels.index('milestone recompute') > labels.index('badge evaluation')
+    assert labels.index('milestone recompute') > labels.index('contract detection')
+
+
+def test_every_step_names_a_real_command():
+    """A step naming a deleted command fails the whole night's run at that step. Cheap to pin."""
+    from django.core.management import get_commands
+    from core.management.commands.nightly import STEPS
+
+    known = get_commands()
+    for _label, cmd, _kw in STEPS:
+        assert cmd in known, f'{cmd} is not a registered management command'
+
+
 def test_one_failing_step_does_not_cancel_the_others(monkeypatch):
     """Isolated failures. Losing the whole night's maintenance because one step raised is the worse
     outcome -- but the run must still FAIL, or a broken step hides behind a green cron."""
@@ -52,10 +97,15 @@ def test_one_failing_step_does_not_cancel_the_others(monkeypatch):
 
 
 def test_a_clean_run_does_not_raise(monkeypatch):
+    # Counted from STEPS rather than hardcoded: this asserted "all 3 steps ok" and so failed the
+    # moment the contract and milestone drift nets were added, which is a passing test breaking on
+    # a correct change.
+    from core.management.commands.nightly import STEPS
+
     monkeypatch.setattr('core.management.commands.nightly.call_command', lambda *a, **k: None)
     out = io.StringIO()
     call_command('nightly', stdout=out)
-    assert 'all 3 steps ok' in out.getvalue()
+    assert f'all {len(STEPS)} steps ok' in out.getvalue()
 
 
 def test_dry_run_lists_the_order_without_running_anything(monkeypatch):

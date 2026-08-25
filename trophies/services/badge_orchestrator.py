@@ -21,7 +21,7 @@ from trophies.models import (
     Stage, Concept, Game, ConceptBundle, ProfileGame, ProfileTrophyGroup, GroupBadge, TrophyGroup,
 )
 from trophies.services.badge_engine import (
-    GameState, StageInput, GroupInput, SeriesInput, evaluate_group_badge,
+    GameState, StageInput, GroupInput, SeriesInput, evaluate_group_badge, evaluate_stage,
 )
 
 _GAME_FIELDS = ('id', 'title_platform', 'is_obtainable', 'is_delisted', 'concept_id')
@@ -68,6 +68,68 @@ def build_catalog(group_badges):
         TrophyGroup.objects.filter(game_id__in=game_ids, trophy_group_id='default').values_list('id', flat=True)
     )
     return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids, 'default_tg_ids': default_tg_ids}
+
+
+def recompute_required_stages(catalog) -> int:
+    """Write `GroupBadge.required_stages` from the catalog. Returns the number of rows changed.
+
+    WHY THIS EXISTS: the column's help_text promised a recompute and nothing ever performed one, so every
+    row sat at its `default=0` from the day the model was created. `badge_list_service` reads it as
+    `stages_total`, and the medallion renders its "X / Y" count behind `{% if total %}` -- so a zero does
+    not show as "0 / 0", it removes the count from every card on Browse Badges and the Series view. It read
+    as a design choice rather than a bug, which is why it survived the rebuild. Badge DETAIL was unaffected
+    because it takes `result.gating_count` from a live evaluation, and its `or stage_count` fallback masked
+    the dead column there too.
+
+    WHY IT CAN BE COMPUTED WITHOUT A PROFILE: gating is `_qualifies` (platform overlap) and `_gates`
+    (obtainable, and delisted vs the group's exclude_delisted) -- catalog facts only. Nothing in the gating
+    decision reads completion, so the stand-in GameState below passes `base_complete=False,
+    full_complete=False` and the count is identical for every hunter. That is also why this is NOT written
+    from `apply_changes`: that step only visits badges whose HELD state changed, which would leave every
+    unchanged badge at zero forever.
+
+    WHY PER GROUP and not a `Stage` count per series: a stage stops gating on an edition where its only
+    games are delisted (and the group excludes delisted) or unobtainable. Counting `Stage` rows would
+    over-report on exactly the editions where the difference is visible.
+    """
+    counts = {}
+    stages_by_series = defaultdict(list)
+    for st in catalog['stages']:
+        units = []
+        for c in st.concepts.all():
+            units.extend(_catalog_game_state(g) for g in c.games.all())
+        for b in st.concept_bundles.all():
+            bundle = _bundle_state(b, _catalog_game_state)
+            if bundle is not None:
+                units.append(bundle)
+        stages_by_series[st.series_slug].append(StageInput(st.stage_number, tuple(units)))
+
+    for gb in catalog['group_badges']:
+        group_input = GroupInput(frozenset(gb.platform_group.platforms), gb.platform_group.exclude_delisted)
+        stages = stages_by_series.get(gb.series.series_slug, [])
+        results = [evaluate_stage(s, group_input) for s in stages if s.stage_number > 0]
+        counts[gb.id] = sum(1 for r in results if r.gates)
+
+    stale = [gb for gb in catalog['group_badges'] if gb.required_stages != counts[gb.id]]
+    for gb in stale:
+        gb.required_stages = counts[gb.id]
+    if stale:
+        GroupBadge.objects.bulk_update(stale, ['required_stages'], batch_size=500)
+    return len(stale)
+
+
+def _catalog_game_state(g):
+    """A GameState carrying only the catalog facts gating reads. Completion is stubbed False because
+    `_gates`/`_qualifies` never look at it -- see recompute_required_stages."""
+    return GameState(
+        game_id=g.id,
+        platforms=frozenset(g.title_platform or []),
+        is_obtainable=g.is_obtainable,
+        is_delisted=g.is_delisted,
+        base_complete=False,
+        full_complete=False,
+        completion_date=None,
+    )
 
 
 def evaluate_with_catalog(profile, catalog):

@@ -27,11 +27,24 @@ from django.core.management.base import BaseCommand
 
 #: (label, command, kwargs). Order is a DEPENDENCY order, not a preference:
 #:   1. evaluate_badges --all  writes SeriesBadgeStanding / ProfileBadgeStanding / ProfileEditionStanding
-#:   2. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables)
-#:   3. audit_badge_coverage   read-only report; last because it is the least urgent
+#:   2. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables) AND
+#:      rewrites ProfileGame.progress for the affected games, dropping owners back below 100%
+#:   3. process_contracts --all reads ProfileGame.progress, so it MUST follow the DLC sweep or it would
+#:      stamp contract reaches that step 2 is about to invalidate
+#:   4. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
+#:      among the writers
+#:   5. audit_badge_coverage   read-only report; last because it is the least urgent
+#:
+#: Steps 3 and 4 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
+#: Sync only evaluates what a sync TOUCHED, so anything authored after a hunter last touched the relevant
+#: game is invisible to them forever without a sweep. `evaluate_badges --all` has always been badges'
+#: net; contracts and milestones had none. A Contract published for a game 10,000 hunters already
+#: platinumed reached exactly zero of them until this ran.
 STEPS = [
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
+    ('contract detection', 'process_contracts', {'all': True}),
+    ('milestone recompute', 'recompute_milestones', {}),
     ('badge coverage audit', 'audit_badge_coverage', {}),
 ]
 
