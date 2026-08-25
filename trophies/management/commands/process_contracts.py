@@ -144,38 +144,56 @@ class Command(BaseCommand):
     @staticmethod
     def _candidate_profiles(contract, member_ids):
         """Profiles with completion relevant to this Contract -- the only ones worth running
-        detection on. Streams; never materialises the id set in Python.
+        detection on. The candidate ids never enter Python.
 
-        THIS USED TO BUILD A PYTHON SET and pass it to `Profile.objects.filter(id__in=ids)`. Two
-        things wrong with that. It is the "per-user querysets must DB-aggregate" rule inverted: a
-        profile-scaled result pulled into memory. And on psycopg3 (server-side binding) PostgreSQL
-        caps a statement at 65,535 parameters, and Django emits one placeholder per element -- so a
-        Contract on a widely-platinumed game did not merely run slowly, it raised
-        `the number of query arguments cannot exceed 65535`, which `nightly` then swallowed as a
-        failed step every night. Subqueries keep the ids on the server, where the count does not
-        matter.
+        (`.iterator()` here bounds PYTHON memory, not the server's: a management command runs in
+        autocommit, so Django's server-side cursor is `DECLARE ... WITH HOLD`, and Postgres
+        materialises the whole result into a tuplestore at commit. Harmless -- the held set is
+        id-only -- but it is not streaming, and the 60s statement timeout covers the whole scan.)
 
-        `.only('id')`: `_detect_tiers` and `mark_contract_reached` read nothing else off Profile,
-        and hydrating full rows for every candidate was pure waste.
+        THIS USED TO BUILD A PYTHON SET and pass it to `Profile.objects.filter(id__in=ids)`, which is
+        the "per-user querysets must DB-aggregate" rule inverted: a profile-scaled result pulled into
+        memory, then re-sent as one SQL parameter per element. At 300k ids that is a multi-megabyte
+        statement and ~30 MB of Python set.
+
+        (An earlier version of this docstring claimed it RAISED at 65,535 parameters on psycopg3.
+        That is only true under server-side binding, and this project does not enable it -- Django
+        selects `ServerBindingCursor` only when `OPTIONS['server_side_binding']` is True, and neither
+        DATABASES branch sets it. So the old code was slow and rule-violating, not fatal. The fix is
+        the same either way; the stated reason was wrong and someone could have made a config
+        decision on it.)
+
+        UNION, not OR'd `Q(pk__in=...)`. Postgres only pulls an `ANY` sublink up into a semi-join
+        from the top-level AND-list; under an OR each arm stays a SubPlan and the planner falls back
+        to a sequential scan of `Profile` (~300k rows) per contract -- with a cliff, because a
+        subquery estimated above `work_mem` stops being hashed and is re-executed per outer row. One
+        top-level `IN (<union>)` becomes a semi-join against the primary key instead.
         """
-        q = Q(pk__in=[])
+        subs = []
         if member_ids:
-            q |= Q(pk__in=ProfileGame.objects
-                   .filter(game__concept_id__in=member_ids, progress=100)
-                   .values('profile_id'))
-            q |= Q(pk__in=EarnedTrophy.objects
-                   .filter(earned=True, trophy__trophy_type='platinum',
-                           trophy__game__concept_id__in=member_ids)
-                   .values('profile_id'))
+            subs.append(ProfileGame.objects
+                        .filter(game__concept_id__in=member_ids, progress=100)
+                        .values('profile_id'))
+            subs.append(EarnedTrophy.objects
+                        .filter(earned=True, trophy__trophy_type='platinum',
+                                trophy__game__concept_id__in=member_ids)
+                        .values('profile_id'))
         for bundle in contract.bundles.all():
-            # list(...) rather than values_list: `bundles__concepts` is prefetched, and values_list
-            # on a related manager issues a fresh query, silently bypassing the prefetch.
+            # list(...) rather than values_list: `bundles__concepts` is prefetched, and values_list on
+            # a related manager issues a fresh query, silently bypassing the prefetch.
             bundle_ids = [c.id for c in bundle.concepts.all()]
             if bundle_ids:
-                q |= Q(pk__in=ProfileGame.objects
-                       .filter(game__concept_id__in=bundle_ids, progress=100)
-                       .values('profile_id'))
-        return Profile.objects.filter(q).only('id').iterator(chunk_size=500)
+                subs.append(ProfileGame.objects
+                            .filter(game__concept_id__in=bundle_ids, progress=100)
+                            .values('profile_id'))
+        if not subs:
+            return iter(())          # no members and no bundles: nothing to sweep, and no query
+
+        ids = subs[0] if len(subs) == 1 else subs[0].union(*subs[1:])
+        # `.only('id')` is for psycopg row width and Django hydration, not the plan: nothing in
+        # `_apply` / `_detect_tiers` / `mark_contract_reached` reads another field, so there is no
+        # deferred-field reload per row.
+        return Profile.objects.filter(pk__in=ids).only('id').iterator(chunk_size=500)
 
     @staticmethod
     def _apply(profile, contract, member_ids, dry_run):

@@ -175,10 +175,13 @@ class Command(BaseCommand):
         # Same two calls `mark_contract_reached` makes, minus the write: detection is pure, so
         # running it here tells us what the stamped state SHOULD be without changing anything.
         for contract in Contract.objects.filter(is_live=True).prefetch_related('bundles__concepts'):
-            # `member_concept_ids()` is a query per contract and `_detect_tiers` a few more, so this
-            # scales with the contract catalogue rather than the profile. Fine at the current 25-job
-            # catalogue; if that grows into the hundreds this wants batching before it stays "safe to
-            # point at a live profile".
+            # Roughly 3 queries per LIVE CONTRACT: one for the members, two EXISTS in _detect_tiers,
+            # plus a couple per bundle. Linear in the contract catalogue and FLAT in profile size,
+            # which is the property that matters -- a 250,000-trophy hunter costs the same here as a
+            # new one. (An earlier note sized this at "the current 25-job catalogue": that is the JOB
+            # count, a fixed set of 25 role categories. Contracts are one per curated GAME and grow
+            # with the badge catalogue, so the real number is far larger and climbing. If it reaches
+            # the low thousands this wants batching by igdb_id.)
             member_ids = contract.member_concept_ids()
             platinum_reached, full_reached = _detect_tiers(profile, contract, member_ids)
             if not (platinum_reached or full_reached):

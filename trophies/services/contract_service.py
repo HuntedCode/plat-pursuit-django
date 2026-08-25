@@ -191,9 +191,19 @@ def _detect_tiers(profile, contract, member_ids):
     """
     platinum_reached = full_reached = False
     if member_ids:
-        platinum_reached = EarnedTrophy.objects.filter(
-            profile=profile, earned=True,
-            trophy__trophy_type='platinum', trophy__game__concept_id__in=member_ids,
+        # SMALL SIDE FIRST, and this is whale-safety not micro-optimisation. Joining
+        # EarnedTrophy -> Trophy -> Game inside the EXISTS lets the planner start from
+        # `(profile, earned)` and apply the join as a filter -- which on a 250,000-trophy hunter with
+        # NO match scans every one of those rows, once per contract, and `LIMIT 1` actively biases it
+        # toward that fast-start shape. Resolving the platinum trophy ids first is catalogue-bounded
+        # (a handful of rows) and turns the check into an unambiguous seek on the
+        # (profile_id, trophy_id) index. Same pattern build_catalog uses for default_tg_ids.
+        platinum_ids = list(
+            Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum')
+            .values_list('id', flat=True)
+        )
+        platinum_reached = bool(platinum_ids) and EarnedTrophy.objects.filter(
+            profile=profile, earned=True, trophy_id__in=platinum_ids,
         ).exists()
         full_reached = ProfileGame.objects.filter(
             profile=profile, game__concept_id__in=member_ids, progress=100,
@@ -202,7 +212,11 @@ def _detect_tiers(profile, contract, member_ids):
         for bundle in contract.bundles.all():
             if platinum_reached and full_reached:
                 break
-            bundle_ids = set(bundle.concepts.values_list('id', flat=True))
+            # `bundle.concepts.all()`, not values_list: callers prefetch `bundles__concepts`,
+            # and values_list on a related manager issues a fresh query that silently bypasses
+            # it. This runs once per CANDIDATE per contract, so it is the hot instance of the
+            # same bug process_contracts._candidate_profiles already fixed on the cold one.
+            bundle_ids = {c.id for c in bundle.concepts.all()}
             if not bundle_ids:
                 continue
             if not full_reached:

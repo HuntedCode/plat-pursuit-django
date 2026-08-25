@@ -284,7 +284,7 @@ def test_a_failed_series_is_retried_by_name_not_by_holding_the_window(monkeypatc
     written, queued = [], []
     monkeypatch.setattr(mod.Command, '_set_watermark', lambda self, when: written.append(when))
     monkeypatch.setattr(mod.Command, '_queue_retries', lambda self, slugs: queued.extend(slugs))
-    monkeypatch.setattr(mod.Command, '_take_retries', lambda self: set())
+    monkeypatch.setattr(mod.Command, '_read_retries', lambda self: set())
     monkeypatch.setattr(mod, 'evaluate_and_apply_batch',
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError('evaluation blew up')))
 
@@ -308,7 +308,8 @@ def test_a_queued_retry_is_swept_even_when_the_window_is_empty(monkeypatch):
 
     swept = []
     monkeypatch.setattr(mod.Command, '_set_watermark', lambda self, when: None)
-    monkeypatch.setattr(mod.Command, '_take_retries', lambda self: {series.series_slug})
+    monkeypatch.setattr(mod.Command, '_read_retries', lambda self: {series.series_slug})
+    monkeypatch.setattr(mod.Command, '_clear_retries', lambda self, slugs: None)
     monkeypatch.setattr(mod, 'evaluate_and_apply_batch',
                         lambda profiles, badges, *a, **k: swept.append(badges) or
                         {'awarded': 0, 'revoked': 0, 'updated': 0})
@@ -316,6 +317,46 @@ def test_a_queued_retry_is_swept_even_when_the_window_is_empty(monkeypatch):
     call_command('detect_dlc_and_refresh', stdout=io.StringIO(), stderr=io.StringIO())
 
     assert swept, 'a queued retry never ran, so the failure really was dropped'
+
+
+@pytest.mark.django_db
+def test_a_crash_mid_run_does_not_lose_the_queued_retries(monkeypatch):
+    """The first version popped the queue at the top of the run and re-queued at the bottom, with the
+    whole refresh loop in between. A kill in that window dropped every popped slug -- and because
+    their trophy groups predate the advanced watermark, no future window rediscovers them. That is
+    the bug the queue exists to prevent, reintroduced by the mechanism meant to fix it.
+
+    Reading must not consume. This asserts against the REAL Redis-backed implementations, not
+    doubles, because the whole failure lived inside them.
+    """
+    from trophies.management.commands import detect_dlc_and_refresh as mod
+
+    store = set()
+
+    class FakeRedis:
+        def smembers(self, key):
+            return set(store)
+
+        def srem(self, key, *members):
+            store.difference_update(members)
+
+        def sadd(self, key, *members):
+            store.update(members)
+
+    monkeypatch.setattr(mod, 'redis_client', FakeRedis())
+
+    cmd = mod.Command()
+    cmd._queue_retries(['a-series', 'b-series'])
+
+    first = cmd._read_retries()
+    assert first == {'a-series', 'b-series'}
+
+    # Simulate the crash: nothing else runs. The queue must be intact.
+    assert cmd._read_retries() == {'a-series', 'b-series'}, 'reading consumed the queue'
+
+    # Only what succeeded is dropped.
+    cmd._clear_retries(['a-series'])
+    assert cmd._read_retries() == {'b-series'}
 
 
 def test_the_scan_window_is_clamped(monkeypatch):

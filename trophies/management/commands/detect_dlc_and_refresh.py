@@ -101,13 +101,19 @@ class Command(BaseCommand):
             for slug in sorted(affected):
                 self.stdout.write(f"  would refresh: {slug}")
             self.stdout.write(f"  would recompute owner completion for {len(affected_game_ids)} game(s).")
+            queued = self._read_retries()
+            for slug in sorted(queued):
+                self.stdout.write(f"  would retry (queued by an earlier failure): {slug}")
             self.stdout.write(self.style.WARNING("Dry run -- no refresh, watermark unchanged."))
             return
 
-        # Series that failed a previous run come back regardless of what the window turned up.
-        affected |= self._take_retries()
+        # Series that failed a previous run come back regardless of what the window turned up. Read
+        # without consuming: the queue is cleared per-slug on success, at the end.
+        retried = self._read_retries()
+        affected |= retried
 
         failed = []
+        succeeded = []
         for slug in sorted(affected):
             try:
                 # Every LIVE edition of the series: DLC lands on a game, and a game can gate more than one
@@ -144,6 +150,7 @@ class Command(BaseCommand):
                     f"  refreshed '{slug}': {len(badges)} edition(s), "
                     f"{totals['awarded']} awarded, {totals['revoked']} revoked, {totals['updated']} updated"
                 ))
+                succeeded.append(slug)
             except Exception:
                 logger.exception("detect_dlc_and_refresh: refresh failed for series %s", slug)
                 self.stdout.write(self.style.ERROR(f"  FAILED '{slug}' (see logs)"))
@@ -170,6 +177,9 @@ class Command(BaseCommand):
         # every affected series over everyone who played it, and turning `_recompute_completion` into
         # the blanket backfill it must not be. Retrying an explicit list preserves the point (nothing
         # is dropped) without letting the window and the completion rewrite grow without bound.
+        # Clear only what swept cleanly, and do it BEFORE the watermark: a crash between the two
+        # costs a repeated sweep of already-done series, which is harmless, rather than a lost one.
+        self._clear_retries([s for s in succeeded if s in retried])
         self._set_watermark(now)
 
         if failed:
@@ -231,15 +241,36 @@ class Command(BaseCommand):
         return now - DEFAULT_LOOKBACK
 
     @staticmethod
-    def _take_retries():
-        """Series queued by a previous failed run. Read AND cleared: a series that fails again is
-        re-queued by `_queue_retries`, so the set never grows unless failures keep happening."""
+    def _read_retries():
+        """Series queued by a previous failed run. NON-DESTRUCTIVE.
+
+        This used `spop`, which REMOVES the members -- and the removal happened at the top of the run
+        while the re-queue only fired at the bottom, with the whole per-series refresh loop and the
+        completion recompute in between. A SIGKILL, an OOM, a container eviction, a deploy restart or
+        a raise out of `_recompute_completion` in that window silently dropped every popped slug, and
+        because their trophy groups predate the advanced watermark, no future window rediscovers
+        them: their owners keep a false "100% complete" permanently. Which is the exact bug the retry
+        queue exists to prevent, reintroduced by the mechanism meant to fix it.
+
+        Read here, cleared in `_clear_retries` only for the slugs that actually SUCCEEDED. A crash now
+        costs a repeated sweep, not a lost one.
+        """
         try:
-            raw = redis_client.spop(RETRY_KEY, 500) or []
+            raw = redis_client.smembers(RETRY_KEY) or set()
         except Exception:
             logger.warning("detect_dlc_and_refresh: redis unavailable for retry read")
             return set()
         return {r.decode() if isinstance(r, bytes) else r for r in raw}
+
+    @staticmethod
+    def _clear_retries(slugs):
+        """Drop the slugs that swept cleanly. Anything still queued is retried next run."""
+        if not slugs:
+            return
+        try:
+            redis_client.srem(RETRY_KEY, *slugs)
+        except Exception:
+            logger.warning("detect_dlc_and_refresh: redis unavailable for retry clear")
 
     @staticmethod
     def _queue_retries(slugs):

@@ -4625,14 +4625,20 @@ class ContractAdmin(admin.ModelAdmin):
             msg += f" Skipped {skipped} with no concepts."
         self.message_user(request, msg)
 
+    # `updated_at` is stamped explicitly: `auto_now` only fires on Model.save(), and a bulk
+    # `queryset.update()` bypasses it. Without this a contract drafted months ago and published from
+    # the changelist keeps its stale timestamp, so `process_contracts --incremental` skips it every
+    # night until the weekly full pass -- while publishing the same contract from the change form
+    # (which does call save) reaches hunters that night. Same action, different latency, depending on
+    # which admin screen the curator used.
     @admin.action(description="Mark selected Contracts LIVE")
     def make_live(self, request, queryset):
-        n = queryset.update(is_live=True)
+        n = queryset.update(is_live=True, updated_at=timezone.now())
         self.message_user(request, f"{n} contract(s) marked live.")
 
     @admin.action(description="Mark selected Contracts NOT live")
     def make_not_live(self, request, queryset):
-        n = queryset.update(is_live=False)
+        n = queryset.update(is_live=False, updated_at=timezone.now())
         self.message_user(request, f"{n} contract(s) marked not live.")
 
 

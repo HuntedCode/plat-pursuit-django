@@ -18,12 +18,17 @@ name, without executing anything. It is the cheap general form of the specific g
 the sync path is barely reachable from tests, so its imports need checking some other way.
 """
 import ast
+import functools
 import importlib.util
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+#: Both resolvers are pure (path in, result out) and are called once per IMPORT SITE across 27 files,
+#: so `trophies/models.py` -- ~4,700 lines -- was being re-read and re-parsed dozens of times per run.
+#: Memoizing took this file from ~4.3s to ~0.5s on every suite run, which is every commit.
 
 #: Hot paths that import lazily and are poorly covered by tests. Not the whole tree: a full sweep would
 #: mostly re-assert what module-level imports already prove at startup.
@@ -106,6 +111,7 @@ def _imports(path):
     return out
 
 
+@functools.lru_cache(maxsize=None)
 def _module_path(module_name):
     """Resolve `a.b.c` to a file WITHOUT importing anything.
 
@@ -124,6 +130,7 @@ def _module_path(module_name):
     return None
 
 
+@functools.lru_cache(maxsize=None)
 def _top_level_names(module_name):
     """Names a module defines at top level, WITHOUT importing it -- parsed from source, so a module with
     side effects (token_keeper registers an atexit handler) is never executed."""

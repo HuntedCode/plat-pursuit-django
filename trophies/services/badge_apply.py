@@ -234,15 +234,21 @@ def evaluate_for_touched_games(profile, profilegame_ids, notify=True) -> dict:
     )
 
 
-def evaluate_and_apply_batch(profiles, group_badges=None) -> Counter:
+def evaluate_and_apply_batch(profiles, group_badges=None, catalog=None) -> Counter:
     """Process many profiles. The immutable catalog is built ONCE and reused per profile (no per-profile
     re-fetch). No rank stamping: earners rank is derived live from earned_at, so awards need no ordering.
-    Returns count totals."""
+    Returns count totals.
+
+    `catalog` lets a caller that has ALREADY built one hand it over. `evaluate_badges` builds a catalog
+    for `recompute_required_stages` immediately before calling this, and without the parameter the six
+    prefetch queries over the whole stage graph simply ran twice. Threading the resolved LIST through
+    removed the duplicate resolve but not the duplicate build, which the commit message claimed it had.
+    """
     group_badges = resolve_group_badges(group_badges)
     totals = Counter()
     if not group_badges:
         return totals
-    catalog = build_catalog(group_badges)
+    catalog = catalog if catalog is not None else build_catalog(group_badges)
     gb_map = {gb.id: gb for gb in group_badges}
 
     for profile in profiles:

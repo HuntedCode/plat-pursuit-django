@@ -141,15 +141,17 @@ class Command(BaseCommand):
             # required_stages across the whole catalogue -- a global write side effect from a local
             # command, which is not a thing a debug run should do.
             resolved = resolve_group_badges(group_badges)
+            catalog = None
             if opts['all'] or opts['series']:
-                changed = recompute_required_stages(build_catalog(resolved))
+                catalog = build_catalog(resolved)
+                changed = recompute_required_stages(catalog)
                 if changed:
                     self.stdout.write(f"required_stages refreshed on {changed} group badge(s).")
 
             # Batch write: awards are stamped in completion-date order, so earn_rank reflects who
-            # finished first. `resolved` is threaded through so the batch does not resolve and build
-            # the catalog a second time.
-            totals = evaluate_and_apply_batch(profiles, resolved)
+            # finished first. Both the resolved list AND the catalog are handed over, so neither the
+            # resolve nor the six-query catalog build happens a second time.
+            totals = evaluate_and_apply_batch(profiles, resolved, catalog=catalog)
 
         verb = "Would" if dry else "Did"
         self.stdout.write(self.style.SUCCESS(

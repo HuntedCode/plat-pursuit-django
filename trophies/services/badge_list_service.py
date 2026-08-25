@@ -18,7 +18,7 @@ from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
 
 
-def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None) -> dict:
+def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None, stages_total=None) -> dict:
     """A SHOWCASE medallion frame for a list card: the full-colour display piece (ownership is shown by a
     separate card marker, not by desaturating the art). No progress meter / engraving rank -- those need the
     engine / Redis and stay off the catalog wall. A mastered (holo) hold shimmers, as a personal flourish."""
@@ -39,10 +39,29 @@ def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None) ->
         # and the count was simply absent -- giving the column a writer is what made this reachable.
         # `stages_done` is None for an anonymous viewer, which zeroes the total and keeps the count
         # off the card: on a catalogue wall, "0 / 5" for someone with no account is noise, not data.
-        'stages_total': gb.required_stages if stages_done is not None else 0,
+        'stages_total': (stages_total or 0) if stages_done is not None else 0,
         'stages_done': stages_done or 0,
         'badge_id': gb.id,
     }
+
+
+def _edition_progress(gb, held, progress):
+    """(stages_done, stages_total) for ONE edition, from the per-edition read-model.
+
+    Shape-guarded the way collection_service guards it: a malformed row falls back to no progress for
+    this badge rather than raising, because a raise here degrades the whole wall instead of one cell.
+
+    A held badge reads N / N from its own gating count, not from the stored `cleared`: the read-model
+    can stop tracking a row once it is held, and a full bar over "0 / 5" is the failure that produces.
+    An edition with no entry (never touched, or no standing row at all) reads 0 over its catalogue
+    count, which is what `required_stages` is for.
+    """
+    raw = (progress.get(gb.series.series_slug) or {}).get(gb.platform_group.key)
+    cleared, gating = raw if isinstance(raw, (list, tuple)) and len(raw) == 2 else (0, 0)
+    if held:
+        total = gating or gb.required_stages
+        return total, total
+    return cleared, (gating or gb.required_stages)
 
 
 def build_list_cards(group_badges, profile) -> list:
@@ -66,12 +85,20 @@ def build_list_cards(group_badges, profile) -> list:
             UserGroupBadge.objects.filter(profile=profile, group_badge__in=group_badges)
             .values_list('group_badge_id', 'is_holo')
         )
-        # The viewer's stage progress, one bulk query keyed on series_slug (SeriesBadgeStanding has
-        # no FK to the series). Same shape collection_service uses for its own count.
-        cleared = dict(
+        # The viewer's PER-EDITION progress, one bulk query keyed on series_slug (SeriesBadgeStanding
+        # has no FK to the series).
+        #
+        # `group_progress`, NOT `stages_cleared`. The first cut read `stages_cleared`, which is a
+        # SERIES-level figure -- specifically the best edition's count (badge_xp picks
+        # `max(results, key=_fraction)`) -- and paired it with `required_stages`, which is strictly
+        # per-edition. A hunter holding Ultra HD (5 stages) with nothing on Legacy HD (3) rendered
+        # "5 / 3" on the Legacy card: a numerator above its denominator, on a badge with no progress.
+        # collection_service.py already carries the comment explaining why no series-level
+        # approximation of a per-edition count is safe; this is the same read-model it uses.
+        progress = dict(
             SeriesBadgeStanding.objects
             .filter(profile=profile, series_slug__in={gb.series.series_slug for gb in group_badges})
-            .values_list('series_slug', 'stages_cleared')
+            .values_list('series_slug', 'group_progress')
         )
 
     cards = []
@@ -84,11 +111,9 @@ def build_list_cards(group_badges, profile) -> list:
             'group_badge': gb,
             'series': gb.series,
             'platform_group': gb.platform_group,
-            # A held badge is complete by definition; otherwise show what they have cleared.
             'frame': _list_frame(
                 gb, tier, layers, is_avatar, held, is_holo,
-                stages_done=(gb.required_stages if held else cleared.get(gb.series.series_slug, 0))
-                if profile else None,
+                *_edition_progress(gb, held, progress) if profile else (None, gb.required_stages),
             ),
             'rarity_pct': pct,
             'rarity_class': cls,

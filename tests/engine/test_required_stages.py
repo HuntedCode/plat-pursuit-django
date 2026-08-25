@@ -180,9 +180,68 @@ def test_a_partial_standing_shows_real_progress():
     profile = ProfileFactory()
     SeriesBadgeStanding.objects.create(
         profile=profile, series_slug=series.series_slug, stages_cleared=2, stages_total=4,
+        group_progress={gb.platform_group.key: [2, 4]},
     )
 
     assert '2 / 4' in _medallion(_card(gb, profile))
+
+
+def test_each_edition_shows_its_own_progress():
+    """THE bug the first fix shipped. `stages_cleared` is a SERIES figure -- the best edition's count
+    -- while `required_stages` is per edition. Pairing them rendered the best edition's numerator over
+    a different edition's denominator, so a hunter holding a 5-stage edition and untouched on a
+    3-stage one saw "5 / 3" on the card they had no progress on. A numerator above its denominator.
+
+    Every earlier test here built a single-edition series, which is why none of them could see it.
+    """
+    series = _series_with_stages(5)
+    big = GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(platforms=['PS4', 'PS5']))
+    small = GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(platforms=['PS5']))
+
+    profile = ProfileFactory()
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug=series.series_slug,
+        stages_cleared=5, stages_total=5,          # the SERIES figure: the best edition's
+        group_progress={big.platform_group.key: [5, 5], small.platform_group.key: [1, 3]},
+    )
+
+    assert '5 / 5' in _medallion(_card(big, profile))
+
+    small_html = _medallion(_card(small, profile))
+    assert '1 / 3' in small_html
+    assert '5 / 3' not in small_html, 'the best edition leaked onto this one'
+
+
+def test_an_untouched_edition_reads_zero_over_its_own_count():
+    """No entry in the read-model means no progress on THIS edition, not no badge."""
+    series = _series_with_stages(3)
+    gb = GroupBadgeFactory(series=series)
+    _recompute([gb])
+    gb.refresh_from_db()
+
+    profile = ProfileFactory()
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug=series.series_slug, group_progress={},
+    )
+
+    assert '0 / 3' in _medallion(_card(gb, profile))
+
+
+def test_a_malformed_read_model_row_does_not_break_the_wall():
+    """collection_service shape-guards this for a stated reason: a raise here degrades the whole
+    page, not one cell."""
+    series = _series_with_stages(3)
+    gb = GroupBadgeFactory(series=series)
+    _recompute([gb])
+    gb.refresh_from_db()
+
+    profile = ProfileFactory()
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug=series.series_slug,
+        group_progress={gb.platform_group.key: 'nonsense'},
+    )
+
+    assert '0 / 3' in _medallion(_card(gb, profile))
 
 
 def test_the_browse_card_carries_both_halves_of_the_count():
