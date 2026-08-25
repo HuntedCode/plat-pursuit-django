@@ -2,6 +2,25 @@
 
 The Token Keeper is PlatPursuit's core background engine for synchronizing PSN trophy data. It manages a pool of authenticated PSN API tokens, distributes work across a multi-priority Redis job queue, and orchestrates the full lifecycle of profile syncs: from fetching a user's trophy list to evaluating badges, contracts, and milestones. The system runs as a long-lived singleton process, spawning worker threads that continuously pull jobs from Redis queues, acquire token instances, make PSN API calls, and persist results to PostgreSQL.
 
+## Gotchas and Pitfalls (audit, 2026-08)
+
+- **`APIAuditLog.calls_remaining` was a constant.** The keeper records call timestamps under
+  `token:{token}:{machine_id}:timestamps` and enforces its window off that same key, so throttling has
+  always been correct -- but `log_api_call` read the key WITHOUT the machine component. Nothing writes
+  that, so every row ever written recorded the full 300. Fixed; the read now uses `MACHINE_ID` too.
+- **The egress IP was a blocking third-party call per API call.** `log_api_call` did a synchronous
+  `requests.get("https://api.ipify.org", timeout=5)` on every success, and it sat OUTSIDE the try that
+  guards the audit write. Since `log_api_call` runs inside `_execute_api_call`'s try, an outage there
+  raised, landed in that method's `except Exception`, which called `log_api_call` again, which raised
+  again -- and the second raise escaped into the job worker's broad handler, whose `finally` still marks
+  the job complete. An outage at an IP-echo service made every sync fail silently while reporting
+  success. Now cached for an hour and fail-safe.
+- **A broad `except Exception` on this path is a data-loss switch, not a safety net.** `_job_worker_loop`
+  catches every job method, and its `finally` still decrements the job counter, so `sync_complete` fires
+  as though the job succeeded. Anything that raises inside a job is therefore invisible AND destructive.
+  Put function-level imports OUTSIDE their inner `try` so an ImportError is loud: that is exactly how
+  the deleted `dashboard_service` import went unnoticed (see `tests/engine/test_no_dangling_imports.py`).
+
 ## Architecture Overview
 
 ### Design Philosophy

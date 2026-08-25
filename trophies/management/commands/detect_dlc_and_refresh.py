@@ -24,7 +24,7 @@ groups at once with none predating the watermark, so it is correctly ignored as 
 import logging
 from datetime import timedelta
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F, Q, Value
 from django.db.models.functions import Least, Round
 from django.utils import timezone
@@ -95,6 +95,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Dry run -- no refresh, watermark unchanged."))
             return
 
+        failed = []
         for slug in sorted(affected):
             try:
                 # Every LIVE edition of the series: DLC lands on a game, and a game can gate more than one
@@ -134,6 +135,7 @@ class Command(BaseCommand):
             except Exception:
                 logger.exception("detect_dlc_and_refresh: refresh failed for series %s", slug)
                 self.stdout.write(self.style.ERROR(f"  FAILED '{slug}' (see logs)"))
+                failed.append(slug)
 
         # Recompute owner completion for the games that gained DLC (the trophy total grew).
         rows = self._recompute_completion(affected_game_ids)
@@ -143,6 +145,21 @@ class Command(BaseCommand):
             ))
 
         # Advance the watermark only after a full pass, so a crash re-scans the same window.
+        #
+        # A per-series failure is not a crash, which is the hole this closes. The loop above catches per
+        # series and carries on, so the watermark used to advance regardless -- and because the next run
+        # only scans groups created AFTER it, a series that raised was never swept again. Its owners kept
+        # a false "100% complete" permanently, with the only evidence one ERROR line in a nightly log.
+        # Holding the watermark means the next run re-scans the same window and retries; raising makes
+        # `nightly` mark the step failed and exit non-zero, so a persistent failure surfaces as a red run
+        # rather than as a window that quietly grows.
+        if failed:
+            self.stdout.write(self.style.ERROR(
+                f"Watermark HELD at the previous value: {len(failed)} series failed "
+                f"({', '.join(failed)}). The next run re-scans this window."
+            ))
+            raise CommandError(f"detect_dlc_and_refresh: {len(failed)} series failed: {', '.join(failed)}")
+
         self._set_watermark(now)
         self.stdout.write(self.style.SUCCESS(f"DLC scan complete. Watermark -> {now.isoformat()}"))
 

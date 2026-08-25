@@ -167,8 +167,13 @@ class ChecklistService:
         except Exception:
             import logging
             logging.getLogger('psn_api').exception("Markdown processing failed")
-            from trophies.util_modules.language import escape_html
-            return escape_html(text)
+            # `django.utils.html.escape`, not a local helper: this used to import `escape_html` from
+            # util_modules.language, which has never defined it (`git log -S` finds no such function in
+            # any commit). So the one path whose entire job is to degrade gracefully raised ImportError
+            # instead, turning a rendering failure into a 500 -- and only ever when something else had
+            # already gone wrong, which is why it survived.
+            from django.utils.html import escape
+            return escape(text)
 
 
 # Match Discord's ``||spoiler||`` syntax. Non-greedy + DOTALL so a single

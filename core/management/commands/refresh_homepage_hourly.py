@@ -1,7 +1,7 @@
 import logging
 
 from django.utils import timezone
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.core.cache import cache
 
 from core.services.site_heartbeat import compute_site_heartbeat
@@ -26,6 +26,12 @@ class Command(BaseCommand):
         today_utc = now_utc.date().isoformat()
         hour = now_utc.hour
 
+        # Steps are isolated so one failure does not cost the others, but the RUN must still go red:
+        # this wrote an ERROR to stdout and exited 0, so the cron platform reported a green run while
+        # the landing served its static fixture indefinitely. A job that can fail silently forever is
+        # indistinguishable from one that is working.
+        failed = []
+
         for job in HOURLY_JOBS:
             cache_key = f"{job['key']}_{today_utc}_{hour:02d}"
             try:
@@ -35,6 +41,7 @@ class Command(BaseCommand):
             except Exception as e:
                 logger.exception(f"Failed to refresh {job['name']}")
                 self.stdout.write(self.style.ERROR(f"{job['name']} failed: {e}"))
+                failed.append(job['name'])
 
         # The landing's showcase Profile Card -- a stable key, not hour-bucketed: it is an
         # artifact, not a stat, and the landing falls back to its literal fixture when unset.
@@ -51,3 +58,7 @@ class Command(BaseCommand):
         except Exception as e:
             logger.exception("Failed to render the landing showcase artifacts")
             self.stdout.write(self.style.ERROR(f"Landing showcase artifacts failed: {e}"))
+            failed.append('Landing showcase artifacts')
+
+        if failed:
+            raise CommandError(f"refresh_homepage_hourly: {len(failed)} step(s) failed: {', '.join(failed)}")
