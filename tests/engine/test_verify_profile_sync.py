@@ -43,6 +43,43 @@ def test_a_consistent_profile_passes():
     assert 'DRIFT' not in out
 
 
+@pytest.mark.parametrize('flags', [
+    {'hide_hiddens': True},
+    {'hide_zeros': True},
+    {'hide_hiddens': True, 'hide_zeros': True},
+])
+def test_the_display_filters_do_not_look_like_drift(flags):
+    """The failure that made this command worthless. Its three library totals are filter-respecting,
+    and the two writers do not even use the SAME filters: `update_profile_games` honours hide_hiddens
+    alone, `update_profile_trophy_counts` honours hide_hiddens AND hide_zeros. Reconciling against an
+    unfiltered count reported DRIFT on a healthy profile with either toggle on -- and since any drift
+    exits non-zero, the tool answered "no" for a hunter whose sync had landed perfectly.
+
+    The fixture is deliberately the awkward one: a hidden game AND a zero-trophy game, so every
+    filter combination actually excludes something.
+    """
+    from trophies.services.profile_stats_service import (
+        update_profile_games, update_profile_trophy_counts,
+    )
+
+    profile = ProfileFactory(**flags)
+    ProfileGameFactory(profile=profile, game=GameFactory(), progress=100,
+                       earned_trophies_count=12, user_hidden=False)
+    ProfileGameFactory(profile=profile, game=GameFactory(), progress=40,
+                       earned_trophies_count=3, user_hidden=True)
+    ProfileGameFactory(profile=profile, game=GameFactory(), progress=0,
+                       earned_trophies_count=0, user_hidden=False)
+
+    # Exactly what sync_complete does, so the stored values are correct BY CONSTRUCTION.
+    update_profile_games(profile)
+    update_profile_trophy_counts(profile)
+    profile.refresh_from_db()
+
+    out = _run(profile, verbose=True)
+
+    assert 'DRIFT' not in out, f'reported drift on a healthy profile with {flags}'
+
+
 def test_it_catches_a_trophy_counter_that_drifted():
     """`total_bronzes` and friends are maintained by the EarnedTrophy signals during sync. Drift here
     means a signal did not fire, and the navbar has been showing the wrong number ever since."""

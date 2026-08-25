@@ -18,7 +18,7 @@ from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
 
 
-def _list_frame(gb, tier, layers, is_avatar, held, is_holo) -> dict:
+def _list_frame(gb, tier, layers, is_avatar, held, is_holo, stages_done=None) -> dict:
     """A SHOWCASE medallion frame for a list card: the full-colour display piece (ownership is shown by a
     separate card marker, not by desaturating the art). No progress meter / engraving rank -- those need the
     engine / Redis and stay off the catalog wall. A mastered (holo) hold shimmers, as a personal flourish."""
@@ -33,7 +33,14 @@ def _list_frame(gb, tier, layers, is_avatar, held, is_holo) -> dict:
         'franchise': series.franchise.name if series.franchise_id else None,
         'collection': series.collection.name if series.collection_id else None,
         'developer': series.developer.name if series.developer_id else None,
-        'stages_total': gb.required_stages,
+        # BOTH halves or neither. The medallion renders `{{ stages_done|default:0 }} / {{ total }}`
+        # behind `{% if total %}`, so a total without a done reads "0 / 5" to a hunter who has
+        # finished the badge. While `required_stages` was the unwritten 0 that gate was always false
+        # and the count was simply absent -- giving the column a writer is what made this reachable.
+        # `stages_done` is None for an anonymous viewer, which zeroes the total and keeps the count
+        # off the card: on a catalogue wall, "0 / 5" for someone with no account is noise, not data.
+        'stages_total': gb.required_stages if stages_done is not None else 0,
+        'stages_done': stages_done or 0,
         'badge_id': gb.id,
     }
 
@@ -41,8 +48,8 @@ def _list_frame(gb, tier, layers, is_avatar, held, is_holo) -> dict:
 def build_list_cards(group_badges, profile) -> list:
     """Cards for a page of GroupBadges (already select_related'd on series + platform_group), in the SAME order.
     Each card: {group_badge, series, platform_group, frame, rarity_pct, rarity_class, earned, is_holo,
-    earned_count}. Two bulk queries beyond the caller's queryset (pursuer counts + the viewer's holds) --
-    whale-safe regardless of page size."""
+    earned_count}. THREE bulk queries beyond the caller's queryset (community size, the viewer's holds,
+    and the viewer's standings for the stage count) -- whale-safe regardless of page size."""
     group_badges = list(group_badges)
     if not group_badges:
         return []
@@ -53,10 +60,18 @@ def build_list_cards(group_badges, profile) -> list:
 
     # The viewer's holds (earned + holo), one query. Anonymous -> no holds -> everything reads as not-earned.
     holds = {}
+    cleared = {}
     if profile:
         holds = dict(
             UserGroupBadge.objects.filter(profile=profile, group_badge__in=group_badges)
             .values_list('group_badge_id', 'is_holo')
+        )
+        # The viewer's stage progress, one bulk query keyed on series_slug (SeriesBadgeStanding has
+        # no FK to the series). Same shape collection_service uses for its own count.
+        cleared = dict(
+            SeriesBadgeStanding.objects
+            .filter(profile=profile, series_slug__in={gb.series.series_slug for gb in group_badges})
+            .values_list('series_slug', 'stages_cleared')
         )
 
     cards = []
@@ -69,7 +84,12 @@ def build_list_cards(group_badges, profile) -> list:
             'group_badge': gb,
             'series': gb.series,
             'platform_group': gb.platform_group,
-            'frame': _list_frame(gb, tier, layers, is_avatar, held, is_holo),
+            # A held badge is complete by definition; otherwise show what they have cleared.
+            'frame': _list_frame(
+                gb, tier, layers, is_avatar, held, is_holo,
+                stages_done=(gb.required_stages if held else cleared.get(gb.series.series_slug, 0))
+                if profile else None,
+            ),
             'rarity_pct': pct,
             'rarity_class': cls,
             'earned': held,

@@ -109,21 +109,34 @@ class Command(BaseCommand):
 
     def _library_totals(self, profile):
         """`total_games` / `total_completes` / `total_trophies`, written ONLY by sync_complete and the
-        settings POST. No cron reconciles these, so a missed write persists until the next sync."""
+        settings POST. No cron reconciles these, so a missed write persists until the next sync.
+
+        THE FILTERS ARE MIRRORED EXACTLY, and the two writers do not use the same set:
+        `update_profile_games` honours `hide_hiddens` alone, while `update_profile_trophy_counts`
+        honours `hide_hiddens` AND `hide_zeros`. Reconciling any of them against an unfiltered count
+        reports DRIFT on a perfectly healthy profile the moment either toggle is on -- and since this
+        exits non-zero on any drift, that made the whole command useless rather than merely noisy.
+        A verifier that cries wolf gets ignored, which is worse than not having one.
+        """
         games = ProfileGame.objects.filter(profile=profile)
-        agg = games.aggregate(
+        if profile.hide_hiddens:
+            games = games.filter(user_hidden=False)
+
+        trophies = games.exclude(earned_trophies_count=0) if profile.hide_zeros else games
+
+        counts = games.aggregate(
             n=Count('id'),
             complete=Count('id', filter=Q(progress=100)),
-            earned=Sum('earned_trophies_count'),
         )
+        earned = trophies.aggregate(earned=Sum('earned_trophies_count'))['earned'] or 0
+
         return [
-            Check('Profile.total_games', profile.total_games, agg['n'],
+            Check('Profile.total_games', profile.total_games, counts['n'],
                   'The home trophy card and the milestones metrics read this.'),
-            Check('Profile.total_completes', profile.total_completes, agg['complete'],
+            Check('Profile.total_completes', profile.total_completes, counts['complete'],
                   'Feeds the full_completions milestone ladder.'),
-            Check('Profile.total_trophies', profile.total_trophies, agg['earned'] or 0,
-                  'The profile header, Browse Hunters and the lifetime_trophies ladder read this. '
-                  'NOTE: filter-respecting -- a mismatch is expected if hide_hiddens/hide_zeros is on.'),
+            Check('Profile.total_trophies', profile.total_trophies, earned,
+                  'The profile header, Browse Hunters and the lifetime_trophies ladder read this.'),
         ]
 
     def _badge_standings(self, profile):

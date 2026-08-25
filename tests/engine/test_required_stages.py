@@ -11,9 +11,10 @@ These pins are about the two halves that were missing: a writer, and a browse ca
 import pytest
 
 from trophies.services.badge_orchestrator import build_catalog, recompute_required_stages
+from trophies.models import SeriesBadgeStanding, UserGroupBadge
 from tests.factories import (
     BadgeSeriesFactory, ConceptFactory, GameFactory, GroupBadgeFactory, PlatformGroupFactory,
-    StageFactory,
+    ProfileFactory, StageFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -125,16 +126,73 @@ def test_recompute_only_writes_rows_that_changed():
     assert _recompute([gb]) == 0, 'second pass rewrote rows that had not changed'
 
 
-def test_the_browse_card_renders_a_stage_count():
-    """The user-visible half. `build_list_cards` feeds `frame.stages_total`, and the medallion hides
-    its count entirely when that is falsy -- so this asserts the value the template gates on."""
+def _medallion(card):
+    """Render the real medallion for a card. The first version of these tests asserted on the frame
+    dict and never rendered anything, which is why it could not see that the card was about to show
+    "0 / 5" to a hunter who had finished the badge."""
+    from django.template.loader import render_to_string
+
+    return render_to_string('components/badge_medallion.html',
+                            {'frame': card['frame'], 'no_id': True})
+
+
+def _card(gb, profile):
     from trophies.services.badge_list_service import build_list_cards
 
+    return build_list_cards([gb], profile)[0]
+
+
+def test_an_anonymous_viewer_gets_no_stage_count():
+    """A catalogue wall has no progress to show someone with no account. "0 / 5" there is noise, and
+    it is what a total-without-a-done produces."""
     series = _series_with_stages(4)
     gb = GroupBadgeFactory(series=series)
     _recompute([gb])
     gb.refresh_from_db()
 
-    cards = build_list_cards([gb], None)
+    assert 'pp-med__count' not in _medallion(_card(gb, None))
 
-    assert cards[0]['frame']['stages_total'] == 4, 'the medallion count would be hidden'
+
+def test_a_held_badge_reads_as_complete_not_zero():
+    """THE regression giving the column a writer introduced. `_list_frame` set `stages_total` and
+    never `stages_done`, and the medallion renders `{{ stages_done|default:0 }} / {{ total }}` -- so
+    the moment the total stopped being 0, every card said "0 / 4", including badges you own."""
+    series = _series_with_stages(4)
+    gb = GroupBadgeFactory(series=series)
+    _recompute([gb])
+    gb.refresh_from_db()
+
+    profile = ProfileFactory()
+    UserGroupBadge.objects.create(profile=profile, group_badge=gb)
+
+    html = _medallion(_card(gb, profile))
+
+    assert '4 / 4' in html
+    assert '0 / 4' not in html
+
+
+def test_a_partial_standing_shows_real_progress():
+    series = _series_with_stages(4)
+    gb = GroupBadgeFactory(series=series)
+    _recompute([gb])
+    gb.refresh_from_db()
+
+    profile = ProfileFactory()
+    SeriesBadgeStanding.objects.create(
+        profile=profile, series_slug=series.series_slug, stages_cleared=2, stages_total=4,
+    )
+
+    assert '2 / 4' in _medallion(_card(gb, profile))
+
+
+def test_the_browse_card_carries_both_halves_of_the_count():
+    """Either both or neither: a total without a done is the bug above."""
+    series = _series_with_stages(4)
+    gb = GroupBadgeFactory(series=series)
+    _recompute([gb])
+    gb.refresh_from_db()
+
+    frame = _card(gb, ProfileFactory())['frame']
+
+    assert frame['stages_total'] == 4
+    assert 'stages_done' in frame, 'the medallion defaults this to 0 and renders "0 / N"'

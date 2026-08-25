@@ -71,15 +71,29 @@ def test_build_list_cards_marks_the_viewers_holds():
 
 
 def test_build_list_cards_query_count_is_flat():
-    # The whole point: the query count does NOT grow with the number of cards (two bulk maps + the queryset).
+    """The whole point: the query count does NOT grow with the number of cards.
+
+    Measured as flatness rather than against a magic number. This asserted `<= 3` and so failed when
+    a fourth bulk map (the viewer's stage standings) was legitimately added -- a passing test breaking
+    on a correct change, which teaches people to bump the number rather than check the property.
+    """
     series = BadgeSeriesFactory(series_slug='s', name='S')
-    gbs = [_group(series, f'g{i}', f'G{i}') for i in range(6)]
     profile = ProfileFactory()
-    qs = GroupBadge.objects.filter(id__in=[g.id for g in gbs]).select_related(*_SR)
-    with CaptureQueriesContext(connection) as ctx:
-        cards = build_list_cards(qs, profile)
-    assert len(cards) == 6
-    assert len(ctx.captured_queries) <= 3   # queryset eval + pursuer counts + holds -- independent of card count
+
+    def count_for(n):
+        gbs = [_group(series, f'g{n}_{i}', f'G{n}_{i}') for i in range(n)]
+        qs = GroupBadge.objects.filter(id__in=[g.id for g in gbs]).select_related(*_SR)
+        with CaptureQueriesContext(connection) as ctx:
+            cards = build_list_cards(qs, profile)
+        assert len(cards) == n
+        return len(ctx.captured_queries)
+
+    # Warm the cached community-size scalar first. Without this the FIRST measurement pays for it and
+    # the second does not, so the counts differ by one for a reason that has nothing to do with size.
+    count_for(2)
+    few, many = count_for(3), count_for(30)
+    assert few == many, f'query count grew with card count: {few} -> {many}'
+    assert many <= 6, f'flat, but {many} bulk queries per page is more than this page should need'
 
 
 # ------------------------------------------------------------------ Gallery: render + links --------------
@@ -273,15 +287,25 @@ def test_build_series_items_total_earned_sums_its_groups():
 
 
 def test_build_series_items_query_count_is_flat():
-    # One group-badge fetch for the whole page + build_list_cards' two bulk maps -- independent of series count.
-    for i in range(6):
-        _series_groups(f's{i}', f'S{i}', [('ultra-hd', 'Ultra HD')])
+    """One group-badge fetch for the whole page plus build_list_cards' bulk maps -- independent of
+    series count. Flatness, not a magic number: see the note on the sibling test above."""
     profile = ProfileFactory()
-    series = list(BadgeSeries.objects.all())
-    with CaptureQueriesContext(connection) as ctx:
-        items = build_series_items(series, profile)
-    assert len(items) == 6
-    assert len(ctx.captured_queries) <= 3   # gbs fetch + pursuer counts + holds
+
+    def count_for(n, tag):
+        for i in range(n):
+            _series_groups(f'{tag}{i}', f'S{tag}{i}', [('ultra-hd', 'Ultra HD')])
+        series = list(BadgeSeries.objects.filter(series_slug__startswith=tag))
+        with CaptureQueriesContext(connection) as ctx:
+            items = build_series_items(series, profile)
+        assert len(items) == n
+        return len(ctx.captured_queries)
+
+    # Warm the cached community-size scalar first. Without this the FIRST measurement pays for it and
+    # the second does not, so the counts differ by one for a reason that has nothing to do with size.
+    count_for(2, 'warm')
+    few, many = count_for(3, 'few'), count_for(20, 'many')
+    assert few == many, f'query count grew with series count: {few} -> {many}'
+    assert many <= 6
 
 
 # ------------------------------------------------------------------ render + links -----------------------
