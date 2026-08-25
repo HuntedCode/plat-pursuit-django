@@ -30,7 +30,9 @@ The CTA partial (emails/_cta_button.html) carries the same note.
 
 BRAND HEX (converted from the site's oklch tokens in static/css/input.css, which email
 clients cannot parse): primary #28EBFE, substrate #05080C, band text #F0F6FD, metals
-platinum #8FD2EA / gold #E7C25C / silver #B9C6D6 / bronze #CF9160.
+platinum #8FD2EA / gold #E7C25C / silver #B9C6D6 / bronze #CF9160. Plus one email-only
+token: #0E7C93, the brand cyan darkened for links on LIGHT surfaces (the cyan itself is
+unreadable on white).
 
 FONTS: system stack only. The site's self-hosted Bricolage and Inter cannot ship in email;
 no client loads webfonts reliably. The display character does not survive, and that is fine.
@@ -74,6 +76,14 @@ BLOCKS (a child migrates by changing its extends line and adding a preheader):
         .pp-card-t { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C; }
         .pp-card-c { margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768; }
         .pp-small { font-size: 13px; line-height: 1.55; color: #7E8FA3; }
+        /* Link on a LIGHT surface: the brand cyan is unreadable on white, so this is its
+           darkened twin (4.56:1 on the #F5F8FC fallback panel, AA at body size). */
+        .pp-body-link { color: #0E7C93; text-decoration: underline; }
+        /* The plaintext-lifeline panel: every CTA whose URL a reader must be able to reach
+           by hand gets one of these under the button (see the CTA partial's note). */
+        .pp-fallback { background-color: #F5F8FC; border-radius: 8px; }
+        .pp-fallback-t { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #4A5768; }
+        .pp-fallback-u { margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all; }
         .pp-band-link { color: #28EBFE; text-decoration: none; font-weight: 600; }
 
         @media screen and (max-width: 620px) {

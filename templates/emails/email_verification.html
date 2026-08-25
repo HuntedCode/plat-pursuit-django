@@ -25,14 +25,15 @@ markup, no wrapping span, nothing that could insert whitespace mid-URL.
 
     {% include 'emails/_cta_button.html' with url=activate_url label="Confirm email address" %}
 
-    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">This link expires in {{ expiration_days }} days.</p>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">This link expires in {{ expiration_days }} day{{ expiration_days|pluralize }}.</p>
 
-    {% comment %} The manual fallback, and the plaintext lifeline. {% endcomment %}
+    {% comment %} The manual fallback, and the plaintext lifeline: strip_tags keeps no hrefs,
+    so this visible copy is the only reachable link for a plaintext reader. {% endcomment %}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 0;">
         <tr>
-            <td style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
-                <p class="pp-small" style="margin: 0 0 6px;">If the button does not work, paste this into your browser:</p>
-                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all;">{{ activate_url }}</p>
+            <td class="pp-fallback" style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
+                <p class="pp-fallback-t" style="margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #4A5768;">If the button does not work, paste this into your browser:</p>
+                <p class="pp-fallback-u" style="margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all;">{{ activate_url }}</p>
             </td>
         </tr>
     </table>

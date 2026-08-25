@@ -241,8 +241,12 @@ def test_the_email_preferences_routes_park_to_settings(client):
 def test_kept_transactional_footers_point_at_settings_not_preferences():
     """The 11 emails that still send are transactional; their footers now link Account
     Settings (via {% url %}, which follows renames) instead of the parked preferences page."""
+    import re as _re
     for name in KEPT_EMAIL_TEMPLATES:
         body = (ROOT / 'templates' / 'emails' / name).read_text(encoding='utf-8')
+        # Strip {% comment %} blocks: a phrase surviving only in a comment must not satisfy
+        # the pin (the trap that has bitten these guard tests repeatedly).
+        body = _re.sub(r'{%\s*comment\s*%}.*?{%\s*endcomment\s*%}', '', body, flags=_re.S)
         assert 'Manage your account settings' in body, f'{name} lost its footer'
         assert 'Manage your email preferences' not in body, f'{name} still sells the parked page'
     # Both bases: the contract ("the footer sells Account Settings, never the parked

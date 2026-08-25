@@ -270,24 +270,12 @@ class Command(BaseCommand):
 
     def _send_verification_preview(self, recipient_email):
         """Send a preview of the email verification template."""
-        from users.services.email_preference_service import EmailPreferenceService
-
         self.stdout.write("\nSending email verification preview...")
-
-        # Sample data
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'activate_url': f'{settings.SITE_URL}/accounts/confirm-email/sample-key-abc123/',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
             'expiration_days': settings.ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS,
         }
 
@@ -318,24 +306,12 @@ class Command(BaseCommand):
 
     def _send_password_reset_preview(self, recipient_email):
         """Send a preview of the password reset template."""
-        from users.services.email_preference_service import EmailPreferenceService
-
         self.stdout.write("\nSending password reset preview...")
-
-        # Sample data
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'password_reset_url': f'{settings.SITE_URL}/accounts/password/reset/key/sample-uid-abc123-set-password/',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
