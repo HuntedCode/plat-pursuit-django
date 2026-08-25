@@ -817,10 +817,10 @@ the numbering concept is abandoned (his call), so a rollback would come back wit
 
 
 ## SEO Lane 3 (2026-08-23)
-- [ ] Eyeball the four quantized badge backdrops (static/images/badges/backdrops/) on beta: open a
-  medallion's inspect modal and the Collection. They dropped 1.47 MB -> 172 KB via 256-color dithered
-  quantization; they render at <=400px so banding should be invisible, but the call is visual.
-  Revert candidates via git if any gradient looks stepped.
+- [x] DONE 2026-08-24: the four quantized badge backdrops were compared against their originals
+  (real render size + 3x zoom on the gradients) and approved by Jeffrey. 1.47 MB -> 172 KB stands;
+  no banding visible, and the badge artwork sits over them anyway. Originals remain in git history
+  before a6123873 if that judgement ever changes.
 - [ ] Post-cutover: re-baseline Lighthouse against PROD (the table in docs/design/seo-strategy.md is
   dev-lab only) and note the numbers next to it. Fonts now self-host, so also confirm the woff2s serve
   with long-cache headers from WhiteNoise (immutable far-future, same as other static).
