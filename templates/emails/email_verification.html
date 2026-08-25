@@ -1,44 +1,46 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The signup confirmation, sent by users/adapters.py CustomAccountAdapter.send_confirmation_mail.
+
+LOAD-BEARING (pinned by tests/engine/test_auth_pages.py): `activate_url` appears BOTH as the
+button's href AND as visible text. The text/plain part is strip_tags(html), which discards
+every href, so the visible copy is the only way a plaintext reader can activate their account.
+The test regexes the URL out of the plaintext body, so keep it in ONE unbroken text node: no
+markup, no wrapping span, nothing that could insert whitespace mid-URL.
+{% endcomment %}
 
 {% block title %}Welcome! Please Confirm Your Email Address{% endblock %}
 
+{% block preheader %}One click to confirm your email address and start your pursuit.{% endblock %}
+
 {% block header_content %}
-    <h1>Welcome to PlatPursuit!</h1>
-    <p>Let's confirm your email address</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Welcome to PlatPursuit</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Let's confirm your email address.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }}!</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, thanks for signing up. Confirm your email address and your pursuit starts.</p>
 
-    <p class="intro">
-        Thanks for signing up! We're excited to have you join our community. To start pursuing, please confirm your email address by clicking the button below.
-    </p>
+    {% include 'emails/_cta_button.html' with url=activate_url label="Confirm email address" %}
 
-    <!-- CTA Button -->
-    <div class="cta-container">
-        <a href="{{ activate_url }}" class="cta-button">Confirm Email Address →</a>
-    </div>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">This link expires in {{ expiration_days }} days.</p>
 
-    <p class="intro" style="margin-top: 30px; text-align: center; font-size: 14px; color: #777777;">
-        This link will expire in {{ expiration_days }} days.
-    </p>
+    {% comment %} The manual fallback, and the plaintext lifeline. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 0;">
+        <tr>
+            <td style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
+                <p class="pp-small" style="margin: 0 0 6px;">If the button does not work, paste this into your browser:</p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all;">{{ activate_url }}</p>
+            </td>
+        </tr>
+    </table>
 
-    <!-- Manual link fallback -->
-    <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
-        <p style="font-size: 13px; color: #555; margin: 0;">
-            If the button doesn't work, copy and paste this link into your browser:
-        </p>
-        <p style="font-size: 12px; color: #667eea; word-break: break-all; margin: 10px 0 0 0;">
-            {{ activate_url }}
-        </p>
-    </div>
-
-    <p class="intro" style="margin-top: 25px; text-align: center; font-size: 13px; color: #999;">
-        If you didn't create an account on PlatPursuit, you can safely ignore this email.
-    </p>
+    <p class="pp-small" style="margin: 20px 0 0; text-align: center;">If you did not create an account on PlatPursuit, you can safely ignore this email.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this email because someone signed up for PlatPursuit with this email address.<br>
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #999999; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because someone signed up for PlatPursuit with this email address.
+    Manage your account settings from the link above.
 {% endblock %}

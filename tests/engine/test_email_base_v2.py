@@ -12,7 +12,8 @@ from django.conf import settings
 
 EMAILS = Path(settings.BASE_DIR) / 'templates' / 'emails'
 V2 = EMAILS / 'base_email_v2.html'
-V2_CHILDREN = ('welcome.html', 'launch_announcement.html')   # grows as templates migrate onto v2
+V2_CHILDREN = ('welcome.html', 'launch_announcement.html',
+               'email_verification.html', 'password_reset.html')   # grows as templates migrate
 
 
 def _src(path):
