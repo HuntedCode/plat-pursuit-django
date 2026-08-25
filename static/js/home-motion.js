@@ -29,10 +29,60 @@
             e.preventDefault();
             // Open the avatar panel, then press ITS button -- so the disabled/progress states that panel
             // manages stay the single source of truth.
+            //
+            // FOCUS, not click. The panel is a DaisyUI dropdown and its open rule is
+            // `.dropdown:focus-within .dropdown-content`; `element.click()` dispatches a click event but
+            // does NOT move focus, so the panel never opened. The sync itself still fired, which is why
+            // this read as "the button does nothing": the request went out and the only visible feedback
+            // was the avatar ring changing colour in the far corner of the screen.
             var avatar = document.querySelector('[data-nav-avatar]');
             var btn = document.querySelector('[data-nav-syncnow]');
-            if (avatar) { avatar.click(); }
+            if (avatar && avatar.focus) { avatar.focus(); }
             if (btn) { btn.click(); }
+        });
+    }
+
+    // --- 4. The freshness line reflects the sync it just started ----------------------------------
+    // The panel is the authoritative progress surface, but it is in the corner and the user is looking
+    // at the line they just clicked. This mirrors the state there and nowhere else -- navsync.js stays
+    // the only thing that talks to the server or owns the button's disabled state.
+    function wireFreshnessLine() {
+        var label = document.querySelector('[data-home-sync-label]');
+        var dot = document.querySelector('.home-hi__dot');
+        if (!label) { return; }
+        var original = label.textContent;
+
+        // Field names and the finalize phrasing are taken from navsync.js's own `update()`, so the line
+        // and the panel cannot describe the same moment differently.
+        var PHASE = { health_check: 'Verifying', stats_badges: 'Badges', finishing: 'Wrapping up' };
+
+        document.addEventListener('platpursuit:sync-progress', function (e) {
+            var d = (e && e.detail) || {};
+            if (d.sync_status !== 'syncing') { return; }
+            if (d.is_finalizing) {
+                label.textContent = (PHASE[d.finalize_phase] || 'Finalizing') + ' your sync';
+            } else {
+                var pct = parseInt(d.sync_percentage, 10);
+                label.textContent = isNaN(pct) ? 'Syncing your trophies'
+                                               : 'Syncing your trophies, ' + pct + '%';
+            }
+            if (dot) { dot.classList.remove('is-ready'); }
+        });
+
+        document.addEventListener('platpursuit:sync-status-changed', function (e) {
+            var status = e && e.detail && e.detail.status;
+            if (status === 'synced') {
+                // Reload rather than patch the numbers in place: a finished sync changes the trophy
+                // card, the glances and the activity list, and this page has no machinery to refresh
+                // them piecemeal. The user asked for fresh data by pressing the button.
+                label.textContent = 'Sync complete, refreshing';
+                window.setTimeout(function () { window.location.reload(); }, 600);
+                return;
+            }
+            if (status === 'error') {
+                label.textContent = original;
+                if (dot) { dot.classList.remove('is-ready'); }
+            }
         });
     }
 
@@ -122,7 +172,8 @@
     }
 
     function run() {
-        wireSyncNow();   // an affordance, never gated
+        wireSyncNow();        // an affordance, never gated
+        wireFreshnessLine();  // mirrors navsync's state onto the line the user clicked
         if (STILL) { return; }
 
         // Gated on the 1.0 launch greeting: on the one visit that modal auto-opens, the whole

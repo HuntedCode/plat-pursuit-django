@@ -314,3 +314,65 @@ def test_a_pursuer_with_no_badges_still_gets_a_context():
 
     assert ctx['recent_badges'] == []
     assert ctx['glances']['snapshot'] is not None
+
+
+# --- "Sync now" on the homepage -----------------------------------------------------------------
+
+def test_sync_now_focuses_the_panel_rather_than_clicking_it():
+    """The bug this pins was one word, and nothing could see it.
+
+    The homepage's "Sync now" delegates to the navbar's real control: open the avatar panel, then
+    press its button. The panel is a DaisyUI dropdown whose open rule is
+    `.dropdown:focus-within .dropdown-content`, and `element.click()` dispatches a click event
+    WITHOUT moving focus -- so the panel never opened. The sync still fired, so the server saw a
+    perfectly normal request and the page did nothing a user would notice.
+
+    A source scan because there is no JS harness here, and because the failure is invisible to every
+    other kind of test: the template is right, the endpoint is right, the request succeeds.
+    """
+    from pathlib import Path
+
+    from django.conf import settings
+
+    js = (Path(settings.BASE_DIR) / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+    handler = js[js.index('function wireSyncNow'):js.index('function wireFreshnessLine')]
+
+    assert 'avatar.focus()' in handler, 'the panel opens on focus-within; .click() does not focus'
+    assert 'avatar.click()' not in handler
+
+
+def test_the_freshness_line_has_the_hook_its_progress_mirror_needs():
+    """`home-motion.js` swaps this element's text for live progress during a sync. Without the hook
+    the button works and the line still reads "Updated 2 hours ago" throughout, which is the same
+    "nothing happened" the focus bug produced."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    import re
+
+    raw = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'home.html').read_text(encoding='utf-8')
+    # Comment-stripped: the {% comment %} block above the hook NAMES it, so scanning the raw source
+    # passes with the attribute deleted. That trap has caught this project's guard tests repeatedly.
+    html = re.sub(r'{%\s*comment\s*%}.*?{%\s*endcomment\s*%}', '', raw, flags=re.S)
+    js = (Path(settings.BASE_DIR) / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+
+    assert 'data-home-sync-label' in html, 'the hook is only mentioned in a comment, not rendered'
+    assert 'data-home-sync-label' in js, 'the template hook and its reader must agree'
+
+
+def test_the_progress_mirror_reads_the_fields_navsync_actually_sends():
+    """The mirror consumes navsync's `platpursuit:sync-progress` payload. Guessing a field name there
+    is silent: the listener runs, reads undefined, and renders nothing -- indistinguishable from the
+    bug it was written to fix. (The first version of this mirror read `progress_percentage`, which no
+    payload has ever contained.)"""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    home = (Path(settings.BASE_DIR) / 'static' / 'js' / 'home-motion.js').read_text(encoding='utf-8')
+    nav = (Path(settings.BASE_DIR) / 'static' / 'js' / 'navsync.js').read_text(encoding='utf-8')
+
+    for field in ('sync_percentage', 'is_finalizing', 'finalize_phase', 'sync_status'):
+        assert field in nav, f'{field} is not in the payload navsync builds'
+        assert field in home, f'the homepage mirror does not read {field}'

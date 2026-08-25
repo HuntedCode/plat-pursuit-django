@@ -51,7 +51,10 @@ would be a second copy of it to keep in step.{% endcomment %}
                     {% if sync %}
                     <p class="home-hi__sync">
                         <span class="home-hi__dot{% if sync.ready %} is-ready{% endif %}" aria-hidden="true"></span>
-                        {% if sync.last_synced %}Updated {{ sync.last_synced|naturaltime }}{% else %}Not synced yet{% endif %}
+                        {% comment %} data-home-sync-label: home-motion.js swaps this for live progress
+                        while a sync runs, mirroring the avatar panel. The panel stays authoritative --
+                        this is only the echo on the line the user actually pressed. {% endcomment %}
+                        <span data-home-sync-label>{% if sync.last_synced %}Updated {{ sync.last_synced|naturaltime }}{% else %}Not synced yet{% endif %}</span>
                         <button type="button" class="home-hi__sync-btn" data-home-syncnow>Sync now</button>
                     </p>
                     {% endif %}
