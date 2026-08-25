@@ -27,14 +27,6 @@ from trophies.services.badge_engine import (
 
 _GAME_FIELDS = ('id', 'title_platform', 'is_obtainable', 'is_delisted', 'concept_id')
 
-#: At or above this many catalogue games, the per-profile completion reads filter on SUBQUERIES rather
-#: than on the precomputed id list. See `build_catalog` for why neither shape wins in both regimes.
-#:
-#: PROVISIONAL. It sits between the two measured points (inlining wins at ~400 catalogue games; the
-#: subquery wins by ~15x at ~2,000), but the real crossover depends on the live catalogue size and the
-#: distribution of library sizes, neither of which has been measured against production data. To tune
-#: it: `len(build_catalog(resolve_group_badges(None))['game_ids'])` gives the catalogue size.
-CATALOG_SUBQUERY_THRESHOLD = 1000
 
 
 def _game_prefetch():
@@ -54,7 +46,7 @@ def resolve_group_badges(group_badges):
     return list(group_badges)
 
 
-def build_catalog(group_badges):
+def build_catalog(group_badges, *, whole_catalogue=False):
     """Fetch the IMMUTABLE catalog once for a resolved list of group badges (identical across all profiles):
     the stage graph, the referenced game-id set, and the default trophy-group ids. A batch calls this ONCE, so
     the ~6 catalog prefetch queries happen a single time instead of per profile."""
@@ -78,8 +70,20 @@ def build_catalog(group_badges):
         TrophyGroup.objects.filter(game_id__in=game_ids, trophy_group_id='default').values_list('id', flat=True)
     )
 
-    # HOW THE PER-PROFILE READS FILTER, chosen by catalogue size. NEITHER SHAPE WINS IN BOTH REGIMES,
-    # which is why this branches instead of picking one:
+    # HOW THE PER-PROFILE READS FILTER. `whole_catalogue` is the CALLER telling us which regime this
+    # is, because the caller already knows and nothing else does as reliably:
+    #
+    #   `evaluate_badges --all` sweeps every live badge for every profile. Big catalogue, 300k profiles.
+    #   Everything else is series-scoped and evaluates one profile -- `evaluate_for_touched_games` on a
+    #   sync, `get_badge_detail` on the badge-page REQUEST PATH, `evaluate_badges --series`, the DLC
+    #   sweep. Small catalogue, one profile.
+    #
+    # That split does not move as the site grows. Adding badge series makes the `--all` catalogue bigger
+    # and leaves every per-series catalogue exactly where it is, because a series' size is an authoring
+    # decision, not a growth curve. (This was briefly a `len(game_ids) >= THRESHOLD` heuristic with a
+    # guessed constant, which is a proxy for the caller intent that was available for free.)
+    #
+    # NEITHER SHAPE WINS IN BOTH REGIMES, which is why it branches instead of picking one:
     #
     #   Inlining the id list sends one bound parameter per game. On `evaluate_badges --all` the
     #   catalogue is every live badge, so each of ~300,000 profiles re-sent a statement carrying the
@@ -91,13 +95,10 @@ def build_catalog(group_badges):
     #   subquery's whole join tree is paid per statement -- and on a SMALL catalogue against a profile
     #   with a large library that is ~12x SLOWER than inlining (measured 98 ms vs 8 ms).
     #
-    # The small-catalogue regime is the common one, not an edge case: three of the four `build_catalog`
-    # callers are series-scoped and evaluate a single profile -- `evaluate_for_touched_games` on every
-    # sync, `get_badge_detail` on the badge-page REQUEST PATH, and `evaluate_badges --series`. Only
-    # `--all` has the big catalogue. Optimising for it alone slowed down every sync and every badge
-    # page view, which is how the first version of this went in.
-    use_subquery = len(game_ids) >= CATALOG_SUBQUERY_THRESHOLD
-    if use_subquery:
+    # Optimising for `--all` alone slowed down every sync and every badge page view, which is how the
+    # first version of this went in. The default is therefore the SMALL regime: a new caller that does
+    # not think about this gets the shape that is safe on a request path.
+    if whole_catalogue:
         in_series = (Q(concept__stages__series_slug__in=series_slugs)
                      | Q(concept__bundles__stage__series_slug__in=series_slugs))
         game_filter = Game.objects.filter(in_series).values('id')
@@ -110,7 +111,7 @@ def build_catalog(group_badges):
     # `game_ids` (the Python set) stays regardless: it is catalogue-bounded, built once, and both the
     # in-memory game_state lookups and badge_detail_service read it.
     return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids,
-            'game_filter': game_filter, 'tg_filter': tg_filter, 'uses_subquery': use_subquery}
+            'game_filter': game_filter, 'tg_filter': tg_filter, 'uses_subquery': whole_catalogue}
 
 
 def recompute_required_stages(catalog) -> int:

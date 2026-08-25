@@ -143,7 +143,10 @@ class Command(BaseCommand):
             resolved = resolve_group_badges(group_badges)
             catalog = None
             if opts['all'] or opts['series']:
-                catalog = build_catalog(resolved)
+                # `--all` is the ONE caller that sweeps the whole live catalogue across every profile,
+                # which is the regime the subquery filter shape exists for. `--series` is scoped, so it
+                # takes the same shape as a sync or a page render.
+                catalog = build_catalog(resolved, whole_catalogue=bool(opts['all']))
                 changed = recompute_required_stages(catalog)
                 if changed:
                     self.stdout.write(f"required_stages refreshed on {changed} group badge(s).")
