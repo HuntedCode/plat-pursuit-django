@@ -16,7 +16,7 @@ index seek even for a whale with 250k ProfileTrophyGroups.
 from collections import defaultdict
 
 from django.db import transaction
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 
 from trophies.models import (
     Stage, Concept, Game, ConceptBundle, ProfileGame, ProfileTrophyGroup, GroupBadge, TrophyGroup,
@@ -68,7 +68,28 @@ def build_catalog(group_badges):
     default_tg_ids = list(
         TrophyGroup.objects.filter(game_id__in=game_ids, trophy_group_id='default').values_list('id', flat=True)
     )
-    return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids, 'default_tg_ids': default_tg_ids}
+
+    # THE SAME TWO ID SETS AS SUBQUERIES, for the per-profile reads only.
+    #
+    # THE INVARIANT: a per-profile query's SQL TEXT must be constant-size. It was not. The two reads in
+    # `evaluate_with_catalog` passed the Python collections above straight into `__in`, which Django
+    # renders as one placeholder per element -- so every one of ~300,000 profiles in a nightly
+    # `evaluate_badges --all` re-sent a statement carrying the entire live badge catalogue's game ids.
+    # Django disables prepared statements (`prepare_threshold=None`), so each of those was parsed and
+    # planned from scratch: a ~140 KB statement, twice per profile, ~600,000 times.
+    #
+    # The Python `game_ids` set stays -- it is catalogue-bounded, built once, and the in-memory
+    # `game_state` lookups need it. Only the FILTER ARGUMENT moves server-side.
+    in_series = (Q(concept__stages__series_slug__in=series_slugs)
+                 | Q(concept__bundles__stage__series_slug__in=series_slugs))
+    game_ids_qs = Game.objects.filter(in_series).values('id')
+    default_tg_qs = TrophyGroup.objects.filter(
+        game_id__in=game_ids_qs, trophy_group_id='default',
+    ).values('id')
+
+    return {'group_badges': group_badges, 'stages': stages, 'game_ids': game_ids,
+            'default_tg_ids': default_tg_ids,
+            'game_ids_qs': game_ids_qs, 'default_tg_qs': default_tg_qs}
 
 
 def recompute_required_stages(catalog) -> int:
@@ -139,18 +160,20 @@ def _catalog_game_state(g):
 def evaluate_with_catalog(profile, catalog):
     """Evaluate one profile against a PRE-BUILT catalog. The ONLY per-profile DB work is the two completion
     reads, both bounded to catalog games (whale-safe). Returns {group_badge_id: GroupBadgeResult}."""
-    game_ids = catalog['game_ids']
+    # SUBQUERIES, not the Python id collections -- see the note in build_catalog. These two statements
+    # run once per profile across the whole userbase, so their SQL text has to be constant-size.
     full_map = {
         gid: (prog, last)
         for gid, prog, last in ProfileGame.objects.filter(
-            profile=profile, game_id__in=game_ids,
+            profile=profile, game_id__in=catalog['game_ids_qs'],
         ).values_list('game_id', 'progress', 'most_recent_trophy_date')
     }
-    # Filter on the pre-resolved default trophy-group ids: a bounded seek on PTG (profile, trophy_group).
+    # Still small-side-first: the subquery resolves the default trophy groups, and the outer filter is
+    # a bounded seek on PTG (profile, trophy_group).
     base_map = {
         gid: (prog, last)
         for gid, prog, last in ProfileTrophyGroup.objects.filter(
-            profile=profile, trophy_group_id__in=catalog['default_tg_ids'],
+            profile=profile, trophy_group_id__in=catalog['default_tg_qs'],
         ).values_list('trophy_group__game_id', 'progress', 'last_trophy_at')
     }
 
