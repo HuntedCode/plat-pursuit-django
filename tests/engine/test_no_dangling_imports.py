@@ -18,7 +18,6 @@ name, without executing anything. It is the cheap general form of the specific g
 the sync path is barely reachable from tests, so its imports need checking some other way.
 """
 import ast
-import importlib.util
 from pathlib import Path
 
 import pytest
@@ -39,6 +38,32 @@ DEFERRED_IMPORT_HEAVY = [
     'core/services/home_service.py',
     'trophies/psn_manager.py',
     'trophies/admin.py',
+    # Widened 2026-08. The list stopped at seven files because the old `find_spec` resolution imported
+    # the parent package and cried wolf on anything importing `trophies.views.*` / `core.services.*`;
+    # resolving by path removed that ceiling. Everything below is offline surface -- it runs in a worker
+    # or a cron, where a dangling import is a log line rather than a 500 somebody reports.
+    'trophies/services/psn_api_service.py',
+    'trophies/services/contract_service.py',
+    'trophies/services/badge_orchestrator.py',
+    'trophies/services/badge_adapters.py',
+    'trophies/sync_utils.py',
+    'milestones/services.py',
+    'notifications/services/deferred_notification_service.py',
+    'notifications/services/notification_service.py',
+    'notifications/signals.py',
+    'trophies/signals.py',
+    # Every command the nightly chain runs, plus the two queueing crons. A step naming a command whose
+    # own deferred import is dangling fails that step nightly, into a log.
+    'core/management/commands/nightly.py',
+    'core/management/commands/refresh_profiles.py',
+    'core/management/commands/refresh_homepage_hourly.py',
+    'core/management/commands/recalc_earn_rates.py',
+    'core/management/commands/recalc_profile_counters.py',
+    'trophies/management/commands/evaluate_badges.py',
+    'trophies/management/commands/detect_dlc_and_refresh.py',
+    'trophies/management/commands/process_contracts.py',
+    'trophies/management/commands/audit_badge_coverage.py',
+    'milestones/management/commands/recompute_milestones.py',
 ]
 
 
@@ -57,28 +82,71 @@ def _imports(path):
     return out
 
 
+def _module_path(module_name):
+    """Resolve `a.b.c` to a file WITHOUT importing anything.
+
+    `importlib.util.find_spec` imports the PARENT package to find a submodule, which under Django drags
+    in app modules and reports false positives for perfectly live imports. That is why this guard could
+    not be widened past its original seven files. Walking the tree is dumber and correct.
+    """
+    parts = module_name.split('.')
+    base = ROOT.joinpath(*parts)
+    if base.with_suffix('.py').exists():
+        return base.with_suffix('.py')
+    if (base / '__init__.py').exists():
+        return base / '__init__.py'
+    if base.is_dir():
+        return base            # namespace package
+    return None
+
+
 def _top_level_names(module_name):
     """Names a module defines at top level, WITHOUT importing it -- parsed from source, so a module with
     side effects (token_keeper registers an atexit handler) is never executed."""
-    spec = importlib.util.find_spec(module_name)
-    if spec is None or not spec.origin or not spec.origin.endswith('.py'):
-        return None            # namespace package / C extension / stdlib builtin: cannot check names
-    tree = ast.parse(Path(spec.origin).read_text(encoding='utf-8'))
+    path = _module_path(module_name)
+    if path is None or path.is_dir():
+        return None            # namespace package / not first-party on disk: cannot check names
+    tree = ast.parse(path.read_text(encoding='utf-8'))
     names = set()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-        elif isinstance(node, ast.Assign):
-            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            names.update(a.asname or a.name.split('.')[0] for a in node.names)
-        elif isinstance(node, ast.If):
-            # `if TYPE_CHECKING:` and friends; be permissive rather than raise false alarms.
-            for sub in ast.walk(node):
-                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    names.add(sub.name)
+
+    def _targets(node):
+        """Every name bound by an assignment target, INCLUDING tuple unpacking. Missing that reported
+        `SUGGEST_MIN, SUGGEST_MAX = 2, 32` as undefined -- a false positive on a live constant."""
+        stack, out = list(node.targets), []
+        while stack:
+            t = stack.pop()
+            if isinstance(t, ast.Name):
+                out.append(t.id)
+            elif isinstance(t, (ast.Tuple, ast.List)):
+                stack.extend(t.elts)
+            elif isinstance(t, ast.Starred):
+                stack.append(t.value)
+        return out
+
+    def _collect(body):
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                names.update(_targets(node))
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                names.add(node.target.id)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                names.update(a.asname or a.name.split('.')[0] for a in node.names)
+            elif isinstance(node, ast.If):
+                # `if TYPE_CHECKING:` and friends; be permissive rather than raise false alarms.
+                _collect(node.body)
+                _collect(node.orelse)
+            elif isinstance(node, ast.Try):
+                # A top-level try/except ImportError is the standard optional-dependency shim, and the
+                # names it binds are real. Descending was missing all of them.
+                _collect(node.body)
+                for handler in node.handlers:
+                    _collect(handler.body)
+                _collect(node.orelse)
+                _collect(node.finalbody)
+
+    _collect(tree.body)
     return names
 
 
@@ -90,13 +158,14 @@ def test_every_module_a_hot_path_imports_still_exists(rel):
     if not path.exists():
         pytest.skip(f'{rel} has been deleted')
 
+    first_party = ('trophies', 'core', 'api', 'notifications', 'users', 'milestones', 'fundraiser',
+                   'art_reveal', 'plat_pursuit', 'payments')
     missing = []
     for name, _ in _imports(path):
-        try:
-            if importlib.util.find_spec(name) is None:
-                missing.append(name)
-        except (ImportError, ModuleNotFoundError, ValueError):
-            # A parent package that no longer exists raises rather than returning None.
+        # Third-party and stdlib resolution is their problem; a missing one fails at startup anyway.
+        if not name.startswith(first_party):
+            continue
+        if _module_path(name) is None:
             missing.append(name)
 
     assert not missing, (
@@ -134,11 +203,8 @@ def test_every_name_a_hot_path_imports_still_exists(rel):
                 continue
             # `from trophies.services import collection_service` imports a SUBMODULE, which is not a name
             # in the package's __init__.py. Resolve it as a module before calling it missing.
-            try:
-                if importlib.util.find_spec(f'{module_name}.{name}') is not None:
-                    continue
-            except (ImportError, ModuleNotFoundError, ValueError):
-                pass
+            if _module_path(f'{module_name}.{name}') is not None:
+                continue
             missing.append(f'{module_name}.{name}')
 
     assert not missing, (

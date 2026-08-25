@@ -656,8 +656,20 @@ class TokenKeeper:
                         self._handle_outage_recovery(profile)
                     except Profile.DoesNotExist:
                         pass
-            except Exception as e:
-                logger.error(f"Error in job worker: {e}")
+            except Exception:
+                # THE most consequential handler on this surface: it catches every job method, and the
+                # `finally` below still calls `_complete_job`, so the per-profile counter decrements and
+                # the pending `sync_complete` fires AS IF THE JOB HAD SUCCEEDED. Anything raising inside a
+                # job is therefore both invisible and destructive.
+                #
+                # It used to log `f"Error in job worker: {e}"` -- no traceback, and naming neither the
+                # profile nor the job type, so the one line nobody reads could not even tell you which
+                # hunter lost what. exc_info and the identifiers are the difference between a diagnosable
+                # incident and a shrug.
+                logger.exception(
+                    "Job worker error: job_type=%s queue=%s profile_id=%s",
+                    job_type, queue_name, profile_id,
+                )
                 # Reset any instances stuck in busy state for too long
                 self._check_stuck_instances()
             finally:
@@ -1496,9 +1508,14 @@ class TokenKeeper:
             # Mark Contract (job XP) tiers as REACHED for the games touched this sync.
             # Detection only -- no XP is granted here; the user banks it later by ACCEPTING
             # the Contract. Wrapped so a failure never breaks the sync.
+            # IMPORTS OUTSIDE THE GUARD, deliberately. This block had them inside, which is the exact
+            # shape of the bug that motivated `tests/engine/test_no_dangling_imports.py`: the deleted
+            # `dashboard_service` import lived in a broad try here, so a ModuleNotFoundError became one
+            # log line and every sync silently skipped the rest of the job. The guard below is for
+            # RUNTIME failures in detection; a missing module is a deploy error and must be loud.
+            from trophies.models import ProfileGame
+            from trophies.services.contract_service import check_profile_contracts
             try:
-                from trophies.models import ProfileGame
-                from trophies.services.contract_service import check_profile_contracts
                 touched_concept_ids = [
                     cid for cid in ProfileGame.objects
                     .filter(id__in=touched_profilegame_ids)
@@ -1533,8 +1550,9 @@ class TokenKeeper:
             # trophy/completion denorms just refreshed above). recompute_on_sync reconciles Discord only when a
             # role-bearing tier was newly crossed, so a routine sync never re-asserts roles against the bot.
             # (Stays under the 'finishing' phase -- it's quick and part of finalize.)
+            # Import outside the guard: see the contract-detection note above.
+            from milestones.services import recompute_on_sync
             try:
-                from milestones.services import recompute_on_sync
                 recompute_on_sync(profile)
             except Exception:
                 logger.exception(f"[profile {profile_id}] milestone recompute failed")
