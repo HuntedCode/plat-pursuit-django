@@ -1,144 +1,75 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The membership welcome, sent by subscription_service._send_subscription_welcome_email.
 
-{% block extra_styles %}
-    <style>
-        /* Celebration box */
-        .welcome-box {
-            background-color: #667eea;
-            background: linear-gradient(135deg, #f6d365 0%, #fda085 50%, #667eea 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 25px 0;
-            color: #ffffff;
-            text-align: center;
-        }
+The perk list is rendered from PREMIUM_PERKS and NEVER hand-written: the old list here sold four
+perks that no longer existed (themes, premium checklists, the Challenge Hub, gated recaps) on the
+first email a paying member reads. The storefront guard test scans this template for exactly that
+regression, so keep the loop and keep it fed by the constant.
 
-        .welcome-box .welcome-icon {
-            font-size: 42px;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .welcome-box h2 {
-            margin: 0 0 10px 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
-
-        .welcome-box p {
-            margin: 0;
-            font-size: 15px;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
-
-        /* Features list */
-        .features-unlocked {
-            background-color: #f0f4ff;
-            border-radius: 8px;
-            padding: 20px 25px;
-            margin: 25px 0;
-            border-left: 4px solid #667eea;
-        }
-
-        .features-unlocked h3 {
-            margin: 0 0 12px 0;
-            font-size: 16px;
-            color: #333333;
-        }
-
-        .features-unlocked ul {
-            margin: 0;
-            padding-left: 20px;
-            color: #555555;
-        }
-
-        .features-unlocked li {
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-
-        .features-unlocked li strong {
-            color: #333333;
-        }
-
-        /* Flavor text */
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .welcome-box {
-                padding: 20px 15px;
-            }
-        }
-    </style>
-{% endblock %}
+The loop's markup is deliberately identical to subscription_cancelled.html and payment_failed.html
+so the three framings (gained / lost / at risk) cannot drift into three different shapes. Each
+perk's own colour drives its accent bar, which is the one place that bar carries real data.
+{% endcomment %}
 
 {% block title %}Welcome to PlatPursuit Premium!{% endblock %}
 
+{% block preheader %}Your {{ tier_name }} membership is live. Here is everything it unlocks.{% endblock %}
+
 {% block header_content %}
-    <h1>Welcome Aboard!</h1>
-    <p>Your {{ tier_name }} subscription is now active</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Welcome aboard</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your {{ tier_name }} membership is now active.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, thank you for backing PlatPursuit. Your support keeps an independent, ad-free trophy tracker running and paying its own bills.</p>
 
-    <div class="welcome-box">
-        <span class="welcome-icon">&#127942;</span>
-        <h2>You just leveled up!</h2>
-        <p>
-            Thank you for subscribing to PlatPursuit. Your support keeps our community
-            thriving and helps us build the best trophy hunting platform out there.
-        </p>
-    </div>
+    <p class="pp-p">Here is what your {{ tier_name }} membership comes with:</p>
 
-    <p class="intro">
-        Your {{ tier_name }} membership is live. Here's what comes with it:
-    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {% for perk in premium_perks %}
+        <tr>
+            <td style="padding: 0 0 10px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="{{ perk.colour }}" style="background-color: {{ perk.colour }}; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 13px 16px;">
+                            <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">{{ perk.name }}</p>
+                            <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">{{ perk.member }}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
 
-    {% comment %} Rendered from PREMIUM_PERKS, never hand-written: the old list here sold four
-    perks that no longer existed (themes, premium checklists, the Challenge Hub, gated recaps) --
-    on the FIRST email a paying member reads. The storefront guard test now scans this template
-    too. {% endcomment %}
-    <div class="features-unlocked">
-        <h3>Your membership:</h3>
-        <ul>
-            {% for perk in premium_perks %}
-            <li><strong>{{ perk.name }}</strong>: {{ perk.member }}</li>
-            {% endfor %}
-        </ul>
-    </div>
+    <p class="pp-p" style="margin-top: 18px;">Everything is live already. Head to your profile and take it for a spin.</p>
 
-    <p class="intro">
-        Everything is ready to go. Head to your profile to start exploring your new features!
-    </p>
+    {% include 'emails/_cta_button.html' with url=profile_url label="View your profile" %}
 
-    <div class="cta-container">
-        <a href="{{ profile_url }}" class="cta-button">Explore Premium Features</a>
-    </div>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ profile_url }}</p>
 
     {% if discord_url %}
-    <p class="intro">
-        Your Discord role and #supporter-chat are ready when you are. Come say hello.
-    </p>
-    <div class="cta-container">
-        <a href="{{ discord_url }}" class="cta-button">Join the Discord</a>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0 0;">
+        <tr>
+            <td style="padding: 14px 16px; background-color: #0F1720; border-radius: 8px;">
+                <p style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #F0F6FD;">Join the Discord</p>
+                <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #9FB3C8;">
+                    Your supporter role and #supporter-chat are ready when you are.
+                    <a href="{{ discord_url }}" style="color: #28EBFE; text-decoration: underline;">{{ discord_url }}</a>
+                </p>
+            </td>
+        </tr>
+    </table>
     {% endif %}
 
-    <p class="flavor-text">
-        Time to hunt in style. Welcome aboard, trophy hunter!
-    </p>
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #7E8FA3;">Time to hunt in style. Welcome aboard.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you subscribed to PlatPursuit Premium.<br>
-    <a href="{{ site_url }}{% url 'settings' %}" style="color: #999999; text-decoration: underline;">Manage your account settings</a>.
+    You're receiving this because you subscribed to PlatPursuit Premium.
+    Manage your account settings from the link above.
 {% endblock %}

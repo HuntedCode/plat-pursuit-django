@@ -784,7 +784,6 @@ class SubscriptionService:
         tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
 
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         from users.constants import PREMIUM_PERKS
         context = {
@@ -793,7 +792,6 @@ class SubscriptionService:
             'portal_url': portal_url,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
             # From the shared constant: the hand-written what-you-lose list threatened retired
             # perks (themes, premium checklists) on a dunning email.
             'premium_perks': PREMIUM_PERKS,
@@ -893,15 +891,13 @@ class SubscriptionService:
             return False
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'tier_name': tier_name,
-            'subscribe_url': f"{settings.SITE_URL}/support/",
+            'subscribe_url': f"{settings.SITE_URL}{reverse('support_hub')}",
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
             'premium_perks': PREMIUM_PERKS,
         }
 
@@ -1042,14 +1038,12 @@ class SubscriptionService:
 
         tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         context = {
             'username': username,
             'invoice_url': invoice_url,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }
 
         try:
@@ -1096,15 +1090,13 @@ class SubscriptionService:
             return False
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         from users.constants import PREMIUM_PERKS
         context = {
             'username': username,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'profile_url': f"{settings.SITE_URL}/profiles/{user.profile.psn_username}/" if hasattr(user, 'profile') else settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[user.profile.psn_username])}" if hasattr(user, 'profile') else settings.SITE_URL,
             # The perk list renders from the shared constant (the hand-written copy sold four
             # retired perks on the first email a member ever read).
             'premium_perks': PREMIUM_PERKS,
@@ -1130,7 +1122,8 @@ class SubscriptionService:
             return False
 
     @staticmethod
-    def _send_payment_succeeded_email(user, tier_name: str, next_billing_date=None, triggered_by: str = 'webhook') -> bool:
+    def _send_payment_succeeded_email(user, tier_name: str, next_billing_date=None,
+                                      triggered_by: str = 'webhook', amount=None) -> bool:
         """
         Send payment confirmation email on successful renewal.
 
@@ -1139,6 +1132,9 @@ class SubscriptionService:
             tier_name: Display name of the subscription tier
             next_billing_date: Formatted date string for next billing (or None)
             triggered_by: Origin of the send (webhook, admin_manual, etc.)
+            amount: Formatted charge string, e.g. '$4.99 USD' (or None). Absent on PayPal
+                renewals and admin resends, which have no invoice in hand -- the template
+                guards the row, the same way it guards next_billing_date.
 
         Returns:
             bool: True if email was sent successfully
@@ -1154,15 +1150,14 @@ class SubscriptionService:
             return False
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         context = {
             'username': username,
             'tier_name': tier_name,
             'next_billing_date': next_billing_date,
+            'amount': amount,
             'manage_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }
 
         try:
@@ -1218,7 +1213,17 @@ class SubscriptionService:
                 except (ValueError, OSError):
                     pass
 
-        SubscriptionService._send_payment_succeeded_email(user, tier_name, next_billing_date)
+        # The charge itself: a renewal receipt that states no amount is the kind of thing that
+        # generates support mail. amount_paid is in the currency's minor unit.
+        amount = None
+        try:
+            currency = (invoice_data.get('currency') or 'usd').upper()
+            amount = f"${amount_paid / 100:.2f} {currency}"
+        except (TypeError, ValueError):
+            pass
+
+        SubscriptionService._send_payment_succeeded_email(
+            user, tier_name, next_billing_date, amount=amount)
 
     # ── Stripe webhook handling ───────────────────────────────────────────
 

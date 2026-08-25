@@ -93,8 +93,8 @@ last child migrates, at which point the legacy base and this table row die toget
 
 | Base | Children | Notes |
 |------|----------|-------|
-| `base_email_v2.html` | `welcome.html`, `launch_announcement.html`, `email_verification.html`, `password_reset.html` | The target. Extend this for anything new or rebuilt. |
-| `base_email.html` (legacy) | the remaining kept templates (`subscription_welcome`, `payment_succeeded`, `payment_failed`, `payment_action_required`, `subscription_cancelled`, `donation_receipt`, `badge_claim_confirmation`, `artwork_complete`, `badge_earned`) + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
+| `base_email_v2.html` | `welcome.html`, `launch_announcement.html`, `email_verification.html`, `password_reset.html`, `payment_action_required.html`, `payment_succeeded.html`, `subscription_welcome.html`, `subscription_cancelled.html`, `payment_failed.html` | The target. Extend this for anything new or rebuilt. |
+| `base_email.html` (legacy) | the remaining kept templates (`donation_receipt`, `badge_claim_confirmation`, `artwork_complete`) + `badge_earned` (no sender) + the parked recap/digest/broadcast + the parked recap/digest/broadcast | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Retired child-by-child. |
 
 **What v2 provides:**
 - A `role="presentation"` table scaffold with MSO ghost tables, so Outlook renders it.
