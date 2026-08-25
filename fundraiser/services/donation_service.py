@@ -424,7 +424,7 @@ class DonationService:
         return {
             'site_url': settings.SITE_URL,
             'username': (
-                (profile.display_psn_username or profile.psn_username) if profile else 'trophy hunter'
+                (profile.display_psn_username or profile.psn_username) if profile else 'hunter'
             ),
         }
 
@@ -483,10 +483,13 @@ class DonationService:
         try:
             context = {
                 **DonationService._build_email_base_context(claim.profile),
-                'claim': claim,
                 'series_name': series_name,
                 'badge_url': f"{settings.SITE_URL}"
                              f"{reverse('badge_detail', kwargs={'series_slug': claim.series_slug})}",
+                # The status pointer. `/badges/<slug>/` shows the badge and knows nothing about
+                # artwork claims; the fundraiser page is the only surface that renders a status.
+                'claim_url': f"{settings.SITE_URL}"
+                             f"{reverse('fundraiser', kwargs={'slug': claim.donation.fundraiser.slug})}",
             }
 
             EmailService.send_html_email(
@@ -545,7 +548,6 @@ class DonationService:
         try:
             context = {
                 **DonationService._build_email_base_context(claim.profile),
-                'claim': claim,
                 'series_name': series_name,
                 'badge_url': f"{settings.SITE_URL}"
                              f"{reverse('badge_detail', kwargs={'series_slug': claim.series_slug})}",

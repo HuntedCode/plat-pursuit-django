@@ -74,6 +74,9 @@ def test_every_billing_email_rides_the_new_base():
         assert 'Manage your account settings' in body
         # The headline must carry its colour inline or it renders near-black on the dark band.
         assert re.search(r'<h1[^>]*style="[^"]*color: #F0F6FD', body)
+        # Only v2 emits this. Everything above is satisfied by the child's OWN markup, so without
+        # it the whole test stays green after a revert to the legacy base.
+        assert 'mso-hide: all' in body, 'no preheader block: this is not riding v2'
 
 
 # --- the perk trio: one shape, three framings ---

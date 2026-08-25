@@ -9,13 +9,18 @@ That one says "we have your pick"; this one says "it is drawn". Keep the two her
 This is the last email a donor gets in the arc and the only one that is purely good news, so it
 stays short: the name, the fact that it is live, and a way to go look at it.
 
+The credit claim is real but it is one tap deep: `complete_badge_claim` writes `BadgeSeries.funded_by`,
+and "Artwork funded by <name>" renders in the medallion peek dialog (`components/group_badge_modal.html`,
+reading `effective_funded_by`), which the badge page opens on tap. It is NOT on the page surface, which
+is why the copy says to open the medallion rather than implying it is the first thing they will see.
+
 `series_name` is derived in the sender (see the twin) because the denormalized name is allowed to
 be blank, and an empty one emptied both the subject and the hero.
 {% endcomment %}
 
 {% block title %}New artwork: {{ series_name }}{% endblock %}
 
-{% block preheader %}The badge series you commissioned is drawn and live on the site.{% endblock %}
+{% block preheader %}{{ series_name }} is drawn and live on the site.{% endblock %}
 
 {% block header_content %}
     <div style="margin-top: 18px;">
@@ -40,7 +45,7 @@ be blank, and an empty one emptied both the subject and the hero.
         </tr>
     </table>
 
-    <p class="pp-p">This one exists because you paid for it. Anyone who earns it from here on gets your artwork, which is a fairly permanent way to leave a mark on a trophy site.</p>
+    <p class="pp-p">This one exists because you paid for it. Anyone who earns it from here on gets your artwork, which is a fairly permanent way to leave a mark on a trophy site. Tap the medallion on the badge page and it credits you by name.</p>
 
     {% include 'emails/_cta_button.html' with url=badge_url label="See the new artwork" %}
 

@@ -26,6 +26,12 @@ def _plain(body):
     return _html.unescape(strip_tags(stripped))
 
 
+def _preheader(body):
+    """The hidden inbox preview line, pulled out of the base's mso-hide div."""
+    match = re.search(r'mso-hide: all[^>]*>(.*?)&zwnj;', body, re.S)
+    return _html.unescape(match.group(1)).strip() if match else ''
+
+
 def _content(body):
     """The visible body, with the hidden preheader dropped: the preview line paraphrases the
     copy, so a pin run against the whole render can pass on the preheader alone.
@@ -63,6 +69,8 @@ def _receipt(**over):
 def _twin(name, **over):
     ctx = dict(site_url=SITE, username='TestHunter', series_name='Trophy Hunter',
                badge_url=BADGE_URL)
+    if name == 'badge_claim_confirmation.html':
+        ctx['claim_url'] = CLAIM_URL
     ctx.update(over)
     return render_to_string('emails/' + name, ctx)
 
@@ -79,6 +87,9 @@ def test_every_fundraiser_email_rides_the_new_base():
         assert 'Manage your account settings' in body
         # The headline must carry its colour inline or it renders near-black on the dark band.
         assert re.search(r'<h1[^>]*style="[^"]*color: #F0F6FD', body)
+        # Only v2 emits this. Everything above is satisfied by the child's OWN markup, so without
+        # it the whole test stays green after a revert to the legacy base.
+        assert 'mso-hide: all' in body, 'no preheader block: this is not riding v2'
 
 
 def test_every_fundraiser_cta_is_reachable_in_plaintext():
@@ -117,14 +128,16 @@ def test_the_receipt_carries_the_details_that_make_it_quotable():
     donation.completed_at = datetime.datetime(2026, 8, 24, 12, 0)
     body = _plain(_receipt(donation=donation))
 
-    assert 'Badge Artwork Fund' in body
+    # The preheader names the campaign too, so this half has to read the visible body.
+    assert 'Badge Artwork Fund' in _plain(_content(_receipt(donation=donation)))
     assert 'August 24, 2026' in body
+    assert 'UTC' in body, 'an unlabelled date is an off-by-one for every donor west of UTC'
     assert TXN in body, 'the transaction id is the only handle a support request has'
 
 
 def test_the_receipt_dates_from_the_creation_stamp_when_it_never_completed():
-    """`completed_at` is nullable. An unguarded date row would print "None" as the date on a
-    receipt for money we took."""
+    """`completed_at` is nullable on the model, so the row is guarded even though the only sender
+    (complete_donation) stamps it before sending. An unguarded row would print "None" as the date."""
     import datetime
     donation = _Donation()
     donation.completed_at = None
@@ -138,10 +151,13 @@ def test_the_receipt_dates_from_the_creation_stamp_when_it_never_completed():
 def test_the_receipt_greets_by_psn_name_not_by_email_address():
     """The old greeting was `user.first_name|default:user.email`, and signup collects no name,
     so nearly every donor was addressed by their raw email address."""
-    body = _content(_receipt())
+    assert 'TestHunter' in _content(_receipt())
 
-    assert 'TestHunter' in body
-    assert '@' not in _plain(body).split('Donation received')[0], 'an email address led the greeting'
+    # Reverting to `user.first_name|default:user.email` raises rather than failing an assertion
+    # (filter arguments must resolve), so the regression is pinned at the source instead.
+    src = (Path(settings.BASE_DIR) / 'templates' / 'emails'
+           / 'donation_receipt.html').read_text(encoding='utf-8')
+    assert 'user.email' not in src and 'user.first_name' not in src
 
 
 # --- the picks fork decides whether a donor learns they have something to spend ---
@@ -179,6 +195,14 @@ def test_the_twins_name_the_series_in_the_subject_and_the_hero(template):
 
 
 @pytest.mark.parametrize('template', ['badge_claim_confirmation.html', 'artwork_complete.html'])
+def test_the_twins_name_the_series_in_the_preheader(template):
+    """The preview line is what a donor reads BEFORE opening, and it is the first thing in the
+    plaintext part. "The badge series you commissioned is live" makes them open the mail to find
+    out which one."""
+    assert 'Trophy Hunter' in _preheader(_twin(template))
+
+
+@pytest.mark.parametrize('template', ['badge_claim_confirmation.html', 'artwork_complete.html'])
 def test_the_twins_share_one_hero_shape(template):
     """Two files, one idiom: an accent bar, an uppercase eyebrow and the series name as display
     type. They drifted into two different boxes once already."""
@@ -189,6 +213,27 @@ def test_the_twins_share_one_hero_shape(template):
     # a bare 'text-transform: uppercase' pin passes on the band alone.
     assert 'text-transform: uppercase; color: #4A5768' in body, 'the eyebrow went missing'
     assert re.search(r'font-size: 24px;[^"]*font-weight: 800', body), 'the series name lost its weight'
+
+
+def test_the_claim_email_points_at_the_only_page_that_shows_a_status():
+    """`/badges/<slug>/` renders the badge and knows nothing about artwork claims; the fundraiser
+    page renders "Your claimed badges" with a state chip per claim. A rewrite of this email once
+    told donors to watch the badge page, which is a dead end and the only status instruction the
+    whole arc gives them."""
+    body = _twin('badge_claim_confirmation.html')
+
+    assert 'fundraiser page' in _content(body)
+    assert 'badge page shows the status' not in _content(body)
+    assert CLAIM_URL in _plain(body), 'the status pointer must survive the plaintext strip'
+
+
+def test_the_claim_email_drops_the_status_pointer_rather_than_printing_a_bare_label():
+    """`claim_url` is guarded: an older send path or a resend without it must not ship
+    "Track the queue on the fundraiser page:" followed by nothing."""
+    body = _twin('badge_claim_confirmation.html', claim_url='')
+
+    assert 'Track the queue' not in body
+    assert 'View the badge series' in body, 'the primary CTA is unconditional'
 
 
 def test_the_twins_are_coloured_for_staked_versus_finished():
@@ -206,16 +251,27 @@ def test_the_sender_derives_a_series_name_when_the_denorm_is_blank():
     "Badge claimed: " over an email that never named the badge."""
     from fundraiser.services.donation_service import DonationService
 
+    class _Series:
+        name = 'Trophy Hunter'
+
     class _Claim:
         series_name = ''
-        series_id = None
-        series = None
+        series_id = 7          # NOT nullable on the model: a persisted claim always has one
+        series = _Series()
 
     claim = _Claim()
-    assert DonationService._claim_series_name(claim) == 'your badge series'
-
-    claim.series_name = 'Trophy Hunter'
+    # The branch a real blank denorm takes. Asserting only the final fallback passes even with
+    # this lookup deleted, and BadgeSeries.name is required, so the fallback is unreachable in
+    # production -- a pin on it alone pins dead code.
     assert DonationService._claim_series_name(claim) == 'Trophy Hunter'
+
+    claim.series_name = 'Claimed As This'
+    assert DonationService._claim_series_name(claim) == 'Claimed As This', 'the denorm wins'
+
+    claim.series_name = ''
+    claim.series_id = None
+    claim.series = None
+    assert DonationService._claim_series_name(claim) == 'your badge series'
 
 
 def test_the_fundraiser_senders_dropped_the_dead_preference_token():

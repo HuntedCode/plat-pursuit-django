@@ -50,6 +50,9 @@ def test_both_auth_emails_ride_the_new_base():
         assert 'role="presentation"' in body, 'the v2 table scaffold is missing'
         assert '#667eea' not in body, 'the pre-rebuild purple came back'
         assert 'v:roundrect' in body, 'the CTA lost its Outlook half'
+        # Only v2 emits this. The three above are satisfied by the child's own markup and
+        # the CTA partial, so the test would stay green after a revert to the legacy base.
+        assert 'mso-hide: all' in body, 'no preheader block: this is not riding v2'
 
 
 def test_the_confirmation_url_survives_the_plaintext_strip():

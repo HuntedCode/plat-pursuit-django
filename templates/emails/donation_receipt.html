@@ -9,6 +9,11 @@ carries the transaction id and the date, which the previous version did not prin
 `badge_picks_earned` forks the closing half and MUST be preserved: above zero it is the only
 place a donor is told they have picks waiting to spend, and the CTA changes with it.
 
+The date is labelled UTC because it is rendered in UTC: `TIME_ZONE` is UTC and the webhook that sends
+this activates no timezone, so a donor west of UTC paying in the evening gets a receipt dated the next
+day. Labelling it is cheaper than pretending, and a receipt with an unexplained off-by-one date is
+exactly the kind of thing that generates support mail.
+
 The amount keeps `floatformat:2` -- `amount` is a Decimal, and Decimal('25.5') renders as "25.5"
 without it, which reads as a truncated number on a receipt. `get_provider_display` comes from the
 model's own choices; the old `|title` filter rendered PayPal as "Paypal".
@@ -58,7 +63,7 @@ model's own choices; the old `|title` filter rendered PayPal as "Paypal".
         </tr>
         <tr>
             <td style="padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #4A5768;">Date</td>
-            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ donation.completed_at|default:donation.created_at|date:"F j, Y" }}</td>
+            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ donation.completed_at|default:donation.created_at|date:"F j, Y" }} UTC</td>
         </tr>
         {% if badge_picks_earned > 0 %}
         <tr>

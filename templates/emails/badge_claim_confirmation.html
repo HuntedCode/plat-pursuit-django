@@ -6,6 +6,11 @@ Twin of artwork_complete.html: same context, same shape, deliberately kept as tw
 kept-template list iterates by filename and EmailLog distinguishes the two types). This one says
 "we have your pick"; its twin says "it is drawn". Keep the two hero shapes in step.
 
+`claim_url` points at the FUNDRAISER page, not the badge page. Only the fundraiser page renders a
+claim's status (`templates/fundraiser/fundraiser.html`, "Your claimed badges" + the public claim wall);
+`/badges/<slug>/` renders the badge and knows nothing about artwork claims. A rewrite of this email
+once sent donors to the badge page to "check the status", which is a dead end.
+
 `series_name` is derived in the sender rather than read straight off the claim: the denormalized
 `claim.series_name` is allowed to be blank, and an empty one produced an empty subject line AND
 an empty hero, so the email said nothing at all about which badge was claimed.
@@ -42,7 +47,7 @@ an empty hero, so the email said nothing at all about which badge was claimed.
         <tr>
             <td class="pp-fallback" style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
                 <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">What happens next</p>
-                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">It goes into the artwork queue. You will get one more email from us when it is drawn and live on the site, and the badge page shows the status in the meantime.</p>
+                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">It goes into the artwork queue. You will get one more email from us when it is drawn and live on the site, and the fundraiser page tracks where every claimed series stands in the meantime.</p>
             </td>
         </tr>
     </table>
@@ -50,6 +55,12 @@ an empty hero, so the email said nothing at all about which badge was claimed.
     {% include 'emails/_cta_button.html' with url=badge_url label="View the badge series" %}
 
     <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ badge_url }}</p>
+
+    {% comment %} The status pointer, and the only page that actually carries one. The badge page
+    shows the badge, not the queue. {% endcomment %}
+    {% if claim_url %}
+    <p class="pp-small" style="margin: 10px 0 0; text-align: center;">Track the queue on the fundraiser page: {{ claim_url }}</p>
+    {% endif %}
 
     <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #627488;">You are shaping the site, one badge at a time.</p>
 {% endblock %}

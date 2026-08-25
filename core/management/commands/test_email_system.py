@@ -548,7 +548,7 @@ class Command(BaseCommand):
 
         # Build a mock donation-like object for template rendering
         class MockDonation:
-            amount = Decimal('25.50')  # the .5 is deliberate: it catches a missing floatformat
+            amount = Decimal('25.5')  # unpadded on purpose: Decimal('25.50') renders fine unfiltered
             provider = 'paypal'
             provider_transaction_id = 'cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0'
             completed_at = timezone.now()
@@ -566,7 +566,8 @@ class Command(BaseCommand):
             'donation': MockDonation(),
             'fundraiser': MockFundraiser(),
             'badge_picks_earned': 2,
-            'claim_url': f'{settings.SITE_URL}/fundraiser/badge-artwork-fund/',
+            'claim_url': f"{settings.SITE_URL}"
+                         f"{reverse('fundraiser', kwargs={'slug': 'badge-artwork-fund'})}",
             'site_url': settings.SITE_URL,
         }
 
@@ -606,10 +607,11 @@ class Command(BaseCommand):
 
         context = {
             'username': 'TestHunter',
-            'claim': MockClaim(),
             'series_name': MockClaim.series_name,
             'badge_url': f"{settings.SITE_URL}"
                          f"{reverse('badge_detail', kwargs={'series_slug': 'trophy-hunter'})}",
+            'claim_url': f"{settings.SITE_URL}"
+                         f"{reverse('fundraiser', kwargs={'slug': 'badge-artwork-fund'})}",
             'site_url': settings.SITE_URL,
         }
 
@@ -649,7 +651,6 @@ class Command(BaseCommand):
 
         context = {
             'username': 'TestHunter',
-            'claim': MockClaim(),
             'series_name': MockClaim.series_name,
             'badge_url': f"{settings.SITE_URL}"
                          f"{reverse('badge_detail', kwargs={'series_slug': 'trophy-hunter'})}",
