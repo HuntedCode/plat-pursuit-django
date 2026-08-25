@@ -1090,6 +1090,28 @@ class SubscriptionService:
     # ── Positive lifecycle emails ─────────────────────────────────────────
 
     @staticmethod
+    def _welcome_supporter_mark(profile):
+        """The supporter mark to SHOW in the welcome email, or None to skip the panel.
+
+        Reads the `display_mark` denorm rather than re-deriving from the tier, so the email shows
+        what the site will actually render beside their name. Two cases return None on purpose:
+
+          - a staff or mod subscriber. Service marks outrank the ladder in `resolve_display_mark`,
+            so they keep wearing the wrench or the shield; showing them supporter stars would
+            promise something no page will ever draw.
+          - no profile, or an unmapped tier.
+
+        Ordering note: activate_subscription runs `reconcile_premium` (which refreshes the denorm)
+        inside its transaction and sends this email after, so the mark is already written.
+        """
+        from users.services.marks import mark_style
+
+        if profile is None:
+            return None
+        mark = mark_style(profile.display_mark)
+        return mark if mark and mark.get('kind') == 'supporter' else None
+
+    @staticmethod
     def _send_subscription_welcome_email(user, tier_name: str, triggered_by: str = 'webhook') -> bool:
         """
         Send welcome email when a user first subscribes.
@@ -1112,18 +1134,28 @@ class SubscriptionService:
             EmailService.log_suppressed('subscription_welcome', user, subject, triggered_by)
             return False
 
-        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
+        profile = getattr(user, 'profile', None)
+        # Display casing, not the lowercased column: this email now SHOWS the name wearing its
+        # mark, and a mark is the name as you earned it plus a glyph.
+        username = (
+            (profile.display_psn_username or profile.psn_username) if profile
+            else user.email.split('@')[0]
+        )
 
         context = {
             'username': username,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[user.profile.psn_username])}" if hasattr(user, 'profile') else settings.SITE_URL,
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[user.profile.psn_username])}" if profile else settings.SITE_URL,
             # The perk list renders from the shared constant (the hand-written copy sold four
             # retired perks on the first email a member ever read).
             'premium_perks': PREMIUM_PERKS,
             # The email sold the Discord perk with no way to get there.
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
+            # The "Site-wide marker" perk, shown rather than described. None for a staff or mod
+            # subscriber: service marks take precedence over the ladder, so what they WEAR is
+            # still the wrench or the shield, and showing them stars would be a lie.
+            'mark': SubscriptionService._welcome_supporter_mark(profile),
         }
 
         try:

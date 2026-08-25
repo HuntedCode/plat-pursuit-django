@@ -14,6 +14,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
 from users.constants import PREMIUM_PERKS
+from users.services.marks import mark_style
 from users.services.subscription_service import format_charge
 
 SITE = 'https://platpursuit.com'
@@ -244,3 +245,86 @@ def test_the_perk_previews_are_fed_the_constant():
         start = preview.index("template_name='emails/" + name + ".html'")
         context = preview.rindex('context = {', 0, start)
         assert 'premium_perks' in preview[context:start], f'{name} preview renders an empty list'
+
+
+# --- the mark preview: the one personal thing in the welcome ---
+
+def _welcome(mark):
+    return _render('subscription_welcome.html', tier_name='Patron', premium_perks=PREMIUM_PERKS,
+                   profile_url=f'{SITE}/hunters/t/', discord_url='', mark=mark)
+
+
+def _mark_panel(body):
+    """Just the mark panel's cell.
+
+    Scoped deliberately: the ladder colours are ALSO the perk-list accent colours (Patron's
+    #6875ee is the "Site-wide marker" perk's own bar), so a colour assertion against the whole
+    body is satisfied by the perk list even with the panel rendering in flat black.
+    """
+    match = re.search(r'background-color: #0F1720.*?</table>', body, re.S)
+    return match.group(0) if match else ''
+
+
+def test_the_welcome_shows_the_mark_it_just_granted():
+    """The "Site-wide marker" perk, shown rather than described."""
+    body = _content(_welcome(mark_style('patron')))
+    panel = _mark_panel(body)
+
+    assert 'Your mark' in panel
+    assert '#6875ee' in panel, "the level's own colour has to drive the name"
+    assert 'TestHunter' in panel, 'the mark is the NAME wearing a glyph, not a glyph alone'
+    assert panel.count('&#9733;') == 2, 'Patron wears two filled stars'
+
+
+def test_the_mark_panel_draws_stars_as_text_not_svg():
+    """Gmail strips <svg> outright and Outlook's Word engine cannot draw it, so the site's real
+    glyph would render as NOTHING for most of the people this email is for."""
+    body = _welcome(mark_style('patron'))
+
+    assert '<svg' not in body
+    assert chr(9733) in _plain(body), 'the stars must survive into the plaintext part too'
+
+
+def test_the_first_ladder_level_wears_a_hollow_star():
+    """Backer is `outline: True` -- the site strokes the SVG instead of filling it, and the
+    email needs the same distinction or level 1 and level 2 look identical."""
+    backer = _mark_panel(_welcome(mark_style('backer')))
+    contributor = _mark_panel(_welcome(mark_style('contributor')))
+
+    assert '&#9734;' in backer and '&#9733;' not in backer
+    assert '&#9733;' in contributor and '&#9734;' not in contributor
+
+
+def test_the_mark_panel_stays_on_a_dark_ground():
+    """Not a style preference: every ladder colour fails AA on the white content body (2.15:1 to
+    3.91:1) and passes on this panel (4.61:1 to 8.38:1)."""
+    assert _mark_panel(_welcome(mark_style('backer'))), 'the mark panel lost its dark ground'
+
+
+def test_the_welcome_skips_the_panel_when_there_is_no_supporter_mark():
+    """A staff or mod subscriber keeps wearing the wrench or the shield (service marks outrank
+    the ladder), so showing them stars would promise a mark no page will draw."""
+    body = _welcome(None)
+
+    assert 'Your mark' not in body
+    assert PREMIUM_PERKS[0]['name'] in body, 'the rest of the email is unaffected'
+
+
+def test_the_sender_only_shows_a_mark_the_site_will_actually_draw():
+    from users.services.subscription_service import SubscriptionService
+
+    class _Profile:
+        display_mark = 'patron'
+
+    profile = _Profile()
+    assert SubscriptionService._welcome_supporter_mark(profile)['key'] == 'patron'
+
+    profile.display_mark = 'staff'
+    assert SubscriptionService._welcome_supporter_mark(profile) is None, 'staff wear the wrench'
+
+    profile.display_mark = 'mod'
+    assert SubscriptionService._welcome_supporter_mark(profile) is None, 'mods wear the shield'
+
+    profile.display_mark = ''
+    assert SubscriptionService._welcome_supporter_mark(profile) is None
+    assert SubscriptionService._welcome_supporter_mark(None) is None
