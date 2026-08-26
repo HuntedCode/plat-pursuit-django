@@ -5,6 +5,7 @@ Replaces the legacy tier-based BadgeDetailView data layer. A series is now N par
 engine pass (badge_orchestrator.evaluate_with_catalog); XP/progress are computed live from that same pass (so
 they match the per-group numbers); live RANKS come from badge_leaderboards (stored standings).
 """
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -17,6 +18,8 @@ from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
 from trophies.services.rating_service import RatingService
 from trophies.services import badge_leaderboards as lb
+
+logger = logging.getLogger(__name__)
 
 # Default medallion metal per platform group until backing_key is set in admin (user pick 2026-08):
 # Legacy HD -> gold, Ultra HD -> platinum.
@@ -139,8 +142,30 @@ def group_medallion_layers(gb) -> tuple:
     tier = pg.backing_key or _GROUP_BACKING.get(pg.key, 'gold')   # data-tier drives the medallion coloring
     backdrop = art['backdrop']
     if not backdrop and tier in _TIER_BACKDROP:
-        backdrop = static(f"images/badges/backdrops/{_TIER_BACKDROP[tier]}_backdrop.png")
+        backdrop = _backdrop_url(_TIER_BACKDROP[tier])
     return tier, [url for url in (backdrop, art['main']) if url], art['is_avatar']
+
+
+def _backdrop_url(n):
+    """The tier backdrop plate, or None if it cannot be resolved.
+
+    `static()` under ManifestStaticFilesStorage RAISES for an unresolvable name, and this function is
+    reached from the request path (badge detail, collection, browse cards), from the profile card, AND
+    from cron. So one decorative plate could take down a page render or a whole cron run -- which is
+    exactly what happened: the worker image had no manifest, so the first `static()` call raised and
+    the hourly job died naming a file that has been in the repo since 2025.
+
+    The plate is already OPTIONAL by design -- a tier outside _TIER_BACKDROP renders without one and
+    the medallion is fine -- so a missing plate degrades to that same state rather than raising. The
+    real fix for the incident is the manifest existing in every image that calls this (Dockerfile
+    .worker); this only ensures the blast radius of any future missing asset is one visual layer.
+    """
+    try:
+        return static(f"images/badges/backdrops/{n}_backdrop.png")
+    except ValueError:
+        # MissingFileError subclasses ValueError, as does the missing-manifest-entry error.
+        logger.warning("badge medallion: backdrop plate %s could not be resolved", n)
+        return None
 
 
 def _medallion_frame(gv: GroupView, series, target_profile) -> dict:
