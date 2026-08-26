@@ -9,7 +9,6 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from django.templatetags.static import static
 
 from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
 from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
@@ -18,6 +17,7 @@ from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
 from trophies.services.rating_service import RatingService
 from trophies.services import badge_leaderboards as lb
+from trophies.util_modules.assets import safe_static
 
 logger = logging.getLogger(__name__)
 
@@ -147,25 +147,8 @@ def group_medallion_layers(gb) -> tuple:
 
 
 def _backdrop_url(n):
-    """The tier backdrop plate, or None if it cannot be resolved.
-
-    `static()` under ManifestStaticFilesStorage RAISES for an unresolvable name, and this function is
-    reached from the request path (badge detail, collection, browse cards), from the profile card, AND
-    from cron. So one decorative plate could take down a page render or a whole cron run -- which is
-    exactly what happened: the worker image had no manifest, so the first `static()` call raised and
-    the hourly job died naming a file that has been in the repo since 2025.
-
-    The plate is already OPTIONAL by design -- a tier outside _TIER_BACKDROP renders without one and
-    the medallion is fine -- so a missing plate degrades to that same state rather than raising. The
-    real fix for the incident is the manifest existing in every image that calls this (Dockerfile
-    .worker); this only ensures the blast radius of any future missing asset is one visual layer.
-    """
-    try:
-        return static(f"images/badges/backdrops/{n}_backdrop.png")
-    except ValueError:
-        # MissingFileError subclasses ValueError, as does the missing-manifest-entry error.
-        logger.warning("badge medallion: backdrop plate %s could not be resolved", n)
-        return None
+    """The tier backdrop plate, or None if it cannot be resolved. See util_modules.assets."""
+    return safe_static(f"images/badges/backdrops/{n}_backdrop.png")
 
 
 def _medallion_frame(gv: GroupView, series, target_profile) -> dict:

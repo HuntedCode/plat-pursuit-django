@@ -56,34 +56,44 @@ def test_the_manifest_is_a_build_artifact_not_a_committed_one():
     )
 
 
-def test_a_missing_backdrop_plate_does_not_break_the_medallion(monkeypatch):
-    """Defence in depth for the blast radius, not for the cause.
+def test_safe_static_degrades_instead_of_raising(monkeypatch):
+    """Defence in depth for the blast radius, not for the cause."""
+    from trophies.util_modules import assets
 
-    `group_medallion_layers` is reached from the request path (badge detail, collection, browse
-    cards), from the profile card, and from cron. `static()` raising there took out a whole cron run
-    over one decorative plate. The plate is already optional by design -- a tier outside
-    _TIER_BACKDROP renders without one -- so an unresolvable one degrades to that same state.
-    """
-    from trophies.services import badge_detail_service as svc
+    monkeypatch.setattr(assets, 'static', lambda p: (_ for _ in ()).throw(
+        ValueError(f"Missing staticfiles manifest entry for '{p}'")))
 
-    def boom(path):
-        raise ValueError(f"Missing staticfiles manifest entry for '{path}'")
+    assert assets.safe_static('images/badges/default.png') is None
 
-    monkeypatch.setattr(svc, 'static', boom)
 
-    assert svc._backdrop_url(4) is None, 'a missing plate must degrade, not raise'
+def test_safe_static_does_not_swallow_real_bugs(monkeypatch):
+    """Only the two manifest failures raise ValueError. A TypeError from a bad call is a bug and must
+    still surface -- a helper that eats everything is how a broken asset path lives forever."""
+    from trophies.util_modules import assets
+
+    monkeypatch.setattr(assets, 'static', lambda p: (_ for _ in ()).throw(TypeError('bad call')))
+
+    with pytest.raises(TypeError):
+        assets.safe_static('images/badges/default.png')
 
 
 @pytest.mark.django_db
-def test_the_medallion_still_composes_without_its_plate(monkeypatch):
-    """And the layers a caller gets back are still usable: the subject art survives."""
+def test_the_whole_medallion_path_survives_a_missing_manifest(monkeypatch):
+    """BOTH layers, which is what the first version of this fix got wrong.
+
+    `art_layers()` resolves the SUBJECT art and runs before the backdrop, so for a badge with no
+    custom art it is the first `static()` call on the path -- guarding only the backdrop left the
+    common case still raising. This drives the real entry point with every static lookup failing.
+    """
     from trophies.services import badge_detail_service as svc
+    from trophies.util_modules import assets
     from tests.factories import GroupBadgeFactory
 
-    monkeypatch.setattr(svc, 'static', lambda p: (_ for _ in ()).throw(ValueError('missing')))
+    monkeypatch.setattr(assets, 'static', lambda p: (_ for _ in ()).throw(ValueError('missing')))
 
-    gb = GroupBadgeFactory()
+    gb = GroupBadgeFactory()          # no custom art -> takes the placeholder branch
     tier, layers, is_avatar = svc.group_medallion_layers(gb)
 
-    assert tier, 'the backing metal is unaffected by the plate'
-    assert isinstance(layers, list), 'the caller still gets a layer list rather than an exception'
+    assert tier, 'the backing metal is CSS-driven and unaffected'
+    assert layers == [], 'unresolvable art degrades to the bare metal plate'
+    assert is_avatar is False

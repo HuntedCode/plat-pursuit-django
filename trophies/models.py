@@ -3118,7 +3118,7 @@ class GroupBadge(models.Model):
         """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
         resolved subject art). Subject art resolves: per-group override -> series default -> (user badge:
         submitter avatar) -> static default. Mirrors the legacy Badge.get_badge_layers behavior."""
-        from django.templatetags.static import static
+        from trophies.util_modules.assets import safe_static
         grp = self.platform_group
         main_url, is_avatar = None, False
         if self.badge_image_override:
@@ -3133,7 +3133,12 @@ class GroupBadge(models.Model):
         if not main_url:
             # Resolve the placeholder to a real static URL -- the branches above return `.url`s, so a raw path
             # here would render as a broken relative <img src> (the default-art bug).
-            main_url = static('images/badges/default.png')
+            #
+            # safe_static: this runs BEFORE the backdrop in group_medallion_layers, so for a badge with
+            # no custom art it is the first `static()` call on the whole medallion path -- and that path
+            # is reached from cron as well as from page renders. An unresolvable placeholder degrades to
+            # the bare metal plate rather than ending the caller.
+            main_url = safe_static('images/badges/default.png')
         return {
             'backdrop': grp.background_image.url if grp.background_image else None,
             'main': main_url,
