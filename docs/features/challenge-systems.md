@@ -511,7 +511,14 @@ Challenge progress feeds into milestones:
 
 ### Concept.absorb()
 
-The `Concept.absorb()` method handles `Genre challenge slots` and `bonus slots` via the `genre_challenge_slots` and `genre_bonus_slots` reverse relations. When concepts are reassigned during sync, any genre challenge slots pointing to the absorbed concept are migrated to the surviving concept.
+When concepts are reassigned (during sync, or when an admin approves a `ConceptJoinReview`), `Concept.absorb()` migrates both genre slot types off the doomed concept onto the survivor. The two relations behave differently because their uniqueness differs:
+
+| Relation | `unique_together` | Behavior in `absorb()` |
+|---|---|---|
+| `genre_challenge_slots` | (challenge, genre) | Bulk `.update(concept=survivor)`. The concept column carries no constraint, so both slots survive and the survivor can legitimately fill two genre slots of one challenge. |
+| `genre_bonus_slots` | (challenge, **concept**) | Per-slot. A slot in a challenge where the survivor has no bonus slot re-points normally. A slot in a challenge the survivor is *already* a bonus game in **collapses**: the survivor's slot is kept (taking on `is_completed`/`completed_at` if the doomed slot was the completed one) and the doomed slot is deleted. |
+
+Both paths then call `recalculate_challenge_counts` on every affected `Challenge` and save the counters, because a collapse changes `bonus_count` and any merge changes the collected-subgenre set behind `subgenre_count` / `platted_subgenre_count`.
 
 ### Share Cards
 
@@ -549,6 +556,17 @@ A-Z and Calendar challenges use `Game` (individual PSN title). Genre challenges 
 Both A-Z and Genre challenges expand their exclusion sets through related entities:
 - **A-Z** (`get_excluded_game_ids`): Game -> Concept siblings -> GameFamily siblings. Prevents picking e.g. the EU version of a game you already platted the NA version of.
 - **Genre** (`get_genre_excluded_concept_ids`): Concept -> GameFamily siblings. Prevents picking the PS4 concept when you already platted the PS5 concept of the same family.
+
+### Bonus Slots Cannot Be Bulk Re-Pointed on Concept Merge
+
+`GenreBonusSlot` is keyed on (challenge, **concept**), unlike every other challenge slot (AZ is (challenge, letter), calendar is (challenge, month, day), genre is (challenge, genre)). That makes it the one slot table where a concept merge can violate uniqueness: if a user had two games in one challenge's bonus pool and those games later resolve to the same Concept, a bulk `.update(concept=survivor)` raises
+
+```
+duplicate key value violates unique constraint
+"trophies_genrebonusslot_challenge_id_concept_id_fff4fa07_uniq"
+```
+
+`Concept.absorb()` collapses the pair instead (see [Concept.absorb()](#conceptabsorb) above). The doomed slot must be **deleted**, not merely skipped: `concept` is `on_delete=SET_NULL`, so a skipped duplicate survives the source concept's deletion as a bonus slot that looks assigned in the DB but renders empty. Pinned by `tests/engine/test_concept_absorb.py`.
 
 ### Genre Merge Map
 Some PSN genre tags need normalization: `SIMULATOR` -> `SIMULATION`, `MUSIC/RHYTHM` -> `MUSIC_RHYTHM`, `PARTY` -> `FAMILY`. The assignment endpoint accepts concepts tagged with either the raw or curated key. The search endpoint handles the reverse mapping when filtering.
