@@ -19,8 +19,15 @@ the bug regressed.
 """
 
 import pytest
+from django.utils import timezone
 
-from trophies.models import Concept, UserConceptRating
+from trophies.models import (
+    Challenge,
+    Concept,
+    GenreBonusSlot,
+    GenreChallengeSlot,
+    UserConceptRating,
+)
 from tests.factories import (
     CommentFactory,
     ConceptFactory,
@@ -185,3 +192,134 @@ def test_rating_dedups_by_profile_and_group_keeping_survivors():
     assert UserConceptRating.objects.filter(profile=profile, concept=survivor).count() == 1
     # the doomed duplicate was not migrated and died with the cascade
     assert not UserConceptRating.objects.filter(pk=doomed_rating.pk).exists()
+
+
+# --- genre challenge slots ----------------------------------------------------
+#
+# GenreBonusSlot has unique_together (challenge, concept), so it is the one
+# Concept relation absorb() cannot bulk-update: a plain .update(concept=self)
+# raises IntegrityError the moment both concepts are bonus games in the same
+# challenge. Prod hit this approving a ConceptJoinReview in the admin.
+
+
+def _genre_challenge(profile):
+    return Challenge.objects.create(
+        profile=profile,
+        challenge_type='genre',
+        name='Genre Challenge',
+    )
+
+
+def test_bonus_slot_repoints_when_survivor_has_no_slot_in_that_challenge():
+    profile = ProfileFactory()
+    survivor = ConceptFactory()
+    doomed = ConceptFactory()
+    challenge = _genre_challenge(profile)
+    slot = GenreBonusSlot.objects.create(challenge=challenge, concept=doomed)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    slot.refresh_from_db()
+    assert slot.concept_id == survivor.id
+
+
+def test_duplicate_bonus_slot_collapses_instead_of_raising():
+    """Both concepts hold a bonus slot in the same challenge — the survivor's
+    row is kept and the doomed duplicate is deleted, not left to violate
+    (challenge, concept) uniqueness."""
+    profile = ProfileFactory()
+    survivor = ConceptFactory()
+    doomed = ConceptFactory()
+    challenge = _genre_challenge(profile)
+    survivor_slot = GenreBonusSlot.objects.create(challenge=challenge, concept=survivor)
+    doomed_slot = GenreBonusSlot.objects.create(challenge=challenge, concept=doomed)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert GenreBonusSlot.objects.filter(challenge=challenge).count() == 1
+    assert GenreBonusSlot.objects.filter(pk=survivor_slot.pk).exists()
+    assert not GenreBonusSlot.objects.filter(pk=doomed_slot.pk).exists()
+
+
+def test_duplicate_bonus_slot_is_deleted_not_left_as_a_phantom_empty_slot():
+    """concept is SET_NULL, so a duplicate merely skipped would survive the
+    doomed concept's delete as an assigned-looking-but-empty bonus slot."""
+    profile = ProfileFactory()
+    survivor = ConceptFactory()
+    doomed = ConceptFactory()
+    challenge = _genre_challenge(profile)
+    GenreBonusSlot.objects.create(challenge=challenge, concept=survivor)
+    GenreBonusSlot.objects.create(challenge=challenge, concept=doomed)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert not GenreBonusSlot.objects.filter(
+        challenge=challenge, concept__isnull=True
+    ).exists()
+
+
+def test_collapsed_bonus_slot_carries_its_completion_to_the_survivor():
+    """The doomed slot was the completed one — that progress belongs to the
+    survivor, since both slots were always the same game."""
+    profile = ProfileFactory()
+    survivor = ConceptFactory()
+    doomed = ConceptFactory()
+    challenge = _genre_challenge(profile)
+    survivor_slot = GenreBonusSlot.objects.create(
+        challenge=challenge, concept=survivor, is_completed=False
+    )
+    completed_at = timezone.now()
+    GenreBonusSlot.objects.create(
+        challenge=challenge, concept=doomed,
+        is_completed=True, completed_at=completed_at,
+    )
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    survivor_slot.refresh_from_db()
+    assert survivor_slot.is_completed is True
+    assert survivor_slot.completed_at == completed_at
+
+
+def test_bonus_count_is_recalculated_after_a_collapse():
+    """Collapsing two slots into one must not leave bonus_count reading 2."""
+    profile = ProfileFactory()
+    survivor = ConceptFactory()
+    doomed = ConceptFactory()
+    challenge = _genre_challenge(profile)
+    GenreBonusSlot.objects.create(challenge=challenge, concept=survivor)
+    GenreBonusSlot.objects.create(challenge=challenge, concept=doomed)
+    Challenge.objects.filter(pk=challenge.pk).update(bonus_count=2)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    challenge.refresh_from_db()
+    assert challenge.bonus_count == 1
+
+
+def test_genre_slot_repoints_without_collapsing():
+    """GenreChallengeSlot is keyed on (challenge, genre), so both slots survive
+    the merge and simply both point at the survivor."""
+    profile = ProfileFactory()
+    survivor = ConceptFactory()
+    doomed = ConceptFactory()
+    challenge = _genre_challenge(profile)
+    survivor_slot = GenreChallengeSlot.objects.create(
+        challenge=challenge, genre='action', concept=survivor
+    )
+    doomed_slot = GenreChallengeSlot.objects.create(
+        challenge=challenge, genre='rpg', concept=doomed
+    )
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    survivor_slot.refresh_from_db()
+    doomed_slot.refresh_from_db()
+    assert survivor_slot.concept_id == survivor.id
+    assert doomed_slot.concept_id == survivor.id

@@ -1276,11 +1276,55 @@ class Concept(models.Model):
 
         # GameFamilyProposal M2M removed — proposal model deleted in Phase 2.6.
 
-        # Genre challenge slots
+        # Genre challenge slots. unique_together is (challenge, genre) here, so
+        # the concept column carries no constraint and a bulk re-point is safe:
+        # the survivor legitimately ends up filling two genre slots of the same
+        # challenge when both merged concepts were assigned to it.
+        affected_challenge_ids = set(
+            other.genre_challenge_slots.values_list('challenge_id', flat=True)
+        )
         other.genre_challenge_slots.update(concept=self)
 
-        # Genre bonus slots
-        other.genre_bonus_slots.update(concept=self)
+        # Genre bonus slots. unique_together IS (challenge, concept) here, so a
+        # bulk re-point blows up with an IntegrityError whenever both concepts
+        # sit in the same challenge's bonus pool — the survivor already owns
+        # that (challenge, concept) row. Collapse the pair instead: the two
+        # slots were always the same game, so the survivor's row stays (taking
+        # on completion, which is real user progress) and the duplicate is
+        # deleted. Deleting is required rather than optional — `concept` is
+        # SET_NULL, so a duplicate left in place would outlive other.delete()
+        # as a phantom empty bonus slot in the user's challenge.
+        survivor_bonus_by_challenge = {
+            slot.challenge_id: slot for slot in self.genre_bonus_slots.all()
+        }
+        for slot in other.genre_bonus_slots.all():
+            affected_challenge_ids.add(slot.challenge_id)
+            survivor_slot = survivor_bonus_by_challenge.get(slot.challenge_id)
+            if survivor_slot is None:
+                slot.concept = self
+                slot.save(update_fields=['concept'])
+                survivor_bonus_by_challenge[slot.challenge_id] = slot
+                continue
+            if slot.is_completed and not survivor_slot.is_completed:
+                survivor_slot.is_completed = True
+                survivor_slot.completed_at = slot.completed_at
+                survivor_slot.save(update_fields=['is_completed', 'completed_at'])
+            slot.delete()
+
+        # Both paths change what a challenge actually holds (a collapsed bonus
+        # slot drops bonus_count; two slots merging onto one concept shrinks the
+        # collected-subgenre set), so refresh the denormalized counters on every
+        # challenge this absorb touched. Imported locally: challenge_service
+        # imports from this module.
+        if affected_challenge_ids:
+            from trophies.services.challenge_service import recalculate_challenge_counts
+
+            for challenge in Challenge.objects.filter(id__in=affected_challenge_ids):
+                recalculate_challenge_counts(challenge)
+                challenge.save(update_fields=[
+                    'filled_count', 'completed_count', 'subgenre_count',
+                    'platted_subgenre_count', 'bonus_count', 'updated_at',
+                ])
 
         # GameFamily — inherit if this concept doesn't have one
         if other.family and not self.family:
