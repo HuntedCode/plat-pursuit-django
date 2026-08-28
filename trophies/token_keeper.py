@@ -33,6 +33,7 @@ from trophies.services.profile_stats_service import update_profile_games, update
 from trophies.services.badge_service import check_profile_badges
 from trophies.services.milestone_service import check_all_milestones_for_user
 from trophies.services.concept_anchor_service import try_anchor_new_game
+from trophies.services.psn_metadata_service import capture_psn_concept_data
 
 logger = logging.getLogger("psn_api")
 
@@ -1188,9 +1189,12 @@ class TokenKeeper:
         bucket (distributing load across instances) and rate-limit accounting is
         charged to the instance that actually issued the HTTP call.
 
-        Returns (details: dict, used_fallback_region: bool). The flag tells the caller
-        whether the returned payload came from a non-default storefront, so mutations
-        to existing concepts can be gated off per the Asian-title rule.
+        Returns (details: dict, used_fallback_region: bool, region: tuple[str, str]).
+        The flag tells the caller whether the returned payload came from a non-default
+        storefront, so mutations to existing concepts can be gated off per the
+        Asian-title rule. `region` is the (country, language) pair that actually
+        ANSWERED -- PSN returns a different name and rating per storefront, so a
+        payload cannot be interpreted later without knowing which one produced it.
         """
         call_kwargs = {
             "title_id": title_id,
@@ -1219,7 +1223,7 @@ class TokenKeeper:
 
         details = _attempt('US', 'en-US')
         if self._details_is_populated(details):
-            return details, False
+            return details, False, ('US', 'en-US')
 
         logger.info("Primary US/en-US response sparse; walking Asian-region fallbacks")
 
@@ -1227,11 +1231,11 @@ class TokenKeeper:
             candidate = _attempt(country, language)
             if self._details_is_populated(candidate):
                 logger.info(f"Region fallback {country}/{language}: populated concept details")
-                return candidate, True
+                return candidate, True, (country, language)
             logger.info(f"Region fallback {country}/{language}: sparse, continuing")
 
         logger.warning("All Asian-region fallbacks returned sparse responses; using primary result")
-        return details, False
+        return details, False, ('US', 'en-US')
 
     # Job Requests
 
@@ -1868,7 +1872,7 @@ class TokenKeeper:
                 api_platform = game.title_platform[0]
                 logger.warning(f"Platform mismatch for {title_id.title_id}: TitleID={title_id.platform}, Game={game.title_platform}. Using {api_platform}.")
 
-            details, used_fallback_region = self._get_details_with_region_fallback(
+            details, used_fallback_region, (psn_country, psn_language) = self._get_details_with_region_fallback(
                 title_id=title_id.title_id,
                 platform=api_platform,
                 account_id=profile.account_id,
@@ -1905,6 +1909,20 @@ class TokenKeeper:
                     # No PSN-derived enrichment to defer — process_match already
                     # ran inside try_anchor_new_game.
                     #
+                    # THIS IS WHERE PSN DATA USED TO GO TO WASTE. The full `details`
+                    # response is in hand, the Game has landed on an IGDB-anchored
+                    # Concept, and historically exactly one field survived: bg_url,
+                    # patched in below after the profile-banner gap. Name, publisher,
+                    # genres, subgenres, descriptions, content rating and the media
+                    # list were all sitting right here and were dropped.
+                    #
+                    # Now PSN's payload is recorded first, in its own tables. Nothing
+                    # below changed, and nothing reads these yet, so the anchored
+                    # concept still displays exactly what it displayed before.
+                    capture_psn_concept_data(
+                        concept, details, country=psn_country, language=psn_language,
+                    )
+
                     # ...but process_match only captured IGDB media. PSN GAMEHUB
                     # art is the preferred banner background and we already have
                     # the PSN `details` in hand, so apply PSN bg_url over the
@@ -1928,8 +1946,32 @@ class TokenKeeper:
                     # Existing game on an IGDB-anchored Concept: preserve it.
                     # Region detection + title_id capture below still run.
                     concept = game.concept
+
+                    # The OTHER place PSN data went to waste, and the one that is easy
+                    # to miss: the branch above only fires the first time a Game is ever
+                    # anchored, so for every already-anchored Game this arm is where the
+                    # `details` response lands -- and it rescued nothing at all, not even
+                    # the bg_url the sibling branch takes. Same additive capture, same
+                    # guarantee: nothing below changed and nothing reads these tables.
+                    capture_psn_concept_data(
+                        concept, details, country=psn_country, language=psn_language,
+                    )
                 else:
                     concept, concept_created = PsnApiService.create_concept_from_details(details)
+
+                    # Third and last capture site: a PSN-native concept, the one case where our
+                    # derived copy DOES keep most of the payload. Captured anyway, because "most" is
+                    # not "all" (the raw response holds what we never parsed) and because a row here
+                    # is what lets the anchored branches above recognise the same PSN concept later.
+                    #
+                    # Unconditional, ahead of the Asian-storefront gate below, and that is safe only
+                    # because rows are keyed per region: a JP response writes the JP row and cannot
+                    # reach the US one, so the rule the gate enforces for Concept -- fallback data
+                    # must never overwrite the default storefront's -- holds here by construction
+                    # rather than by branching.
+                    capture_psn_concept_data(
+                        concept, details, country=psn_country, language=psn_language,
+                    )
 
                     # Gate: data from a non-default (Asian) storefront may only be used
                     # to initialize a NEW concept. It must never overwrite fields on an
