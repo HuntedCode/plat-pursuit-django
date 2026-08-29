@@ -1,7 +1,9 @@
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from trophies.models import Game
 from trophies.psn_manager import PSNManager
+from trophies.util_modules.constants import TITLE_ID_BLACKLIST
 from trophies.util_modules.psn_sweep import (
     SweepConfigurationError, resolve_api_platform, resolve_driver_profile,
 )
@@ -35,11 +37,28 @@ class Command(BaseCommand):
             '--missing-only', action='store_true',
             help='Only enqueue games whose concept has no PSNConceptData row yet. This is the '
                  'backfill filter: it shrinks every re-run to what is genuinely uncaptured, so '
-                 'an interrupted sweep can be resumed without re-spending API calls.',
+                 'an interrupted sweep can be resumed without re-spending API calls. CAVEAT: it '
+                 'shrinks on SUCCESS only. A title PSN answers sparsely for writes no row, so it '
+                 'stays in the filter and is re-swept every run -- and those are the most '
+                 'expensive games, since a sparse US response walks every Asian fallback before '
+                 'giving up. Expect the remaining count to stop converging on a floor of '
+                 'permanently-unanswerable titles rather than reaching zero.',
         )
         parser.add_argument(
             '--platform', default=None,
             help='Only enqueue games whose title_platform contains this value (e.g. PS4, PS5).',
+        )
+        parser.add_argument(
+            '--all-title-ids', action='store_true',
+            help='Enqueue one job per title_id instead of only the first. A game can carry US, EU '
+                 'and JP title_ids; the default sweeps only title_ids[0], which is whichever one '
+                 'the first syncing user happened to own. Since a game with any PSN row is then '
+                 'filtered out by --missing-only, the others are never revisited. Use this to '
+                 'gather the regional storefronts too -- it multiplies the PSN cost per game.',
+        )
+        parser.add_argument(
+            '--yes', action='store_true',
+            help='Skip the confirmation prompt. Required for non-interactive runs.',
         )
         parser.add_argument(
             '--limit', type=int, default=None,
@@ -48,6 +67,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # Checked FIRST, before anything is queued. Capture is behind a kill switch, and with it off
+        # every job still drains, still spends its PSN calls, and still performs the other writes --
+        # while creating zero rows. Worse, the failure is invisible on retry: --missing-only would
+        # find nothing captured and re-enqueue the whole catalogue at full price.
+        if not settings.PSN_METADATA_CAPTURE_ENABLED:
+            raise CommandError(
+                "PSN_METADATA_CAPTURE_ENABLED is False, so this sweep would spend the entire "
+                "catalogue PSN budget and capture nothing. Enable it and re-run. (Note the setting "
+                "is a strict == 'True' compare: 'true', '1' and 'yes' all read as False.)"
+            )
+
         driver = self._resolve_driver(options['driver_profile'])
         dry_run = options['dry_run']
         limit = options['limit']
@@ -83,8 +113,13 @@ class Command(BaseCommand):
             "Each game costs at least one PSN get_details call, more if it walks region fallbacks."
         ))
 
+        if not dry_run and not options['yes'] and not self._confirm():
+            self.stdout.write(self.style.ERROR("Operation cancelled."))
+            return
+
         enqueued = 0
         skipped_platform = 0
+        skipped_blacklist = 0
         for game in games.iterator():
             if limit and enqueued >= limit:
                 break
@@ -94,25 +129,42 @@ class Command(BaseCommand):
                 skipped_platform += 1
                 continue
 
-            if dry_run:
-                enqueued += 1
+            # Belt-and-braces against an empty list. `.exclude(title_ids=[])` already covers the
+            # reachable case, but a crash here would abort mid-sweep with an arbitrary number of
+            # jobs already queued and no record of where it stopped.
+            if not game.title_ids:
                 continue
 
-            # sync_title_id resolves its own platform from the Game/TitleID, so the platform
-            # check above is a skip filter rather than a job argument.
-            PSNManager.assign_job(
-                'sync_title_id',
-                [game.title_ids[0], game.np_communication_id],
-                driver.id,
-                priority_override='bulk_priority',
-            )
-            enqueued += 1
-            if enqueued % 500 == 0:
-                self.stdout.write(f"  queued {enqueued}...")
+            title_ids = game.title_ids if options['all_title_ids'] else game.title_ids[:1]
+            # The normal queue path skips these (see _walk_title_stats); sweeping by Game would
+            # otherwise re-run concept resolution on exactly the titles it was disabled for.
+            title_ids = [t for t in title_ids if t not in TITLE_ID_BLACKLIST]
+            if not title_ids:
+                skipped_blacklist += 1
+                continue
+
+            if dry_run:
+                enqueued += len(title_ids)
+                continue
+
+            for title_id in title_ids:
+                # sync_title_id resolves its own platform from the Game/TitleID, so the platform
+                # check above is a skip filter rather than a job argument.
+                PSNManager.assign_job(
+                    'sync_title_id',
+                    [title_id, game.np_communication_id],
+                    driver.id,
+                    priority_override='bulk_priority',
+                )
+                enqueued += 1
+                if enqueued % 500 == 0:
+                    self.stdout.write(f"  queued {enqueued}...")
 
         skip_note = (
             f", skipped {skipped_platform} with no resolvable platform" if skipped_platform else ""
         )
+        if skipped_blacklist:
+            skip_note += f", skipped {skipped_blacklist} blacklisted"
         if dry_run:
             self.stdout.write(self.style.SUCCESS(
                 f"[DRY RUN] Would enqueue {enqueued} game(s){skip_note}. No jobs queued."
@@ -124,6 +176,10 @@ class Command(BaseCommand):
             f"They drain via the TokenKeeper worker against driver '{driver.psn_username}'; "
             f"avoid syncing that profile until the sweep finishes, then reset its sync progress."
         ))
+
+    def _confirm(self):
+        confirm = input("Enqueue this sweep against the live catalogue? (y/n):").strip().lower()
+        return confirm == 'y'
 
     def _resolve_driver(self, username):
         try:
