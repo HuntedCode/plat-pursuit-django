@@ -164,20 +164,45 @@ class Command(BaseCommand):
             f"(created when PSN returned nothing usable, so these are evidence of a sparse answer)"
         )
 
-        self.stdout.write("\nReachable-but-uncaptured, by platform:")
-        for platform in ['PS5', 'PS4', 'PS3', 'PSVITA', 'PSPC']:
-            n = (
-                uncaptured.annotate(n=Count('games', filter=(
-                    Q(games__title_platform__contains=platform) & ~Q(games__title_ids=[])
-                )))
-                .filter(n__gt=0).count()
-            )
-            self.stdout.write(f"  {platform:8} {n:>6}")
+        # Both buckets get a platform breakdown. Only breaking down the reachable one was a real
+        # blind spot: on the first prod run "games, but no title_id" was 3147 of a 3813 gap and went
+        # entirely unclassified, while the platform table showed a modern-looking PS4/PS5 remainder.
+        # Reading that table alone suggested the opposite conclusion to the one the data supports.
+        no_ids = (
+            uncaptured.filter(games__isnull=False)
+            .annotate(n=Count('games', filter=~Q(games__title_ids=[]))).filter(n=0)
+        )
+        reachable_qs = (
+            uncaptured.annotate(n=Count('games', filter=~Q(games__title_ids=[]))).filter(n__gt=0)
+        )
 
-        self.stdout.write(self.style.WARNING(
-            "\nPS3/PSVITA concentration here is the expected shape: the PS3 storefront is retired, "
-            "so game_details answers sparsely and the sync falls through to a stub concept without "
-            "capturing. Re-running the sweep cannot fix that -- only a different PSN endpoint or "
-            "another data source could. Concepts with no games or no title_id are likewise not "
-            "fixable by re-running; they need the sweep to enqueue something it currently cannot."
-        ))
+        self.stdout.write("\nBy platform (a concept spanning platforms counts under each):")
+        self.stdout.write(f"  {'':8} {'no title_id':>12} {'reachable':>12}")
+        for platform in ['PS5', 'PS4', 'PS3', 'PSVITA', 'PSPC']:
+            # pk__in against a queryset, not a materialised list: these buckets run to thousands of
+            # rows on prod and the point is to keep every number a DB-side aggregate.
+            without = Concept.objects.filter(
+                pk__in=no_ids.values('pk'), games__title_platform__contains=platform
+            ).distinct().count()
+            within = Concept.objects.filter(
+                pk__in=reachable_qs.values('pk'), games__title_platform__contains=platform
+            ).distinct().count()
+            self.stdout.write(f"  {platform:8} {without:>12} {within:>12}")
+
+        # Data-driven, not a canned narrative. An earlier version asserted a PS3/Vita conclusion
+        # unconditionally, which on the first real prod run contradicted the numbers above it.
+        if no_title_ids > reachable:
+            self.stdout.write(self.style.WARNING(
+                f"\nLargest bucket is 'no title_id' ({no_title_ids}), not sparse PSN answers "
+                f"({stubs} stubs). title_ids are only populated by the title_stats walk, which "
+                f"covers modern titles, so a game that only ever arrived via the trophy list never "
+                f"gets one and can never be asked about. Re-running the sweep cannot win these -- "
+                f"they need a title_id from somewhere else. Read the platform split above: mostly "
+                f"PS3/PSVITA is structural, mostly PS4/PS5 is a real hole in title_id collection."
+            ))
+        else:
+            self.stdout.write(self.style.WARNING(
+                f"\nLargest bucket is 'reachable' ({reachable}): asked, or not yet asked. Since "
+                f"attempts are not recorded, re-running the sweep with --missing-only is the "
+                f"cheapest way to find out how many are winnable."
+            ))

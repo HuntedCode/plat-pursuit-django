@@ -199,27 +199,52 @@ def test_a_concept_with_one_titleless_game_and_one_real_game_counts_as_reachable
     assert 'games, but no title_id:          0' in printed
 
 
-def test_the_platform_breakdown_separates_ps3_from_modern():
-    """The whole question behind --gap: is the shortfall concentrated in platforms whose storefront
-    is retired, in which case re-running the sweep cannot win it back."""
+def test_both_gap_buckets_are_broken_down_by_platform():
+    """The blind spot on the first prod run: only the REACHABLE bucket was classified, so 3147 of a
+    3813 gap went unclassified while the platform table showed a modern-looking remainder. Reading
+    that table alone pointed at the opposite conclusion to the one the data supported."""
     from tests.factories import GameFactory
 
-    ps3 = ConceptFactory()
-    GameFactory(concept=ps3, title_ids=['NPUB30001_00'], title_platform=['PS3'])
-    # A MIXED concept: a titleless PS3 entry beside a sweepable PS5 one. This shape is what makes
-    # the breakdown honest -- under a multi-valued exclude() the titleless game suppresses the whole
-    # concept and PS5 silently reads 0, which is how a reachable platform looks unreachable.
-    ps5 = ConceptFactory()
-    GameFactory(concept=ps5, title_ids=[], title_platform=['PS3'])
-    GameFactory(concept=ps5, title_ids=['PPSA00001_00'], title_platform=['PS5'])
+    no_id = ConceptFactory()
+    GameFactory(concept=no_id, title_ids=[], title_platform=['PS3'])
+    # A MIXED concept: a titleless PS3 entry beside a sweepable PS5 one. Under a multi-valued
+    # exclude() the titleless game suppresses the whole concept and PS5 silently reads 0, which is
+    # how a reachable platform comes to look unreachable.
+    mixed = ConceptFactory()
+    GameFactory(concept=mixed, title_ids=[], title_platform=['PS3'])
+    GameFactory(concept=mixed, title_ids=['PPSA00001_00'], title_platform=['PS5'])
 
     printed = _gap()
-    tail = printed.split('by platform:')[1]
+    rows = {
+        l.split()[0]: l.split()[1:]
+        for l in printed.split('counts under each):')[1].splitlines()
+        if l.strip().startswith(('PS5', 'PS4', 'PS3', 'PSVITA', 'PSPC'))
+    }
 
-    assert 'PS3' in tail and 'PS5' in tail
-    ps3_line = [l for l in tail.splitlines() if l.strip().startswith('PS3')][0]
-    ps5_line = [l for l in tail.splitlines() if l.strip().startswith('PS5')][0]
-    assert ps3_line.split()[-1] == '1' and ps5_line.split()[-1] == '1'
+    assert rows['PS3'][0] == '1', 'the no-title_id bucket must be classified, not just reachable'
+    assert rows['PS5'][1] == '1', 'a mixed concept must still count as reachable on PS5'
+
+
+def test_the_conclusion_follows_the_data_rather_than_a_canned_narrative():
+    """The first version asserted a PS3/Vita story unconditionally, and on the first real prod run
+    that text contradicted the numbers printed directly above it."""
+    from tests.factories import GameFactory
+
+    for _ in range(3):
+        c = ConceptFactory()
+        GameFactory(concept=c, title_ids=[], title_platform=['PS3'])
+
+    assert "Largest bucket is 'no title_id'" in _gap()
+
+
+def test_the_conclusion_flips_when_the_reachable_bucket_dominates():
+    from tests.factories import GameFactory
+
+    for i in range(3):
+        c = ConceptFactory()
+        GameFactory(concept=c, title_ids=[f'CUSA{i:05}_00'], title_platform=['PS4'])
+
+    assert "Largest bucket is 'reachable'" in _gap()
 
 
 def test_stub_concepts_are_surfaced_as_evidence_of_a_sparse_answer():
@@ -233,20 +258,45 @@ def test_stub_concepts_are_surfaced_as_evidence_of_a_sparse_answer():
 
 
 def test_the_gap_report_costs_no_psn_calls_and_never_walks_the_concepts():
-    """Runs against 18k concepts on prod. Every number must be a DB-side aggregate."""
+    """Runs against 18k concepts on prod. Every number must be a DB-side aggregate.
+
+    TWO checks, because each misses what the other catches:
+
+      * SHAPE alone is fooled by an annotated queryset -- `annotate(Count(...))` puts COUNT in the
+        SQL of a query that still fetches every row, so a walk over it reads as an aggregate.
+      * SCALING alone is fooled by a walk over a plain `.all()` -- that is ONE query no matter how
+        many rows come back, so the count never moves.
+
+    Together they cover both: an unbounded fetch trips the shape check, and an N+1 trips scaling.
+    """
     from django.test.utils import CaptureQueriesContext
     from django.db import connection
     from tests.factories import GameFactory
 
-    for i in range(15):
-        c = ConceptFactory()
-        GameFactory(concept=c, title_ids=[f'CUSA{i:05}_00'], title_platform=['PS4'])
+    def sql_for_run():
+        with CaptureQueriesContext(connection) as ctx:
+            call_command('audit_psn_capture', '--gap', stdout=io.StringIO())
+        return [q['sql'] for q in ctx.captured_queries]
 
-    with CaptureQueriesContext(connection) as ctx:
-        call_command('audit_psn_capture', '--gap', stdout=io.StringIO())
+    def add(n, start):
+        for i in range(n):
+            c = ConceptFactory()
+            GameFactory(concept=c, title_ids=[f'CUSA{start + i:05}_00'], title_platform=['PS4'])
+            d = ConceptFactory()
+            GameFactory(concept=d, title_ids=[], title_platform=['PS3'])
+
+    add(4, 0)
+    small = sql_for_run()
+    add(30, 100)
+    big = sql_for_run()
 
     unbounded = [
-        q['sql'] for q in ctx.captured_queries
-        if 'count(' not in q['sql'].lower() and 'limit' not in q['sql'].lower()
+        q for q in big
+        if 'count(' not in q.lower() and 'limit' not in q.lower()
     ]
-    assert not unbounded, 'the gap report walks rows: ' + ' | '.join(unbounded)
+    assert not unbounded, 'these queries neither aggregate nor bound their rows: ' + ' | '.join(unbounded)
+
+    assert len(small) == len(big), (
+        f'query count grew from {len(small)} to {len(big)} as the table went 8 -> 68 concepts; '
+        f'something is issuing one query per row'
+    )
