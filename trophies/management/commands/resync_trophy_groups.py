@@ -1,8 +1,11 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
 
-from trophies.models import Game, Profile, ScoutAccount
+from trophies.models import Game
 from trophies.psn_manager import PSNManager
+from trophies.util_modules.psn_sweep import (
+    SweepConfigurationError, resolve_api_platform, resolve_driver_profile,
+)
 
 
 class Command(BaseCommand):
@@ -77,7 +80,7 @@ class Command(BaseCommand):
             if limit and enqueued >= limit:
                 break
 
-            platform = self._resolve_platform(game.title_platform)
+            platform = resolve_api_platform(game.title_platform)
             if platform is None:
                 skipped_platform += 1
                 self.stdout.write(self.style.WARNING(
@@ -114,35 +117,7 @@ class Command(BaseCommand):
         ))
 
     def _resolve_driver(self, username):
-        """Resolve the driver Profile: explicit --driver-profile, else first
-        active scout. The driver only supplies auth/context (the PSN call is
-        title-level), so it does not need to own any of the games."""
-        if username:
-            try:
-                return Profile.objects.get(psn_username=username.lower())
-            except Profile.DoesNotExist:
-                raise CommandError(f"No profile with psn_username '{username}'.")
-
-        scout = (
-            ScoutAccount.objects.filter(status='active')
-            .select_related('profile').first()
-        )
-        if not scout:
-            raise CommandError(
-                "No --driver-profile given and no active ScoutAccount found. "
-                "Pass --driver-profile <psn_username>."
-            )
-        return scout.profile
-
-    @staticmethod
-    def _resolve_platform(title_platform):
-        """Resolve the API platform for a game. PSPC titles report
-        title_platform[0]='PSPC' and carry the real platform at [1]. Returns
-        None when the list is empty or only 'PSPC' with no fallback, so the
-        caller can skip rather than IndexError."""
-        if not title_platform:
-            return None
-        first = title_platform[0]
-        if first != 'PSPC':
-            return first
-        return title_platform[1] if len(title_platform) > 1 else None
+        try:
+            return resolve_driver_profile(username)
+        except SweepConfigurationError as exc:
+            raise CommandError(str(exc))
