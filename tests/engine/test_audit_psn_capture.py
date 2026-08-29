@@ -300,3 +300,58 @@ def test_the_gap_report_costs_no_psn_calls_and_never_walks_the_concepts():
         f'query count grew from {len(small)} to {len(big)} as the table went 8 -> 68 concepts; '
         f'something is issuing one query per row'
     )
+
+
+# --- title observations in the report: the block that was unreachable when it mattered ----------
+
+def test_observations_are_reported_even_with_zero_concept_rows():
+    """CRITICAL from the audit round: the observation block originally sat BELOW the
+    `if total == 0: return` early-out -- unreachable in precisely the default post-deploy state
+    (observations fill from every sync; concept rows only from unresolved titles), which is
+    exactly when an operator runs this to check the backfill."""
+    from tests.factories import GameFactory
+    from trophies.services.psn_metadata_service import capture_title_stats_observation
+    from types import SimpleNamespace
+
+    game = GameFactory(np_communication_id='NPWR55555_00')
+    capture_title_stats_observation(game, SimpleNamespace(
+        title_id='CUSA05555_00', name='Stray', image_url='', category=None,
+        play_count=0, first_played_date_time=None, last_played_date_time=None, play_duration=None,
+    ))
+
+    printed = _run()
+
+    assert 'Title observations' in printed
+    assert 'rows:              1' in printed
+
+
+def test_cross_source_disagreement_is_not_counted_as_a_rename():
+    """title_stats' name and trophy_titles' name disagree SYSTEMATICALLY ((TM), suffixes), so an
+    unfiltered distinct-count reads as 'every dual-source game was renamed' -- noise, in a report
+    that exists to be believed."""
+    from psnawp_api.models.trophies import PlatformType
+    from tests.factories import GameFactory
+    from trophies.services.psn_metadata_service import (
+        capture_title_page_bulk, capture_title_stats_observation,
+    )
+    from types import SimpleNamespace
+
+    game = GameFactory(np_communication_id='NPWR66666_00')
+    capture_title_page_bulk([SimpleNamespace(
+        np_communication_id='NPWR66666_00', np_title_id=None, np_service_name='trophy',
+        trophy_set_version='01.00', title_name='Stray™', title_detail='',
+        title_icon_url='', title_platform=frozenset({PlatformType.PS5}),
+        has_trophy_groups=False,
+        defined_trophies=SimpleNamespace(bronze=1, silver=0, gold=0, platinum=0),
+        progress=0, hidden_flag=False,
+        earned_trophies=SimpleNamespace(bronze=0, silver=0, gold=0, platinum=0),
+        last_updated_datetime=None,
+    )])
+    capture_title_stats_observation(game, SimpleNamespace(
+        title_id='CUSA06666_00', name='Stray', image_url='', category=None,
+        play_count=0, first_played_date_time=None, last_played_date_time=None, play_duration=None,
+    ))
+
+    printed = _run()
+
+    assert 'renamed (>1 name): 0' in printed, 'never renamed; two sources disagreeing is not a rename'

@@ -7,6 +7,7 @@ from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from collections import defaultdict
 from django.db.models import Count, Max, Min, Q
+from trophies.services.psn_metadata_service import capture_title_stats_observation
 from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
@@ -380,6 +381,9 @@ class PsnApiService:
         if games:
             needs_refresh = False
             for game in games:
+                # Ahead of the ProfileGame guard below: the observation is about the TITLE, and a
+                # missing ProfileGame row (the early return) is no reason to drop it.
+                capture_title_stats_observation(game, title_stats)
                 try:
                     profile_game = ProfileGame.objects.get(profile=profile, game=game)
                 except ProfileGame.DoesNotExist:
