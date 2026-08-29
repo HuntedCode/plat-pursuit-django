@@ -131,3 +131,182 @@ def capture_psn_concept_data(concept, details, *, country='', language=''):
             getattr(concept, 'concept_id', None), psn_id, exc_info=True,
         )
         return None
+
+
+# ─── Game-level observations (trophy_titles / title_stats) ────────────────────────────────────────
+#
+# Same contract as concept capture above: behind the same kill switch, never raises, savepointed.
+# But APPEND-ON-CHANGE rather than latest-value -- see the PSNTitleObservation docstring for why a
+# latest-value sidecar cannot answer the question this table exists for.
+
+import hashlib
+import json
+from datetime import timedelta
+
+from django.utils import timezone
+
+from trophies.models import Game, PSNTitleObservation
+
+
+def _observation_content(source, fields):
+    """The canonical stored tuple and its hash. The hash covers EXACTLY what is stored, so two
+    payloads that differ only in per-user data (progress, earned counts) hash identically and
+    collapse into one row -- which is what keeps this table at ~one row per game, not one per sync."""
+    # The hash covers source + fields; the returned dict is fields ONLY, so callers can pass
+    # `source=` explicitly without a duplicate-kwarg TypeError in the bulk constructor -- which the
+    # never-raises guard would swallow into a silent "0 captured". Found by test, kept as a comment.
+    canonical = json.dumps({'source': source, **fields}, sort_keys=True, ensure_ascii=False, default=str)
+    return fields, hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
+def _title_fields(trophy_title):
+    """Title-level fields ONLY. progress / earned_trophies / hidden_flag / last_updated_datetime are
+    per-user and must never land in a game-level table."""
+    defined = trophy_title.defined_trophies
+    return {
+        'title_name_raw': trophy_title.title_name or '',
+        'title_detail': trophy_title.title_detail or '',
+        # Query string stripped before hashing: trophy icons are path-addressed today, but a CDN
+        # cache-buster would otherwise mint a new row per change of token, for every game at once.
+        'title_icon_url': (trophy_title.title_icon_url or '').split('?')[0],
+        'np_service_name': trophy_title.np_service_name or '',
+        'trophy_set_version': trophy_title.trophy_set_version or '',
+        'title_platform': sorted(p.value for p in (trophy_title.title_platform or [])),
+        'has_trophy_groups': trophy_title.has_trophy_groups,
+        'defined_trophies': {
+            'bronze': defined.bronze, 'silver': defined.silver,
+            'gold': defined.gold, 'platinum': defined.platinum,
+        } if defined else {},
+        # np_title_id is DELIBERATELY absent: psnawp's trophy_titles paginator hardcodes it to
+        # None (only trophy_titles_for_title populates it, and those payloads never reach this
+        # capture), so including it stored '' on 100% of rows -- the exact wrong-key signature
+        # audit_psn_capture exists to flag. title_stats rows carry the real one.
+    }
+
+
+def _stats_fields(title_stats):
+    """title_stats' independent view of the same title. name/image/category are title-level;
+    play_count / durations / first+last played are per-user and excluded."""
+    return {
+        'title_name_raw': title_stats.name or '',
+        'title_icon_url': (title_stats.image_url or '').split('?')[0],
+        'np_title_id': title_stats.title_id or '',
+        'stats_category': title_stats.category.value if title_stats.category else '',
+    }
+
+
+def _record_observation(np_communication_id, game, source, fields):
+    if not settings.PSN_METADATA_CAPTURE_ENABLED:
+        return None
+    if not np_communication_id:
+        return None
+    content, content_hash = _observation_content(source, fields)
+    try:
+        with transaction.atomic():
+            row, _created = PSNTitleObservation.objects.update_or_create(
+                np_communication_id=np_communication_id,
+                content_hash=content_hash,
+                defaults={'game': game, 'source': source, **content},
+            )
+        return row
+    except Exception:
+        logger.warning(
+            'PSN title observation failed for %s (%s)', np_communication_id, source, exc_info=True,
+        )
+        return None
+
+
+def capture_title_stats_observation(game, title_stats):
+    """Record title_stats' independent name/art/category for this title. Previously discarded on
+    arrival at `update_profile_game_with_title_stats`."""
+    if game is None or title_stats is None:
+        return None
+    try:
+        fields = _stats_fields(title_stats)
+    except Exception:
+        logger.warning('PSN title observation failed for %s (title_stats payload)',
+                       game.np_communication_id, exc_info=True)
+        return None
+    return _record_observation(game.np_communication_id, game, 'title_stats', fields)
+
+
+def capture_title_page_bulk(trophy_titles):
+    """Fast-path capture: page 1 of trophy_titles is fetched on EVERY sync (it builds the
+    fingerprint) and was discarded when the fingerprint matched. That page is the only channel that
+    can see a pure rename -- a rename changes neither trophy counts nor game count, so it never
+    breaks the fingerprint and never triggers the slow-path walk that the per-game capture rides on.
+
+    Bounded work regardless of page size (~4 queries for 400 titles): one Game lookup, one
+    existing-hash lookup, one bulk insert, one last_seen bump. NEVER RAISES -- this runs inline in
+    the sync orchestrator ahead of the fast-path return.
+    """
+    if not settings.PSN_METADATA_CAPTURE_ENABLED:
+        return 0
+    if not trophy_titles:
+        return 0
+    try:
+        wanted = {}
+        for tt in trophy_titles:
+            # Per-title guard: one malformed entry must cost ONLY itself. A single try around the
+            # whole loop silently lost the entire 400-title page to one bad payload, reported as
+            # "0 captured" -- while the single-row path promised the opposite.
+            try:
+                np_id = (tt.np_communication_id or '').strip()
+                if not np_id:
+                    continue
+                content, content_hash = _observation_content('trophy_titles', _title_fields(tt))
+                wanted[(np_id, content_hash)] = content
+            except Exception:
+                logger.warning('PSN title observation skipped one malformed page entry', exc_info=True)
+                continue
+        if not wanted:
+            return 0
+
+        np_ids = {k[0] for k in wanted}
+        # Two integers per game, not 400 full rows: Game has 35 columns including TEXT and JSON,
+        # and this runs on every fast-path sync (the CLAUDE.md per-user-queryset rule, applied to
+        # a catalogue queryset that is just as hot).
+        games = dict(
+            Game.objects.filter(np_communication_id__in=np_ids)
+            .values_list('np_communication_id', 'id')
+        )
+
+        # source-filtered: title_stats rows share the np_communication_id but can never match a
+        # trophy_titles hash, so without the filter ~40% of the fetched rows were pure waste.
+        existing = {}
+        for pk, np_id, chash, seen in PSNTitleObservation.objects.filter(
+            np_communication_id__in=np_ids, source='trophy_titles',
+        ).values_list('pk', 'np_communication_id', 'content_hash', 'last_seen_at'):
+            existing[(np_id, chash)] = (pk, seen)
+
+        # Damped bump: last_seen_at is provenance (nothing reads it below day granularity), and an
+        # undamped bump UPDATEd up to 400 rows on EVERY fast-path sync -- 300-500k dead tuples/day
+        # against a ~100k-row table, turning the previously write-free fast path into the table's
+        # heaviest writer. With the cutoff the UPDATE is empty on almost every sync.
+        stale_cutoff = timezone.now() - timedelta(hours=24)
+        to_bump = [
+            pk for k in wanted if k in existing
+            for pk, seen in [existing[k]] if seen < stale_cutoff
+        ]
+        to_insert = [
+            PSNTitleObservation(
+                np_communication_id=np_id, content_hash=chash,
+                game_id=games.get(np_id), source='trophy_titles', **content,
+            )
+            for (np_id, chash), content in wanted.items()
+            if (np_id, chash) not in existing and np_id in games
+        ]
+        # The savepoint carries the same do-not-delete rationale as _record_observation's: today
+        # the orchestrator runs in autocommit, but the day it gets wrapped in atomic() a swallowed
+        # failure here would abort the CALLER's transaction and kill its next query far from here.
+        with transaction.atomic():
+            if to_insert:
+                # ignore_conflicts: two workers fast-pathing overlapping libraries race on the
+                # unique constraint; the loser's row already exists, which is the outcome we wanted.
+                PSNTitleObservation.objects.bulk_create(to_insert, ignore_conflicts=True)
+            if to_bump:
+                PSNTitleObservation.objects.filter(pk__in=to_bump).update(last_seen_at=timezone.now())
+        return len(to_insert)
+    except Exception:
+        logger.warning('PSN title page bulk capture failed', exc_info=True)
+        return 0

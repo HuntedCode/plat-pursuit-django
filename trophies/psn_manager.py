@@ -96,7 +96,12 @@ class PSNManager:
             cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
 
     @classmethod
-    def profile_refresh(cls, profile: Profile):
+    def profile_refresh(cls, profile: Profile, force_walk: bool = False):
+        # force_walk=True makes the orchestrator take the slow path even when the fingerprint
+        # matches. The fingerprint watches trophy counts and game count, so it is structurally
+        # blind to anything that changes neither -- a title rename being the case that motivated
+        # this: the observation backfill needs the full trophy_titles walk, and a matching
+        # fingerprint would silently reduce it to page 1.
         if cls.is_psn_outage_active():
             logger.warning(f"Skipping profile_refresh for profile {profile.id}: PSN outage active")
             return
@@ -107,7 +112,9 @@ class PSNManager:
             profile.set_sync_status('syncing')
             redis_client.set(f"sync_started_at:{profile.id}", str(time.time()), ex=7200)
             redis_client.set(f"sync_orchestrator_pending:{profile.id}", "1", ex=1800)
-            cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
+            # Old shape ([]) preserved for the normal case so nothing else changes; the flag rides
+            # as args[0] only when set, and the dispatcher tolerates both.
+            cls.assign_job('profile_refresh', args=[force_walk] if force_walk else [], profile_id=profile.id)
 
     @classmethod
     def sync_complete(cls, profile: Profile, priority: str, touched_profilegame_ids: list[int]):

@@ -956,3 +956,24 @@ most expensive set in the catalogue.
 - ~611 PS4/PS5 concepts sit in the no-`title_id` bucket. Unlike PS3/Vita that is a genuine
   collection gap rather than a platform limit, but it is 3.4% of the catalogue and needs a
   different way to source title_ids. Noted, not scheduled.
+
+### Game-level title observations (shipped to prod 2026-08-29, PR #64)
+
+`PSNTitleObservation` records every distinct title-level tuple PSN sends (raw uncleaned name,
+detail, icon, platforms, trophy structure), append-on-change, from three channels that all ride
+payloads already in hand. Nothing on any page reads it yet.
+
+- [x] Deployed to prod; capture confirmed on a real sync.
+- [ ] **Backfill order is load-bearing**: `backfill_psn_game_observations` queues FORCED-WALK
+      refreshes, and an old worker drains a forced-walk job into a plain fingerprint check --
+      silently, with the command reporting success. Always: deploy the worker, THEN run the
+      command. `--top N` sorts by the indexed `Profile.total_games`; queue tens per session, not
+      hundreds (orchestrator lane).
+- [ ] `audit_psn_capture` now reports observation coverage (rows, titles covered, renames,
+      by-source) ABOVE the concept section, so it prints even while PSNConceptData is empty.
+- [ ] Known shape, not a bug: `np_title_id` is empty on `trophy_titles` rows BY DESIGN (psnawp's
+      paginator hardcodes it to None); the real id arrives on `title_stats` rows and lives in
+      `Game.title_ids`. Do not "fix" it back into the hash -- it stored '' on 100% of rows.
+- [ ] The `last_seen_at` bump is damped to 24h and the table is fillfactor=85. Undamped, the
+      fast path UPDATEd up to 400 rows per sync (300-500k dead tuples/day); if anyone adds a
+      reader that needs finer freshness than a day, revisit the damper deliberately.

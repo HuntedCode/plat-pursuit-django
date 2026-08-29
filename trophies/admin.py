@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation
 
 
 # Register your models here.
@@ -4936,3 +4936,28 @@ class PSNRawPayloadAdmin(admin.ModelAdmin):
         payload = PSNRawPayload.objects.values_list('payload', flat=True).get(pk=obj.pk)
         return format_html('<pre style="white-space:pre-wrap;max-height:70vh;overflow:auto;">{}</pre>',
                            json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+
+@admin.register(PSNTitleObservation)
+class PSNTitleObservationAdmin(admin.ModelAdmin):
+    """What PSN has called each game, over time. READ-ONLY for the same reason as the concept
+    sidecar: captured, not authored -- and here an edit would also corrupt the content hash the
+    dedup rides on."""
+    list_display = ['np_communication_id', 'source', 'title_name_raw', 'np_title_id',
+                    'first_seen_at', 'last_seen_at']
+    list_filter = ['source']
+    search_fields = ['np_communication_id', 'np_title_id', 'title_name_raw',
+                     'game__title_name']
+    raw_id_fields = ['game']
+    date_hierarchy = 'last_seen_at'
+    readonly_fields = [f.name for f in PSNTitleObservation._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

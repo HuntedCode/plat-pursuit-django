@@ -7508,3 +7508,82 @@ class PSNRawPayload(models.Model):
 
     def __str__(self):
         return f"Raw PSN payload for {self.psn_data.psn_concept_id}"
+
+
+class PSNTitleObservation(models.Model):
+    """Every distinct title-level tuple PSN has ever sent us for a Game. APPEND-ON-CHANGE.
+
+    `Game.title_name` cannot answer "what did PSN call this game?": `Game.save()` runs
+    `clean_game_title()` unconditionally (strips (TM)/(R), normalizes Roman numerals, drops
+    "Trophy Set" suffixes), so the raw string has never been stored -- and three writers replace the
+    column wholesale (every sync unless `lock_title`, the IGDB CJK promotion which then LOCKS it,
+    and review_title_merges renames). This table is where the answer lives.
+
+    APPEND-ON-CHANGE, NOT LATEST-VALUE, deliberately unlike PSNConceptData. The question this table
+    exists for is "what was it called BEFORE it was overwritten?" -- a latest-value sidecar gets
+    overwritten too and answers nothing. One row per distinct content tuple per game: re-observing a
+    known tuple bumps `last_seen_at`; anything else inserts. Renames are rare, so most games hold
+    exactly one row forever. This shape also dissolves the region question without a locale key:
+    `trophy_titles` names arrive in the syncing account's locale, so a JP name and a US name are
+    simply two rows -- alternation bumps timestamps instead of ping-ponging a column, which was the
+    (psn_concept_id, country) lesson one table up, solved here without needing to know the region.
+
+    TITLE-LEVEL FIELDS ONLY. The `trophy_titles` payload mixes in per-user data (progress,
+    earned_trophies, hidden_flag, last_updated) which must never land in a game-level table; the
+    capture strips to the title-level tuple and the hash covers exactly what is stored.
+
+    TWO SOURCES, tagged by `source`: `trophy_titles` (the sync walk) and `title_stats` (the playtime
+    endpoint, whose independent `name`/`category` were previously discarded on arrival).
+
+    `np_communication_id` is the durable key and `game` is a SET_NULL pointer, same reasoning as
+    PSNConceptData.concept: a table whose purpose is not losing data must survive its Game row.
+    No `Concept.absorb()` branch is needed -- this hangs off Game, and Games move between Concepts
+    whole; nothing merges or deletes Games in that path.
+    """
+    SOURCE_CHOICES = [
+        ('trophy_titles', 'Trophy titles walk'),
+        ('title_stats', 'Title stats endpoint'),
+    ]
+
+    # max_length mirrors Game.np_communication_id (50): a narrower copy of the source column
+    # raises DataError on values the source permits -- swallowed in the per-title path, and fatal
+    # to a whole page's inserts in the bulk path (one statement). No standalone db_index: the
+    # UniqueConstraint below already provides a btree whose LEADING column is this one, and a
+    # second identical index only costs write time -- the same rule PSNConceptData.Meta documents.
+    np_communication_id = models.CharField(max_length=50)
+    game = models.ForeignKey(
+        'Game', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='psn_observations',
+        help_text='Pointer, not ownership: the observation outlives the Game row.',
+    )
+    source = models.CharField(max_length=16, choices=SOURCE_CHOICES)
+    #: The name exactly as PSN sent it. NOT cleaned -- storing what PSN said is the entire point.
+    title_name_raw = models.CharField(max_length=255, blank=True)
+    title_detail = models.TextField(blank=True)
+    title_icon_url = models.CharField(max_length=500, blank=True)
+    np_service_name = models.CharField(max_length=50, blank=True)
+    trophy_set_version = models.CharField(max_length=16, blank=True)
+    title_platform = models.JSONField(default=list, blank=True)
+    has_trophy_groups = models.BooleanField(null=True, blank=True)
+    defined_trophies = models.JSONField(default=dict, blank=True)
+    np_title_id = models.CharField(max_length=32, blank=True)
+    #: title_stats only; '' for trophy_titles rows. Stores PlatformCategory.value verbatim:
+    #: 'ps4_game' / 'ps5_native_game' / 'unknown' (never None -- psnawp's _missing_ maps to UNKNOWN).
+    stats_category = models.CharField(max_length=32, blank=True)
+    #: sha256 hex of the canonical stored tuple. The dedup key: same content = same row.
+    content_hash = models.CharField(max_length=64)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['np_communication_id', 'content_hash'],
+                name='psn_title_obs_unique_content',
+            ),
+        ]
+        verbose_name = 'PSN title observation'
+        verbose_name_plural = 'PSN title observations'
+
+    def __str__(self):
+        return f"{self.np_communication_id} [{self.source}]: {self.title_name_raw}"

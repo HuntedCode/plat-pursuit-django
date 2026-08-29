@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
 
-from trophies.models import Concept, PSNConceptData, PSNRawPayload
+from trophies.models import Concept, Game, PSNConceptData, PSNRawPayload, PSNTitleObservation
 
 #: (field, the value that means "we captured nothing here"). Every one of these is lifted from a
 #: specific key of PSN's response, so a field that is empty on EVERY row means we are reading the
@@ -49,6 +49,34 @@ class Command(BaseCommand):
 
         self.stdout.write(f"PSNConceptData rows: {total}")
         self.stdout.write(f"PSNRawPayload rows:  {payloads}")
+
+        obs_total = PSNTitleObservation.objects.count()
+        self.stdout.write("\nTitle observations (game level, append-on-change):")
+        self.stdout.write(f"  rows:              {obs_total}")
+        if obs_total:
+            covered = PSNTitleObservation.objects.values('np_communication_id').distinct().count()
+            games = Game.objects.count()
+            # Same-source only: title_stats' name and trophy_titles' name disagree SYSTEMATICALLY
+            # ((TM), suffixes), so counting across sources reads as 'every dual-source game was
+            # renamed' -- the metric would be noise, and this report exists to be believed.
+            renamed = (
+                PSNTitleObservation.objects.filter(source='trophy_titles')
+                .values('np_communication_id')
+                .annotate(names=Count('title_name_raw', distinct=True)).filter(names__gt=1).count()
+            )
+            by_source = dict(
+                PSNTitleObservation.objects.values_list('source')
+                .annotate(n=Count('id')).order_by()
+            )
+            self.stdout.write(f"  titles covered:    {covered}/{games} games")
+            self.stdout.write(f"  renamed (>1 name): {renamed}")
+            self.stdout.write(f"  by source:         {by_source}")
+        else:
+            self.stdout.write(
+                "  none yet -- fills from slow-path syncs and fast-path page 1; "
+                "backfill_psn_game_observations front-loads it."
+            )
+
 
         if total == 0:
             self.stdout.write(self.style.WARNING(

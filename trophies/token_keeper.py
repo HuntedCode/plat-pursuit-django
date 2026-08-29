@@ -32,7 +32,10 @@ from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_apply import evaluate_for_sync
 from trophies.services.concept_anchor_service import try_anchor_new_game
-from trophies.services.psn_metadata_service import capture_psn_concept_data
+from trophies.services.psn_metadata_service import (
+    capture_psn_concept_data,
+    capture_title_page_bulk,
+)
 
 logger = logging.getLogger("psn_api")
 
@@ -593,7 +596,9 @@ class TokenKeeper:
                 elif job_type == 'sync_trophies':
                     self._job_sync_trophies(profile_id, args[0], args[1])
                 elif job_type == 'profile_refresh':
-                    self._job_profile_refresh(profile_id)
+                    # args=[force_walk] since the observation backfill; [] from every
+                    # older caller and any job queued before this deployed.
+                    self._job_profile_refresh(profile_id, args[0] is True if args else False)
                 elif job_type == 'sync_title_id':
                     self._job_sync_title_id(profile_id, args[0], args[1])
                 elif job_type == 'sync_complete':
@@ -2268,7 +2273,7 @@ class TokenKeeper:
     # empty or partially populated is no longer a code-branch decision; it
     # just shows up as a larger fingerprint mismatch.
 
-    def _job_profile_refresh(self, profile_id: int):
+    def _job_profile_refresh(self, profile_id: int, force_walk: bool = False):
         """Unified sync orchestrator.
 
         Computes a fingerprint from PSN (`trophy_summary` totals + visible
@@ -2335,15 +2340,24 @@ class TokenKeeper:
             ).exists():
                 force_slow = True
 
-        path_label = 'slow' if (not fingerprints_match or force_slow) else 'fast'
+        path_label = 'slow' if (not fingerprints_match or force_slow or force_walk) else 'fast'
         log_suffix = ' (concept-less recovery)' if (fingerprints_match and force_slow) else ''
+        if force_walk and fingerprints_match:
+            log_suffix = ' (forced walk)'
         logger.info(
             f"[profile {profile_id}] fingerprint "
             f"psn={psn_fingerprint} db={db_fingerprint} "
             f"path={path_label}{log_suffix}"
         )
 
-        if fingerprints_match and not force_slow:
+        if fingerprints_match and not force_slow and not force_walk:
+            # Page 1 was fetched to build the fingerprint and is about to be discarded. It is the
+            # only channel that can see a pure RENAME: a rename changes neither trophy counts nor
+            # game count, so it never breaks the fingerprint and never triggers the slow-path walk
+            # the per-game capture rides on. Bounded (~4 queries per 400 titles), never raises.
+            captured = capture_title_page_bulk(first_page)
+            if captured:
+                logger.info(f"[profile {profile_id}] fast path: {captured} new title observation(s)")
             self._profile_refresh_fast_path(profile_id)
             return
 
@@ -2521,6 +2535,15 @@ class TokenKeeper:
                 # evaluate_for_sync scope their work to this list, so adding
                 # untouched games is wasted DB / badge-eval cycles.
                 touched_profilegame_ids.append(profile_game.id)
+
+        # Title observations for the WHOLE walk in one bulk pass (~4 queries), not per title.
+        # The per-title update_or_create this replaces cost ~6 statements per game -- roughly
+        # doubling the DB cost of the longest-running job in the system for a whale walk. Placed
+        # after the loop so every Game row exists (the bulk capture only links titles it can
+        # resolve to a Game, which the first pass above just guaranteed). Never raises.
+        captured = capture_title_page_bulk(trophy_titles)
+        if captured:
+            logger.info(f"[profile {profile_id}] walk: {captured} new title observation(s)")
 
         # Scout discovery counter (no-op for non-scouts).
         if new_game_count > 0:
