@@ -908,3 +908,51 @@ prod with the cutover and be switched on deliberately. ONE exception, below.
       announcement honours `global_unsubscribe`, but the preferences PAGE is parked and
       unrouted, so that mailbox is the only self-service opt-out during the send window.
       Assign someone to watch it and set the flag by hand for anyone who asks.
+
+---
+
+## PSN metadata capture (shipped to prod ahead of the rebuild, 2026-08)
+
+Capture and its two sweeps went to `main` and deployed before this branch merged, so most of this
+is already DONE on prod. What remains is only what the rebuild deploy re-touches.
+
+- [x] `migrate` is a Render **pre-deploy** command on prod and beta. This is load-bearing for
+      `Concept.absorb()`: the PSN branch is the one branch there wrapped in its own try/except
+      precisely because `absorb()` is not transactional, and a worker booting new code against a
+      table that does not exist yet would otherwise leave a merge half-committed. Pre-deploy
+      closes that window; do not move `migrate` to a container start step.
+- [ ] `PSN_METADATA_CAPTURE_ENABLED` — **leave it unset**. It defaults to on, and adding it only
+      creates a way to get it wrong: the compare is strict `== 'True'`, so `true`, `1` and `yes`
+      all read as `False` and silently disable capture. If you ever DO set it, set it on **every
+      service**. It is read per-service, and capture runs in the WORKER while
+      `backfill_psn_concept_data`'s guard runs wherever you open a shell — so setting it on web
+      alone lets the sweep pass its own check and then capture nothing.
+- [ ] After the rebuild deploy, re-run `python manage.py audit_psn_capture` as a smoke check.
+      Any parsed field empty on 100% of rows means a key is being read wrong.
+
+### Where the catalogue stands (2026-08-29, post-sweep)
+
+Do not re-run a full sweep expecting the gap to close; it will not, and the remainder is the
+most expensive set in the catalogue.
+
+| | Concepts | |
+|---|---:|---|
+| Total | 18,002 | |
+| Captured | 14,193 | **93.5% of what is actually reachable** |
+| No `title_id` | 3,147 | PS3 1,771 + PSVITA 1,026 dominate — structural, see below |
+| Reachable, refused | 642 | asked; PSN answers sparsely |
+| No games | 20 | orphan concepts |
+
+- **The PS3/Vita bucket is not winnable.** `title_ids` are only populated by the `title_stats`
+  walk, which is playtime data covering modern titles. A game that only ever arrived via the
+  trophy list never gets one, and there is nothing to ask the storefront about. Both storefronts
+  are retired anyway.
+- **The 642 were asked.** A full `--missing-only` sweep drained ~1,300 jobs and captured **4**.
+  Worse, a sparse US response walks every entry in `ASIAN_REGION_FALLBACKS` before giving up, so
+  each of those ~1,296 failures spent the maximum calls available to it.
+- **`--missing-only` shrinks on SUCCESS only.** We record captures, not attempts, so every future
+  sweep re-pays that same several-thousand-call bill. If repeated sweeps are ever planned, add a
+  `psn_capture_attempted_at` stamp on Game first and filter on it.
+- ~611 PS4/PS5 concepts sit in the no-`title_id` bucket. Unlike PS3/Vita that is a genuine
+  collection gap rather than a platform limit, but it is 3.4% of the catalogue and needs a
+  different way to source title_ids. Noted, not scheduled.

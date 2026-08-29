@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload
 
 
 # Register your models here.
@@ -4865,3 +4865,74 @@ class UserGroupBadgeAdmin(admin.ModelAdmin):
     raw_id_fields = ['profile', 'group_badge']
     readonly_fields = ['earned_at']
     date_hierarchy = 'earned_at'
+
+
+@admin.register(PSNConceptData)
+class PSNConceptDataAdmin(admin.ModelAdmin):
+    """PSN's own metadata for a concept. READ-ONLY: this is captured, not authored -- an edit here
+    would be overwritten by the next sync of that game, so offering the field would be a lie.
+
+    `payload` is deliberately absent from every list and fieldset. It is a large JSON blob in its own
+    table for the same reason `IGDBMatch.raw_response` now needs `.defer()` everywhere: joining one
+    per row is how the May 2026 OOM happened. Open a single row's raw view to inspect it.
+    """
+    list_display = ['psn_concept_id', 'name_en', 'name', 'publisher_name', 'concept', 'country', 'last_seen_at']
+    list_filter = ['country', 'language']
+    search_fields = ['psn_concept_id', 'name', 'name_en', 'publisher_name', 'concept__concept_id',
+                     'concept__unified_title']
+    list_select_related = ['concept']
+    raw_id_fields = ['concept']
+    date_hierarchy = 'last_seen_at'
+    readonly_fields = [f.name for f in PSNConceptData._meta.fields] + ['raw_payload_link']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Deleting cascades the raw payload, and re-capturing it costs a PSN API call on a title that
+        # may not resync for months. "Read-only" has to include this one to mean anything.
+        return False
+
+    @admin.display(description='Raw payload')
+    def raw_payload_link(self, obj):
+        raw = getattr(obj, 'raw', None)
+        if raw is None:
+            return format_html('<span style="color:#999;">— none captured</span>')
+        url = reverse('admin:trophies_psnrawpayload_change', args=[raw.pk])
+        return format_html('<a href="{}">View the full PSN response</a>', url)
+
+
+@admin.register(PSNRawPayload)
+class PSNRawPayloadAdmin(admin.ModelAdmin):
+    """The untouched PSN response. Reachable from a PSNConceptData row; not browsable in bulk on
+    purpose, since every row is a large blob."""
+    list_display = ['psn_data', 'fetched_at']
+    search_fields = ['psn_data__psn_concept_id', 'psn_data__name_en']
+    raw_id_fields = ['psn_data']
+    readonly_fields = ['psn_data', 'fetched_at', 'pretty_payload']
+    exclude = ['payload']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        # Never load the blob for a LIST view -- that is the shape of the incident this table's
+        # separation was designed to prevent.
+        return super().get_queryset(request).defer('payload').select_related('psn_data')
+
+    @admin.display(description='Payload')
+    def pretty_payload(self, obj):
+        import json
+        # Re-fetch the deferred column for the single row being viewed.
+        payload = PSNRawPayload.objects.values_list('payload', flat=True).get(pk=obj.pk)
+        return format_html('<pre style="white-space:pre-wrap;max-height:70vh;overflow:auto;">{}</pre>',
+                           json.dumps(payload, indent=2, ensure_ascii=False))

@@ -515,6 +515,11 @@ AUDIT_REPORT_EMAIL = os.getenv('AUDIT_REPORT_EMAIL', '')
 # staging clone, a restored DB) must not be able to cancel real subscriptions. Prod enables.
 PAYMENT_SELF_HEAL_ENABLED = os.getenv('PAYMENT_SELF_HEAL_ENABLED', 'False') == 'True'
 
+# PSN metadata capture (trophies/services/psn_metadata_service.py). Writes a multi-KB payload per
+# newly-resolved title from inside the sync worker. Off-switch so "capture is eating disk" is an
+# env-var flip and a worker restart rather than a deploy.
+PSN_METADATA_CAPTURE_ENABLED = os.getenv('PSN_METADATA_CAPTURE_ENABLED', 'True') == 'True'
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

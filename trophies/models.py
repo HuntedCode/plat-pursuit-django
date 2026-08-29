@@ -1329,6 +1329,34 @@ class Concept(models.Model):
         # id, so a concept's contract is DERIVED from its IGDBMatch (which migrates above, gated
         # on inherit_match). ContractMembership was removed with the igdb-keyed rework.
 
+        # PSN concept data: re-point EVERY row, no dedup, no winner-picking.
+        #
+        # Deliberately unlike the IGDB branch below, and the asymmetry is the point. IGDB enrichment
+        # is a deterministic projection of ONE match, so merging two concepts' worth would stack two
+        # different games' companies and genres -- hence the `inherit_match` gate that drops the
+        # source's when the survivor has its own. PSN rows are INDEPENDENT storefront entries, and one
+        # concept legitimately has several (regional variants, editions) -- which is why `title_ids`
+        # merges rather than choosing. Keyed on (psn_concept_id, country), and `concept` is not part
+        # of that key, so re-pointing cannot collide.
+        #
+        # Dropping one here would be the exact data loss these tables were added to stop.
+        #
+        # GUARDED, unlike its neighbours, for one specific reason: absorb() is NOT wrapped in a
+        # transaction and neither is its caller (`add_concept` -> absorb -> delete; see
+        # docs/architecture/concept-model.md). Everything above this line has already COMMITTED by the
+        # time we get here. If this raised -- the realistic trigger being a worker booting new code
+        # before `migrate` has created the table during a rolling deploy -- the branches below would
+        # be skipped and `other.delete()` would never run, leaving half-migrated relations and an
+        # orphan Concept, silently. A capture table that nothing reads must not be able to do that to
+        # a merge, so a failure here costs the association and nothing else.
+        try:
+            other.psn_data.update(concept=self)
+        except Exception:
+            logger.exception(
+                "Failed to re-point PSN concept data from %s to %s; the merge continues",
+                other.concept_id, self.concept_id,
+            )
+
         # ContractBundle satisfier membership (per-bundle M2M): move other's links to self.
         for cbundle in other.contract_bundles.all():
             if not cbundle.concepts.filter(pk=self.pk).exists():
@@ -7365,3 +7393,118 @@ class ScoutAccount(models.Model):
     def __str__(self):
         return f"Scout: {self.profile.psn_username} ({self.get_status_display()})"
 
+
+
+class PSNConceptData(models.Model):
+    """PSN's own metadata for a concept, kept as PSN sent it.
+
+    WHY THIS EXISTS. `Concept` is a blend: PSN writes `unified_title`, `publisher_name`, `genres`,
+    `subgenres`, `descriptions` and `content_rating`, and IGDB writes over some of the same columns.
+    Two sources, one row, and the referee logic has accumulated as guard rails -- `title_lock`, the
+    CJK-regression guard, fill-when-empty on release_date/publisher. Each was added after a real
+    regression.
+
+    Worse, on the anchoring path PSN's payload is discarded outright. `_do_sync_trophies` holds the
+    full `details` object when a Game anchors to IGDB and rescues exactly one field from it
+    (`bg_url`, patched in after the profile-banner gap); the name, publisher, genres, subgenres,
+    descriptions, content rating and media are dropped on the floor.
+
+    This is the PSN half of a pattern that already exists on the IGDB side. `IGDBMatch` keeps parsed
+    fields plus the raw response "for future Tier 2 parsing without re-querying"; PSN never got the
+    same treatment. `Concept.genres` vs `Concept.igdb_genres` is the same idea, applied to one field
+    and stopped there.
+
+    ADDITIVE ONLY. Nothing reads this yet, and no existing write changed. Concept's columns are still
+    written by the same code with the same guards, so nothing on any page can move. Whether Concept's
+    values eventually become derived from an explicit precedence chain is a separate decision that
+    this does not force.
+
+    KEYED ON (psn_concept_id, country), NOT ON psn_concept_id ALONE. A row IS one PSN storefront
+    record, and PSN returns a DIFFERENT name, rating and description per region for the same concept
+    id. Keying on the id alone means the US sync overwrites the JP row's native name and its raw
+    payload, which is precisely the loss this table exists to stop -- just relocated. The surrounding
+    sync code already refuses to let a fallback-region response overwrite an existing Concept
+    (`_job_sync_title_id`'s `concept_created or not used_fallback_region` gate); this honours the same
+    rule by giving each region its own row instead of a shared one.
+
+    THE FK IS A POINTER, NOT OWNERSHIP, and it is deliberately SET_NULL rather than CASCADE. One PSN
+    concept id routinely spans several of OUR Concepts: `create_concept_from_details` makes one PSN
+    concept hold the PS4 and PS5 Games together, and `try_anchor_new_game` then splits them into
+    per-IGDB-version Concepts ("The now-empty PSN concept absorbs into the survivor(s)"). So `concept`
+    records which Concept most recently resolved this storefront entry and may legitimately move.
+    CASCADE on a pointer that moves would let deleting one of two Concepts destroy a payload the other
+    still refers to -- deleting data that cost a PSN API call to gather, in the table whose entire
+    purpose is to stop deleting data. `Concept.absorb()` still re-points rows so the association
+    survives a merge; SET_NULL is the floor under it, not a replacement for it.
+    """
+    concept = models.ForeignKey(
+        Concept, on_delete=models.SET_NULL, null=True, blank=True, related_name='psn_data',
+        help_text='The concept that most recently resolved this PSN storefront entry. May move: one '
+                  'PSN concept id can span several Concepts once IGDB anchoring splits editions.',
+    )
+    psn_concept_id = models.CharField(
+        max_length=50, db_index=True,
+        help_text="PSN's own concept id, unprefixed. Concept.concept_id may be an IGDB anchor or a "
+                  "PP_* stub, so this is the only reliable record of the PSN identity. NOT unique on "
+                  "its own -- one row per (id, region).",
+    )
+    #: PSN's native/regional name and its English name, kept SEPARATE. Concept.unified_title collapses
+    #: them into one column, which is what the CJK-regression guard exists to referee.
+    name = models.CharField(max_length=255, blank=True)
+    name_en = models.CharField(max_length=255, blank=True)
+    publisher_name = models.CharField(max_length=255, blank=True)
+    genres = models.JSONField(default=list, blank=True)
+    subgenres = models.JSONField(default=list, blank=True)
+    descriptions = models.JSONField(default=dict, blank=True)
+    content_rating = models.JSONField(default=dict, blank=True)
+    media = models.JSONField(default=dict, blank=True)
+    #: Which regional storefront answered. PSN returns different names and ratings per region, and
+    #: without this a row cannot be interpreted -- a CJK name is only meaningful next to its region.
+    country = models.CharField(max_length=8, blank=True)
+    language = models.CharField(max_length=8, blank=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # No explicit index on `concept`: the FK already gets one (db_index defaults True on a
+        # non-unique FK), and adding a second identical btree only costs write time and disk.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['psn_concept_id', 'country'], name='psn_concept_data_unique_per_region',
+            ),
+        ]
+        verbose_name = 'PSN concept data'
+        verbose_name_plural = 'PSN concept data'
+
+    def __str__(self):
+        return f"PSN {self.psn_concept_id}: {self.name_en or self.name}"
+
+
+class PSNRawPayload(models.Model):
+    """The untouched PSN title-details response, in its own table on purpose.
+
+    SEPARATE TABLE, NOT A COLUMN. `IGDBMatch.raw_response` is a ~30 KB blob living on the row that
+    cover-art rendering `select_related`s, and it was the trigger for the May 2026 web-server OOM --
+    CLAUDE.md now requires `.defer()` on every queryset that joins it. A blob nobody can accidentally
+    join cannot repeat that, so this is deliberately one hop further away rather than a field on
+    PSNConceptData.
+
+    Latest response only, replaced on refresh. That bounds the table at one row per PSN concept
+    (~18k) rather than growing without limit, and the goal here is to stop discarding what PSN sends
+    -- not to build an archive of every sync.
+    """
+    psn_data = models.OneToOneField(
+        PSNConceptData, on_delete=models.CASCADE, related_name='raw',
+    )
+    payload = models.JSONField(
+        help_text='The full get_details response, exactly as PSN returned it. We consume ~8 keys of '
+                  'it; keeping the rest is what makes "what does PSN actually send us?" answerable.',
+    )
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'PSN raw payload'
+        verbose_name_plural = 'PSN raw payloads'
+
+    def __str__(self):
+        return f"Raw PSN payload for {self.psn_data.psn_concept_id}"
