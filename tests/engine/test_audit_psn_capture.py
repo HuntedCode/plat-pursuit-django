@@ -149,3 +149,104 @@ def test_the_report_never_walks_the_table():
         'these queries neither aggregate nor bound their rows, so their cost grows with the '
         'table: ' + ' | '.join(unbounded)
     )
+
+
+# --- --gap: classifying the concepts a sweep could not capture -----------------------------------
+
+def _gap(*args):
+    out = io.StringIO()
+    call_command('audit_psn_capture', '--gap', *args, stdout=out)
+    return out.getvalue()
+
+
+def test_the_gap_buckets_account_for_every_uncaptured_concept():
+    """The three buckets are computed two different ways -- no_games and reachable by query,
+    no_title_ids by subtraction -- so a wrong filter shows up as a bucket that does not add up
+    rather than as a plausible-looking number."""
+    from tests.factories import GameFactory
+
+    captured = ConceptFactory()
+    capture_psn_concept_data(captured, _details(psn_id='c1'), country='US')
+    GameFactory(concept=captured, title_ids=['CUSA00001_00'], title_platform=['PS4'])
+
+    ConceptFactory()                                                   # no games
+    orphan_titleless = ConceptFactory()
+    GameFactory(concept=orphan_titleless, title_ids=[], title_platform=['PS3'])
+    reachable = ConceptFactory()
+    GameFactory(concept=reachable, title_ids=['CUSA00009_00'], title_platform=['PS3'])
+
+    printed = _gap()
+
+    assert 'with a PSN row:    1' in printed
+    assert 'without:           3' in printed
+    assert 'no games at all:                 1' in printed
+    assert 'games, but no title_id:          1' in printed
+    assert 'reachable, still uncaptured:     1' in printed
+
+
+def test_a_concept_with_one_titleless_game_and_one_real_game_counts_as_reachable():
+    """The subtlety the comment in the command names: `games__title_ids=[]` on its own also matches
+    a concept whose OTHER game does have a title_id, which would double-count it into two buckets."""
+    from tests.factories import GameFactory
+
+    concept = ConceptFactory()
+    GameFactory(concept=concept, title_ids=[], title_platform=['PS3'])
+    GameFactory(concept=concept, title_ids=['CUSA00002_00'], title_platform=['PS4'])
+
+    printed = _gap()
+
+    assert 'reachable, still uncaptured:     1' in printed
+    assert 'games, but no title_id:          0' in printed
+
+
+def test_the_platform_breakdown_separates_ps3_from_modern():
+    """The whole question behind --gap: is the shortfall concentrated in platforms whose storefront
+    is retired, in which case re-running the sweep cannot win it back."""
+    from tests.factories import GameFactory
+
+    ps3 = ConceptFactory()
+    GameFactory(concept=ps3, title_ids=['NPUB30001_00'], title_platform=['PS3'])
+    # A MIXED concept: a titleless PS3 entry beside a sweepable PS5 one. This shape is what makes
+    # the breakdown honest -- under a multi-valued exclude() the titleless game suppresses the whole
+    # concept and PS5 silently reads 0, which is how a reachable platform looks unreachable.
+    ps5 = ConceptFactory()
+    GameFactory(concept=ps5, title_ids=[], title_platform=['PS3'])
+    GameFactory(concept=ps5, title_ids=['PPSA00001_00'], title_platform=['PS5'])
+
+    printed = _gap()
+    tail = printed.split('by platform:')[1]
+
+    assert 'PS3' in tail and 'PS5' in tail
+    ps3_line = [l for l in tail.splitlines() if l.strip().startswith('PS3')][0]
+    ps5_line = [l for l in tail.splitlines() if l.strip().startswith('PS5')][0]
+    assert ps3_line.split()[-1] == '1' and ps5_line.split()[-1] == '1'
+
+
+def test_stub_concepts_are_surfaced_as_evidence_of_a_sparse_answer():
+    """A PP_* concept exists because PSN returned nothing usable, so it is the closest thing we have
+    to a recorded failed attempt -- which we otherwise do not store at all."""
+    ConceptFactory(concept_id='PP_something')
+
+    printed = _gap()
+
+    assert 'PP_* stubs: 1' in printed
+
+
+def test_the_gap_report_costs_no_psn_calls_and_never_walks_the_concepts():
+    """Runs against 18k concepts on prod. Every number must be a DB-side aggregate."""
+    from django.test.utils import CaptureQueriesContext
+    from django.db import connection
+    from tests.factories import GameFactory
+
+    for i in range(15):
+        c = ConceptFactory()
+        GameFactory(concept=c, title_ids=[f'CUSA{i:05}_00'], title_platform=['PS4'])
+
+    with CaptureQueriesContext(connection) as ctx:
+        call_command('audit_psn_capture', '--gap', stdout=io.StringIO())
+
+    unbounded = [
+        q['sql'] for q in ctx.captured_queries
+        if 'count(' not in q['sql'].lower() and 'limit' not in q['sql'].lower()
+    ]
+    assert not unbounded, 'the gap report walks rows: ' + ' | '.join(unbounded)
