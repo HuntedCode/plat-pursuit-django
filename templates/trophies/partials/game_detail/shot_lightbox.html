@@ -1,0 +1,30 @@
+{% comment %}The hero screenshot lightbox dialog, shared by List detail and the concept
+Game page (shot-lightbox.js drives it; opener thumbs are `#gd-shots [data-shot]` in each
+hero). Include contract: shot_title (accessible name for the dialog and image alts) and the
+page-level image_urls. Belongs in {% block fixed_overlays %} -- outside the page content
+wrapper, so the recede effect can't drag the open dialog with it.{% endcomment %}
+{% if image_urls.screenshot_urls %}
+<dialog id="gd-shot-modal" class="gd-shotmodal" aria-label="{{ shot_title }} screenshots">
+    <div class="gd-shotmodal__stage">
+        <img id="gd-shot-img" src="" alt="{{ shot_title }} screenshot" class="gd-shotmodal__img" />
+        <button type="button" class="gd-shotmodal__close" data-shot-close aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        {% if image_urls.screenshot_urls|length > 1 %}
+            <button type="button" class="gd-shotmodal__nav gd-shotmodal__nav--prev" data-shot-prev aria-label="Previous screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <button type="button" class="gd-shotmodal__nav gd-shotmodal__nav--next" data-shot-next aria-label="Next screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+            <span class="gd-shotmodal__count" id="gd-shot-count"></span>
+        {% endif %}
+    </div>
+    {% if image_urls.screenshot_urls|length > 1 %}
+        <div class="gd-shotmodal__strip" id="gd-shot-strip" aria-label="All screenshots">
+            {% for url in image_urls.screenshot_urls %}
+                <button type="button" class="gd-shotmodal__thumb" data-shot-to="{{ forloop.counter0 }}" aria-label="View screenshot {{ forloop.counter }}">
+                    <img src="{{ url }}" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                </button>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {{ image_urls.screenshot_urls|json_script:"gd-shot-data" }}
+</dialog>
+{% endif %}

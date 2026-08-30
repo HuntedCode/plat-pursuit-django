@@ -67,7 +67,10 @@ model) around ONE list viewport tab:
 - **The hero is List detail's hero, concept-half only** (owner's call, first browser pass):
   same `gd-hero` anatomy -- cover / facts / IGDB teaser / screenshots -- minus every per-list
   piece (progress readout, My Stats, plat-card CTA, Outlook, flags) and minus the modal-bound
-  buttons, whose JS lives only on List detail. Platform chips show the UNION across the list
+  buttons, whose JS lives only on List detail. One exception: the screenshot LIGHTBOX came along
+  (owner's call) -- extracted into `shot-lightbox.js` + the `shot_lightbox.html` partial, one
+  implementation driven by both pages, so the hero thumbs open the full FLIP/carousel viewer
+  here too instead of raw image tabs. Platform chips show the UNION across the list
   set; the players headline reads the aggregated community stats; Released is
   `concept.release_date` (the work's date, not the host list's platform date). The badge/contract
   spine sits IN the hero as one split band (badges left, contract right; each badge medallion
@@ -146,7 +149,10 @@ Page-by-page during the rebuild, never a big-bang rename:
   versions card gated off on igdb pages only (kept on `/games/c/` -- the audit caught that a
   blanket gate orphaned untrusted same-igdb siblings, and that the first gate suppressed the
   About empty state along with the card, leaving a blank panel). Read-only gating hardened: the
-  blurb report button and the three ratings modals now honor `concept_tabs_readonly`.
+  blurb report button and the three ratings modals now honor `concept_tabs_readonly`. Follow-up
+  the same day: the screenshot lightbox EXTRACTED from game-detail.js into shared
+  `shot-lightbox.js` + `shot_lightbox.html` (owner asked for the viewer here, not raw image
+  links); both pages load the one module.
 - **2026-08-30 -- slice 1 shipped** (rebuild branch, 9 commits): `display_list_name` chain,
   `_build_earned_state` extraction (+ the per-trophy N+1 fix), the shared trophy grid
   (`templates/trophies/partials/trophy_grid/`, contract-bound, id-prefixed), `ConceptContextMixin`,

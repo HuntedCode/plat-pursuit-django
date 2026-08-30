@@ -516,7 +516,9 @@ def test_the_breadcrumb_is_visible_not_just_structured_data(client):
 
 def test_the_hero_is_concept_level_with_no_list_furniture(client):
     """The hero adoption (Jeffrey's call): the List-detail hero's concept-level portion, WITHOUT
-    the per-list pieces or modal-bound CTAs -- none of that JS ships here. The second audit round
+    the per-list pieces or modal-bound CTAs -- their JS doesn't ship here. ONE exception: the
+    screenshot lightbox, which was extracted into a shared module both pages load, so its openers
+    and dialog are expected. The second audit round
     proved the anonymous version of this test vacuous (4 of 5 banned markers could not render for
     an anonymous viewer of an unenriched game, while the REAL leak -- an inert blurb-report button
     plus three orphaned modals -- sailed through unbanned). So the fixture makes every ban
@@ -549,8 +551,11 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
     chips_html = content.split('gd-hero__chips', 1)[1].split('</div>', 1)[0]
     chips = re.findall(r'<span class="gd-plat">(\w+)</span>', chips_html)
     assert chips == ['PS5', 'PS4'], chips
-    # The screenshots render as plain links, not List detail's lightbox buttons.
-    assert '<a class="gd-shots__thumb"' in content
+    # Screenshots open the SHARED lightbox (extracted from List detail at Jeffrey's ask): opener
+    # buttons + the dialog + the shared script must all ship, or the thumbs are dead buttons.
+    assert '<button type="button" class="gd-shots__thumb" data-shot="0"' in content
+    assert 'id="gd-shot-modal"' in content
+    assert 'js/shot-lightbox.js' in content
     assert 'A reachable quick take from someone else.' in content
     # Every one of these WOULD render on List detail for this exact viewer + data; here each is a
     # dead CTA or an orphaned dialog, gated server-side by concept_tabs_readonly or by the hero
@@ -562,7 +567,6 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
         'id="gd-guidelines-modal"',
         'id="gd-versions-modal"',   # List detail's versions dialog
         'data-versions-open',
-        'data-shot=',               # lightbox buttons
         'data-stats-open',          # My Stats modal opener
         'gd-btn--card',             # plat-card CTA
     ]:
@@ -570,10 +574,12 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
 
     # And the same viewer + blurb on the HOST concept's List detail DOES get the report
     # affordance: proves the markers are reachable, so the bans above cannot rot into
-    # vacuousness again.
+    # vacuousness again. The extraction must not have cost List detail its own lightbox.
     list_content = client.get(f'/games/{b.np_communication_id}/').content.decode()
     assert 'data-blurb-report' in list_content
     assert 'id="gd-qr-modal"' in list_content
+    assert 'id="gd-shot-modal"' in list_content
+    assert 'js/shot-lightbox.js' in list_content
 
 
 def test_the_family_band_links_siblings_to_their_own_game_pages(client):

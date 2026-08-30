@@ -6,8 +6,9 @@ relevant here as there. Deliberately absent: the list-level pieces (per-list pla
 chips, the authed progress readout, My Stats, plat-card CTA, Outlook, flags) -- those describe ONE
 stack, and per-list data lives below the switcher, which is this page's whole anatomy. Platform
 chips here are the UNION across the list set; the players headline reads the aggregated
-community_stats. Badge and screenshot affordances are plain links (List detail's versions of these
-open modals its JS drives; no dead buttons here).
+community_stats. Badge affordances are plain links (List detail's open a modal its JS
+drives); screenshots open the SHARED lightbox (shot-lightbox.js + the shot_lightbox partial,
+extracted from List detail).
 {% endcomment %}
 <section class="gd-hero card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
     <div class="card-body gd-hero__body p-3 md:p-5 lg:p-6">
@@ -157,15 +158,18 @@ open modals its JS drives; no dead buttons here).
 
             <div class="gd-hero__extras pp-head-cascade">
                 {% if concept and image_urls.screenshot_urls %}
-                    {# Plain links (new tab), not lightbox buttons -- the lightbox lives on List detail. #}
-                    <div class="gd-shots" id="gp-shots">
+                    {% comment %}Same lightbox openers as List detail's hero (Jeffrey's call: the
+                    shared lightbox beats a raw image tab). shot-lightbox.js binds #gd-shots
+                    [data-shot], so the id must be gd-shots here too -- it doubles as the FLIP
+                    shrink-home target.{% endcomment %}
+                    <div class="gd-shots" id="gd-shots">
                         {% for url in image_urls.screenshot_urls|slice:":3" %}
-                            <a class="gd-shots__thumb" href="{{ url }}" target="_blank" rel="noopener" aria-label="View screenshot {{ forloop.counter }}">
+                            <button type="button" class="gd-shots__thumb" data-shot="{{ forloop.counter0 }}" aria-label="View screenshot {{ forloop.counter }}">
                                 <img src="{{ url }}" alt="{{ page_title }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                                 {% if forloop.last and image_urls.screenshot_urls|length > 3 %}
                                     <span class="gd-shots__more">+{{ image_urls.screenshot_urls|length|add:"-3" }}</span>
                                 {% endif %}
-                            </a>
+                            </button>
                         {% endfor %}
                     </div>
                 {% else %}
