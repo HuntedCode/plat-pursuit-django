@@ -40,7 +40,7 @@ page with a one-entry switcher). Emphasis adapts inside the page; existence of s
 |---|---|---|
 | Games browse | Concept | SHIPPED (phase 3): the catalogue deduped -- one card per page identity via the sitemap's election, an "N lists" chip + the partition's platform union on the card, links to the Game page. Tag detail (genre/theme) runs the same condensed pipeline. |
 | Game detail | Concept | The wrapper page (anatomy below). Where users live. |
-| Trophy Lists browse | Game | The list-level catalogue (regional variants, editions, recently added lists). |
+| Trophy Lists browse | Game | SHIPPED (phase 4): `/games/lists/` -- the list-level catalogue, one UN-condensed card per trophy list (observed PSN list names, region/Global chips, this list's own platforms), the full browse filter family with Regions first-class, alphabetical default. |
 | List detail | Game | The list as a COMMUNITY OBJECT: leaderboards, earn rates/rarity (the per-Game community-stats denorm), first achievers, playtime stats, stack identity -- plus its trophy grid. |
 
 ## Game detail anatomy: the wrapper pattern
@@ -155,6 +155,22 @@ Page-by-page during the rebuild, never a big-bang rename:
    on the number. Consult it mid-build if a sizing question actually comes up.
 
 ## Rollout log
+
+- **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (5 commits) -- the IA's LAST canonical
+  page. `/games/lists/` (the neutral `lists` SEGMENT per the naming insurance; url name
+  `trophy_lists`, subnav slug `trophy-lists` -- the parked GameList system's guards forbid bare
+  `lists` in nav slugs and sitemap keys, and hold `lists_browse`/`list_detail`/`my_lists`).
+  The TagDetailBaseView sibling-browse shape: plain form, NO browse_defaults dispatch (the bare
+  URL must 200 -- it is static-sitemap-advertised), the shared filter -> sort pipeline WITHOUT
+  the election (per-list is the point) + the destination np floor. The shared card's THIRD mode,
+  `list_identity_cards`: titles/alts from the observed PSN list names (`display_list_names`,
+  ONE batched query per render, mirrored into the ItemList schema) and region chips
+  REINTRODUCED page-gated as `.pp-gcard__region` (+ a muted Global chip for non-regional lists)
+  -- `.pp-gcard__plat--region` stays retired and the work-describing cards stay region-free
+  (leak-banned in their suites). Deliberate v1 omissions: no Lucky (it hardwires to Game
+  pages), no saved browse defaults, no contract drill-down. Recorded divergence (the phase-3
+  interim class): search and the alpha sort operate on `title_name` while the card displays the
+  observed name -- they rarely diverge; a stale-titled list can sort slightly off its label.
 
 - **2026-08-30 -- PHASE 3: Games browse condensing shipped** (6 commits + tag pages). One card
   per page identity via `game_page_canonicals()` slotted into the browse pipeline AFTER every
