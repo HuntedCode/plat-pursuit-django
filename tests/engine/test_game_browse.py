@@ -150,6 +150,55 @@ def test_viewer_best_progress_folds_across_siblings(client):
     assert '73%' in resp.content.decode()
 
 
+def test_a_blank_np_work_never_renders_a_card_and_never_breaks_the_fold(client):
+    """Final-audit #1/#2: the election population carries the DESTINATION's np floor, so a work
+    whose only row has no np id -- unrenderable on every page it could link -- never becomes a
+    card that 404s on click. And a blank-np SIBLING neither elects nor damages the viewer's
+    progress fold: the elected row's own entry survives (the fold seeds with it)."""
+    GameFactory(title_name='Ghost Work', title_platform=['PS5'], np_communication_id=None,
+                concept__unified_title='Ghost Work')
+    elected = GameFactory(title_platform=['PS5'], played_count=50,
+                          concept__unified_title='Solid Work')
+    GameFactory(concept=elected.concept, title_platform=['PS5'], np_communication_id='',
+                played_count=999)   # blank-np sibling: floored out despite the higher played
+    viewer = ProfileFactory(is_linked=True)
+    ProfileGameFactory(profile=viewer, game=elected, progress=60)
+    client.force_login(viewer.user)
+
+    url, params = _url()
+    resp = client.get(url, params)
+    content = resp.content.decode()
+
+    assert 'Ghost Work' not in content, 'an unrenderable work must not mint a card'
+    assert 'Solid Work' in content
+    assert resp.context['user_game_map'][elected.id]['progress'] == 60, (
+        'the fold must never delete the elected row\'s own progress'
+    )
+
+
+def test_trust_split_renders_the_accepted_two_destination_cards(client):
+    """Final-audit #3, pinning the PLAN's recorded accepted risk: an untrusted-match concept
+    sharing a trusted concept's igdb id elects its OWN card (its page is the c/ destination)
+    while the trusted card's UNGATED count includes the untrusted lists (its switcher shows
+    them). Two cards because there ARE two live destination pages; self-heals on graduation."""
+    trusted = GameFactory(title_platform=['PS5'], played_count=50,
+                          concept__unified_title='Trusted Work')
+    IGDBMatchFactory(concept=trusted.concept, igdb_id=82001)
+    shadow = GameFactory(title_platform=['PS5'], played_count=5,
+                         concept__unified_title='Shadow Work')
+    IGDBMatchFactory(concept=shadow.concept, igdb_id=82001, status='pending_review')
+
+    url, params = _url()
+    resp = client.get(url, params)
+    content = resp.content.decode()
+
+    assert content.count('pp-gcard__title') == 2
+    assert 'href="/games/82001/"' in content
+    assert f'href="/games/c/{shadow.concept.concept_id}/"' in content
+    assert resp.context['list_count_map'][trusted.id] == 2, 'the trusted switcher lists both'
+    assert resp.context['list_count_map'][shadow.id] == 1, 'the c/ page lists only its own'
+
+
 def test_condensed_card_links_titles_and_chips(client):
     """The card tweaks (owner: 'not a ton of tweaks to the actual cards'): the condensed card
     links the concept GAME page, titles by the concept, shows the partition's platform UNION in

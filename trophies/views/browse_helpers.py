@@ -16,8 +16,11 @@ from trophies.models import (
 # ---------------------------------------------------------------------------
 # Active-filter chips (GameSearchForm) — dismissable pills of the applied CONTENT
 # filters (the ones hidden in the collapsed panel), each with a remove-URL. Search
-# (query) and SCOPE (platform/regions/sort/page/view) are excluded — the search
-# field owns query; scope isn't a "filter" chip.
+# (query) and SCOPE (platform/sort/page/view) are excluded — the search field owns
+# query; scope isn't a "filter" chip. REGIONS graduated from scope to a chip with
+# the condensed catalogue (final-audit #7): the card lost its region chips and its
+# platform row shows the WORK's union, so an applied ?regions= had no visible
+# representation anywhere on the results.
 # ---------------------------------------------------------------------------
 
 # Boolean filter -> chip label.
@@ -37,7 +40,7 @@ _CHIP_SLIDERS = [
     ('igdb_time_min', 'igdb_time_max', 0, 1000, 'IGDB time', 'h'),
     ('community_time_min', 'community_time_max', 0, 1000, 'Time-to-beat', 'h'),
 ]
-_CHIP_MULTI = ('genres', 'themes', 'contract_jobs')
+_CHIP_MULTI = ('genres', 'themes', 'contract_jobs', 'regions')
 
 
 def get_active_filter_chips(request, form):

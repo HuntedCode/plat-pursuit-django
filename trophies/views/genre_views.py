@@ -209,8 +209,13 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         # ONE CARD PER PAGE IDENTITY, same as Browse Games (IA phase 3): the election slots in
         # AFTER every filter and BEFORE the final order_by -- a .filter() chained after the
         # window silently narrows the election population instead of filtering elected rows
-        # (the composition rule recorded in GamesListView.get_queryset).
-        qs = qs.game_page_canonicals()
+        # (the composition rule recorded in GamesListView.get_queryset). The np floor rides
+        # along for the same reason it does there: no card may link a 404.
+        qs = (
+            qs.filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
+            .game_page_canonicals()
+        )
 
         # Defer the ~30 KB IGDB blob (never read by the card); the platinum_trophy prefetch is dead -- the
         # shared card reads defined_trophies.platinum (a JSON column), not game.platinum_trophy.

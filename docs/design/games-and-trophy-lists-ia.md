@@ -169,10 +169,18 @@ Page-by-page during the rebuild, never a big-bang rename:
   filter); `seo_item_list` + Lucky follow. Recently Added stays deliberately PER-LIST with
   List-detail links (pinned). Interims recorded in the card's comments: flags overlay +
   played_count are the ELECTED row's own columns (election ~= partition max; never sum);
-  rating/badge/DLC maps stay elected-row/host-concept keyed; alpha sort orders by the elected
-  row's title_name while the card displays unified_title (they rarely diverge). Window cost at
+  rating/badge/DLC maps stay elected-row/host-concept keyed; alpha sort AND text search operate
+  on the elected row's title_name while the card displays unified_title (they rarely diverge; a
+  stack-specific search can return a card whose visible title omits the query). Window cost at
   prod scale is a prod-deploy-checklist item; the fallback (materialized elected ids) is named,
-  not built.
+  not built. Final-audit additions: the election population carries the destination's np floor
+  (a blank-np work must never mint a card that 404s); regions GRADUATED from scope to an
+  active-filter chip (the card lost its region chips, so an applied ?regions= needed a visible
+  representation); the trust-split overlap is ACCEPTED and pinned -- an untrusted-match concept
+  sharing a trusted igdb id renders its own c/-destination card while the trusted card's ungated
+  count includes its lists (two cards because there are two live pages; self-heals on
+  graduation); the tag hero's header stats (and the Genres & Themes list tiles) still count
+  LISTS while the grids count page identities -- accepted, the stats describe catalogue scale.
 
 - **2026-08-30 -- PHASE 2: the List-detail slim-down shipped** (7 commits). List detail is
   Trophies + Ranks; the concept Game page is the ONE active ratings host (quick-rate, blurb

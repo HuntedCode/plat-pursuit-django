@@ -191,7 +191,9 @@ def test_query_count_is_bounded(client, django_assert_max_num_queries):
         game = GameFactory(title_platform=['PS5'], played_count=50)
         ConceptGenreFactory(concept=game.concept, genre=genre)
 
-    with django_assert_max_num_queries(22):
+    # 14 measured post-condensing (final-audit #9: 22 hid the phase's +1 sibling query in
+    # slack). 15 = measured + one of headroom, tight enough that a stray per-card query trips it.
+    with django_assert_max_num_queries(15):
         resp = client.get(_url(genre))
     assert resp.status_code == 200
 

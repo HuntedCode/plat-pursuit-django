@@ -133,7 +133,11 @@ def build_game_card_context(page_games, request, condensed=False):
         user_map = {pg['game_id']: pg for pg in user_games}
         if condensed:
             for eid, sids in sibling_ids_by_elected.items():
-                best = max((user_map.get(sid) for sid in sids if user_map.get(sid)),
+                # Seed with the elected row's own entry even if a population quirk ever leaves
+                # eid out of its sibling set (final-audit #2) -- the fold must never DELETE the
+                # viewer's real progress.
+                candidates = [user_map.get(sid) for sid in set(sids) | {eid}]
+                best = max((pg for pg in candidates if pg),
                            key=lambda pg: (pg['progress'] or 0), default=None)
                 if best is None:
                     user_map.pop(eid, None)
@@ -141,7 +145,8 @@ def build_game_card_context(page_games, request, condensed=False):
                 user_map[eid] = {
                     'game_id': eid,
                     'progress': best['progress'],
-                    'has_plat': any((user_map.get(sid) or {}).get('has_plat') for sid in sids),
+                    'has_plat': any((user_map.get(sid) or {}).get('has_plat')
+                                    for sid in set(sids) | {eid}),
                     'earned_trophies_count': best['earned_trophies_count'],
                 }
         ctx['user_game_map'] = user_map
@@ -317,7 +322,15 @@ class GamesListView(HtmxListMixin, ListView):
         # the right SEMANTICS: ?platform=PS3 removes the PS5 sibling from the population, so the
         # PS3 row wins its partition and the card shows the version you asked for -- the same
         # promotion rule the shovelware election test pins.
-        qs = qs.game_page_canonicals()
+        #
+        # The np floor BEFORE the election (final-audit #1): every destination this grid links
+        # applies it (GamePageView, the sitemaps, the sibling query), so a blank/null-np row
+        # winning its partition would mint a card whose click 404s.
+        qs = (
+            qs.filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
+            .game_page_canonicals()
+        )
 
         qs = qs.select_related(
             'concept', 'concept__igdb_match',
@@ -433,10 +446,14 @@ class RandomGameView(View):
         if form.is_valid():
             qs, _ = apply_game_browse_filters(qs, form)
 
-        # No election needed for Lucky: any sibling resolves to the same Game page, so a random
-        # LIST row is a random PAGE. select_related keeps game_page_url query-free.
+        # No election needed for Lucky: any sibling resolves to the same Game page. NOTE the
+        # distribution is LIST-weighted (a 6-stack work is 6x likelier than a single-list one)
+        # -- accepted: popularity correlates with stacks, and an election here would buy
+        # uniformity at window-query cost. The np floor keeps the redirect target renderable.
         random_game = (
-            qs.select_related('concept', 'concept__igdb_match')
+            qs.filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
+            .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
             .order_by('?').first()
         )

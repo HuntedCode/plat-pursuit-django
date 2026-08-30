@@ -7,7 +7,10 @@
     Game page). The flags overlay + played_count below stay the ELECTED row's own columns on
     purpose: the election picks the most-played real row, so played ~= the partition max --
     never sum siblings (auto-pop double-counts). rating/badge/DLC maps stay elected-row /
-    host-concept keyed (the Game page's recorded split-concept interim).{% endcomment %}
+    host-concept keyed (the Game page's recorded split-concept interim). Search matches
+    title_name (the LIST) while the card displays unified_title -- same recorded divergence as
+    the alpha sort; a stack-specific query can return a card whose visible title omits the
+    query string.{% endcomment %}
     <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard>
         {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
         icons overlay top-left; the quick-add button top-right (signed in); the viewer's progress rides the
@@ -91,7 +94,9 @@
             on the right. Region chips removed 2026-08-30 (owner call: the card describes the
             WORK; region stays a filter). Zero queries either way. {% endcomment %}
             {% with union=platform_union_map|dict_get:game.id list_n=list_count_map|dict_get:game.id %}
-            {% if union or game.title_platform %}
+            {% comment %}The lists chip is PARTITION metadata, not platform metadata -- it must
+            not vanish with an empty platform set (final-audit #8), so it joins the gate.{% endcomment %}
+            {% if union or game.title_platform or list_n > 1 %}
             <div class="pp-gcard__foot">
                 <span class="pp-gcard__plats">
                     {% for p in union|default:game.title_platform %}<span class="pp-gcard__plat">{{ p }}</span>{% endfor %}
