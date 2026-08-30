@@ -93,6 +93,17 @@ list + viewer earned-state), included by Game detail's viewport AND by List deta
 List" page that does not show its trophies is a broken promise; anyone landing from a leaderboard
 row expects the list.
 
+The grid's group nav is ADAPTIVE (owner's call, 2026-08-30): the chip cloud stays for the
+common 2-8 group case, but above that threshold (Sea of Thieves / Vampire Survivors class,
+tens of packs) it becomes one compact "Jump to pack" control -- a native `<details>`
+disclosure with a filter input and a scrollable row per pack (icon, name, count, viewer %). It
+pins below the chrome on the Game page only; List detail's sticky minibar already carries a
+jump select, so the shared component stays static there.
+`<details>` is deliberate: the grid is htmx-swapped on both hosts, and a native disclosure plus
+document-delegated enhancements (`trophy-grid.js`, loaded by both hosts) needs zero rebinding.
+Rows keep `data-gd-groupjump`, so List detail's smooth-jump delegate and minibar sync work
+unchanged; without JS the rows are plain anchor jumps.
+
 SEO stays clean because the PAGES differ even though the component is shared: Game detail answers
 "the game" queries; List detail is the canonical, indexable home of stack-specific intent
 ("<game> PS5 trophy list", "EU stack" -- real query classes). Distinct titles/meta, distinct
@@ -141,6 +152,9 @@ Page-by-page during the rebuild, never a big-bang rename:
 
 ## Rollout log
 
+- **2026-08-30 -- adaptive group nav**: the trophy grid's chip cloud collapses to the sticky
+  "Jump to pack" menu above 8 groups (see the component section above). One shared partial +
+  `trophy-grid.js`, so List detail and the Game page changed together.
 - **2026-08-30 -- slice 1 refinement round** (owner's first browser pass + audit): page width
   matched to List detail (the narrower wrapper had no reason); the hero ADOPTED from List
   detail's concept half (anatomy bullet above); badge/contract spine became a split band in the

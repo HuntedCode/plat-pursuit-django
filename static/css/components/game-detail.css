@@ -727,6 +727,51 @@
 .gd-groupnav__name { white-space: nowrap; }
 .gd-groupnav__count { font-size: 0.62rem; font-weight: 700; padding: 0 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 50%, transparent); }
 
+/* Adaptive "Jump to pack" menu -- the group nav's many-DLC form (grid.html renders it above the
+   chip threshold). Native <details>; the popover mirrors .gd-rate__dropmenu's surface so the two
+   dropdown idioms on these pages read as one family. NOT sticky here: List detail's sticky
+   minibar already carries a jump-to-group select, and two pinned controls would collide in the
+   same zone -- the Game page (no minibar) opts into sticky in game-page.css. */
+.gd-jumpmenu { position: relative; z-index: 30; margin-bottom: 14px; align-self: flex-start; }
+.gd-jumpmenu__btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; cursor: pointer;
+    list-style: none; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-jumpmenu__btn::-webkit-details-marker { display: none; }
+.gd-jumpmenu__btn:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-jumpmenu__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-jumpmenu__btn > svg { width: 14px; height: 14px; flex-shrink: 0; }
+.gd-jumpmenu__caret { transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-jumpmenu[open] .gd-jumpmenu__caret { transform: rotate(180deg); }
+.gd-jumpmenu__tally { font-size: 0.68rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 50%, transparent); }
+.gd-jumpmenu__pop {
+    position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+    width: min(21rem, calc(100vw - 2rem));
+    display: flex; flex-direction: column; gap: 4px; padding: 6px;
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.gd-jumpmenu__filter {
+    width: 100%; padding: 7px 11px; font-size: 0.78rem; color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-bg-0) 60%, transparent);
+    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm);
+}
+.gd-jumpmenu__filter:focus { outline: 2px solid var(--pp-primary); outline-offset: -1px; }
+.gd-jumpmenu__filter::placeholder { color: var(--pp-text-mute); }
+.gd-jumpmenu__list { max-height: min(19rem, 55vh); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.gd-jumpmenu__row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 9px; text-decoration: none;
+    font-size: 0.78rem; color: var(--pp-text-dim); border-radius: var(--pp-radius-sm);
+}
+.gd-jumpmenu__row:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+.gd-jumpmenu__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.gd-jumpmenu__row .gd-groupnav__name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-jumpmenu__pct { font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .gd-jumpmenu__caret { transition: none; } }
+
 /* Mobile tap targets: enlarge the interactive filter/jump controls (and their spacing) on phones -- the
    desktop-compact sizes are too small to reliably tap. Restored to compact at md+ (mouse precision). */
 @media (max-width: 767px) {

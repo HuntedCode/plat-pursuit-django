@@ -409,6 +409,7 @@ def test_the_page_actually_loads_its_javascript():
 
     assert '{% block js_scripts %}' in src, 'base.html has no `scripts` block; only js_scripts renders'
     assert "js/game-page.js" in src
+    assert "js/trophy-grid.js" in src, 'the shared grid driver (jump-to-pack menu) must load here too'
 
 
 def test_template_js_and_view_agree_on_the_swap_target():

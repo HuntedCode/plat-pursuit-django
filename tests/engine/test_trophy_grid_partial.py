@@ -93,6 +93,51 @@ def test_anonymous_render_shows_no_viewer_chrome():
 
 def test_group_nav_respects_the_host_flag():
     assert 'gd-groupnav' not in _render(show_group_nav=False)
+    assert 'gd-jumpmenu' not in _render(show_group_nav=False, **_many_groups(12))
+
+
+def _many_groups(n):
+    """Contract overrides for an n-group list (group ids g00, g01, ...)."""
+    trophy = dict(_ctx()['trophies']['default'][0])
+    ids = [f'g{i:02d}' for i in range(n)]
+    return {
+        'trophies': {g: [dict(trophy, trophy_id=i)] for i, g in enumerate(ids)},
+        'groups': {g: {'trophy_group_name': f'Pack {g}', 'trophy_group_icon_url': f'https://psn/{g}.png',
+                       'defined_trophies': {'bronze': 1, 'silver': 0, 'gold': 0, 'platinum': 0}} for g in ids},
+        'earned': {}, 'group_totals': {g: {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0} for g in ids},
+        'group_pct': {g: 5 * i for i, g in enumerate(ids)},
+    }
+
+
+def test_group_nav_stays_chips_at_the_threshold():
+    """Eight groups still get the chip cloud -- the jump menu is for the many-DLC tail only."""
+    html = _render(**_many_groups(8))
+
+    assert html.count('gd-groupnav__chip') == 8
+    assert 'gd-jumpmenu' not in html
+
+
+def test_many_groups_collapse_to_the_jump_menu():
+    """Nine-plus groups (Sea of Thieves class): the chip cloud becomes ONE compact <details>
+    control -- filter input + a row per pack, each row a real anchor carrying data-gd-groupjump
+    so List detail's smooth-jump delegate and minibar sync keep working unchanged."""
+    html = _render(**_many_groups(9), id_prefix='gp-')
+
+    assert 'data-gd-jumpmenu' in html
+    assert 'gd-groupnav__chip' not in html
+    assert html.count('gd-jumpmenu__row') == 9
+    assert html.count('data-gd-groupjump') == 9
+    assert 'href="#gp-trophy-group-g03"' in html          # rows are id_prefix-namespaced anchors
+    assert 'data-gd-groupjump="gp-trophy-group-g03"' in html
+    assert 'data-gd-jumpfilter' in html
+    assert '9 packs' in html
+    assert 'Pack g03' in html
+    assert '15%' in html                                   # viewer % from the group_pct param
+
+    # Anonymous render: rows stay, the viewer % column goes.
+    anon = _render(**_many_groups(9), profile=None)
+    assert html.count('gd-jumpmenu__row') == 9
+    assert 'gd-jumpmenu__pct' not in anon
 
 
 def test_empty_grid_renders_the_empty_state():
@@ -132,3 +177,4 @@ def test_the_real_game_page_still_renders_the_grid_through_the_wrapper(client):
     assert 'gd-trophies' in content and 'gd-group' in content
     assert 'id="trophy-group-default"' in content, "List detail's historical anchor ids must survive"
     assert 'id="gd-count-data"' in content
+    assert 'js/trophy-grid.js' in content, 'List detail must load the shared grid driver'
