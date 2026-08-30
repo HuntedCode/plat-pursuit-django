@@ -1,4 +1,4 @@
-{% load custom_filters humanize job_icons %}
+{% load humanize job_icons %}
 {% comment %}
 The Game page hero: the List-detail hero's CONCEPT-LEVEL portion, same visual anatomy (gd-hero
 grid: cover / main / extras), adopted per Jeffrey's call -- everything about the WORK is as
@@ -14,9 +14,11 @@ open modals its JS drives; no dead buttons here).
         <div class="gd-hero__grid">
 
             <figure class="gd-cover">
+                {% if host_game.display_image_url %}
                 <img src="{{ host_game.display_image_url }}" alt="{{ page_title }} {% if host_game.has_cover_art %}cover{% else %}icon{% endif %}"
                      loading="eager" decoding="async" fetchpriority="high"
                      class="w-full h-full {% if host_game.has_cover_art %}object-cover object-top{% else %}object-contain p-4{% endif %}" />
+                {% endif %}
             </figure>
 
             <div class="gd-hero__main pp-head-cascade">
@@ -35,7 +37,11 @@ open modals its JS drives; no dead buttons here).
                     {% for cc in concept.concept_companies.all %}{% if cc.is_publisher %}
                         <span class="gd-fact"><span class="gd-fact__k">Publisher</span><a href="{% url 'company_detail' slug=cc.company.slug %}" class="gd-fact__v gd-fact__v--link">{{ cc.company.name }}</a></span>
                     {% endif %}{% endfor %}
-                    {% with release_date=host_game.platform_release_date %}{% if release_date %}
+                    {% comment %}concept.release_date, not the host list's platform date: this
+                    header describes the WORK, and a 2018 game with a 2020 PS5 list must not read
+                    "Released 2020" (audit M2). Host platform date is the fallback for concepts
+                    that never got one.{% endcomment %}
+                    {% with release_date=concept.release_date|default:host_game.platform_release_date %}{% if release_date %}
                         <span class="gd-fact"><span class="gd-fact__k">Released</span><time datetime="{{ release_date|date:'Y-m-d' }}" class="gd-fact__v">{{ release_date|date }}</time></span>
                     {% endif %}{% endwith %}
                     {% with igdb=concept.igdb_match %}{% if igdb.is_trusted and igdb.completion_time_display %}
@@ -54,16 +60,16 @@ open modals its JS drives; no dead buttons here).
                                 {% for ct in concept.concept_themes.all|slice:":2" %}<span class="gd-tag gd-tag--theme">{{ ct.theme.name }}</span>{% endfor %}
                             </div>
                         {% endif %}
-                        <button type="button" class="gd-about-more" data-gp-goto="about">More about this game
+                        <a class="gd-about-more" href="?{% if selected_game.np_communication_id != default_list_np %}list={{ selected_game.np_communication_id }}&amp;{% endif %}view=about" data-gp-goto="about">More about this game
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                        </button>
+                        </a>
                     </div>
                 {% endif %}
                 {% endwith %}
 
                 {% if community_stats.played_count %}
                     {# Aggregated across every list -- jumps to the Ratings tab's community band. #}
-                    <a href="?view=ratings" data-gp-goto="ratings" class="gd-hero__players" title="Community stats for {{ page_title }}">
+                    <a href="?{% if selected_game.np_communication_id != default_list_np %}list={{ selected_game.np_communication_id }}&amp;{% endif %}view=ratings" data-gp-goto="ratings" class="gd-hero__players" title="Community stats for {{ page_title }}">
                         <span class="pp-tally pp-tally--lg gd-hero__players-n" data-gd-countup="{{ community_stats.played_count }}">{{ community_stats.played_count|intcomma }}</span>
                         <span class="gd-hero__players-lbl">Player{{ community_stats.played_count|pluralize }} &rsaquo;</span>
                     </a>
@@ -75,18 +81,20 @@ open modals its JS drives; no dead buttons here).
                 the screenshots. Falls back to a single column at base width.{% endcomment %}
                 <div class="gd-spine gd-spine--band">
                     {% if badges %}
-                        {# A link to the series' badge page, not List detail's modal button. #}
-                        <a class="gd-spine__row gd-spine__row--badges" href="{% url 'badge_detail' series_slug=badges.0.series_slug %}">
+                        {% comment %}Each medallion links ITS OWN series page (audit M3: a game in
+                        two series showed "3 Badges" with every click going to the alphabetically
+                        first one -- List detail's modal listed them all, and a single row-link
+                        lost that). The row itself is not a link.{% endcomment %}
+                        <div class="gd-spine__row gd-spine__row--badges">
                             <span class="gd-spine__disc" aria-hidden="true"></span>
                             <div class="gd-spine__main">
                                 <div class="gd-spine__peek">
-                                    {% for badge in badges|slice:":3" %}<span class="gd-spine__obj gd-spine__obj--badge" title="{{ badge.name }} &middot; {{ badge.group_name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>{% endfor %}
+                                    {% for badge in badges|slice:":3" %}<a class="gd-spine__obj gd-spine__obj--badge" href="{% url 'badge_detail' series_slug=badge.series_slug %}" title="{{ badge.name }} &middot; {{ badge.group_name }}">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</a>{% endfor %}
                                     {% if badges|length > 3 %}<span class="gd-spine__more">+{{ badges|length|add:"-3" }} more</span>{% endif %}
                                 </div>
                                 <span class="gd-spine__cap">{{ badges|length }} Badge{{ badges|length|pluralize }}</span>
                             </div>
-                            <svg class="gd-spine__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-                        </a>
+                        </div>
                     {% else %}
                         <div class="gd-spine__row gd-spine__row--empty">
                             <div class="gd-spine__main">
@@ -130,7 +138,7 @@ open modals its JS drives; no dead buttons here).
                     <div class="gp-family">
                         <span class="gp-family__label">In the same family</span>
                         <div class="gp-family__row">
-                            {% for fv in family_versions %}
+                            {% for fv in family_versions|slice:":6" %}
                                 <a class="gp-family__item" href="{{ fv.game.concept.game_page_url }}">
                                     <span class="gp-family__cover">
                                         {% if fv.game.display_image_url %}
@@ -138,9 +146,10 @@ open modals its JS drives; no dead buttons here).
                                                  class="w-full h-full {% if fv.game.has_cover_art %}object-cover object-top{% else %}object-contain p-0.5{% endif %}" />
                                         {% endif %}
                                     </span>
-                                    <span class="gp-family__name">{{ fv.concept.unified_title|default:fv.game.title_name }}</span>
+                                    <span class="gp-family__name">{{ fv.game.concept.unified_title|default:fv.game.title_name }}</span>
                                 </a>
                             {% endfor %}
+                            {% if family_versions|length > 6 %}<span class="gd-spine__more">+{{ family_versions|length|add:"-6" }} more</span>{% endif %}
                         </div>
                     </div>
                 {% endif %}

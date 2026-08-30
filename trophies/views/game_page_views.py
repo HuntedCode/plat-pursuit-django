@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 
 from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame
-from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER
+from trophies.util_modules.constants import PLATFORM_DISPLAY_ORDER, PLATFORM_PRIORITY_ORDER
 from trophies.views.concept_context import ConceptContextMixin
 from trophies.views.game_views import (
     build_earned_state,
@@ -222,8 +222,14 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # Hero chips: the platform UNION across the set, in priority order -- per-list platforms
         # live on the switcher chips; the hero describes the WORK.
         seen = {p for g in self.list_set for p in (g.title_platform or [])}
-        context['all_platforms'] = [p for p in PLATFORM_PRIORITY_ORDER if p in seen] + sorted(
-            p for p in seen if p not in PLATFORM_PRIORITY_ORDER
+        # PLATFORM_DISPLAY_ORDER first (it slots the VR cohorts where the site shows them --
+        # alphabetical put PSVR before PSVR2), then the priority order's legacy tail, then any
+        # stragglers alphabetically.
+        display_rank = list(PLATFORM_DISPLAY_ORDER) + [
+            p for p in PLATFORM_PRIORITY_ORDER if p not in PLATFORM_DISPLAY_ORDER
+        ]
+        context['all_platforms'] = [p for p in display_rank if p in seen] + sorted(
+            p for p in seen if p not in display_rank
         )
         context['host_game'] = host
         # The concept partials (ratings/about/versions) read `game` -- the HOST game, elected
@@ -271,9 +277,12 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # JS and the flag/report modal live on List detail. The flag gates their CTAs so the page
         # never renders an invitation with no button (audit A3/M4).
         context['concept_tabs_readonly'] = True
-        # The About tab's versions sections are redundant on THIS page: "Other platforms" is the
-        # switcher's own list set, "In the same family" is the hero's family band (Jeffrey's call).
-        context['about_hide_versions'] = True
+        # The About tab's versions card is hidden on IGDB pages only: there "Other platforms" is
+        # the switcher's own list set and "In the same family" is the hero's family band. On a c/
+        # page it STAYS -- the audit found other_versions is the sole surface reaching untrusted
+        # same-igdb siblings (they are neither switcher lists there nor family, by the exclusion
+        # rule), and gating it made those concepts unreachable from each other.
+        context['about_hide_versions'] = self.kwargs.get('igdb_id') is not None
 
         context.update(self._build_viewport_context(selected, viewer, names))
 

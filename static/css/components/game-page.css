@@ -120,6 +120,7 @@
 @media (prefers-reduced-motion: reduce) {
     #gp-viewport.is-swapping { transition: none; }
     .gp-lchip { transition: none; }
+    .gp-family__item { transition: none; }
 }
 
 /* The hero's badge/contract spine as one split band in the main column (Jeffrey's call): the two
@@ -137,12 +138,22 @@
     .gd-spine--band .gd-spine__row { height: 100%; }
 }
 
+/* The band's badge row is a DIV holding per-medallion series links (audit M3), not List detail's
+   clickable row -- the inherited row pointer would advertise a click the row no longer answers.
+   The medallion links carry their own affordance instead (glow, not scale). */
+.gd-spine--band div.gd-spine__row--badges { cursor: default; }
+.gd-spine--band a.gd-spine__obj--badge { border-radius: 9999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
+.gd-spine--band a.gd-spine__obj--badge:hover { filter: brightness(1.18); }
+.gd-spine--band a.gd-spine__obj--badge:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
 /* Hero-jump landing guarantee (browser-repro'd): switching away from the tall Lists panel can
    shrink the document below the scroll distance the jump needs, leaving the hero filling the
    viewport and the switched panel invisible below the fold -- "the link does nothing". A floor on
    the panels keeps the tabs-row scroll target reachable. Page-scoped; List detail's panels are
    naturally tall and untouched. */
-#game-page-container .gd-view { min-height: calc(100vh - 9rem); }
+/* Jump DESTINATIONS only -- NOT the Lists panel: on the default view the floor just pushed the
+   footer ~500px past a stub game's content (audit M4). */
+#gp-view-ratings, #gp-view-about { min-height: calc(100vh - 9rem); }
 
 /* Family band: sibling concepts (remasters/remakes, different igdb id) one hop away, below the
    badge/contract band. Same quiet-row idiom as the spine; covers are tiny 3:4 plates so the row
@@ -182,7 +193,8 @@
     border-color: color-mix(in oklab, var(--pp-accent) 45%, var(--pp-border));
     background: var(--pp-bg-2);
 }
-.gp-family__item:focus-visible { outline: 2px solid var(--pp-accent); outline-offset: 2px; }
+/* --pp-primary, not accent: the band lives inside the hero, whose cohesive keyboard ring is primary. */
+.gp-family__item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .gp-family__cover {
     width: 1.6rem;
     aspect-ratio: 3 / 4;

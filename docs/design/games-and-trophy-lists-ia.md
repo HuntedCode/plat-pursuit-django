@@ -64,6 +64,23 @@ model) around ONE list viewport tab:
 - **Identity chip** on the viewport: list name + platform badges + region, with the link to the
   List detail page living IN the chip -- identity and escape hatch are one object.
 - **Lazy**: default list renders server-side; other lists fetch on switch.
+- **The hero is List detail's hero, concept-half only** (owner's call, first browser pass):
+  same `gd-hero` anatomy -- cover / facts / IGDB teaser / screenshots -- minus every per-list
+  piece (progress readout, My Stats, plat-card CTA, Outlook, flags) and minus the modal-bound
+  buttons, whose JS lives only on List detail. Platform chips show the UNION across the list
+  set; the players headline reads the aggregated community stats; Released is
+  `concept.release_date` (the work's date, not the host list's platform date). The badge/contract
+  spine sits IN the hero as one split band (badges left, contract right; each badge medallion
+  links its own series page), using the vertical room the dropped progress readout freed.
+- **Family band** (owner's call, same pass): below the spine band, the concept's different-igdb
+  siblings -- remasters, remakes, collections -- as one-hop links to THEIR Game pages, capped at
+  six with a "+N more" tally. Same-igdb concepts are the switcher's territory, never family.
+  Wording rule: family is a hero BAND on Game detail and a SECTION on List detail; it is never a
+  nav layer.
+- **No versions card in About here** (owner's call: "doesn't make sense for the page as a
+  whole") -- "Other platforms" restates the switcher's own set and "In the same family" is the
+  hero band, so `about_hide_versions` gates the card off on igdb pages ONLY. `/games/c/` pages
+  KEEP it: there the card is the sole surface linking untrusted same-igdb sibling concepts.
 
 ## The trophy grid is ONE COMPONENT, rendered on both pages
 
@@ -121,6 +138,15 @@ Page-by-page during the rebuild, never a big-bang rename:
 
 ## Rollout log
 
+- **2026-08-30 -- slice 1 refinement round** (owner's first browser pass + audit): page width
+  matched to List detail (the narrower wrapper had no reason); the hero ADOPTED from List
+  detail's concept half (anatomy bullet above); badge/contract spine became a split band in the
+  hero; the family band added; jump links (`More about this game`, the players headline) made
+  real anchors that preserve a non-default `?list=` and scroll past the sticky navbar; the About
+  versions card gated off on igdb pages only (kept on `/games/c/` -- the audit caught that a
+  blanket gate orphaned untrusted same-igdb siblings, and that the first gate suppressed the
+  About empty state along with the card, leaving a blank panel). Read-only gating hardened: the
+  blurb report button and the three ratings modals now honor `concept_tabs_readonly`.
 - **2026-08-30 -- slice 1 shipped** (rebuild branch, 9 commits): `display_list_name` chain,
   `_build_earned_state` extraction (+ the per-trophy N+1 fix), the shared trophy grid
   (`templates/trophies/partials/trophy_grid/`, contract-bound, id-prefixed), `ConceptContextMixin`,

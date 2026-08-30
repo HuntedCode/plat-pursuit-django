@@ -107,7 +107,11 @@ so the gating stays out of the template.
     </section>
     {% endif %}{% endif %}
 
-    {% if not about_has_info and not other_versions and not family_versions %}
+    {% comment %}When the versions card is gated off (about_hide_versions), the versions lists
+    must not ALSO suppress this empty state -- both audits caught the tab rendering a zero-length
+    <div> on every un-enriched split-concept page (`or` binds looser than `and` below, so this
+    reads: hide-flag set, OR genuinely nothing to show).{% endcomment %}
+    {% if not about_has_info %}{% if about_hide_versions or not other_versions and not family_versions %}
     <div class="gd-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <p class="gd-empty__title">No extended info yet</p>
@@ -122,7 +126,7 @@ so the gating stays out of the template.
         </button>
         {% endif %}
     </div>
-    {% endif %}
+    {% endif %}{% endif %}
 
 </div>
 {% endwith %}

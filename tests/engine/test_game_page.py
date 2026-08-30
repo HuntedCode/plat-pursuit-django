@@ -516,24 +516,64 @@ def test_the_breadcrumb_is_visible_not_just_structured_data(client):
 
 def test_the_hero_is_concept_level_with_no_list_furniture(client):
     """The hero adoption (Jeffrey's call): the List-detail hero's concept-level portion, WITHOUT
-    the per-list pieces -- and without its modal-bound buttons, which have no modals or JS here
-    (the dead-CTA class the audit flagged on About)."""
+    the per-list pieces or modal-bound CTAs -- none of that JS ships here. The second audit round
+    proved the anonymous version of this test vacuous (4 of 5 banned markers could not render for
+    an anonymous viewer of an unenriched game, while the REAL leak -- an inert blurb-report button
+    plus three orphaned modals -- sailed through unbanned). So the fixture makes every ban
+    reachable: a logged-in linked viewer, ANOTHER profile's public blurb (the report affordance's
+    exact render condition on List detail), and PSN screenshots."""
+    from tests.factories import ConceptTrophyGroupFactory, UserConceptRatingFactory
+
     a = _game(igdb_id=996, title_platform=['PS4'])
     b = _game(igdb_id=None, title_platform=['PS5'])
     _match(b.concept, 996)
     TrophyFactory(game=a, trophy_id=1)
+    # The enrichment goes on B's concept: both lists are trusted, so host election picks the
+    # platform-priority winner (PS5 = b), and image_urls / community_tabs read the HOST concept.
+    b.concept.media = [{'type': 'SCREENSHOT', 'url': 'https://img.example/shot1.jpg'}]
+    b.concept.save()
+    ConceptTrophyGroupFactory(concept=b.concept)  # blurbs render per-CTG; base group required
+    UserConceptRatingFactory(
+        profile=ProfileFactory(is_linked=True), concept=b.concept,
+        blurb='A reachable quick take from someone else.',
+    )
+    viewer = ProfileFactory(is_linked=True)
+    client.force_login(viewer.user)
 
     content = client.get('/games/996/').content.decode()
 
     assert 'gd-hero' in content and 'gd-hero__title' in content
-    # Platform chips: the UNION in priority order, one per platform -- not one row per list.
+    # Platform chips: the UNION in priority order, one per platform -- scoped to the hero's own
+    # chip row so a stray gd-plat elsewhere on the page can't satisfy (or pollute) the check.
     import re
-    chips = re.findall(r'<span class="gd-plat">(\w+)</span>', content)
+    chips_html = content.split('gd-hero__chips', 1)[1].split('</div>', 1)[0]
+    chips = re.findall(r'<span class="gd-plat">(\w+)</span>', chips_html)
     assert chips == ['PS5', 'PS4'], chips
-    # List-level furniture must not leak up: progress readout, versions modal, lightbox buttons,
-    # badge modal openers, flag button.
-    for marker in ['gd-prog', 'data-versions-open', 'data-shot=', 'data-spine-open', 'game-flag-btn']:
+    # The screenshots render as plain links, not List detail's lightbox buttons.
+    assert '<a class="gd-shots__thumb"' in content
+    assert 'A reachable quick take from someone else.' in content
+    # Every one of these WOULD render on List detail for this exact viewer + data; here each is a
+    # dead CTA or an orphaned dialog, gated server-side by concept_tabs_readonly or by the hero
+    # simply not being List detail's.
+    for marker in [
+        'data-blurb-report',        # blurb report button (another profile's blurb IS present)
+        'id="gd-qr-modal"',         # quick-rate modal include
+        'id="gd-blurb-report-modal"',
+        'id="gd-guidelines-modal"',
+        'id="gd-versions-modal"',   # List detail's versions dialog
+        'data-versions-open',
+        'data-shot=',               # lightbox buttons
+        'data-stats-open',          # My Stats modal opener
+        'gd-btn--card',             # plat-card CTA
+    ]:
         assert marker not in content, f'list-level hero piece leaked: {marker}'
+
+    # And the same viewer + blurb on the HOST concept's List detail DOES get the report
+    # affordance: proves the markers are reachable, so the bans above cannot rot into
+    # vacuousness again.
+    list_content = client.get(f'/games/{b.np_communication_id}/').content.decode()
+    assert 'data-blurb-report' in list_content
+    assert 'id="gd-qr-modal"' in list_content
 
 
 def test_the_family_band_links_siblings_to_their_own_game_pages(client):
@@ -556,15 +596,56 @@ def test_the_family_band_links_siblings_to_their_own_game_pages(client):
 
     content = client.get('/games/997/').content.decode()
 
-    assert 'gp-family' in content and 'In the same family' in content
+    # A family member whose concept matches the SAME igdb id is 'other platforms' (the switcher's
+    # territory), never family -- the band must exclude it or the page lists itself as its own
+    # sibling on every split concept.
+    same_igdb = ConceptFactory(unified_title='Crash Same-IGDB', family=family)
+    # Untrusted on purpose: a trusted PS5 match would win host election and retitle the page,
+    # which is correct page behavior but not what this test is about. Membership and the family
+    # exclusion both key on the igdb id regardless of trust.
+    _match(same_igdb, 997, status='pending')
+    GameFactory(concept=same_igdb, title_platform=['PS5'])
+
+    content = client.get('/games/997/').content.decode()
+
+    assert 'gp-family' in content
+    assert content.count('In the same family') == 1, (
+        'the family label must appear exactly once: the hero band. A second occurrence means the '
+        'About versions card is rendering its family section again (the about_hide_versions gate)'
+    )
     assert 'href="/games/998/"' in content, 'a matched sibling must link its igdb page'
     assert 'href="/games/c/PP_FAMSTUB/"' in content, 'an unmatched sibling links its c/ page'
     assert 'Crash Remade' in content and 'Crash Stub' in content
+    # Scoped to the band's own name spans: the sibling's game is legitimately elsewhere on the
+    # page (it IS a member of the list set), it just must not appear as family.
+    assert 'gp-family__name">Crash Same-IGDB' not in content
 
     # No family -> no band.
     lone = _game(igdb_id=999)
     TrophyFactory(game=lone, trophy_id=1)
     assert 'gp-family' not in client.get('/games/999/').content.decode()
+
+
+def test_the_family_band_is_bounded_at_six_with_an_overflow_tally(client):
+    """The band is a hero PEEK, not a directory (audit M5): a mega-family (LEGO, Ratalaika shovel
+    stacks) must not stretch the header into a wall of covers. Six render; the rest collapse to
+    the same '+N more' idiom the badge peek uses."""
+    from trophies.models import GameFamily
+
+    family = GameFamily.objects.create(igdb_id=525252, canonical_name='Mega Family')
+    host = _game(igdb_id=1005, title_platform=['PS5'])
+    host.concept.family = family
+    host.concept.save()
+    TrophyFactory(game=host, trophy_id=1)
+    for i in range(8):
+        sib = ConceptFactory(unified_title=f'Mega Sibling {i}', family=family)
+        _match(sib, 2000 + i)
+        GameFactory(concept=sib, title_platform=['PS4'])
+
+    content = client.get('/games/1005/').content.decode()
+
+    assert content.count('gp-family__item') == 6, 'the band must cap at six siblings'
+    assert '+2 more' in content
 
 
 def test_the_about_tab_hides_the_versions_card_here_but_not_on_list_detail(client):
@@ -582,6 +663,32 @@ def test_the_about_tab_hides_the_versions_card_here_but_not_on_list_detail(clien
     game_page = client.get('/games/1001/').content.decode()
     assert 'Versions &amp; editions' not in game_page
     assert 'gd-vsec' not in game_page
+    # BOTH audits caught the companion bug: with the card gated off, the About tab's empty state
+    # was ALSO suppressed (its old condition required no other_versions, which a split-concept
+    # page has by construction), leaving a zero-length panel. Unenriched fixture -> gd-empty.
+    assert 'gd-empty' in game_page, (
+        'an unenriched game page must show the About empty state, not a blank panel'
+    )
 
     list_page = client.get(f'/games/{a.np_communication_id}/').content.decode()
     assert 'Versions &amp; editions' in list_page, 'List detail must keep its versions card'
+
+
+def test_the_concept_fallback_page_keeps_the_versions_card(client):
+    """The flag is igdb-pages-only (audit M1): on a /games/c/ page the About versions card is the
+    ONLY surface linking untrusted same-igdb sibling concepts (the switcher can't reach them --
+    membership groups by concept there). Blanket-hiding it orphaned those siblings entirely."""
+    a = _game(title_platform=['PS5'])
+    b = _game(igdb_id=None, title_platform=['PS4'])
+    # Same UNTRUSTED igdb id on both: neither graduates, each keeps its own c/ page, and the only
+    # bridge between them is _build_other_versions' same-igdb grouping inside the versions card.
+    _match(a.concept, 7007, status='pending')
+    _match(b.concept, 7007, status='pending')
+    TrophyFactory(game=a, trophy_id=1)
+
+    content = client.get(f'/games/c/{a.concept.concept_id}/', HTTP_CF_RAY='test').content.decode()
+
+    assert 'Versions &amp; editions' in content, 'c/ pages must keep the versions card'
+    assert f'/games/{b.np_communication_id}/' in content, (
+        'the untrusted same-igdb sibling must stay reachable through it'
+    )
