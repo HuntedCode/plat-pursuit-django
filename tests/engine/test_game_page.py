@@ -32,6 +32,22 @@ def _resolve(kwargs):
     return view._resolve(kwargs)
 
 
+# --- the shared platform union -------------------------------------------------------------------
+
+def test_ordered_platform_union_slots_vr_and_legacy_correctly():
+    """The shared util behind the Game page hero chips AND the condensed Browse card: DISPLAY
+    order first (VR cohorts between PS4 and PS3 -- alphabetical put PSVR before PSVR2), then the
+    priority order's legacy tail, then unknown stragglers alphabetically."""
+    from trophies.util_modules.constants import ordered_platform_union
+
+    union = ordered_platform_union([
+        ['PS3'], ['PSVR', 'PS4'], ['PSVR2', 'PS5'], ['PSP'], ['MYSTERYBOX'],
+    ])
+    assert union == ['PS5', 'PS4', 'PSVR2', 'PSVR', 'PS3', 'PSP', 'MYSTERYBOX']
+    assert ordered_platform_union([]) == []
+    assert ordered_platform_union([None, []]) == []   # PSN nulls tolerated
+
+
 # --- resolution ----------------------------------------------------------------------------------
 
 def test_split_concepts_sharing_an_igdb_id_share_one_page():

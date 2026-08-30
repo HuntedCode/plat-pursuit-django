@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 
 from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame
-from trophies.util_modules.constants import PLATFORM_DISPLAY_ORDER, PLATFORM_PRIORITY_ORDER
+from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER, ordered_platform_union
 from trophies.views.concept_context import ConceptContextMixin
 from trophies.views.game_views import (
     build_earned_state,
@@ -227,18 +227,10 @@ class GamePageView(ConceptContextMixin, TemplateView):
         default = self._default_list(progress)
         names = Game.display_list_names(self.list_set)
 
-        # Hero chips: the platform UNION across the set, in priority order -- per-list platforms
-        # live on the switcher chips; the hero describes the WORK.
-        seen = {p for g in self.list_set for p in (g.title_platform or [])}
-        # PLATFORM_DISPLAY_ORDER first (it slots the VR cohorts where the site shows them --
-        # alphabetical put PSVR before PSVR2), then the priority order's legacy tail, then any
-        # stragglers alphabetically.
-        display_rank = list(PLATFORM_DISPLAY_ORDER) + [
-            p for p in PLATFORM_PRIORITY_ORDER if p not in PLATFORM_DISPLAY_ORDER
-        ]
-        context['all_platforms'] = [p for p in display_rank if p in seen] + sorted(
-            p for p in seen if p not in display_rank
-        )
+        # Hero chips: the platform UNION across the set, in display order -- per-list platforms
+        # live on the switcher chips; the hero describes the WORK. The shared util is also what
+        # the condensed Browse card uses, so the two surfaces cannot disagree.
+        context['all_platforms'] = ordered_platform_union(g.title_platform for g in self.list_set)
         context['host_game'] = host
         # The concept partials (ratings/about/versions) read `game` -- the HOST game, elected
         # anonymously, so the concept furniture never varies by viewer.

@@ -36,6 +36,23 @@ def platform_display_rank(title_platform):
         default=_PLATFORM_DISPLAY_FALLBACK,
     )
 
+
+def ordered_platform_union(platform_lists):
+    """The de-duplicated union of several games' title_platform lists, in display order.
+
+    DISPLAY order first (PS5, PS4, PSVR2, PSVR, PS3, PSVITA), then any PRIORITY-order
+    platforms display order omits (PSP, PS2, PS1 legacy tails), then unknown stragglers
+    alphabetically -- deterministic whatever PSN sends. Extracted verbatim from
+    GamePageView.get_context_data when Browse Games condensed to one card per page
+    identity and needed the SAME union per card (the two surfaces must never disagree
+    about a game's platform set).
+    """
+    seen = {p for platforms in platform_lists for p in (platforms or [])}
+    display_rank = list(PLATFORM_DISPLAY_ORDER) + [
+        p for p in PLATFORM_PRIORITY_ORDER if p not in PLATFORM_DISPLAY_ORDER
+    ]
+    return [p for p in display_rank if p in seen] + sorted(p for p in seen if p not in display_rank)
+
 # Title ID blacklist - Games with known issues or duplicates
 TITLE_ID_BLACKLIST = [
     'CUSA05214_00', 'CUSA01015_00', 'CUSA00129_00', 'CUSA00131_00',
