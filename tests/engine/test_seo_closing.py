@@ -185,8 +185,10 @@ def test_jsonld_game_url_agrees_with_the_canonical(client):
 
     head = client.get(f'/games/{quiet.np_communication_id}/', **CF).content.decode().split('</head>')[0]
 
-    assert f'"url": "http://testserver/games/c/{concept.concept_id}/"' in head, (
-        'the VideoGame node must agree with rel=canonical -- both point at the concept Game page'
+    # Self-canonical since the slim-down: the node's url and rel=canonical are both the page's
+    # own bare list URL -- one identity claim, still zero drift.
+    assert f'"url": "http://testserver/games/{quiet.np_communication_id}/"' in head, (
+        'the VideoGame node must agree with rel=canonical -- both are the bare list URL'
     )
 
 

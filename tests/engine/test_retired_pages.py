@@ -26,7 +26,8 @@ def test_game_detail_engine_shows_as_text_not_a_link():
     ConceptEngine.objects.create(concept=concept, engine=engine)
     game = GameFactory(concept=concept, title_platform=['PS5'])
 
-    html = Client().get(reverse('game_detail', args=[game.np_communication_id])).content.decode()
+    # The About panel lives on the concept Game page since the list-detail slim-down.
+    html = Client().get(f'/games/{concept.igdb_match.igdb_id}/').content.decode()
 
     assert 'Unreal Engine 5' in html                 # the engine still shows
     assert 'href="/engines/' not in html             # but not as a link to the retired page

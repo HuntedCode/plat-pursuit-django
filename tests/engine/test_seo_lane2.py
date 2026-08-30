@@ -20,14 +20,18 @@ def test_game_detail_emits_aggregate_rating_from_real_ratings(client):
     """Star-snippet food, but only ever from genuine data."""
     from tests.factories import ConceptTrophyGroupFactory
 
+    from tests.factories import IGDBMatchFactory
+
     concept = ConceptFactory()
+    match = IGDBMatchFactory(concept=concept)   # trusted -> the ratings host resolves
     game = GameFactory(concept=concept, defined_trophies={'bronze': 5})
     ConceptTrophyGroupFactory(concept=concept)   # the base group the averages are keyed on
     for i in range(3):
         UserConceptRatingFactory(profile=ProfileFactory(is_linked=True),
                                  concept=concept, overall_rating=4.0)
 
-    head = client.get(f'/games/{game.np_communication_id}/', **CF).content.decode().split('</head>')[0]
+    # The AggregateRating claim lives on the concept Game page since the slim-down.
+    head = client.get(f'/games/{match.igdb_id}/', **CF).content.decode().split('</head>')[0]
 
     assert '"aggregateRating"' in head
     assert '"ratingValue": 4.0' in head
@@ -36,9 +40,14 @@ def test_game_detail_emits_aggregate_rating_from_real_ratings(client):
 
 def test_no_ratings_means_no_aggregate_rating_block(client):
     """Fabricated or empty rating markup is a structured-data policy violation."""
-    game = GameFactory(concept=ConceptFactory(), defined_trophies={'bronze': 5})
+    from tests.factories import IGDBMatchFactory
 
-    head = client.get(f'/games/{game.np_communication_id}/', **CF).content.decode().split('</head>')[0]
+    concept = ConceptFactory()
+    match = IGDBMatchFactory(concept=concept)
+    GameFactory(concept=concept, defined_trophies={'bronze': 5})
+
+    # On the ratings host itself, so "no ratings -> no block" pins the real surface.
+    head = client.get(f'/games/{match.igdb_id}/', **CF).content.decode().split('</head>')[0]
 
     assert 'aggregateRating' not in head
 
@@ -115,13 +124,16 @@ def test_schema_rating_matches_the_visible_value(client):
     say the same, not banker's-rounded 4.2."""
     from tests.factories import ConceptTrophyGroupFactory
 
+    from tests.factories import IGDBMatchFactory
+
     concept = ConceptFactory()
-    game = GameFactory(concept=concept, defined_trophies={'bronze': 5})
+    match = IGDBMatchFactory(concept=concept)
+    GameFactory(concept=concept, defined_trophies={'bronze': 5})
     ConceptTrophyGroupFactory(concept=concept)
     UserConceptRatingFactory(profile=ProfileFactory(is_linked=True), concept=concept, overall_rating=4.0)
     UserConceptRatingFactory(profile=ProfileFactory(is_linked=True), concept=concept, overall_rating=4.5)
 
-    head = client.get(f'/games/{game.np_communication_id}/', **CF).content.decode().split('</head>')[0]
+    head = client.get(f'/games/{match.igdb_id}/', **CF).content.decode().split('</head>')[0]
 
     assert '"ratingValue": 4.3' in head, 'the schema disagrees with the visible rounding'
 
