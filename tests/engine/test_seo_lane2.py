@@ -53,7 +53,9 @@ def test_no_ratings_means_no_aggregate_rating_block(client):
 
 
 def test_the_games_hub_emits_an_item_list(client):
-    GameFactory(title_name='Listed Game', defined_trophies={'bronze': 1})
+    # unified_title too: the condensed ItemList names rows by CONCEPT (IA phase 3).
+    GameFactory(title_name='Listed Game', defined_trophies={'bronze': 1},
+                concept__unified_title='Listed Game')
 
     head = client.get('/games/', **CF).content.decode().split('</head>')[0]
 
@@ -111,7 +113,9 @@ def test_dlc_only_concepts_emit_no_aggregate_rating(client):
 def test_jsonld_never_lets_a_title_break_out_of_the_script(client):
     """The json_script hardening: a title containing </script> must emit as unicode escapes,
     or everything after it in the head becomes live markup."""
-    GameFactory(title_name='Evil</script><img src=x>Game', defined_trophies={'bronze': 1})
+    # The CONCEPT title is what feeds the condensed ItemList now -- poison the live surface.
+    GameFactory(title_name='Evil</script><img src=x>Game', defined_trophies={'bronze': 1},
+                concept__unified_title='Evil</script><img src=x>Game')
 
     head = client.get('/games/', **CF).content.decode().split('</head>')[0]
 
