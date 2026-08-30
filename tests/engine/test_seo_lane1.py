@@ -27,35 +27,41 @@ def _family():
 
 
 def test_the_election_prefers_trophies_then_played_count():
-    """The rule of record: has trophy data first (a trophy-less SKU cannot represent the
-    concept, whatever its played_count), then the SKU the community actually owns."""
-    _, stub, winner, quiet = _family()
-
-    assert stub.canonical_sibling().id == winner.id
-    assert quiet.canonical_sibling().id == winner.id
-    assert winner.canonical_sibling().id == winner.id
-
-
-def test_a_conceptless_game_stands_for_itself():
-    lone = GameFactory(concept=None)
-
-    assert lone.canonical_sibling().id == lone.id
-
-
-def test_the_sitemap_and_the_page_agree_on_the_winner():
-    """The whole point of the shared ordering: the sitemap's window and the page's per-concept
-    pick must elect the SAME sibling, or the sitemap advertises a URL whose page canonicals
-    elsewhere."""
+    """The rule of record: has trophy data first (a trophy-less SKU cannot represent the page,
+    whatever its played_count), then the SKU the community actually owns. Pinned via the sitemap's
+    window now -- canonical_sibling() was deleted when the concept Game page subsumed per-page
+    sibling canonicals (Games/Trophy Lists IA)."""
     from trophies.models import Game
 
     _, stub, winner, quiet = _family()
-    lone = GameFactory(concept=None)
 
-    elected = set(Game.objects.concept_canonicals().values_list('id', flat=True))
+    elected = set(Game.objects.game_page_canonicals().values_list('id', flat=True))
 
     assert winner.id in elected
     assert stub.id not in elected and quiet.id not in elected
-    assert lone.id in elected, 'a concept-less game must stand for itself in the sitemap'
+
+
+def test_a_conceptless_game_stands_for_itself():
+    from trophies.models import Game
+
+    lone = GameFactory(concept=None)
+
+    assert lone.id in set(Game.objects.game_page_canonicals().values_list('id', flat=True))
+
+
+def test_every_sitemap_url_equals_the_canonical_of_the_page_it_advertises(client):
+    """The invariant that replaced 'sitemap and page agree on the winner': the sitemap and
+    rel=canonical both route through Concept.game_page_url, so each advertised URL must be
+    exactly what its own page emits as canonical."""
+    from core.sitemaps import GameSitemap
+
+    concept, stub, winner, quiet = _family()
+    lone = GameFactory(concept=None, defined_trophies={'bronze': 1})
+
+    for obj in GameSitemap().items():
+        url = GameSitemap().location(obj)
+        head = client.get(url, **CF).content.decode().split('</head>')[0]
+        assert f'rel="canonical" href="http://testserver{url}"' in head, url
 
 
 def test_every_sibling_page_canonicalizes_to_the_concept_game_page(client):
@@ -140,10 +146,9 @@ def test_the_two_electors_share_one_population():
                                  defined_trophies={'bronze': 5}, shovelware_status='manually_flagged')
     clean = GameFactory(concept=concept, played_count=10, defined_trophies={'bronze': 5})
 
-    assert clean.canonical_sibling().id == clean.id, 'the page elected a shovelware winner'
     elected = set(Game.objects.exclude_shovelware()
                   .filter(np_communication_id__isnull=False)
-                  .concept_canonicals().values_list('id', flat=True))
+                  .game_page_canonicals().values_list('id', flat=True))
     assert clean.id in elected and flagged_winner.id not in elected
 
 

@@ -57,15 +57,24 @@ class GameSitemap(Sitemap):
             Game.objects
             .exclude_shovelware()
             .filter(np_communication_id__isnull=False)
-            # One URL per CONCEPT (SEO Lane 1): the elected canonical SKU. Regional/platform
-            # siblings point their rel=canonical here and are not advertised -- ~35k rows
-            # collapse toward ~18-20k, each consolidating its siblings' signals.
-            .concept_canonicals()
-            .only('np_communication_id', 'created_at')
+            # One URL per GAME PAGE (Games/Trophy Lists IA): the partition key mirrors
+            # Concept.game_page_url exactly, so deliberately-split concepts sharing a trusted
+            # igdb_id are advertised ONCE, at the URL every sibling page's rel=canonical points
+            # to. Consolidates harder than the old per-concept election.
+            .game_page_canonicals()
+            .select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
+            .only('np_communication_id', 'created_at',
+                  'concept__concept_id',
+                  'concept__igdb_match__igdb_id', 'concept__igdb_match__status')
             .order_by('-id')
         )
 
     def location(self, obj):
+        # The one routing helper: a game with a concept advertises its Game page (igdb or c/
+        # form); a conceptless game has no Game page and keeps its list URL.
+        if obj.concept_id:
+            return obj.concept.game_page_url()
         return reverse('game_detail', kwargs={'np_communication_id': obj.np_communication_id})
 
     def lastmod(self, obj):

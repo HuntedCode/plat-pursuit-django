@@ -130,6 +130,40 @@ class GameQuerySet(models.QuerySet):
             .filter(Q(_election_rank=1) | Q(concept__isnull=True))
         )
 
+    def game_page_canonicals(self):
+        """One Game per GAME PAGE -- the Games/Trophy Lists IA identity, which is broader than
+        concept_canonicals: deliberately-split concepts sharing a trusted igdb_id are ONE page, so
+        they elect ONE representative between them. Partition key mirrors Concept.game_page_url
+        exactly (trusted igdb id, else concept_id, else the row itself), so the sitemap can never
+        advertise two rows for one page or a page for zero rows. Same election ordering inside the
+        partition; concept-less rows partition on their own id and stand for themselves."""
+        from django.db.models import Case, CharField, Value, When, Window
+        from django.db.models.functions import Cast, Concat, RowNumber
+
+        from trophies.models import IGDBMatch
+
+        page_key = Case(
+            When(
+                concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                concept__igdb_match__igdb_id__isnull=False,
+                then=Concat(Value('igdb:'), Cast('concept__igdb_match__igdb_id', CharField())),
+            ),
+            When(concept__isnull=False,
+                 then=Concat(Value('concept:'), models.F('concept__concept_id'))),
+            default=Concat(Value('game:'), Cast('id', CharField())),
+            output_field=CharField(),
+        )
+        return (
+            self.annotate(
+                _election_rank=Window(
+                    expression=RowNumber(),
+                    partition_by=[page_key],
+                    order_by=canonical_election_order(),
+                )
+            )
+            .filter(_election_rank=1)
+        )
+
     def exclude_shovelware(self):
         """
         Exclude shovelware games.
@@ -221,6 +255,10 @@ class GameManager(models.Manager):
     def obtainable(self):
         """Proxy to queryset method."""
         return self.get_queryset().obtainable()
+
+    def game_page_canonicals(self):
+        """Proxy to GameQuerySet.game_page_canonicals -- one implementation, manager-style."""
+        return self.get_queryset().game_page_canonicals()
 
     def concept_canonicals(self):
         """Proxy to GameQuerySet.concept_canonicals -- one implementation, like every other

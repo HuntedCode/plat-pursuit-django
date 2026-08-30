@@ -288,3 +288,72 @@ def test_list_page_canonicalizes_up_to_its_igdb_game_page(client):
     head = client.get(f'/games/{game.np_communication_id}/').content.decode().split('</head>')[0]
 
     assert 'rel="canonical" href="http://testserver/games/906/"' in head
+
+
+# --- sitemap: the page-identity election ---------------------------------------------------------
+
+def test_sitemap_advertises_a_split_concept_page_exactly_once():
+    """Two concepts, one trusted igdb id -> ONE page, so the sitemap must emit /games/<id>/ once.
+    Under the old per-concept partition it would have advertised the same URL twice."""
+    from core.sitemaps import GameSitemap
+
+    a = _game(igdb_id=950, title_platform=['PS4'], defined_trophies={'bronze': 2})
+    b = _game(igdb_id=None, title_platform=['PS5'], defined_trophies={'bronze': 2})
+    _match(b.concept, 950)
+
+    sm = GameSitemap()
+    urls = [sm.location(o) for o in sm.items()]
+
+    assert urls.count('/games/950/') == 1
+
+
+def test_sitemap_routes_unmatched_and_conceptless_correctly():
+    from core.sitemaps import GameSitemap
+
+    stub_concept = ConceptFactory(concept_id='PP_SMAP')
+    stub_game = GameFactory(concept=stub_concept, defined_trophies={'bronze': 1})
+    lone = GameFactory(concept=None, defined_trophies={'bronze': 1})
+
+    sm = GameSitemap()
+    urls = {sm.location(o) for o in sm.items()}
+
+    assert '/games/c/PP_SMAP/' in urls
+    assert f'/games/{lone.np_communication_id}/' in urls
+
+
+def test_sitemap_page_is_bounded_queries():
+    """The window over the Case partition key is heavier SQL than the old concept partition; this
+    pins that a sitemap page still resolves in a fixed number of queries (no per-row igdb walks --
+    location() reads the select_related'd match)."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    from core.sitemaps import GameSitemap
+
+    for i in range(6):
+        _game(igdb_id=960 + i, defined_trophies={'bronze': 1})
+
+    sm = GameSitemap()
+    with CaptureQueriesContext(connection) as ctx:
+        urls = [sm.location(o) for o in sm.items()]
+
+    assert len(urls) >= 6
+    assert len(ctx) == 1, f'sitemap page must be one query, used {len(ctx)}'
+
+
+def test_untrusted_matches_do_not_merge_sitemap_partitions():
+    """Two concepts with UNTRUSTED matches sharing an igdb id are still two c/ pages (trust gates
+    the URL, so it must gate the partition identically) -- merging them would elect one row for
+    two pages and silently drop the other from the sitemap."""
+    from core.sitemaps import GameSitemap
+
+    a = ConceptFactory(concept_id='PSN_UT_A')
+    b = ConceptFactory(concept_id='PSN_UT_B')
+    _match(a, 970, status='pending_review')
+    _match(b, 970, status='pending_review')
+    GameFactory(concept=a, defined_trophies={'bronze': 1})
+    GameFactory(concept=b, defined_trophies={'bronze': 1})
+
+    sm = GameSitemap()
+    urls = {sm.location(o) for o in sm.items()}
+
+    assert '/games/c/PSN_UT_A/' in urls and '/games/c/PSN_UT_B/' in urls
