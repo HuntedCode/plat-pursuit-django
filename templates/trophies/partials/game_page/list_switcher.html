@@ -22,6 +22,10 @@ replaces the grid, not the switcher; active-chip state is synced client-side.
             <span class="gp-lchip__name">{{ entry.name }}</span>
             <span class="gp-lchip__meta">
                 {% for plat in entry.game.title_platform %}<span class="gp-lchip__plat">{{ plat }}</span>{% endfor %}
+                {% comment %}Region chips, when the list IS regional: stacks often differ by region
+                alone (same platform), and without these the chips read as duplicates. Secondary
+                tint = list META, the Trophy Lists browse card's vocabulary.{% endcomment %}
+                {% if entry.game.is_regional and entry.game.region %}{% for r in entry.game.region %}<span class="gp-lchip__region">{{ r }}</span>{% endfor %}{% endif %}
                 {% if entry.progress is not None %}
                     <span class="gp-lchip__pct pp-tally{% if entry.has_plat %} gp-lchip__pct--plat{% endif %}"
                           title="{% if entry.has_plat %}Platinum earned &middot; {% endif %}Your progress">

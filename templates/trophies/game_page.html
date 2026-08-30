@@ -43,7 +43,7 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
                     {% if switcher_entries|length > 1 %}
                     <select data-minibar-listswitch data-mb-only="lists" class="pp-gallery__select pp-minibar__listswitch" aria-label="Switch trophy list">
                         {% for entry in switcher_entries %}
-                        <option value="{{ entry.game.np_communication_id }}"{% if entry.is_selected %} selected{% endif %}>{{ entry.name }}{% if entry.game.title_platform %} ({{ entry.game.title_platform|join:"/" }}){% endif %}</option>
+                        <option value="{{ entry.game.np_communication_id }}"{% if entry.is_selected %} selected{% endif %}>{{ entry.name }}{% if entry.game.title_platform or entry.game.is_regional and entry.game.region %} ({% if entry.game.title_platform %}{{ entry.game.title_platform|join:"/" }}{% endif %}{% if entry.game.is_regional and entry.game.region %}{% if entry.game.title_platform %} &middot; {% endif %}{{ entry.game.region|join:"/" }}{% endif %}){% endif %}</option>
                         {% endfor %}
                     </select>
                     {% endif %}

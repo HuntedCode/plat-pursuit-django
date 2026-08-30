@@ -794,6 +794,28 @@ def test_the_minibar_list_switch_mirrors_the_real_switcher(client):
     assert f'<option value="{b.np_communication_id}" selected' not in sel
 
 
+def test_the_switcher_shows_regions_when_lists_differ_by_region_alone(client):
+    """Jeffrey's beta catch: stacks often vary ONLY by region on the same platform, and without
+    region chips the switcher (and the minibar select) rendered indistinguishable twins. A
+    regional list carries .gp-lchip__region chips + a region suffix in the select option; a
+    non-regional list carries neither (no 'Global' filler in the tight chip)."""
+    na = _game(igdb_id=1014, title_platform=['PS5'], is_regional=True, region=['NA'])
+    jp = _game(igdb_id=None, title_platform=['PS5'], is_regional=True, region=['JP'])
+    plain = _game(igdb_id=None, title_platform=['PS4'])
+    _match(jp.concept, 1014)
+    _match(plain.concept, 1014)
+    for i, g in enumerate((na, jp, plain)):
+        TrophyFactory(game=g, trophy_id=i + 1)
+
+    content = client.get('/games/1014/').content.decode()
+
+    assert content.count('gp-lchip__region') == 2
+    assert '>NA</span>' in content and '>JP</span>' in content
+    assert '(PS5 &middot; NA)' in content and '(PS5 &middot; JP)' in content
+    assert '(PS4)' in content and '(PS4 &middot;' not in content
+    assert 'Global' not in content
+
+
 def test_view_param_is_honored_server_side(client):
     """The hero jump anchors are only real no-JS links if the server renders the named panel
     visible -- the audit found ?view=about landing on a page whose About panel shipped with the

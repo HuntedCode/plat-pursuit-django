@@ -63,6 +63,18 @@
     border: 1px solid var(--pp-border);
     opacity: 0.85;
 }
+/* Region chip: only on regional lists (stacks that differ by region alone would otherwise read
+   as duplicate chips). Secondary tint = list META, the Trophy Lists browse card's vocabulary. */
+.gp-lchip__region {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.05rem 0.3rem;
+    border-radius: 0.3rem;
+    color: var(--pp-secondary);
+    border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border));
+    opacity: 0.85;
+}
 .gp-lchip__pct {
     font-size: 0.7rem;
     font-weight: 700;
