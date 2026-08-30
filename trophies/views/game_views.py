@@ -915,11 +915,16 @@ class GameDetailView(ConceptContextMixin, DetailView):
         Returns:
             list: Breadcrumb items
         """
-        return [
+        crumbs = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Games', 'url': reverse_lazy('games_list')},
-            {'text': f"{game.title_name}"}
         ]
+        # Games/Trophy Lists IA: the concept Game page sits between the hub and this list, so the
+        # trail reads Home > Games > <the work> > <this list's name>.
+        if game.concept_id and game.concept.unified_title:
+            crumbs.append({'text': game.concept.unified_title, 'url': game.concept.game_page_url()})
+        crumbs.append({'text': f"{game.title_name}"})
+        return crumbs
 
     # PSN-global rarity tiers (Trophy.trophy_rarity): Common=3 .. Ultra_Rare=0.
     _RARITY_LABELS = {0: 'Ultra Rare', 1: 'Very Rare', 2: 'Rare', 3: 'Common'}

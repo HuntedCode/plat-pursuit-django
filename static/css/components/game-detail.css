@@ -1590,3 +1590,16 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
    that ground instead of bg-1. */
 .gd-blurb { --mark-rim: var(--pp-bg-2); }
 
+
+/* Identity affordance up to the concept Game page (Games/Trophy Lists IA): one quiet line. */
+.gd-partof {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    opacity: 0.75;
+    text-decoration: none;
+    margin-bottom: 0.35rem;
+}
+.gd-partof:hover { opacity: 1; }
+.gd-partof .gd-partof__cta { color: var(--pp-accent); white-space: nowrap; }

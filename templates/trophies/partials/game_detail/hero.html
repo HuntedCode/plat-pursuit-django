@@ -22,6 +22,15 @@
             </figure>
 
             <div class="gd-hero__main pp-head-cascade">
+                {% if concept_page_url %}
+                    {# Identity affordance (Games/Trophy Lists IA): this page is ONE trophy list of a
+                       game; the link up to the concept Game page is the list's parentage, quiet by
+                       design -- one line above the chips, not a banner. #}
+                    <a class="gd-partof" href="{{ concept_page_url }}">
+                        Part of <strong>{{ game.concept.unified_title }}</strong>
+                        <span class="gd-partof__cta">View game &rsaquo;</span>
+                    </a>
+                {% endif %}
                 <div class="gd-hero__chips">
                     {% for platform in game.title_platform %}
                         <span class="gd-plat">{{ platform }}</span>

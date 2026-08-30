@@ -117,6 +117,25 @@ Page-by-page during the rebuild, never a big-bang rename:
    titles, classified by kind. It is a DIAGNOSTIC, not a gate -- nothing in this design branches
    on the number. Consult it mid-build if a sizing question actually comes up.
 
+## Rollout log
+
+- **2026-08-30 -- slice 1 shipped** (rebuild branch, 9 commits): `display_list_name` chain,
+  `_build_earned_state` extraction (+ the per-trophy N+1 fix), the shared trophy grid
+  (`templates/trophies/partials/trophy_grid/`, contract-bound, id-prefixed), `ConceptContextMixin`,
+  the Game page at `/games/<igdb_id>/` + `/games/c/<concept_id>/` with the list switcher,
+  canonicals both directions, `game_page_canonicals()` sitemap, nav/search wiring, the List-detail
+  link-up. Interim decisions taken then, to revisit deliberately:
+  - List pages rel=canonical UP to the Game page until the slim-down phase gives them distinct
+    stack content (then they earn back a self-canonical).
+  - Split-concept pages show the HOST concept's ratings only; merging sibling concepts' rating
+    sets is the refinement phase's design problem.
+  - The identity chip shows name+platforms; "region" has no data source on Game and is deferred.
+  - robots.txt's `/games/*/*` disallow covers the `/games/c/` fallback tail -- deliberate: those
+    are the unmatched/stub concepts (thin content), and the igdb pages are single-segment and
+    fully crawlable. Revisit alongside the slim-down SEO pass.
+  - Page identity decision recorded: **IGDB id, no slug** (owner's call) -- stable across renames,
+    no slug backfill, and deliberately-split concepts share one page by construction.
+
 ## Gotchas and Pitfalls
 
 - **`GameList` name collision**: the hidden user-collections feature is called Game Lists. Until
