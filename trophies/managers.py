@@ -111,28 +111,9 @@ class GameQuerySet(models.QuerySet):
         """
         return self.filter(is_obtainable=True)
 
-    def concept_canonicals(self):
-        """One Game per Concept -- the elected canonical SKU -- plus every concept-less row
-        (each stands for itself). Window-ranked with canonical_election_order() so this and
-        Game.canonical_sibling() cannot drift. Django 4.2+ emulates filtering on window
-        annotations via a subquery (QUALIFY-style), so this stays one queryset the sitemap
-        can slice."""
-        from django.db.models import Q, Window
-        from django.db.models.functions import RowNumber
-        return (
-            self.annotate(
-                _election_rank=Window(
-                    expression=RowNumber(),
-                    partition_by=[models.F('concept_id')],
-                    order_by=canonical_election_order(),
-                )
-            )
-            .filter(Q(_election_rank=1) | Q(concept__isnull=True))
-        )
-
     def game_page_canonicals(self):
         """One Game per GAME PAGE -- the Games/Trophy Lists IA identity, which is broader than
-        concept_canonicals: deliberately-split concepts sharing a trusted igdb_id are ONE page, so
+        the retired per-concept election: deliberately-split concepts sharing a trusted igdb_id are ONE page, so
         they elect ONE representative between them. Partition key mirrors Concept.game_page_url
         exactly (trusted igdb id, else concept_id, else the row itself), so the sitemap can never
         advertise two rows for one page or a page for zero rows. Same election ordering inside the
@@ -259,11 +240,6 @@ class GameManager(models.Manager):
     def game_page_canonicals(self):
         """Proxy to GameQuerySet.game_page_canonicals -- one implementation, manager-style."""
         return self.get_queryset().game_page_canonicals()
-
-    def concept_canonicals(self):
-        """Proxy to GameQuerySet.concept_canonicals -- one implementation, like every other
-        method on this manager."""
-        return self.get_queryset().concept_canonicals()
 
     def exclude_shovelware(self):
         """Proxy to queryset method."""

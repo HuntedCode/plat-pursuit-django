@@ -21,7 +21,7 @@
     background: color-mix(in oklab, var(--pp-bg-1) 72%, transparent);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     text-decoration: none;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
     min-width: 0;
 }
 .gp-lchip:hover {
@@ -109,9 +109,14 @@
     text-decoration: none;
 }
 .gp-idchip__link:hover { text-decoration: underline; }
+.gp-idchip__link:focus-visible {
+    outline: 2px solid var(--pp-accent);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+}
 
 /* Swap settle: the dim is a STATE (kept under reduced motion); only the transition is decorative. */
-#gp-viewport.is-swapping { opacity: 0.55; transition: opacity 0.15s ease; }
+#gp-viewport.is-swapping { opacity: 0.55; transition: opacity var(--pp-dur-fast) var(--pp-ease); }
 @media (prefers-reduced-motion: reduce) {
     #gp-viewport.is-swapping { transition: none; }
     .gp-lchip { transition: none; }

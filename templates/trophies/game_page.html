@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load custom_filters humanize static seo_tags %}
+{% load static seo_tags %}
 {% block title %}{{ page_title }} Trophies{% endblock %}
 {% block og_title %}{{ page_title }} Trophies{% endblock %}
 {% block og_description %}{{ seo_description }}{% endblock %}
@@ -16,6 +16,7 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
 
 {% block content %}
     <div class="max-w-5xl mx-auto px-3 md:px-4">
+        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
         {% include 'trophies/partials/game_page/header.html' %}
 
         {# ── Concept tabs: one segmented switcher, site standard. Lists is the default view. ── #}
@@ -41,7 +42,7 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
             chips and can't leak elsewhere -- this page has no filter form in slice 1; when filters
             arrive, carry the scope on a data attribute (browse-filters.js Lucky-button trick), not
             a hidden input. {% endcomment %}
-            <div id="gp-viewport" data-default-np="{{ default_list_np }}">
+            <div id="gp-viewport" role="tabpanel" aria-label="Selected trophy list" data-default-np="{{ default_list_np }}">
                 {% include 'trophies/partials/game_page/list_viewport.html' %}
             </div>
         </div>
@@ -56,6 +57,9 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
     </div>
 {% endblock %}
 
-{% block scripts %}
+{% comment %}js_scripts, NOT scripts: base.html has no `scripts` block and Django silently
+discards a child block with no parent counterpart -- the audit found the page's entire JS layer
+dead because of that one word. The source-guard test now pins this tag.{% endcomment %}
+{% block js_scripts %}
     <script src="{% static 'js/game-page.js' %}"></script>
 {% endblock %}

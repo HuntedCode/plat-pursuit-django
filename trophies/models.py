@@ -1157,7 +1157,7 @@ class Concept(models.Model):
         from django.urls import reverse
 
         match = getattr(self, 'igdb_match', None)
-        if match is not None and match.is_trusted and match.igdb_id:
+        if match is not None and match.is_trusted and match.igdb_id is not None:
             return reverse('game_page', kwargs={'igdb_id': match.igdb_id})
         return reverse('game_page_concept', kwargs={'concept_id': self.concept_id})
 

@@ -82,7 +82,7 @@ class GameSitemap(Sitemap):
 
     def get_latest_lastmod(self):
         # Same floor as items(): without exclude_shovelware, the advertised lastmod could be
-        # the timestamp of a row the section never lists. (concept_canonicals is skipped here
+        # the timestamp of a row the section never lists. (the election window is skipped here
         # on purpose -- a window function for a max() would cost more than it disambiguates,
         # and any elected row's created_at is bounded by this max anyway.)
         return (

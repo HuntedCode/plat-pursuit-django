@@ -27,7 +27,7 @@
                     list of a game; the link up to the concept Game page is the list's parentage,
                     quiet by design -- one line above the chips, not a banner.{% endcomment %}
                     <a class="gd-partof" href="{{ concept_page_url }}">
-                        Part of <strong>{{ game.concept.unified_title }}</strong>
+                        Part of <strong>{{ game.concept.unified_title|default:game.title_name }}</strong>
                         <span class="gd-partof__cta">View game &rsaquo;</span>
                     </a>
                 {% endif %}

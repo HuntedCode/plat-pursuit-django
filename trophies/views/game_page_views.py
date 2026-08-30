@@ -20,7 +20,6 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from trophies.mixins import BackgroundContextMixin
 from trophies.models import Concept, ConceptFranchise, EarnedTrophy, Game, ProfileGame
 from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER
 from trophies.views.concept_context import ConceptContextMixin
@@ -49,7 +48,7 @@ def _platform_priority_case():
     )
 
 
-class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
+class GamePageView(ConceptContextMixin, TemplateView):
     """Anon renders cheap (zero per-user queries -- pinned by test); the concept tabs are stable
     across viewers because the HOST concept comes from the platform-priority election, never from
     the viewer-personalized default list."""
@@ -68,6 +67,11 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
     def _resolve(self, kwargs):
         base = (
             Game.objects
+            # Mirror the sitemap's floor: np_communication_id is nullable/blankable, a blank row
+            # NoReverseMatch-500s the identity chip and a null one mints an unactivatable
+            # ?list=None chip.
+            .filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
             .select_related('concept', 'concept__igdb_match')
             .defer(
                 # The ~30KB IGDB blob; the house rule for every queryset joining igdb_match.
@@ -96,11 +100,13 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
 
         concept = get_object_or_404(Concept, concept_id=kwargs['concept_id'])
         match = getattr(concept, 'igdb_match', None)
-        if match is not None and match.is_trusted and match.igdb_id:
+        if match is not None and match.is_trusted and match.igdb_id is not None:
             # Graduation: the concept now has a trusted match, so its page IS the igdb page.
             url = reverse('game_page', kwargs={'igdb_id': match.igdb_id})
-            qstring = self.request.META.get('QUERY_STRING', '')
-            return HttpResponsePermanentRedirect(f'{url}?{qstring}' if qstring else url)
+            # Forward ONLY ?list= -- the one param the target reads. Reflecting the raw query
+            # string mints an unbounded family of 301s onto one page for crawlers to chew.
+            wanted = self.request.GET.get('list', '')
+            return HttpResponsePermanentRedirect(f'{url}?list={wanted}' if wanted else url)
         return list(base.filter(concept=concept))
 
     # ── viewer ───────────────────────────────────────────────────────────────────────────────────
@@ -111,8 +117,11 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
         return profile if (profile is not None and profile.is_linked) else None
 
     def _viewer_maps(self, viewer):
-        """(progress by game pk, plat'd game pks) over the list set -- two bounded queries, and the
-        whole per-user cost of the page. Anonymous pays neither."""
+        """(progress by game pk, plat'd game pks) over the list set -- two bounded queries.
+        NOT the whole per-user cost of the page: an authed viewer also pays build_earned_state
+        (3 queries) and, via the inherited ratings builder, several queries PER ConceptTrophyGroup
+        (can_rate + own-rating lookups) -- tens of queries on a DLC-heavy game, inherited unchanged
+        from GameDetailView. Anonymous pays none of it (pinned)."""
         if viewer is None:
             return {}, set()
         game_ids = [g.pk for g in self.list_set]
@@ -128,6 +137,22 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
             .values_list('trophy__game_id', flat=True)
         )
         return progress, plats
+
+    def _host_game(self):
+        """The list whose concept supplies the page's identity (title, canonical, About, ratings).
+
+        MEMBERSHIP is deliberately trust-ungated (the decision record); the HOST is not: an
+        untrusted -- or admin-REJECTED -- match whose list wins platform priority would otherwise
+        title the page, and its game_page_url would point the canonical at a subset c/ page while
+        the sitemap advertises the igdb URL (the audit's H2). So: first list, in the deterministic
+        platform order, whose concept holds a trusted match; else first list. On the c/ route every
+        list shares the requested concept, so this degrades to list_set[0].
+        """
+        for g in self.list_set:
+            match = getattr(g.concept, 'igdb_match', None) if g.concept_id else None
+            if match is not None and match.is_trusted:
+                return g
+        return self.list_set[0]
 
     def _default_list(self, progress):
         """The decided rule: the viewer's list when they have progress on EXACTLY one stack
@@ -190,7 +215,7 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
             context.update(self._build_viewport_context(selected, viewer, names))
             return context
 
-        host = self.list_set[0]
+        host = self._host_game()
         default = self._default_list(progress)
         names = Game.display_list_names(self.list_set)
 
@@ -221,8 +246,25 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
             context['about_ttb'] = self._build_about_ttb(
                 getattr(host.concept, 'igdb_match', None), None,
             )
-            context.update(self.get_background_context(host.concept))
         context.update(self._build_pursuit_context(host, viewer))
+
+        # The Community band must describe the GAME, not the host list, on a page whose header
+        # just said "N trophy lists": sum the per-list denorms, played-weighted for the average.
+        played = [g.played_count or 0 for g in self.list_set]
+        total_played = sum(played)
+        context['community_stats'] = {
+            'played_count': total_played,
+            'plats_earned_count': sum(g.plats_earned_count or 0 for g in self.list_set),
+            'full_completion_count': sum(g.full_completion_count or 0 for g in self.list_set),
+            'avg_completion': (
+                round(sum((g.avg_completion or 0) * w for g, w in zip(self.list_set, played)) / total_played)
+                if total_played else (self.list_set[0].avg_completion or 0)
+            ),
+        }
+        # Slice 1: the reused Ratings/About tabs are READ-ONLY here -- the quick-rate modal, its
+        # JS and the flag/report modal live on List detail. The flag gates their CTAs so the page
+        # never renders an invitation with no button (audit A3/M4).
+        context['concept_tabs_readonly'] = True
 
         context.update(self._build_viewport_context(selected, viewer, names))
 

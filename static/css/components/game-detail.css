@@ -1594,6 +1594,7 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 /* Identity affordance up to the concept Game page (Games/Trophy Lists IA): one quiet line. */
 .gd-partof {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: baseline;
     gap: 0.35rem;
     font-size: 0.78rem;
@@ -1603,3 +1604,4 @@ a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2
 }
 .gd-partof:hover { opacity: 1; }
 .gd-partof .gd-partof__cta { color: var(--pp-accent); white-space: nowrap; }
+.gd-partof:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }

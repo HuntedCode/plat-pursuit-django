@@ -226,8 +226,12 @@ def test_anonymous_page_load_pays_no_per_user_queries(client):
         client.get('/games/904/')
 
     sql = ' '.join(q['sql'] for q in ctx.captured_queries).lower()
-    assert 'profilegame' not in sql.replace('trophies_profilegame', 'PG').lower() or 'trophies_profilegame' not in sql, \
-        'anonymous render must not touch per-user tables'
+    # The first version of this assertion was a malformed boolean the audit PROVED tautological
+    # (the replace() stripped the very substring the left operand then searched for). Plain and
+    # conjunctive now, over the per-user tables the viewer path touches.
+    assert 'trophies_profilegame' not in sql, 'anonymous render queried ProfileGame'
+    assert 'trophies_earnedtrophy' not in sql, 'anonymous render queried EarnedTrophy'
+    assert 'trophies_userconceptrating' not in sql, 'anonymous render queried ratings rows'
 
 
 def test_bots_are_not_canonical_redirected_off_the_concept_fallback(client):
@@ -387,3 +391,124 @@ def test_search_suggests_the_concept_game_page(client):
 
     assert urls['Searchable Matched'] == '/games/980/'
     assert urls['Searchable Stubbed'] == '/games/c/PP_SRCH/'
+
+
+# --- final-audit fixes, pinned ------------------------------------------------------------------
+
+PAGE_TPL = None  # populated lazily; Path computed in the test to match the repo layout
+
+
+def test_the_page_actually_loads_its_javascript():
+    """The audit's H1: {% block scripts %} does not exist in base.html, so Django silently
+    discarded the tag and the ENTIRE client layer -- tabs, switcher sync, URL state, bar fills --
+    was dead in production while every test passed. Source-pinned so a block rename can never be
+    silent again."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[2] / 'templates' / 'trophies' / 'game_page.html').read_text(encoding='utf-8')
+
+    assert '{% block js_scripts %}' in src, 'base.html has no `scripts` block; only js_scripts renders'
+    assert "js/game-page.js" in src
+
+
+def test_template_js_and_view_agree_on_the_swap_target():
+    """Three independent encodings of 'gp-viewport' (template id, JS constant, view's htmx.target
+    check). A rename in one silently degrades the page to full reloads with zero test failures --
+    this parity guard is the repo's answer to that class."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    tpl = (root / 'templates' / 'trophies' / 'game_page.html').read_text(encoding='utf-8')
+    js = (root / 'static' / 'js' / 'game-page.js').read_text(encoding='utf-8')
+    view = (root / 'trophies' / 'views' / 'game_page_views.py').read_text(encoding='utf-8')
+
+    assert 'id="gp-viewport"' in tpl
+    assert "getElementById('gp-viewport')" in js
+    assert "self.request.htmx.target == 'gp-viewport'" in view
+    # And the concept tabs: VIEW_ORDER must match the chips' data-view attributes in order.
+    import re
+    chips = re.findall(r'data-view="(\w+)"(?=[^>]*role="tab")', tpl)
+    assert "VIEW_ORDER = ['lists', 'ratings', 'about']" in js
+    assert chips == ['lists', 'ratings', 'about'], chips
+
+
+def test_the_host_is_the_first_trusted_list_not_an_untrusted_platform_winner(client):
+    """The audit's H2: membership is trust-ungated by decision, but the HOST (title, canonical,
+    concept furniture) must not be -- an untrusted or admin-rejected match whose PS5 list wins
+    platform priority would title the page and point its canonical at a subset c/ page while the
+    sitemap advertises the igdb URL."""
+    trusted_ps4 = _game(igdb_id=991, title_platform=['PS4'])
+    trusted_ps4.concept.unified_title = 'The Real Name'
+    trusted_ps4.concept.save()
+    untrusted_ps5 = _game(igdb_id=None, title_platform=['PS5'])
+    _match(untrusted_ps5.concept, 991, status='rejected')
+    TrophyFactory(game=trusted_ps4, trophy_id=1)
+    TrophyFactory(game=untrusted_ps5, trophy_id=1)
+
+    head = client.get('/games/991/').content.decode().split('</head>')[0]
+
+    assert 'rel="canonical" href="http://testserver/games/991/"' in head, (
+        'the untrusted host pointed the canonical at its c/ subset page'
+    )
+    assert 'The Real Name' in head
+
+
+def test_rows_without_an_np_communication_id_are_excluded(client):
+    """The audit's H4: np_communication_id is nullable/blankable; a blank row NoReverseMatch-500s
+    the identity chip and a null one mints an unactivatable ?list=None chip. Same floor as the
+    sitemap."""
+    game = _game(igdb_id=992)
+    broken = GameFactory(concept=game.concept, np_communication_id=None)
+    TrophyFactory(game=game, trophy_id=1)
+
+    content = client.get('/games/992/').content.decode()
+
+    assert content.count('gp-lchip') >= 1
+    assert '?list=None' not in content
+
+
+def test_community_band_aggregates_across_the_list_set(client):
+    """The audit's M3: 'Players' under a header that just said '2 trophy lists' must describe the
+    game, not the host stack."""
+    a = _game(igdb_id=993, title_platform=['PS5'], played_count=100, plats_earned_count=10)
+    b = _game(igdb_id=None, title_platform=['PS4'], played_count=900, plats_earned_count=90)
+    _match(b.concept, 993)
+    TrophyFactory(game=a, trophy_id=1)
+
+    content = client.get('/games/993/').content.decode()
+
+    assert '1,000' in content, 'the header/Community numbers must sum every list'
+
+
+def test_the_reused_tabs_render_read_only(client):
+    """The audit's A3/M4: the quick-rate CTA and the flag button are bound by JS and modals that
+    live only on List detail -- rendering them here would be dead buttons. concept_tabs_readonly
+    gates them server-side. The viewer is LOGGED IN AND LINKED on purpose: for an anonymous
+    viewer both CTAs are absent anyway, and the first mutation round proved that version of this
+    test unfalsifiable."""
+    game = _game(igdb_id=994)
+    TrophyFactory(game=game, trophy_id=1)
+    viewer = ProfileFactory(is_linked=True)
+    client.force_login(viewer.user)
+
+    content = client.get('/games/994/').content.decode()
+
+    assert 'quick-rate-btn' not in content
+    assert 'data-flag-open' not in content
+
+    # And the same viewer on List detail still gets the flag CTA path (the gate must not leak).
+    list_content = client.get(f'/games/{game.np_communication_id}/').content.decode()
+    assert 'concept_tabs_readonly' not in list_content
+
+
+def test_the_breadcrumb_is_visible_not_just_structured_data(client):
+    game = _game(igdb_id=995)
+    game.concept.unified_title = 'Crumbed Game'
+    game.concept.save()
+    TrophyFactory(game=game, trophy_id=1)
+
+    content = client.get('/games/995/').content.decode()
+
+    assert 'aria-label="Breadcrumb"' in content or 'breadcrumbs' in content, (
+        'the breadcrumb partial must render visibly, not only as jsonld'
+    )

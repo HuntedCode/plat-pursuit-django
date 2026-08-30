@@ -110,7 +110,7 @@ so the gating stays out of the template.
         {% comment %} Give the dead end a path: this is the same SSR report modal the hero's Report button
         opens (game-flag.js binds every [data-flag-open]). Gated on is_linked to match that button -- an
         unlinked visitor would get a control that goes nowhere. {% endcomment %}
-        {% if user.is_authenticated and user.profile.is_linked %}
+        {% if user.is_authenticated and user.profile.is_linked and not concept_tabs_readonly %}
         <button type="button" class="gd-empty__cta" data-flag-open aria-haspopup="dialog">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
             Know this game? Tell us what's missing

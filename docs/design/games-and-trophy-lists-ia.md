@@ -52,8 +52,10 @@ model) around ONE list viewport tab:
   lists. Users see trophies without a hop; stackers compare progress without leaving the page
   (each switcher entry shows the viewer's % and plat state -- the switcher IS the
   stack-comparison view).
-- **Selected list lives in the URL** (`?list=NPWR...`), htmx partial swap +
-  `history.replaceState`, matching the browse-filters pattern. Back button, refresh, sharing and
+- **Selected list lives in the URL** (`?list=NPWR...`), htmx partial swap + `history.pushState`
+  (the chips are real links whose navigation htmx swallows; stopping a navigation without pushing
+  strands the Back button -- utils.js's own rule). `?view=` on the concept tabs stays
+  replaceState (buttons, not links). Back button, refresh, sharing and
   deep links (a profile log's "platted the PS5 stack") all work. Param states carry
   `rel=canonical` to the bare game URL so six stack-states do not index as six pages.
 - **Default list rule (deterministic, decided here)**: the viewer's own in-progress list when they
@@ -130,9 +132,12 @@ Page-by-page during the rebuild, never a big-bang rename:
   - Split-concept pages show the HOST concept's ratings only; merging sibling concepts' rating
     sets is the refinement phase's design problem.
   - The identity chip shows name+platforms; "region" has no data source on Game and is deferred.
-  - robots.txt's `/games/*/*` disallow covers the `/games/c/` fallback tail -- deliberate: those
-    are the unmatched/stub concepts (thin content), and the igdb pages are single-segment and
-    fully crawlable. Revisit alongside the slim-down SEO pass.
+  - The `/games/c/` fallback tail is CRAWLABLE and sitemap-advertised. (An earlier draft of this
+    bullet claimed a robots.txt `/games/*/*` disallow covered it -- that rule was REMOVED in SEO
+    Lane 0 on 2026-08-23 precisely because wildcards also blocked canonical pages; the final audit
+    caught the stale claim.) Kept crawlable DELIBERATELY: unmatched games' List pages canonicalize
+    UP to their c/ page, and a canonical target must be indexable or the consolidation is void.
+    Thin-stub exposure accepted; revisit alongside the slim-down SEO pass.
   - Page identity decision recorded: **IGDB id, no slug** (owner's call) -- stable across renames,
     no slug backfill, and deliberately-split concepts share one page by construction.
 

@@ -8,25 +8,29 @@ runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; 
 
     {# ── Community stats band: per-game context (players / plats / 100% / avg). Framed like About's sections. ── #}
     <section class="gd-acard gd-rate__snapshot">
+        {% comment %}community_stats (set by the concept Game page) aggregates the four denorms
+        across EVERY list of the game; absent (List detail), each |default falls through to this
+        one list's own columns. Without this the Game page showed one stack's numbers under a
+        heading that had just said "6 trophy lists".{% endcomment %}
         <h3 class="gd-acard__h">Community</h3>
         <div class="gd-rate__stats">
         <div class="gd-rate__stat">
-            <span class="gd-rate__stat-n" data-gd-countup="{{ game.played_count|default:0 }}">{{ game.played_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-n" data-gd-countup="{{ community_stats.played_count|default:game.played_count|default:0 }}">{{ community_stats.played_count|default:game.played_count|default:0|intcomma }}</span>
             <span class="gd-rate__stat-lbl">Players</span>
         </div>
         {% if game.defined_trophies.platinum %}
         <div class="gd-rate__stat">
-            <span class="gd-rate__stat-n" data-gd-countup="{{ game.plats_earned_count|default:0 }}">{{ game.plats_earned_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-n" data-gd-countup="{{ community_stats.plats_earned_count|default:game.plats_earned_count|default:0 }}">{{ community_stats.plats_earned_count|default:game.plats_earned_count|default:0|intcomma }}</span>
             <span class="gd-rate__stat-lbl">Platinums</span>
         </div>
         {% endif %}
         <div class="gd-rate__stat">
-            <span class="gd-rate__stat-n" data-gd-countup="{{ game.full_completion_count|default:0 }}">{{ game.full_completion_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-n" data-gd-countup="{{ community_stats.full_completion_count|default:game.full_completion_count|default:0 }}">{{ community_stats.full_completion_count|default:game.full_completion_count|default:0|intcomma }}</span>
             <span class="gd-rate__stat-lbl">100% Club</span>
         </div>
         <div class="gd-rate__stat">
             {# count-up target is the inner number span so the % unit survives (countUp rewrites textContent). #}
-            <span class="gd-rate__stat-n"><span data-gd-countup="{{ game.avg_completion|floatformat:0 }}">{{ game.avg_completion|floatformat:0 }}</span><span class="gd-rate__stat-unit">%</span></span>
+            <span class="gd-rate__stat-n"><span data-gd-countup="{{ community_stats.avg_completion|default:game.avg_completion|floatformat:0 }}">{{ community_stats.avg_completion|default:game.avg_completion|floatformat:0 }}</span><span class="gd-rate__stat-unit">%</span></span>
             <span class="gd-rate__stat-lbl">Avg completion</span>
         </div>
         </div>

@@ -60,7 +60,10 @@
                 requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty('--horizon-progress', target)));
             });
         }
-        fillBars(viewport);
+        // Whole document, not just the viewport: the About tab ships its time-to-beat bars at 0%
+        // for THIS call to grow (game_about_card's own comment names the contract), and the
+        // ratings band bars sit outside #gp-viewport too.
+        fillBars();
 
         if (lswitch && viewport) {
             const chips = Array.from(lswitch.querySelectorAll('[role="tab"]'));
@@ -80,14 +83,24 @@
                     viewport.classList.add('is-swapping', 'pointer-events-none');
                 }
             });
+            let lastNp = viewport.dataset.defaultNp || '';
+            const chipOrder = chips.map((c) => c.dataset.np);
             document.body.addEventListener('htmx:afterSwap', (e) => {
                 if (e.detail.target !== viewport) return;
                 viewport.classList.remove('is-swapping', 'pointer-events-none');
+                // pathInfo.requestPath is an htmx 2.0.4 internal (the only consumer in this
+                // repo); if a bump renames it, np silently falls back to the default and the
+                // chips desync -- the parity source-guard test names this line.
                 const params = new URLSearchParams(e.detail.pathInfo.requestPath.split('?')[1] || '');
                 const np = params.get('list') || defaultNp;
                 // State first (chips + URL), decoration after -- never strand the switcher.
                 syncChips(np);
-                PP.syncViewParam(np, { param: 'list', default: defaultNp });
+                // push, not replace: the chips are real <a>s whose navigation htmx swallowed --
+                // stopping a navigation without pushing is what strands the Back button
+                // (utils.js's own rule for swallowed-link tabs).
+                PP.syncViewParam(np, { param: 'list', default: defaultNp, push: true });
+                PP.slideViewIn(viewport, lastNp, np, chipOrder);
+                lastNp = np;
                 fillBars(viewport);
                 const chip = chips.find((c) => c.dataset.np === np);
                 if (chip) PP.igniteTab(chip);
@@ -100,5 +113,52 @@
                 }
             });
         }
+
+        // ── Ratings tab: per-group selector (ported from game-detail.js ratingsTab, read-only:
+        //    no quick-rate here -- concept_tabs_readonly gates those CTAs server-side). ──
+        (function ratingsSelector() {
+            const root = document.querySelector('[data-gd-rate]');
+            if (!root) return;
+            const drop = root.querySelector('[data-rate-drop]');
+            const dropBtn = root.querySelector('[data-rate-drop-toggle]');
+            function closeDrop() {
+                if (!dropBtn) return;
+                dropBtn.setAttribute('aria-expanded', 'false');
+                const m = drop && drop.querySelector('.gd-rate__dropmenu');
+                if (m) m.hidden = true;
+            }
+            function selectGroup(ctgId, srcEl) {
+                root.querySelectorAll('[data-rate-panel]').forEach((panel) => {
+                    panel.classList.toggle('is-hidden', panel.dataset.ratePanel !== ctgId);
+                });
+                root.querySelectorAll('.gd-rate__segchip[data-rate-ctg]').forEach((c) => {
+                    const on = c.dataset.rateCtg === ctgId;
+                    c.classList.toggle('is-active', on);
+                    c.setAttribute('aria-pressed', on ? 'true' : 'false');
+                });
+                if (drop && dropBtn) {
+                    dropBtn.classList.toggle('is-active', !!(srcEl && srcEl.classList.contains('gd-rate__dropitem')));
+                }
+                fillBars(root);
+            }
+            root.addEventListener('click', (e) => {
+                const toggle = e.target.closest('[data-rate-drop-toggle]');
+                if (toggle) {
+                    const open = toggle.getAttribute('aria-expanded') === 'true';
+                    toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+                    const menu = drop && drop.querySelector('.gd-rate__dropmenu');
+                    if (menu) menu.hidden = open;
+                    return;
+                }
+                const chip = e.target.closest('[data-rate-ctg]');
+                if (chip) { selectGroup(chip.dataset.rateCtg, chip); closeDrop(); }
+            });
+            if (drop) {
+                document.addEventListener('click', (e) => { if (!drop.contains(e.target)) closeDrop(); });
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && dropBtn && dropBtn.getAttribute('aria-expanded') === 'true') { closeDrop(); dropBtn.focus(); }
+                });
+            }
+        })();
     });
 })();

@@ -19,10 +19,11 @@ source label (the IA doc's core display decision).
                     {% if concept.publisher_name %}{{ concept.publisher_name }}{% endif %}
                     {% if concept.release_date %}{% if concept.publisher_name %} &middot; {% endif %}{{ concept.release_date|date:"Y" }}{% endif %}
                 </p>
-                <div class="flex items-center gap-4 mt-2 md:mt-3">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 md:mt-3">
                     <span class="text-sm opacity-80"><span class="pp-tally font-semibold">{{ list_set|length }}</span> trophy list{{ list_set|length|pluralize }}</span>
-                    {% if host_game.played_count %}
-                        <span class="text-sm opacity-80"><span class="pp-tally font-semibold">{{ host_game.played_count|intcomma }}</span> hunters</span>
+                    {% if community_stats.played_count %}
+                        {# Aggregated across every list -- the header just said "N trophy lists". #}
+                        <span class="text-sm opacity-80"><span class="pp-tally font-semibold">{{ community_stats.played_count|intcomma }}</span> hunters</span>
                     {% endif %}
                 </div>
             </div>
