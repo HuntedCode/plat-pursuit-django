@@ -183,7 +183,8 @@ def test_site_suggest_groups_all_entity_types(client):
     groups = _groups(resp)
     assert set(groups) == {'game', 'badge', 'franchise', 'profile'}
     assert groups['game']['items'][0]['label'] == 'Elden Ring'
-    assert groups['game']['items'][0]['url'] == reverse('game_detail', kwargs={'np_communication_id': 'NPWR_ELDEN_00'})
+    # Games/Trophy Lists IA: the suggest destination is the concept's own Game page.
+    assert groups['game']['items'][0]['url'] == reverse('game_page_concept', kwargs={'concept_id': concept.concept_id})
     assert groups['badge']['items'][0]['url'] == reverse('badge_detail', kwargs={'series_slug': 'elden-lord'})
     assert groups['badge']['items'][0]['image'] == ''    # no medallion art on this test badge -> glyph fallback
     assert groups['franchise']['items'][0]['url'] == reverse('franchise_detail', kwargs={'slug': 'elden-ring-fr'})
@@ -191,15 +192,17 @@ def test_site_suggest_groups_all_entity_types(client):
     assert groups['profile']['items'][0]['plats'] == 42
 
 
-def test_site_suggest_game_dedups_concept_to_most_played(client):
-    # A concept with several Game versions collapses to ONE row linking the most-played version.
+def test_site_suggest_game_dedups_concept_to_one_game_page(client):
+    # A concept with several Game versions collapses to ONE row -- and since the Games/Trophy
+    # Lists IA, that row links the concept's Game page (which holds every version), not the
+    # most-played version's list page.
     concept = ConceptFactory(unified_title='God of War')
     GameFactory(concept=concept, played_count=5, np_communication_id='NPWR_LOW_00')
     GameFactory(concept=concept, played_count=500, np_communication_id='NPWR_HIGH_00')
 
     games = _groups(client.get(reverse('site_suggest'), {'q': 'god of war'}))['game']['items']
     assert len(games) == 1
-    assert games[0]['url'] == reverse('game_detail', kwargs={'np_communication_id': 'NPWR_HIGH_00'})
+    assert games[0]['url'] == reverse('game_page_concept', kwargs={'concept_id': concept.concept_id})
 
 
 def test_site_suggest_substring_not_prefix(client):
