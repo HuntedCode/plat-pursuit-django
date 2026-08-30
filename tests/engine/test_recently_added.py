@@ -97,6 +97,23 @@ def test_unknown_category_falls_back_to_base_games(client):
     assert 'data-category="base_games" aria-controls="ra-view" aria-selected="true"' in content
 
 
+def test_recently_added_stays_per_list_and_uncondensed(client):
+    """Browse Games condensed to one card per page identity (IA phase 3); Recently Added did NOT
+    -- a new sibling list appearing is this page's whole point. Two sibling lists = two cards,
+    each linking its OWN List detail, and none of the condensed maps reach the context."""
+    a = GameFactory(title_name='Fresh EU', title_platform=['PS5'])
+    b = GameFactory(concept=a.concept, title_name='Fresh NA', title_platform=['PS5'])
+
+    resp = client.get(reverse('recently_added'))
+    content = resp.content.decode()
+
+    assert 'Fresh EU' in content and 'Fresh NA' in content
+    assert f'href="/games/{a.np_communication_id}/"' in content
+    assert f'href="/games/{b.np_communication_id}/"' in content
+    assert 'condensed_cards' not in resp.context
+    assert 'list_count_map' not in resp.context
+
+
 def test_base_cards_get_pursuer_hooks(client):
     """Base-games cards render the shared card's pursuer band (badge series + contract placeholder), proving
     build_game_card_context is wired in -- the whole point of the reuse (legacy Recently Added lacked it)."""

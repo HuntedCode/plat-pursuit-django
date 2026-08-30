@@ -31,7 +31,7 @@ from .browse_helpers import (
 logger = logging.getLogger("psn_api")
 
 
-def build_game_card_context(page_games, request):
+def build_game_card_context(page_games, request, condensed=False):
     """Batched, whale-safe context for a page of `.pp-gcard` game cards.
 
     Builds everything the shared `game_list/game_cards.html` card consumes for a
@@ -44,23 +44,107 @@ def build_game_card_context(page_games, request):
     shared card (Browse Games, Recently Added). `show_game_hooks` is always set,
     so the card's pursuer band renders wherever this helper is used; browse pages
     that don't call it leave the band off (the card gates on the flag).
+
+    `condensed=True` (the elected one-card-per-page-identity grids: Browse Games,
+    tag detail -- NEVER Recently Added, whose per-list rows are its point): adds
+    `list_count_map` + `platform_union_map` (elected-game-id keyed) and sets
+    `condensed_cards` so the card links the Game page and shows the union. The
+    sibling grouping is the DESTINATION PAGE's membership rule -- trust-UNGATED
+    igdb grouping, same-concept for unmatched, GamePageView's np floor -- which
+    deliberately diverges from the trust-GATED election partition, so the card's
+    "N lists" always agrees with the switcher the click lands on. Viewer progress
+    is rolled up partition-BEST over the same siblings (still one query), so a
+    PS4-progress hunter sees their fill on the PS5-elected card
+    (game_grouping_service precedent). Net cost: +1 bounded query.
     """
     from collections import defaultdict
     from trophies.constants import badge_attribution_rank
     from trophies.models import BadgeSeries
     from trophies.services.contract_service import contract_by_concept_map
-    from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+    from trophies.util_modules.constants import CONTRACT_XP_TOTAL, ordered_platform_union
 
     ctx = {'show_game_hooks': True}
     game_ids = [g.id for g in page_games]
 
+    sibling_ids_by_elected = {}
+    if condensed:
+        ctx['condensed_cards'] = True
+        # Destination-page grouping: elected rows whose concept holds a TRUSTED match with an
+        # igdb id group by that id (membership itself ungated, mirroring GamePageView._resolve);
+        # concept-bearing rows without one group by concept (the c/ page); conceptless rows
+        # stand alone and keep their list-detail link.
+        igdb_by_elected, concept_by_elected = {}, {}
+        for g in page_games:
+            match = getattr(g.concept, 'igdb_match', None) if g.concept_id else None
+            if match is not None and match.is_trusted and match.igdb_id is not None:
+                igdb_by_elected[g.id] = match.igdb_id
+            elif g.concept_id:
+                concept_by_elected[g.id] = g.concept_id
+        sibling_filter = Q()
+        if igdb_by_elected:
+            sibling_filter |= Q(concept__igdb_match__igdb_id__in=set(igdb_by_elected.values()))
+        if concept_by_elected:
+            sibling_filter |= Q(concept_id__in=set(concept_by_elected.values()))
+        rows = []
+        if sibling_filter:
+            # GamePageView's np floor: a blank/null np row is not a linkable list there either.
+            rows = list(
+                Game.objects
+                .filter(sibling_filter, np_communication_id__isnull=False)
+                .exclude(np_communication_id='')
+                .values_list('id', 'concept_id', 'concept__igdb_match__igdb_id',
+                             'concept__igdb_match__status', 'title_platform')
+            )
+        by_igdb, by_concept = defaultdict(list), defaultdict(list)
+        for row in rows:
+            if row[2] is not None:
+                by_igdb[row[2]].append(row)
+            if row[1] is not None:
+                by_concept[row[1]].append(row)
+        list_count_map, platform_union_map = {}, {}
+        for eid in game_ids:
+            if eid in igdb_by_elected:
+                members = by_igdb.get(igdb_by_elected[eid], [])
+            elif eid in concept_by_elected:
+                # The c/ page's set: same-concept rows only. (An untrusted match on the concept
+                # does NOT widen membership -- GamePageView's concept route filters by concept.)
+                members = by_concept.get(concept_by_elected[eid], [])
+            else:
+                continue
+            list_count_map[eid] = len(members)
+            platform_union_map[eid] = ordered_platform_union(m[4] for m in members)
+            sibling_ids_by_elected[eid] = [m[0] for m in members]
+        ctx['list_count_map'] = list_count_map
+        ctx['platform_union_map'] = platform_union_map
+
     # User-specific game data (1 query): progress + plat state for the card's bottom-edge fill.
+    # Condensed grids query over ALL partition siblings (same single query, wider id set) and
+    # roll up partition-BEST per elected id in the SAME value shape, so the card's five-state
+    # fill logic never knows the difference.
     if request.user.is_authenticated and hasattr(request.user, 'profile'):
+        lookup_ids = game_ids
+        if condensed and sibling_ids_by_elected:
+            lookup_ids = list({sid for sids in sibling_ids_by_elected.values() for sid in sids}
+                              | set(game_ids))
         user_games = ProfileGame.objects.filter(
             profile=request.user.profile,
-            game_id__in=game_ids,
+            game_id__in=lookup_ids,
         ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
-        ctx['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+        user_map = {pg['game_id']: pg for pg in user_games}
+        if condensed:
+            for eid, sids in sibling_ids_by_elected.items():
+                best = max((user_map.get(sid) for sid in sids if user_map.get(sid)),
+                           key=lambda pg: (pg['progress'] or 0), default=None)
+                if best is None:
+                    user_map.pop(eid, None)
+                    continue
+                user_map[eid] = {
+                    'game_id': eid,
+                    'progress': best['progress'],
+                    'has_plat': any((user_map.get(sid) or {}).get('has_plat') for sid in sids),
+                    'earned_trophies_count': best['earned_trophies_count'],
+                }
+        ctx['user_game_map'] = user_map
 
     # DLC pack count per game (1 grouped query): trophy groups beyond the base 'default' group.
     dlc_counts = (
@@ -329,7 +413,7 @@ class GamesListView(HtmxListMixin, ListView):
 
         # Post-pagination card data (progress / DLC counts / ratings / pursuer hooks) for the <=30 games on
         # this page. Shared, batched, whale-safe -- see build_game_card_context (also used by Recently Added).
-        context.update(build_game_card_context(context['object_list'], self.request))
+        context.update(build_game_card_context(context['object_list'], self.request, condensed=True))
 
         return context
 

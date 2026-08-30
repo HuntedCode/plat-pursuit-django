@@ -105,6 +105,46 @@ def test_platform_filter_promotes_the_matching_sibling(client):
     assert 'data-result-count="1"' in content
 
 
+def test_list_count_uses_the_destination_pages_ungated_membership(client):
+    """The trust-divergence pin: the election partition is trust-GATED, but the card's "N lists"
+    must use the DESTINATION page's UNGATED membership -- an untrusted-match sibling sharing the
+    igdb id is invisible to the election yet IS a switcher entry on the Game page the card links,
+    so it counts here. A blank-np sibling counts nowhere (GamePageView's floor)."""
+    a = GameFactory(title_name='Gated A', title_platform=['PS5'], played_count=50)
+    IGDBMatchFactory(concept=a.concept, igdb_id=78001)
+    untrusted = GameFactory(title_platform=['PS4'])
+    IGDBMatchFactory(concept=untrusted.concept, igdb_id=78001, status='pending_review')
+    GameFactory(concept=a.concept, title_platform=['PS3'], np_communication_id='')  # np floor
+
+    url, params = _url()
+    resp = client.get(url, params)
+
+    assert resp.context['condensed_cards'] is True
+    assert resp.context['list_count_map'][a.id] == 2, (
+        'trusted elected row + untrusted same-igdb sibling; the blank-np row never counts'
+    )
+    assert resp.context['platform_union_map'][a.id] == ['PS5', 'PS4']
+
+
+def test_viewer_best_progress_folds_across_siblings(client):
+    """A hunter whose progress lives on a NON-elected sibling still gets their fill on the
+    elected card: partition-best progress + any-sibling has_plat, in the same value shape the
+    card's five-state fill logic already reads (game_grouping_service precedent)."""
+    elected = GameFactory(title_name='Fold Elected', title_platform=['PS5'], played_count=90)
+    sibling = GameFactory(concept=elected.concept, title_name='Fold Sibling',
+                          title_platform=['PS5'], played_count=1)
+    viewer = ProfileFactory(is_linked=True)
+    ProfileGameFactory(profile=viewer, game=sibling, progress=73, has_plat=True)
+    client.force_login(viewer.user)
+
+    url, params = _url()
+    resp = client.get(url, params)
+
+    row = resp.context['user_game_map'][elected.id]
+    assert row['progress'] == 73 and row['has_plat'] is True
+    assert '73%' in resp.content.decode()
+
+
 def test_seo_item_list_claims_the_game_page_urls(client):
     """The ItemList schema must agree with what the grid links: the concept Game page for
     matched rows, the c/ page for unmatched concepts."""
@@ -522,7 +562,8 @@ def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
     url, params = _url()
 
     # Page (count + 30 rows) + rating/user maps + badge (2) + contract (1) batched maps + the contract
-    # discipline roster (1, full page) + session/misc. Bounded, not per-card.
-    with django_assert_max_num_queries(20):
+    # discipline roster (1, full page) + session/misc + the condensed grids' ONE sibling query
+    # (list count / platform union / progress fold, phase 3). Bounded, not per-card.
+    with django_assert_max_num_queries(21):
         resp = client.get(url, params)
     assert resp.status_code == 200
