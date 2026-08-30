@@ -431,6 +431,100 @@ class GamesListView(HtmxListMixin, ListView):
         return context
 
 
+class TrophyListsBrowseView(HtmxListMixin, ListView):
+    """Trophy Lists browse (/games/lists/) -- the LAST canonical page of the Games/Trophy Lists
+    IA: the LIST-level catalogue. One card per trophy list, deliberately UN-condensed -- this is
+    the browse home for exactly what Browse Games' election dedupes away (regional variants,
+    platform stacks, editions).
+
+    The sibling-browse shape is TagDetailBaseView's, not GamesListView's: a plain GameSearchForm
+    (no defaults injection) and NO browse_defaults dispatch redirect -- the bare URL must return
+    200 without a hop, because the page is static-sitemap-advertised (test_seo_closing's
+    contract). The pipeline is the shared filter -> sort chain, SKIPPING game_page_canonicals()
+    (no election) and applying the destination np floor directly: every card links game_detail,
+    and reverse() happily builds /games// from a blank np (the ListSitemap note).
+    """
+
+    model = Game
+    template_name = 'trophies/trophy_lists.html'
+    partial_template_name = 'trophies/partials/trophy_lists/browse_results.html'
+    context_object_name = 'games'
+    paginate_by = 30
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = GameSearchForm(self.request.GET)
+        return self._filter_form
+
+    def get_queryset(self):
+        qs = Game.objects.all()
+        form = self.get_filter_form()
+
+        if form.is_valid():
+            sort_val = form.cleaned_data.get('sort', '')
+            qs, annotations = apply_game_browse_filters(qs, form, sort_val)
+            qs, order = apply_game_browse_sort(qs, sort_val, annotations)
+        else:
+            qs = annotate_ascii_name(qs)
+            order = ['is_ascii_name', Lower('title_name')]
+
+        # The np floor WITHOUT the election: per-list is this page's point, but an un-linkable
+        # row is still not a card (same floor as GamePageView / the sitemaps).
+        qs = qs.filter(np_communication_id__isnull=False).exclude(np_communication_id='')
+
+        qs = qs.select_related('concept', 'concept__igdb_match').defer(
+            # The ~30 KB IGDB blob, never read by the card (house OOM rule).
+            'concept__igdb_match__raw_response',
+        )
+        return qs.order_by(*order)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+            {'text': 'Trophy Lists'},
+        ]
+
+        form = self.get_filter_form()
+        context['form'] = form
+        context.update(get_active_filter_chips(self.request, form))
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['selected_regions'] = self.request.GET.getlist('regions')
+        context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
+        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
+        context['show_delisted'] = self.request.GET.get('show_delisted', '')
+        context['show_unobtainable'] = self.request.GET.get('show_unobtainable', '')
+        context['show_online'] = self.request.GET.get('show_online', '')
+        context['show_buggy'] = self.request.GET.get('show_buggy', '')
+        context['selected_genres'] = self.request.GET.getlist('genres')
+        context['selected_themes'] = self.request.GET.getlist('themes')
+        context['view_type'] = self.request.GET.get('view', 'grid')
+        context['has_advanced_filters'] = any(
+            v for k, v in self.request.GET.lists()
+            if k not in ('page', 'view') and any(v)
+        )
+
+        context['seo_description'] = (
+            "Browse every PlayStation trophy list on Platinum Pursuit -- regional variants, "
+            "platform stacks, and edition lists. Filter by platform, region, and platinum "
+            "availability."
+        )
+        # ItemList rows are per-LIST game_detail URLs -- exactly the pages these cards link,
+        # and every list page is self-canonical (the slim-down), so the claims are clean.
+        context['seo_item_list'] = [
+            {'name': g.title_name,
+             'url': reverse('game_detail', kwargs={'np_communication_id': g.np_communication_id})}
+            for g in context.get('page_obj').object_list
+        ] if context.get('page_obj') else []
+
+        # UNCONDENSED on purpose (the anti-Browse-Games): one card per list, list links, the
+        # game/concept-keyed maps all behave per-list (the Recently Added precedent).
+        context.update(build_game_card_context(context['object_list'], self.request))
+
+        return context
+
+
 class RandomGameView(View):
     """Redirect to a random game detail page, respecting active browse filters.
 

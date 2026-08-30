@@ -4,7 +4,7 @@ Trophies views package.
 Re-exports all view classes for backward compatibility with existing URL configuration.
 """
 
-from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAddedView, RandomGameView
+from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAddedView, RandomGameView, TrophyListsBrowseView
 from .game_page_views import GamePageView
 from .game_leaderboard_views import GameLeaderboardView
 from .trophy_views import TrophyCaseView, ToggleSelectionView
@@ -29,6 +29,7 @@ from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
 __all__ = [
     # Game views
     'GamesListView', 'GameDetailView', 'GamePageView', 'GuideListView', 'RecentlyAddedView', 'RandomGameView',
+    'TrophyListsBrowseView',
     # Trophy views
     'TrophyCaseView', 'ToggleSelectionView',
     # Profile views
