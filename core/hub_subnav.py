@@ -237,13 +237,15 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
 
 _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # url_name: (hub_key, item_slug)
-    # Browse
-    'game_detail': ('browse', 'games'),
+    # Browse. The Games/Trophy Lists IA split the highlighting with the pages: the CONCEPT Game
+    # page lights Games, while a LIST detail page (and the list-scoped roadmap editor reached
+    # from it) lights Trophy Lists -- each detail page points at the catalogue that browses it.
+    'game_detail': ('browse', 'trophy-lists'),
+    'game_detail_with_profile': ('browse', 'trophy-lists'),
     # The concept Game page + its unmatched-concept fallback (Games/Trophy Lists IA). Without
     # these lines the rail renders unlit on the new pages -- the documented job_detail failure.
     'game_page': ('browse', 'games'),
     'game_page_concept': ('browse', 'games'),
-    'game_detail_with_profile': ('browse', 'games'),
     'company_detail': ('browse', 'companies'),
     'franchise_detail': ('browse', 'franchises'),
     'badge_detail': ('browse', 'badges'),
@@ -255,7 +257,10 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # (`job_detail` vs `jobs_browse`), so every one of them needs a line here; the item shipping without
     # one is silent, because the strip still renders.
     'job_detail': ('browse', 'jobs'),
-    'roadmap_edit': ('browse', 'games'),
+    # Both editor routes are /games/<np>/-scoped (you reach them FROM a list), so they light
+    # with the list family. The _ctg variant had no line at all before -- the silent-unlit trap.
+    'roadmap_edit': ('browse', 'trophy-lists'),
+    'roadmap_edit_ctg': ('browse', 'trophy-lists'),
     # Community
     'profile_detail': ('browse', 'profiles'),
     'trophy_case': ('browse', 'profiles'),

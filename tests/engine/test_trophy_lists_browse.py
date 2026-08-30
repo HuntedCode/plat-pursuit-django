@@ -226,6 +226,32 @@ def test_the_browse_rail_lights_and_the_sitemap_advertises(client):
     assert 'trophy_lists' in StaticViewSitemap().items()
 
 
+def test_list_detail_lights_trophy_lists_not_games(client):
+    """A LIST detail page belongs to the list-level catalogue (Jeffrey's browser-pass catch):
+    /games/<np>/ lights the Trophy Lists pill, while the CONCEPT Game page keeps lighting
+    Games -- each detail page points at the catalogue that browses it. Resolved through the
+    real request so the override map's url_name spelling is exercised, not just its shape."""
+    from django.test import RequestFactory
+
+    from core.hub_subnav import resolve_hub_subnav
+
+    game = GameFactory(title_platform=['PS5'])
+    resp = client.get(f'/games/{game.np_communication_id}/', HTTP_CF_RAY='test')
+    assert resp.status_code == 200
+    req = RequestFactory().get(f'/games/{game.np_communication_id}/')
+    req.resolver_match = resp.wsgi_request.resolver_match
+    match = resolve_hub_subnav(req)
+    assert match['hub'].key == 'browse' and match['active_slug'] == 'trophy-lists'
+
+    # Scope to the RAIL pills (href="..." class="pp-subpill..."): a bare 'href="/games/"' scan
+    # would catch the navbar's Browse hub button, which legitimately stays active hub-wide.
+    content = resp.content.decode()
+    games_pill = content.split('href="/games/" class="pp-subpill', 1)[1].split('>')[0]
+    assert 'is-active' not in games_pill, 'the Games rail pill must NOT light on a list page'
+    lists_pill = content.split('href="/games/lists/" class="pp-subpill', 1)[1].split('>')[0]
+    assert 'is-active' in lists_pill and 'aria-current="page"' in lists_pill
+
+
 # ── Chassis: XHR partial, pagination, minibar ─────────────────────────────────────────────────────
 
 def test_xhr_returns_rows_partial(client):
