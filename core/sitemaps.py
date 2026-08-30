@@ -15,7 +15,7 @@ class StaticViewSitemap(Sitemap):
             # The rest of the indexable, nav-linked hub set (closing audit): live pages the
             # sitemap simply never advertised.
             'companies_list', 'franchises_list', 'genres_list',
-            'jobs_browse', 'recently_added', 'badge_how_it_works',
+            'jobs_browse', 'recently_added', 'trophy_lists', 'badge_how_it_works',
             'milestones_list', 'support_hub', 'support_roadmap',
         ]
 

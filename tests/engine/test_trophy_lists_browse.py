@@ -184,6 +184,26 @@ def test_region_chip_and_reset_resolve_against_this_page(client):
     assert 'href="/games/lists/"' in content
 
 
+# ── Nav + sitemap wiring ──────────────────────────────────────────────────────────────────────────
+
+def test_the_browse_rail_lights_and_the_sitemap_advertises(client):
+    """The page is a first-class Browse destination: its rail pill is active on its own page
+    (exact url_name match -- no override needed since the item IS the page), and the static
+    sitemap advertises it (the no-dispatch decision is what lets seo_closing's 200-no-redirect
+    contract hold)."""
+    from core.sitemaps import StaticViewSitemap
+
+    GameFactory(title_platform=['PS5'])
+    content = client.get(URL).content.decode()
+
+    # The active pill: href + is-active + aria-current on one anchor (the subnav's contract).
+    pill = content.split('href="/games/lists/"', 1)[1].split('>')[0]
+    assert 'is-active' in pill and 'aria-current="page"' in pill, (
+        'the Trophy Lists rail pill must light on its own page'
+    )
+    assert 'trophy_lists' in StaticViewSitemap().items()
+
+
 # ── Chassis: XHR partial, pagination, minibar ─────────────────────────────────────────────────────
 
 def test_xhr_returns_rows_partial(client):

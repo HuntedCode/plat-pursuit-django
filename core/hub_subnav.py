@@ -126,6 +126,9 @@ BROWSE_HUB = HubSubnavConfig(
     # groupings. Order = group order (regroup-ready).
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
+        # SLUG deliberately not bare 'lists' (the hidden GameList system's guard pins that);
+        # display copy "Trophy Lists" per the IA doc's naming insurance.
+        HubSubnavItem('trophy-lists', 'Trophy Lists', 'trophy_lists', 'list', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
         HubSubnavItem('jobs', 'Jobs', 'jobs_browse', 'briefcase', group='Catalog'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
