@@ -275,8 +275,8 @@ def test_concept_fallback_page_self_canonicalizes(client):
 
 
 def test_conceptless_list_page_stays_self_canonical(client):
-    """A game with no concept has no Game page to consolidate onto; block.super keeps it
-    self-canonical rather than emitting a link to nowhere."""
+    """Since the slim-down EVERY list page is self-canonical; the conceptless case is no longer
+    the exception, but it exercises the page_canonical_url path with no concept in context."""
     game = GameFactory(concept=None)
     TrophyFactory(game=game, trophy_id=1)
 
@@ -285,13 +285,18 @@ def test_conceptless_list_page_stays_self_canonical(client):
     assert f'rel="canonical" href="http://testserver/games/{game.np_communication_id}/"' in head
 
 
-def test_list_page_canonicalizes_up_to_its_igdb_game_page(client):
+def test_list_page_no_longer_canonicalizes_up_to_its_igdb_game_page(client):
+    """The slice-1 interim inverted: a matched list page keeps its own canonical (the slim-down
+    gave it distinct content) and merely LINKS up to /games/<igdb>/ in the hero/breadcrumb."""
     game = _game(igdb_id=906)
     TrophyFactory(game=game, trophy_id=1)
 
-    head = client.get(f'/games/{game.np_communication_id}/').content.decode().split('</head>')[0]
+    content = client.get(f'/games/{game.np_communication_id}/').content.decode()
+    head = content.split('</head>')[0]
 
-    assert 'rel="canonical" href="http://testserver/games/906/"' in head
+    assert f'rel="canonical" href="http://testserver/games/{game.np_communication_id}/"' in head
+    assert 'href="http://testserver/games/906/"' not in head.split('rel="canonical"')[1].split('>')[0]
+    assert '/games/906/' in content, 'the hero/breadcrumb link UP must survive the canonical flip'
 
 
 # --- sitemap: the page-identity election ---------------------------------------------------------

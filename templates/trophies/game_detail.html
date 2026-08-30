@@ -3,16 +3,23 @@
 {% block title %}{{ game.title_name }} Trophies ({{ game.platforms_display }}){% endblock %}
 {% comment %}meta_description flows from the view's seo_description (one system -- the
 hardcoded block here silently discarded the view's richer, truthful value, and this one still
-sold the hidden Roadmaps). rel=canonical: every list page points at its concept Game page (Games/Trophy Lists IA), consolidating winner AND siblings onto one URL -- harder than the old sibling election. INTERIM until the List-detail slim-down earns these pages a self-canonical.{% endcomment %}
-{% block canonical_url %}{% if concept_page_url %}{{ concept_page_url }}{% else %}{{ block.super }}{% endif %}{% endblock %}
-{% block og_url %}{% if concept_page_url %}{{ concept_page_url }}{% else %}{{ block.super }}{% endif %}{% endblock %}
+sold the hidden Roadmaps). rel=canonical: SELF, the bare list URL -- the slim-down gave this page
+distinct stack content (trophies, Ranks, the community snapshot; Ratings/About moved up to the
+concept Game page), which is what the slice-1 interim consolidation was waiting on. An explicit
+view-computed value, not block.super: base.html's default is request.path, which would mint
+per-viewer canonicals on the /games/<np>/<username>/ variant.{% endcomment %}
+{% block canonical_url %}{{ page_canonical_url }}{% endblock %}
+{% block og_url %}{{ page_canonical_url }}{% endblock %}
 {% block og_type %}video.other{% endblock %}
 {% block og_title %}{{ game.title_name }} Trophies{% endblock %}
 {% block og_description %}{{ seo_description }}{% endblock %}
 {% block twitter_description %}{{ seo_description }}{% endblock %}
 {% block og_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
-{% block extra_head %}{% jsonld_game game game.concept request base_rating_averages node_url=concept_page_url %}{% endblock %}
+{% comment %}No averages arg: the AggregateRating claim belongs to the ONE concept Game page
+(where ratings live); two indexable pages both claiming it for the same work would race for the
+rich result.{% endcomment %}
+{% block extra_head %}{% jsonld_game game game.concept request node_url=page_canonical_url %}{% endblock %}
 
 {% block content %}
     <div id="game-detail-container"

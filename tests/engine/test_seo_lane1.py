@@ -64,18 +64,63 @@ def test_every_sitemap_url_equals_the_canonical_of_the_page_it_advertises(client
         assert f'rel="canonical" href="http://testserver{url}"' in head, url
 
 
-def test_every_sibling_page_canonicalizes_to_the_concept_game_page(client):
-    """Games/Trophy Lists IA: the concept Game page subsumed the sibling election -- winner AND
-    siblings now consolidate onto ONE URL (harder than the old winner-among-siblings rule). An
-    unmatched concept's page is the /games/c/<concept_id>/ form."""
+def test_every_list_page_is_self_canonical(client):
+    """The slim-down flipped the slice-1 interim: List detail has distinct stack content now
+    (trophies, Ranks, the community snapshot -- Ratings/About moved up to the concept Game
+    page), so EVERY list page canonicalizes to its own bare URL. Winner and quiet sibling alike
+    -- the old consolidation direction must be gone."""
     concept, stub, winner, quiet = _family()
-    target = f'rel="canonical" href="http://testserver/games/c/{concept.concept_id}/"'
 
-    body = client.get(f'/games/{quiet.np_communication_id}/', **CF).content.decode()
-    assert target in body
+    for g in (winner, quiet):
+        body = client.get(f'/games/{g.np_communication_id}/', **CF).content.decode()
+        assert f'rel="canonical" href="http://testserver/games/{g.np_communication_id}/"' in body
+        # Scoped to the canonical LINK element: the Game-page URL legitimately appears elsewhere
+        # in the head (the breadcrumb JSON-LD's ListItem) -- only the canonical must not carry it.
+        canonical_href = body.split('rel="canonical" href="')[1].split('"')[0]
+        assert f'/games/c/{concept.concept_id}/' not in canonical_href, (
+            'the interim up-canonical is back'
+        )
 
-    winner_body = client.get(f'/games/{winner.np_communication_id}/', **CF).content.decode()
-    assert target in winner_body
+
+def test_the_username_variant_canonicalizes_to_the_bare_list_url(client):
+    """The D6 trap: base.html's canonical default is request.path, so a block.super revert would
+    mint per-viewer canonicals on /games/<np>/<username>/. The explicit page_canonical_url must
+    hold the BARE list URL there."""
+    concept, stub, winner, quiet = _family()
+    viewer = ProfileFactory(is_linked=True)
+    client.force_login(viewer.user)
+
+    head = client.get(
+        f'/games/{winner.np_communication_id}/{viewer.psn_username}/', **CF
+    ).content.decode().split('</head>')[0]
+
+    assert f'rel="canonical" href="http://testserver/games/{winner.np_communication_id}/"' in head
+    assert viewer.psn_username not in head.split('rel="canonical"')[1].split('>')[0], (
+        'the canonical must not carry the username segment'
+    )
+
+
+def test_aggregate_rating_lives_on_the_game_page_only(client):
+    """One star-snippet claim per work: the concept Game page's VideoGame node carries the
+    AggregateRating; List detail's (also indexable since the self-canonical flip) must NOT --
+    two indexable pages racing for the same rich result is the drift this pins."""
+    from tests.factories import ConceptTrophyGroupFactory
+    from trophies.models import IGDBMatch, UserConceptRating
+
+    concept = ConceptFactory()
+    IGDBMatch.objects.create(concept=concept, igdb_id=61001, status='accepted')
+    ConceptTrophyGroupFactory(concept=concept)   # the base community tab the averages hang off
+    game = GameFactory(concept=concept, defined_trophies={'bronze': 1})
+    UserConceptRating.objects.create(
+        profile=ProfileFactory(), concept=concept, concept_trophy_group=None,
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=7, overall_rating=4.0,
+    )
+
+    game_page = client.get('/games/61001/', **CF).content.decode()
+    list_page = client.get(f'/games/{game.np_communication_id}/', **CF).content.decode()
+
+    assert 'aggregateRating' in game_page
+    assert 'aggregateRating' not in list_page
 
 
 # --- the hub ---
@@ -172,8 +217,8 @@ def test_og_url_follows_the_canonical_on_game_detail(client):
 
     head = client.get(f'/games/{quiet.np_communication_id}/', **CF).content.decode().split('</head>')[0]
 
-    assert f'og:url" content="http://testserver/games/c/{concept.concept_id}/"' in head, (
-        'og:url disagrees with rel=canonical'
+    assert f'og:url" content="http://testserver/games/{quiet.np_communication_id}/"' in head, (
+        'og:url disagrees with rel=canonical (self, since the slim-down)'
     )
 
 

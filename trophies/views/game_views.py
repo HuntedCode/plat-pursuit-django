@@ -1083,15 +1083,21 @@ class GameDetailView(ConceptContextMixin, DetailView):
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
 
-        # rel=canonical consolidation (Games/Trophy Lists IA slice 1): every list page points at
-        # its concept Game page, which consolidates HARDER than the old sibling election (winner
-        # AND siblings now point at one URL) -- so the election left this context. INTERIM by
-        # design: once the List-detail slim-down gives these pages distinct stack content, they
-        # earn back a self-canonical (recorded in the IA doc's rollout log). Conceptless games
-        # stay self-canonical via the template's block.super.
+        # The hero's "Part of <game> - View game" link + the breadcrumb's Game-page crumb. NOT
+        # the canonical anymore: the slim-down gave this page distinct stack content (trophies,
+        # Ranks, the community snapshot -- Ratings/About moved up), so it earned back the
+        # self-canonical the IA doc's slice-1 interim promised.
         context['concept_page_url'] = (
             f"{self.request.scheme}://{self.request.get_host()}{game.concept.game_page_url()}"
             if game.concept_id else None
+        )
+        # One absolute self-canonical, computed once (the GamePageView pattern): the rel=canonical,
+        # og:url and the jsonld VideoGame node all read this single value. An EXPLICIT bare list
+        # URL, never base.html's request.path default -- that would mint per-viewer canonicals on
+        # the /games/<np>/<username>/ variant and per-state ones under ?view=.
+        context['page_canonical_url'] = (
+            f"{self.request.scheme}://{self.request.get_host()}"
+            f"{reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id})}"
         )
 
         context['seo_description'] = (

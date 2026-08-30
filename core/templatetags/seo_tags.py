@@ -150,9 +150,11 @@ def jsonld_game(game, concept, request, averages=None, canonical_game=None, node
     base_url = f"{request.scheme}://{request.get_host()}"
     from django.urls import reverse
     # `node_url` (Games/Trophy Lists IA): the ABSOLUTE URL the caller emits as rel=canonical --
-    # both detail pages now consolidate onto the concept Game page, so the caller passes the same
-    # URL to both tags and the two identity claims cannot drift. Wins over the legacy
-    # canonical_game sibling (kept until every caller migrates).
+    # each detail page passes ITS OWN canonical (the Game page its bare concept URL, List detail
+    # its bare list URL since the slim-down earned it a self-canonical), so the VideoGame node's
+    # `url` and the page's rel=canonical cannot drift. Only the Game page passes `averages`: the
+    # AggregateRating claim belongs to the one ratings host. Wins over the legacy canonical_game
+    # sibling (kept until every caller migrates).
     if node_url:
         pass
     elif canonical_game is not None and getattr(canonical_game, 'np_communication_id', None):
