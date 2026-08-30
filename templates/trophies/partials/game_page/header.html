@@ -119,6 +119,31 @@ open modals its JS drives; no dead buttons here).
                         </div>
                     {% endif %}
                 </div>
+
+                {% if family_versions %}
+                    {% comment %}Family band (Jeffrey's call): the concept's siblings -- remasters,
+                    remakes, collections sharing the origin work but a DIFFERENT igdb id -- one hop
+                    from here to THEIR Game pages. The data was already computed for the About tab;
+                    this is the IA doc's "family is a section, never a nav layer" made swift.
+                    Progressive: no family, no band. fv.game.concept carries the select_related
+                    igdb_match, so game_page_url costs no query per item.{% endcomment %}
+                    <div class="gp-family">
+                        <span class="gp-family__label">In the same family</span>
+                        <div class="gp-family__row">
+                            {% for fv in family_versions %}
+                                <a class="gp-family__item" href="{{ fv.game.concept.game_page_url }}">
+                                    <span class="gp-family__cover">
+                                        {% if fv.game.display_image_url %}
+                                            <img src="{{ fv.game.display_image_url }}" alt="" loading="lazy" decoding="async"
+                                                 class="w-full h-full {% if fv.game.has_cover_art %}object-cover object-top{% else %}object-contain p-0.5{% endif %}" />
+                                        {% endif %}
+                                    </span>
+                                    <span class="gp-family__name">{{ fv.concept.unified_title|default:fv.game.title_name }}</span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
             </div>
 
             <div class="gd-hero__extras pp-head-cascade">

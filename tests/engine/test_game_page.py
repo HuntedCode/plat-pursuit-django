@@ -534,3 +534,34 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
     # badge modal openers, flag button.
     for marker in ['gd-prog', 'data-versions-open', 'data-shot=', 'data-spine-open', 'game-flag-btn']:
         assert marker not in content, f'list-level hero piece leaked: {marker}'
+
+
+def test_the_family_band_links_siblings_to_their_own_game_pages(client):
+    """Family band (hero): siblings -- same GameFamily, DIFFERENT igdb id -- link to THEIR Game
+    pages via game_page_url, so family hopping stays at the concept level. Progressive: a game
+    with no family renders no band."""
+    from trophies.models import GameFamily
+
+    family = GameFamily.objects.create(igdb_id=424242, canonical_name='Crash Family')
+    original = _game(igdb_id=997, title_platform=['PS4'])
+    original.concept.family = family
+    original.concept.unified_title = 'Crash Original'
+    original.concept.save()
+    remake_concept = ConceptFactory(unified_title='Crash Remade', family=family)
+    _match(remake_concept, 998)
+    GameFactory(concept=remake_concept, title_platform=['PS5'])
+    stub_sibling = ConceptFactory(concept_id='PP_FAMSTUB', unified_title='Crash Stub', family=family)
+    GameFactory(concept=stub_sibling, title_platform=['PS3'])
+    TrophyFactory(game=original, trophy_id=1)
+
+    content = client.get('/games/997/').content.decode()
+
+    assert 'gp-family' in content and 'In the same family' in content
+    assert 'href="/games/998/"' in content, 'a matched sibling must link its igdb page'
+    assert 'href="/games/c/PP_FAMSTUB/"' in content, 'an unmatched sibling links its c/ page'
+    assert 'Crash Remade' in content and 'Crash Stub' in content
+
+    # No family -> no band.
+    lone = _game(igdb_id=999)
+    TrophyFactory(game=lone, trophy_id=1)
+    assert 'gp-family' not in client.get('/games/999/').content.decode()
