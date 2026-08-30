@@ -271,6 +271,9 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # JS and the flag/report modal live on List detail. The flag gates their CTAs so the page
         # never renders an invitation with no button (audit A3/M4).
         context['concept_tabs_readonly'] = True
+        # The About tab's versions sections are redundant on THIS page: "Other platforms" is the
+        # switcher's own list set, "In the same family" is the hero's family band (Jeffrey's call).
+        context['about_hide_versions'] = True
 
         context.update(self._build_viewport_context(selected, viewer, names))
 

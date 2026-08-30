@@ -95,12 +95,17 @@ so the gating stays out of the template.
         {% endif %}
     {% endif %}
 
-    {% if other_versions or family_versions %}
+    {% comment %}about_hide_versions (the concept Game page): this card is redundant THERE --
+    "Other platforms" is the list switcher's own set restated relative to the host, and "In the
+    same family" is the hero's family band. On List detail (flag absent) it renders as always:
+    that page IS one version, so its relatives belong here. Gated on the whole card, heading
+    included, so no empty shell survives.{% endcomment %}
+    {% if not about_hide_versions %}{% if other_versions or family_versions %}
     <section class="gd-acard">
         <h3 class="gd-acard__h">Versions &amp; editions</h3>
         {% include 'trophies/partials/game_detail/_version_sections.html' %}
     </section>
-    {% endif %}
+    {% endif %}{% endif %}
 
     {% if not about_has_info and not other_versions and not family_versions %}
     <div class="gd-empty">

@@ -565,3 +565,23 @@ def test_the_family_band_links_siblings_to_their_own_game_pages(client):
     lone = _game(igdb_id=999)
     TrophyFactory(game=lone, trophy_id=1)
     assert 'gp-family' not in client.get('/games/999/').content.decode()
+
+
+def test_the_about_tab_hides_the_versions_card_here_but_not_on_list_detail(client):
+    """Jeffrey's call: on THIS page "Other platforms" is the switcher's own set restated relative
+    to the host, and "In the same family" is the hero's family band -- redundant twice over. On
+    List detail the card stays: that page IS one version, so its relatives belong there. The gate
+    covers the whole card, heading included (an empty "Versions & editions" shell is the classic
+    half-gate bug)."""
+    a = _game(igdb_id=1001, title_platform=['PS5'])
+    b = _game(igdb_id=None, title_platform=['PS4'])
+    _match(b.concept, 1001)
+    TrophyFactory(game=a, trophy_id=1)
+    TrophyFactory(game=b, trophy_id=1)
+
+    game_page = client.get('/games/1001/').content.decode()
+    assert 'Versions &amp; editions' not in game_page
+    assert 'gd-vsec' not in game_page
+
+    list_page = client.get(f'/games/{a.np_communication_id}/').content.decode()
+    assert 'Versions &amp; editions' in list_page, 'List detail must keep its versions card'
