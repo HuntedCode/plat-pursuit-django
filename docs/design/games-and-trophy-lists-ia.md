@@ -38,7 +38,7 @@ page with a one-entry switcher). Emphasis adapts inside the page; existence of s
 
 | Page | Keyed on | Role |
 |---|---|---|
-| Games browse | Concept | The catalogue, deduped: one card per work ("4 lists" as a badge), fixing today's near-duplicate stack cards. |
+| Games browse | Concept | SHIPPED (phase 3): the catalogue deduped -- one card per page identity via the sitemap's election, an "N lists" chip + the partition's platform union on the card, links to the Game page. Tag detail (genre/theme) runs the same condensed pipeline. |
 | Game detail | Concept | The wrapper page (anatomy below). Where users live. |
 | Trophy Lists browse | Game | The list-level catalogue (regional variants, editions, recently added lists). |
 | List detail | Game | The list as a COMMUNITY OBJECT: leaderboards, earn rates/rarity (the per-Game community-stats denorm), first achievers, playtime stats, stack identity -- plus its trophy grid. |
@@ -155,6 +155,24 @@ Page-by-page during the rebuild, never a big-bang rename:
    on the number. Consult it mid-build if a sizing question actually comes up.
 
 ## Rollout log
+
+- **2026-08-30 -- PHASE 3: Games browse condensing shipped** (6 commits + tag pages). One card
+  per page identity via `game_page_canonicals()` slotted into the browse pipeline AFTER every
+  filter and BEFORE the final order_by -- the composition rule is load-bearing: a `.filter()`
+  chained after the window silently narrows the election POPULATION (which is also the right
+  semantics: `?platform=PS3` promotes the PS3 sibling to its partition's card). The card's
+  "N lists" + platform union use the DESTINATION page's trust-UNGATED membership (GamePageView's
+  rule, np floor included), deliberately diverging from the trust-gated election partition so
+  the chip agrees with the switcher the click lands on. Viewer progress folds partition-best
+  across siblings (one query). Cards link `game_page_url`, title by `unified_title`; region
+  chips retired from the shared card (owner call -- the card describes the WORK; region stays a
+  filter); `seo_item_list` + Lucky follow. Recently Added stays deliberately PER-LIST with
+  List-detail links (pinned). Interims recorded in the card's comments: flags overlay +
+  played_count are the ELECTED row's own columns (election ~= partition max; never sum);
+  rating/badge/DLC maps stay elected-row/host-concept keyed; alpha sort orders by the elected
+  row's title_name while the card displays unified_title (they rarely diverge). Window cost at
+  prod scale is a prod-deploy-checklist item; the fallback (materialized elected ids) is named,
+  not built.
 
 - **2026-08-30 -- PHASE 2: the List-detail slim-down shipped** (7 commits). List detail is
   Trophies + Ranks; the concept Game page is the ONE active ratings host (quick-rate, blurb
