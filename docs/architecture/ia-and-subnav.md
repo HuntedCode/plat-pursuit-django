@@ -153,9 +153,9 @@ both halves of what lives here, where "Membership" would name only one of them.
   url_name, icon, auth_required, divider_before)` (frozen dataclasses). `HUB_SUBNAV_CONFIG` holds
   My Pursuit / Browse / Leaderboards / Support.
 - **Resolution.** `resolve_hub_subnav(request)`: (1) `_URL_NAME_TO_SLUG_OVERRIDES` — sub-pages whose
-  url_name differs from their tab (e.g. `game_detail` → Browse/trophy-lists: a List detail page
-  lights the list-level catalogue, while the concept `game_page` lights Games) short-circuit
-  here; (2) the
+  url_name differs from their tab short-circuit here (e.g. `game_detail` → Browse/trophy-lists:
+  the whole `/games/<np>/` list family, roadmaps included, lights the list-level catalogue,
+  while the concept `game_page` lights Games); (2) the
   **exact `/`** case → My Pursuit + `overview`; (3) **longest-prefix-wins** across every hub's
   prefixes. The bare-root case is an equality check, so `/profiles/...` never falls into it.
 - **Context processor.** `hub_subnav()` returns `hub_section`, `hub_subnav_label`/`icon`,

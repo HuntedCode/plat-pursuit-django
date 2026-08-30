@@ -243,13 +243,26 @@ def test_list_detail_lights_trophy_lists_not_games(client):
     match = resolve_hub_subnav(req)
     assert match['hub'].key == 'browse' and match['active_slug'] == 'trophy-lists'
 
-    # Scope to the RAIL pills (href="..." class="pp-subpill..."): a bare 'href="/games/"' scan
-    # would catch the navbar's Browse hub button, which legitimately stays active hub-wide.
-    content = resp.content.decode()
-    games_pill = content.split('href="/games/" class="pp-subpill', 1)[1].split('>')[0]
-    assert 'is-active' not in games_pill, 'the Games rail pill must NOT light on a list page'
-    lists_pill = content.split('href="/games/lists/" class="pp-subpill', 1)[1].split('>')[0]
-    assert 'is-active' in lists_pill and 'aria-current="page"' in lists_pill
+    # Assert over EVERY lit rail pill (desktop + mobile sheet render the strip twice; the
+    # jobs-surface pattern): the lit set must be exactly Trophy Lists -- which also proves the
+    # Games pill is dark without a fragile positional split. The navbar's Browse hub button is
+    # not a pp-subpill, so it can't leak in.
+    import re
+    lit = re.findall(r'href="([^"]*)" class="pp-subpill is-active"', resp.content.decode())
+    assert set(lit) == {'/games/lists/'}, lit
+
+
+def test_the_whole_list_scoped_family_lights_trophy_lists():
+    """Every /games/<np>/-scoped url_name lights the list family -- INCLUDING the two public
+    roadmap reader routes, which the audit caught with NO override line at all (rail rendered
+    unlit on sitemap-indexed pages). The concept pages stay on Games (the IA split)."""
+    from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES as overrides
+
+    for name in ('game_detail', 'game_detail_with_profile',
+                 'roadmap_edit', 'roadmap_edit_ctg', 'roadmap_detail', 'roadmap_detail_dlc'):
+        assert overrides[name] == ('browse', 'trophy-lists'), name
+    for name in ('game_page', 'game_page_concept'):
+        assert overrides[name] == ('browse', 'games'), name
 
 
 # ── Chassis: XHR partial, pagination, minibar ─────────────────────────────────────────────────────

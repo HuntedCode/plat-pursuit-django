@@ -257,10 +257,13 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # (`job_detail` vs `jobs_browse`), so every one of them needs a line here; the item shipping without
     # one is silent, because the strip still renders.
     'job_detail': ('browse', 'jobs'),
-    # Both editor routes are /games/<np>/-scoped (you reach them FROM a list), so they light
-    # with the list family. The _ctg variant had no line at all before -- the silent-unlit trap.
+    # The whole roadmap family is /games/<np>/-scoped (you reach every one FROM a list), so all
+    # four light with the list family. The _ctg editor and BOTH public reader routes had no line
+    # at all before -- the silent-unlit trap, on sitemap-indexed pages for the readers.
     'roadmap_edit': ('browse', 'trophy-lists'),
     'roadmap_edit_ctg': ('browse', 'trophy-lists'),
+    'roadmap_detail': ('browse', 'trophy-lists'),
+    'roadmap_detail_dlc': ('browse', 'trophy-lists'),
     # Community
     'profile_detail': ('browse', 'profiles'),
     'trophy_case': ('browse', 'profiles'),
