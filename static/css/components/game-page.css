@@ -121,3 +121,18 @@
     #gp-viewport.is-swapping { transition: none; }
     .gp-lchip { transition: none; }
 }
+
+/* The hero's badge/contract spine as one split band in the main column (Jeffrey's call): the two
+   rows share a line at md+ instead of stacking under the screenshots; base width stacks as the
+   original spine did. Pinned to the column bottom so it sits where the old hero anchored its
+   substance block. */
+.gd-spine--band { margin-top: auto; padding-top: 0.75rem; }
+@media (min-width: 768px) {
+    .gd-spine--band {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        align-items: stretch;
+    }
+    .gd-spine--band .gd-spine__row { height: 100%; }
+}

@@ -68,29 +68,12 @@ open modals its JS drives; no dead buttons here).
                         <span class="gd-hero__players-lbl">Player{{ community_stats.played_count|pluralize }} &rsaquo;</span>
                     </a>
                 {% endif %}
-            </div>
 
-            <div class="gd-hero__extras pp-head-cascade">
-                {% if concept and image_urls.screenshot_urls %}
-                    {# Plain links (new tab), not lightbox buttons -- the lightbox lives on List detail. #}
-                    <div class="gd-shots" id="gp-shots">
-                        {% for url in image_urls.screenshot_urls|slice:":3" %}
-                            <a class="gd-shots__thumb" href="{{ url }}" target="_blank" rel="noopener" aria-label="View screenshot {{ forloop.counter }}">
-                                <img src="{{ url }}" alt="{{ page_title }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
-                                {% if forloop.last and image_urls.screenshot_urls|length > 3 %}
-                                    <span class="gd-shots__more">+{{ image_urls.screenshot_urls|length|add:"-3" }}</span>
-                                {% endif %}
-                            </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="gd-shots gd-shots--empty" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></svg>
-                        No screenshots
-                    </div>
-                {% endif %}
-
-                <div class="gd-spine">
+                {% comment %}The badge/contract spine as ONE band in the header itself (Jeffrey's
+                call): the vertical space freed by dropping the per-list progress readout gives the
+                two rows a shared line -- badges left, contract right -- instead of stacking under
+                the screenshots. Falls back to a single column at base width.{% endcomment %}
+                <div class="gd-spine gd-spine--band">
                     {% if badges %}
                         {# A link to the series' badge page, not List detail's modal button. #}
                         <a class="gd-spine__row gd-spine__row--badges" href="{% url 'badge_detail' series_slug=badges.0.series_slug %}">
@@ -136,6 +119,28 @@ open modals its JS drives; no dead buttons here).
                         </div>
                     {% endif %}
                 </div>
+            </div>
+
+            <div class="gd-hero__extras pp-head-cascade">
+                {% if concept and image_urls.screenshot_urls %}
+                    {# Plain links (new tab), not lightbox buttons -- the lightbox lives on List detail. #}
+                    <div class="gd-shots" id="gp-shots">
+                        {% for url in image_urls.screenshot_urls|slice:":3" %}
+                            <a class="gd-shots__thumb" href="{{ url }}" target="_blank" rel="noopener" aria-label="View screenshot {{ forloop.counter }}">
+                                <img src="{{ url }}" alt="{{ page_title }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
+                                {% if forloop.last and image_urls.screenshot_urls|length > 3 %}
+                                    <span class="gd-shots__more">+{{ image_urls.screenshot_urls|length|add:"-3" }}</span>
+                                {% endif %}
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="gd-shots gd-shots--empty" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></svg>
+                        No screenshots
+                    </div>
+                {% endif %}
+
             </div>
         </div>
     </div>
