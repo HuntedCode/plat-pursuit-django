@@ -114,7 +114,7 @@ def test_default_list_is_the_viewers_single_started_stack():
 
     view = _view_for('/')
     view.list_set = _resolve({'igdb_id': 888})
-    progress, _plats = view._viewer_maps(viewer)
+    progress, _plats, _hours = view._viewer_maps(viewer)
 
     assert view._default_list(progress).pk == ps4.pk, 'their one started stack wins over PS5-first'
 
@@ -135,7 +135,7 @@ def test_default_list_with_two_started_stacks_is_platform_priority():
 
     view = _view_for('/')
     view.list_set = _resolve({'igdb_id': 889})
-    progress, _plats = view._viewer_maps(viewer)
+    progress, _plats, _hours = view._viewer_maps(viewer)
 
     assert view._default_list(progress).pk == ps5.pk
 
@@ -148,9 +148,9 @@ def test_anonymous_default_is_platform_priority_with_zero_viewer_queries():
     view.list_set = [None]  # unused by the anon branch
 
     with CaptureQueriesContext(connection) as ctx:
-        progress, plats = view._viewer_maps(None)
+        progress, plats, hours = view._viewer_maps(None)
 
-    assert (progress, plats) == ({}, set())
+    assert (progress, plats, hours) == ({}, set(), None)
     assert len(ctx) == 0, 'anonymous must pay zero per-user queries'
 
 
@@ -481,25 +481,41 @@ def test_community_band_aggregates_across_the_list_set(client):
     assert '1,000' in content, 'the header/Community numbers must sum every list'
 
 
-def test_the_reused_tabs_render_read_only(client):
-    """The audit's A3/M4: the quick-rate CTA and the flag button are bound by JS and modals that
-    live only on List detail -- rendering them here would be dead buttons. concept_tabs_readonly
-    gates them server-side. The viewer is LOGGED IN AND LINKED on purpose: for an anonymous
-    viewer both CTAs are absent anyway, and the first mutation round proved that version of this
-    test unfalsifiable."""
+def test_the_ratings_tab_is_active_here(client):
+    """Phase 2 (slim-down): this page is the ONE active ratings host, replacing the slice-1
+    read-only gate this test used to pin. An ELIGIBLE linked viewer (platinum earned on the host
+    concept, the can_rate rule) gets the quick-rate CTA with its API-contract attrs, the compose
+    dialog + shared controller ship, the tracked playtime reaches the modal's hint, and the
+    About empty-state's flag CTA has its modal + JS on the page (the D7 machinery)."""
+    import datetime
+
+    from tests.factories import ConceptTrophyGroupFactory, EarnedTrophyFactory
+
     game = _game(igdb_id=994)
-    TrophyFactory(game=game, trophy_id=1)
+    plat = TrophyFactory(game=game, trophy_id=1, trophy_type='platinum')
+    ConceptTrophyGroupFactory(concept=game.concept)
     viewer = ProfileFactory(is_linked=True)
+    EarnedTrophyFactory(profile=viewer, trophy=plat, earned=True)
+    ProfileGameFactory(profile=viewer, game=game, progress=100,
+                       play_duration=datetime.timedelta(hours=42))
     client.force_login(viewer.user)
 
     content = client.get('/games/994/').content.decode()
 
-    assert 'quick-rate-btn' not in content
-    assert 'data-flag-open' not in content
+    assert 'quick-rate-btn' in content, 'the eligible viewer must get the rate CTA'
+    assert f'data-concept-id="{game.concept.id}"' in content
+    assert 'id="gd-qr-modal"' in content
+    assert 'js/quick-rate.js' in content and 'js/ratings-tab.js' in content
+    assert 'Playtime: about <b>42</b>' in content, 'the playtime hint must reach the modal'
+    assert 'data-flag-open' in content and 'id="game-flag-modal"' in content
+    assert 'js/game-flag.js' in content
+    assert 'concept_tabs_readonly' not in content
 
-    # And the same viewer on List detail still gets the flag CTA path (the gate must not leak).
-    list_content = client.get(f'/games/{game.np_communication_id}/').content.decode()
-    assert 'concept_tabs_readonly' not in list_content
+    # An anonymous viewer gets none of the write surfaces (can_rate gates them), and no flag JS.
+    client.logout()
+    anon = client.get('/games/994/').content.decode()
+    assert 'quick-rate-btn' not in anon
+    assert 'js/game-flag.js' not in anon
 
 
 def test_the_breadcrumb_is_visible_not_just_structured_data(client):
@@ -577,21 +593,25 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
     # Each badge medallion links its OWN series page (audit M3): the second series' href is the
     # one a badges.0-style row link would lose.
     assert '/hero-crash/' in content and '/hero-spyro/' in content
-    # Every one of these WOULD render on List detail for this exact viewer + data; here each is a
-    # dead CTA or an orphaned dialog, gated server-side by concept_tabs_readonly or by the hero
-    # simply not being List detail's.
+    # Since the slim-down made this page the ACTIVE ratings host, the ratings dialogs + the blurb
+    # report affordance legitimately ship here -- they are positive pins now, not bans.
     for marker in [
         'data-blurb-report',        # blurb report button (another profile's blurb IS present)
-        'id="gd-qr-modal"',         # quick-rate modal include
+        'id="gd-qr-modal"',
         'id="gd-blurb-report-modal"',
         'id="gd-guidelines-modal"',
+    ]:
+        assert marker in content, f'active-ratings piece missing: {marker}'
+    # Every one of these WOULD render on List detail for this exact viewer + data; here each is a
+    # dead CTA or an orphaned dialog -- genuinely list-level furniture.
+    for marker in [
         'id="gd-versions-modal"',   # List detail's versions dialog
         'data-versions-open',
         'data-stats-open',          # My Stats modal opener
         'gd-btn--card',             # plat-card CTA (the viewer's finished list earns one THERE)
         'gd-prog',                  # per-list progress readout
         'data-spine-open',          # badge spine modal opener (badges ARE present)
-        'game-flag-btn',            # hero flag/report button
+        'game-flag-btn',            # hero flag/report button (the About CTA's modal ships, this id doesn't)
     ]:
         assert marker not in content, f'list-level hero piece leaked: {marker}'
 

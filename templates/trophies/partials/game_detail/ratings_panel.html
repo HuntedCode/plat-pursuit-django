@@ -76,10 +76,9 @@ runs the reveal (revealRatings). Players drill-down lives in the Ranks tab now; 
     {% endfor %}
 </section>
 
-{% comment %}Inert markup on read-only hosts (the concept Game page): nothing there binds or
-opens these dialogs, so shipping them is dead weight at best and a dead-CTA source at worst.{% endcomment %}
-{% if not concept_tabs_readonly %}
+{% comment %}The compose/report dialogs ship with the panel: since the list-detail slim-down
+this panel has ONE host (the concept Game page) and it is the active ratings surface --
+ratings-tab.js + quick-rate.js drive these.{% endcomment %}
 {% include 'trophies/partials/game_detail/quick_rate_modal.html' %}
 {% include 'trophies/partials/game_detail/blurb_report_modal.html' %}
 {% include 'trophies/partials/game_detail/guidelines_sheet.html' %}
-{% endif %}

@@ -34,6 +34,9 @@
             // The minibar's identity icon + per-view controls follow the active tab (CSS gates on
             // data-mb-active, the List-detail contract).
             if (minibar) minibar.dataset.mbActive = name;
+            // First arrival on Ratings: the tab's entrance (stagger + count-ups + star grow) --
+            // one-shot, guarded inside reveal itself.
+            if (name === 'ratings' && PP.RatingsTab) PP.RatingsTab.reveal(panels[name]);
             tablist.syncTabindex();
             PP.syncViewParam(name, { default: 'lists' });
             // Decorative motion last (the game-detail.js ordering rule).
@@ -196,51 +199,8 @@
             });
         }
 
-        // ── Ratings tab: per-group selector (ported from game-detail.js ratingsTab, read-only:
-        //    no quick-rate here -- concept_tabs_readonly gates those CTAs server-side). ──
-        (function ratingsSelector() {
-            const root = document.querySelector('[data-gd-rate]');
-            if (!root) return;
-            const drop = root.querySelector('[data-rate-drop]');
-            const dropBtn = root.querySelector('[data-rate-drop-toggle]');
-            function closeDrop() {
-                if (!dropBtn) return;
-                dropBtn.setAttribute('aria-expanded', 'false');
-                const m = drop && drop.querySelector('.gd-rate__dropmenu');
-                if (m) m.hidden = true;
-            }
-            function selectGroup(ctgId, srcEl) {
-                root.querySelectorAll('[data-rate-panel]').forEach((panel) => {
-                    panel.classList.toggle('is-hidden', panel.dataset.ratePanel !== ctgId);
-                });
-                root.querySelectorAll('.gd-rate__segchip[data-rate-ctg]').forEach((c) => {
-                    const on = c.dataset.rateCtg === ctgId;
-                    c.classList.toggle('is-active', on);
-                    c.setAttribute('aria-pressed', on ? 'true' : 'false');
-                });
-                if (drop && dropBtn) {
-                    dropBtn.classList.toggle('is-active', !!(srcEl && srcEl.classList.contains('gd-rate__dropitem')));
-                }
-                fillBars(root);
-            }
-            root.addEventListener('click', (e) => {
-                const toggle = e.target.closest('[data-rate-drop-toggle]');
-                if (toggle) {
-                    const open = toggle.getAttribute('aria-expanded') === 'true';
-                    toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-                    const menu = drop && drop.querySelector('.gd-rate__dropmenu');
-                    if (menu) menu.hidden = open;
-                    return;
-                }
-                const chip = e.target.closest('[data-rate-ctg]');
-                if (chip) { selectGroup(chip.dataset.rateCtg, chip); closeDrop(); }
-            });
-            if (drop) {
-                document.addEventListener('click', (e) => { if (!drop.contains(e.target)) closeDrop(); });
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Escape' && dropBtn && dropBtn.getAttribute('aria-expanded') === 'true') { closeDrop(); dropBtn.focus(); }
-                });
-            }
-        })();
+        // The Ratings tab's own machinery -- per-group selector, quick-rate glue, live update,
+        // entrance reveal -- lives in ratings-tab.js (the slim-down made this page its one host;
+        // an older read-only selector port used to live here and was deleted with the gate).
     });
 })();

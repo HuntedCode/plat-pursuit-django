@@ -149,12 +149,8 @@ makes that legible.
 Its `data-rate-count` hook is unchanged, but the live-update now looks for it from the PANEL rather than
 from the conditions grid, because it no longer lives inside that grid.{% endcomment %}
 <div class="gd-rate__foot">
-    {% comment %}concept_tabs_readonly: the concept Game page renders this tab read-only for
-    slice 1 (the quick-rate modal + its JS live on List detail; split-concept rating design
-    pending) -- so the CTA and the be-the-first invitation are gated together, never an invitation
-    with no button.{% endcomment %}
-    <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate and not concept_tabs_readonly %}Be the first to rate this.{% endif %}</span>
-    {% if can_rate and not concept_tabs_readonly %}
+    <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
+    {% if can_rate %}
     <button type="button" class="gd-btn gd-btn--primary gd-rate__cta quick-rate-btn"
             data-concept-id="{{ concept_id }}"
             data-group-id="{{ group_id }}"

@@ -44,6 +44,9 @@ STATIC_JS = Path(__file__).resolve().parents[2] / 'static' / 'js'
 
 @pytest.mark.parametrize('name,entry', [
     ('game-detail.js', 'QuickRate'),
+    # ratings-tab.js is the Game page's ratings driver (the slim-down's one active host);
+    # game-detail.js stays listed until its Ratings tab leaves in the slim-down's commit 4.
+    ('ratings-tab.js', 'QuickRate'),
     ('plat-cards.js', 'QuickRate'),
     # The wizard is the third host, and the last one to stop carrying its own copy (2026-08). It renders
     # the form INLINE rather than in a dialog, so it composes the inner layer directly.
@@ -69,6 +72,7 @@ def test_both_hosts_load_the_shared_controller():
     root = Path(__file__).resolve().parents[2] / 'templates'
     for page, controller in [
         ('trophies/game_detail.html', 'js/game-detail.js'),
+        ('trophies/game_page.html', 'js/ratings-tab.js'),
         ('shareables/plat_cards.html', 'js/plat-cards.js'),
         ('trophies/rate_my_games.html', 'js/rate-my-games.js'),
     ]:

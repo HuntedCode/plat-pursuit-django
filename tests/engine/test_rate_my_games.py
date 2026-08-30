@@ -825,7 +825,7 @@ def test_every_host_of_the_shared_form_confirms_a_save():
 
     # Hosts with custom wording claim it; the rest rely on the default. What must never happen is a host
     # that claims it and then does not say anything.
-    for rel in ('static/js/game-detail.js', 'static/js/rate-my-games.js'):
+    for rel in ('static/js/game-detail.js', 'static/js/ratings-tab.js', 'static/js/rate-my-games.js'):
         src = (ROOT / rel).read_text(encoding='utf-8')
         assert 'announcesSave' in src, f'{rel} would now toast twice'
         assert 'ToastManager' in src, f'{rel} claims announcesSave but says nothing'

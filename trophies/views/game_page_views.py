@@ -117,26 +117,36 @@ class GamePageView(ConceptContextMixin, TemplateView):
         return profile if (profile is not None and profile.is_linked) else None
 
     def _viewer_maps(self, viewer):
-        """(progress by game pk, plat'd game pks) over the list set -- two bounded queries.
+        """(progress by game pk, plat'd game pks, play hours) over the list set -- two bounded
+        queries. play hours ride the SAME ProfileGame query (one extra column, zero extra
+        queries): the MAX play_duration across the set's rows, because a PS4+PS5 auto-pop would
+        double-count a sum; >= 1h rounds to whole hours, else None -- the exact rule List
+        detail's quick-rate host used (the modal's playtime hint reads it).
         NOT the whole per-user cost of the page: an authed viewer also pays build_earned_state
         (3 queries) and, via the inherited ratings builder, several queries PER ConceptTrophyGroup
         (can_rate + own-rating lookups) -- tens of queries on a DLC-heavy game, inherited unchanged
         from GameDetailView. Anonymous pays none of it (pinned)."""
         if viewer is None:
-            return {}, set()
+            return {}, set(), None
         game_ids = [g.pk for g in self.list_set]
-        progress = dict(
+        rows = list(
             ProfileGame.objects
             .filter(profile=viewer, game_id__in=game_ids)
-            .values_list('game_id', 'progress')
+            .values_list('game_id', 'progress', 'play_duration')
         )
+        progress = {game_id: prog for game_id, prog, _dur in rows}
+        durations = [dur for _gid, _prog, dur in rows if dur is not None]
+        play_hours = None
+        if durations:
+            secs = max(d.total_seconds() for d in durations)
+            play_hours = round(secs / 3600) if secs >= 3600 else None
         plats = set(
             EarnedTrophy.objects
             .filter(profile=viewer, earned=True, trophy__trophy_type='platinum',
                     trophy__game_id__in=game_ids)
             .values_list('trophy__game_id', flat=True)
         )
-        return progress, plats
+        return progress, plats, play_hours
 
     def _host_game(self):
         """The list whose concept supplies the page's identity (title, canonical, About, ratings).
@@ -206,7 +216,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         viewer = self._viewer_profile()
-        progress, plats = self._viewer_maps(viewer)
+        progress, plats, play_hours = self._viewer_maps(viewer)
         selected = self._selected_list(progress)
 
         if self._is_viewport_swap():
@@ -278,10 +288,11 @@ class GamePageView(ConceptContextMixin, TemplateView):
                 if total_played else (self.list_set[0].avg_completion or 0)
             ),
         }
-        # Slice 1: the reused Ratings/About tabs are READ-ONLY here -- the quick-rate modal, its
-        # JS and the flag/report modal live on List detail. The flag gates their CTAs so the page
-        # never renders an invitation with no button (audit A3/M4).
-        context['concept_tabs_readonly'] = True
+        # Phase 2 (slim-down): this page is the ONE active ratings host -- quick-rate, blurb
+        # report, guidelines and the flag/report modal all ship here (List detail's copies left
+        # with its Ratings/About tabs). The slice-1 concept_tabs_readonly gate retired with them.
+        # PSN-tracked playtime as a whole-hours hint in the quick-rate modal; rides _viewer_maps.
+        context['user_play_hours'] = play_hours
         # The About tab's versions card is hidden on IGDB pages only: there "Other platforms" is
         # the switcher's own list set and "In the same family" is the hero's family band. On a c/
         # page it STAYS -- the audit found other_versions is the sole surface reaching untrusted

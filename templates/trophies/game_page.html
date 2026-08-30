@@ -98,13 +98,27 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
 {% comment %}js_scripts, NOT scripts: base.html has no `scripts` block and Django silently
 discards a child block with no parent counterpart -- the audit found the page's entire JS layer
 dead because of that one word. The source-guard test now pins this tag.{% endcomment %}
-{# The screenshot lightbox lives in the shared overlay layer, outside the page content wrapper. #}
+{# The screenshot lightbox + the report modal live in the shared overlay layer, outside the page content wrapper. #}
 {% block fixed_overlays %}
 {% include 'trophies/partials/game_detail/shot_lightbox.html' with shot_title=page_title %}
+{% comment %}Report-an-issue modal (linked viewers only, same gate as List detail): the About
+tab's empty-state "tell us what's missing" CTA opens it via game-flag.js -- shipped here since
+the slim-down made this page the About host.{% endcomment %}
+{% if user.is_authenticated and user.profile and user.profile.is_linked %}
+    {% include 'trophies/partials/game_detail/report_modal.html' %}
+{% endif %}
 {% endblock %}
 
+{% comment %}Load order matters twice: quick-rate.js (the shared form controller) must precede
+ratings-tab.js (its consumer -- the hygiene test pins the pair), and both precede game-page.js
+(which calls RatingsTab.reveal).{% endcomment %}
 {% block js_scripts %}
     <script src="{% static 'js/shot-lightbox.js' %}"></script>
     <script src="{% static 'js/trophy-grid.js' %}"></script>
+    <script src="{% static 'js/quick-rate.js' %}"></script>
+    <script src="{% static 'js/ratings-tab.js' %}"></script>
     <script src="{% static 'js/game-page.js' %}"></script>
+    {% if user.is_authenticated and user.profile and user.profile.is_linked %}
+    <script src="{% static 'js/game-flag.js' %}"></script>
+    {% endif %}
 {% endblock %}
