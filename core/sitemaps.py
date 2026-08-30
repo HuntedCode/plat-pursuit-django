@@ -53,14 +53,18 @@ class GameSitemap(Sitemap):
         # and fed only a browse filter while the sitemap invited crawlers to index every
         # asset-flip stub at priority 0.6. Sites are quality-scored on their worst indexed
         # pages. (Concept-level dedupe of regional siblings is Lane 1.)
+        #
+        # CONCEPT-BEARING rows only, since the slim-down: this class advertises GAME PAGES and
+        # nothing else -- one class, one URL kind. Conceptless games have no Game page and are
+        # ListSitemap's alone (they used to ride here via a location() fallback branch, deleted).
         return (
             Game.objects
             .exclude_shovelware()
-            .filter(np_communication_id__isnull=False)
+            .filter(np_communication_id__isnull=False, concept__isnull=False)
             # One URL per GAME PAGE (Games/Trophy Lists IA): the partition key mirrors
             # Concept.game_page_url exactly, so deliberately-split concepts sharing a trusted
             # igdb_id are advertised ONCE, at the URL every sibling page's rel=canonical points
-            # to. Consolidates harder than the old per-concept election.
+            # to.
             .game_page_canonicals()
             .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
@@ -71,11 +75,7 @@ class GameSitemap(Sitemap):
         )
 
     def location(self, obj):
-        # The one routing helper: a game with a concept advertises its Game page (igdb or c/
-        # form); a conceptless game has no Game page and keeps its list URL.
-        if obj.concept_id:
-            return obj.concept.game_page_url()
-        return reverse('game_detail', kwargs={'np_communication_id': obj.np_communication_id})
+        return obj.concept.game_page_url()
 
     def lastmod(self, obj):
         return obj.created_at
@@ -86,7 +86,53 @@ class GameSitemap(Sitemap):
         # on purpose -- a window function for a max() would cost more than it disambiguates,
         # and any elected row's created_at is bounded by this max anyway.)
         return (
-            Game.objects.exclude_shovelware().filter(np_communication_id__isnull=False)
+            Game.objects.exclude_shovelware()
+            .filter(np_communication_id__isnull=False, concept__isnull=False)
+            .order_by('-created_at')
+            .values_list('created_at', flat=True)
+            .first()
+        )
+
+
+class ListSitemap(Sitemap):
+    """Every non-shovelware trophy LIST at its own /games/<np>/ URL.
+
+    New with the list-detail slim-down (owner decision 3): list pages are self-canonical again --
+    "the indexable home of stack-specific intent" (the IA doc) -- so the sitemap advertises them.
+    No election here: ONE row per np_communication_id, the un-deduplicated set, because every
+    list page now stands for itself. Disjoint from GameSitemap by construction (that class is
+    concept-bearing game pages only), so no URL is emitted by both classes -- which the invariant
+    test (sitemap URL == that page's rel=canonical) would otherwise catch as a contradiction.
+
+    The blank-np exclude is a real floor, not decoration: reverse() happily builds
+    /games// from an empty string (GamePageView's list floor guards the same class of row).
+    Priority sits below GameSitemap's 0.6: the list is the child of the work.
+    """
+    changefreq = 'weekly'
+    priority = 0.5
+    limit = 5000
+
+    def items(self):
+        return (
+            Game.objects
+            .exclude_shovelware()
+            .filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
+            .only('np_communication_id', 'created_at')
+            .order_by('-id')
+        )
+
+    def location(self, obj):
+        return reverse('game_detail', kwargs={'np_communication_id': obj.np_communication_id})
+
+    def lastmod(self, obj):
+        return obj.created_at
+
+    def get_latest_lastmod(self):
+        return (
+            Game.objects.exclude_shovelware()
+            .filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
             .order_by('-created_at')
             .values_list('created_at', flat=True)
             .first()

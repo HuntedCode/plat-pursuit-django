@@ -26,11 +26,14 @@ from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServ
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
+    ListSitemap,
 )
 
 sitemaps = {
     'static': StaticViewSitemap,
     'games': GameSitemap,
+    # Trophy LIST pages, self-canonical since the slim-down (Games/Trophy Lists IA phase 2).
+    'game_lists': ListSitemap,
     'profiles': ProfileSitemap,
     'badges': BadgeSitemap,
     # 'roadmaps' — withdrawn 2026-08-23 (SEO Lane 0): Roadmaps are hidden from the site with no

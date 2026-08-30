@@ -317,7 +317,7 @@ def test_sitemap_advertises_a_split_concept_page_exactly_once():
 
 
 def test_sitemap_routes_unmatched_and_conceptless_correctly():
-    from core.sitemaps import GameSitemap
+    from core.sitemaps import GameSitemap, ListSitemap
 
     stub_concept = ConceptFactory(concept_id='PP_SMAP')
     stub_game = GameFactory(concept=stub_concept, defined_trophies={'bronze': 1})
@@ -327,7 +327,11 @@ def test_sitemap_routes_unmatched_and_conceptless_correctly():
     urls = {sm.location(o) for o in sm.items()}
 
     assert '/games/c/PP_SMAP/' in urls
-    assert f'/games/{lone.np_communication_id}/' in urls
+    # A conceptless game has no Game page: since the slim-down's sitemap split it is advertised
+    # by ListSitemap at its list URL, and GameSitemap must NOT carry it.
+    assert f'/games/{lone.np_communication_id}/' not in urls
+    list_urls = {ListSitemap().location(o) for o in ListSitemap().items()}
+    assert f'/games/{lone.np_communication_id}/' in list_urls
 
 
 def test_sitemap_page_is_bounded_queries():

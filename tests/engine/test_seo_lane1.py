@@ -50,18 +50,43 @@ def test_a_conceptless_game_stands_for_itself():
 
 
 def test_every_sitemap_url_equals_the_canonical_of_the_page_it_advertises(client):
-    """The invariant that replaced 'sitemap and page agree on the winner': the sitemap and
-    rel=canonical both route through Concept.game_page_url, so each advertised URL must be
-    exactly what its own page emits as canonical."""
-    from core.sitemaps import GameSitemap
+    """The invariant that replaced 'sitemap and page agree on the winner', now over BOTH game
+    sections: every advertised URL -- Game pages AND (since the slim-down flip) self-canonical
+    list pages -- must be exactly what its own page emits as canonical."""
+    from core.sitemaps import GameSitemap, ListSitemap
 
     concept, stub, winner, quiet = _family()
     lone = GameFactory(concept=None, defined_trophies={'bronze': 1})
 
-    for obj in GameSitemap().items():
-        url = GameSitemap().location(obj)
-        head = client.get(url, **CF).content.decode().split('</head>')[0]
-        assert f'rel="canonical" href="http://testserver{url}"' in head, url
+    for smap in (GameSitemap(), ListSitemap()):
+        for obj in smap.items():
+            url = smap.location(obj)
+            head = client.get(url, **CF).content.decode().split('</head>')[0]
+            assert f'rel="canonical" href="http://testserver{url}"' in head, url
+
+
+def test_list_sitemap_advertises_every_list_and_only_lists(client):
+    """Owner decision 3: every non-shovelware list joins the sitemap at its own URL -- winner,
+    quiet sibling, stub and conceptless alike (self-canonical pages all stand for themselves;
+    no election). Shovelware stays out, and the two classes are DISJOINT: GameSitemap is
+    concept-bearing Game pages only, so no URL is emitted by both."""
+    from core.sitemaps import GameSitemap, ListSitemap
+
+    concept, stub, winner, quiet = _family()
+    lone = GameFactory(concept=None, defined_trophies={'bronze': 1})
+    shovel = GameFactory(concept=ConceptFactory(), defined_trophies={'bronze': 1})
+    type(shovel).objects.filter(pk=shovel.pk).update(shovelware_status='manually_flagged')
+
+    list_urls = {ListSitemap().location(o) for o in ListSitemap().items()}
+    for g in (stub, winner, quiet, lone):
+        assert f'/games/{g.np_communication_id}/' in list_urls
+    assert f'/games/{shovel.np_communication_id}/' not in list_urls
+
+    game_urls = {GameSitemap().location(o) for o in GameSitemap().items()}
+    assert not (game_urls & list_urls), 'a URL emitted by both sitemap classes'
+    assert not any('/games/c/' in u or u.rstrip('/').split('/')[-1].isdigit() for u in list_urls), (
+        'ListSitemap leaked a Game-page URL form'
+    )
 
 
 def test_every_list_page_is_self_canonical(client):
