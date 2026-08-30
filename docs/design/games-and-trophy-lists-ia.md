@@ -1,0 +1,135 @@
+# Games and Trophy Lists: Vocabulary and IA
+
+The site's word "game" has quietly meant two different things: the *work* (the IGDB-anchored
+Concept) and the *trophy list* (the `Game` model row, one per `np_communication_id`). Most features
+already live at the concept level (contracts, ratings, roadmaps, badges, franchise/company pages);
+the browse and detail surfaces and the vocabulary are list-level. This doc makes the separation
+deliberate so every page rebuilt from here inherits one decision instead of re-litigating it.
+
+Decided 2026-08-29 across a design conversation with Jeffrey; the display question that triggered
+it ("IGDB title or PSN title?") is resolved structurally rather than by choosing a winner: the
+Game page header carries the concept (IGDB) title, and the list switcher entries carry the actual
+list names. Which name is which is communicated by where it sits, never by a source label.
+
+## Vocabulary
+
+| Site term | Model | What it is |
+|---|---|---|
+| **Game** | `Concept` | The work. IGDB-anchored where matched; the cross-platform join point (a future Steam/Xbox list hangs off the same Concept via its IGDB id). |
+| **Trophy List** | `Game` | One platform trophy list (`np_communication_id`), owning its trophy groups (base + DLC). The community calls multiples of these *stacks*; flavor text may too. |
+| **Family** | `GameFamily` | Other versions of the same origin work (original / remaster / remake). A SECTION on Game detail, never a nav layer -- coverage is partial (inherit-if-none from IGDB) and a mandatory layer with holes reads as broken. |
+| **Franchise** | `Franchise` | The series (TLOU + Part II). Distinct from family; conflating them in UI is the easy mistake. |
+
+**The Django models are NOT renamed.** Same precedent as the Career reframe (models stayed
+Job/Contract): the surface changes, the schema vocabulary does not. `Game` in code = Trophy List
+on the page. This table is the mapping; do not "fix" it.
+
+**Naming insurance for the multi-platform future**: display copy says "Trophy Lists" today; URL
+segments and code identifiers stay NEUTRAL (`lists`, `list_*`), because copy is a template-string
+change and URLs are a 301 migration. "Trophy Lists" is PlayStation-flavored and will not survive
+Xbox/Steam ("achievements"); when that bridge arrives, per-platform flavoring may even be correct
+(Trophy Lists on a PS tab, Achievement Lists on an Xbox tab), and bare "Lists" becomes available
+if the hidden `GameList` feature revamps under the better name "Collections".
+
+## The four canonical pages
+
+Stable structure, always the same shape -- NO conditional IA (a one-list game renders the same
+page with a one-entry switcher). Emphasis adapts inside the page; existence of sections does not.
+
+| Page | Keyed on | Role |
+|---|---|---|
+| Games browse | Concept | The catalogue, deduped: one card per work ("4 lists" as a badge), fixing today's near-duplicate stack cards. |
+| Game detail | Concept | The wrapper page (anatomy below). Where users live. |
+| Trophy Lists browse | Game | The list-level catalogue (regional variants, editions, recently added lists). |
+| List detail | Game | The list as a COMMUNITY OBJECT: leaderboards, earn rates/rarity (the per-Game community-stats denorm), first achievers, playtime stats, stack identity -- plus its trophy grid. |
+
+## Game detail anatomy: the wrapper pattern
+
+Concept-oriented tabs (ratings, roadmap, family, media -- all already concept/CTG-keyed in the
+model) around ONE list viewport tab:
+
+- **The viewport embeds the trophy grid of the selected list** and a switcher across the game's
+  lists. Users see trophies without a hop; stackers compare progress without leaving the page
+  (each switcher entry shows the viewer's % and plat state -- the switcher IS the
+  stack-comparison view).
+- **Selected list lives in the URL** (`?list=NPWR...`), htmx partial swap +
+  `history.replaceState`, matching the browse-filters pattern. Back button, refresh, sharing and
+  deep links (a profile log's "platted the PS5 stack") all work. Param states carry
+  `rel=canonical` to the bare game URL so six stack-states do not index as six pages.
+- **Default list rule (deterministic, decided here)**: the viewer's own in-progress list when they
+  have progress on exactly one stack; otherwise `PLATFORM_PRIORITY_ORDER`. Personalized when it
+  can be, stable when anonymous.
+- **Identity chip** on the viewport: list name + platform badges + region, with the link to the
+  List detail page living IN the chip -- identity and escape hatch are one object.
+- **Lazy**: default list renders server-side; other lists fetch on switch.
+
+## The trophy grid is ONE COMPONENT, rendered on both pages
+
+Duplicating CODE is the sin; duplicating CONTENT across pages serving different moments is good
+product -- trophies are quite literally why anyone visits. One shared partial (context contract:
+list + viewer earned-state), included by Game detail's viewport AND by List detail. A "Trophy
+List" page that does not show its trophies is a broken promise; anyone landing from a leaderboard
+row expects the list.
+
+SEO stays clean because the PAGES differ even though the component is shared: Game detail answers
+"the game" queries; List detail is the canonical, indexable home of stack-specific intent
+("<game> PS5 trophy list", "EU stack" -- real query classes). Distinct titles/meta, distinct
+surrounding content.
+
+## List display names: the helper chain
+
+The switcher/chip name comes from a `display_list_name`-style helper -- ONE precedence chain on
+the model, never reimplemented inline (the `display_image_url` pattern):
+
+1. Freshest `trophy_titles`-source `PSNTitleObservation.title_name_raw` for the list --
+   display-cleaned at render (strip marks the way `clean_game_title` does). Raw stays raw in the
+   table; cleaning is a render concern.
+2. Fallback: `Game.title_name` (always present; coverage of #1 grows with every sync and can be
+   front-loaded via `backfill_psn_game_observations`).
+
+Locale rule for #1 (games synced by JP and US users have two live names; "most recent" would flap
+the label): when multiple names were seen within the last 30 days, prefer the Latin-script one;
+otherwise most recent. Deterministic, and the CJK original remains one click away wherever an
+"also known as" affordance lands.
+
+Why not `Game.title_name` alone: it is cleaned (fine) but also OVERWRITTEN -- the IGDB CJK
+promotion replaces it and locks the replacement, and merge renames rewrite it -- so it is not
+reliably the list's own name, which is the whole point of the switcher label.
+
+## Stats: per-list is atomic, concept aggregates are additive
+
+Stacking is load-bearing for the core audience: the plat on PS4 and PS5 lists is TWO platinums,
+earned on purpose. Per-list numbers (plat rarity, completion %, played_count, earn rates) remain
+the source of truth; any concept-level number is an additive aggregate, never a replacement. The
+failure mode to design against is a merged completion number that makes a stacker's second plat
+invisible.
+
+## Rollout
+
+Page-by-page during the rebuild, never a big-bang rename:
+
+1. Today's list-keyed game page is the BASIS for List detail (adopted, not rebuilt from zero).
+2. Game detail + Games browse are the new builds.
+3. When URLs move, 301 the old ones -- the SEO lane just stabilized; migrations are deliberate.
+4. Universal search: Games (concepts) are the primary result type; lists are reachable through
+   them. A list-specific query match may surface the list directly, labeled by its identity chip.
+5. `audit_psn_capture --names` (main branch) reports how often list names diverge from concept
+   titles, classified by kind. It is a DIAGNOSTIC, not a gate -- nothing in this design branches
+   on the number. Consult it mid-build if a sizing question actually comes up.
+
+## Gotchas and Pitfalls
+
+- **`GameList` name collision**: the hidden user-collections feature is called Game Lists. Until
+  it revamps (suggested: "Collections"), never label trophy lists bare "Lists" in nav.
+- **`PP_*` stub concepts** must still render a coherent Game page; the title helper chain and
+  `display_image_url` already handle stubs -- keep new surfaces on those helpers.
+- **Do not hand-copy the trophy grid markup** into a second template; both pages include the one
+  partial. Two hand-written copies drifting was the original argument against rendering it twice
+  at all.
+- **Family != franchise** in UI copy, ever.
+- **Ratings/roadmaps are concept/CTG-level** -- they belong on Game detail's tabs, not List
+  detail, no matter how tempting "list ratings" sounds. List detail owns what is genuinely
+  per-list: leaderboards, denormed stats, achievers, identity.
+- **Switcher labels must not flap**: the locale rule above exists because "most recent
+  observation" alternates for dual-region games. If the rule changes, change it in the helper,
+  once.
