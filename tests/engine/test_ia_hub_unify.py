@@ -66,8 +66,10 @@ def test_browse_items_grouped_catalog_curation():
     # Profiles joined Catalog in 2026-08: hunters are another thing you browse.
     # 'jobs' joins Catalog 2026-08: `/jobs/` is the public jobs catalogue (leaderboards rebuild step 7).
     # It sits beside Games and Badges because those are the three things a hunter pursues; Recently
-    # Added and Hunters keep their positions.
-    assert groups['Catalog'] == ['games', 'badges', 'jobs', 'recently-added', 'profiles']
+    # Added and Hunters keep their positions. 'trophy-lists' joins after games 2026-08-30
+    # (Games/Trophy Lists IA phase 4: the list-level catalogue rides beside the game-level one;
+    # the slug is deliberately NOT 'lists' -- that name belongs to the hidden GameList system).
+    assert groups['Catalog'] == ['games', 'trophy-lists', 'badges', 'jobs', 'recently-added', 'profiles']
     assert groups['Curation'] == ['franchises', 'companies', 'genres']
 
 

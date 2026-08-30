@@ -92,8 +92,10 @@ def test_profiles_are_a_browse_surface_now():
     catalog = [i.slug for i in match['hub'].items if i.group == 'Catalog']
     # 'jobs' joins Catalog 2026-08: `/jobs/` is the public jobs catalogue (leaderboards rebuild step 7).
     # It sits beside Games and Badges because those are the three things a hunter pursues; Recently
-    # Added and Hunters keep their positions.
-    assert catalog == ['games', 'badges', 'jobs', 'recently-added', 'profiles'], catalog
+    # Added and Hunters keep their positions. 'trophy-lists' joins after games 2026-08-30
+    # (Games/Trophy Lists IA phase 4: the list-level catalogue rides beside the game-level one;
+    # the slug is deliberately NOT 'lists' -- that name belongs to the hidden GameList system).
+    assert catalog == ['games', 'trophy-lists', 'badges', 'jobs', 'recently-added', 'profiles'], catalog
 
 
 def test_the_moved_profile_pages_are_still_behind_the_cloudflare_guard():
