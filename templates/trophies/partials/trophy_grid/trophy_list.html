@@ -1,9 +1,15 @@
 {% load custom_filters static humanize %}
+{% comment %}
+The trophy rows for one group. Contract: trophies (list of trophy DICTS, not model instances --
+the ORM-decoupled rows the host builds), earned (trophy_id -> state mapping), profile, id_prefix.
+Article ids are namespaced ({{ id_prefix }}trophy-{{ id }}); the predecessor's bare-numeric ids
+(id="3") were invalid as a shared component and had no located consumer.
+{% endcomment %}
 <div class="gd-trophies">
     {% for trophy in trophies %}
-        {% with profile_earned|dict_get:trophy.trophy_id as earned %}
-            <article id="{{ trophy.trophy_id }}"
-                     class="gd-trophy gd-trophy--{{ trophy.trophy_type }}{% if earned.earned %} is-earned{% endif %}">
+        {% with earned|dict_get:trophy.trophy_id as e %}
+            <article id="{{ id_prefix }}trophy-{{ trophy.trophy_id }}"
+                     class="gd-trophy gd-trophy--{{ trophy.trophy_type }}{% if e.earned %} is-earned{% endif %}">
                 <div class="gd-trophy__icon">
                     <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-full h-full object-cover" loading="lazy" />
                 </div>
@@ -15,16 +21,16 @@
                     </div>
                     <p class="gd-trophy__detail">{{ trophy.trophy_detail }}</p>
 
-                    {% if earned.earned and earned.earned_date_time %}
-                        <span class="gd-trophy__earned">Earned {{ earned.earned_date_time|format_date:"with_tz" }}</span>
+                    {% if e.earned and e.earned_date_time %}
+                        <span class="gd-trophy__earned">Earned {{ e.earned_date_time|format_date:"with_tz" }}</span>
                     {% endif %}
 
-                    {% if profile and trophy.progress_target_value and not earned.earned %}
+                    {% if profile and trophy.progress_target_value and not e.earned %}
                         <div class="gd-trophy__prog">
-                            {% with earned.progress|default:0 as prog %}{% with trophy.progress_target_value as target %}
+                            {% with e.progress|default:0 as prog %}{% with trophy.progress_target_value as target %}
                                 <div class="pp-horizon pp-horizon__track gd-trophy__progbar" style="--horizon-h: 5px; --horizon-accent: var(--pp-accent); --horizon-progress: {% widthratio prog target 100 %}%;"><span class="pp-horizon__fill"></span></div>
                             {% endwith %}{% endwith %}
-                            <span class="gd-trophy__progval">{{ earned.progress|default:0|intcomma }}/{{ trophy.progress_target_value|intcomma }}</span>
+                            <span class="gd-trophy__progval">{{ e.progress|default:0|intcomma }}/{{ trophy.progress_target_value|intcomma }}</span>
                         </div>
                     {% endif %}
 
@@ -32,7 +38,7 @@
 
                 {# Rarity: one block. Desktop = right-hand stacked column with labels; mobile = wraps below the row, inline, labels hidden (CSS-driven, no duplicate markup). #}
                 <div class="gd-trophy__rates">
-                    {% if earned.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4' %}</span>{% endif %}
+                    {% if e.earned %}<span class="gd-trophy__got" title="Earned">{% include 'partials/icons/checkmark.html' with color='var(--pp-success)' size='w-4 h-4' %}</span>{% endif %}
                     <div class="gd-trate gd-trate--stacked">
                         <span class="gd-trate__val">{% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
                         <span class="gd-trate__lbl">PP Rate</span>

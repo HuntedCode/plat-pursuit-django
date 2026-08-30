@@ -1,0 +1,51 @@
+{% load custom_filters %}
+{% comment %}
+THE shared trophy grid -- rendered by List detail (via game_detail/trophy_browse_results.html) and
+by the concept Game page's list viewport. One component, two hosts, per
+docs/design/games-and-trophy-lists-ia.md: duplicating code is the sin, duplicating content across
+pages serving different moments is the product.
+
+EXPLICIT CONTRACT -- every read below uses ONLY these include params (a source-guard test pins it;
+the predecessor read page globals, so a second grid on one page showed the first grid's numbers):
+  trophies       mapping: group_id -> list of trophy dicts (the ORM-decoupled rows built in
+                 game_views; any host can feed this from any source)
+  groups         mapping: group_id -> {trophy_group_name, trophy_group_icon_url, defined_trophies}
+  earned         mapping: trophy_id -> earned-state dict ({} for anonymous)
+  group_pct      mapping: group_id -> int viewer completion percent
+  group_totals   mapping: group_id -> {bronze, silver, gold, platinum} viewer counts
+  profile        the displayed profile or None -- gates all viewer chrome
+  show_group_nav boolean (the host's game.has_trophy_groups)
+  id_prefix      namespaces every DOM id so two grids can share a document ('' on List detail
+                 keeps its historical group ids byte-identical)
+Styles: the gd-* component classes live in static/css/components/game-detail.css (global build).
+{% endcomment %}
+{% if show_group_nav and trophies %}
+    <nav class="gd-groupnav" aria-label="Jump to trophy group">
+        {% for group_id, group_trophies in trophies.items %}
+            {% with groups|dict_get:group_id as group %}
+                <a href="#{{ id_prefix }}trophy-group-{{ group_id }}" class="gd-groupnav__chip" data-gd-groupjump="{{ id_prefix }}trophy-group-{{ group_id }}">
+                    <img src="{{ group.trophy_group_icon_url }}" class="gd-groupnav__icon" alt="" loading="lazy" />
+                    <span class="gd-groupnav__name">{{ group.trophy_group_name }}</span>
+                    <span class="gd-groupnav__count">{{ group_trophies|length }}</span>
+                </a>
+            {% endwith %}
+        {% endfor %}
+    </nav>
+{% endif %}
+
+{% for group_id, group_trophies in trophies.items %}
+    {% with groups|dict_get:group_id as group %}
+        {% with group_totals|dict_get:group_id as group_total %}
+            <section id="{{ id_prefix }}trophy-group-{{ group_id }}" class="gd-group{% if not forloop.first %} gd-group--sep{% endif %}">
+                {% include 'trophies/partials/trophy_grid/group_card.html' with group=group group_id=group_id group_pct=group_pct group_total=group_total profile=profile %}
+                {% include 'trophies/partials/trophy_grid/trophy_list.html' with trophies=group_trophies earned=earned profile=profile id_prefix=id_prefix %}
+            </section>
+        {% endwith %}
+    {% endwith %}
+{% empty %}
+    <div class="gd-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+        <p class="gd-empty__title">No trophies match these filters</p>
+        <p class="gd-empty__hint">Try clearing a type or rarity filter to see more.</p>
+    </div>
+{% endfor %}

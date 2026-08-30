@@ -1,33 +1,10 @@
 {% load custom_filters %}
+{% comment %}
+List detail's swappable trophy results body (the #browse-results htmx target). Page-specific
+pieces live here; the grid itself is the SHARED component at trophies/partials/trophy_grid/ --
+one component, two hosts (this page + the concept Game page's list viewport). id_prefix='' keeps
+this page's historical trophy-group-<id> anchors byte-identical for game-detail.js's group jump.
+{% endcomment %}
 {# Filtered trophy count, read by game-detail.js on swap to count-up the toolbar/minibar totals. #}
 <span id="gd-count-data" data-trophy-count="{{ trophy_shown_count }}" hidden></span>
-{% if game.has_trophy_groups and grouped_trophies %}
-    <nav class="gd-groupnav" aria-label="Jump to trophy group">
-        {% for group_id, trophies in grouped_trophies.items %}
-            {% with trophy_groups|dict_get:group_id as group %}
-                <a href="#trophy-group-{{ group_id }}" class="gd-groupnav__chip" data-gd-groupjump="trophy-group-{{ group_id }}">
-                    <img src="{{ group.trophy_group_icon_url }}" class="gd-groupnav__icon" alt="" loading="lazy" />
-                    <span class="gd-groupnav__name">{{ group.trophy_group_name }}</span>
-                    <span class="gd-groupnav__count">{{ trophies|length }}</span>
-                </a>
-            {% endwith %}
-        {% endfor %}
-    </nav>
-{% endif %}
-
-{% for group_id, trophies in grouped_trophies.items %}
-    {% with trophy_groups|dict_get:group_id as group %}
-        {% with profile_group_totals|dict_get:group_id as profile_group_total %}
-            <section id="trophy-group-{{ group_id }}" class="gd-group{% if not forloop.first %} gd-group--sep{% endif %}">
-                {% include 'trophies/partials/game_detail/trophy_group_card.html' %}
-                {% include 'trophies/partials/game_detail/trophy_list.html' %}
-            </section>
-        {% endwith %}
-    {% endwith %}
-{% empty %}
-    <div class="gd-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
-        <p class="gd-empty__title">No trophies match these filters</p>
-        <p class="gd-empty__hint">Try clearing a type or rarity filter to see more.</p>
-    </div>
-{% endfor %}
+{% include 'trophies/partials/trophy_grid/grid.html' with trophies=grouped_trophies groups=trophy_groups earned=profile_earned group_pct=profile_group_pct group_totals=profile_group_totals profile=profile show_group_nav=game.has_trophy_groups id_prefix='' %}
