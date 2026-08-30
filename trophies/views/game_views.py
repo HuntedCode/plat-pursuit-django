@@ -350,6 +350,133 @@ class RandomGameView(View):
         )
 
 
+# ─── List-level trophy helpers, shared with the concept Game page ─────────────────────────────────
+# Module functions rather than GameDetailView methods so GamePageView's list viewport renders the
+# SAME rows/groups/grouping without inheriting a DetailView. The view methods above/below delegate
+# here; their unit tests keep calling the methods, which is what pins the delegation.
+
+def build_trophy_rows(game):
+    """The ORM-decoupled trophy dicts for one list -- the shared grid's row contract.
+    Returns (rows, has_trophies)."""
+    has_trophies = Trophy.objects.filter(game=game).exists()
+    if not has_trophies:
+        return [], False
+    try:
+        trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
+        rows = [
+            {
+                'trophy_id': t.trophy_id,
+                'trophy_type': t.trophy_type,
+                'trophy_name': t.trophy_name,
+                'trophy_detail': t.trophy_detail,
+                'trophy_icon_url': t.trophy_icon_url,
+                'trophy_group_id': t.trophy_group_id,
+                'progress_target_value': t.progress_target_value,
+                'trophy_rarity': t.trophy_rarity,
+                'trophy_earn_rate': t.trophy_earn_rate,
+                'earned_count': t.earned_count,
+                'earn_rate': t.earn_rate,
+                'pp_rarity': t.get_pp_rarity_tier()
+            } for t in trophies_qs
+        ]
+    except Exception:
+        logger.exception(f"Game trophies query failed for {game.np_communication_id}")
+        rows = []
+    return rows, has_trophies
+
+
+def build_trophy_groups(game):
+    """Group metadata keyed by trophy_group_id -- the shared grid's `groups` contract param."""
+    return {
+        g.trophy_group_id: {
+            'trophy_group_name': g.trophy_group_name,
+            'trophy_group_icon_url': g.trophy_group_icon_url,
+            'defined_trophies': g.defined_trophies,
+        } for g in TrophyGroup.objects.filter(game=game)
+    }
+
+
+def compute_group_pct(trophy_groups, group_totals):
+    """Per-group completion % keyed by group_id, for the grid's group headers. Same earned/total
+    math as _build_group_bars, reading the already-aggregated totals + defined counts."""
+    pct = {}
+    for gid, group in trophy_groups.items():
+        total = sum(int(v or 0) for v in (group.get('defined_trophies') or {}).values())
+        earned = sum((group_totals.get(gid) or {}).values())
+        pct[gid] = round(earned / total * 100) if total else 0
+    return pct
+
+
+def group_trophy_rows(rows):
+    """Bucket rows by group, default first then alphabetically -- the grid's `trophies` param."""
+    grouped = {}
+    for trophy in rows:
+        grouped.setdefault(trophy.get('trophy_group_id', 'default'), []).append(trophy)
+    return {gid: grouped[gid] for gid in sorted(grouped, key=lambda x: (x != 'default', x))}
+
+
+def build_earned_state(game, profile):
+    """The viewer's earned-state for ONE list: the per-trophy map plus the DB-side totals.
+
+    Extracted so the concept Game page's list viewport can price a list switch at exactly this
+    (per docs/design/games-and-trophy-lists-ia.md) without dragging in timeline/plat-card/
+    play-hours. Returns (context_dict, ordered_earned_qs, earned_count) -- the trailing pair
+    exists solely for _build_timeline_events, which shares the ordered queryset.
+
+    `select_related('trophy')` is load-bearing, not an optimization nicety: the dict build
+    reads e.trophy.trophy_id and the timeline reads e.trophy.trophy_type per row, which was one
+    query PER EARNED TROPHY (~200 extra queries per authenticated render of a 100-trophy game).
+    A regression here multiplies by every list a switcher fetches.
+
+    Whale-safety shape is inherited unchanged: bounded by ONE list's trophy count, totals
+    aggregated in the DB (never iterate the per-user earned queryset in Python -- a 250K-trophy
+    profile would materialize hundreds of MB), the `.order_by()` strip keeping the earned-date
+    sort out of the GROUP BY.
+    """
+    earned_qs = (
+        EarnedTrophy.objects
+        .filter(profile=profile, trophy__game=game)
+        .select_related('trophy')
+        .order_by('trophy__trophy_id')
+    )
+    state = {
+        'profile_earned': {
+            e.trophy.trophy_id: {
+                'earned': e.earned,
+                'progress': e.progress,
+                'progress_rate': e.progress_rate,
+                'progressed_date_time': e.progressed_date_time,
+                'earned_date_time': e.earned_date_time
+            } for e in earned_qs
+        },
+    }
+
+    ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
+    state['profile_trophy_totals'] = ordered_earned_qs.aggregate(
+        bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+        silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+        gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+        platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+    )
+
+    profile_group_totals = {}
+    group_rows = (
+        ordered_earned_qs.order_by()
+        .values('trophy__trophy_group_id', 'trophy__trophy_type')
+        .annotate(c=Count('id'))
+    )
+    for row in group_rows:
+        group_id = row['trophy__trophy_group_id'] or 'default'
+        bucket = profile_group_totals.setdefault(
+            group_id, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+        )
+        bucket[row['trophy__trophy_type']] = row['c']
+    state['profile_group_totals'] = profile_group_totals
+
+    return state, ordered_earned_qs, len(earned_qs)
+
+
+
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class GameDetailView(ConceptContextMixin, DetailView):
     """
@@ -531,64 +658,9 @@ class GameDetailView(ConceptContextMixin, DetailView):
         return context
 
     def _build_earned_state(self, game, profile):
-        """The viewer's earned-state for ONE list: the per-trophy map plus the DB-side totals.
-
-        Extracted so the concept Game page's list viewport can price a list switch at exactly this
-        (per docs/design/games-and-trophy-lists-ia.md) without dragging in timeline/plat-card/
-        play-hours. Returns (context_dict, ordered_earned_qs, earned_count) -- the trailing pair
-        exists solely for _build_timeline_events, which shares the ordered queryset.
-
-        `select_related('trophy')` is load-bearing, not an optimization nicety: the dict build
-        reads e.trophy.trophy_id and the timeline reads e.trophy.trophy_type per row, which was one
-        query PER EARNED TROPHY (~200 extra queries per authenticated render of a 100-trophy game).
-        A regression here multiplies by every list a switcher fetches.
-
-        Whale-safety shape is inherited unchanged: bounded by ONE list's trophy count, totals
-        aggregated in the DB (never iterate the per-user earned queryset in Python -- a 250K-trophy
-        profile would materialize hundreds of MB), the `.order_by()` strip keeping the earned-date
-        sort out of the GROUP BY.
-        """
-        earned_qs = (
-            EarnedTrophy.objects
-            .filter(profile=profile, trophy__game=game)
-            .select_related('trophy')
-            .order_by('trophy__trophy_id')
-        )
-        state = {
-            'profile_earned': {
-                e.trophy.trophy_id: {
-                    'earned': e.earned,
-                    'progress': e.progress,
-                    'progress_rate': e.progress_rate,
-                    'progressed_date_time': e.progressed_date_time,
-                    'earned_date_time': e.earned_date_time
-                } for e in earned_qs
-            },
-        }
-
-        ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
-        state['profile_trophy_totals'] = ordered_earned_qs.aggregate(
-            bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
-            silver=Count('id', filter=Q(trophy__trophy_type='silver')),
-            gold=Count('id', filter=Q(trophy__trophy_type='gold')),
-            platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
-        )
-
-        profile_group_totals = {}
-        group_rows = (
-            ordered_earned_qs.order_by()
-            .values('trophy__trophy_group_id', 'trophy__trophy_type')
-            .annotate(c=Count('id'))
-        )
-        for row in group_rows:
-            group_id = row['trophy__trophy_group_id'] or 'default'
-            bucket = profile_group_totals.setdefault(
-                group_id, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-            )
-            bucket[row['trophy__trophy_type']] = row['c']
-        state['profile_group_totals'] = profile_group_totals
-
-        return state, ordered_earned_qs, len(earned_qs)
+        """Delegates to the module-level build_earned_state (shared with GamePageView's viewport);
+        kept as a method so the existing unit tests keep pinning the delegation."""
+        return build_earned_state(game, profile)
 
     def _make_timeline_event(self, label, event_type, earned, date=None, trophy=None):
         """Create a uniform timeline event dict."""
@@ -701,32 +773,9 @@ class GameDetailView(ConceptContextMixin, DetailView):
         Returns:
             tuple: (full_trophies list, trophy_groups dict, grouped_trophies dict, has_trophies bool)
         """
-        has_trophies = Trophy.objects.filter(game=game).exists()
+        full_trophies, has_trophies = build_trophy_rows(game)
         if not has_trophies:
             return [], {}, {}, False
-
-        try:
-            # Get all trophies
-            trophies_qs = Trophy.objects.filter(game=game).order_by('trophy_id')
-            full_trophies = [
-                {
-                    'trophy_id': t.trophy_id,
-                    'trophy_type': t.trophy_type,
-                    'trophy_name': t.trophy_name,
-                    'trophy_detail': t.trophy_detail,
-                    'trophy_icon_url': t.trophy_icon_url,
-                    'trophy_group_id': t.trophy_group_id,
-                    'progress_target_value': t.progress_target_value,
-                    'trophy_rarity': t.trophy_rarity,
-                    'trophy_earn_rate': t.trophy_earn_rate,
-                    'earned_count': t.earned_count,
-                    'earn_rate': t.earn_rate,
-                    'pp_rarity': t.get_pp_rarity_tier()
-                } for t in trophies_qs
-            ]
-        except Exception as e:
-            logger.exception(f"Game trophies query failed for {game.np_communication_id}")
-            full_trophies = []
 
         # Apply filtering and sorting
         if form.is_valid():
@@ -785,28 +834,7 @@ class GameDetailView(ConceptContextMixin, DetailView):
                 type_order = {'platinum': 0, 'gold': 1, 'silver': 2, 'bronze': 3}
                 full_trophies.sort(key=lambda t: (type_order.get(t['trophy_type'], 4), t['trophy_name'].lower()))
 
-        # Get trophy groups (cheap indexed FK query, not worth caching)
-        trophy_groups = {
-            g.trophy_group_id: {
-                'trophy_group_name': g.trophy_group_name,
-                'trophy_group_icon_url': g.trophy_group_icon_url,
-                'defined_trophies': g.defined_trophies,
-            } for g in TrophyGroup.objects.filter(game=game)
-        }
-
-        # Group trophies
-        grouped_trophies = {}
-        for trophy in full_trophies:
-            group_id = trophy.get('trophy_group_id', 'default')
-            if group_id not in grouped_trophies:
-                grouped_trophies[group_id] = []
-            grouped_trophies[group_id].append(trophy)
-
-        # Sort groups (default first, then alphabetically)
-        sorted_groups = sorted(grouped_trophies.keys(), key=lambda x: (x != 'default', x))
-        sorted_grouped = {gid: grouped_trophies[gid] for gid in sorted_groups}
-
-        return full_trophies, trophy_groups, sorted_grouped, has_trophies
+        return full_trophies, build_trophy_groups(game), group_trophy_rows(full_trophies), has_trophies
 
     def _build_group_bars(self, trophy_groups, profile_group_totals):
         """Composite per-group progress: ONE segment per trophy group (base + DLCs), each filled to
@@ -848,16 +876,8 @@ class GameDetailView(ConceptContextMixin, DetailView):
         return {'main': main, 'dlcs': dlcs, 'dlc_total': dlc_total, 'combined_dlc': combined}
 
     def _build_group_pct(self, trophy_groups, profile_group_totals):
-        """Per-group completion % keyed by group_id, for the trophy-panel group headers. Same
-        earned/total math as _build_group_bars, but keyed by group_id so each group's own header
-        can render its Horizon. Cheap: reads the already-aggregated group totals + defined counts.
-        """
-        pct = {}
-        for gid, group in trophy_groups.items():
-            total = sum(int(v or 0) for v in (group.get('defined_trophies') or {}).values())
-            earned = sum((profile_group_totals.get(gid) or {}).values())
-            pct[gid] = round(earned / total * 100) if total else 0
-        return pct
+        """Delegates to compute_group_pct (shared with GamePageView's viewport)."""
+        return compute_group_pct(trophy_groups, profile_group_totals)
 
     def _build_rating_context(self, user, game):
         """

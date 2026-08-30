@@ -138,7 +138,10 @@ _BOT_REDIRECT_RULES = (
     # content", but the closing audit found it serves a HEADLESS fragment (the HTMX panel, no
     # head at all) and is the most expensive query on the site -- so bots now 301 to the game
     # page, and robots.txt blocks it for the crawlers that ask first.
-    (re.compile(r'^/games/([^/]+)/(?!roadmap(?:/|$))[^/]+/?$'), '/games/{slug}/'),
+    # (?!c/): /games/c/<concept_id>/ is the concept-keyed Game page fallback (Games/Trophy Lists
+    # IA), not a profile-scoped variant -- without this exclusion a crawler hitting it would 301 to
+    # the nonexistent /games/c/ and index a 404.
+    (re.compile(r'^/games/(?!c/)([^/]+)/(?!roadmap(?:/|$))[^/]+/?$'), '/games/{slug}/'),
     (
         re.compile(r'^/(?:my-pursuit/badges|badges|achievements/badges)/([^/]+)/[^/]+/?$'),
         '/badges/{slug}/',

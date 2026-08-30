@@ -39,7 +39,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import GamesListView, GameDetailView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
+from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook, SupportStorefrontView, SupportRoadmapView, SubscriptionManagementView
@@ -156,6 +156,14 @@ urlpatterns = [
     # lingering reverse('engines_list'/'engine_detail') degrades to a redirect, not a 500.
     path('engines/', RedirectView.as_view(pattern_name='games_list', permanent=True), name='engines_list'),
     path('engines/<slug:slug>/', RedirectView.as_view(url='/games/', permanent=True), name='engine_detail'),
+    # Concept-level Game page (Games/Trophy Lists IA slice 1). Page identity is the IGDB id --
+    # deliberately-split concepts sharing an igdb_id share one page. <int:> vs the <str:np> route
+    # below disambiguates numeric igdb ids from NPWR ids by route order; the c/ prefix on the
+    # unmatched-concept fallback is mandatory (PSN concept ids are numeric strings and would
+    # collide with igdb ids in a flat namespace). Both MUST precede the greedy two-segment
+    # games/<np>/<username>/ catch-all, which would swallow 'c' as an np id.
+    path('games/<int:igdb_id>/', GamePageView.as_view(), name='game_page'),
+    path('games/c/<str:concept_id>/', GamePageView.as_view(), name='game_page_concept'),
     # MUST precede game_detail_with_profile below, which would otherwise match 'leaderboard' as a
     # psn_username -- the same reason the roadmap sub-paths are declared above.
     path('games/<str:np_communication_id>/leaderboard/', GameLeaderboardView.as_view(), name='game_leaderboard'),

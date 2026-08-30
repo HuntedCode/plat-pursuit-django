@@ -5,6 +5,7 @@ Re-exports all view classes for backward compatibility with existing URL configu
 """
 
 from .game_views import GamesListView, GameDetailView, GuideListView, RecentlyAddedView, RandomGameView
+from .game_page_views import GamePageView
 from .game_leaderboard_views import GameLeaderboardView
 from .trophy_views import TrophyCaseView, ToggleSelectionView
 from .profile_views import ProfilesListView, ProfileDetailView, ProfileDayView, LinkPSNView, ProfileVerifyView
@@ -27,7 +28,7 @@ from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
 
 __all__ = [
     # Game views
-    'GamesListView', 'GameDetailView', 'GuideListView', 'RecentlyAddedView', 'RandomGameView',
+    'GamesListView', 'GameDetailView', 'GamePageView', 'GuideListView', 'RecentlyAddedView', 'RandomGameView',
     # Trophy views
     'TrophyCaseView', 'ToggleSelectionView',
     # Profile views

@@ -1160,6 +1160,25 @@ class Concept(models.Model):
             return match.cover_url(size)
         return None
 
+    def game_page_url(self):
+        """THE concept Game page URL (Games/Trophy Lists IA slice 1) -- the one helper search,
+        canonicals, sitemap and the identity chip all use, so the routing rule lives once.
+
+        Page identity is the IGDB id: deliberately-split concepts sharing an igdb_id share one
+        page, so a trusted match routes to /games/<igdb_id>/. The unmatched tail (PP_* stubs,
+        PSN-only concepts) routes to /games/c/<concept_id>/, and the view 301s a concept URL to
+        its igdb URL the moment the concept graduates to a trusted match.
+
+        Callers rendering many concepts must select_related('igdb_match') (and defer
+        raw_response, the house rule) or this walks the FK per row.
+        """
+        from django.urls import reverse
+
+        match = getattr(self, 'igdb_match', None)
+        if match is not None and match.is_trusted and match.igdb_id:
+            return reverse('game_page', kwargs={'igdb_id': match.igdb_id})
+        return reverse('game_page_concept', kwargs={'concept_id': self.concept_id})
+
     def get_cover_url(self, size='cover_big'):
         """Return portrait cover art URL for display in square/portrait containers.
 
