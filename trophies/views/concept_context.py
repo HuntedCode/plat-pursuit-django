@@ -2,8 +2,13 @@
 
 Lifted VERBATIM off GameDetailView (slice 1 of docs/design/games-and-trophy-lists-ia.md): these
 builders render the WORK -- IGDB facts, time-to-beat, images, ratings/community tabs, versions,
-family, the contract panel -- none of it specific to one trophy list. During the transition BOTH
-pages mix this in; the List-detail slim-down phase later removes it from GameDetailView.
+family, the contract panel -- none of it specific to one trophy list. BOTH pages mix this in for
+good: the slim-down (phase 2) did not remove the mixin from GameDetailView, because the List-page
+hero and its modals genuinely need the concept-level subset (images, badges, versions, pursuit).
+Instead GameDetailView's lane is that subset -- _build_images_context, _build_badges_context,
+_build_versions_context, _build_pursuit_context -- while _build_concept_context (which layers the
+About facts and the ratings/community assembly on top of the subset) is the GAME page's entry
+point.
 
 The acceptance bar for this move was zero edits to test_game_detail_hero/test_game_detail_ratings:
 their unit tests call these builders directly on GameDetailView, so passing untouched proves the
@@ -146,11 +151,12 @@ class ConceptContextMixin:
         from trophies.models import ConceptTrophyGroup, Trophy, UserConceptRating
         from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
 
+        # Local only: feeds community_tabs below. (A `concept_trophy_groups` context key used to be
+        # set here too -- deleted in the slim-down split, zero consumers anywhere.)
         ctgs = list(
             ConceptTrophyGroup.objects.filter(concept=game.concept)
             .order_by('sort_order', 'trophy_group_id')
         )
-        context['concept_trophy_groups'] = ctgs
 
         user = self.request.user
         profile = getattr(user, 'profile', None) if user.is_authenticated else None
@@ -216,11 +222,27 @@ class ConceptContextMixin:
         # Lets each blurb card mark the viewer's own (You pill, no self-report) without a per-row query.
         context['viewer_profile_id'] = profile.id if profile else None
 
-        # Related badges (grouping-badge system) — the specific badge EDITIONS this game is part of. A game only
-        # gates for the platform groups its own platforms match (the exact routing the engine uses:
-        # title_platform overlaps the group's platforms -- badge_detail_service._group_journey), so show exactly
-        # those editions: usually one per series, both for a cross-generation game. Each links to its edition tab
-        # (?group=<key>). build_list_cards gives the SAME whale-safe showcase frame the badge list uses.
+        context.update(self._build_badges_context(game))
+        context.update(self._build_versions_context(game))
+
+        return context
+
+    def _build_badges_context(self, game):
+        """Related badges (grouping-badge system) — the specific badge EDITIONS this game is part of.
+
+        Split out of _build_concept_context for the list-detail slim-down: the hero's badge spine
+        (and its modal) is a LIST-page keeper, while the ratings/about assembly above is Game-page
+        territory — List detail calls this directly without paying for community_tabs.
+
+        A game only gates for the platform groups its own platforms match (the exact routing the
+        engine uses: title_platform overlaps the group's platforms --
+        badge_detail_service._group_journey), so show exactly those editions: usually one per
+        series, both for a cross-generation game. Each links to its edition tab (?group=<key>).
+        build_list_cards gives the SAME whale-safe showcase frame the badge list uses.
+        """
+        if not game.concept:
+            return {'badges': []}
+
         from trophies.models import GroupBadge
         from trophies.services.badge_list_service import build_list_cards
         series_slugs = (
@@ -251,14 +273,24 @@ class ConceptContextMixin:
                 }
                 for c in build_list_cards(gbs, None)
             ]
-        context['badges'] = badges
+        return {'badges': badges}
 
-        # "Other platforms" + "In the same family" cross-links (rendered in the versions modal).
-        context['other_versions'] = self._build_other_versions(game)
-        context['family_versions'] = self._build_family_versions(game)
-        context['versions_total'] = len(context['other_versions']) + len(context['family_versions'])
+    def _build_versions_context(self, game):
+        """"Other platforms" + "In the same family" cross-links (the versions modal / About card).
 
-        return context
+        Split out alongside _build_badges_context (same slim-down reasoning): List detail's hero
+        versions button + #gd-versions-modal need these three keys without the rest of
+        _build_concept_context.
+        """
+        if not game.concept:
+            return {'other_versions': [], 'family_versions': [], 'versions_total': 0}
+        other_versions = self._build_other_versions(game)
+        family_versions = self._build_family_versions(game)
+        return {
+            'other_versions': other_versions,
+            'family_versions': family_versions,
+            'versions_total': len(other_versions) + len(family_versions),
+        }
 
     def _build_about_facts(self, game, franchises, collections, has_cf_rows):
         """Quick Facts rows for the About panel: ONE row per role with its entries grouped, rather than one

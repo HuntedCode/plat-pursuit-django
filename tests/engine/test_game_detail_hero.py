@@ -229,6 +229,43 @@ def test_pursuit_status_fully_accepted_is_banked():
     assert state['variant'] == 'done'
 
 
+# ── the slim-down split: badges + versions builders callable standalone ─────
+
+def test_badges_and_versions_builders_return_empty_shapes_for_conceptless_games():
+    """The slim-down split (phase 2): List detail calls _build_badges_context and
+    _build_versions_context DIRECTLY, without _build_concept_context's early conceptless
+    return in front of them -- so each must produce its own empty SHAPE (present, falsy keys),
+    never a KeyError-shaped hole in the page context."""
+    game = GameFactory(concept=None)
+
+    assert GameDetailView()._build_badges_context(game) == {'badges': []}
+    assert GameDetailView()._build_versions_context(game) == {
+        'other_versions': [], 'family_versions': [], 'versions_total': 0,
+    }
+
+
+def test_concept_context_delegates_to_the_split_builders():
+    """The split must not fork behavior: _build_concept_context's badges/versions keys are the
+    delegated builders' own output, byte-for-byte, so the two call paths cannot drift."""
+    family = GameFamily.objects.create(canonical_name='Split Series')
+    concept = ConceptFactory(family=family)
+    game = GameFactory(concept=concept)
+    sib = ConceptFactory(unified_title='Split Sibling', family=family)
+    GameFactory(concept=sib, played_count=3)
+
+    view = GameDetailView()
+    view.request = RequestFactory().get('/')
+    view.request.user = AnonymousUser()
+    full = view._build_concept_context(game)
+
+    assert full['badges'] == view._build_badges_context(game)['badges']
+    versions = view._build_versions_context(game)
+    assert full['other_versions'] == versions['other_versions']
+    assert full['family_versions'] == versions['family_versions']
+    assert full['versions_total'] == versions['versions_total'] == 1
+    assert 'concept_trophy_groups' not in full   # the dead key stays dead
+
+
 # ── _build_family_versions (other concepts in the same GameFamily) ──────────
 
 def test_family_versions_empty_without_family():
