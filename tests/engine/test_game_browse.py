@@ -66,8 +66,10 @@ def test_split_concepts_sharing_an_igdb_id_render_one_card(client):
     matches share one igdb id are ONE page -- so the catalogue shows ONE card, and the paginator
     counts identities, not lists. Both fixtures carry PS5 or _url()'s default platform filter
     would silently pre-elect for us (the recorded fixture wrinkle)."""
-    a = GameFactory(title_name='Split A', title_platform=['PS5'], played_count=50)
-    b = GameFactory(title_name='Split B', title_platform=['PS5'], played_count=5)
+    a = GameFactory(title_name='Split A', title_platform=['PS5'], played_count=50,
+                    concept__unified_title='Split A')
+    b = GameFactory(title_name='Split B', title_platform=['PS5'], played_count=5,
+                    concept__unified_title='Split B')
     shared = next(_igdb_seq)
     IGDBMatchFactory(concept=a.concept, igdb_id=shared)
     IGDBMatchFactory(concept=b.concept, igdb_id=shared)
@@ -97,12 +99,15 @@ def test_platform_filter_promotes_the_matching_sibling(client):
     the election population, so the PS3 row wins its partition and the card shows the version
     you asked for. Passes its OWN platform param -- never _url()'s PS5 default."""
     ps5 = GameFactory(title_name='Promo PS5', title_platform=['PS5'], played_count=100)
-    GameFactory(concept=ps5.concept, title_name='Promo PS3', title_platform=['PS3'], played_count=1)
+    ps3 = GameFactory(concept=ps5.concept, title_name='Promo PS3', title_platform=['PS3'],
+                      played_count=1)
 
-    content = client.get(reverse('games_list'), {'platform': 'PS3'}).content.decode()
+    resp = client.get(reverse('games_list'), {'platform': 'PS3'})
 
-    assert 'Promo PS3' in content and 'Promo PS5' not in content
-    assert 'data-result-count="1"' in content
+    # Context-level on purpose: both siblings share the concept, so the card's displayed title
+    # (the concept's) and its platform union (the WORK's) cannot discriminate the elected row.
+    assert [g.pk for g in resp.context['object_list']] == [ps3.pk]
+    assert 'data-result-count="1"' in resp.content.decode()
 
 
 def test_list_count_uses_the_destination_pages_ungated_membership(client):
@@ -145,6 +150,36 @@ def test_viewer_best_progress_folds_across_siblings(client):
     assert '73%' in resp.content.decode()
 
 
+def test_condensed_card_links_titles_and_chips(client):
+    """The card tweaks (owner: 'not a ton of tweaks to the actual cards'): the condensed card
+    links the concept GAME page, titles by the concept, shows the partition's platform UNION in
+    display order plus the lists chip -- and region chips are gone (the card describes the WORK;
+    region stays a filter)."""
+    a = GameFactory(title_name='Chip List EU', title_platform=['PS5'], played_count=90,
+                    is_regional=True, region=['EU'])
+    a.concept.unified_title = 'Chip Work'
+    a.concept.save()
+    IGDBMatchFactory(concept=a.concept, igdb_id=79001)
+    GameFactory(concept=a.concept, title_name='Chip List JP', title_platform=['PS4', 'PSVR2'],
+                played_count=5, is_regional=True, region=['JP'])
+
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert 'href="/games/79001/"' in content, 'the condensed card must link the Game page'
+    assert 'Chip Work' in content and 'Chip List EU' not in content
+    # Union in display order: PS5, PS4, PSVR2 (PSVR2 slots after PS4, before PS3).
+    plats = content.split('pp-gcard__plats')[1].split('</span></span>')[0]
+    assert plats.index('PS5') < plats.index('PS4') < plats.index('PSVR2')
+    assert '2 lists' in content
+    assert 'pp-gcard__plat--region' not in content and '>EU<' not in content
+
+    # A single-list work shows no chip.
+    lone = GameFactory(title_name='Lone Work', title_platform=['PS5'])
+    content = client.get(url, params).content.decode()
+    assert '1 lists' not in content
+
+
 def test_seo_item_list_claims_the_game_page_urls(client):
     """The ItemList schema must agree with what the grid links: the concept Game page for
     matched rows, the c/ page for unmatched concepts."""
@@ -175,7 +210,8 @@ def test_lucky_redirects_to_the_game_page(client):
 def test_grid_renders_card_contract(client):
     """The grid renders .pp-gcard cells with the game title, the colored B/S/G/P trophy counts, the pursuer-
     hook placeholders (Browse Games sets show_game_hooks), and the infinite-scroll sentinel."""
-    GameFactory(title_name='Render Check Game', title_platform=['PS5'], has_trophy_groups=True)
+    GameFactory(title_name='Render Check Game', title_platform=['PS5'], has_trophy_groups=True,
+                concept__unified_title='Render Check Game')
     url, params = _url()
 
     resp = client.get(url, params)
@@ -256,7 +292,8 @@ def test_card_footer_shows_platform_and_players(client):
 
 def test_card_footer_shows_platform_without_players(client):
     """A game nobody has played still shows the platform footer -- just no player-count span."""
-    GameFactory(title_name='Unplayed Game', title_platform=['PS5'])  # played_count defaults to 0
+    GameFactory(title_name='Unplayed Game', title_platform=['PS5'],  # played_count defaults to 0
+                concept__unified_title='Unplayed Game')
     url, params = _url()
     content = client.get(url, params).content.decode()
 
@@ -327,8 +364,8 @@ def test_active_filters_container_not_duplicated_on_full_page(client):
 
 def test_platform_filter_narrows(client):
     """?platform=PS5 shows only PS5 games; ?platform=PS3 shows only PS3 games."""
-    GameFactory(title_name='Current Gen', title_platform=['PS5'])
-    GameFactory(title_name='Retro Relic', title_platform=['PS3'])
+    GameFactory(title_name='Current Gen', title_platform=['PS5'], concept__unified_title='Current Gen')
+    GameFactory(title_name='Retro Relic', title_platform=['PS3'], concept__unified_title='Retro Relic')
 
     url = reverse('games_list')
     ps5 = client.get(url, {'platform': 'PS5'}).content.decode()
@@ -342,8 +379,8 @@ def test_platform_filter_narrows(client):
 
 def test_sort_alpha_orders(client):
     """The default alphabetical sort orders titles A->Z."""
-    GameFactory(title_name='Zephyr Drift', title_platform=['PS5'])
-    GameFactory(title_name='Alpha Ascent', title_platform=['PS5'])
+    GameFactory(title_name='Zephyr Drift', title_platform=['PS5'], concept__unified_title='Zephyr Drift')
+    GameFactory(title_name='Alpha Ascent', title_platform=['PS5'], concept__unified_title='Alpha Ascent')
     url, params = _url(sort='alpha')
 
     content = client.get(url, params).content.decode()
@@ -353,9 +390,11 @@ def test_sort_alpha_orders(client):
 
 def test_platinum_only_filter(client):
     """show_only_platinum=on keeps only games that define a platinum trophy."""
-    plat_game = GameFactory(title_name='Platinum Path', title_platform=['PS5'])
+    plat_game = GameFactory(title_name='Platinum Path', title_platform=['PS5'],
+                            concept__unified_title='Platinum Path')
     TrophyFactory(game=plat_game, trophy_type='platinum')
-    GameFactory(title_name='No Platinum Here', title_platform=['PS5'])
+    GameFactory(title_name='No Platinum Here', title_platform=['PS5'],
+                concept__unified_title='No Platinum Here')
 
     url, params = _url(show_only_platinum='on')
     content = client.get(url, params).content.decode()
@@ -367,8 +406,9 @@ def test_platinum_only_filter(client):
 def test_in_badge_filter(client):
     """?in_badge=on narrows to games whose concept is in a live badge series (the toggle that replaced the
     removed 'Pick a Badge' modal)."""
-    with_b = GameFactory(title_name='Has Badge', title_platform=['PS5'])
-    GameFactory(title_name='No Badge', title_platform=['PS5'])
+    with_b = GameFactory(title_name='Has Badge', title_platform=['PS5'],
+                         concept__unified_title='Has Badge')
+    GameFactory(title_name='No Badge', title_platform=['PS5'], concept__unified_title='No Badge')
     stage = StageFactory(series_slug='in-badge-series')
     stage.concepts.add(with_b.concept)
     _live_badge_series('in-badge-series', 'In Badge')
@@ -383,8 +423,9 @@ def test_in_contract_filter(client):
     """?in_contract=on narrows to games whose concept has a live contract."""
     from trophies.models import Contract
 
-    with_c = GameFactory(title_name='Has Contract', title_platform=['PS5'])
-    GameFactory(title_name='No Contract', title_platform=['PS5'])
+    with_c = GameFactory(title_name='Has Contract', title_platform=['PS5'],
+                         concept__unified_title='Has Contract')
+    GameFactory(title_name='No Contract', title_platform=['PS5'], concept__unified_title='No Contract')
     contract = Contract.objects.create(name='C1', slug='c1', is_live=True)
     _make_member(with_c.concept, contract)
 
@@ -402,8 +443,11 @@ def test_contract_jobs_filter(client):
     if len(jobs) < 2:
         pytest.skip('needs >= 2 seeded non-fallback jobs')
     job_a, job_b = jobs[0], jobs[1]
-    game_a = GameFactory(title_name='Job A Game', title_platform=['PS5'])
-    game_b = GameFactory(title_name='Job B Game', title_platform=['PS5'])
+    # unified_title too: the condensed card titles by CONCEPT (phase 3).
+    game_a = GameFactory(title_name='Job A Game', title_platform=['PS5'],
+                         concept__unified_title='Job A Game')
+    game_b = GameFactory(title_name='Job B Game', title_platform=['PS5'],
+                         concept__unified_title='Job B Game')
     ca = Contract.objects.create(name='CA', slug='ca', is_live=True)
     ca.jobs.add(job_a)
     cb = Contract.objects.create(name='CB', slug='cb', is_live=True)
@@ -422,7 +466,8 @@ def test_authenticated_progress_renders(client):
     """A signed-in user's per-game progress shows on the card."""
     profile = ProfileFactory()
     client.force_login(profile.user)
-    game = GameFactory(title_name='In Progress Game', title_platform=['PS5'])
+    game = GameFactory(title_name='In Progress Game', title_platform=['PS5'],
+                       concept__unified_title='In Progress Game')
     ProfileGameFactory(profile=profile, game=game, progress=42, has_plat=False)
 
     url, params = _url()
