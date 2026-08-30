@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q, Value
+from django.db.models.functions import Replace
 
 from trophies.models import Concept, Game, PSNConceptData, PSNRawPayload, PSNTitleObservation
 
@@ -36,6 +37,12 @@ class Command(BaseCommand):
                  'PSN calls.',
         )
         parser.add_argument(
+            '--names', action='store_true',
+            help='Measure how often trophy-list names diverge from their concept title, classified '
+                 'by kind. Sizes the Game-detail list-switcher work (see '
+                 'docs/design/games-and-trophy-lists-ia.md). Pure DB work, no PSN calls.',
+        )
+        parser.add_argument(
             '--sample', type=int, default=1,
             help='How many rows to print key-level detail for (default 1, 0 to skip).',
         )
@@ -43,6 +50,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options['gap']:
             return self._report_gap()
+        if options['names']:
+            return self._report_names(options['sample'])
 
         total = PSNConceptData.objects.count()
         payloads = PSNRawPayload.objects.count()
@@ -142,6 +151,89 @@ class Command(BaseCommand):
             ))
         else:
             self.stdout.write(self.style.SUCCESS("\nNo field is empty across the board."))
+
+    def _report_names(self, sample):
+        """How often does a list's name differ from its concept's title, and HOW?
+
+        The Games/Trophy Lists IA hangs a list switcher off the Game detail page, labeled by list
+        names. This sizes that work: if 3% differ and most are list-suffix cases ("Additional
+        Trophies"), the switcher UI is small; a bigger or weirder answer should be known BEFORE
+        designing around a guess. All counts are DB-side; the sample is LIMIT-bounded.
+        """
+        from trophies.models import PSNTitleObservation
+
+        # Lists whose concept has a real title to diverge from. PP_* stubs are excluded: their
+        # unified_title IS the list name by construction, so they can only agree.
+        base = (
+            Game.objects.filter(concept__isnull=False)
+            .exclude(concept__concept_id__startswith='PP_')
+            .exclude(concept__unified_title='')
+        )
+        total = base.count()
+        self.stdout.write(f"Trophy lists with a non-stub concept title: {total}")
+        if not total:
+            return
+
+        differing_qs = base.exclude(title_name=F('concept__unified_title'))
+        differing = differing_qs.count()
+        case_only = differing - base.exclude(
+            title_name__iexact=F('concept__unified_title')).count()
+
+        # Kind classification, coarse on purpose (a sizing instrument, not a parser):
+        # a list name that STARTS WITH the concept title and continues is the suffix class --
+        # "Vampire Survivors Additional Trophies", "X Trophy Set", "Y PS5" -- exactly the cases the
+        # switcher label exists to show. Everything else differs substantively (regional names,
+        # renames, IGDB promotions).
+        # Excluding iexact keeps the buckets a true partition: istartswith also matches a
+        # whole-string case variant, which double-counted case-only rows in here (found by test).
+        suffix = differing_qs.exclude(
+            title_name__iexact=F('concept__unified_title')).filter(
+            title_name__istartswith=F('concept__unified_title')).count()
+        substantive = differing - case_only - suffix
+
+        def line(label, n):
+            pct = n * 100 // total
+            self.stdout.write(f"  {label:34} {n:>7} ({pct}%)")
+
+        self.stdout.write("\nList name vs concept title:")
+        line('identical', total - differing)
+        line('case-only difference', case_only)
+        line('concept title + suffix', suffix)
+        line('substantively different', substantive)
+
+        # The helper-chain question: how often is Game.title_name NOT what PSN currently says?
+        # Approximate cleaning DB-side (strip the marks clean_game_title strips); Roman-numeral and
+        # suffix normalization are not reproduced here, so treat small counts as noise.
+        obs_named = (
+            PSNTitleObservation.objects.filter(source='trophy_titles', game__isnull=False)
+            .exclude(title_name_raw='')
+        )
+        obs_total = obs_named.values('np_communication_id').distinct().count()
+        approx_clean = Replace(Replace(F('title_name_raw'), Value('™'), Value('')),
+                               Value('®'), Value(''))
+        obs_differs = (
+            obs_named.annotate(clean_raw=approx_clean)
+            .exclude(game__title_name=F('clean_raw'))
+            .values('np_communication_id').distinct().count()
+        )
+        self.stdout.write(
+            f"\nObserved lists whose stored title_name != PSN's current name (approx-cleaned): "
+            f"{obs_differs}/{obs_total}"
+        )
+        self.stdout.write(
+            "  (IGDB promotions, merge renames, and un-reproduced normalization all land here; "
+            "the display_list_name helper chain is what reconciles it.)"
+        )
+
+        if sample:
+            self.stdout.write("\nSample of substantive differences (list name vs concept title):")
+            rows = (
+                differing_qs.exclude(title_name__iexact=F('concept__unified_title'))
+                .exclude(title_name__istartswith=F('concept__unified_title'))
+                .values_list('title_name', 'concept__unified_title')[:max(sample, 15)]
+            )
+            for list_name, concept_title in rows:
+                self.stdout.write(f"  list: {list_name!r:60} concept: {concept_title!r}")
 
     def _report_gap(self):
         """Split the uncaptured concepts by CAUSE, using only the database.

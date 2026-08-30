@@ -355,3 +355,114 @@ def test_cross_source_disagreement_is_not_counted_as_a_rename():
     printed = _run()
 
     assert 'renamed (>1 name): 0' in printed, 'never renamed; two sources disagreeing is not a rename'
+
+
+# --- --names: sizing the list-switcher work with data instead of a guess ------------------------
+
+def _names(*args):
+    out = io.StringIO()
+    call_command('audit_psn_capture', '--names', *args, stdout=out)
+    return out.getvalue()
+
+
+def _list(concept, title):
+    from tests.factories import GameFactory
+    return GameFactory(concept=concept, title_name=title)
+
+
+def test_names_classifies_each_divergence_kind_once():
+    """The whole report: identical / case-only / suffix / substantive must partition the total.
+    One list of each kind, and each bucket must read exactly 1."""
+    from tests.factories import ConceptFactory
+
+    c = ConceptFactory(unified_title='Vampire Survivors')
+    _list(c, 'Vampire Survivors')                        # identical
+    _list(c, 'VAMPIRE SURVIVORS')                        # case-only
+    _list(c, 'Vampire Survivors Additional Trophies')    # suffix -- the switcher's reason to exist
+    _list(c, 'Totally Different Name')                   # substantive
+
+    printed = _names('--sample', '0')
+
+    assert 'Trophy lists with a non-stub concept title: 4' in printed
+    for label in ['identical', 'case-only difference', 'concept title + suffix',
+                  'substantively different']:
+        row = [l for l in printed.splitlines() if l.strip().startswith(label)][0]
+        assert '1 (25%)' in row, f'{label}: {row}'
+
+
+def test_names_excludes_stub_concepts():
+    """A PP_* stub's unified_title IS the list name by construction, so including stubs inflates
+    'identical' and understates every divergence rate."""
+    from tests.factories import ConceptFactory
+
+    stub = ConceptFactory(concept_id='PP_123', unified_title='Some Game')
+    _list(stub, 'Some Game')
+
+    printed = _names('--sample', '0')
+
+    assert 'Trophy lists with a non-stub concept title: 0' in printed
+
+
+def test_names_reports_observed_divergence_through_approx_cleaning():
+    """The helper-chain question: stored title_name vs what PSN currently says. The trademark mark
+    must not count as divergence (cleaning strips it); a genuinely different observed name must."""
+    from tests.factories import ConceptFactory, GameFactory
+    from trophies.services.psn_metadata_service import capture_title_page_bulk
+    from psnawp_api.models.trophies import PlatformType
+    from types import SimpleNamespace
+
+    def tt(np_id, name):
+        return SimpleNamespace(
+            np_communication_id=np_id, np_title_id=None, np_service_name='trophy',
+            trophy_set_version='01.00', title_name=name, title_detail='',
+            title_icon_url='', title_platform=frozenset({PlatformType.PS4}),
+            has_trophy_groups=False,
+            defined_trophies=SimpleNamespace(bronze=1, silver=0, gold=0, platinum=0),
+            progress=0, hidden_flag=False,
+            earned_trophies=SimpleNamespace(bronze=0, silver=0, gold=0, platinum=0),
+            last_updated_datetime=None,
+        )
+
+    c = ConceptFactory(unified_title='Stray')
+    GameFactory(concept=c, np_communication_id='NPWR77777_00', title_name='Stray' + chr(0x2122))
+    GameFactory(concept=c, np_communication_id='NPWR88888_00', title_name='Old Stored Name')
+    capture_title_page_bulk([tt('NPWR77777_00', 'Stray' + chr(0x2122)),
+                             tt('NPWR88888_00', 'What PSN Says Now' + chr(0x2122))])
+
+    printed = _names('--sample', '0')
+
+    assert "!= PSN's current name (approx-cleaned): 1/2" in printed
+
+
+def test_names_sample_shows_only_substantive_rows():
+    from tests.factories import ConceptFactory
+
+    c = ConceptFactory(unified_title='Vampire Survivors')
+    _list(c, 'Vampire Survivors Additional Trophies')
+    _list(c, 'Regional JP Name')
+
+    printed = _names('--sample', '15')
+
+    assert "'Regional JP Name'" in printed
+    # Game.save() strips the trailing " Trophies" (clean_game_title), so the STORED suffix-class
+    # name is 'Vampire Survivors Additional' -- asserting the unstripped string was vacuously true
+    # (found by mutation: removing the sample's istartswith exclude still passed).
+    assert "'Vampire Survivors Additional'" not in printed.split('Sample of')[1]
+
+
+def test_names_never_walks_the_catalogue():
+    """Runs on prod against the whole Game table; every query must be a COUNT or LIMIT-bounded."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    from tests.factories import ConceptFactory, GameFactory
+
+    c = ConceptFactory(unified_title='Stray')
+    for i in range(10):
+        GameFactory(concept=c, title_name=f'Stray Variant {i}')
+
+    with CaptureQueriesContext(connection) as ctx:
+        call_command('audit_psn_capture', '--names', stdout=io.StringIO())
+
+    unbounded = [q['sql'] for q in ctx.captured_queries
+                 if 'count(' not in q['sql'].lower() and 'limit' not in q['sql'].lower()]
+    assert not unbounded, 'these queries walk the catalogue: ' + ' | '.join(unbounded)
