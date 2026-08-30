@@ -26,20 +26,20 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
         {# ── Concept tabs: one segmented switcher, site standard. Lists is the default view. ── #}
         <div class="flex items-center justify-end mt-5 mb-4" id="gp-tabs-row">
             <div class="pp-switch" id="gp-switch" role="tablist" aria-label="Game view">
-                <button type="button" id="gp-tab-lists" aria-controls="gp-view-lists" class="pp-switch__chip is-active" data-view="lists" role="tab" aria-selected="true">
+                <button type="button" id="gp-tab-lists" aria-controls="gp-view-lists" class="pp-switch__chip{% if initial_view == 'lists' %} is-active{% endif %}" data-view="lists" role="tab" aria-selected="{% if initial_view == 'lists' %}true{% else %}false{% endif %}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span class="pp-switch__lbl">Trophy Lists</span>
                 </button>
-                <button type="button" id="gp-tab-ratings" aria-controls="gp-view-ratings" class="pp-switch__chip" data-view="ratings" role="tab" aria-selected="false">
+                <button type="button" id="gp-tab-ratings" aria-controls="gp-view-ratings" class="pp-switch__chip{% if initial_view == 'ratings' %} is-active{% endif %}" data-view="ratings" role="tab" aria-selected="{% if initial_view == 'ratings' %}true{% else %}false{% endif %}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg><span class="pp-switch__lbl">Ratings</span>
                 </button>
-                <button type="button" id="gp-tab-about" aria-controls="gp-view-about" class="pp-switch__chip" data-view="about" role="tab" aria-selected="false">
+                <button type="button" id="gp-tab-about" aria-controls="gp-view-about" class="pp-switch__chip{% if initial_view == 'about' %} is-active{% endif %}" data-view="about" role="tab" aria-selected="{% if initial_view == 'about' %}true{% else %}false{% endif %}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span class="pp-switch__lbl">About</span>
                 </button>
             </div>
         </div>
 
         {# ── Panels: server-rendered, toggled client-side (SEO-safe), free content per the stacked-chrome rule. ── #}
-        <div class="gd-view" id="gp-view-lists" role="tabpanel" aria-labelledby="gp-tab-lists" data-view="lists">
+        <div class="gd-view" id="gp-view-lists" role="tabpanel" aria-labelledby="gp-tab-lists" data-view="lists"{% if initial_view != 'lists' %} hidden{% endif %}>
             {% include 'trophies/partials/game_page/list_switcher.html' %}
             {% comment %} PERSISTENT swap target (hx-swap="innerHTML"): settle classes are added to
             this node by JS and must survive the swap. The ?list= param is scoped to the switcher
@@ -51,11 +51,11 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
             </div>
         </div>
 
-        <div class="gd-view" id="gp-view-ratings" role="tabpanel" aria-labelledby="gp-tab-ratings" data-view="ratings" hidden>
+        <div class="gd-view" id="gp-view-ratings" role="tabpanel" aria-labelledby="gp-tab-ratings" data-view="ratings"{% if initial_view != 'ratings' %} hidden{% endif %}>
             {% include 'trophies/partials/game_detail/ratings_panel.html' %}
         </div>
 
-        <div class="gd-view" id="gp-view-about" role="tabpanel" aria-labelledby="gp-tab-about" data-view="about" hidden>
+        <div class="gd-view" id="gp-view-about" role="tabpanel" aria-labelledby="gp-tab-about" data-view="about"{% if initial_view != 'about' %} hidden{% endif %}>
             {% include 'trophies/partials/game_detail/game_about_card.html' %}
         </div>
     </div>

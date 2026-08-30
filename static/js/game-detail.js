@@ -2,10 +2,11 @@
  * Game Detail Page controller (rebuild).
  *
  * Owns: the Trophies/Ratings/Ranks/About view switcher (shared .pp-switch +
- * PlatPursuit.wireTablist/slideViewIn/igniteTab/syncViewParam), the hero screenshot
- * lightbox, the trophy-filter settle + scroll restore, hero count-ups, and deep-link
- * jumps ([data-gd-goto]). The quick-rate modal block is carried over from the legacy
- * ratings panel until that panel is rebuilt.
+ * PlatPursuit.wireTablist/slideViewIn/igniteTab/syncViewParam), the trophy-filter
+ * settle + scroll restore, hero count-ups, and deep-link jumps ([data-gd-goto]).
+ * The hero screenshot lightbox lives in shot-lightbox.js (shared with the concept
+ * Game page). The quick-rate modal block is carried over from the legacy ratings
+ * panel until that panel is rebuilt.
  */
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('game-detail-container');

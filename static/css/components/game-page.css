@@ -139,9 +139,17 @@
 }
 
 /* The band's badge row is a DIV holding per-medallion series links (audit M3), not List detail's
-   clickable row -- the inherited row pointer would advertise a click the row no longer answers.
-   The medallion links carry their own affordance instead (glow, not scale). */
+   clickable row -- the inherited row affordances would advertise a click the row no longer
+   answers. Cursor, hover lift AND the :active press (game-detail.css .gd-spine__row rules) are
+   all neutralized; hover/active repeat the row's RESTING border/background from
+   .gd-spine__row--badges. The medallion links carry their own affordance instead (glow, not
+   scale). */
 .gd-spine--band div.gd-spine__row--badges { cursor: default; }
+.gd-spine--band div.gd-spine__row--badges:hover {
+    border-color: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent));
+}
+.gd-spine--band div.gd-spine__row--badges:active { transform: none; }
 .gd-spine--band a.gd-spine__obj--badge { border-radius: 9999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
 .gd-spine--band a.gd-spine__obj--badge:hover { filter: brightness(1.18); }
 .gd-spine--band a.gd-spine__obj--badge:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }

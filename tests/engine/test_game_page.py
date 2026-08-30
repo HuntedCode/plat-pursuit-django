@@ -524,7 +524,10 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
     plus three orphaned modals -- sailed through unbanned). So the fixture makes every ban
     reachable: a logged-in linked viewer, ANOTHER profile's public blurb (the report affordance's
     exact render condition on List detail), and PSN screenshots."""
-    from tests.factories import ConceptTrophyGroupFactory, UserConceptRatingFactory
+    from tests.factories import (
+        BadgeSeriesFactory, ConceptTrophyGroupFactory, GroupBadgeFactory, PlatformGroupFactory,
+        ProfileTrophyGroupFactory, StageFactory, TrophyGroupFactory, UserConceptRatingFactory,
+    )
 
     a = _game(igdb_id=996, title_platform=['PS4'])
     b = _game(igdb_id=None, title_platform=['PS5'])
@@ -539,7 +542,20 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
         profile=ProfileFactory(is_linked=True), concept=b.concept,
         blurb='A reachable quick take from someone else.',
     )
+    # TWO badge series on the host concept: the band must link each medallion to ITS series
+    # (a single series could not distinguish the audit-fixed markup from the old badges.0 row
+    # link), and badges being present is what makes List detail's data-spine-open reachable.
+    pg = PlatformGroupFactory(key='hero-ultra', platforms=['PS4', 'PS5'])
+    for slug in ('hero-crash', 'hero-spyro'):
+        GroupBadgeFactory(series=BadgeSeriesFactory(series_slug=slug), platform_group=pg)
+        StageFactory(series_slug=slug).concepts.add(b.concept)
     viewer = ProfileFactory(is_linked=True)
+    # A finished host list: makes the plat-card CTA, My Stats opener and progress readout all
+    # reachable on List detail, so their bans below cannot be vacuous.
+    ProfileGameFactory(profile=viewer, game=b, progress=100)
+    ProfileTrophyGroupFactory(
+        profile=viewer, trophy_group=TrophyGroupFactory(game=b), progress=100,
+    )
     client.force_login(viewer.user)
 
     content = client.get('/games/996/').content.decode()
@@ -557,6 +573,9 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
     assert 'id="gd-shot-modal"' in content
     assert 'js/shot-lightbox.js' in content
     assert 'A reachable quick take from someone else.' in content
+    # Each badge medallion links its OWN series page (audit M3): the second series' href is the
+    # one a badges.0-style row link would lose.
+    assert '/hero-crash/' in content and '/hero-spyro/' in content
     # Every one of these WOULD render on List detail for this exact viewer + data; here each is a
     # dead CTA or an orphaned dialog, gated server-side by concept_tabs_readonly or by the hero
     # simply not being List detail's.
@@ -568,18 +587,100 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
         'id="gd-versions-modal"',   # List detail's versions dialog
         'data-versions-open',
         'data-stats-open',          # My Stats modal opener
-        'gd-btn--card',             # plat-card CTA
+        'gd-btn--card',             # plat-card CTA (the viewer's finished list earns one THERE)
+        'gd-prog',                  # per-list progress readout
+        'data-spine-open',          # badge spine modal opener (badges ARE present)
+        'game-flag-btn',            # hero flag/report button
     ]:
         assert marker not in content, f'list-level hero piece leaked: {marker}'
 
-    # And the same viewer + blurb on the HOST concept's List detail DOES get the report
-    # affordance: proves the markers are reachable, so the bans above cannot rot into
-    # vacuousness again. The extraction must not have cost List detail its own lightbox.
+    # And every banned marker DOES render on the HOST concept's List detail for this same viewer
+    # + data: proves each ban is reachable, so the list above cannot rot into vacuousness again
+    # (the first rewrite of this test dropped three bans without noticing -- audit finding). The
+    # extraction must not have cost List detail its own lightbox either.
     list_content = client.get(f'/games/{b.np_communication_id}/').content.decode()
-    assert 'data-blurb-report' in list_content
-    assert 'id="gd-qr-modal"' in list_content
-    assert 'id="gd-shot-modal"' in list_content
-    assert 'js/shot-lightbox.js' in list_content
+    for marker in [
+        'data-blurb-report', 'id="gd-qr-modal"', 'id="gd-blurb-report-modal"',
+        'id="gd-guidelines-modal"', 'id="gd-versions-modal"', 'data-versions-open',
+        'data-stats-open', 'gd-btn--card', 'gd-prog', 'data-spine-open', 'game-flag-btn',
+        'id="gd-shot-modal"', 'js/shot-lightbox.js',
+    ]:
+        assert marker in list_content, f'ban not proven reachable on List detail: {marker}'
+
+
+def test_hero_facts_and_jumps_are_concept_true(client):
+    """Audit pins for the un-guarded hero fixes: Released is the WORK's earliest date
+    (concept.release_date), never the host list's platform date; and with a non-default ?list=
+    selected, both hero jump anchors carry it so the no-JS path lands on the right stack."""
+    from django.utils import timezone as djtz
+    import datetime
+
+    from trophies.services.igdb_service import IGDB_RELEASE_STATUS_RELEASE, PLAT_TO_IGDB_ID
+
+    a = _game(igdb_id=1010, title_platform=['PS4'])
+    b = _game(igdb_id=None, title_platform=['PS5'])
+    _match(b.concept, 1010)
+    TrophyFactory(game=a, trophy_id=1)
+    TrophyFactory(game=b, trophy_id=1)
+    # The work released in 2018; the HOST (PS5 = b) list's platform date is 2020. The hero
+    # describes the work, so 2018 must win -- reverting to host_game.platform_release_date
+    # renders 2020 and fails both assertions.
+    b.concept.release_date = djtz.make_aware(datetime.datetime(2018, 4, 20))
+    b.concept.save()
+    match = b.concept.igdb_match
+    match.igdb_ps_release_dates = [
+        {'platform': PLAT_TO_IGDB_ID['PS5'], 'date': '2020-11-12',
+         'status': IGDB_RELEASE_STATUS_RELEASE},
+    ]
+    match.igdb_summary = 'A summary, so the about teaser (and its jump link) renders.'
+    match.save()
+    # Non-zero players so the ratings jump headline renders.
+    for g in (a, b):
+        g.played_count = 10
+        g.save(update_fields=['played_count'])
+
+    content = client.get('/games/1010/').content.decode()
+
+    assert 'datetime="2018-04-20"' in content
+    assert '2020-11-12' not in content
+    # Default list selected -> bare jump hrefs (no redundant list param).
+    assert 'href="?view=about"' in content
+    assert 'href="?view=ratings"' in content
+
+    # Non-default list selected -> both jumps preserve it (audit L8).
+    sel = client.get(f'/games/1010/?list={a.np_communication_id}').content.decode()
+    assert f'href="?list={a.np_communication_id}&amp;view=about"' in sel
+    assert f'href="?list={a.np_communication_id}&amp;view=ratings"' in sel
+
+
+def test_view_param_is_honored_server_side(client):
+    """The hero jump anchors are only real no-JS links if the server renders the named panel
+    visible -- the audit found ?view=about landing on a page whose About panel shipped with the
+    `hidden` attribute (game-page.js was the only thing that ever revealed it)."""
+    import re
+
+    game = _game(igdb_id=1011)
+    TrophyFactory(game=game, trophy_id=1)
+
+    def panel_tag(content, view):
+        return re.search(r'<div[^>]*id="gp-view-' + view + r'"[^>]*>', content).group(0)
+
+    def tab_tag(content, view):
+        return re.search(r'<button[^>]*id="gp-tab-' + view + r'"[^>]*>', content).group(0)
+
+    about = client.get('/games/1011/?view=about').content.decode()
+    assert 'hidden' not in panel_tag(about, 'about')
+    assert 'hidden' in panel_tag(about, 'lists')
+    assert 'aria-selected="true"' in tab_tag(about, 'about')
+    assert 'is-active' in tab_tag(about, 'about')
+    assert 'aria-selected="false"' in tab_tag(about, 'lists')
+
+    # Default and unknown values both fall back to Lists.
+    for url in ('/games/1011/', '/games/1011/?view=bogus'):
+        content = client.get(url).content.decode()
+        assert 'hidden' not in panel_tag(content, 'lists')
+        assert 'hidden' in panel_tag(content, 'about')
+        assert 'aria-selected="true"' in tab_tag(content, 'lists')
 
 
 def test_the_family_band_links_siblings_to_their_own_game_pages(client):

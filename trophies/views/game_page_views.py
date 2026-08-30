@@ -239,6 +239,11 @@ class GamePageView(ConceptContextMixin, TemplateView):
         context['list_set'] = self.list_set
         context['selected_game'] = selected
         context['default_list_np'] = default.np_communication_id
+        # ?view= is honored SERVER-side too, so the hero's jump anchors work without JS (the
+        # audit found the no-JS href landed on a page whose target panel was rendered hidden).
+        # game-page.js re-applies the same view idempotently at init; unknown values fall back.
+        view_param = self.request.GET.get('view')
+        context['initial_view'] = view_param if view_param in ('lists', 'ratings', 'about') else 'lists'
         context['viewer_profile'] = viewer
         context['switcher_entries'] = [
             {
