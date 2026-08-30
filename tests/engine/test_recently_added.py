@@ -112,8 +112,10 @@ def test_recently_added_stays_per_list_and_uncondensed(client):
     assert f'href="/games/{b.np_communication_id}/"' in content
     assert 'condensed_cards' not in resp.context
     assert 'list_count_map' not in resp.context
-    # Nor the Trophy Lists page's list-identity mode: RA titles by title_name, not observations.
+    # Nor the Trophy Lists page's list-identity mode: RA titles by title_name, not observations,
+    # and its cards carry no region chips.
     assert 'list_identity_cards' not in resp.context
+    assert 'pp-gcard__region' not in content
 
 
 def test_base_cards_get_pursuer_hooks(client):

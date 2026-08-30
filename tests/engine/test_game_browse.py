@@ -231,6 +231,7 @@ def test_condensed_card_links_titles_and_chips(client):
     assert plats.index('PS5') < plats.index('PS4') < plats.index('PSVR2')
     assert '2 lists' in content
     assert 'pp-gcard__plat--region' not in content and '>EU<' not in content
+    assert 'pp-gcard__region' not in content   # the list-identity mode's chips stay on ITS page
 
     # A single-list work shows no chip.
     lone = GameFactory(title_name='Lone Work', title_platform=['PS5'])

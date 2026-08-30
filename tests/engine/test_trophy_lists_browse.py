@@ -115,6 +115,22 @@ def test_the_name_batch_runs_exactly_once_per_render(client):
     )
 
 
+def test_region_chips_render_on_these_cards_only(client):
+    """The list-identity mode's region chips: a regional list shows its region codes, a
+    non-regional one shows the muted Global chip -- and the class is this page's OWN
+    (.pp-gcard__plat--region stays retired; the work-describing cards remain region-free,
+    banned in their suites)."""
+    GameFactory(title_name='JP Copy', title_platform=['PS5'], is_regional=True, region=['JP'])
+    GameFactory(title_name='World Copy', title_platform=['PS5'])
+
+    content = client.get(URL).content.decode()
+
+    assert 'pp-gcard__region' in content
+    assert '>JP<' in content
+    assert 'pp-gcard__region--global' in content and '>Global<' in content
+    assert 'pp-gcard__plat--region' not in content   # the retired class stays retired
+
+
 # ── Filters + sort ────────────────────────────────────────────────────────────────────────────────
 
 def test_platform_and_region_filters_narrow(client):

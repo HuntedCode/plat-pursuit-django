@@ -56,6 +56,11 @@
 .pp-gcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
 .pp-gcard__plats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
 .pp-gcard__plat { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+/* Region chips, the LIST-IDENTITY mode's own (Trophy Lists browse only -- .pp-gcard__plat--region
+   stays retired; the work-describing cards remain region-free). Secondary-tinted like the lists
+   tally: region is list META here, not a platform. --global mutes to a quiet whole-world tag. */
+.pp-gcard__region { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-secondary); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
+.pp-gcard__region--global { color: var(--pp-text-mute); border-color: var(--pp-border); }
 /* The stacks tally: secondary-tinted so it reads as META (how many lists share this page), not
    as another platform. Same chip anatomy as its neighbors. */
 .pp-gcard__lists { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-secondary); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }

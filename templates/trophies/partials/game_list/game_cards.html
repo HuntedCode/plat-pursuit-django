@@ -99,12 +99,19 @@
             WORK; region stays a filter). Zero queries either way. {% endcomment %}
             {% with union=platform_union_map|dict_get:game.id list_n=list_count_map|dict_get:game.id %}
             {% comment %}The lists chip is PARTITION metadata, not platform metadata -- it must
-            not vanish with an empty platform set (final-audit #8), so it joins the gate.{% endcomment %}
-            {% if union or game.title_platform or list_n > 1 %}
+    not vanish with an empty platform set (final-audit #8), so it joins the gate; the
+    list-identity mode's region chips join it for the same reason (a platform-less regional
+    list still shows its region).{% endcomment %}
+            {% if union or game.title_platform or list_n > 1 or list_identity_cards %}
             <div class="pp-gcard__foot">
                 <span class="pp-gcard__plats">
                     {% for p in union|default:game.title_platform %}<span class="pp-gcard__plat">{{ p }}</span>{% endfor %}
                     {% if list_n > 1 %}<span class="pp-gcard__lists" title="{{ list_n }} trophy lists -- regional and platform stacks share this page">{{ list_n }} lists</span>{% endif %}
+                    {% comment %}Region chips, LIST-IDENTITY MODE ONLY (Trophy Lists browse):
+                    each card IS one list, and regional variants are that page's point. The
+                    condensed/work cards stay region-free (.pp-gcard__plat--region remains
+                    retired); this is the mode's own class.{% endcomment %}
+                    {% if list_identity_cards %}{% if game.is_regional and game.region %}{% for r in game.region %}<span class="pp-gcard__region">{{ r }}</span>{% endfor %}{% else %}<span class="pp-gcard__region pp-gcard__region--global">Global</span>{% endif %}{% endif %}
                 </span>
                 {% if game.played_count %}
                 <span class="pp-gcard__players" title="{{ game.played_count|intcomma }} players own this game">
