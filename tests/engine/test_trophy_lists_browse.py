@@ -133,6 +133,49 @@ def test_region_chips_render_on_these_cards_only(client):
     assert 'pp-gcard__plat--region' not in content   # the retired class stays retired
 
 
+# ── Header: the browse-family standard ────────────────────────────────────────────────────────────
+
+def test_header_carries_the_family_tally_and_scard_grid(client):
+    """Jeffrey's beta catch: the header must look/function like the other browse headers --
+    the right-aligned headline Tally with its shown-sublabel plus the .scard substance grid,
+    LIST-scoped (the games heartbeat scards stay off this page; lists are its honest unit).
+    Values checked through the context so the hourly cache serves what this fixture built."""
+    from django.core.cache import cache
+
+    from tests.factories import TrophyFactory
+
+    cache.delete('trophy_lists:header_stats')
+    plat = GameFactory(title_name='Plat List', title_platform=['PS5'])
+    TrophyFactory(game=plat, trophy_type='platinum')
+    GameFactory(title_name='JP List', title_platform=['PS5'], is_regional=True, region=['JP'])
+
+    resp = client.get(URL)
+    content = resp.content.decode()
+
+    assert 'id="tlb-count"' in content and 'lists shown' in content
+    for label in ('Trophy lists', 'Regional', 'With a platinum', 'New this week'):
+        assert label in content, label
+    assert resp.context['tlb_stats'] == {
+        'total': 2, 'regional': 1, 'with_plat': 1, 'new_this_week': 2,
+    }
+
+
+def test_header_stats_never_run_on_grid_swaps(client):
+    """The gating that keeps the swap path cheap: the XHR/HTMX branches re-render only the grid,
+    so the header stats must not be computed (or fetched) for them."""
+    from django.core.cache import cache
+
+    cache.delete('trophy_lists:header_stats')
+    GameFactory(title_platform=['PS5'])
+
+    xhr = client.get(URL, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    htmx = client.get(URL, HTTP_HX_REQUEST='true')
+
+    assert 'tlb_stats' not in xhr.context
+    assert 'tlb_stats' not in htmx.context
+    assert cache.get('trophy_lists:header_stats') is None, 'a swap warmed the header cache'
+
+
 # ── Filters + sort ────────────────────────────────────────────────────────────────────────────────
 
 def test_platform_and_region_filters_narrow(client):

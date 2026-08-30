@@ -166,6 +166,7 @@ test to grade anything fixes the denominator for the whole session.
 | `whats_new_{YYYY-MM-DD}_{HH}` | 7200s | What's New sidebar content; hourly rotation |
 | `site_heartbeat_{YYYY-MM-DD}_{HH}` | 7200s | Site Heartbeat stats (incl. ratings totals); hourly rotation; reader falls back one hour |
 | `landing_badge_showcase_v2` | 3600s (300s on failure) | Anon landing's medallion shelf: top-earned live SERIES-type badges with custom art, one edition per series. Lazily filled on the request path (bounded) |
+| `trophy_lists:header_stats` | 3600s | Trophy Lists browse header scards (list totals/regional/platinum/new-this-week). Lazily filled on full-page renders only (four bounded COUNTs) |
 | `landing_showcase_card_v1` | 21600s | Anon landing's showcase Profile Card HTML, rendered hourly by `refresh_homepage_hourly` from `LANDING_SHOWCASE_PSN`; landing falls back to a literal fixture |
 
 **Files**: `core/views.py`, `core/management/commands/refresh_homepage_daily.py`, `core/management/commands/refresh_homepage_hourly.py`

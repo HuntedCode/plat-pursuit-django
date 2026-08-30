@@ -18,17 +18,66 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
 <div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Page header: accented card. The filtered-count Tally is the single headline -- the heartbeat scards are games-catalogue-scoped and stay off this page; paginator.count is its honest number. ── #}
+    {# ── Page header: accented card + --pp-* substance, opening-beat cascade (the browse-family standard: left identity + flavor, right headline Tally, .scard substance grid). ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
-            <div class="flex items-center gap-2 flex-wrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Trophy Lists</h1>
-                <span class="pp-tally text-lg md:text-xl" id="tlb-count" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Trophy Lists</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        {% if request.GET.query %}
+                            Hunting for "{{ request.GET.query }}"{% if is_paginated %} across {{ paginator.count|intcomma }} list{{ paginator.count|pluralize }}...{% endif %}
+                        {% elif selected_regions %}
+                            Region hunting. {{ paginator.count|intcomma|default:"No" }} list{{ paginator.count|pluralize }} in the territory.
+                        {% elif show_only_platinum == 'on' %}
+                            Platinum or bust. {{ paginator.count|intcomma|default:"No" }} list{{ paginator.count|pluralize }} shipping the ultimate prize.
+                        {% elif request.GET.letter %}
+                            {{ paginator.count|intcomma|default:"No" }} list{{ paginator.count|pluralize }} starting with "{{ request.GET.letter }}". Happy hunting!
+                        {% else %}
+                            Every stack, every region &mdash; the catalogue at list level. Siblings that share one game page each get their own card here.
+                        {% endif %}
+                    </p>
+                </div>
+
+                {% comment %} Filtered-result count as the headline Tally (mirrors Browse Games / Recently
+                Added). The catalogue scale lives in the .scard grid below; this names the shown results.
+                trophy-lists.js ticks #tlb-count live on every grid swap. {% endcomment %}
+                <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                    <span id="tlb-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">list{{ paginator.count|pluralize }} shown</span>
+                </div>
             </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                Every stack, every region &mdash; the catalogue at list level. Siblings that share one game page each get their own card here.
-            </p>
+
+            {% comment %} Catalogue substance: the family .scard grid, LIST-scoped (the games heartbeat
+            scards stay off this page -- these count lists, its honest unit). Hourly-cached in the view,
+            so the grid only shows once the cache is warm; full page only (never re-rendered on swaps). {% endcomment %}
+            {% if tlb_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Trophy lists</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.total }}">{{ tlb_stats.total|intcomma }}</div>
+                    <div class="scard__sub">in the catalogue</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Regional</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.regional|default:0 }}">{{ tlb_stats.regional|default:0|intcomma }}</div>
+                    <div class="scard__sub">territory-specific</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">With a platinum</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.with_plat|default:0 }}">{{ tlb_stats.with_plat|default:0|intcomma }}</div>
+                    <div class="scard__sub">ship the prize</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">New this week</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.new_this_week|default:0 }}">{{ tlb_stats.new_this_week|default:0|intcomma }}</div>
+                    <div class="scard__sub">freshly synced</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </section>
 

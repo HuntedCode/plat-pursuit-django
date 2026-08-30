@@ -141,9 +141,10 @@
     // ── Element wiring: runs on first load AND on each history restore (fresh DOM). ──
     function boot(first) {
         handledGrid = null;
-        if (first && PP.countUp) {   // the header Tally counts up on first load only
+        if (first && PP.countUp) {   // the header Tally + scard values count up on first load only
             var headCount = document.getElementById('tlb-count');
             if (headCount) { PP.countUp(headCount, 900); }
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
         }
         initToolbar();
         wireMinibar();

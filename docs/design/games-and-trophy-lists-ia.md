@@ -171,6 +171,11 @@ Page-by-page during the rebuild, never a big-bang rename:
   pages), no saved browse defaults, no contract drill-down. Recorded divergence (the phase-3
   interim class): search and the alpha sort operate on `title_name` while the card displays the
   observed name -- they rarely diverge; a stale-titled list can sort slightly off its label.
+  Beta feedback round (2026-08-30): the header converted to the browse-family standard
+  (right-aligned headline Tally + a LIST-scoped `.scard` substance grid, hourly-cached at
+  `trophy_lists:header_stats`; the games heartbeat scards stay off the page), and the Game
+  page's list switcher gained region chips + a region suffix in the minibar select --
+  stacks that differ by region alone rendered as indistinguishable twins.
 
 - **2026-08-30 -- PHASE 3: Games browse condensing shipped** (6 commits + tag pages). One card
   per page identity via `game_page_canonicals()` slotted into the browse pipeline AFTER every

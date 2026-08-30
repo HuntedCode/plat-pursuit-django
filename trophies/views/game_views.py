@@ -7,7 +7,7 @@ from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
-from django.db.models import Q, F, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
+from django.db.models import Q, F, Exists, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
 from django.db.models.functions import Coalesce, Lower, Cast
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -481,6 +481,21 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
         # duplicating or dropping cards across a page boundary.
         return qs.order_by(*order, 'pk')
 
+    @staticmethod
+    def _build_header_stats():
+        """The four list-level header scards: catalogue scale, the regional slice (this page's
+        point), platinum coverage, fresh-sync momentum. All DB aggregates over the same np
+        floor the grid renders with."""
+        base = Game.objects.filter(np_communication_id__isnull=False).exclude(np_communication_id='')
+        return {
+            'total': base.count(),
+            'regional': base.filter(is_regional=True).count(),
+            'with_plat': base.filter(Exists(
+                Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum'))).count(),
+            'new_this_week': base.filter(
+                created_at__gte=timezone.now() - timedelta(days=7)).count(),
+        }
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['breadcrumb'] = [
@@ -508,6 +523,15 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
             "platform stacks, and edition lists. Filter by platform, region, and platinum "
             "availability."
         )
+
+        # Header substance scards (the browse-family header standard), full page only -- the
+        # panel/grid swaps never re-render the header. Whole-catalogue COUNTs, so they are
+        # cached for an hour (the game_list header reads the site heartbeat for the same
+        # reason); a cold cache pays four bounded aggregate queries, never per-row work.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not self.request.htmx and not is_xhr:
+            context['tlb_stats'] = cache.get_or_set(
+                'trophy_lists:header_stats', self._build_header_stats, 3600)
 
         # LIST-IDENTITY cards (the page's third card mode): titles come from the observed PSN
         # list names -- Game.display_list_names, the batch that is the ONLY supported grid read
