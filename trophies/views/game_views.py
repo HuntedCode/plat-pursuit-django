@@ -505,6 +505,24 @@ class GameDetailView(ConceptContextMixin, DetailView):
             existing_qs = request.META.get('QUERY_STRING', '')
             suffix = f'&{existing_qs}' if existing_qs else ''
             return HttpResponseRedirect(f'{canonical}?{urlencode(params)}{suffix}')
+
+        # The Ratings and About tabs left this page for the concept Game page (the slim-down,
+        # owner decision 4), but the old tabs WROTE ?view= into the address bar on every switch,
+        # so bookmarked/shared deep links to them exist in the wild. Send them where the content
+        # went -- a 302, not 301: cheap to change if the Game page's view names ever shift. The
+        # username segment and other params are dropped deliberately (ratings are concept-level,
+        # not profile-level). Conceptless games have no Game page and fall through to Trophies.
+        view_param = request.GET.get('view')
+        if view_param in ('ratings', 'about'):
+            game = (
+                Game.objects.filter(np_communication_id=kwargs['np_communication_id'])
+                .select_related('concept__igdb_match')
+                .only('np_communication_id', 'concept__concept_id',
+                      'concept__igdb_match__igdb_id', 'concept__igdb_match__status')
+                .first()
+            )
+            if game is not None and game.concept_id:
+                return HttpResponseRedirect(f'{game.concept.game_page_url()}?view={view_param}')
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):

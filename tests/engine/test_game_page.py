@@ -674,6 +674,38 @@ def test_hero_facts_and_jumps_are_concept_true(client):
     assert f'href="?list={a.np_communication_id}&amp;view=ratings"' in sel
 
 
+def test_old_ratings_and_about_deep_links_redirect_up(client):
+    """Slim-down decision 4: List detail's old tabs WROTE ?view= into the address bar, so
+    bookmarked deep links exist in the wild. After the tabs leave, /games/<np>/?view=ratings|about
+    must land where the content went -- a 302 to the concept Game page's same view. The username
+    segment and other params are dropped (ratings are concept-level); conceptless games have no
+    Game page and fall through to Trophies."""
+    a = _game(igdb_id=1014)
+    TrophyFactory(game=a, trophy_id=1)
+
+    resp = client.get(f'/games/{a.np_communication_id}/?view=ratings')
+    assert resp.status_code == 302 and resp.url == '/games/1014/?view=ratings'
+    resp = client.get(f'/games/{a.np_communication_id}/?view=about')
+    assert resp.status_code == 302 and resp.url == '/games/1014/?view=about'
+
+    # The authed profile-scoped variant redirects up too, shedding the username segment.
+    viewer = ProfileFactory(is_linked=True)
+    client.force_login(viewer.user)
+    resp = client.get(f'/games/{a.np_communication_id}/{viewer.psn_username}/?view=ratings',
+                      HTTP_CF_RAY='test')
+    assert resp.status_code == 302 and resp.url == '/games/1014/?view=ratings'
+    client.logout()
+
+    # Views that still live here (or no view at all) render normally, with no extra hop.
+    assert client.get(f'/games/{a.np_communication_id}/?view=trophies').status_code == 200
+    assert client.get(f'/games/{a.np_communication_id}/').status_code == 200
+
+    # A conceptless game has nowhere to send the bookmark -- it falls through to the page.
+    lone = GameFactory(concept=None)
+    TrophyFactory(game=lone, trophy_id=1)
+    assert client.get(f'/games/{lone.np_communication_id}/?view=ratings').status_code == 200
+
+
 def test_the_sticky_minibar_is_wired_like_list_details(client):
     """Jeffrey's call: the Game page carries List detail's sticky minibar (identity icon per tab +
     jump-to-pack select) instead of pinning the grid's jump menu. Pins the template contract (bar,
