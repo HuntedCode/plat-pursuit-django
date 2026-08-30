@@ -133,9 +133,10 @@ gate is wired after the first spine tests exist — a gate over zero tests is mo
   (the 25 Jobs from `0247_seed_jobs`, notification templates, ...) stay gone for every
   later test and every later RUN. This gutted the Job catalog in 2026-08: every
   contract-claim test silently banked 0 XP (XP splits across a contract's jobs) and the
-  failures pointed nowhere near the cause. `conftest.py`'s session-start guard now
-  re-seeds an empty Job catalog and prints when it does; if OTHER seeded data goes
-  missing, `pytest --create-db` is the general repair. Prefer keeping transactional
+  failures pointed nowhere near the cause. `conftest.py`'s `django_db_setup` wrapper now
+  re-seeds an empty Job catalog and raises a warning (visible in the run's warnings
+  summary) when it does; if OTHER seeded data goes missing, `pytest --create-db` is the
+  general repair. Prefer keeping transactional
   tests out of the committed suite; if one becomes necessary, look at pytest-django's
   `serialized_rollback` before accepting the flush.
 - **Management commands named `test_*`.** Several Django commands are literally

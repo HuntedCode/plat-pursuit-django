@@ -7,8 +7,8 @@ wiring is needed here. Fixtures below are convenience wrappers over the factorie
 import pytest
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _ensure_seeded_job_catalog(django_db_setup, django_db_blocker):
+@pytest.fixture(scope="session")
+def django_db_setup(django_db_setup, django_db_blocker):
     """Re-seed the migration-seeded Job catalog if the (reused) test DB has lost it.
 
     Data migrations run only when the test DB is CREATED, but --reuse-db keeps the DB across
@@ -18,11 +18,20 @@ def _ensure_seeded_job_catalog(django_db_setup, django_db_blocker):
     test: XP splits across a contract's jobs, so zero jobs banks zero XP, and the failures
     pointed nowhere near the cause (an idempotency test even kept passing vacuously, 0 == 0).
 
+    Shape matters (both from the final audit of this guard):
+    - This WRAPS pytest-django's django_db_setup rather than being an autouse fixture, so it
+      runs only when some collected test actually requests the DB -- the ~25 DB-free
+      source-guard suites keep running with no database (and no db-test container) at all.
+    - The repair is announced via warnings.warn, not print: a session-fixture print lands in
+      the first test's captured-setup buffer and a green -q run shows nothing, which defeats
+      the point of the notice (the flush it detects should get diagnosed, not resurface).
+
     The repair is the seed migration's own idempotent function, run once per session and
     committed OUTSIDE any test transaction so it sticks in the reused DB. Import via
     importlib because the module name starts with a digit.
     """
     import importlib
+    import warnings
 
     from django.apps import apps as django_apps
 
@@ -30,11 +39,20 @@ def _ensure_seeded_job_catalog(django_db_setup, django_db_blocker):
         from trophies.models import Job
 
         if not Job.objects.exists():
+            # BOTH Job data migrations, not just the seed: 0256 assigned every job its icon
+            # AFTER 0247 created them, and a seed-only repair left 25 icon-less jobs that
+            # failed test_job_icons (the full-suite run that proved this guard's first cut
+            # incomplete). If a future data migration mutates Jobs again, add it here.
             seed_mod = importlib.import_module("trophies.migrations.0247_seed_jobs")
             seed_mod.seed_jobs(django_apps, None)
-            print("\n[conftest] Job catalog was EMPTY in the reused test DB -- re-seeded "
-                  f"{Job.objects.count()} jobs (a transactional test truncated it; "
-                  "see docs/guides/testing.md Gotchas).")
+            icons_mod = importlib.import_module("trophies.migrations.0256_job_icons")
+            icons_mod.set_icons(django_apps, None)
+            warnings.warn(
+                "Job catalog was EMPTY in the reused test DB -- re-seeded "
+                f"{Job.objects.count()} jobs. A transactional test truncated it; "
+                "see docs/guides/testing.md Gotchas.",
+                stacklevel=1,
+            )
 
 
 @pytest.fixture(autouse=True)

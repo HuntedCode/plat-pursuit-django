@@ -130,13 +130,15 @@ def test_many_groups_collapse_to_the_jump_menu():
     assert 'href="#gp-trophy-group-g03"' in html          # rows are id_prefix-namespaced anchors
     assert 'data-gd-groupjump="gp-trophy-group-g03"' in html
     assert 'data-gd-jumpfilter' in html
+    assert 'data-gd-jumpnone' in html and 'No packs match' in html   # the filter's empty state
     assert '9 packs' in html
     assert 'Pack g03' in html
     assert '15%' in html                                   # viewer % from the group_pct param
 
-    # Anonymous render: rows stay, the viewer % column goes.
+    # Anonymous render: rows stay, the viewer % column goes. (The first cut of this asserted
+    # the row count against the PROFILED render above -- vacuous; the final audit caught it.)
     anon = _render(**_many_groups(9), profile=None)
-    assert html.count('gd-jumpmenu__row') == 9
+    assert anon.count('gd-jumpmenu__row') == 9
     assert 'gd-jumpmenu__pct' not in anon
 
 

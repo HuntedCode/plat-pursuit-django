@@ -188,6 +188,10 @@
                 // hx-sync abort superseded by a newer request.
                 if (e.detail.target === viewport && e.detail.xhr && e.detail.xhr.status !== 0) {
                     viewport.classList.remove('is-swapping', 'pointer-events-none');
+                    // A FAILED swap never reaches afterSwap, so the minibar's list select would
+                    // keep showing the list the viewer picked while the page still shows the old
+                    // one (final-audit finding) -- walk it back to the list actually on screen.
+                    if (!e.detail.successful && listSel) listSel.value = lastNp;
                 }
             });
         }

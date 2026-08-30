@@ -44,10 +44,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const q = input.value.trim().toLowerCase();
         const menu = input.closest('[data-gd-jumpmenu]');
         if (!menu) return;
+        let shown = 0;
         menu.querySelectorAll('.gd-jumpmenu__row').forEach((r) => {
             const name = r.querySelector('.gd-groupnav__name');
             r.hidden = !!q && !(name && name.textContent.toLowerCase().includes(q));
+            if (!r.hidden) shown += 1;
         });
+        // A query that empties the list must SAY so (final-audit finding: the popover collapsed
+        // to a bare text field, with nothing for a screen reader). role="status" announces it.
+        const none = menu.querySelector('[data-gd-jumpnone]');
+        if (none) none.hidden = shown > 0;
     });
 
     // A closing menu resets its filter so it reopens showing every pack. 'toggle' doesn't
@@ -58,5 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const input = menu.querySelector('[data-gd-jumpfilter]');
         if (input) input.value = '';
         menu.querySelectorAll('.gd-jumpmenu__row').forEach((r) => { r.hidden = false; });
+        const none = menu.querySelector('[data-gd-jumpnone]');
+        if (none) none.hidden = true;
     }, true);
 });
