@@ -34,7 +34,7 @@ The design prioritizes DRY: views set a single `seo_description` string and it f
 | `title` | Falls back to `{{ title }}` context var or "Platinum Pursuit". Auto-appends " - Platinum Pursuit" suffix. | Always set for named pages |
 | `meta_description` | Uses `{{ seo_description }}` context var, falls back to site tagline | Set via `seo_description` in views, or override block for static pages |
 | `robots` | `index, follow` | Override with `noindex, nofollow` for auth/personal/edit pages |
-| `canonical_url` | scheme://host/PATH (querystring STRIPPED, Lane 0) | Override when another URL is the canonical (game detail points siblings at the concept's elected SKU); condition must live INSIDE the block with `{{ block.super }}` -- a block wrapped in `{% if %}` overrides unconditionally |
+| `canonical_url` | scheme://host/PATH (querystring STRIPPED, Lane 0) | Override when another URL is the canonical; both game detail pages set an explicit view-computed self-canonical (never request.path, which would mint per-viewer canonicals on profile-scoped variants); condition must live INSIDE the block with `{{ block.super }}` -- a block wrapped in `{% if %}` overrides unconditionally |
 | `og_title` | Uses `{{ seo_title }}` or `{{ title }}` context var | Only if OG title should differ from page title |
 | `og_description` | Uses `{{ seo_description }}` context var | Only if OG description should differ from meta description |
 | `og_type` | `website` | Override: `profile` for profile pages, `article` for guides |
@@ -88,7 +88,7 @@ Registered (see `plat_pursuit/urls.py` -- registration is explicit, and so is th
 | Class | Content | Priority | Frequency |
 |-------|---------|----------|-----------|
 | `StaticViewSitemap` | Homepage, copy pages, browse hubs | 0.8 | weekly |
-| `GameSitemap` | CONCEPT-CANONICAL games only (`concept_canonicals()` window election), shovelware excluded | 0.6 | weekly |
+| `GameSitemap` | Game pages only (`game_page_canonicals()` window election); `ListSitemap` ('game_lists') advertises every non-shovelware list at its self-canonical URL, shovelware excluded | 0.6 | weekly |
 | `ProfileSitemap` | Quality-floored profiles: public history + trophies > 0; `lastmod` = `last_synced` | 0.5 | daily |
 | `BadgeSitemap` | `BadgeSeries` with a live `GroupBadge` edition (the set BadgeDetailView serves) | 0.6 | weekly |
 
@@ -258,11 +258,13 @@ These flow through the standard `plat_pursuit` logger → console handler → st
 
 ## Lane 1 behaviors (2026-08-23)
 
-- **Concept-canonical election**: `canonical_election_order()` (trophies/managers.py) is THE
-  ordering; `GameQuerySet.concept_canonicals()` (the sitemap's window) and
-  `Game.canonical_sibling()` (the page's rel=canonical + og:url) share it AND the same floor
-  (shovelware excluded, np-less rows excluded) -- the two electors must never diverge in
-  ordering OR population.
+- **Page-identity election**: `canonical_election_order()` (trophies/managers.py) is THE
+  ordering inside `GameQuerySet.game_page_canonicals()` (GameSitemap's window, shovelware and
+  np-less rows excluded). Each page's own view-computed `page_canonical_url` shares the
+  `Concept.game_page_url` routing with it, so sitemap and canonical cannot drift -- pinned by
+  the invariant test over BOTH GameSitemap and ListSitemap. (The old
+  `concept_canonicals()`/`Game.canonical_sibling()` pair was deleted with the Games/Trophy
+  Lists IA; list pages are SELF-canonical since the slim-down.)
 - **The games hub returns 200 bare**: anon hits bind the platform defaults into the form and
   the template history.replaceState()s them into the URL (no redirect); signed-in hunters with
   saved browse defaults keep their personalization redirect.

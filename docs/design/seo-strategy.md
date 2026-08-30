@@ -21,10 +21,13 @@ they ever return, revisit -- they carry the site's best long-form markup.
 
 ## The five structural decisions (2026-08-23)
 
-1. **The indexable game unit is the CONCEPT.** One canonical Game row per Concept (the "best" SKU);
-   regional/platform siblings point their `rel=canonical` at it and leave the sitemap. Scale today:
-   ~35,000 Game rows over ~18-20k Concepts, so this roughly halves the indexed set before quality
-   filters. (Lane 1 defines "best SKU": prefer the row with trophy data + IGDB match + current-gen.)
+1. **The indexable game unit is the CONCEPT-level Game page** (`/games/<igdb_id>/`, the Games/
+   Trophy Lists IA superseded the original "best SKU" framing): one page per work, advertised once
+   in the sitemap. SUPERSEDED IN PART by the list-detail slim-down (2026-08-30): list pages
+   (`/games/<np>/`) are self-canonical again and sitemap-advertised (`ListSitemap`) -- they carry
+   distinct stack content (trophies, Ranks, the community snapshot) and serve stack-specific
+   intent ("<game> PS5 trophy list"), while the Game page answers "the game" queries and holds
+   the concept content (Ratings, About). The AggregateRating claim lives ONLY on the Game page.
 2. **Profiles are an SEO asset WITH a quality floor.** Indexed: synced, public-history profiles with
    real data. `noindex` + out of the sitemap: never-synced stubs, zero-trophy rows, and
    `psn_history_public=False` profiles (which render header-only pages).

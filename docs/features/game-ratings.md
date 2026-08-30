@@ -1,10 +1,10 @@
 # Ratings
 
-`UserConceptRating` surfaces in two places, and they are mirror images of one question. The **game-detail Ratings tab** answers "what does the community think of this game". The **profile Ratings tab** answers "what does this hunter think of games". Both are documented here, and both are built in `rating_service.py`, so the two definitions of "the community average" cannot drift apart.
+`UserConceptRating` surfaces in two places, and they are mirror images of one question. The **Game page Ratings tab** answers "what does the community think of this game". The **profile Ratings tab** answers "what does this hunter think of games". Both are documented here, and both are built in `rating_service.py`, so the two definitions of "the community average" cannot drift apart.
 
-## Game-detail Ratings tab
+## Game page Ratings tab
 
-The **Ratings** tab on a game's detail page (`/games/<np>/`, `?view=ratings`) is where the community's take on a game lives: an aggregate difficulty/grindiness/fun/hours/overall verdict, per trophy group (base + each DLC), plus optional short written "quick takes." It is the read/write home for `UserConceptRating` (the structured rating model kept after the review hub was archived, see [Review Hub](review-hub.md)).
+The **Ratings** tab on the concept Game page (`/games/<igdb_id>/` or `/games/c/<concept_id>/`, `?view=ratings`) is where the community's take on a game lives -- the ONE ratings host since the list-detail slim-down moved the tab off `/games/<np>/` (old `?view=ratings` deep links there 302 up): an aggregate difficulty/grindiness/fun/hours/overall verdict, per trophy group (base + each DLC), plus optional short written "quick takes." It is the read/write home for `UserConceptRating` (the structured rating model kept after the review hub was archived, see [Review Hub](review-hub.md)).
 
 ## What's shipped
 
@@ -18,7 +18,9 @@ Rendered by `ratings_panel.html` → per-group `_rating_conditions.html`, as a s
 | **Your take** (framed) | When the viewer has rated AND >1 rating exists: a one-line comparison of their scores vs the community (`rating_comparison`). |
 | **Quick takes** (bare card grid) | Optional ≤140-char public micro-reviews attached to a rating — the individual human voices. A bounded preview (newest 6 per group), each a distinct card. |
 
-All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `rating_comparison`) are mirrored verbatim by `game-detail.js` for the no-reload live-update after a submit — keep the Python + JS thresholds/wording in sync.
+All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `rating_comparison`) are mirrored verbatim by `ratings-tab.js` for the no-reload live-update after a submit — keep the Python + JS thresholds/wording in sync.
+
+The **community snapshot** section is a shared partial (`_community_snapshot.html`): the Game page renders it here with its across-every-list aggregation, and List detail renders the same partial at the top of its Trophies panel with that one list's denorms.
 
 **Quick-take blurbs** (Phase 1, shipped): optional field on `UserConceptRating`, written via the quick-rate modal, sanitized + banned-word filtered on submit, reactively moderated (publish → report → staff soft-hide), with a first-class **community-guidelines** agreement (persistent notice + in-context rules sheet, recorded on submit). See the backend detail in the [API reference](../reference/api-endpoints.md#ratings--quick-takes).
 
@@ -32,7 +34,7 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 | `templates/trophies/partials/game_detail/{quick_rate_modal,blurb_report_modal,guidelines_sheet}.html` | Compose / report / guidelines dialogs |
 | `core/templatetags/custom_filters.py` | `rating_tone` / `rating_verdict` / `rating_summary` / `rating_comparison` (mirrored in JS) |
 | `static/css/components/game-detail.css` | `.gd-rate*`, `.gd-cond*`, `.gd-blurb*` |
-| `static/js/game-detail.js` | `ratingsTab` IIFE: DLC selector, quick-rate submit + live-update, report, guidelines sheet |
+| `static/js/ratings-tab.js` | The tab's driver (loaded by `game_page.html` after `quick-rate.js`): DLC selector, quick-rate submit + live-update, report, guidelines sheet, the entrance reveal |
 | `api/rating_views.py` | `GroupRatingView` (rate, incl. blurb), `BlurbReportView` |
 | `trophies/services/rating_service.py` | `RatingService` (community averages) **+ the profile half**: `profile_rating_summary`, `build_profile_ratings_page`, `PROFILE_RATING_SORTS` |
 | `templates/trophies/partials/profile_detail/tabs/ratings_{tab,results}.html` | Profile tab shell (summary + sort) and its swap target |
@@ -109,10 +111,10 @@ The card shows **all three options, including the ones nobody picked**: showing 
 
 ## Gotchas and Pitfalls
 
-- **Bare `.gd-*` block names collide — this stylesheet has bitten us twice.** `.gd-rate` (ratings panel) once collided with a per-trophy earn-rate widget (`display: inline-flex`), shrink-wrapping the whole tab to ~460px on desktop (widget renamed `.gd-trate`). The blurb-report modal's `.gd-report*` collided with the hero "Report an issue" modal's `.gd-report*` — both dialogs are on the page, so the shared `.gd-report__select` `background` shorthand wiped the chevron (blurb modal renamed `.gd-breport*`). Before adding any bare `.gd-*` block class, grep for existing use. See [[feedback_narrow_panel_suspect_class_collision]].
+- **Bare `.gd-*` block names collide — this stylesheet has bitten us twice.** `.gd-rate` (ratings panel) once collided with a per-trophy earn-rate widget (`display: inline-flex`), shrink-wrapping the whole tab to ~460px on desktop (widget renamed `.gd-trate`). The blurb-report modal's `.gd-report*` collided with the hero "Report an issue" modal's `.gd-report*` — both dialogs shared a page at the time (and still ship together on the Game page), so the shared `.gd-report__select` `background` shorthand wiped the chevron (blurb modal renamed `.gd-breport*`). Before adding any bare `.gd-*` block class, grep for existing use. See [[feedback_narrow_panel_suspect_class_collision]].
 - **The stored blurb is plain, UN-escaped text** (`sanitize_text` un-escapes entities). Render it ONLY in an auto-escaped `{{ }}` HTML text context — never `|safe`, never a JS/attribute/JSON-to-client context. `visible_blurbs()` documents this.
 - **Per-group queries must stay bounded.** The blurb preview is `visible_blurbs().filter(...)[:6]` with `select_related('profile')`; keep it index-backed and capped (whale-safe).
-- **SSR↔JS parity.** The four rating filters have JS twins in `game-detail.js`; a threshold/wording change must move both.
+- **SSR↔JS parity.** The four rating filters have JS twins in `ratings-tab.js`; a threshold/wording change must move both.
 - **`annotate_community_ratings` cannot score a DLC rating.** The shared browse helper correlates on the concept alone and hard-filters to `concept_trophy_group__isnull=True`, so a DLC rating scored through it is compared against its **base game's** community — a comparison that renders convincingly and means something else. Correlating on the group instead is not the fix either: a base-game rating carries a NULL group and `NULL = NULL` never matches in SQL, so every base row would come back silently unmatched. `_community_scores` groups in the database and pairs up in Python, which sidesteps both. Pinned by test.
 - **The rating card's stat strip is laid out by a CONTAINER query, the only one in the codebase.** Its width is the wall's `auto-fill` track minus the art panel, so the same viewport gives it different widths depending on how many columns fit — a viewport breakpoint put four cells in a 300px body and ellipsised every label. `.pp-rcard__body` is `container-type: inline-size` and the strip goes 2×2 → one row at `@container (min-width: 360px)`.
 - **"Rated" means COMPLETE, in ONE place.** It used to mean "a row exists", spelled out separately in nine spots across the wizard queue, `ReviewHubService` and the dashboard provider. It now means "a row carrying a recommendation", and every one of them reads `ReviewHubService.COMPLETE` / `complete_ratings()`. Nine copies of a definition is nine chances for the header to report zero waiting while the queue is still serving.

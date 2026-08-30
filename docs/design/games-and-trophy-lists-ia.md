@@ -156,6 +156,23 @@ Page-by-page during the rebuild, never a big-bang rename:
 
 ## Rollout log
 
+- **2026-08-30 -- PHASE 2: the List-detail slim-down shipped** (7 commits). List detail is
+  Trophies + Ranks; the concept Game page is the ONE active ratings host (quick-rate, blurb
+  report, guidelines and the flag modal all ship there; `concept_tabs_readonly` retired; the
+  ratings JS lives in `ratings-tab.js`). The community snapshot became a shared partial
+  (`_community_snapshot.html`): List detail renders it atop the Trophies panel with its own
+  denorms, the Game page keeps the aggregated version. Old `/games/<np>/?view=ratings|about`
+  deep links 302 up to the Game page's same view. SEO: every list page is SELF-canonical (an
+  explicit view-computed `page_canonical_url` -- never request.path, which would mint per-viewer
+  canonicals on the username variant); the AggregateRating claim lives only on the Game page;
+  `ListSitemap` advertises every non-shovelware list while `GameSitemap` narrows to
+  concept-bearing Game pages (disjoint by construction, both under the sitemap==canonical
+  invariant test). `ConceptContextMixin` stays on BOTH views: GameDetailView calls the split
+  subset (`_build_badges_context`, `_build_versions_context`, images, pursuit);
+  `_build_concept_context` is the Game page's entry point. The Game page also gained the
+  viewer's play_duration through `_viewer_maps` (quick-rate playtime hint + the About TTB "You"
+  row -- parity List detail's About had).
+
 - **2026-08-30 -- adaptive group nav**: the trophy grid's chip cloud collapses to the
   "Jump to pack" menu above 8 groups (see the component section above). One shared partial +
   `trophy-grid.js`, so List detail and the Game page changed together. Same day, owner's
@@ -180,7 +197,7 @@ Page-by-page during the rebuild, never a big-bang rename:
   canonicals both directions, `game_page_canonicals()` sitemap, nav/search wiring, the List-detail
   link-up. Interim decisions taken then, to revisit deliberately:
   - List pages rel=canonical UP to the Game page until the slim-down phase gives them distinct
-    stack content (then they earn back a self-canonical).
+    stack content (then they earn back a self-canonical). RESOLVED by phase 2 below.
   - Split-concept pages show the HOST concept's ratings only; merging sibling concepts' rating
     sets is the refinement phase's design problem.
   - The identity chip shows name+platforms; "region" has no data source on Game and is deferred.
@@ -189,7 +206,9 @@ Page-by-page during the rebuild, never a big-bang rename:
     Lane 0 on 2026-08-23 precisely because wildcards also blocked canonical pages; the final audit
     caught the stale claim.) Kept crawlable DELIBERATELY: unmatched games' List pages canonicalize
     UP to their c/ page, and a canonical target must be indexable or the consolidation is void.
-    Thin-stub exposure accepted; revisit alongside the slim-down SEO pass.
+    Thin-stub exposure accepted. REVISITED in phase 2: with list pages self-canonical the c/
+    page is no longer any list's canonical target, but it remains the About/versions host for
+    unmatched concepts and stays crawlable + sitemap-advertised.
   - Page identity decision recorded: **IGDB id, no slug** (owner's call) -- stable across renames,
     no slug backfill, and deliberately-split concepts share one page by construction.
 
