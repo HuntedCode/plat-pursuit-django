@@ -217,6 +217,15 @@ def test_condensed_card_links_titles_and_chips(client):
 
     assert 'href="/games/79001/"' in content, 'the condensed card must link the Game page'
     assert 'Chip Work' in content and 'Chip List EU' not in content
+    # The Trophy Lists page's list-identity mode must never leak here: a planted PSN observation
+    # does not retitle a condensed card (isolation between the card's three modes).
+    from trophies.models import PSNTitleObservation
+    PSNTitleObservation.objects.create(
+        np_communication_id=a.np_communication_id, game=a, source='trophy_titles',
+        title_name_raw='Observed Leak Name', content_hash=f'{a.np_communication_id}:leak:tt',
+    )
+    content = client.get(url, params).content.decode()
+    assert 'Observed Leak Name' not in content and 'Chip Work' in content
     # Union in display order: PS5, PS4, PSVR2 (PSVR2 slots after PS4, before PS3).
     plats = content.split('pp-gcard__plats')[1].split('</span></span>')[0]
     assert plats.index('PS5') < plats.index('PS4') < plats.index('PSVR2')

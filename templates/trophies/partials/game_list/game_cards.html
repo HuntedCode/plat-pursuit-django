@@ -10,13 +10,17 @@
     host-concept keyed (the Game page's recorded split-concept interim). Search matches
     title_name (the LIST) while the card displays unified_title -- same recorded divergence as
     the alpha sort; a stack-specific query can return a card whose visible title omits the
-    query string.{% endcomment %}
+    query string. THIRD MODE -- list_identity_cards (Trophy Lists browse only): the title/alt
+    come from the observed PSN list name (list_name_map, the display_list_names batch), the href
+    stays the uncondensed game_detail branch. The two flags are mutually exclusive by
+    construction: only Browse Games/tag detail set condensed_cards, only Trophy Lists browse
+    sets list_identity_cards.{% endcomment %}
     <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard>
         {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
         icons overlay top-left; the quick-add button top-right (signed in); the viewer's progress rides the
         bottom edge (platinum-tinted once earned). {% endcomment %}
         <div class="pp-gcard__cover">
-            <img src="{{ game.display_image_url }}" alt="{% if condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
+            <img src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
                  class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
 
             {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}
@@ -34,7 +38,7 @@
         </div>
 
         <div class="pp-gcard__body">
-            <h3 class="pp-gcard__title">{% if condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}</h3>
+            <h3 class="pp-gcard__title">{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}</h3>
 
             {% comment %} Facts: community rating + the trophy breakdown as colored B/S/G/P counts + the plat
             availability tag (platinum-coloured once the viewer has earned it). {% endcomment %}

@@ -510,10 +510,19 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
             "platform stacks, and edition lists. Filter by platform, region, and platinum "
             "availability."
         )
-        # ItemList rows are per-LIST game_detail URLs -- exactly the pages these cards link,
-        # and every list page is self-canonical (the slim-down), so the claims are clean.
+
+        # LIST-IDENTITY cards (the page's third card mode): titles come from the observed PSN
+        # list names -- Game.display_list_names, the batch that is the ONLY supported grid read
+        # (one indexed query for the page's <=30 rows; a per-card property would be the N+1 the
+        # batch exists to prevent). Runs for full AND partial/XHR renders alike.
+        context['list_identity_cards'] = True
+        context['list_name_map'] = Game.display_list_names(context['object_list'])
+
+        # ItemList rows are per-LIST game_detail URLs -- exactly the pages these cards link, and
+        # every list page is self-canonical (the slim-down). Names read the SAME dict the grid
+        # shows (no second observation query; the schema must claim what renders).
         context['seo_item_list'] = [
-            {'name': g.title_name,
+            {'name': context['list_name_map'].get(g.np_communication_id) or g.title_name,
              'url': reverse('game_detail', kwargs={'np_communication_id': g.np_communication_id})}
             for g in context.get('page_obj').object_list
         ] if context.get('page_obj') else []

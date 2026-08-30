@@ -62,6 +62,59 @@ def test_bare_url_returns_200_even_with_saved_browse_defaults(client):
     assert 'index, follow' in resp.content.decode()
 
 
+# ── List identity: observed names ─────────────────────────────────────────────────────────────────
+
+def _observe(game, raw_name):
+    """A PSN trophy_titles observation -- what this page's cards are titled by."""
+    from trophies.models import PSNTitleObservation
+    return PSNTitleObservation.objects.create(
+        np_communication_id=game.np_communication_id, game=game, source='trophy_titles',
+        title_name_raw=raw_name, content_hash=f'{game.np_communication_id}:{raw_name}:tt',
+    )
+
+
+def test_cards_title_by_the_observed_list_name(client):
+    """The list-identity mode: the card's title (and alt) is what PSN actually calls the list
+    (display_list_names), falling back to title_name -- NOT the concept's unified_title (the
+    condensed grids' source; the fixture wrinkle this suite exists to respect)."""
+    observed = GameFactory(title_name='Cleaned Title', title_platform=['PS5'],
+                           concept__unified_title='Concept Title')
+    _observe(observed, 'Observed PSN Name')
+    bare = GameFactory(title_name='Fallback Title', title_platform=['PS5'],
+                       concept__unified_title='Another Concept')
+
+    resp = client.get(URL)
+    content = resp.content.decode()
+
+    assert resp.context['list_identity_cards'] is True
+    assert 'Observed PSN Name' in content
+    assert 'Fallback Title' in content
+    assert 'Concept Title' not in content and 'Another Concept' not in content
+    # The ItemList schema claims the same names the grid shows.
+    names = {row['name'] for row in resp.context['seo_item_list']}
+    assert 'Observed PSN Name' in names and 'Fallback Title' in names
+
+
+def test_the_name_batch_runs_exactly_once_per_render(client):
+    """display_list_names is THE grid read: one observation query per page, never per card."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    for i in range(8):
+        g = GameFactory(title_platform=['PS5'])
+        _observe(g, f'Observed {i}')
+
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(URL)
+
+    assert resp.status_code == 200
+    observation_queries = [q for q in ctx.captured_queries
+                           if 'psntitleobservation' in q['sql'].lower()]
+    assert len(observation_queries) == 1, (
+        f'expected ONE batched observation query, saw {len(observation_queries)}'
+    )
+
+
 # ── Filters + sort ────────────────────────────────────────────────────────────────────────────────
 
 def test_platform_and_region_filters_narrow(client):
