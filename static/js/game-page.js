@@ -48,6 +48,25 @@
         const initialView = new URLSearchParams(window.location.search).get('view');
         if (initialView && VIEW_ORDER.includes(initialView)) showView(initialView, { silent: true });
 
+        // Hero jumps ("More about this game", the players headline) -> the named concept tab.
+        // The players <a> keeps ?view=ratings as its no-JS fallback; with JS we switch in place.
+        document.querySelectorAll('[data-gp-goto]').forEach((el) => {
+            el.addEventListener('click', (e) => {
+                const view = el.dataset.gpGoto;
+                if (!VIEW_ORDER.includes(view)) return;
+                e.preventDefault();
+                showView(view);
+                const panel = panels[view];
+                if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+
+        // Hero tallies (the players headline): countUp reads data-countup or falls back to the
+        // element's own text, so the SSR number is the reduced-motion/no-JS truth.
+        if (PP.countUp) {
+            document.querySelectorAll('.gd-hero [data-gd-countup]').forEach((el) => PP.countUp(el));
+        }
+
         // ── List switcher (?list=, default carried on the viewport) ───────────────────────────
         const viewport = document.getElementById('gp-viewport');
         const lswitch = document.querySelector('.gp-lswitch');

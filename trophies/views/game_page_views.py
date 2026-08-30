@@ -219,6 +219,12 @@ class GamePageView(ConceptContextMixin, TemplateView):
         default = self._default_list(progress)
         names = Game.display_list_names(self.list_set)
 
+        # Hero chips: the platform UNION across the set, in priority order -- per-list platforms
+        # live on the switcher chips; the hero describes the WORK.
+        seen = {p for g in self.list_set for p in (g.title_platform or [])}
+        context['all_platforms'] = [p for p in PLATFORM_PRIORITY_ORDER if p in seen] + sorted(
+            p for p in seen if p not in PLATFORM_PRIORITY_ORDER
+        )
         context['host_game'] = host
         # The concept partials (ratings/about/versions) read `game` -- the HOST game, elected
         # anonymously, so the concept furniture never varies by viewer.

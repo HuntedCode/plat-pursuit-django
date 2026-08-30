@@ -512,3 +512,25 @@ def test_the_breadcrumb_is_visible_not_just_structured_data(client):
     assert 'aria-label="Breadcrumb"' in content or 'breadcrumbs' in content, (
         'the breadcrumb partial must render visibly, not only as jsonld'
     )
+
+
+def test_the_hero_is_concept_level_with_no_list_furniture(client):
+    """The hero adoption (Jeffrey's call): the List-detail hero's concept-level portion, WITHOUT
+    the per-list pieces -- and without its modal-bound buttons, which have no modals or JS here
+    (the dead-CTA class the audit flagged on About)."""
+    a = _game(igdb_id=996, title_platform=['PS4'])
+    b = _game(igdb_id=None, title_platform=['PS5'])
+    _match(b.concept, 996)
+    TrophyFactory(game=a, trophy_id=1)
+
+    content = client.get('/games/996/').content.decode()
+
+    assert 'gd-hero' in content and 'gd-hero__title' in content
+    # Platform chips: the UNION in priority order, one per platform -- not one row per list.
+    import re
+    chips = re.findall(r'<span class="gd-plat">(\w+)</span>', content)
+    assert chips == ['PS5', 'PS4'], chips
+    # List-level furniture must not leak up: progress readout, versions modal, lightbox buttons,
+    # badge modal openers, flag button.
+    for marker in ['gd-prog', 'data-versions-open', 'data-shot=', 'data-spine-open', 'game-flag-btn']:
+        assert marker not in content, f'list-level hero piece leaked: {marker}'
