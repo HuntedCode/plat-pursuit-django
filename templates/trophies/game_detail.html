@@ -82,6 +82,12 @@ rich result.{% endcomment %}
             </div>
         </div>
 
+        {% comment %}This list's community snapshot as page CHROME (owner's placement call +
+        design audit): a .scard strip between the hero and the switcher -- the stacked-chrome
+        stat-card position, in the house stat-strip vocabulary. The four numbers are THIS
+        list's own denorms, per-list data the IA assigns to List detail.{% endcomment %}
+        {% include 'trophies/partials/game_detail/_community_snapshot.html' with snapshot_chrome=True %}
+
         {# ── View switcher: Trophies (default) · Ranks -- Ratings/About live on the concept Game page (slim-down) ── #}
         <div class="flex items-center justify-end mt-5 mb-4">
             <div class="pp-switch" id="gd-switch" role="tablist" aria-label="Game detail view">

@@ -20,7 +20,7 @@ Rendered by `ratings_panel.html` → per-group `_rating_conditions.html`, as a s
 
 All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `rating_comparison`) are mirrored verbatim by `ratings-tab.js` for the no-reload live-update after a submit — keep the Python + JS thresholds/wording in sync.
 
-The **community snapshot** section is a shared partial (`_community_snapshot.html`): the Game page renders it here with its across-every-list aggregation, and List detail renders the same partial at the top of its Trophies panel with that one list's denorms.
+The **community snapshot** section is a shared partial (`_community_snapshot.html`) with two sanctioned looks via its `snapshot_chrome` flag: the Game page renders the framed band here with its across-every-list aggregation, and List detail renders the CHROME variant (a `.scard`/`.pp-tally` strip above its tab switcher) with that one list's denorms.
 
 **Quick-take blurbs** (Phase 1, shipped): optional field on `UserConceptRating`, written via the quick-rate modal, sanitized + banned-word filtered on submit, reactively moderated (publish → report → staff soft-hide), with a first-class **community-guidelines** agreement (persistent notice + in-context rules sheet, recorded on submit). See the backend detail in the [API reference](../reference/api-endpoints.md#ratings--quick-takes).
 

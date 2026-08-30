@@ -441,20 +441,26 @@ def test_roadmap_tab_removed_and_players_link_goes_to_ranks(client):
     assert 'data-gd-goto="ratings"' not in content     # the Players jump no longer points at Ratings
 
 
-def test_stats_strip_leads_the_trophies_panel_with_denormed_numbers(client):
-    """The community snapshot moved from the departed Ratings tab to the TOP of the Trophies
-    panel (owner decision 2) -- this list's own four denorms, whale-safe zero-query reads."""
+def test_stats_strip_is_page_chrome_above_the_switcher(client):
+    """The community snapshot is page CHROME (owner's placement call after the design audit):
+    a .scard strip with .pp-tally faces -- the house stat-strip vocabulary -- sitting between
+    the hero and the Trophies|Ranks switcher, NOT inside any panel. This list's own four
+    denorms, whale-safe zero-query reads."""
     content = _detail(client, GameFactory(
         defined_trophies=_DEFINED, played_count=1234, plats_earned_count=56,
         full_completion_count=78, avg_completion=63.4,
     ))
-    assert 'gd-rate__stats' in content
-    # Bounded on BOTH sides (audit #6): after the Trophies panel opens AND before the next panel
-    # opens, so a snapshot moved into Ranks or below every panel fails the claim.
-    assert (content.index('id="gd-view-trophies"')
-            < content.index('gd-rate__stats')
-            < content.index('id="gd-view-leaderboard"')), (
-        'the snapshot must render inside the Trophies panel'
+    assert 'id="gd-snapshot"' in content
+    # ABOVE the switcher, and therefore above every panel -- bounded on the switcher's own id.
+    assert content.index('id="gd-snapshot"') < content.index('id="gd-switch"'), (
+        'the snapshot must sit above the tab switcher, as chrome'
+    )
+    # The house primitives, not the one-off band the audit called a placeholder. Scoped between
+    # the snapshot hook and the switcher so a stray scard elsewhere can't satisfy the pin.
+    snapshot = content.split('id="gd-snapshot"')[1].split('id="gd-switch"')[0]
+    assert 'scard__label' in snapshot and 'pp-tally' in snapshot
+    assert 'gd-rate__snapshot' not in content, (
+        'the panel-band variant belongs to the Game page ratings tab, not here'
     )
     assert 'data-gd-countup="1234"' in content    # players
     assert 'data-gd-countup="56"' in content      # platinums (game has a plat)
@@ -464,19 +470,22 @@ def test_stats_strip_leads_the_trophies_panel_with_denormed_numbers(client):
 
 
 def test_ratings_platinum_tile_gated_on_platinum(client):
-    """A game with no platinum hides the Platinums tile (it would always read 0)."""
+    """A game with no platinum hides the Platinums cell (it would always read 0)."""
     content = _detail(client, GameFactory(defined_trophies=_NO_PLAT, plats_earned_count=0, played_count=9))
-    assert 'gd-rate__stats' in content
+    assert 'id="gd-snapshot"' in content
     assert 'Platinums' not in content
     assert 'Players' in content
 
 
 def test_snapshot_renders_on_both_hosts(client):
-    """One shared partial, two hosts: List detail's Trophies panel (this list's denorms) AND the
-    Game page's Ratings tab (its across-every-list aggregation feeds the same markup)."""
+    """One shared partial, two hosts, two sanctioned looks: List detail renders the CHROME
+    variant (scard strip, this list's denorms); the Game page's Ratings tab keeps the framed
+    band that sits among its sibling sections (aggregated stats, revealRatings cascade)."""
     game = GameFactory(defined_trophies=_DEFINED, played_count=321)
-    assert 'gd-rate__snapshot' in _detail(client, game)
-    assert 'gd-rate__snapshot' in _game_page(client, game)
+    list_page = _detail(client, game)
+    game_page = _game_page(client, game)
+    assert 'id="gd-snapshot"' in list_page and 'gd-rate__snapshot' not in list_page
+    assert 'gd-rate__snapshot' in game_page and 'id="gd-snapshot"' not in game_page
 
 
 def test_ratings_selector_pills_for_few_groups(client):

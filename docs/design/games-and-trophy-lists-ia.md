@@ -160,8 +160,10 @@ Page-by-page during the rebuild, never a big-bang rename:
   Trophies + Ranks; the concept Game page is the ONE active ratings host (quick-rate, blurb
   report, guidelines and the flag modal all ship there; `concept_tabs_readonly` retired; the
   ratings JS lives in `ratings-tab.js`). The community snapshot became a shared partial
-  (`_community_snapshot.html`): List detail renders it atop the Trophies panel with its own
-  denorms, the Game page keeps the aggregated version. Old `/games/<np>/?view=ratings|about`
+  (`_community_snapshot.html`): List detail renders it as page CHROME above the switcher --
+  a `.scard`/`.pp-tally` strip, the house stat-strip vocabulary, after the owner's design audit
+  found the plain band reading as a placeholder -- while the Game page's Ratings tab keeps the
+  framed band among its sibling sections (the partial's `snapshot_chrome` flag picks the look). Old `/games/<np>/?view=ratings|about`
   deep links 302 up to the Game page's same view. SEO: every list page is SELF-canonical (an
   explicit view-computed `page_canonical_url` -- never request.path, which would mint per-viewer
   canonicals on the username variant); the AggregateRating claim lives only on the Game page;

@@ -1,8 +1,4 @@
 {% load custom_filters humanize static %}
-{% comment %}This list's community snapshot leads the panel (the slim-down moved it here from
-the departed Ratings tab -- the four numbers are THIS list's own denorms, per-list data the
-IA assigns to List detail). Outside the syncing conditional: same page shape while syncing.{% endcomment %}
-{% include 'trophies/partials/game_detail/_community_snapshot.html' %}
 {% if trophies_syncing %}
     <div class="gd-syncing" role="status" aria-live="polite">
         <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
