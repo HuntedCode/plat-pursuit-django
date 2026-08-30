@@ -136,3 +136,10 @@
     }
     .gd-spine--band .gd-spine__row { height: 100%; }
 }
+
+/* Hero-jump landing guarantee (browser-repro'd): switching away from the tall Lists panel can
+   shrink the document below the scroll distance the jump needs, leaving the hero filling the
+   viewport and the switched panel invisible below the fold -- "the link does nothing". A floor on
+   the panels keeps the tabs-row scroll target reachable. Page-scoped; List detail's panels are
+   naturally tall and untouched. */
+#game-page-container .gd-view { min-height: calc(100vh - 9rem); }

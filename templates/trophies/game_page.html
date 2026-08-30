@@ -24,7 +24,7 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
         {% include 'trophies/partials/game_page/header.html' %}
 
         {# ── Concept tabs: one segmented switcher, site standard. Lists is the default view. ── #}
-        <div class="flex items-center justify-end mt-5 mb-4">
+        <div class="flex items-center justify-end mt-5 mb-4" id="gp-tabs-row">
             <div class="pp-switch" id="gp-switch" role="tablist" aria-label="Game view">
                 <button type="button" id="gp-tab-lists" aria-controls="gp-view-lists" class="pp-switch__chip is-active" data-view="lists" role="tab" aria-selected="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span class="pp-switch__lbl">Trophy Lists</span>

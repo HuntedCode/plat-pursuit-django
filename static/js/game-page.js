@@ -56,8 +56,14 @@
                 if (!VIEW_ORDER.includes(view)) return;
                 e.preventDefault();
                 showView(view);
-                const panel = panels[view];
-                if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Scroll the TABS ROW to the top, not the panel: the user lands seeing the
+                // switcher + the panel below it. Browser-repro'd bug: scrolling the panel with
+                // the hero above it went nowhere, because hiding the tall Lists panel shrinks the
+                // document below the distance needed -- the min-height on the panels (CSS) is the
+                // other half of this fix, guaranteeing the destination is reachable.
+                const row = document.getElementById('gp-tabs-row');
+                const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                if (row) row.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
             });
         });
 
