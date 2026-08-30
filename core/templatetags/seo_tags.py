@@ -132,7 +132,7 @@ def jsonld_breadcrumbs(breadcrumb, request):
 
 
 @register.simple_tag
-def jsonld_game(game, concept, request, averages=None, canonical_game=None):
+def jsonld_game(game, concept, request, averages=None, canonical_game=None, node_url=None):
     """VideoGame schema for game detail pages.
 
     `averages` (SEO Lane 2): the base group's cached community-rating aggregate
@@ -149,7 +149,13 @@ def jsonld_game(game, concept, request, averages=None, canonical_game=None):
         return ''
     base_url = f"{request.scheme}://{request.get_host()}"
     from django.urls import reverse
-    if canonical_game is not None and getattr(canonical_game, 'np_communication_id', None):
+    # `node_url` (Games/Trophy Lists IA): the ABSOLUTE URL the caller emits as rel=canonical --
+    # both detail pages now consolidate onto the concept Game page, so the caller passes the same
+    # URL to both tags and the two identity claims cannot drift. Wins over the legacy
+    # canonical_game sibling (kept until every caller migrates).
+    if node_url:
+        pass
+    elif canonical_game is not None and getattr(canonical_game, 'np_communication_id', None):
         node_url = base_url + reverse(
             'game_detail', kwargs={'np_communication_id': canonical_game.np_communication_id})
     else:

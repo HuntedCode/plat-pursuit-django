@@ -242,3 +242,49 @@ def test_bots_are_not_canonical_redirected_off_the_concept_fallback(client):
                           HTTP_USER_AGENT='Mozilla/5.0 (compatible; Googlebot/2.1)')
 
     assert response.status_code == 200, f'bot was redirected: {getattr(response, "url", "")}'
+
+
+# --- SEO: canonicals both directions -------------------------------------------------------------
+
+def test_param_states_canonicalize_to_the_bare_page_url(client):
+    """?list= and ?view= are views of ONE document; six stack-states must collapse to one indexed
+    page. The canonical, og:url and the jsonld VideoGame url all read one context value."""
+    game = _game(igdb_id=905)
+    TrophyFactory(game=game, trophy_id=1)
+
+    head = client.get(f'/games/905/?list={game.np_communication_id}&view=about')\
+        .content.decode().split('</head>')[0]
+
+    assert 'rel="canonical" href="http://testserver/games/905/"' in head
+    assert 'og:url" content="http://testserver/games/905/"' in head
+    assert '"url": "http://testserver/games/905/"' in head, 'jsonld must agree with the canonical'
+
+
+def test_concept_fallback_page_self_canonicalizes(client):
+    concept = ConceptFactory(concept_id='PP_CANON')
+    game = GameFactory(concept=concept)
+    TrophyFactory(game=game, trophy_id=1)
+
+    head = client.get('/games/c/PP_CANON/', HTTP_CF_RAY='test').content.decode().split('</head>')[0]
+
+    assert 'rel="canonical" href="http://testserver/games/c/PP_CANON/"' in head
+
+
+def test_conceptless_list_page_stays_self_canonical(client):
+    """A game with no concept has no Game page to consolidate onto; block.super keeps it
+    self-canonical rather than emitting a link to nowhere."""
+    game = GameFactory(concept=None)
+    TrophyFactory(game=game, trophy_id=1)
+
+    head = client.get(f'/games/{game.np_communication_id}/').content.decode().split('</head>')[0]
+
+    assert f'rel="canonical" href="http://testserver/games/{game.np_communication_id}/"' in head
+
+
+def test_list_page_canonicalizes_up_to_its_igdb_game_page(client):
+    game = _game(igdb_id=906)
+    TrophyFactory(game=game, trophy_id=1)
+
+    head = client.get(f'/games/{game.np_communication_id}/').content.decode().split('</head>')[0]
+
+    assert 'rel="canonical" href="http://testserver/games/906/"' in head

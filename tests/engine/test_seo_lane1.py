@@ -58,15 +58,18 @@ def test_the_sitemap_and_the_page_agree_on_the_winner():
     assert lone.id in elected, 'a concept-less game must stand for itself in the sitemap'
 
 
-def test_a_sibling_page_points_its_canonical_at_the_winner(client):
-    _, stub, winner, quiet = _family()
+def test_every_sibling_page_canonicalizes_to_the_concept_game_page(client):
+    """Games/Trophy Lists IA: the concept Game page subsumed the sibling election -- winner AND
+    siblings now consolidate onto ONE URL (harder than the old winner-among-siblings rule). An
+    unmatched concept's page is the /games/c/<concept_id>/ form."""
+    concept, stub, winner, quiet = _family()
+    target = f'rel="canonical" href="http://testserver/games/c/{concept.concept_id}/"'
 
     body = client.get(f'/games/{quiet.np_communication_id}/', **CF).content.decode()
-
-    assert f'rel="canonical" href="http://testserver/games/{winner.np_communication_id}/"' in body
+    assert target in body
 
     winner_body = client.get(f'/games/{winner.np_communication_id}/', **CF).content.decode()
-    assert f'rel="canonical" href="http://testserver/games/{winner.np_communication_id}/"' in winner_body
+    assert target in winner_body
 
 
 # --- the hub ---
@@ -164,7 +167,7 @@ def test_og_url_follows_the_canonical_on_game_detail(client):
 
     head = client.get(f'/games/{quiet.np_communication_id}/', **CF).content.decode().split('</head>')[0]
 
-    assert f'og:url" content="http://testserver/games/{winner.np_communication_id}/"' in head, (
+    assert f'og:url" content="http://testserver/games/c/{concept.concept_id}/"' in head, (
         'og:url disagrees with rel=canonical'
     )
 

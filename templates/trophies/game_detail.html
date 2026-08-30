@@ -3,17 +3,16 @@
 {% block title %}{{ game.title_name }} Trophies ({{ game.platforms_display }}){% endblock %}
 {% comment %}meta_description flows from the view's seo_description (one system -- the
 hardcoded block here silently discarded the view's richer, truthful value, and this one still
-sold the hidden Roadmaps). rel=canonical: a regional/platform sibling points at the concept's
-elected SKU, so N near-identical pages consolidate into one in search (SEO Lane 1).{% endcomment %}
-{% block canonical_url %}{% if canonical_game %}{{ request.scheme }}://{{ request.get_host }}{% url 'game_detail' np_communication_id=canonical_game.np_communication_id %}{% else %}{{ block.super }}{% endif %}{% endblock %}
-{% block og_url %}{% if canonical_game %}{{ request.scheme }}://{{ request.get_host }}{% url 'game_detail' np_communication_id=canonical_game.np_communication_id %}{% else %}{{ block.super }}{% endif %}{% endblock %}
+sold the hidden Roadmaps). rel=canonical: every list page points at its concept Game page (Games/Trophy Lists IA), consolidating winner AND siblings onto one URL -- harder than the old sibling election. INTERIM until the List-detail slim-down earns these pages a self-canonical.{% endcomment %}
+{% block canonical_url %}{% if concept_page_url %}{{ concept_page_url }}{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block og_url %}{% if concept_page_url %}{{ concept_page_url }}{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block og_type %}video.other{% endblock %}
 {% block og_title %}{{ game.title_name }} Trophies{% endblock %}
 {% block og_description %}{{ seo_description }}{% endblock %}
 {% block twitter_description %}{{ seo_description }}{% endblock %}
 {% block og_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
-{% block extra_head %}{% jsonld_game game game.concept request base_rating_averages canonical_game %}{% endblock %}
+{% block extra_head %}{% jsonld_game game game.concept request base_rating_averages node_url=concept_page_url %}{% endblock %}
 
 {% block content %}
     <div id="game-detail-container"

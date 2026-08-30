@@ -1101,10 +1101,16 @@ class GameDetailView(ConceptContextMixin, DetailView):
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
 
-        # The elected canonical sibling (SEO Lane 1): when this SKU is not the concept's
-        # representative, the template points rel=canonical at the one that is. Bounded query
-        # over the concept's handful of sibling rows.
-        context['canonical_game'] = game.canonical_sibling()
+        # rel=canonical consolidation (Games/Trophy Lists IA slice 1): every list page points at
+        # its concept Game page, which consolidates HARDER than the old sibling election (winner
+        # AND siblings now point at one URL) -- so the election left this context. INTERIM by
+        # design: once the List-detail slim-down gives these pages distinct stack content, they
+        # earn back a self-canonical (recorded in the IA doc's rollout log). Conceptless games
+        # stay self-canonical via the template's block.super.
+        context['concept_page_url'] = (
+            f"{self.request.scheme}://{self.request.get_host()}{game.concept.game_page_url()}"
+            if game.concept_id else None
+        )
 
         context['seo_description'] = (
             f"{game.title_name} on {game.platforms_display}. "

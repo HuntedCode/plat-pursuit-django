@@ -1,11 +1,18 @@
 {% extends 'base.html' %}
-{% load custom_filters humanize static %}
+{% load custom_filters humanize static seo_tags %}
 {% block title %}{{ page_title }} Trophies{% endblock %}
 {% block og_title %}{{ page_title }} Trophies{% endblock %}
 {% block og_description %}{{ seo_description }}{% endblock %}
 {% block twitter_description %}{{ seo_description }}{% endblock %}
 {% block meta_description %}{{ seo_description }}{% endblock %}
+{% comment %}Canonical is the BARE page URL: ?list= and ?view= states are views of this one
+document, so six stack-states collapse to one indexed page. concept.game_page_url is the same
+helper the sitemap and search use, so the three can never disagree.{% endcomment %}
+{% block canonical_url %}{{ page_canonical_url }}{% endblock %}
+{% block og_url %}{{ page_canonical_url }}{% endblock %}
 {% block og_image %}{% if host_game.display_image_url %}{{ host_game.display_image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+
+{% block extra_head %}{% jsonld_game host_game concept request base_rating_averages node_url=page_canonical_url %}{% endblock %}
 
 {% block content %}
     <div class="max-w-5xl mx-auto px-3 md:px-4">

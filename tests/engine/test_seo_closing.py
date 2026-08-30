@@ -185,8 +185,8 @@ def test_jsonld_game_url_agrees_with_the_canonical(client):
 
     head = client.get(f'/games/{quiet.np_communication_id}/', **CF).content.decode().split('</head>')[0]
 
-    assert f'"url": "http://testserver/games/{winner.np_communication_id}/"' in head, (
-        'the VideoGame node points at the page while rel=canonical points at the sibling'
+    assert f'"url": "http://testserver/games/c/{concept.concept_id}/"' in head, (
+        'the VideoGame node must agree with rel=canonical -- both point at the concept Game page'
     )
 
 

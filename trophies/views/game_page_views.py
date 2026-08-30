@@ -226,6 +226,12 @@ class GamePageView(ConceptContextMixin, BackgroundContextMixin, TemplateView):
 
         context.update(self._build_viewport_context(selected, viewer, names))
 
+        # One absolute canonical, computed once: the template's rel=canonical, og:url and the
+        # jsonld VideoGame node all read this single value, so they cannot disagree.
+        context['page_canonical_url'] = (
+            f"{self.request.scheme}://{self.request.get_host()}{host.concept.game_page_url()}"
+        )
+
         title = host.concept.unified_title if host.concept_id and host.concept.unified_title else host.title_name
         context['page_title'] = title
         context['breadcrumb'] = [
