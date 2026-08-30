@@ -58,6 +58,9 @@
 /* Both minibar selects use the shared .pp-gallery__select look (matches Browse Games). The group-jump keeps
    the compact minibar sizing but stays visible on mobile (unlike the sort, which hides < 768px). */
 .gd-minibar .pp-minibar__groupjump { height: 30px; font-size: 0.75rem; max-width: 150px; }
+/* The Game page's list switch sits INSIDE the flexed __id (beside the title), so it must be
+   allowed to shrink with it rather than shoving the controls off the bar at phone widths. */
+.gd-minibar .pp-minibar__listswitch { height: 30px; font-size: 0.75rem; max-width: 170px; min-width: 4.5rem; flex-shrink: 1; }
 
 /* ============================================================
    Hero

@@ -99,7 +99,10 @@ tens of packs) it becomes one compact "Jump to pack" control -- a native `<detai
 disclosure with a filter input and a scrollable row per pack (icon, name, count, viewer %). The
 control itself is static on BOTH hosts: mid-scroll jumping belongs to the sticky minibar --
 List detail's, and the Game page's port of it (identity icon per tab + jump-to-pack select,
-same StickyReveal/sentinel/data-mb-active contract, wired in game-page.js).
+same StickyReveal/sentinel/data-mb-active contract, wired in game-page.js). The Game page's bar
+also carries a LIST SWITCH select beside the title: options server-rendered from
+switcher_entries (the chips' own source), a pick proxied to a real chip CLICK so the swap runs
+the one htmx path, and the select follows swaps made from either control.
 `<details>` is deliberate: the grid is htmx-swapped on both hosts, and a native disclosure plus
 document-delegated enhancements (`trophy-grid.js`, loaded by both hosts) needs zero rebinding.
 Rows keep `data-gd-groupjump`, so List detail's smooth-jump delegate and minibar sync work

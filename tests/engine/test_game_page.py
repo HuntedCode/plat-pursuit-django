@@ -678,6 +678,35 @@ def test_the_sticky_minibar_is_wired_like_list_details(client):
     assert 'StickyReveal.init()' in js, 'nothing pins the bar without the page-side init'
     assert 'data-minibar-groupjump' in js, 'nothing fills the jump select without the sync'
     assert 'mbActive' in js, 'nothing follows the active tab without the dataset write'
+    assert 'data-minibar-listswitch' in js, 'nothing proxies the list switch without the wiring'
+
+    # Single-list game: a one-option list switch is dead chrome, so it must not render at all.
+    assert 'data-minibar-listswitch' not in content
+
+
+def test_the_minibar_list_switch_mirrors_the_real_switcher(client):
+    """Jeffrey's call: switch lists from the pinned bar. The select is server-rendered from
+    switcher_entries -- the same source as the real chips -- with the SELECTED list following
+    ?list=, so bar and switcher can never disagree at render time (JS proxies a pick to a real
+    chip click from there)."""
+    a = _game(igdb_id=1013, title_platform=['PS4'])
+    b = _game(igdb_id=None, title_platform=['PS5'])
+    _match(b.concept, 1013)
+    TrophyFactory(game=a, trophy_id=1)
+    TrophyFactory(game=b, trophy_id=1)
+
+    content = client.get('/games/1013/').content.decode()
+    assert content.count('data-minibar-listswitch') == 1
+    assert f'<option value="{a.np_communication_id}"' in content
+    assert f'<option value="{b.np_communication_id}" selected' in content, (
+        'the platform-priority default (PS5 = b) must render selected'
+    )
+    assert '(PS4)' in content and '(PS5)' in content
+
+    # A non-default ?list= flips which option is selected.
+    sel = client.get(f'/games/1013/?list={a.np_communication_id}').content.decode()
+    assert f'<option value="{a.np_communication_id}" selected' in sel
+    assert f'<option value="{b.np_communication_id}" selected' not in sel
 
 
 def test_view_param_is_honored_server_side(client):

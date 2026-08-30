@@ -143,6 +143,18 @@
                 });
             }
 
+            // Minibar list switch: a PROXY for the real chips, per the minibar contract (no
+            // duplicate form fields, no second swap path) -- a selection CLICKS the matching
+            // chip, so URL push, chip sync and the slide all run the one htmx path. The select
+            // follows swaps from either side in afterSwap below.
+            const listSel = document.querySelector('[data-minibar-listswitch]');
+            if (listSel) {
+                listSel.addEventListener('change', () => {
+                    const chip = chips.find((c) => c.dataset.np === listSel.value);
+                    if (chip) chip.click();
+                });
+            }
+
             document.body.addEventListener('htmx:beforeRequest', (e) => {
                 if (e.detail.target === viewport) {
                     viewport.classList.add('is-swapping', 'pointer-events-none');
@@ -160,6 +172,7 @@
                 const np = params.get('list') || defaultNp;
                 // State first (chips + URL), decoration after -- never strand the switcher.
                 syncChips(np);
+                if (listSel) listSel.value = np;
                 // push, not replace: the chips are real <a>s whose navigation htmx swallowed --
                 // stopping a navigation without pushing is what strands the Back button
                 // (utils.js's own rule for swallowed-link tabs).
