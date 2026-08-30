@@ -1266,6 +1266,10 @@ def test_the_contract_state_lookup_is_batched_for_the_page(client):
 
     for i in range(2):
         EarnedContract.objects.create(profile=profile, contract=_contract(f'Few {i}', [job]))
+    # Warm the one-time process caches BEFORE the first capture: run solo (or after a
+    # cache-clearing neighbor in the full suite) the first render pays warmup queries the
+    # second doesn't, and the equal-counts comparison breaks on noise it never meant to pin.
+    client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
     with CaptureQueriesContext(connection) as small:
         client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
 
