@@ -222,6 +222,19 @@ class GamesListView(HtmxListMixin, ListView):
             qs = annotate_ascii_name(qs)
             order = ['is_ascii_name', Lower('title_name')]
 
+        # ONE CARD PER PAGE IDENTITY (Games/Trophy Lists IA phase 3): the sitemap's window
+        # election dedupes regional/platform siblings AND deliberately-split concepts sharing a
+        # trusted igdb id onto the card whose page they all resolve to. ORDER MATTERS and is
+        # load-bearing: a .filter() chained AFTER the window's _election_rank=1 lands INSIDE the
+        # subquery and silently narrows the election POPULATION instead of filtering elected rows
+        # (verified SQL) -- so every filter above, including apply_game_browse_sort's own
+        # narrowing filters (rating-null etc.), runs BEFORE the election, and only ordering /
+        # select_related / defer come after (the verified-safe shapes). Filtering first is also
+        # the right SEMANTICS: ?platform=PS3 removes the PS5 sibling from the population, so the
+        # PS3 row wins its partition and the card shows the version you asked for -- the same
+        # promotion rule the shovelware election test pins.
+        qs = qs.game_page_canonicals()
+
         qs = qs.select_related(
             'concept', 'concept__igdb_match',
         ).defer(
@@ -253,10 +266,13 @@ class GamesListView(HtmxListMixin, ListView):
         )
         if getattr(self, '_applied_defaults', False):
             context['applied_default_query'] = urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
-        # ItemList schema rows for this page (SEO Lane 2) -- bounded by paginate_by.
+        # ItemList schema rows for this page (SEO Lane 2) -- bounded by paginate_by. Condensed
+        # cards link the concept GAME page, so the ItemList must claim the same URLs the grid
+        # renders; the conceptless floor keeps its list URL (no Game page exists).
         context['seo_item_list'] = [
-            {'name': g.title_name,
-             'url': reverse('game_detail', kwargs={'np_communication_id': g.np_communication_id})}
+            {'name': (g.concept.unified_title or g.title_name) if g.concept_id else g.title_name,
+             'url': g.concept.game_page_url() if g.concept_id
+             else reverse('game_detail', kwargs={'np_communication_id': g.np_communication_id})}
             for g in context.get('page_obj').object_list if g.np_communication_id
         ] if context.get('page_obj') else []
         context['selected_regions'] = self.request.GET.getlist('regions')
@@ -333,9 +349,17 @@ class RandomGameView(View):
         if form.is_valid():
             qs, _ = apply_game_browse_filters(qs, form)
 
-        random_game = qs.order_by('?').only('np_communication_id').first()
+        # No election needed for Lucky: any sibling resolves to the same Game page, so a random
+        # LIST row is a random PAGE. select_related keeps game_page_url query-free.
+        random_game = (
+            qs.select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
+            .order_by('?').first()
+        )
 
         if random_game:
+            if random_game.concept_id:
+                return HttpResponseRedirect(random_game.concept.game_page_url())
             return HttpResponseRedirect(
                 reverse('game_detail', args=[random_game.np_communication_id])
             )

@@ -59,6 +59,79 @@ def _url(**params):
     return reverse('games_list'), base
 
 
+# ── the condensed catalogue (Games/Trophy Lists IA phase 3) ─────────────────────────────────────
+
+def test_split_concepts_sharing_an_igdb_id_render_one_card(client):
+    """THE condensing rule: two separate Concepts (a deliberate trophy-count split) whose trusted
+    matches share one igdb id are ONE page -- so the catalogue shows ONE card, and the paginator
+    counts identities, not lists. Both fixtures carry PS5 or _url()'s default platform filter
+    would silently pre-elect for us (the recorded fixture wrinkle)."""
+    a = GameFactory(title_name='Split A', title_platform=['PS5'], played_count=50)
+    b = GameFactory(title_name='Split B', title_platform=['PS5'], played_count=5)
+    shared = next(_igdb_seq)
+    IGDBMatchFactory(concept=a.concept, igdb_id=shared)
+    IGDBMatchFactory(concept=b.concept, igdb_id=shared)
+
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert content.count('pp-gcard__title') == 1
+    assert 'data-result-count="1"' in content
+    assert 'Split A' in content, 'the most-played real row must be the elected card'
+
+
+def test_sibling_lists_of_one_concept_render_one_card(client):
+    """Regional/platform siblings of ONE concept condense the same way (the concept: partition)."""
+    a = GameFactory(title_name='Sibling EU', title_platform=['PS5'], played_count=90)
+    GameFactory(concept=a.concept, title_name='Sibling NA', title_platform=['PS5'], played_count=10)
+
+    url, params = _url()
+    content = client.get(url, params).content.decode()
+
+    assert content.count('pp-gcard__title') == 1
+    assert 'data-result-count="1"' in content
+
+
+def test_platform_filter_promotes_the_matching_sibling(client):
+    """Pre-election filtering IS the promotion rule: ?platform=PS3 removes the PS5 sibling from
+    the election population, so the PS3 row wins its partition and the card shows the version
+    you asked for. Passes its OWN platform param -- never _url()'s PS5 default."""
+    ps5 = GameFactory(title_name='Promo PS5', title_platform=['PS5'], played_count=100)
+    GameFactory(concept=ps5.concept, title_name='Promo PS3', title_platform=['PS3'], played_count=1)
+
+    content = client.get(reverse('games_list'), {'platform': 'PS3'}).content.decode()
+
+    assert 'Promo PS3' in content and 'Promo PS5' not in content
+    assert 'data-result-count="1"' in content
+
+
+def test_seo_item_list_claims_the_game_page_urls(client):
+    """The ItemList schema must agree with what the grid links: the concept Game page for
+    matched rows, the c/ page for unmatched concepts."""
+    g = GameFactory(title_name='Schema Game', title_platform=['PS5'])
+    IGDBMatchFactory(concept=g.concept, igdb_id=77001)
+    stub = GameFactory(title_name='Schema Stub', title_platform=['PS5'])
+
+    url, params = _url()
+    resp = client.get(url, params)
+
+    urls = {row['url'] for row in resp.context['seo_item_list']}
+    assert '/games/77001/' in urls
+    assert f'/games/c/{stub.concept.concept_id}/' in urls
+    assert not any(f'/games/{g.np_communication_id}/' == u for u in urls), (
+        'the ItemList must not claim list URLs for concept-bearing rows'
+    )
+
+
+def test_lucky_redirects_to_the_game_page(client):
+    g = GameFactory(title_name='Lucky Game', title_platform=['PS5'])
+    IGDBMatchFactory(concept=g.concept, igdb_id=77002)
+
+    resp = client.get(reverse('random_game'), {'platform': 'PS5'})
+
+    assert resp.status_code == 302 and resp.url == '/games/77002/'
+
+
 def test_grid_renders_card_contract(client):
     """The grid renders .pp-gcard cells with the game title, the colored B/S/G/P trophy counts, the pursuer-
     hook placeholders (Browse Games sets show_game_hooks), and the infinite-scroll sentinel."""

@@ -977,3 +977,9 @@ payloads already in hand. Nothing on any page reads it yet.
 - [ ] The `last_seen_at` bump is damped to 24h and the table is fillfactor=85. Undamped, the
       fast path UPDATEd up to 400 rows per sync (300-500k dead tuples/day); if anyone adds a
       reader that needs finer freshness than a day, revisit the damper deliberately.
+- [ ] Browse condensing (IA phase 3): EXPLAIN ANALYZE the default /games/ queryset against PROD
+      data once deployed -- the window election is a full scan + sort of the filtered population
+      per request (twice, with paginator.count). Shape verified on test data (filter INSIDE the
+      window, one WindowAgg pass); at ~35k rows this should be tens of ms, but if prod says
+      otherwise the recorded fallback is a materialized elected-id flag maintained by the
+      denorm cron -- swap the window for an indexed filter, no view changes.
