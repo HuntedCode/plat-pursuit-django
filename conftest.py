@@ -7,6 +7,36 @@ wiring is needed here. Fixtures below are convenience wrappers over the factorie
 import pytest
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_seeded_job_catalog(django_db_setup, django_db_blocker):
+    """Re-seed the migration-seeded Job catalog if the (reused) test DB has lost it.
+
+    Data migrations run only when the test DB is CREATED, but --reuse-db keeps the DB across
+    runs -- and any transactional-DB test (live_server / TransactionTestCase, committed or a
+    throwaway repro) TRUNCATES every table at teardown, migration-seeded rows included. That
+    combination gutted the Job catalog in 2026-08 and silently zeroed every contract-claim
+    test: XP splits across a contract's jobs, so zero jobs banks zero XP, and the failures
+    pointed nowhere near the cause (an idempotency test even kept passing vacuously, 0 == 0).
+
+    The repair is the seed migration's own idempotent function, run once per session and
+    committed OUTSIDE any test transaction so it sticks in the reused DB. Import via
+    importlib because the module name starts with a digit.
+    """
+    import importlib
+
+    from django.apps import apps as django_apps
+
+    with django_db_blocker.unblock():
+        from trophies.models import Job
+
+        if not Job.objects.exists():
+            seed_mod = importlib.import_module("trophies.migrations.0247_seed_jobs")
+            seed_mod.seed_jobs(django_apps, None)
+            print("\n[conftest] Job catalog was EMPTY in the reused test DB -- re-seeded "
+                  f"{Job.objects.count()} jobs (a transactional test truncated it; "
+                  "see docs/guides/testing.md Gotchas).")
+
+
 @pytest.fixture(autouse=True)
 def _clear_rarity_cache():
     """Drop the caches that would otherwise leak a population figure between tests.
