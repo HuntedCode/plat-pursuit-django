@@ -15,7 +15,11 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
 {% block extra_head %}{% jsonld_game host_game concept request base_rating_averages node_url=page_canonical_url %}{% endblock %}
 
 {% block content %}
-    <div class="max-w-5xl mx-auto px-3 md:px-4">
+    {% comment %}No width wrapper of its own: base.html's `container mx-auto px-4` main governs
+    the page width, exactly as on List detail -- the two pages share the trophy grid and the
+    ratings/About partials, so they must share a width or the same components render differently
+    per page. (An earlier cut added max-w-5xl here for no recorded reason; Jeffrey caught it.){% endcomment %}
+    <div id="game-page-container">
         {% include 'partials/breadcrumb.html' with items=breadcrumb %}
         {% include 'trophies/partials/game_page/header.html' %}
 
