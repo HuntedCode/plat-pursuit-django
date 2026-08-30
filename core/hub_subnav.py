@@ -236,6 +236,10 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # url_name: (hub_key, item_slug)
     # Browse
     'game_detail': ('browse', 'games'),
+    # The concept Game page + its unmatched-concept fallback (Games/Trophy Lists IA). Without
+    # these lines the rail renders unlit on the new pages -- the documented job_detail failure.
+    'game_page': ('browse', 'games'),
+    'game_page_concept': ('browse', 'games'),
     'game_detail_with_profile': ('browse', 'games'),
     'company_detail': ('browse', 'companies'),
     'franchise_detail': ('browse', 'franchises'),

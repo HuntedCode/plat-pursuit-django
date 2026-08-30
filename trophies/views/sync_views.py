@@ -296,7 +296,10 @@ class SiteSuggestView(View):
             {
                 'label': c.unified_title,
                 'image': c.get_cover_url('cover_small') or '',   # IGDB-first, mirrors the game cards
-                'url': reverse('game_detail', kwargs={'np_communication_id': c.npc}),
+                # The concept Game page is the primary result (Games/Trophy Lists IA): search
+                # already dedupes to concepts, so the destination is the concept's own page.
+                # game_page_url reads igdb_match, select_related'd above (raw_response deferred).
+                'url': c.game_page_url(),
             }
             for c in concepts
         ]

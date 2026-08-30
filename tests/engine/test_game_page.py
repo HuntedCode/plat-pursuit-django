@@ -357,3 +357,33 @@ def test_untrusted_matches_do_not_merge_sitemap_partitions():
     urls = {sm.location(o) for o in sm.items()}
 
     assert '/games/c/PSN_UT_A/' in urls and '/games/c/PSN_UT_B/' in urls
+
+
+# --- nav + search wiring -------------------------------------------------------------------------
+
+def test_the_subnav_rail_lights_on_both_new_urls():
+    """The documented job_detail failure: a detail page's url_name never equals its rail item's,
+    so without an override line the strip renders with nothing lit -- silently."""
+    from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
+
+    assert _URL_NAME_TO_SLUG_OVERRIDES['game_page'] == ('browse', 'games')
+    assert _URL_NAME_TO_SLUG_OVERRIDES['game_page_concept'] == ('browse', 'games')
+
+
+def test_search_suggests_the_concept_game_page(client):
+    """Search already dedupes to concepts; its destination is now the concept's own page --
+    igdb URL when trusted, c/ URL for the unmatched tail."""
+    from trophies.views.sync_views import SiteSuggestView
+
+    matched = _game(igdb_id=980, title_name='Searchable Matched')
+    matched.concept.unified_title = 'Searchable Matched'
+    matched.concept.save()
+    stub = ConceptFactory(concept_id='PP_SRCH', unified_title='Searchable Stubbed')
+    GameFactory(concept=stub)
+
+    view = SiteSuggestView()
+    group = view._games('searchable')
+    urls = {i['label']: i['url'] for i in group['items']}
+
+    assert urls['Searchable Matched'] == '/games/980/'
+    assert urls['Searchable Stubbed'] == '/games/c/PP_SRCH/'
