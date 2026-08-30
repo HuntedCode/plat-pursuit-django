@@ -31,11 +31,11 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
                         {% if request.GET.query %}
                             Hunting for "{{ request.GET.query }}"{% if is_paginated %} across {{ paginator.count|intcomma }} list{{ paginator.count|pluralize }}...{% endif %}
                         {% elif selected_regions %}
-                            Region hunting. {{ paginator.count|intcomma|default:"No" }} list{{ paginator.count|pluralize }} in the territory.
+                            Region hunting. {{ paginator.count|intcomma }} list{{ paginator.count|pluralize }} in the territory.
                         {% elif show_only_platinum == 'on' %}
-                            Platinum or bust. {{ paginator.count|intcomma|default:"No" }} list{{ paginator.count|pluralize }} shipping the ultimate prize.
+                            Platinum or bust. {{ paginator.count|intcomma }} list{{ paginator.count|pluralize }} shipping the ultimate prize.
                         {% elif request.GET.letter %}
-                            {{ paginator.count|intcomma|default:"No" }} list{{ paginator.count|pluralize }} starting with "{{ request.GET.letter }}". Happy hunting!
+                            {{ paginator.count|intcomma }} list{{ paginator.count|pluralize }} starting with "{{ request.GET.letter }}". Happy hunting!
                         {% else %}
                             Every stack, every region &mdash; the catalogue at list level. Siblings that share one game page each get their own card here.
                         {% endif %}
@@ -52,13 +52,14 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
             </div>
 
             {% comment %} Catalogue substance: the family .scard grid, LIST-scoped (the games heartbeat
-            scards stay off this page -- these count lists, its honest unit). Hourly-cached in the view,
-            so the grid only shows once the cache is warm; full page only (never re-rendered on swaps). {% endcomment %}
+            scards stay off this page -- these count lists, its honest unit). Hourly-cached, filled
+            lazily in the view on full-page renders only (never on swaps) -- unlike game_list's
+            cron-warmed heartbeat, tlb_stats is always present here; the guard is belt-and-braces. {% endcomment %}
             {% if tlb_stats %}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
                 <div class="scard">
                     <div class="scard__label">Trophy lists</div>
-                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.total }}">{{ tlb_stats.total|intcomma }}</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ tlb_stats.total|default:0 }}">{{ tlb_stats.total|default:0|intcomma }}</div>
                     <div class="scard__sub">in the catalogue</div>
                 </div>
                 <div class="scard">

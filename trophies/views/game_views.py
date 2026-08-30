@@ -482,14 +482,18 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
         return qs.order_by(*order, 'pk')
 
     @staticmethod
-    def _build_header_stats():
+    def _build_catalogue_scards():
         """The four list-level header scards: catalogue scale, the regional slice (this page's
         point), platinum coverage, fresh-sync momentum. All DB aggregates over the same np
-        floor the grid renders with."""
+        floor the grid renders with. (Named to stay grep-distinct from ProfileDetailView's
+        unrelated _build_header_stats.)"""
         base = Game.objects.filter(np_communication_id__isnull=False).exclude(np_communication_id='')
         return {
             'total': base.count(),
-            'regional': base.filter(is_regional=True).count(),
+            # is_regional AND a region: every render site (card chips, switcher) gates on both,
+            # and check_and_mark_regional can set the flag before region detection lands -- the
+            # count must match what the page actually shows as regional.
+            'regional': base.filter(is_regional=True).exclude(region=[]).count(),
             'with_plat': base.filter(Exists(
                 Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum'))).count(),
             'new_this_week': base.filter(
@@ -525,13 +529,16 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
         )
 
         # Header substance scards (the browse-family header standard), full page only -- the
-        # panel/grid swaps never re-render the header. Whole-catalogue COUNTs, so they are
-        # cached for an hour (the game_list header reads the site heartbeat for the same
-        # reason); a cold cache pays four bounded aggregate queries, never per-row work.
+        # panel/grid swaps never re-render the header. Four O(catalogue) COUNT aggregates,
+        # cached for an hour and filled LAZILY on the request path (the landing badge-showcase
+        # pattern -- deliberately NOT game_list's heartbeat, which is cron-warmed and never
+        # computes here; this page's traffic doesn't justify a cron slot). At TTL expiry
+        # concurrent visitors can each recompute once (get_or_set is not atomic) -- accepted
+        # for this page's traffic; move to the heartbeat if that ever shows up in monitoring.
         is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if not self.request.htmx and not is_xhr:
             context['tlb_stats'] = cache.get_or_set(
-                'trophy_lists:header_stats', self._build_header_stats, 3600)
+                'trophy_lists:header_stats', self._build_catalogue_scards, 3600)
 
         # LIST-IDENTITY cards (the page's third card mode): titles come from the observed PSN
         # list names -- Game.display_list_names, the batch that is the ONLY supported grid read

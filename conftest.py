@@ -79,7 +79,11 @@ def _clear_rarity_cache():
 
     from trophies.services.rarity import COMMUNITY_SIZE_CACHE_KEY
 
-    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions']
+    # trophy_lists:header_stats joins for the same reason: catalogue COUNTs cached hourly by the
+    # Trophy Lists browse header -- without the delete, the first full-page render in a module
+    # fixes the scard numbers (and the render's query count) for every test after it.
+    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions',
+            'trophy_lists:header_stats']
 
     def _drop():
         for key in keys:

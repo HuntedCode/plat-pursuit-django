@@ -148,15 +148,22 @@ def test_header_carries_the_family_tally_and_scard_grid(client):
     plat = GameFactory(title_name='Plat List', title_platform=['PS5'])
     TrophyFactory(game=plat, trophy_type='platinum')
     GameFactory(title_name='JP List', title_platform=['PS5'], is_regional=True, region=['JP'])
+    # is_regional WITHOUT a region: check_and_mark_regional sets the flag before region
+    # detection lands, and every render site gates on BOTH -- the scard must not count it
+    # (the audit's divergence catch).
+    GameFactory(title_name='Flagged Only', title_platform=['PS5'], is_regional=True)
 
     resp = client.get(URL)
     content = resp.content.decode()
 
-    assert 'id="tlb-count"' in content and 'lists shown' in content
+    # The HEADER tally block specifically -- bare 'lists shown' also lives in the minibar's
+    # title attribute, and #tlb-count predates this header (both vacuous alone).
+    assert 'id="tlb-count" class="pp-tally text-primary' in content
+    assert 'lists shown</span>' in content
     for label in ('Trophy lists', 'Regional', 'With a platinum', 'New this week'):
         assert label in content, label
     assert resp.context['tlb_stats'] == {
-        'total': 2, 'regional': 1, 'with_plat': 1, 'new_this_week': 2,
+        'total': 3, 'regional': 1, 'with_plat': 1, 'new_this_week': 3,
     }
 
 
