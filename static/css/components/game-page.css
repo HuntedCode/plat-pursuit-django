@@ -159,11 +159,6 @@
    viewport and the switched panel invisible below the fold -- "the link does nothing". A floor on
    the panels keeps the tabs-row scroll target reachable. Page-scoped; List detail's panels are
    naturally tall and untouched. */
-/* The grid's "Jump to pack" menu pins below the chrome while a 30-pack list scrolls -- THIS page
-   has no sticky minibar to carry that job (List detail's does, so the shared component stays
-   static there; see game-detail.css). */
-#game-page-container .gd-jumpmenu { position: sticky; top: calc(var(--chrome-height, 5rem) + 0.5rem); }
-
 /* Jump DESTINATIONS only -- NOT the Lists panel: on the default view the floor just pushed the
    footer ~500px past a stub game's content (audit M4). */
 #gp-view-ratings, #gp-view-about { min-height: calc(100vh - 9rem); }

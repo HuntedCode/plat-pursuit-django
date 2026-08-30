@@ -26,6 +26,7 @@
 /* Per-view elements (identity icon + per-view extras) show only when their tab is active; the natural display
    is preserved for the active one. Each tab's icon carries data-mb-only, so the minibar icon matches the tab. */
 .gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
+.gd-minibar:not([data-mb-active="lists"]) [data-mb-only="lists"] { display: none; }   /* the concept Game page's default view */
 .gd-minibar:not([data-mb-active="roadmap"]) [data-mb-only="roadmap"] { display: none; }
 .gd-minibar:not([data-mb-active="ratings"]) [data-mb-only="ratings"] { display: none; }
 .gd-minibar:not([data-mb-active="leaderboard"]) [data-mb-only="leaderboard"] { display: none; }
@@ -729,9 +730,9 @@
 
 /* Adaptive "Jump to pack" menu -- the group nav's many-DLC form (grid.html renders it above the
    chip threshold). Native <details>; the popover mirrors .gd-rate__dropmenu's surface so the two
-   dropdown idioms on these pages read as one family. NOT sticky here: List detail's sticky
-   minibar already carries a jump-to-group select, and two pinned controls would collide in the
-   same zone -- the Game page (no minibar) opts into sticky in game-page.css. */
+   dropdown idioms on these pages read as one family. NOT sticky: on BOTH hosts the sticky
+   minibar (List detail's, and the Game page's port of it) owns mid-scroll jumping via its
+   jump-to-group select, so pinning this control too would double the chrome. */
 .gd-jumpmenu { position: relative; z-index: 30; margin-bottom: 14px; align-self: flex-start; }
 .gd-jumpmenu__btn {
     display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; cursor: pointer;

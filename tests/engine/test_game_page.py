@@ -654,6 +654,32 @@ def test_hero_facts_and_jumps_are_concept_true(client):
     assert f'href="?list={a.np_communication_id}&amp;view=ratings"' in sel
 
 
+def test_the_sticky_minibar_is_wired_like_list_details(client):
+    """Jeffrey's call: the Game page carries List detail's sticky minibar (identity icon per tab +
+    jump-to-pack select) instead of pinning the grid's jump menu. Pins the template contract (bar,
+    sentinel pair, select, server-seeded data-mb-active) and the JS-side agreement -- a rename on
+    either side silently leaves a bar that never pins or a select that never fills."""
+    from pathlib import Path
+
+    game = _game(igdb_id=1012)
+    TrophyFactory(game=game, trophy_id=1)
+
+    content = client.get('/games/1012/').content.decode()
+    assert 'pp-minibar gd-minibar' in content
+    assert 'data-sticky-sentinel="#gp-minibar-sentinel"' in content
+    assert 'id="gp-minibar-sentinel"' in content
+    assert 'data-minibar-groupjump' in content
+    assert 'data-mb-active="lists"' in content
+
+    about = client.get('/games/1012/?view=about').content.decode()
+    assert 'data-mb-active="about"' in about, 'the bar must seed from the server-honored ?view='
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'game-page.js').read_text(encoding='utf-8')
+    assert 'StickyReveal.init()' in js, 'nothing pins the bar without the page-side init'
+    assert 'data-minibar-groupjump' in js, 'nothing fills the jump select without the sync'
+    assert 'mbActive' in js, 'nothing follows the active tab without the dataset write'
+
+
 def test_view_param_is_honored_server_side(client):
     """The hero jump anchors are only real no-JS links if the server renders the named panel
     visible -- the audit found ?view=about landing on a page whose About panel shipped with the

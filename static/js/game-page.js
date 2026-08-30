@@ -19,6 +19,7 @@
         VIEW_ORDER.forEach((v) => { panels[v] = document.getElementById('gp-view-' + v); });
 
         let currentView = 'lists';
+        const minibar = document.querySelector('.gd-minibar');
 
         function showView(name, opts) {
             if (!panels[name] || name === currentView) return;
@@ -30,6 +31,9 @@
                 t.classList.toggle('is-active', active);
                 t.setAttribute('aria-selected', active ? 'true' : 'false');
             });
+            // The minibar's identity icon + per-view controls follow the active tab (CSS gates on
+            // data-mb-active, the List-detail contract).
+            if (minibar) minibar.dataset.mbActive = name;
             tablist.syncTabindex();
             PP.syncViewParam(name, { default: 'lists' });
             // Decorative motion last (the game-detail.js ordering rule).
@@ -89,6 +93,42 @@
         // for THIS call to grow (game_about_card's own comment names the contract), and the
         // ratings band bars sit outside #gp-viewport too.
         fillBars();
+
+        // ── Sticky minibar (List detail's pattern) ─────────────────────────────────────────────
+        // The bar + sentinel live OUTSIDE #gp-viewport, so list swaps never tear them out and one
+        // StickyReveal.init() holds for the page's life. The jump select mirrors the grid's group
+        // nav (chips or the jump-menu rows -- both carry data-gd-groupjump + .gd-groupnav__name),
+        // rebuilt after each swap since each list brings its own groups. Options go in via
+        // new Option(text, value) so pack names land as text, never HTML.
+        const jumpSel = document.querySelector('[data-minibar-groupjump]');
+        function syncGroupJump() {
+            if (!jumpSel) return;
+            const rows = Array.from(document.querySelectorAll('#gp-viewport [data-gd-groupjump]'));
+            if (rows.length <= 1) { jumpSel.hidden = true; return; }
+            jumpSel.hidden = false;
+            jumpSel.textContent = '';
+            const ph = new Option('Jump to pack…', '');
+            ph.disabled = true; ph.selected = true;
+            jumpSel.add(ph);
+            rows.forEach((r) => {
+                const name = r.querySelector('.gd-groupnav__name');
+                jumpSel.add(new Option(name ? name.textContent : r.dataset.gdGroupjump, r.dataset.gdGroupjump));
+            });
+        }
+        syncGroupJump();
+        if (jumpSel) {
+            jumpSel.addEventListener('change', () => {
+                const target = document.getElementById(jumpSel.value);
+                jumpSel.selectedIndex = 0;   // reset to the placeholder so the same pack can be re-picked
+                if (!target) return;
+                const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+            });
+        }
+        document.body.addEventListener('htmx:afterSwap', (e) => {
+            if (viewport && e.detail.target === viewport) syncGroupJump();
+        });
+        if (PP.StickyReveal) PP.StickyReveal.init();
 
         if (lswitch && viewport) {
             const chips = Array.from(lswitch.querySelectorAll('[role="tab"]'));
