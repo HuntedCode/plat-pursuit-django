@@ -25,16 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (zoomContainer) zoomContainer.classList.toggle('pp-receded', on);
     }
 
-    // Same contract as game-page.js's fillBars, scoped: double-rAF so a freshly shown bar
-    // transitions from 0 instead of snapping.
-    function fillBars(root) {
-        root.querySelectorAll('[data-gd-fill] .pp-horizon__fill').forEach((fill) => {
-            const bar = fill.closest('[data-gd-fill]');
-            const target = (bar.dataset.gdFill || '0') + '%';
-            requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty('--horizon-progress', target)));
-        });
-    }
-
     // countReveal: zero a number now (it shows its SSR final value), then count 0->final after a stagger delay.
     function countReveal(el, delay, decimals) {
         if (!el || !PlatPursuit.countUp) return;
@@ -144,8 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             // (List detail's copy synced a minibar Base/DLC label here; this page's minibar
-            // has no such slot -- instead refresh any bars the newly shown panel carries.)
-            if (target) fillBars(target);
+            // has no such slot, so the swap ends with the settle above.)
         }
         root.addEventListener('click', (e) => {
             const toggle = e.target.closest('[data-rate-drop-toggle]');

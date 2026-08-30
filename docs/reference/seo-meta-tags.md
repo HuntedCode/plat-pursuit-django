@@ -88,7 +88,8 @@ Registered (see `plat_pursuit/urls.py` -- registration is explicit, and so is th
 | Class | Content | Priority | Frequency |
 |-------|---------|----------|-----------|
 | `StaticViewSitemap` | Homepage, copy pages, browse hubs | 0.8 | weekly |
-| `GameSitemap` | Game pages only (`game_page_canonicals()` window election); `ListSitemap` ('game_lists') advertises every non-shovelware list at its self-canonical URL, shovelware excluded | 0.6 | weekly |
+| `GameSitemap` | Game pages only (`game_page_canonicals()` window election), shovelware excluded | 0.6 | weekly |
+| `ListSitemap` (`game_lists`) | Every non-shovelware trophy list at its self-canonical `/games/<np>/` URL (no election -- disjoint from GameSitemap, which is concept-bearing Game pages only) | 0.5 | weekly |
 | `ProfileSitemap` | Quality-floored profiles: public history + trophies > 0; `lastmod` = `last_synced` | 0.5 | daily |
 | `BadgeSitemap` | `BadgeSeries` with a live `GroupBadge` edition (the set BadgeDetailView serves) | 0.6 | weekly |
 

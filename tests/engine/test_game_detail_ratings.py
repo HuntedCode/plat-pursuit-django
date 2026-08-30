@@ -449,7 +449,11 @@ def test_stats_strip_leads_the_trophies_panel_with_denormed_numbers(client):
         full_completion_count=78, avg_completion=63.4,
     ))
     assert 'gd-rate__stats' in content
-    assert content.index('id="gd-view-trophies"') < content.index('gd-rate__stats'), (
+    # Bounded on BOTH sides (audit #6): after the Trophies panel opens AND before the next panel
+    # opens, so a snapshot moved into Ranks or below every panel fails the claim.
+    assert (content.index('id="gd-view-trophies"')
+            < content.index('gd-rate__stats')
+            < content.index('id="gd-view-leaderboard"')), (
         'the snapshot must render inside the Trophies panel'
     )
     assert 'data-gd-countup="1234"' in content    # players

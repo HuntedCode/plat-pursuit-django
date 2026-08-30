@@ -42,6 +42,10 @@ def test_the_election_prefers_trophies_then_played_count():
 
 
 def test_a_conceptless_game_stands_for_itself():
+    """Manager-level TOTALITY pin: game_page_canonicals() partitions conceptless rows on their own
+    id, so the window is total over any input set. No current caller exercises this branch
+    (GameSitemap filters concept__isnull=False and ListSitemap doesn't elect) -- the branch stays
+    because a future unfiltered caller must not get NULL-key partitioning."""
     from trophies.models import Game
 
     lone = GameFactory(concept=None)

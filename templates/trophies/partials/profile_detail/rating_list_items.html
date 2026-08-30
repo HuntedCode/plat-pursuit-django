@@ -42,8 +42,8 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
              src="{{ g.display_image_url }}" alt="" loading="lazy" decoding="async">
         {% elif r.concept.cover_url %}
         {% comment %}A concept with no owned Game behind it -- possible after a concept merge re-points a
-        rating onto a survivor the hunter does not own a copy of. The concept's own cover still draws;
-        only the LINK is unavailable, so the card stays whole rather than blank.{% endcomment %}
+        rating onto a survivor the hunter does not own a copy of. The concept's own cover still draws
+        (and since the slim-down retarget the title still links -- game_page_url needs no game row).{% endcomment %}
         <img class="pp-rcard__shot pp-rcard__shot--cover" src="{{ r.concept.cover_url }}" alt="" loading="lazy" decoding="async">
         {% endif %}
 
@@ -70,10 +70,9 @@ Each rating carries `card_game`, `community_avg` and `community_n`, attached in 
                 {% comment %}A STRETCHED link: the anchor is the title, but its ::after covers the card, so
                 the cover and the whole surface are the tap target. The card takes the focus ring via
                 `:focus-within`, because the ring belongs to the card and not to a line of text.
-                {% endcomment %}
-                {% comment %}Ratings intent goes to the RATINGS host: the concept Game page's
-                Ratings view (the slim-down moved the tab off List detail). game_page_url is safe
-                without a game row -- it routes igdb or c/ by the concept's own match.{% endcomment %}
+                Ratings intent goes to the RATINGS host: the concept Game page's Ratings view (the
+                slim-down moved the tab off List detail). Always a link -- game_page_url routes
+                igdb or c/ off the concept's own match, so no game row is needed.{% endcomment %}
                 <a class="pp-rcard__title pp-rcard__link" href="{{ r.concept.game_page_url }}?view=ratings">{{ r.concept.unified_title }}</a>
 
                 {% comment %}Which trophy set was scored. A DLC pack is rated separately from its base

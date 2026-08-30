@@ -7,7 +7,7 @@ from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
-from django.db.models import Q, F, Prefetch, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
+from django.db.models import Q, F, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
 from django.db.models.functions import Coalesce, Lower, Cast
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -20,7 +20,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import HtmxListMixin
 from trophies.views.concept_context import ConceptContextMixin
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, ProfileTrophyGroup, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
+from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, ProfileTrophyGroup, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
@@ -498,20 +498,14 @@ class GameDetailView(ConceptContextMixin, DetailView):
         # fan-out. Anonymous visitors are redirected to the canonical game
         # page with a from_profile hint that drives a sign-up banner — cheap
         # to render, still useful to casual visitors, cuts scraper access.
-        psn_username = kwargs.get('psn_username')
-        if psn_username and not request.user.is_authenticated:
-            canonical = reverse('game_detail', kwargs={'np_communication_id': kwargs['np_communication_id']})
-            params = {'from_profile': psn_username}
-            existing_qs = request.META.get('QUERY_STRING', '')
-            suffix = f'&{existing_qs}' if existing_qs else ''
-            return HttpResponseRedirect(f'{canonical}?{urlencode(params)}{suffix}')
-
         # The Ratings and About tabs left this page for the concept Game page (the slim-down,
         # owner decision 4), but the old tabs WROTE ?view= into the address bar on every switch,
         # so bookmarked/shared deep links to them exist in the wild. Send them where the content
         # went -- a 302, not 301: cheap to change if the Game page's view names ever shift. The
         # username segment and other params are dropped deliberately (ratings are concept-level,
         # not profile-level). Conceptless games have no Game page and fall through to Trophies.
+        # ABOVE the anon-username redirect on purpose: anon + /<username>/ + ?view=ratings would
+        # otherwise pay two hops (audit #7) -- both roads end at the Game page anyway.
         view_param = request.GET.get('view')
         if view_param in ('ratings', 'about'):
             game = (
@@ -523,32 +517,31 @@ class GameDetailView(ConceptContextMixin, DetailView):
             )
             if game is not None and game.concept_id:
                 return HttpResponseRedirect(f'{game.concept.game_page_url()}?view={view_param}')
+
+        psn_username = kwargs.get('psn_username')
+        if psn_username and not request.user.is_authenticated:
+            canonical = reverse('game_detail', kwargs={'np_communication_id': kwargs['np_communication_id']})
+            params = {'from_profile': psn_username}
+            existing_qs = request.META.get('QUERY_STRING', '')
+            suffix = f'&{existing_qs}' if existing_qs else ''
+            return HttpResponseRedirect(f'{canonical}?{urlencode(params)}{suffix}')
+
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        # All non-excluded links are equal; sort by name for stable display.
-        # The view partitions by source_type into franchises vs collections.
-        franchise_prefetch = Prefetch(
-            'concept__concept_franchises',
-            queryset=ConceptFranchise.objects.select_related('franchise').order_by(
-                'franchise__name',
-            ),
-        )
         return super().get_queryset().select_related('concept', 'concept__igdb_match').defer(
-            # The ~30KB IGDB API blob is never read here -- every About-card field
-            # uses a parsed column (igdb_summary, time_to_beat_*, external_urls,
-            # igdb_screenshot_image_ids). select_related drags it into the join for
-            # free otherwise; deferring it keeps the per-render payload lean.
+            # The ~30KB IGDB API blob is never read here -- every field the hero renders
+            # uses a parsed column. select_related drags it into the join for free
+            # otherwise; deferring it keeps the per-render payload lean.
             'concept__igdb_match__raw_response',
         ).prefetch_related(
+            # The HERO's concept facts only (dev/publisher, genre/theme tags). The About
+            # panel's engines + franchises prefetches left with the About tab (the slim-down's
+            # final audit caught them still riding every List-detail render); GamePageView
+            # carries its own copies for the panel it now hosts.
             'concept__concept_companies__company',
             'concept__concept_genres__genre',
             'concept__concept_themes__theme',
-            # The About panel's Engine line walks concept_engines -> engine; without this it's an extra
-            # query per engine row on EVERY game-detail load (all panels are server-rendered for SEO,
-            # so About's queries run even when the tab is never opened).
-            'concept__concept_engines__engine',
-            franchise_prefetch,
         )
 
     def _get_target_profile(self):

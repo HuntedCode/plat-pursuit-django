@@ -518,7 +518,9 @@ def test_the_ratings_tab_is_active_here(client):
     assert 'Playtime: about <b>42</b>' in content, 'the playtime hint must reach the modal'
     assert 'data-flag-open' in content and 'id="game-flag-modal"' in content
     assert 'js/game-flag.js' in content
-    assert 'concept_tabs_readonly' not in content
+    # (No 'concept_tabs_readonly not in content' assert: the gate was a context key consumed in
+    # {% if %} tags, never emitted into HTML -- the audit found that ban unfalsifiable. The
+    # positive CTA/dialog pins above ARE the proof the gate is gone.)
 
     # An anonymous viewer gets none of the write surfaces (can_rate gates them), and no flag JS.
     client.logout()
@@ -698,7 +700,12 @@ def test_old_ratings_and_about_deep_links_redirect_up(client):
     resp = client.get(f'/games/{a.np_communication_id}/?view=about')
     assert resp.status_code == 302 and resp.url == '/games/1014/?view=about'
 
-    # The authed profile-scoped variant redirects up too, shedding the username segment.
+    # The profile-scoped variant redirects up too, shedding the username segment -- and for an
+    # ANONYMOUS visitor it must be ONE hop (audit #7: the view-param check sits above the
+    # anon-profile redirect, or that path pays two 302s to reach the same place).
+    resp = client.get(f'/games/{a.np_communication_id}/somehunter/?view=ratings',
+                      HTTP_CF_RAY='test')
+    assert resp.status_code == 302 and resp.url == '/games/1014/?view=ratings'
     viewer = ProfileFactory(is_linked=True)
     client.force_login(viewer.user)
     resp = client.get(f'/games/{a.np_communication_id}/{viewer.psn_username}/?view=ratings',

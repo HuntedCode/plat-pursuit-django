@@ -100,7 +100,7 @@ The plain `render_markdown` filter (used by reviews, etc.) does NOT enable spoil
 ### Game Detail Page (CTA)
 - Top-level Roadmap card sits directly under the game header, above the Community card. Promoted out of the Community section so it can't be missed during a scroll-by.
 - Filled state is a primary-tinted card with a stat chip strip (steps, guides, estimated hours, difficulty, missables, online required, playthroughs, video walkthrough — chips only render when the underlying field has data), a 3-step "Walkthrough Preview" list with overflow indicator, and a prominent "View Full Roadmap" button. Author byline (compact avatars) sits next to the title; staff Edit button is right-aligned.
-- The whole card is click-to-navigate (excluding nested links/buttons) via the `.roadmap-cta-link` JS hook that lives in `roadmap_cta_card.html`.
+- The whole card is click-to-navigate (excluding nested links/buttons) via the `.roadmap-cta-link` JS hook that lives in `roadmap_cta_card.html (DELETED 2026-08-30 -- see note below)`.
 - DLC tab bar inside this card reuses the `.community-tab-btn` / `.community-tab-panel` class pattern, so clicking a DLC tab in this card or the Community card swaps both panels in sync. The shared switching JS lives in `community_tabs_section.html`.
 - Empty state (no roadmap for the active CTG): neutral "opportunity" card with Discord CTAs (Request a Roadmap / Join the Team) plus the staff Create button.
 
@@ -116,8 +116,8 @@ The plain `render_markdown` filter (used by reviews, etc.) does NOT enable spoil
 
 | Surface | File | When it shows | Purpose |
 |---------|------|---------------|---------|
-| **Game detail CTA (top card)** | `roadmap_cta_card.html` + `roadmap_cta_filled.html` | Top of game detail page when a published roadmap exists | Primary link to the dedicated roadmap page; renders stat chips + step preview |
-| **Game detail empty state** | `roadmap_cta_card.html` + `roadmap_cta_empty.html` | Top of game detail page when no roadmap exists for the active CTG | Demand capture + author recruitment |
+| **Game detail CTA (top card)** | `roadmap_cta_card.html (DELETED 2026-08-30 -- see note below)` + `roadmap_cta_filled.html` | Top of game detail page when a published roadmap exists | Primary link to the dedicated roadmap page; renders stat chips + step preview |
+| **Game detail empty state** | `roadmap_cta_card.html (DELETED 2026-08-30 -- see note below)` + `roadmap_cta_empty.html` | Top of game detail page when no roadmap exists for the active CTG | Demand capture + author recruitment |
 | **Dashboard module** | `roadmap_recommendations.html` | Dashboard, unplatted games with roadmaps | Links directly to roadmap detail page |
 | **Community hub recruitment** | `roadmap_recruitment_strip.html` | Community hub, hidden for staff | Author recruitment |
 
@@ -161,12 +161,19 @@ All endpoints require staff authentication via SessionAuthentication + IsAdminUs
 | `static/js/roadmap-detail.js` | Detail page JavaScript (scrollspy, TOC, interactions) |
 | `templates/trophies/roadmap_edit.html` | Editor template |
 | `static/js/roadmap_editor.js` | Editor JavaScript |
-| `templates/trophies/partials/game_detail/roadmap_cta_card.html` | Top-level Roadmap CTA card wrapper (header + DLC tab bar + per-CTG panels) |
+| `templates/trophies/partials/game_detail/roadmap_cta_card.html (DELETED 2026-08-30 -- see note below)` | Top-level Roadmap CTA card wrapper (header + DLC tab bar + per-CTG panels) |
 | `templates/trophies/partials/game_detail/roadmap_cta_filled.html` | Filled-state body: stat chips, step preview, View Full Roadmap button |
 | `templates/trophies/partials/game_detail/roadmap_cta_empty.html` | Empty-state body: Discord CTAs + optional staff Create button |
 | `templates/trophies/partials/game_detail/community_tabs_section.html` | Community section (ratings + reviews; owns the shared DLC tab-switching JS) |
 | `templates/trophies/partials/dashboard/roadmap_recommendations.html` | Dashboard module |
 | `templates/community/partials/roadmap_recruitment_strip.html` | Community hub recruitment strip |
+
+**Restore note (2026-08-30, list-detail slim-down):** `roadmap_cta_card.html` -- the wrapper
+that included `roadmap_cta_filled/empty/staff.html` and carried the inline `.roadmap-cta-link`
+click script -- was deleted as a true orphan (zero includes since the Roadmap tab left game
+detail). The three inner partials are still kept for a restore, but a restore must now RECREATE
+the wrapper (or an equivalent include site) and re-wire `.roadmap-cta-link`; git history at
+commit 9dc1bde9^ has the last copy.
 
 ## Gotchas and Pitfalls
 

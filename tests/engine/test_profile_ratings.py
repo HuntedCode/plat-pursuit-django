@@ -343,6 +343,21 @@ def test_the_tab_renders_the_wall_and_the_summary(client):
     assert 'Still thinking about it.' in body
 
 
+def test_the_card_links_ratings_intent_to_the_ratings_host(client):
+    """The slim-down retarget (previously untested -- the final audit's #9): a rating card's
+    stretched link goes to the concept Game page's Ratings view, the ONE ratings host, never
+    List detail's departed tab. game_page_url routes off the concept's own match, so even a
+    rating whose hunter owns no game row still links."""
+    profile = ProfileFactory(is_linked=True)
+    rating = _rated(profile, title='Retargeted Game', overall_rating=4.0)
+
+    body = client.get(_url(profile), **CF).content.decode()
+
+    assert f'href="{rating.concept.game_page_url()}?view=ratings"' in body
+    assert 'game_detail_with_profile' not in body
+    assert f'/games/{rating.concept.games.first().np_communication_id}/{profile.psn_username}/' not in body
+
+
 def test_the_card_shows_the_whole_rating_not_a_subset(client):
     """All five scored axes: the overall as stars, and difficulty / grindiness / fun / hours as cells. An
     earlier cut showed three of them on the argument that five numbers is a spreadsheet -- true of a narrow
