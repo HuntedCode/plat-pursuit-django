@@ -733,7 +733,10 @@
    dropdown idioms on these pages read as one family. NOT sticky: on BOTH hosts the sticky
    minibar (List detail's, and the Game page's port of it) owns mid-scroll jumping via its
    jump-to-group select, so pinning this control too would double the chrome. */
-.gd-jumpmenu { position: relative; z-index: 30; margin-bottom: 14px; align-self: flex-start; }
+/* No z-index on the pill itself (a sticky-era leftover): it tied the fixed .pp-minibar's 30 and
+   DOM order made the pill paint OVER the pinned bar. Unpositioned-z, the bar wins; the OPEN
+   popover keeps its own 30 so its rows never render half-hidden under the bar. */
+.gd-jumpmenu { position: relative; margin-bottom: 14px; align-self: flex-start; }
 .gd-jumpmenu__btn {
     display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; cursor: pointer;
     list-style: none; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim);
