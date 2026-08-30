@@ -40,7 +40,7 @@ page with a one-entry switcher). Emphasis adapts inside the page; existence of s
 |---|---|---|
 | Games browse | Concept | SHIPPED (phase 3): the catalogue deduped -- one card per page identity via the sitemap's election, an "N lists" chip + the partition's platform union on the card, links to the Game page. Tag detail (genre/theme) runs the same condensed pipeline. |
 | Game detail | Concept | The wrapper page (anatomy below). Where users live. |
-| Trophy Lists browse | Game | SHIPPED (phase 4): `/games/lists/` -- the list-level catalogue, one UN-condensed card per trophy list (observed PSN list names, region/Global chips, this list's own platforms), the full browse filter family with Regions first-class, alphabetical default. |
+| Trophy Lists browse | Game | SHIPPED (phase 4): `/games/lists/` -- the list-level catalogue, one UN-condensed card per trophy list (observed PSN list names, region/Global chips, this list's own platforms), the browse filter family (minus the contract drill-down) with Regions first-class, alphabetical default. |
 | List detail | Game | The list as a COMMUNITY OBJECT: leaderboards, earn rates/rarity (the per-Game community-stats denorm), first achievers, playtime stats, stack identity -- plus its trophy grid. |
 
 ## Game detail anatomy: the wrapper pattern
@@ -156,7 +156,7 @@ Page-by-page during the rebuild, never a big-bang rename:
 
 ## Rollout log
 
-- **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (5 commits) -- the IA's LAST canonical
+- **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (7 commits incl. rail pins + audit response) -- the IA's LAST canonical
   page. `/games/lists/` (the neutral `lists` SEGMENT per the naming insurance; url name
   `trophy_lists`, subnav slug `trophy-lists` -- the parked GameList system's guards forbid bare
   `lists` in nav slugs and sitemap keys, and hold `lists_browse`/`list_detail`/`my_lists`).

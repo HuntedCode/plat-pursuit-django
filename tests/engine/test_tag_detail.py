@@ -97,13 +97,17 @@ def test_tag_grid_condenses_to_one_card_per_page_identity(client):
     ConceptGenreFactory(concept=a.concept, genre=genre)
     ConceptGenreFactory(concept=b.concept, genre=genre)
 
-    content = client.get(reverse('genre_detail', kwargs={'slug': 'racing'}),
-                         {'platform': 'PS5'}).content.decode()
+    resp = client.get(reverse('genre_detail', kwargs={'slug': 'racing'}), {'platform': 'PS5'})
+    content = resp.content.decode()
 
     assert content.count('pp-gcard__title') == 1
     assert 'Drift Work' in content
     assert f'href="/games/{shared}/"' in content, 'the condensed tag card must link the Game page'
     assert '2 lists' in content
+    # ISOLATION: the Trophy Lists page's list-identity mode never reaches the tag grids --
+    # no observed-name titling, no region chips (the third-consumer ban).
+    assert 'list_identity_cards' not in resp.context
+    assert 'pp-gcard__region' not in content
 
 
 def test_cards_get_pursuer_hooks(client):

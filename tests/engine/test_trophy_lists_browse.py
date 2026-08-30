@@ -59,7 +59,9 @@ def test_bare_url_returns_200_even_with_saved_browse_defaults(client):
     resp = client.get(URL)
 
     assert resp.status_code == 200
-    assert 'index, follow' in resp.content.decode()
+    # The full attribute: bare 'index, follow' is a SUBSTRING of 'noindex, follow' and
+    # would pass either way (the audit's vacuous-assertion catch).
+    assert 'content="index, follow"' in resp.content.decode()
 
 
 # ── List identity: observed names ─────────────────────────────────────────────────────────────────
@@ -148,6 +150,25 @@ def test_platform_and_region_filters_narrow(client):
     assert 'Old Gen List' in by_platform and 'NA Copy' not in by_platform
 
 
+def test_every_sort_ends_on_the_pk_tiebreaker():
+    """This is the ONE grid where title ties are the NORM (sibling stacks share a cleaned
+    title_name), and the InfiniteScroller fetches each page as its own LIMIT/OFFSET query --
+    without a unique trailing key Postgres may reorder a tie block between pages, duplicating
+    or dropping cards at a page boundary. Pin the deterministic tail on default AND param sorts."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.test import RequestFactory
+
+    from trophies.views.game_views import TrophyListsBrowseView
+
+    for params in ({}, {'sort': 'played'}):
+        req = RequestFactory().get(URL, params)
+        req.user = AnonymousUser()
+        v = TrophyListsBrowseView()
+        v.request = req
+        v.kwargs = {}
+        assert v.get_queryset().query.order_by[-1] == 'pk', params
+
+
 def test_alpha_default_and_sort_param(client):
     GameFactory(title_name='Zulu List', title_platform=['PS5'], played_count=999)
     GameFactory(title_name='Alpha List', title_platform=['PS5'], played_count=1)
@@ -177,7 +198,8 @@ def test_region_chip_and_reset_resolve_against_this_page(client):
 
     content = client.get(URL, {'regions': 'NA', 'letter': 'Q'}).content.decode()
 
-    assert 'pp-gbrowse__achip' in content                     # active-filter chips rendered
+    # The chip ELEMENT, not the always-present __achips container (substring trap).
+    assert 'class="pp-gbrowse__achip"' in content             # active-filter chips rendered
     assert 'href="/games/lists/?' in content                  # chip remove-URLs on this page
     assert 'href="/games/?' not in content                    # never Browse Games
     assert 'pp-gcard-empty__reset' in content                 # nothing matches Q + NA -> reset CTA
@@ -224,6 +246,26 @@ def test_xhr_past_end_page_404s(client):
     assert resp.status_code == 404
 
 
+def test_htmx_filter_swap_returns_grid_with_oob_chips(client):
+    """A panel filter change HTMX-swaps only the grid partial -- WITH pp-reveal baked in (the
+    settle-strips-classes fix) and the OOB active_filters copy whose chips resolve against
+    /games/lists/ (the line that keeps a reader's SECOND filter change from ejecting them to
+    Browse Games)."""
+    GameFactory(title_name='Regional List', title_platform=['PS5'], is_regional=True, region=['NA'])
+
+    resp = client.get(URL, {'regions': 'NA'}, HTTP_HX_REQUEST='true')
+    templates = {t.name for t in resp.templates if t.name}
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert GRID_PARTIAL in templates
+    assert FULL_PAGE not in templates
+    assert 'pp-reveal' in content
+    assert 'hx-swap-oob="true"' in content
+    assert 'href="/games/lists/?' in content
+    assert 'href="/games/?' not in content
+
+
 def test_grid_contract_minibar_and_sentinel(client):
     """The card contract (pursuer band via show_game_hooks) + the page chrome: sticky minibar,
     its sentinel, the infinite-scroll sentinel, no Lucky button (deliberate v1 omission), and
@@ -243,3 +285,39 @@ def test_grid_contract_minibar_and_sentinel(client):
     assert 'data-lucky-btn' not in content
     assert 'js/trophy-lists.js' in content and 'js/browse-filters.js' in content
     assert '{#' not in content and '{%' not in content
+
+
+# ── Whale safety ──────────────────────────────────────────────────────────────────────────────────
+
+def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
+    """One page of cards costs a bounded number of queries regardless of catalogue size --
+    the house ceiling every browse grid pins (the name-batch-once pin above guards only the
+    observation table; THIS one catches a dropped select_related going 30-wide)."""
+    for i in range(60):
+        g = GameFactory(title_platform=['PS5'])
+        _observe(g, f'Whale List {i}')
+
+    with django_assert_max_num_queries(20):
+        resp = client.get(URL)
+    assert resp.status_code == 200
+
+
+def test_raw_response_is_deferred():
+    """The ~30 KB IGDB blob is deferred off the queryset (never read by the cards; the
+    May-2026 OOM rule)."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.test import RequestFactory
+
+    from tests.factories import IGDBMatchFactory
+    from trophies.views.game_views import TrophyListsBrowseView
+
+    game = GameFactory(title_platform=['PS5'])
+    IGDBMatchFactory(concept=game.concept)
+
+    req = RequestFactory().get(URL)
+    req.user = AnonymousUser()
+    v = TrophyListsBrowseView()
+    v.request = req
+    v.kwargs = {}
+    first = v.get_queryset().first()
+    assert 'raw_response' in first.concept.igdb_match.get_deferred_fields()

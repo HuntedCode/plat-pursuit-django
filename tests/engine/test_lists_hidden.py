@@ -121,7 +121,8 @@ def test_no_game_card_offers_to_add_to_a_list():
                 'templates/trophies/game_detail.html',
                 'templates/trophies/game_list.html',
                 'templates/trophies/recently_added.html',
-                'templates/trophies/tag_detail.html'):
+                'templates/trophies/tag_detail.html',
+                'templates/trophies/trophy_lists.html'):
         src = (ROOT / rel).read_text(encoding='utf-8')
         # Strip the notes explaining the removal, which naturally name the thing they removed.
         src = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
@@ -134,7 +135,8 @@ def test_live_pages_do_not_ship_the_dead_list_controller():
     Left in place it downloads, parses and binds nothing -- on game detail and Browse Games, which are
     two of the busiest pages on the site. It stays on the two list pages themselves, which are hidden."""
     for rel in ('templates/trophies/game_detail.html', 'templates/trophies/game_list.html',
-                'templates/trophies/recently_added.html', 'templates/trophies/tag_detail.html'):
+                'templates/trophies/recently_added.html', 'templates/trophies/tag_detail.html',
+                'templates/trophies/trophy_lists.html'):
         src = (ROOT / rel).read_text(encoding='utf-8')
         src = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
         assert 'game-lists.js' not in src, f'{rel} still ships the list controller'

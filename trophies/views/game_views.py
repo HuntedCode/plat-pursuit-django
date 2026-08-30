@@ -448,7 +448,6 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
     model = Game
     template_name = 'trophies/trophy_lists.html'
     partial_template_name = 'trophies/partials/trophy_lists/browse_results.html'
-    context_object_name = 'games'
     paginate_by = 30
 
     def get_filter_form(self):
@@ -476,7 +475,11 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
             # The ~30 KB IGDB blob, never read by the card (house OOM rule).
             'concept__igdb_match__raw_response',
         )
-        return qs.order_by(*order)
+        # 'pk' tiebreaker: this page is the ONE grid where title ties are the NORM (sibling
+        # stacks share a cleaned title_name), and without a unique key Postgres may reorder a
+        # tie block between the per-page LIMIT/OFFSET queries the InfiniteScroller issues --
+        # duplicating or dropping cards across a page boundary.
+        return qs.order_by(*order, 'pk')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -493,13 +496,8 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
         context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
-        context['show_delisted'] = self.request.GET.get('show_delisted', '')
-        context['show_unobtainable'] = self.request.GET.get('show_unobtainable', '')
-        context['show_online'] = self.request.GET.get('show_online', '')
-        context['show_buggy'] = self.request.GET.get('show_buggy', '')
         context['selected_genres'] = self.request.GET.getlist('genres')
         context['selected_themes'] = self.request.GET.getlist('themes')
-        context['view_type'] = self.request.GET.get('view', 'grid')
         context['has_advanced_filters'] = any(
             v for k, v in self.request.GET.lists()
             if k not in ('page', 'view') and any(v)
