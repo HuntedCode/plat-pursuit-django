@@ -49,6 +49,49 @@ def clean_game_title(value: str) -> str:
     return cleaned
 
 
+#: Code-point ranges that mark a name as NOT Latin-script for display_list_name's tiebreak.
+#: Deliberately a "not CJK" test, not a script classifier -- Cyrillic/Greek count as Latin-enough.
+#: The rule exists only to stop the JP/US locale flap on dual-region lists, nothing more.
+_NON_LATIN_NAME_RANGES = (
+    (0x3040, 0x30FF),   # Hiragana + Katakana
+    (0x3400, 0x4DBF),   # CJK Extension A
+    (0x4E00, 0x9FFF),   # CJK Unified Ideographs
+    (0xAC00, 0xD7AF),   # Hangul syllables
+    (0xF900, 0xFAFF),   # CJK Compatibility Ideographs
+)
+
+
+def _is_latin_script_name(value: str) -> bool:
+    return not any(
+        lo <= ord(ch) <= hi for ch in value for lo, hi in _NON_LATIN_NAME_RANGES
+    )
+
+
+def _pick_observed_name(observations, now):
+    """Choose ONE observed raw name for a list from [(title_name_raw, last_seen_at), ...].
+
+    The flap this exists to stop: a game synced by JP and US accounts holds two live
+    trophy_titles observations, and plain freshest-wins alternates the label between syncs --
+    made worse by last_seen_at's deliberate 24h damping, which makes same-day freshness
+    arbitrary. Rule (docs/design/games-and-trophy-lists-ia.md): when SEVERAL names were seen in
+    the last 30 days, prefer the freshest Latin-script one; otherwise freshest overall. A single
+    recent name cannot flap and wins as-is. Returns the RAW string (cleaning is the caller's
+    render concern) or None when there is nothing observed.
+    """
+    if not observations:
+        return None
+    ordered = sorted(observations, key=lambda pair: pair[1], reverse=True)
+    window_start = now - timedelta(days=30)
+    recent = [pair for pair in ordered if pair[1] >= window_start]
+    # No length guard on `recent`: with a single recent name the scan can only return that same
+    # name or nothing, so guarding on len(recent) > 1 was provably dead logic (an equivalent
+    # mutant in the verification round) -- "a single recent name cannot flap" holds either way.
+    latin = next((name for name, _seen in recent if _is_latin_script_name(name)), None)
+    if latin:
+        return latin
+    return (recent or ordered)[0][0]
+
+
 # Create your models here.
 
 class Profile(models.Model):
@@ -813,6 +856,49 @@ class Game(models.Model):
         if not self.title_platform:
             return 'Unknown'
         return ', '.join(self.title_platform)
+
+    @classmethod
+    def display_list_names(cls, games):
+        """{np_communication_id: display name} for these lists -- the display_image_url of names.
+
+        Why `title_name` alone cannot be the list's label: save() cleans it unconditionally, every
+        sync rewrites it unless lock_title, and the IGDB CJK promotion replaces it and LOCKS the
+        replacement -- so it is not reliably the list's own name, which is the entire point of a
+        list label. Chain: freshest trophy_titles-source PSNTitleObservation raw name (Latin-script
+        preference inside a 30-day window, see _pick_observed_name), display-cleaned HERE via
+        clean_game_title (the raw stays raw in the table; cleaning is a render concern), falling
+        back to title_name when nothing was observed or cleaning empties the string.
+
+        BATCH-FIRST, one query for N games: the observation table's only index is the unique
+        (np_communication_id, content_hash) btree, so the np `__in` read is indexed but a per-row
+        property on a grid would N+1 it -- any grid surface MUST come through here. Coverage of the
+        observation branch grows with every sync; the fallback carries the rest.
+        """
+        games = list(games)
+        if not games:
+            return {}
+        observed = {}
+        rows = PSNTitleObservation.objects.filter(
+            np_communication_id__in=[g.np_communication_id for g in games],
+            source='trophy_titles',
+        ).exclude(title_name_raw='').values_list(
+            'np_communication_id', 'title_name_raw', 'last_seen_at',
+        )
+        for np_id, raw_name, seen in rows:
+            observed.setdefault(np_id, []).append((raw_name, seen))
+
+        now = timezone.now()
+        names = {}
+        for game in games:
+            raw = _pick_observed_name(observed.get(game.np_communication_id, []), now)
+            cleaned = clean_game_title(raw) if raw else ''
+            names[game.np_communication_id] = cleaned or game.title_name
+        return names
+
+    @property
+    def display_list_name(self):
+        """Single-row convenience over display_list_names -- costs one query; grids use the batch."""
+        return type(self).display_list_names([self])[self.np_communication_id]
 
     @property
     def platform_release_date(self):
