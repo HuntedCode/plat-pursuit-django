@@ -30,6 +30,10 @@ FULL_PAGE = 'trophies/tag_detail.html'
 
 def _genre(name, n=1, **game_kwargs):
     genre = GenreFactory(name=name, slug=name.lower().replace(' ', '-'))
+    # The condensed card titles by CONCEPT (IA phase 3) -- keep the concept name in step with
+    # the list name so title pins keep meaning what they say.
+    if 'title_name' in game_kwargs:
+        game_kwargs.setdefault('concept__unified_title', game_kwargs['title_name'])
     games = []
     for _ in range(n):
         game = GameFactory(**game_kwargs)
@@ -62,7 +66,7 @@ def test_genre_detail_renders_hero_and_grid(client):
 def test_theme_detail_renders(client):
     from trophies.models import Theme, ConceptTheme
     theme = Theme.objects.create(igdb_id=7001, name='Horror', slug='horror')
-    game = GameFactory(title_name='Spooky', title_platform=['PS5'])
+    game = GameFactory(title_name='Spooky', title_platform=['PS5'], concept__unified_title='Spooky')
     ConceptTheme.objects.create(concept=game.concept, theme=theme)
 
     content = client.get(reverse('theme_detail', kwargs={'slug': 'horror'})).content.decode()
@@ -75,6 +79,31 @@ def test_theme_detail_renders(client):
 def test_unknown_slug_404s(client):
     resp = client.get(reverse('genre_detail', kwargs={'slug': 'does-not-exist'}))
     assert resp.status_code == 404
+
+
+def test_tag_grid_condenses_to_one_card_per_page_identity(client):
+    """Tag pages run the identical condensed pipeline (IA phase 3, owner-approved): split
+    concepts sharing a trusted igdb id -> one card, linking the concept Game page. The tag
+    filter scopes the ELECTION POPULATION, same as every other pre-election filter."""
+    from tests.factories import IGDBMatchFactory
+
+    genre = GenreFactory(name='Racing', slug='racing')
+    a = GameFactory(title_name='Drift A', title_platform=['PS5'], played_count=50,
+                    concept__unified_title='Drift Work')
+    b = GameFactory(title_name='Drift B', title_platform=['PS5'], played_count=5)
+    shared = 81001
+    IGDBMatchFactory(concept=a.concept, igdb_id=shared)
+    IGDBMatchFactory(concept=b.concept, igdb_id=shared)
+    ConceptGenreFactory(concept=a.concept, genre=genre)
+    ConceptGenreFactory(concept=b.concept, genre=genre)
+
+    content = client.get(reverse('genre_detail', kwargs={'slug': 'racing'}),
+                         {'platform': 'PS5'}).content.decode()
+
+    assert content.count('pp-gcard__title') == 1
+    assert 'Drift Work' in content
+    assert f'href="/games/{shared}/"' in content, 'the condensed tag card must link the Game page'
+    assert '2 lists' in content
 
 
 def test_cards_get_pursuer_hooks(client):
@@ -110,8 +139,8 @@ def test_active_filter_chips_keep_tag_scope(client):
 
 def test_platform_filter_narrows(client):
     genre = GenreFactory(name='Puzzle', slug='puzzle')
-    ps5 = GameFactory(title_name='PS5 Puzzle', title_platform=['PS5'])
-    ps4 = GameFactory(title_name='PS4 Puzzle', title_platform=['PS4'])
+    ps5 = GameFactory(title_name='PS5 Puzzle', title_platform=['PS5'], concept__unified_title='PS5 Puzzle')
+    ps4 = GameFactory(title_name='PS4 Puzzle', title_platform=['PS4'], concept__unified_title='PS4 Puzzle')
     ConceptGenreFactory(concept=ps5.concept, genre=genre)
     ConceptGenreFactory(concept=ps4.concept, genre=genre)
 

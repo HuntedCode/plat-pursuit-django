@@ -206,6 +206,12 @@ class TagDetailBaseView(HtmxListMixin, ListView):
             qs = annotate_ascii_name(qs)
             order = ['is_ascii_name', Lower('title_name')]
 
+        # ONE CARD PER PAGE IDENTITY, same as Browse Games (IA phase 3): the election slots in
+        # AFTER every filter and BEFORE the final order_by -- a .filter() chained after the
+        # window silently narrows the election population instead of filtering elected rows
+        # (the composition rule recorded in GamesListView.get_queryset).
+        qs = qs.game_page_canonicals()
+
         # Defer the ~30 KB IGDB blob (never read by the card); the platinum_trophy prefetch is dead -- the
         # shared card reads defined_trophies.platinum (a JSON column), not game.platinum_trophy.
         qs = qs.select_related('concept', 'concept__igdb_match').defer('concept__igdb_match__raw_response')
@@ -270,7 +276,7 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         # Shared, batched, whale-safe card context (progress / DLC counts / ratings / badge + contract hooks),
         # the same helper Browse Games + Recently Added use -- lights up the pursuer band the old hand-built
         # rating/user maps were missing.
-        context.update(build_game_card_context(context['object_list'], self.request))
+        context.update(build_game_card_context(context['object_list'], self.request, condensed=True))
 
         return context
 
