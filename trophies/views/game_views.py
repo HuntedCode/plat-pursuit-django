@@ -520,53 +520,76 @@ class GameDetailView(DetailView):
                     }
 
             if has_trophies:
-                # Get earned trophies data
-                earned_qs = EarnedTrophy.objects.filter(profile=profile, trophy__game=game).order_by('trophy__trophy_id')
-                context['profile_earned'] = {
-                    e.trophy.trophy_id: {
-                        'earned': e.earned,
-                        'progress': e.progress,
-                        'progress_rate': e.progress_rate,
-                        'progressed_date_time': e.progressed_date_time,
-                        'earned_date_time': e.earned_date_time
-                    } for e in earned_qs
-                }
-
-                # Calculate trophy type totals
-                ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
-                context['profile_trophy_totals'] = ordered_earned_qs.aggregate(
-                    bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
-                    silver=Count('id', filter=Q(trophy__trophy_type='silver')),
-                    gold=Count('id', filter=Q(trophy__trophy_type='gold')),
-                    platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
-                )
-
-                # Calculate group totals -- DB-aggregated (whale-safe: never
-                # iterate the per-user earned queryset in Python; a 250K-trophy
-                # profile would materialize hundreds of MB here). Bounded to
-                # ~groups x 4 rows. .order_by() clears the inherited earned-date
-                # sort so it can't leak into the GROUP BY.
-                profile_group_totals = {}
-                group_rows = (
-                    ordered_earned_qs.order_by()
-                    .values('trophy__trophy_group_id', 'trophy__trophy_type')
-                    .annotate(c=Count('id'))
-                )
-                for row in group_rows:
-                    group_id = row['trophy__trophy_group_id'] or 'default'
-                    bucket = profile_group_totals.setdefault(
-                        group_id, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-                    )
-                    bucket[row['trophy__trophy_type']] = row['c']
-                context['profile_group_totals'] = profile_group_totals
+                earned_state, ordered_earned_qs, earned_count = self._build_earned_state(game, profile)
+                context.update(earned_state)
 
                 # Build milestones
-                context['timeline_events'] = self._build_timeline_events(ordered_earned_qs, len(earned_qs), context['profile_progress'], profile_game)
+                context['timeline_events'] = self._build_timeline_events(ordered_earned_qs, earned_count, context['profile_progress'], profile_game)
 
         except ProfileGame.DoesNotExist:
             pass
 
         return context
+
+    def _build_earned_state(self, game, profile):
+        """The viewer's earned-state for ONE list: the per-trophy map plus the DB-side totals.
+
+        Extracted so the concept Game page's list viewport can price a list switch at exactly this
+        (per docs/design/games-and-trophy-lists-ia.md) without dragging in timeline/plat-card/
+        play-hours. Returns (context_dict, ordered_earned_qs, earned_count) -- the trailing pair
+        exists solely for _build_timeline_events, which shares the ordered queryset.
+
+        `select_related('trophy')` is load-bearing, not an optimization nicety: the dict build
+        reads e.trophy.trophy_id and the timeline reads e.trophy.trophy_type per row, which was one
+        query PER EARNED TROPHY (~200 extra queries per authenticated render of a 100-trophy game).
+        A regression here multiplies by every list a switcher fetches.
+
+        Whale-safety shape is inherited unchanged: bounded by ONE list's trophy count, totals
+        aggregated in the DB (never iterate the per-user earned queryset in Python -- a 250K-trophy
+        profile would materialize hundreds of MB), the `.order_by()` strip keeping the earned-date
+        sort out of the GROUP BY.
+        """
+        earned_qs = (
+            EarnedTrophy.objects
+            .filter(profile=profile, trophy__game=game)
+            .select_related('trophy')
+            .order_by('trophy__trophy_id')
+        )
+        state = {
+            'profile_earned': {
+                e.trophy.trophy_id: {
+                    'earned': e.earned,
+                    'progress': e.progress,
+                    'progress_rate': e.progress_rate,
+                    'progressed_date_time': e.progressed_date_time,
+                    'earned_date_time': e.earned_date_time
+                } for e in earned_qs
+            },
+        }
+
+        ordered_earned_qs = earned_qs.filter(earned=True).order_by(F('earned_date_time').asc(nulls_last=True))
+        state['profile_trophy_totals'] = ordered_earned_qs.aggregate(
+            bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+            silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+            gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+            platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+        )
+
+        profile_group_totals = {}
+        group_rows = (
+            ordered_earned_qs.order_by()
+            .values('trophy__trophy_group_id', 'trophy__trophy_type')
+            .annotate(c=Count('id'))
+        )
+        for row in group_rows:
+            group_id = row['trophy__trophy_group_id'] or 'default'
+            bucket = profile_group_totals.setdefault(
+                group_id, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
+            )
+            bucket[row['trophy__trophy_type']] = row['c']
+        state['profile_group_totals'] = profile_group_totals
+
+        return state, ordered_earned_qs, len(earned_qs)
 
     def _make_timeline_event(self, label, event_type, earned, date=None, trophy=None):
         """Create a uniform timeline event dict."""
