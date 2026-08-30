@@ -87,9 +87,12 @@
                                 {% for ct in game.concept.concept_themes.all|slice:":2" %}<span class="gd-tag gd-tag--theme">{{ ct.theme.name }}</span>{% endfor %}
                             </div>
                         {% endif %}
-                        <button type="button" class="gd-about-more" data-gd-goto="about">More about this game
+                        {% comment %}A real link UP since the slim-down: About lives on the concept
+                        Game page now. Reachable only when the match is trusted (this whole block is),
+                        which guarantees concept_page_url is set.{% endcomment %}
+                        <a class="gd-about-more" href="{{ concept_page_url }}?view=about">More about this game
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                        </button>
+                        </a>
                     </div>
                 {% endif %}
                 {% endwith %}

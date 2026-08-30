@@ -825,7 +825,7 @@ def test_every_host_of_the_shared_form_confirms_a_save():
 
     # Hosts with custom wording claim it; the rest rely on the default. What must never happen is a host
     # that claims it and then does not say anything.
-    for rel in ('static/js/game-detail.js', 'static/js/ratings-tab.js', 'static/js/rate-my-games.js'):
+    for rel in ('static/js/ratings-tab.js', 'static/js/rate-my-games.js'):
         src = (ROOT / rel).read_text(encoding='utf-8')
         assert 'announcesSave' in src, f'{rel} would now toast twice'
         assert 'ToastManager' in src, f'{rel} claims announcesSave but says nothing'
@@ -856,7 +856,7 @@ def test_the_prefill_shape_has_one_definition_per_side():
     )
 
     # The two client hosts must not rebuild it themselves.
-    for rel in ('static/js/game-detail.js', 'static/js/plat-cards.js'):
+    for rel in ('static/js/ratings-tab.js', 'static/js/plat-cards.js'):
         src = (ROOT / rel).read_text(encoding='utf-8')
         assert 'prefillFrom(' in src, f'{rel} does not use the shared prefill builder'
     service = (ROOT / 'core' / 'services' / 'completion_card_service.py').read_text(encoding='utf-8')

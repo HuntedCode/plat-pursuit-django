@@ -118,10 +118,11 @@ class GamePageView(ConceptContextMixin, TemplateView):
 
     def _viewer_maps(self, viewer):
         """(progress by game pk, plat'd game pks, play hours) over the list set -- two bounded
-        queries. play hours ride the SAME ProfileGame query (one extra column, zero extra
-        queries): the MAX play_duration across the set's rows, because a PS4+PS5 auto-pop would
-        double-count a sum; >= 1h rounds to whole hours, else None -- the exact rule List
-        detail's quick-rate host used (the modal's playtime hint reads it).
+        queries. The viewer's playtime rides the SAME ProfileGame query (one extra column,
+        zero extra queries): the MAX play_duration across the set's rows, because a PS4+PS5
+        auto-pop would double-count a sum. Returned RAW (a timedelta) -- the caller derives the
+        quick-rate modal's whole-hours hint (>= 1h rounds, else None, List detail's old rule)
+        AND feeds the About tab's time-to-beat "You" row, which wants the duration itself.
         NOT the whole per-user cost of the page: an authed viewer also pays build_earned_state
         (3 queries) and, via the inherited ratings builder, several queries PER ConceptTrophyGroup
         (can_rate + own-rating lookups) -- tens of queries on a DLC-heavy game, inherited unchanged
@@ -136,17 +137,14 @@ class GamePageView(ConceptContextMixin, TemplateView):
         )
         progress = {game_id: prog for game_id, prog, _dur in rows}
         durations = [dur for _gid, _prog, dur in rows if dur is not None]
-        play_hours = None
-        if durations:
-            secs = max(d.total_seconds() for d in durations)
-            play_hours = round(secs / 3600) if secs >= 3600 else None
+        play_duration = max(durations, default=None)
         plats = set(
             EarnedTrophy.objects
             .filter(profile=viewer, earned=True, trophy__trophy_type='platinum',
                     trophy__game_id__in=game_ids)
             .values_list('trophy__game_id', flat=True)
         )
-        return progress, plats, play_hours
+        return progress, plats, play_duration
 
     def _host_game(self):
         """The list whose concept supplies the page's identity (title, canonical, About, ratings).
@@ -216,7 +214,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         viewer = self._viewer_profile()
-        progress, plats, play_hours = self._viewer_maps(viewer)
+        progress, plats, play_duration = self._viewer_maps(viewer)
         selected = self._selected_list(progress)
 
         if self._is_viewport_swap():
@@ -270,8 +268,10 @@ class GamePageView(ConceptContextMixin, TemplateView):
         context['image_urls'] = self._build_images_context(host)
         context.update(self._build_concept_context(host))
         if host.concept_id:
+            # The viewer's playtime joins the TTB scale (the "You" row) -- parity with what List
+            # detail's About tab showed before the slim-down moved the tab here.
             context['about_ttb'] = self._build_about_ttb(
-                getattr(host.concept, 'igdb_match', None), None,
+                getattr(host.concept, 'igdb_match', None), play_duration,
             )
         context.update(self._build_pursuit_context(host, viewer))
 
@@ -292,7 +292,8 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # report, guidelines and the flag/report modal all ship here (List detail's copies left
         # with its Ratings/About tabs). The slice-1 concept_tabs_readonly gate retired with them.
         # PSN-tracked playtime as a whole-hours hint in the quick-rate modal; rides _viewer_maps.
-        context['user_play_hours'] = play_hours
+        secs = play_duration.total_seconds() if play_duration else 0
+        context['user_play_hours'] = round(secs / 3600) if secs >= 3600 else None
         # The About tab's versions card is hidden on IGDB pages only: there "Other platforms" is
         # the switcher's own list set and "In the same family" is the hero's family band. On a c/
         # page it STAYS -- the audit found other_versions is the sole surface reaching untrusted

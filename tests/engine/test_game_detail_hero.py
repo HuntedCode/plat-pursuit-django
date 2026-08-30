@@ -522,12 +522,19 @@ def test_about_ttb_lone_estimate_is_not_comparative():
     assert GameDetailView._build_about_ttb(solo, timedelta(hours=10))['comparative'] is True
 
 
+def _game_page(client, game):
+    """The concept Game page render -- the About/TTB host since the list-detail slim-down.
+    Relies on IGDBMatchFactory's trusted default so /games/<igdb_id>/ resolves."""
+    return client.get(f'/games/{game.concept.igdb_match.igdb_id}/').content.decode()
+
+
 def test_game_detail_renders_ttb_bars(client):
-    """The comparative bars reach the page with their fill targets, ready for fillBars() to grow."""
+    """The comparative bars reach the page with their fill targets, ready for fillBars() to grow.
+    Rendered on the concept Game page -- the About tab's host since the slim-down."""
     concept = ConceptFactory()
     IGDBMatchFactory(concept=concept, igdb_summary='A summary.', time_to_beat_hastily=10 * _HOUR,
                      time_to_beat_normally=20 * _HOUR, time_to_beat_completely=40 * _HOUR)
-    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
 
     assert 'gd-ttb__row' in content
     assert 'data-gd-fill="100"' in content    # completionist sets the scale
@@ -547,7 +554,8 @@ def test_game_detail_renders_ttb_you_row_for_viewer_with_playtime(client):
     ProfileGameFactory(profile=profile, game=game, play_duration=timedelta(hours=20))
     client.force_login(profile.user)
 
-    content = _detail(client, game)
+    # The Game page hosts About now; _viewer_maps feeds the viewer's playtime into the scale.
+    content = _game_page(client, game)
 
     assert 'gd-ttb__row--you' in content
     assert 'data-gd-fill="50"' in content    # 20h against the 40h completionist scale
@@ -625,7 +633,7 @@ def test_game_detail_renders_about_panel(client):
     for i in range(4):
         ConceptCompanyFactory(concept=concept, company=CompanyFactory(name=f'Studio {i}'),
                               is_developer=False, is_supporting=True)
-    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
 
     assert 'gd-about' in content
     assert 'About this game' in content
@@ -640,9 +648,12 @@ def test_game_detail_renders_about_panel(client):
 
 
 def test_game_detail_about_panel_shows_empty_state(client):
-    """A game with no trusted IGDB match (and no other versions) gets the About empty state, not a blank tab.
-    Deliberately leaves defined_trophies empty -- an unsynced game must still render the page."""
-    content = _detail(client, GameFactory(concept=ConceptFactory()))
+    """A game with no trusted IGDB match gets the About empty state, not a blank tab -- on its
+    /games/c/ page, the About host for unmatched concepts since the slim-down. Deliberately
+    leaves defined_trophies empty -- an unsynced game must still render the page."""
+    concept = ConceptFactory()
+    GameFactory(concept=concept)
+    content = client.get(f'/games/c/{concept.concept_id}/', HTTP_CF_RAY='test').content.decode()
 
     assert 'No extended info yet' in content
 

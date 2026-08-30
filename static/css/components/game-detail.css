@@ -36,11 +36,6 @@
 .gd-lb__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
 .gd-lb__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
 @media (min-width: 1024px) { .gd-minibar[data-mb-active="leaderboard"] .gd-lb__mbtitle { display: inline-block; } }
-/* Ratings tab: the current group (Base Game / DLC name) in the minibar, desktop only. JS fills it ONLY when a
-   game has DLC, so :not(:empty) keeps it hidden for base-only games (nothing to disambiguate). */
-.gd-rate__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.gd-rate__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
-@media (min-width: 1024px) { .gd-minibar[data-mb-active="ratings"] .gd-rate__mbtitle:not(:empty) { display: inline-block; } }
 /* Mobile minibar is tight with the leaderboard's search + You + Filters, so drop the game title (the page
    header already shows it) and the "You" word (the #N + chevron carry it). */
 @media (max-width: 767px) {

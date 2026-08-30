@@ -618,11 +618,12 @@ def test_the_hero_is_concept_level_with_no_list_furniture(client):
     # And every banned marker DOES render on the HOST concept's List detail for this same viewer
     # + data: proves each ban is reachable, so the list above cannot rot into vacuousness again
     # (the first rewrite of this test dropped three bans without noticing -- audit finding). The
-    # extraction must not have cost List detail its own lightbox either.
+    # ratings markers left this proof with List detail's Ratings tab (the slim-down); their
+    # positive pins above ARE their reachability now. The extraction must not have cost List
+    # detail its own lightbox either.
     list_content = client.get(f'/games/{b.np_communication_id}/').content.decode()
     for marker in [
-        'data-blurb-report', 'id="gd-qr-modal"', 'id="gd-blurb-report-modal"',
-        'id="gd-guidelines-modal"', 'id="gd-versions-modal"', 'data-versions-open',
+        'id="gd-versions-modal"', 'data-versions-open',
         'data-stats-open', 'gd-btn--card', 'gd-prog', 'data-spine-open', 'game-flag-btn',
         'id="gd-shot-modal"', 'js/shot-lightbox.js',
     ]:

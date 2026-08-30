@@ -2,9 +2,9 @@
 
 Pins:
   - `rating_tone` filter: the per-stat tone thresholds (shared verbatim with the live-update JS in
-    game-detail.js -- if these move, the two must move together).
+    ratings-tab.js -- if these move, the two must move together).
   - `rating_verdict` / `rating_summary` filters: the per-stat word and the synthesized one-line sentence
-    (both mirrored by game-detail.js verdictOf / summaryOf).
+    (both mirrored by ratings-tab.js verdictOf / summaryOf).
   - `_rating_conditions.html`: the summary headline + star score, the icon word-tiles (verdict + tone +
     number), the empty state, and the preserved quick-rate data-* contract.
   - The Ratings tab render: the tab was renamed from Community, the stats strip surfaces the four denormed
@@ -30,7 +30,7 @@ _DEFINED = {'bronze': 10, 'silver': 5, 'gold': 2, 'platinum': 1}
 _NO_PLAT = {'bronze': 10, 'silver': 5, 'gold': 2}
 
 
-# ── rating_tone (thresholds mirrored by game-detail.js toneOf) ──────────────
+# ── rating_tone (thresholds mirrored by ratings-tab.js toneOf) ──────────────
 
 @pytest.mark.parametrize('kind,value,expected', [
     # difficulty / grindiness: LOW is good (easier / less grindy).
@@ -51,7 +51,7 @@ def test_rating_tone_non_numeric_is_neutral_good():
     assert rating_tone('', 'fun') == 'good'
 
 
-# ── rating_verdict (plain-language words, mirrored by game-detail.js verdictOf) ──
+# ── rating_verdict (plain-language words, mirrored by ratings-tab.js verdictOf) ──
 
 @pytest.mark.parametrize('kind,value,expected', [
     ('difficulty', 2, 'A breeze'), ('difficulty', 6, 'Tough'), ('difficulty', 9, 'Brutal'),
@@ -68,7 +68,7 @@ def test_rating_verdict_non_numeric_is_blank():
     assert rating_verdict(None, 'overall') == ''
 
 
-# ── rating_summary (the synthesized one-line sentence; mirrored by game-detail.js summaryOf) ──
+# ── rating_summary (the synthesized one-line sentence; mirrored by ratings-tab.js summaryOf) ──
 
 def test_rating_summary_hard_but_fun_uses_but():
     """Hard/grindy YET fun flips the final conjunction to 'but' (the contrast is the whole point)."""
@@ -91,7 +91,7 @@ def test_rating_summary_blank_without_data():
     assert rating_summary({'avg_difficulty': 5.0}) == ''   # missing grind/fun
 
 
-# ── rating_comparison ("your take vs community", mirrored by game-detail.js comparisonOf) ──
+# ── rating_comparison ("your take vs community", mirrored by ratings-tab.js comparisonOf) ──
 
 def _rater(difficulty, grindiness, fun_ranking, overall_rating=4.0):
     return type('R', (), {'difficulty': difficulty, 'grindiness': grindiness,
@@ -210,7 +210,7 @@ def test_the_total_sits_with_the_action_not_beside_the_answered_count():
     assert 'data-rate-count' in foot, 'the total is not in the action row'
     assert 'data-rate-count' not in html[:html.index('gd-rate__foot')], 'the total is still in the hero too'
 
-    js = (ROOT / 'static' / 'js' / 'game-detail.js').read_text(encoding='utf-8')
+    js = (ROOT / 'static' / 'js' / 'ratings-tab.js').read_text(encoding='utf-8')
     assert "panel.querySelector('[data-rate-count]')" in js, (
         'the live-update looks for the total inside the conditions grid, which no longer contains it'
     )
@@ -316,7 +316,7 @@ def test_conditions_empty_state_keeps_structure():
 
 
 def test_conditions_quick_rate_button_contract():
-    """The quick-rate button preserves the data-* game-detail.js reads (concept/group/hours + existing JSON)."""
+    """The quick-rate button preserves the data-* ratings-tab.js reads (concept/group/hours + existing JSON)."""
     user_rating = type('R', (), {'difficulty': 8, 'grindiness': 3, 'hours_to_platinum': 55, 'fun_ranking': 9, 'overall_rating': 4.5})()
     html = _conditions(_AVERAGES, can_rate=True, user_rating=user_rating, concept_id=42, group_id='001',
                        hours_label_long='Hours to 100%')
@@ -400,26 +400,40 @@ def test_conditions_no_your_take_when_sole_rater():
     assert 'gd-cond__you' not in _conditions(solo, user_rating=_YOU)   # nothing to compare against
 
 
-# ── Full page: tab rename + stats strip + adaptive selector ─────────────────
+# ── Full pages: List detail keeps the snapshot; the Game page hosts the ratings machinery ────
 
 def _detail(client, game):
     url = reverse('game_detail', kwargs={'np_communication_id': game.np_communication_id})
     return client.get(url).content.decode()
 
 
-def test_ratings_tab_replaced_community(client):
-    """The tab is now Ratings, not Community: the panel id / label / hero jump all moved."""
+_igdb_seq = iter(range(51000, 52000))
+
+
+def _game_page(client, game):
+    """Render the concept GAME page for a factory game (minting it a trusted match): since the
+    slim-down, the ratings machinery renders THERE, so the page-render pins fetch that host."""
+    from trophies.models import IGDBMatch
+    igdb_id = next(_igdb_seq)
+    IGDBMatch.objects.create(concept=game.concept, igdb_id=igdb_id, status='accepted')
+    return client.get(f'/games/{igdb_id}/').content.decode()
+
+
+def test_ratings_and_about_tabs_left_this_page(client):
+    """The slim-down: List detail is Trophies + Ranks. The Ratings/About tabs, panels and their
+    machinery must be GONE here (the concept Game page hosts them now)."""
     content = _detail(client, GameFactory(defined_trophies=_DEFINED, played_count=100))
-    assert 'id="gd-view-ratings"' in content
-    assert 'data-view="ratings"' in content
-    assert '<span class="pp-switch__lbl">Ratings</span>' in content
-    assert 'gd-view-community' not in content
-    assert '<span class="pp-switch__lbl">Community</span>' not in content
+    for marker in ('id="gd-view-ratings"', 'id="gd-view-about"', 'id="gd-tab-ratings"',
+                   'id="gd-tab-about"', 'id="gd-qr-modal"', 'id="gd-guidelines-modal"',
+                   'id="gd-blurb-report-modal"', 'js/quick-rate.js',
+                   '<span class="pp-switch__lbl">Ratings</span>'):
+        assert marker not in content, f'slimmed-away piece still renders: {marker}'
+    assert 'id="gd-view-trophies"' in content and 'id="gd-view-leaderboard"' in content
 
 
 def test_roadmap_tab_removed_and_players_link_goes_to_ranks(client):
-    """The Roadmap tab/panel were removed from game detail; the hero "X Players" jump now targets the Ranks
-    (leaderboard) tab, not Ratings."""
+    """The Roadmap tab/panel were removed from game detail; the hero "X Players" jump targets the
+    Ranks (leaderboard) tab."""
     content = _detail(client, GameFactory(defined_trophies=_DEFINED, played_count=100))
     assert 'data-view="roadmap"' not in content and 'gd-view-roadmap' not in content   # tab + panel gone
     assert '<span class="pp-switch__lbl">Roadmap</span>' not in content
@@ -427,12 +441,17 @@ def test_roadmap_tab_removed_and_players_link_goes_to_ranks(client):
     assert 'data-gd-goto="ratings"' not in content     # the Players jump no longer points at Ratings
 
 
-def test_ratings_stats_strip_surfaces_denormed_numbers(client):
+def test_stats_strip_leads_the_trophies_panel_with_denormed_numbers(client):
+    """The community snapshot moved from the departed Ratings tab to the TOP of the Trophies
+    panel (owner decision 2) -- this list's own four denorms, whale-safe zero-query reads."""
     content = _detail(client, GameFactory(
         defined_trophies=_DEFINED, played_count=1234, plats_earned_count=56,
         full_completion_count=78, avg_completion=63.4,
     ))
     assert 'gd-rate__stats' in content
+    assert content.index('id="gd-view-trophies"') < content.index('gd-rate__stats'), (
+        'the snapshot must render inside the Trophies panel'
+    )
     assert 'data-gd-countup="1234"' in content    # players
     assert 'data-gd-countup="56"' in content      # platinums (game has a plat)
     assert 'data-gd-countup="78"' in content      # 100% club
@@ -448,11 +467,19 @@ def test_ratings_platinum_tile_gated_on_platinum(client):
     assert 'Players' in content
 
 
+def test_snapshot_renders_on_both_hosts(client):
+    """One shared partial, two hosts: List detail's Trophies panel (this list's denorms) AND the
+    Game page's Ratings tab (its across-every-list aggregation feeds the same markup)."""
+    game = GameFactory(defined_trophies=_DEFINED, played_count=321)
+    assert 'gd-rate__snapshot' in _detail(client, game)
+    assert 'gd-rate__snapshot' in _game_page(client, game)
+
+
 def test_ratings_selector_pills_for_few_groups(client):
     concept = ConceptFactory()
     ConceptTrophyGroupFactory(concept=concept, trophy_group_id='default', display_name='Base Game')
     ConceptTrophyGroupFactory(concept=concept, trophy_group_id='001', display_name='DLC One')
-    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
     assert 'gd-rate__segchip' in content
     assert 'data-rate-ctg=' in content
     assert 'gd-rate__dropmenu' not in content     # few groups -> pills, no dropdown
@@ -463,7 +490,7 @@ def test_ratings_selector_dropdown_for_many_groups(client):
     ConceptTrophyGroupFactory(concept=concept, trophy_group_id='default', display_name='Base Game')
     for i in range(1, 6):                          # 5 DLC + base = 6 groups (> 4) -> dropdown
         ConceptTrophyGroupFactory(concept=concept, trophy_group_id=f'{i:03d}', display_name=f'DLC {i}')
-    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
     assert 'gd-rate__dropmenu' in content
     assert 'data-rate-drop-toggle' in content
     assert 'gd-rate__dropitem' in content
@@ -472,13 +499,13 @@ def test_ratings_selector_dropdown_for_many_groups(client):
 def test_ratings_no_selector_for_base_game_only(client):
     concept = ConceptFactory()
     ConceptTrophyGroupFactory(concept=concept, trophy_group_id='default', display_name='Base Game')
-    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
     assert 'gd-rate__seg' not in content          # one group -> no selector at all
 
 
 def test_quick_rate_modal_form_contract(client):
     """The modal ships the five inputs the rating API expects, by their exact names."""
-    content = _detail(client, GameFactory(defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(defined_trophies=_DEFINED))
     assert 'id="gd-qr-modal"' in content
     for name in ('difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating'):
         assert f'name="{name}"' in content
@@ -488,7 +515,7 @@ def test_quick_rate_modal_form_contract(client):
 
 def test_quick_rate_persistent_guidelines_notice_and_sheet(client):
     """The compose modal shows a persistent guidelines notice; the rules open in an in-context sheet."""
-    content = _detail(client, GameFactory(defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(defined_trophies=_DEFINED))
     assert 'gd-qr__notice' in content                     # persistent notice (always shown, not JS-toggled)
     assert 'data-gd-guidelines-open' in content           # its Community Guidelines trigger
     assert 'id="gd-guidelines-modal"' in content          # the in-context sheet is on the page
@@ -507,13 +534,14 @@ def test_quick_rate_playtime_hint_and_toast_container():
 
 
 def test_playtime_hint_reaches_modal_from_context(client):
-    """Regression: the view must copy user_play_hours out of _build_profile_context so the modal hint shows."""
+    """Regression, repointed to the modal's host page: the view must plumb user_play_hours into
+    the context (GamePageView rides _viewer_maps) so the modal hint shows."""
     from datetime import timedelta
     from trophies.models import ProfileGame
     profile, game = ProfileFactory(is_linked=True), GameFactory(defined_trophies=_DEFINED)
     ProfileGame.objects.create(profile=profile, game=game, play_duration=timedelta(hours=42))
     client.force_login(profile.user)
-    content = _detail(client, game)
+    content = _game_page(client, game)
     assert 'Playtime: about' in content and '<b>42</b>' in content
 
 
@@ -525,12 +553,15 @@ def test_quick_takes_count_in_title():
     assert 'data-blurbs-count' in html and '>7<' in html
 
 
-def test_minibar_has_per_tab_icons_and_ratings_group_slot(client):
-    """The sticky minibar carries an icon per tab (matches the active one) + the Base/DLC group slot."""
+def test_minibar_matches_the_slimmed_tab_set(client):
+    """List detail's sticky minibar carries an icon per REMAINING tab only: the ratings/about
+    icons and the Base/DLC group slot left with their tabs (the Game page's minibar has its own
+    lists/ratings/about set, pinned in test_game_page)."""
     content = _detail(client, GameFactory(defined_trophies=_DEFINED))
-    for tab in ('trophies', 'ratings', 'leaderboard', 'about'):
+    for tab in ('trophies', 'leaderboard'):
         assert 'data-mb-only="' + tab + '"' in content
-    assert 'data-rate-mb-title' in content
+    for gone in ('data-mb-only="ratings"', 'data-mb-only="about"', 'data-rate-mb-title'):
+        assert gone not in content, f'slimmed-away minibar piece still renders: {gone}'
 
 
 # ── Quick takes: the community blurb strip under the aggregate ──────────────
@@ -573,7 +604,7 @@ def test_ratings_page_shows_visible_blurbs_and_hides_hidden(client):
     ConceptTrophyGroupFactory(concept=concept, trophy_group_id='default', display_name='Base Game')
     _blurb_row(concept, ProfileFactory(), 'Shown quick take.')
     _blurb_row(concept, ProfileFactory(), 'Hidden quick take.', hidden=True)
-    content = _detail(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
+    content = _game_page(client, GameFactory(concept=concept, defined_trophies=_DEFINED))
     assert 'Quick takes' in content
     assert 'Shown quick take.' in content
     assert 'Hidden quick take.' not in content

@@ -609,11 +609,6 @@ class GameDetailView(ConceptContextMixin, DetailView):
                 'last_played': profile_game.last_played_date_time
             }
 
-            # PSN-tracked playtime as a whole-hours hint in the quick-rate modal (a reference when estimating
-            # hours-to-platinum). Often absent (not every game/user reports it) -- the modal has a fallback.
-            pd = profile_game.play_duration
-            context['user_play_hours'] = round(pd.total_seconds() / 3600) if pd and pd.total_seconds() >= 3600 else None
-
             # Plat card CTA -- shown only when the VIEWER has earned a card for this game.
             #
             # Gated on the profile being the viewer's own: this page also renders another hunter's
@@ -897,31 +892,6 @@ class GameDetailView(ConceptContextMixin, DetailView):
         """Delegates to compute_group_pct (shared with GamePageView's viewport)."""
         return compute_group_pct(trophy_groups, profile_group_totals)
 
-    def _build_rating_context(self, user, game):
-        """
-        Build user platinum context for share card button.
-
-        Args:
-            user: Request user
-            game: Game instance
-
-        Returns:
-            dict: Platinum context or empty dict
-        """
-        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') and user.profile and user.profile.is_linked else None
-        if not profile or not game.concept:
-            return {}
-
-        has_platinum = game.concept.has_user_earned_platinum(profile)
-        if not has_platinum:
-            return {}
-
-        # The share-card button lived here until 2026-08. Plat cards are now generated ONLY from
-        # My Shareables (see docs/features/share-images.md), so this no longer resolves the platinum's
-        # EarnedTrophy id, the landscape art, or the theme registry -- which also drops share-image.js,
-        # shareable-manager.js, color-grid-modal.js and an inlined GRADIENT_THEMES blob off this page.
-        return {'has_platinum': has_platinum}
-
     def _build_breadcrumbs(self, game, target_profile):
         """
         Build breadcrumb navigation.
@@ -1023,14 +993,12 @@ class GameDetailView(ConceptContextMixin, DetailView):
             context['profile_trophy_totals'] = profile_context['profile_trophy_totals']
             context['profile_group_totals'] = profile_context['profile_group_totals']
             context['timeline_events'] = profile_context['timeline_events']
-            context['user_play_hours'] = profile_context.get('user_play_hours')
             # NOTE: this merge is key-by-key, not a context.update() -- a new key added inside
             # _build_profile_context does NOT reach the template until it is listed here.
             context['plat_card'] = profile_context.get('plat_card')
         else:
             context['profile'] = None
             context['profile_progress'] = None
-            context['user_play_hours'] = None
             context['plat_card'] = None
             context['profile_earned'] = {}
             context['profile_trophy_totals'] = {}
@@ -1098,16 +1066,11 @@ class GameDetailView(ConceptContextMixin, DetailView):
             if target_profile and context['trophy_groups'] else {}
         )
 
-        # Build concept-related context (community ratings, badges, other versions)
-        concept_context = self._build_concept_context(game)
-        context.update(concept_context)
-
-        # About time-to-beat needs BOTH the concept's IGDB match and the viewer's profile_progress, so it's
-        # composed here where both already exist rather than re-fetching either.
-        context['about_ttb'] = self._build_about_ttb(
-            getattr(game.concept, 'igdb_match', None),
-            (context.get('profile_progress') or {}).get('play_duration'),
-        )
+        # Concept-level SUBSET only (the slim-down): the hero's badge spine + versions modal.
+        # The rest of _build_concept_context (About facts, community_tabs, the ratings assembly)
+        # left with the Ratings/About tabs -- the concept Game page is their host now.
+        context.update(self._build_badges_context(game))
+        context.update(self._build_versions_context(game))
 
         # Spine cross-link: this game's Contract + the Jobs it levels (hero band).
         context.update(self._build_pursuit_context(game, target_profile))
@@ -1116,10 +1079,6 @@ class GameDetailView(ConceptContextMixin, DetailView):
         # so skip the work (a trophy lookup) for members who'll never see it.
         if not target_profile:
             context.update(self._build_outlook_context(game))
-
-        # Build user rating context (if earned platinum)
-        rating_context = self._build_rating_context(user, game)
-        context.update(rating_context)
 
         # Build breadcrumbs
         context['breadcrumb'] = self._build_breadcrumbs(game, target_profile)
