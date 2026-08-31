@@ -161,6 +161,47 @@ def compute_site_heartbeat() -> dict:
         games_in_contracts = None
         is_partial = True
 
+    # Trophy-list catalogue: the Trophy Lists browse header's scards. LIST-scoped (np-floored --
+    # every row the page can render as a card), moved here from a lazy request-path
+    # cache.get_or_set in 2026-08: the with-a-platinum EXISTS semi-join over the Trophy table is
+    # exactly the read that belongs on the cron. `regional` requires is_regional AND a region,
+    # matching what every render site shows as regional (check_and_mark_regional can set the
+    # flag before region detection lands).
+    try:
+        from django.db.models import Exists, OuterRef
+
+        from trophies.models import Game, Trophy
+        _lists_base = Game.objects.filter(
+            np_communication_id__isnull=False).exclude(np_communication_id='')
+        lists_total = _lists_base.count()
+        lists_regional = _lists_base.filter(is_regional=True).exclude(region=[]).count()
+        lists_with_plat = _lists_base.filter(Exists(
+            Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum'))).count()
+        lists_new_this_week = _lists_base.filter(
+            created_at__gte=now - timedelta(days=7)).count()
+    except Exception:
+        logger.exception("trophy-list catalogue stats query failed")
+        lists_total = lists_regional = lists_with_plat = lists_new_this_week = None
+        is_partial = True
+
+    # Genres & Themes index header: how many of each actually carry games. Two DISTINCT
+    # existence counts over 4-table joins -- moved here from a hot per-request compute in
+    # 2026-08 (they ran on every request AND every filter swap of /genres/).
+    try:
+        from trophies.models import Genre, Theme
+        genres_with_games = (
+            Genre.objects.filter(genre_concepts__concept__games__isnull=False)
+            .distinct().count()
+        )
+        themes_with_games = (
+            Theme.objects.filter(theme_concepts__concept__games__isnull=False)
+            .distinct().count()
+        )
+    except Exception:
+        logger.exception("genre/theme index stats query failed")
+        genres_with_games = themes_with_games = None
+        is_partial = True
+
     # Community ratings -- the landing's Ratings section reads these. The distinct over the full
     # ratings table is exactly the kind of read that belongs here (hourly cron) and never on a
     # request path.
@@ -250,6 +291,32 @@ def compute_site_heartbeat() -> dict:
             'games_in_contracts': {
                 'value': games_in_contracts,
                 'label': 'Games in contracts',
+                'sublabel': 'catalogue',
+            },
+            'lists_total': {
+                'value': lists_total,
+                'label': 'Trophy lists',
+                'sublabel': 'in the catalogue',
+                'delta': lists_new_this_week,   # lists added in the last 7 days
+            },
+            'lists_regional': {
+                'value': lists_regional,
+                'label': 'Regional lists',
+                'sublabel': 'territory-specific',
+            },
+            'lists_with_plat': {
+                'value': lists_with_plat,
+                'label': 'Lists with a platinum',
+                'sublabel': 'ship the prize',
+            },
+            'genres_with_games': {
+                'value': genres_with_games,
+                'label': 'Genres with games',
+                'sublabel': 'catalogue',
+            },
+            'themes_with_games': {
+                'value': themes_with_games,
+                'label': 'Themes with games',
                 'sublabel': 'catalogue',
             },
             'ratings_total': {
