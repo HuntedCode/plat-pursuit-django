@@ -20,6 +20,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
+| 04:45 UTC daily | `evaluate_contract_candidates` | Daily | Runs AFTER `update_shovelware` (04:00 -- the shovelware override reads the flags): evaluates the media-density contract rule over new/changed trusted matches, auto-STAGES Tier A contracts (`is_live=False`, jobs auto-suggested, `--max-stage 150`/run in player-demand order) and maintains the ContractCandidate review/snooze queues in admin. Idempotent; `--dry-run` to preview |
 | 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
