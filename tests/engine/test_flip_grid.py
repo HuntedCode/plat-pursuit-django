@@ -348,5 +348,10 @@ def test_only_the_views_that_mean_it_send_the_scroller_its_stop_signal():
             # Full relative paths, not basenames: an allowlisted NAME would let any future
             # trophies/sub/mixins.py send the signal unnoticed.
             senders.append(py.relative_to(root).as_posix())
-    assert sorted(senders) == ['trophies/mixins.py', 'trophies/views/career_views.py'], (
-        f'a new view sends the scroller stop signal: {senders}')
+    # company_views joined 2026-08-31: CompanyDetailView paginates its grouped list for the
+    # scroller (a Sony-sized role section no longer ships in one response) and sends the header
+    # only on its own partial-serving requests.
+    assert sorted(senders) == [
+        'trophies/mixins.py', 'trophies/views/career_views.py',
+        'trophies/views/company_views.py',
+    ], f'a new view sends the scroller stop signal: {senders}'

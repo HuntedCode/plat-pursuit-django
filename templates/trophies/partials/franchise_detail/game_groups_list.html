@@ -14,7 +14,7 @@
         detail both do). A page that includes this partial WITHOUT reveal JS must leave it unset, or the cards
         would stick hidden (opacity:0) after an HTMX swap.
 {% endcomment %}
-<div class="fgroup-grid{% if request.htmx and group_reveal %} pp-reveal{% endif %}">
+<div id="fgroup-grid" class="fgroup-grid{% if request.htmx and group_reveal %} pp-reveal{% endif %}">
     {% for group in groups %}
     <article class="fgroup">
         {% comment %} Compact header: a small cover thumbnail + the game name, so the version rows below get

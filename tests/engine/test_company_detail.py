@@ -301,3 +301,59 @@ def test_detail_no_per_game_n_plus_1(client):
         return len(ctx)
 
     assert _q(small.slug) == _q(big.slug)   # 4x the games, same query count -> no per-game/version N+1
+
+
+# ── Infinite scroll over the grouped list (2026-08-31) ────────────────────────────────────────────
+
+def _many_links(co, n, prefix='Bulk'):
+    for i in range(n):
+        _link(co, f'{prefix} Game {i:02d}')
+
+
+def test_grouped_list_is_paginated_for_the_scroller(client):
+    """A big publisher's role section ships GROUPS_PER_PAGE (24) groups per response, not all of
+    them: the full page carries page 1, a page-2 XHR fetch returns the partial with the REST +
+    X-Has-Next, and past-the-end 404s (the scroller's stop contract)."""
+    co = _company('Mega Pub', 'mega-pub')
+    _many_links(co, 30)
+
+    full = client.get(reverse('company_detail', kwargs={'slug': co.slug}))
+    assert full.content.decode().count('class="fgroup"') == 24
+    assert 'X-Has-Next' not in full.headers          # full page: the scroller reads the DOM
+
+    page2 = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'page': '2'},
+                       HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    templates = {t.name for t in page2.templates if t.name}
+    assert GROUP_PARTIAL in templates and FULL_PAGE not in templates
+    assert page2.content.decode().count('class="fgroup"') == 6
+    assert page2['X-Has-Next'] == '0'
+
+    past = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'page': '3'},
+                      HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert past.status_code == 404
+
+
+def test_scroller_fetch_skips_the_header_aggregates(client):
+    """The gate extension the scroll work forced: a plain-XHR fetch (not htmx) serves the
+    partial too, so the big-IN header aggregates must skip it as well."""
+    co = _company('Gated Pub', 'gated-pub')
+    _many_links(co, 30)
+
+    xhr = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'page': '2'},
+                     HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+    assert 'company_avg_rating' not in xhr.context
+    assert 'company_total_players' not in xhr.context
+
+
+def test_role_swap_returns_page_one_with_has_next(client):
+    """An htmx role/sort swap resets to page 1 of the new tab and carries the header, so the
+    re-created scroller knows whether to keep pulling."""
+    co = _company('Swap Pub', 'swap-pub')
+    _many_links(co, 30)
+
+    resp = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'sort': 'alpha'},
+                      HTTP_HX_REQUEST='true')
+
+    assert resp.content.decode().count('class="fgroup"') == 24
+    assert resp['X-Has-Next'] == '1'

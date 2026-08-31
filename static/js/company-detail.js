@@ -11,6 +11,28 @@
 (function () {
     var PP = window.PlatPursuit || {};
     var revealHandle = null;
+    var scroller = null;
+
+    // Infinite scroll over the grouped list (24 groups/fetch; the view slices + sends
+    // X-Has-Next). Re-created per role/sort swap because the swap replaces the grid node AND
+    // changes the querystring the scroller must carry (hx-push-url keeps location current).
+    function initScroller() {
+        if (scroller) { scroller.destroy(); scroller = null; }
+        if (!PP.InfiniteScroller) { return; }
+        scroller = PP.InfiniteScroller.create({
+            gridId: 'fgroup-grid', sentinelId: 'co-groups-sentinel', loadingId: 'co-groups-loading',
+            paginateBy: 24, cardSelector: '.fgroup',
+            onAppend: function (cards) {
+                // Appended groups arrive un-revealed when the reveal engine is running; fade
+                // them in like the sibling browse pages (guarded: reduced-motion just shows them).
+                cards.forEach(function (el, i) {
+                    if (!el.animate) { return; }
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: 320, delay: i * 22, easing: 'ease-out', fill: 'backwards' });
+                });
+            },
+        });
+    }
 
     function initReveal() {
         if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
@@ -71,6 +93,7 @@
         if (!t || t.id !== 'company-groups') { return; }
         t.classList.remove('is-swapping');
         initReveal();
+        initScroller();
     }
 
     function boot(first) {
@@ -96,6 +119,7 @@
         // Re-measure once web fonts settle -- a FOUT height shift can flip a borderline 3-line clamp.
         if (document.fonts && document.fonts.ready) { document.fonts.ready.then(wireAbout); }
         initReveal();
+        initScroller();
         if (first) { document.body.addEventListener('htmx:afterSwap', onAfterSwap); }
     }
 

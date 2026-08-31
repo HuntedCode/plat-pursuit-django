@@ -174,10 +174,16 @@ doesn't; thousands of them dilute the crawl. Stays crawlable (follow) so its lin
         </div>
     </form>
 
-    {# ── Grouped game list (HTMX role/sort-swap target). ── #}
+    {# ── Grouped game list (HTMX role/sort-swap target + the scroller's append host). ── #}
     <div id="company-groups">
         {% include 'trophies/partials/franchise_detail/game_groups_list.html' %}
     </div>
+    {% comment %} Infinite scroll (Jeffrey's call: like everything else, not a cap): the shared
+    InfiniteScroller appends 24 groups per fetch, so a Sony-sized role section never ships in one
+    response. Sentinel + loading live OUTSIDE #company-groups so the role/sort swap replaces only
+    the grid. {% endcomment %}
+    <div id="co-groups-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="co-groups-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
 </div>
 {% endblock %}
 

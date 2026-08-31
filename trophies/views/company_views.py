@@ -222,13 +222,32 @@ class CompanyDetailView(DetailView):
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
 
+    # A Sony/EA-sized publisher renders thousands of games of HTML in one role section (the
+    # browse-backend audit's finding: the page weight, not the queries, was the cost). The
+    # grouped list is paginated for the shared InfiniteScroller instead -- Jeffrey's call:
+    # infinite scroll like everything else, not a cap.
+    GROUPS_PER_PAGE = 24
+
+    def _serving_partial(self):
+        """HTMX (role/sort swap) or plain XHR (the InfiniteScroller's ?page fetch)."""
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        return bool(getattr(self.request, 'htmx', False) or is_xhr)
+
     def get_template_names(self):
-        # On HTMX (role switcher or sort) return just the grouped-list partial so the
-        # header + switcher + toolbar stay put. Full page otherwise so a deep-linked
-        # ?tab=...&sort=... URL still works for bookmarks / first paint.
-        if getattr(self.request, 'htmx', False):
+        # On HTMX (role switcher or sort) OR a scroller XHR fetch, return just the grouped-list
+        # partial so the header + switcher + toolbar stay put. Full page otherwise so a
+        # deep-linked ?tab=...&sort=... URL still works for bookmarks / first paint.
+        if self._serving_partial():
             return [self.partial_template_name]
         return [self.template_name]
+
+    def render_to_response(self, context, **response_kwargs):
+        # X-Has-Next stops the scroller one fetch early -- each saved fetch is a whole
+        # links-to-groups rebuild on a big publisher.
+        response = super().render_to_response(context, **response_kwargs)
+        if self._serving_partial():
+            response['X-Has-Next'] = '1' if getattr(self, '_groups_has_next', False) else '0'
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -354,10 +373,11 @@ class CompanyDetailView(DetailView):
 
         # Community stats across this company's games (unchanged from the
         # pre-rebuild version — existing aggregation still correct). FULL PAGE ONLY: the two
-        # big-IN aggregates below feed header-only stats, and the HTMX role/sort swap renders
-        # just the grouped list -- without this gate every swap paid them for nothing.
+        # big-IN aggregates below feed header-only stats, and the swap/scroll partials render
+        # just the grouped list -- without this gate every swap AND every scroller fetch paid
+        # them for nothing.
         company_concept_ids = [cc.concept_id for cc in all_concept_companies]
-        if company_concept_ids and not getattr(self.request, 'htmx', False):
+        if company_concept_ids and not self._serving_partial():
             rating_agg = UserConceptRating.objects.filter(
                 concept_id__in=company_concept_ids,
                 concept_trophy_group__isnull=True,
@@ -391,7 +411,23 @@ class CompanyDetailView(DetailView):
         # `groups` + `empty_message` + `group_reveal` are the shared game_groups_list.html contract (also fed
         # to that partial standalone on the HTMX role/sort swap). group_reveal gates pp-reveal since company
         # detail runs staggerReveal on .fgroup.
-        context['groups'] = active_section['groups'] if active_section else []
+        #
+        # PAGINATED for the InfiniteScroller (GROUPS_PER_PAGE groups per fetch): the full role
+        # list still builds server-side (bounded Python), but a Sony-sized role section no
+        # longer ships thousands of games of HTML in one response. Past-the-end 404s -- the
+        # scroller's fallback stop signal.
+        all_tab_groups = active_section['groups'] if active_section else []
+        try:
+            page_number = max(1, int(self.request.GET.get('page', 1)))
+        except (TypeError, ValueError):
+            page_number = 1
+        offset = (page_number - 1) * self.GROUPS_PER_PAGE
+        page_groups = all_tab_groups[offset:offset + self.GROUPS_PER_PAGE]
+        if page_number > 1 and not page_groups:
+            from django.http import Http404
+            raise Http404(f'Empty group page {page_number}')
+        self._groups_has_next = len(all_tab_groups) > offset + self.GROUPS_PER_PAGE
+        context['groups'] = page_groups
         context['empty_message'] = 'No games found for this role.'
         context['group_reveal'] = True
         context['sort_choices'] = grouping.SORT_CHOICES
