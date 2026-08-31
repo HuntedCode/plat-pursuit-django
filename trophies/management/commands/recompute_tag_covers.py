@@ -23,7 +23,7 @@ Idempotent -- recomputes from scratch. Run on a daily cadence (after `recalc_ear
 import hashlib
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Avg, Count, Exists, OuterRef, Q
 
 from trophies.models import (
     Genre, Theme, Franchise, Company, Game, Contract,
@@ -86,8 +86,11 @@ class Command(BaseCommand):
             total += changed
             verb = 'would change' if dry else 'updated'
             self.stdout.write(f"{cfg['model'].__name__}: {changed} row(s) {verb}.")
+        counts_changed = self._recompute_counts(dry)
+        verb = 'would change' if dry else 'updated'
+        self.stdout.write(f"Browse counts: {counts_changed} row(s) {verb}.")
         self.stdout.write(self.style.SUCCESS(
-            f"Done. {total} grouping row(s) {'to change' if dry else 'updated'}."
+            f"Done. {total + counts_changed} grouping row(s) {'to change' if dry else 'updated'}."
         ))
 
     def _recompute(self, cfg, contract_exists, dry):
@@ -116,6 +119,75 @@ class Command(BaseCommand):
                 updates.append(row)
         if updates and not dry:
             Model.objects.bulk_update(updates, list(changed_fields) or ['representative_game'], batch_size=200)
+        return len(updates)
+
+    def _recompute_counts(self, dry):
+        """Fill the materialized browse counts (2026-08-31): the columns that replaced the
+        per-row correlated subqueries the Franchises/Companies browse and the Genres & Themes
+        sorts paid on every request. ONE grouped aggregate per stat family (never per row).
+
+        Semantics mirror the live queries they replaced exactly:
+        - Franchise: VISIBLE links only (is_excluded=False, is_spinoff=False -- the browse
+          page's _VISIBLE_LINK_FILTER); game_count = distinct IGDB ids (NULL ids ignored by
+          COUNT DISTINCT, matching the live undercount note), version_count = distinct Games.
+        - Company: same pair over ALL links (ConceptCompany has no visibility flags).
+        - Genre/Theme: game_count = distinct member Games; player_count = distinct profiles
+          across their ProfileGame rows (the sort that scanned the whole table per load);
+          avg_rating = concept-level community average (base-game ratings only). The avg runs
+          as its OWN query: folding it into the games aggregate would join ratings x games and
+          average over duplicated rating rows.
+        """
+        changed = 0
+
+        link_pair = dict(
+            g=Count('concept__igdb_match__igdb_id', distinct=True),
+            v=Count('concept__games', distinct=True),
+        )
+        fr_rows = {r['franchise']: r for r in ConceptFranchise.objects.filter(
+            is_excluded=False, is_spinoff=False,
+        ).values('franchise').annotate(**link_pair)}
+        changed += self._apply_counts(
+            Franchise, fr_rows, {'game_count': 'g', 'version_count': 'v'}, dry)
+
+        co_rows = {r['company']: r for r in ConceptCompany.objects.values(
+            'company').annotate(**link_pair)}
+        changed += self._apply_counts(
+            Company, co_rows, {'game_count': 'g', 'version_count': 'v'}, dry)
+
+        for Model, Through, field in ((Genre, ConceptGenre, 'genre'), (Theme, ConceptTheme, 'theme')):
+            rows = {r[field]: r for r in Through.objects.values(field).annotate(
+                g=Count('concept__games', distinct=True),
+                p=Count('concept__games__played_by__profile', distinct=True),
+            )}
+            for r in Through.objects.values(field).annotate(
+                a=Avg('concept__user_ratings__overall_rating',
+                      filter=Q(concept__user_ratings__concept_trophy_group__isnull=True)),
+            ):
+                rows.setdefault(r[field], {})['a'] = r['a']
+            changed += self._apply_counts(
+                Model, rows, {'game_count': 'g', 'player_count': 'p', 'avg_rating': 'a'},
+                dry, float_fields=('avg_rating',))
+        return changed
+
+    def _apply_counts(self, Model, rows, mapping, dry, float_fields=()):
+        """Diff the aggregate results onto every Model row (a row absent from the aggregates --
+        all its links removed -- RESETS to 0/None rather than keeping a stale count)."""
+        fields = list(mapping)
+        updates = []
+        for obj in Model.objects.only('id', *fields):
+            row = rows.get(obj.id, {})
+            dirty = False
+            for attr, key in mapping.items():
+                new = row.get(key)
+                if new is None and attr not in float_fields:
+                    new = 0
+                if getattr(obj, attr) != new:
+                    setattr(obj, attr, new)
+                    dirty = True
+            if dirty:
+                updates.append(obj)
+        if updates and not dry:
+            Model.objects.bulk_update(updates, fields, batch_size=200)
         return len(updates)
 
     def _pick(self, row_id, path, contract_exists, cover_filter=None):
