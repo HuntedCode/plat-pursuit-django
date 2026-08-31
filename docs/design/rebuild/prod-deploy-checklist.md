@@ -983,3 +983,21 @@ payloads already in hand. Nothing on any page reads it yet.
       window, one WindowAgg pass); at ~35k rows this should be tens of ms, but if prod says
       otherwise the recorded fallback is a materialized elected-id flag maintained by the
       denorm cron -- swap the window for an indexed filter, no view changes.
+
+## 2026-08-31 — Browse denorm counts + countless scroll (perf lane)
+
+- [ ] **DEPLOY-CRITICAL ORDER**: migration `0319_browse_denorm_counts` ships columns defaulting
+      to 0, and `/franchises/`, `/companies/`, `/genres/` filter on them (`version_count>0` /
+      `game_count>0`) -- the three pages render EMPTY until the counts fill. Run
+      `python manage.py recompute_tag_covers` immediately after migrating (it now fills the
+      counts alongside the covers; the existing 03:45 UTC cron keeps them fresh). Same
+      one-command remedy as the original cover backfill, same task, higher stakes.
+- [ ] New-entity latency is BY DESIGN: a brand-new tag/franchise/company (and its counts) waits
+      for the nightly recompute before appearing in browse -- the same wait-for-the-cron
+      contract as the materialized covers. Don't page-hotfix it; run the command.
+- [ ] The countless-scroll change (HtmxListMixin) needs no deploy step, but spot-check on prod:
+      a /games/ page-2 XHR fetch should show NO `SELECT COUNT` in the slow-query log and carry
+      `X-Has-Next`.
+- [ ] Company detail now paginates its grouped list (24 groups/fetch, infinite scroll): verify
+      a Sony-sized publisher page loads light and scrolls, and that role/sort swaps reset to
+      page 1.
