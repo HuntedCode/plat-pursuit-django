@@ -210,7 +210,7 @@ class TagDetailBaseView(HtmxListMixin, ListView):
             qs, order = apply_game_browse_sort(qs, sort_val, annotations)
         else:
             qs = annotate_ascii_name(qs)
-            order = ['is_ascii_name', Lower('title_name')]
+            order = ['is_ascii_name', Lower('title_name'), 'pk']
 
         # ONE CARD PER PAGE IDENTITY, same as Browse Games (IA phase 3): the election slots in
         # AFTER every filter and BEFORE the final order_by -- a .filter() chained after the

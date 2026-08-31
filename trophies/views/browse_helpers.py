@@ -108,7 +108,14 @@ def annotate_ascii_name(qs):
     )
 
 
-_ALPHA_SECONDARY = ['is_ascii_name', Lower('title_name')]
+# 'pk' tiebreaker: without a unique trailing key Postgres may reorder a tie block between the
+# per-page LIMIT/OFFSET queries the InfiniteScroller issues, duplicating or dropping cards at a
+# page boundary. Title ties are the norm on the un-condensed pages (sibling stacks share a
+# cleaned title_name), and the count-based sorts (-played_count, -platinums_earned_count) put
+# thousands of zero-valued rows in one tie block. First fixed on Trophy Lists (2026-08-30);
+# hoisted here when countless scroll pagination made the per-page slice the scroller's whole
+# contract (2026-08-31 audit).
+_ALPHA_SECONDARY = ['is_ascii_name', Lower('title_name'), 'pk']
 
 
 def annotate_community_ratings(qs, concept_ref_path='concept_id'):

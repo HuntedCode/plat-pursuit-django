@@ -309,7 +309,7 @@ class GamesListView(HtmxListMixin, ListView):
             qs, order = apply_game_browse_sort(qs, sort_val, annotations)
         else:
             qs = annotate_ascii_name(qs)
-            order = ['is_ascii_name', Lower('title_name')]
+            order = ['is_ascii_name', Lower('title_name'), 'pk']
 
         # ONE CARD PER PAGE IDENTITY (Games/Trophy Lists IA phase 3): the sitemap's window
         # election dedupes regional/platform siblings AND deliberately-split concepts sharing a
@@ -465,7 +465,7 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
             qs, order = apply_game_browse_sort(qs, sort_val, annotations)
         else:
             qs = annotate_ascii_name(qs)
-            order = ['is_ascii_name', Lower('title_name')]
+            order = ['is_ascii_name', Lower('title_name'), 'pk']
 
         # The np floor WITHOUT the election: per-list is this page's point, but an un-linkable
         # row is still not a card (same floor as GamePageView / the sitemaps).
@@ -1525,7 +1525,7 @@ class RecentlyAddedView(HtmxListMixin, ListView):
             # Sort within the capped pool
             if sort_val == 'alpha':
                 qs = annotate_ascii_name(qs)
-                return qs.order_by('is_ascii_name', Lower('title_name'))
+                return qs.order_by('is_ascii_name', Lower('title_name'), 'pk')
             elif sort_val == 'played':
                 return qs.order_by('-played_count', '-created_at')
             elif sort_val == 'trophy_count':

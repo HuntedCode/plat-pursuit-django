@@ -345,6 +345,8 @@ def test_only_the_views_that_mean_it_send_the_scroller_its_stop_signal():
     senders = []
     for py in (root / 'trophies').rglob('*.py'):
         if 'X-Has-Next' in py.read_text(encoding='utf-8', errors='ignore'):
-            senders.append(py.name)
-    assert sorted(senders) == ['career_views.py', 'mixins.py'], (
+            # Full relative paths, not basenames: an allowlisted NAME would let any future
+            # trophies/sub/mixins.py send the signal unnoticed.
+            senders.append(py.relative_to(root).as_posix())
+    assert sorted(senders) == ['trophies/mixins.py', 'trophies/views/career_views.py'], (
         f'a new view sends the scroller stop signal: {senders}')

@@ -1,7 +1,8 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Page, Paginator
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
+from django.utils.cache import patch_vary_headers
 
 
 class PremiumRequiredMixin(LoginRequiredMixin):
@@ -212,14 +213,19 @@ class HtmxListMixin:
         if not rows:
             # Past the end: the scroller's fallback stop signal (and the pre-existing contract
             # every suite pins). Matches what Django's paginator raises through ListView.
-            from django.http import Http404
             raise Http404(f'Empty scroll page {page_number}')
         has_next = len(rows) > page_size
         rows = rows[:page_size]
-        # A local paginator over just this page's rows: len(), never a query. Its `count` leaks
-        # only into the partial's data-result-count attribute, which nothing reads on a scroll
-        # append (the scroller extracts cards + the X-Has-Next header alone).
+        # A local paginator over just this page's rows: len(), never a query. Its fake `count`
+        # reaches the partial's data-result-count attribute (unread on a scroll append -- the
+        # scroller extracts cards + the X-Has-Next header alone) and any view that copies
+        # paginator.count into context (company_list's total_company_count, browse_lists'
+        # total_lists -- both rendered by full-page templates only). A partial that starts
+        # RENDERING a count must not trust it on this branch. num_pages is stamped honest-enough
+        # (this page's number, +1 when more exist) so a future pager partial's
+        # next/previous_page_number calls don't raise EmptyPage against the 1-page default.
         paginator = Paginator(rows, page_size)
+        paginator.num_pages = page_number + (1 if has_next else 0)
         page = _ScrollPage(rows, page_number, paginator, has_next)
         return paginator, page, rows, True
 
@@ -230,6 +236,10 @@ class HtmxListMixin:
         # from the count it already paid for. XHR only; a filter swap's response is consumed by
         # htmx, which ignores it.
         response = super().render_to_response(context, **response_kwargs)
+        # The same URL serves two bodies (full page vs partial) keyed on this header, so any
+        # shared cache must partition on it -- the central hook is the right place to say so
+        # once for every consumer.
+        patch_vary_headers(response, ('X-Requested-With',))
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             page_obj = context.get('page_obj')
             if page_obj is not None:

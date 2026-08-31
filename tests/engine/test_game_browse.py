@@ -614,6 +614,21 @@ def test_scroll_fetches_carry_x_has_next(client):
     assert more.content.decode().count('pp-gcard__title') == 30
 
 
+def test_exact_multiple_last_page_says_no_next(client):
+    """The probe-row boundary (the audit's surviving mutant): with rows an exact multiple of
+    the page size, the last page's slice comes back FULL -- has_next must still be '0' (strict
+    `>` on the probe), or every exact-multiple wall costs the extra fetch this exists to kill."""
+    for i in range(60):
+        GameFactory(title_platform=['PS5'])   # exactly 2 full pages
+
+    url, params = _url(page='2')
+    resp = client.get(url, params, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+    assert resp.status_code == 200
+    assert resp.content.decode().count('pp-gcard__title') == 30
+    assert resp['X-Has-Next'] == '0'
+
+
 def test_bare_games_renders_defaults_in_place(client):
     """A bare /games/ renders the modern-platform default view as a 200 (SEO Lane 1: the old
     force-302 meant the hub's canonical URL never returned a page). The defaults still apply --
