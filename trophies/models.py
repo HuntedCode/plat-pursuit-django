@@ -6497,6 +6497,13 @@ class Company(models.Model):
         'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
     )
 
+    # Materialized browse counts (recompute_tag_covers, nightly): the live versions were
+    # correlated aggregate subqueries per row, paid by the browse COUNT + page + every scroll
+    # fetch (the 2026-08-31 browse-backend audit's landmine). game_count = distinct IGDB ids;
+    # version_count = distinct Game rows (all links; ConceptCompany has no visibility flags).
+    game_count = models.PositiveIntegerField(default=0)
+    version_count = models.PositiveIntegerField(default=0)
+
     class Meta:
         verbose_name_plural = 'companies'
         ordering = ['name']
@@ -6615,6 +6622,15 @@ class Genre(models.Model):
     # JSON slug list (not an M2M) so the co-occurrence GROUP BY runs off the request path, not per page load.
     related_tags = models.JSONField(default=list, blank=True)
 
+    # Materialized browse stats (recompute_tag_covers, nightly): the per-tag counts the live
+    # sorts computed as correlated subqueries per request -- `players` scanned the whole
+    # ProfileGame table per load (the 2026-08-31 browse-backend audit's landmine). game_count =
+    # distinct member Games; player_count = distinct profiles across them; avg_rating = the
+    # concept-level community average. Read as plain indexed-enough columns at render.
+    game_count = models.PositiveIntegerField(default=0)
+    player_count = models.PositiveIntegerField(default=0)
+    avg_rating = models.FloatField(null=True, blank=True)
+
     class Meta:
         ordering = ['name']
 
@@ -6633,6 +6649,15 @@ class Theme(models.Model):
     )
     # Materialized "related themes" (co-occurrence slug list) -- see Genre.related_tags.
     related_tags = models.JSONField(default=list, blank=True)
+
+    # Materialized browse stats (recompute_tag_covers, nightly): the per-tag counts the live
+    # sorts computed as correlated subqueries per request -- `players` scanned the whole
+    # ProfileGame table per load (the 2026-08-31 browse-backend audit's landmine). game_count =
+    # distinct member Games; player_count = distinct profiles across them; avg_rating = the
+    # concept-level community average. Read as plain indexed-enough columns at render.
+    game_count = models.PositiveIntegerField(default=0)
+    player_count = models.PositiveIntegerField(default=0)
+    avg_rating = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ['name']
@@ -6790,6 +6815,13 @@ class Franchise(models.Model):
     representative_game = models.ForeignKey(
         'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
     )
+
+    # Materialized browse counts (recompute_tag_covers, nightly): the live versions were
+    # correlated aggregate subqueries per row, paid by the browse COUNT + page + every scroll
+    # fetch (the 2026-08-31 browse-backend audit's landmine). game_count = distinct IGDB ids;
+    # version_count = distinct Game rows, both over VISIBLE links (is_excluded=False, is_spinoff=False).
+    game_count = models.PositiveIntegerField(default=0)
+    version_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['name']
