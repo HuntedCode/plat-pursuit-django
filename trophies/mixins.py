@@ -1,4 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.paginator import Page, Paginator
 from django.http import JsonResponse
 from django.shortcuts import redirect
 
@@ -151,6 +152,18 @@ class RecapSyncGateMixin:
         return None
 
 
+class _ScrollPage(Page):
+    """Page for the countless scroll branch below: has_next comes from the +1-row probe, never
+    from a count."""
+
+    def __init__(self, object_list, number, paginator, has_next):
+        super().__init__(object_list, number, paginator)
+        self._has_next = has_next
+
+    def has_next(self):
+        return self._has_next
+
+
 class HtmxListMixin:
     """Mixin for ListViews that returns a partial template on HTMX requests.
 
@@ -158,6 +171,16 @@ class HtmxListMixin:
     (cards + pagination). On normal requests the full page template is rendered;
     on HTMX requests only the partial is returned, enabling snappy filter
     updates without a full page reload.
+
+    Infinite-scroll fetches (plain XHR, page >= 2) additionally get COUNTLESS pagination: the
+    InfiniteScroller appends cards and stops on the ``X-Has-Next`` header (or an empty page) --
+    it never reads ``paginator.count`` -- yet Django's paginator ran a full ``COUNT(*)`` over
+    the queryset on every fetch. On the browse pages whose querysets carry the page-identity
+    WINDOW election (Games, tag detail), that count executed the whole election a SECOND time
+    per scroll page, which is what made deep scrolling feel slow on the beta. The scroll branch
+    instead slices ``page_size + 1`` rows: one query, has_next from the probe row, past-end
+    still 404s (the scroller's stop contract). Filter swaps (HX-Request) and full pages keep
+    the real count -- their headers render it.
     """
     partial_template_name = None  # e.g. 'trophies/partials/game_list/browse_results.html'
 
@@ -170,6 +193,48 @@ class HtmxListMixin:
         if (self.request.htmx or is_xhr) and self.partial_template_name:
             return [self.partial_template_name]
         return super().get_template_names()
+
+    def _is_scroll_fetch(self):
+        """A plain-XHR fetch of page >= 2: the InfiniteScroller pulling the next page."""
+        if self.request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+            return False
+        try:
+            return int(self.request.GET.get('page', 1)) > 1
+        except (TypeError, ValueError):
+            return False
+
+    def paginate_queryset(self, queryset, page_size):
+        if not self._is_scroll_fetch():
+            return super().paginate_queryset(queryset, page_size)
+        page_number = int(self.request.GET.get('page'))
+        offset = (page_number - 1) * page_size
+        rows = list(queryset[offset:offset + page_size + 1])
+        if not rows:
+            # Past the end: the scroller's fallback stop signal (and the pre-existing contract
+            # every suite pins). Matches what Django's paginator raises through ListView.
+            from django.http import Http404
+            raise Http404(f'Empty scroll page {page_number}')
+        has_next = len(rows) > page_size
+        rows = rows[:page_size]
+        # A local paginator over just this page's rows: len(), never a query. Its `count` leaks
+        # only into the partial's data-result-count attribute, which nothing reads on a scroll
+        # append (the scroller extracts cards + the X-Has-Next header alone).
+        paginator = Paginator(rows, page_size)
+        page = _ScrollPage(rows, page_number, paginator, has_next)
+        return paginator, page, rows, True
+
+    def render_to_response(self, context, **response_kwargs):
+        # `X-Has-Next` stops the scroller one fetch EARLIER than the empty-page fallback --
+        # each saved fetch is a whole queryset execution on the windowed browse pages. Free on
+        # both branches: the scroll page carries the probe answer, the counted page derives it
+        # from the count it already paid for. XHR only; a filter swap's response is consumed by
+        # htmx, which ignores it.
+        response = super().render_to_response(context, **response_kwargs)
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            page_obj = context.get('page_obj')
+            if page_obj is not None:
+                response['X-Has-Next'] = '1' if page_obj.has_next() else '0'
+        return response
 
 
 class BackgroundContextMixin:

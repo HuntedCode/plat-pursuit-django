@@ -337,11 +337,14 @@ def test_the_radio_debounce_still_updates_the_active_filter_badge():
 
 def test_only_the_views_that_mean_it_send_the_scroller_its_stop_signal():
     """`InfiniteScroller` now stops on `X-Has-Next: 0`, so a view sending that header for any other reason
-    would end its wall early. Checked because the change reached 12 callers: only the two contract
-    endpoints send it, and one of those feeds Career's own bespoke scroller rather than the shared one."""
+    would end its wall early. Originally only the two contract endpoints sent it; the browse family
+    joined DELIBERATELY in 2026-08 via HtmxListMixin (the countless-scroll optimization), which sends it
+    ONLY on XHR responses that carry a page_obj -- exactly the scroller's own fetches. Anything beyond
+    these two files is still an accident waiting to end a wall early."""
     root = pathlib.Path(__file__).resolve().parents[2]
     senders = []
     for py in (root / 'trophies').rglob('*.py'):
         if 'X-Has-Next' in py.read_text(encoding='utf-8', errors='ignore'):
             senders.append(py.name)
-    assert senders == ['career_views.py'], f'a new view sends the scroller stop signal: {senders}'
+    assert sorted(senders) == ['career_views.py', 'mixins.py'], (
+        f'a new view sends the scroller stop signal: {senders}')

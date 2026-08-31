@@ -565,6 +565,55 @@ def test_xhr_past_end_page_404s(client):
     assert resp.status_code == 404
 
 
+# ── Countless scroll pagination (the beta slow-scroll fix) ────────────────────────────────────────
+
+def test_scroll_fetches_never_run_the_count(client):
+    """The beta slowness: every scroll fetch paid a COUNT(*) over the WINDOWED election
+    subquery -- the whole election executed a second time per page, for a number the scroller
+    never reads. A page>=2 XHR fetch must run ZERO count queries and exactly ONE window
+    (election) query; the filter swap (htmx, page 1) keeps the real count for its header tick."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    for i in range(35):
+        GameFactory(title_platform=['PS5'], played_count=i)
+    url, params = _url(page='2')
+
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(url, params, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+    assert resp.status_code == 200
+    counts = [q['sql'] for q in ctx.captured_queries if q['sql'].startswith('SELECT COUNT')]
+    assert not counts, f'scroll fetch ran a COUNT: {counts[0][:120]}'
+    windows = [q['sql'] for q in ctx.captured_queries if 'ROW_NUMBER' in q['sql']]
+    assert len(windows) == 1, f'expected ONE election execution, saw {len(windows)}'
+
+    # The filter swap keeps the REAL population count (its header tick reads it).
+    url, params = _url()
+    swap = client.get(url, params, HTTP_HX_REQUEST='true')
+    assert 'data-result-count="35"' in swap.content.decode()
+
+
+def test_scroll_fetches_carry_x_has_next(client):
+    """The stop-one-fetch-early header (the career scroller's protocol, now on the browse
+    family): '1' while more rows exist, '0' on the exact last page -- each saved fetch is a
+    whole election execution."""
+    for i in range(35):
+        GameFactory(title_platform=['PS5'])   # 35 rows, 30/page -> page 2 is the last
+
+    url, params = _url(page='2')
+    last = client.get(url, params, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert last.status_code == 200
+    assert last['X-Has-Next'] == '0'
+    assert last.content.decode().count('pp-gcard__title') == 5
+
+    for i in range(30):
+        GameFactory(title_platform=['PS5'])   # 65 rows -> page 2 now has a page 3 behind it
+    more = client.get(url, params, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert more['X-Has-Next'] == '1'
+    assert more.content.decode().count('pp-gcard__title') == 30
+
+
 def test_bare_games_renders_defaults_in_place(client):
     """A bare /games/ renders the modern-platform default view as a 200 (SEO Lane 1: the old
     force-302 meant the hub's canonical URL never returned a page). The defaults still apply --
