@@ -172,15 +172,10 @@ test to grade anything fixes the denominator for the whole session.
 
 All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Date/hour keying ensures seamless rotation without stale data windows. (`landing_badge_showcase_v2` is the exception: lazily filled, no cron behind it.)
 
-### Browse Pages (Lazily Filled)
-
-No cron: filled on the request path via `cache.get_or_set` when a full page renders on a cold cache.
-
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `trophy_lists:header_stats` | 3600s | Trophy Lists browse header scards (list totals / regional / with-a-platinum / new-this-week). Four O(catalogue) COUNT aggregates; full-page renders only, never grid swaps. Conftest deletes it per test (LocMem leak guard) |
-
-**Files**: `trophies/views/game_views.py` (`TrophyListsBrowseView._build_catalogue_scards`)
+The `site_heartbeat_*` payload also carries every browse-header substance stat (Browse Games,
+Trophy Lists, Genres & Themes index, Badges) -- the 2026-08 consolidation; see
+[homepage-services.md](homepage-services.md). The short-lived lazy key
+`trophy_lists:header_stats` was folded into it and no longer exists.
 
 ### Cron Watermarks / Cursors
 

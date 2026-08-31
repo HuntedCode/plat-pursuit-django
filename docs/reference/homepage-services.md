@@ -39,6 +39,14 @@ The dict shape is intentionally stable so the template can do simple nested look
 
 The `always` group renders as the four primary stat tiles. The `expanded` group is shown when the ribbon is expanded. `hours_hunted` and `trophies_24h` are computed live in the service from `ProfileGame.play_duration` and `EarnedTrophy` respectively. The other six values are sourced from `core.services.stats.compute_community_stats()` so the heartbeat doesn't double-query the same aggregates.
 
+The heartbeat is also the compute site for every **browse-header substance stat** (the 2026-08
+consolidation: hourly cron, never the request path). `expanded` additionally carries
+`games_in_badges` / `games_in_contracts` (Browse Games), `lists_total` (+7-day `delta`) /
+`lists_regional` / `lists_with_plat` (Trophy Lists browse), `genres_with_games` /
+`themes_with_games` (Genres & Themes index), and the badge-catalog values the Badges browse
+header reads. Consuming views do a pure `get_cached_heartbeat()` read and their templates hide
+the stat grid until the cron has warmed the cache.
+
 ## How It's Read
 
 `HomeView` reads the cached heartbeat via `get_cached_heartbeat()` and attaches it to the
