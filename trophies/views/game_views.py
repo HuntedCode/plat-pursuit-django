@@ -1635,6 +1635,14 @@ class RecentlyAddedView(HtmxListMixin, ListView):
                 [t for t in (newest_game, newest_dlc) if t is not None], default=None,
             )
 
+            # The grid's heartbeat pair (fills it to the four-stat family standard): the 7-day
+            # catalogue delta + total scale, both values the cron already computes for the home
+            # ribbon. Stale <=2h beside the two LIVE window counts above -- acceptable, they
+            # answer different questions and the template labels them so.
+            _gt = ((get_cached_heartbeat() or {}).get('always') or {}).get('games_total') or {}
+            context['ra_new_this_week'] = _gt.get('delta')
+            context['ra_catalog_total'] = _gt.get('value')
+
         # Base-games cards render the shared `.pp-gcard`, so feed it the same batched, whale-safe card
         # context Browse Games uses (progress / DLC counts / ratings / badge + contract pursuer hooks).
         if category == 'base_games':

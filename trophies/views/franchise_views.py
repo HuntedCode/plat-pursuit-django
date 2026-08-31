@@ -145,6 +145,17 @@ class FranchiseListView(HtmxListMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Franchises'},
         ]
+
+        # Header substance scards from the hourly heartbeat (the browse-family standard): full
+        # page only (guard mirrors HtmxListMixin's template selection). None until the cron
+        # warms the cache; the template hides the grid.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            from core.services.site_heartbeat import heartbeat_values
+            stats = heartbeat_values(
+                'franchises_total', 'series_total', 'franchise_games', 'franchise_spinoffs')
+            context['franchise_stats'] = stats if stats['franchises_total'] is not None else None
+
         context['sort_choices'] = FRANCHISE_SORT_CHOICES
         context['current_sort'] = self.request.GET.get('sort', 'alpha')
         context['show_solo'] = self.request.GET.get('show_solo') == '1'

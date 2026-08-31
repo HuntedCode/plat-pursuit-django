@@ -35,6 +35,33 @@
                     </span>
                 </div>
             </div>
+
+            {% comment %} Catalogue substance: the family .scard grid, fed by the hourly site heartbeat
+            (hidden until the cron warms the cache; full page only, never re-rendered on swaps). {% endcomment %}
+            {% if franchise_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Franchises</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchises_total|default:0 }}">{{ franchise_stats.franchises_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Series</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.series_total|default:0 }}">{{ franchise_stats.series_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Games in a franchise</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchise_games|default:0 }}">{{ franchise_stats.franchise_games|default:0|intcomma }}</div>
+                    <div class="scard__sub">of the catalogue</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Spin-offs</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchise_spinoffs|default:0 }}">{{ franchise_stats.franchise_spinoffs|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked separately</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </section>
 

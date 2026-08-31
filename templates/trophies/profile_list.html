@@ -52,6 +52,34 @@ scroll and an outer border would grow with it forever.
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">hunter{{ paginator.count|pluralize }} shown</span>
                 </div>
             </div>
+
+            {% comment %} Community substance: the family .scard grid, fed by the hourly site heartbeat --
+            all four values the cron already computes for the home ribbon (hidden until warm; full page
+            only, never re-rendered on swaps). {% endcomment %}
+            {% if hunters_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Hunters tracked</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ hunters_stats.profiles_total|default:0 }}">{{ hunters_stats.profiles_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">all-time</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Trophies tracked</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ hunters_stats.trophies_total|default:0 }}">{{ hunters_stats.trophies_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">between them</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Platinums earned</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ hunters_stats.platinums_total|default:0 }}">{{ hunters_stats.platinums_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">all-time</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Earned in last 24h</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ hunters_stats.trophies_24h|default:0 }}">{{ hunters_stats.trophies_24h|default:0|intcomma }}</div>
+                    <div class="scard__sub">refreshed hourly</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </section>
 
@@ -337,6 +365,7 @@ scroll and an outer border would grow with it forever.
                     PlatPursuit.countUp(countEl, 900);
                     countLast = parseFloat(countEl.dataset.countup);
                 }
+                document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
             }
 
             // Mini-bar proxies. Re-wired per boot because a history restore hands us fresh nodes; the real

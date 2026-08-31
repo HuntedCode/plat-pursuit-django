@@ -290,6 +290,15 @@ class JobsBrowseView(HtmxListMixin, ListView):
         value = (self.request.GET.get('sort') or '').strip()
         return value if value in self.SORTS else self.DEFAULT_SORT
 
+    def _header_stats(self):
+        """Heartbeat scards for the full page; None on swaps and until the cron warms the cache."""
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if getattr(self.request, 'htmx', False) or is_xhr:
+            return None
+        from core.services.site_heartbeat import heartbeat_values
+        stats = heartbeat_values('jobs_total', 'contracts_live', 'games_in_contracts', 'job_xp_banked')
+        return stats if stats['jobs_total'] is not None else None
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update({
@@ -308,6 +317,10 @@ class JobsBrowseView(HtmxListMixin, ListView):
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Jobs'},
             ],
+            # Header substance scards from the hourly heartbeat (the browse-family standard):
+            # full page only -- the guard mirrors HtmxListMixin's template selection exactly.
+            # None until the cron warms the cache; the template hides the grid.
+            'jobs_stats': self._header_stats(),
         })
         return context
 

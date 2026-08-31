@@ -353,6 +353,7 @@ def test_index_header_counts_ride_the_heartbeat(client):
     key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
     cache.set(key, {'expanded': {
         'genres_with_games': {'value': 23}, 'themes_with_games': {'value': 21},
+        'games_tagged': {'value': 5400}, 'tags_applied': {'value': 9800},
     }}, 120)
     try:
         with CaptureQueriesContext(connection) as ctx:
@@ -367,6 +368,9 @@ def test_index_header_counts_ride_the_heartbeat(client):
     assert warm_resp.context['genre_count'] == 23
     assert warm_resp.context['theme_count'] == 21
     assert '>23<' in warm and '>21<' in warm   # the scard value elements render the cached numbers
+    # The coverage pair (four-stat fill-out, 2026-08-31) -- individually gated, so a payload
+    # carrying them renders them:
+    assert 'Games tagged' in warm and '5,400' in warm and '9,800' in warm
     # On the genres tab the ONLY thing that ever queried trophies_theme was the header's
     # with-games count -- zero theme queries proves the header compute left the request path
     # (the genre tile grid legitimately joins trophies_genre, so that side can't be pinned).

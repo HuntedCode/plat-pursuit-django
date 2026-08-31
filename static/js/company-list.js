@@ -138,6 +138,7 @@
         if (first && PP.countUp) {
             var headEl = document.querySelector('[data-co-count]');
             if (headEl) { PP.countUp(headEl, 900); }
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
         }
         initToolbar();
         wireMinibar();

@@ -35,6 +35,15 @@ def get_cached_heartbeat():
     return data
 
 
+def heartbeat_values(*keys):
+    """Browse-header read helper: {key: value-or-None} for the given stat keys, searched across
+    the cached heartbeat's `always` + `expanded` sections. Cold cache (cron hasn't run) yields
+    all-None, which consuming templates gate on -- a pure cache.get, safe on any request path."""
+    hb = get_cached_heartbeat() or {}
+    merged = {**(hb.get('always') or {}), **(hb.get('expanded') or {})}
+    return {k: (merged.get(k) or {}).get('value') for k in keys}
+
+
 def _humanize_compact(n):
     """Format a number into compact form: 1234 -> '1.2K', 1_234_567 -> '1.2M'."""
     if n is None:
@@ -184,11 +193,14 @@ def compute_site_heartbeat() -> dict:
         lists_total = lists_regional = lists_with_plat = lists_new_this_week = None
         is_partial = True
 
-    # Genres & Themes index header: how many of each actually carry games. Two DISTINCT
+    # Genres & Themes index header: how many of each actually carry games (two DISTINCT
     # existence counts over 4-table joins -- moved here from a hot per-request compute in
-    # 2026-08 (they ran on every request AND every filter swap of /genres/).
+    # 2026-08, they ran on every request AND every filter swap of /genres/), plus the coverage
+    # pair that filled the grid out to the four-stat family standard.
     try:
-        from trophies.models import Genre, Theme
+        from django.db.models import Q as _Q
+
+        from trophies.models import ConceptGenre, ConceptTheme, Game, Genre, Theme
         genres_with_games = (
             Genre.objects.filter(genre_concepts__concept__games__isnull=False)
             .distinct().count()
@@ -197,9 +209,57 @@ def compute_site_heartbeat() -> dict:
             Theme.objects.filter(theme_concepts__concept__games__isnull=False)
             .distinct().count()
         )
+        games_tagged = (
+            Game.objects.filter(
+                _Q(concept__concept_genres__isnull=False)
+                | _Q(concept__concept_themes__isnull=False))
+            .distinct().count()
+        )
+        tags_applied = ConceptGenre.objects.count() + ConceptTheme.objects.count()
     except Exception:
         logger.exception("genre/theme index stats query failed")
-        genres_with_games = themes_with_games = None
+        genres_with_games = themes_with_games = games_tagged = tags_applied = None
+        is_partial = True
+
+    # Jobs browse header: the catalog scale + the live contract pool + the XP hunters have
+    # banked across every job (a whole-table Sum -> cron). games_in_contracts above completes
+    # its four-stat grid.
+    try:
+        from trophies.models import Contract, Job, ProfileJobXP
+        jobs_total = Job.objects.exclude(is_fallback=True).count()
+        contracts_live = Contract.objects.filter(is_live=True).count()
+        job_xp_banked = ProfileJobXP.objects.aggregate(total=Sum('total_xp'))['total'] or 0
+    except Exception:
+        logger.exception("jobs browse stats query failed")
+        jobs_total = contracts_live = job_xp_banked = None
+        is_partial = True
+
+    # Franchise + company browse headers: how much of the catalogue each curation layer
+    # reaches. Games counts are Game rows whose concept carries a (visible) link -- one row
+    # per Game, no distinct multiplication.
+    try:
+        from django.db.models import Exists as _Exists, OuterRef as _OuterRef
+
+        from trophies.models import (
+            Company, ConceptCompany, ConceptFranchise, Franchise, Game,
+        )
+        franchises_total = Franchise.objects.filter(source_type='franchise').count()
+        series_total = Franchise.objects.filter(source_type='collection').count()
+        franchise_games = Game.objects.filter(concept_id__in=ConceptFranchise.objects.filter(
+            is_excluded=False).values('concept_id')).count()
+        franchise_spinoffs = ConceptFranchise.objects.filter(
+            is_excluded=False, is_spinoff=True).count()
+        companies_total = Company.objects.count()
+        companies_developers = Company.objects.filter(_Exists(ConceptCompany.objects.filter(
+            company=_OuterRef('pk'), is_developer=True))).count()
+        companies_publishers = Company.objects.filter(_Exists(ConceptCompany.objects.filter(
+            company=_OuterRef('pk'), is_publisher=True))).count()
+        company_games = Game.objects.filter(
+            concept_id__in=ConceptCompany.objects.values('concept_id')).count()
+    except Exception:
+        logger.exception("franchise/company browse stats query failed")
+        franchises_total = series_total = franchise_games = franchise_spinoffs = None
+        companies_total = companies_developers = companies_publishers = company_games = None
         is_partial = True
 
     # Community ratings -- the landing's Ratings section reads these. The distinct over the full
@@ -317,6 +377,71 @@ def compute_site_heartbeat() -> dict:
             'themes_with_games': {
                 'value': themes_with_games,
                 'label': 'Themes with games',
+                'sublabel': 'catalogue',
+            },
+            'games_tagged': {
+                'value': games_tagged,
+                'label': 'Games tagged',
+                'sublabel': 'genre or theme',
+            },
+            'tags_applied': {
+                'value': tags_applied,
+                'label': 'Tags applied',
+                'sublabel': 'across the catalogue',
+            },
+            'jobs_total': {
+                'value': jobs_total,
+                'label': 'Jobs',
+                'sublabel': 'on the board',
+            },
+            'contracts_live': {
+                'value': contracts_live,
+                'label': 'Live contracts',
+                'sublabel': 'open now',
+            },
+            'job_xp_banked': {
+                'value': job_xp_banked,
+                'label': 'Job XP banked',
+                'sublabel': 'all-time',
+            },
+            'franchises_total': {
+                'value': franchises_total,
+                'label': 'Franchises',
+                'sublabel': 'tracked',
+            },
+            'series_total': {
+                'value': series_total,
+                'label': 'Series',
+                'sublabel': 'tracked',
+            },
+            'franchise_games': {
+                'value': franchise_games,
+                'label': 'Games in a franchise',
+                'sublabel': 'catalogue',
+            },
+            'franchise_spinoffs': {
+                'value': franchise_spinoffs,
+                'label': 'Spin-offs',
+                'sublabel': 'tracked separately',
+            },
+            'companies_total': {
+                'value': companies_total,
+                'label': 'Companies',
+                'sublabel': 'tracked',
+            },
+            'companies_developers': {
+                'value': companies_developers,
+                'label': 'Developers',
+                'sublabel': 'with games',
+            },
+            'companies_publishers': {
+                'value': companies_publishers,
+                'label': 'Publishers',
+                'sublabel': 'with games',
+            },
+            'company_games': {
+                'value': company_games,
+                'label': 'Games with a company',
                 'sublabel': 'catalogue',
             },
             'ratings_total': {

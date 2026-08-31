@@ -41,9 +41,10 @@
                 </div>
             </div>
 
-            {% comment %} Discovery substance: how much has landed in the last 30 days, per category. Two bounded
-            counts (computed in the view), so this is zero extra cost on the request path. {% endcomment %}
-            <div class="grid grid-cols-2 gap-2 md:gap-3 mt-3 md:mt-4">
+            {% comment %} Discovery substance: the two LIVE 30-day window counts (computed in the view,
+            cheap + never lag the grid) padded to the four-stat family standard by the heartbeat pair
+            (7-day delta + catalogue scale, <=2h stale, individually gated for a cold cron). {% endcomment %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
                 <div class="scard">
                     <div class="scard__label">New games</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ category_counts.base_games|default:0 }}">{{ category_counts.base_games|default:0|intcomma }}</div>
@@ -54,6 +55,20 @@
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ category_counts.dlc|default:0 }}">{{ category_counts.dlc|default:0|intcomma }}</div>
                     <div class="scard__sub">in the last 30 days</div>
                 </div>
+                {% if ra_new_this_week is not None %}
+                <div class="scard">
+                    <div class="scard__label">New this week</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ ra_new_this_week|default:0 }}">{{ ra_new_this_week|default:0|intcomma }}</div>
+                    <div class="scard__sub">games, freshly synced</div>
+                </div>
+                {% endif %}
+                {% if ra_catalog_total is not None %}
+                <div class="scard">
+                    <div class="scard__label">Catalogue</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ ra_catalog_total|default:0 }}">{{ ra_catalog_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">games and counting</div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </section>

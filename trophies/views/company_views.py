@@ -185,6 +185,17 @@ class CompanyListView(HtmxListMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Companies'},
         ]
+
+        # Header substance scards from the hourly heartbeat (the browse-family standard): full
+        # page only (guard mirrors HtmxListMixin's template selection). None until the cron
+        # warms the cache; the template hides the grid.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            from core.services.site_heartbeat import heartbeat_values
+            stats = heartbeat_values(
+                'companies_total', 'companies_developers', 'companies_publishers', 'company_games')
+            context['company_stats'] = stats if stats['companies_total'] is not None else None
+
         context['form'] = CompanySearchForm(self.request.GET)
         context['current_sort'] = self.request.GET.get('sort', '')
         context['current_query'] = self.request.GET.get('query', '').strip()

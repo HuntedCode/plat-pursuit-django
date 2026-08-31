@@ -125,6 +125,7 @@
         if (first && PP.countUp) {
             var headEl = document.querySelector('[data-fr-count]');
             if (headEl) { PP.countUp(headEl, 900); }
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); });
         }
         var form = document.getElementById('fr-form');
         if (form) { form.addEventListener('change', onFormChangeDim); }

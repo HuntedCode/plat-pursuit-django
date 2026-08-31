@@ -153,10 +153,13 @@ class GenreThemeListView(HtmxListMixin, ListView):
         # would zero the captions on an htmx history-restore (which renders the FULL page --
         # the trap the Recently Added guard documents). None until the cron warms the cache;
         # the template gates on that.
-        from core.services.site_heartbeat import get_cached_heartbeat
-        _exp = (get_cached_heartbeat() or {}).get('expanded') or {}
-        context['genre_count'] = (_exp.get('genres_with_games') or {}).get('value')
-        context['theme_count'] = (_exp.get('themes_with_games') or {}).get('value')
+        from core.services.site_heartbeat import heartbeat_values
+        _stats = heartbeat_values(
+            'genres_with_games', 'themes_with_games', 'games_tagged', 'tags_applied')
+        context['genre_count'] = _stats['genres_with_games']
+        context['theme_count'] = _stats['themes_with_games']
+        context['games_tagged'] = _stats['games_tagged']
+        context['tags_applied'] = _stats['tags_applied']
 
         context['seo_description'] = (
             "Browse PlayStation games by genre and theme. "

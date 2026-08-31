@@ -48,6 +48,33 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
                     <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">job{{ jobs|length|pluralize }}</div>
                 </div>
             </div>
+
+            {% comment %} Catalogue substance: the family .scard grid, fed by the hourly site heartbeat
+            (hidden until the cron warms the cache; full page only, never re-rendered on swaps). {% endcomment %}
+            {% if jobs_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Jobs</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.jobs_total|default:0 }}">{{ jobs_stats.jobs_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">on the board</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Live contracts</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.contracts_live|default:0 }}">{{ jobs_stats.contracts_live|default:0|intcomma }}</div>
+                    <div class="scard__sub">open now</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Games in contracts</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.games_in_contracts|default:0 }}">{{ jobs_stats.games_in_contracts|default:0|intcomma }}</div>
+                    <div class="scard__sub">catalogue</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Job XP banked</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.job_xp_banked|default:0 }}">{{ jobs_stats.job_xp_banked|default:0|intcomma }}</div>
+                    <div class="scard__sub">all-time</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </section>
 
@@ -216,6 +243,7 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
         initReveal();
         // First paint sweeps up from zero; every filter after it ticks from the previous value (above).
         if (tally && PP.countUp) { PP.countUp(tally, 850); }
+        if (PP.countUp) { document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); }); }
     })();
 </script>
 {% endblock %}

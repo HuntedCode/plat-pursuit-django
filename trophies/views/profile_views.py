@@ -150,6 +150,17 @@ class ProfilesListView(HtmxListMixin, ListView):
             {'text': 'Hunters'},
         ]
 
+        # Header substance scards from the hourly heartbeat (the browse-family standard) --
+        # ALL four are values the heartbeat already computed for the home ribbon, so this page
+        # costs the cron nothing new. Full page only (guard mirrors HtmxListMixin's template
+        # selection); None until the cron warms the cache, and the template hides the grid.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            from core.services.site_heartbeat import heartbeat_values
+            stats = heartbeat_values(
+                'profiles_total', 'trophies_total', 'platinums_total', 'trophies_24h')
+            context['hunters_stats'] = stats if stats['profiles_total'] is not None else None
+
         context['form'] = self.get_filter_form()
         context['selected_country'] = self.request.GET.get('country', '')
 

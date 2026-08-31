@@ -36,6 +36,33 @@
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">shown</span>
                 </div>
             </div>
+
+            {% comment %} Catalogue substance: the family .scard grid, fed by the hourly site heartbeat
+            (hidden until the cron warms the cache; full page only, never re-rendered on swaps). {% endcomment %}
+            {% if company_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Companies</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.companies_total|default:0 }}">{{ company_stats.companies_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Developers</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.companies_developers|default:0 }}">{{ company_stats.companies_developers|default:0|intcomma }}</div>
+                    <div class="scard__sub">with games</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Publishers</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.companies_publishers|default:0 }}">{{ company_stats.companies_publishers|default:0|intcomma }}</div>
+                    <div class="scard__sub">with games</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Games with a company</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.company_games|default:0 }}">{{ company_stats.company_games|default:0|intcomma }}</div>
+                    <div class="scard__sub">of the catalogue</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </section>
 
