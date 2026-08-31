@@ -1604,19 +1604,25 @@ class RecentlyAddedView(HtmxListMixin, ListView):
         # Windowed discovery counts for the header stats + switcher captions (2 bounded counts). Same window
         # the grid uses (get_window_start) -- these are the raw discovery scale for the window, so they read
         # a touch higher than the grid when active filters narrow it or a POOL_SIZE-exceeding burst is capped.
-        window_start = self.get_window_start()
-        dlc_qs = TrophyGroup.objects.exclude(trophy_group_id='default')
-        context['category_counts'] = {
-            'base_games': Game.objects.filter(created_at__gte=window_start).count(),
-            'dlc': dlc_qs.filter(created_at__gte=window_start).count(),
-        }
+        # FULL PAGE ONLY (the browse-family guard): every render site lives in the full-page
+        # header/switcher markup, and the island/grid swaps were paying these four indexed
+        # queries per swap for nothing. Cheap enough to stay live (no heartbeat lag on the
+        # captions), too cheap to keep paying on the infinite-scroll path.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not self.request.htmx and not is_xhr:
+            window_start = self.get_window_start()
+            dlc_qs = TrophyGroup.objects.exclude(trophy_group_id='default')
+            context['category_counts'] = {
+                'base_games': Game.objects.filter(created_at__gte=window_start).count(),
+                'dlc': dlc_qs.filter(created_at__gte=window_start).count(),
+            }
 
-        # Freshest add across both categories -> header recency stat (2 indexed LIMIT-1 lookups).
-        newest_game = Game.objects.order_by('-created_at').values_list('created_at', flat=True).first()
-        newest_dlc = dlc_qs.order_by('-created_at').values_list('created_at', flat=True).first()
-        context['newest_added_at'] = max(
-            [t for t in (newest_game, newest_dlc) if t is not None], default=None,
-        )
+            # Freshest add across both categories -> header recency stat (2 indexed LIMIT-1 lookups).
+            newest_game = Game.objects.order_by('-created_at').values_list('created_at', flat=True).first()
+            newest_dlc = dlc_qs.order_by('-created_at').values_list('created_at', flat=True).first()
+            context['newest_added_at'] = max(
+                [t for t in (newest_game, newest_dlc) if t is not None], default=None,
+            )
 
         # Base-games cards render the shared `.pp-gcard`, so feed it the same batched, whale-safe card
         # context Browse Games uses (progress / DLC counts / ratings / badge + contract pursuer hooks).

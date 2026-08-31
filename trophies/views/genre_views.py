@@ -227,36 +227,43 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         """Header stats + hero cover + related-tags rail + the shared card context + filter/toolbar state."""
         tag = self.get_tag()
 
-        # Header stats: one aggregate over the tag's games, off DENORMED Game columns -> whale-safe (bounded by
-        # game count, not player rows). games/plays/plats/avg-completion for the .scard row.
-        stats = Game.objects.filter(self.get_tag_filter()).aggregate(
-            games=Count('id'),
-            owned=Sum('played_count'),   # total ownership records across the tag's games (not distinct players)
-            plats=Sum('plats_earned_count'),
-            avg_completion=Avg('avg_completion'),
-        )
-        context['total_game_count'] = stats['games'] or 0
-        context['tag_stats'] = stats
-
-        # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered + game_count-annotated
-        # (bounded to RELATED_N tiles). Rendered with the shared .pp-gtile.
-        related_slugs = list(tag.related_tags or [])
-        if related_slugs:
-            Model = self.get_tag_model()
-            rail = list(
-                Model.objects.filter(slug__in=related_slugs)
-                .select_related(
-                    'representative_game', 'representative_game__concept',
-                    'representative_game__concept__igdb_match',
-                )
-                .defer('representative_game__concept__igdb_match__raw_response')
-                .annotate(game_count=Count(self.get_rail_count_path(), distinct=True))
+        # Header furniture (stats aggregate + related-tags rail): FULL PAGE ONLY. The grid
+        # partial the HTMX filter swaps and infinite-scroll XHRs render never shows either, but
+        # HtmxListMixin swaps only the template, so get_context_data still runs in full -- this
+        # gate is what keeps the swap path from paying header queries it throws away (the
+        # browse-family guard GamesListView established).
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            # Header stats: one aggregate over the tag's games, off DENORMED Game columns -> whale-safe
+            # (bounded by game count, not player rows). games/plays/plats/avg-completion for the .scard row.
+            stats = Game.objects.filter(self.get_tag_filter()).aggregate(
+                games=Count('id'),
+                owned=Sum('played_count'),   # total ownership records across the tag's games (not distinct players)
+                plats=Sum('plats_earned_count'),
+                avg_completion=Avg('avg_completion'),
             )
-            order = {s: i for i, s in enumerate(related_slugs)}
-            rail.sort(key=lambda t: order.get(t.slug, len(order)))
-            context['related_tags'] = [t for t in rail if t.game_count]
-        else:
-            context['related_tags'] = []
+            context['total_game_count'] = stats['games'] or 0
+            context['tag_stats'] = stats
+
+            # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered +
+            # game_count-annotated (bounded to RELATED_N tiles). Rendered with the shared .pp-gtile.
+            related_slugs = list(tag.related_tags or [])
+            if related_slugs:
+                Model = self.get_tag_model()
+                rail = list(
+                    Model.objects.filter(slug__in=related_slugs)
+                    .select_related(
+                        'representative_game', 'representative_game__concept',
+                        'representative_game__concept__igdb_match',
+                    )
+                    .defer('representative_game__concept__igdb_match__raw_response')
+                    .annotate(game_count=Count(self.get_rail_count_path(), distinct=True))
+                )
+                order = {s: i for i, s in enumerate(related_slugs)}
+                rail.sort(key=lambda t: order.get(t.slug, len(order)))
+                context['related_tags'] = [t for t in rail if t.game_count]
+            else:
+                context['related_tags'] = []
 
         form = self.get_filter_form()
         context['form'] = form

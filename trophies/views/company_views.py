@@ -353,9 +353,11 @@ class CompanyDetailView(DetailView):
             context['parent_company'] = company.parent
 
         # Community stats across this company's games (unchanged from the
-        # pre-rebuild version — existing aggregation still correct).
+        # pre-rebuild version — existing aggregation still correct). FULL PAGE ONLY: the two
+        # big-IN aggregates below feed header-only stats, and the HTMX role/sort swap renders
+        # just the grouped list -- without this gate every swap paid them for nothing.
         company_concept_ids = [cc.concept_id for cc in all_concept_companies]
-        if company_concept_ids:
+        if company_concept_ids and not getattr(self.request, 'htmx', False):
             rating_agg = UserConceptRating.objects.filter(
                 concept_id__in=company_concept_ids,
                 concept_trophy_group__isnull=True,

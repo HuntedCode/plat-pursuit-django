@@ -166,6 +166,16 @@ def test_xhr_returns_rows_partial(client):
     assert GRID_PARTIAL in templates
     assert FULL_PAGE not in templates
     assert 'data-result-count' in resp.content.decode()
+    # Header furniture is FULL PAGE ONLY (the 2026-08 swap-path guard): the grid partial never
+    # renders the stats aggregate or the related rail, so neither may be computed for it.
+    assert 'tag_stats' not in resp.context
+    assert 'related_tags' not in resp.context
+
+    htmx = client.get(_url(genre), HTTP_HX_REQUEST='true')
+    assert 'tag_stats' not in htmx.context
+
+    full = client.get(_url(genre))
+    assert full.context['tag_stats']['games'] >= 1
 
 
 # ── Whale-safety ──────────────────────────────────────────────────────────────────────────────────────────

@@ -246,6 +246,10 @@ def test_role_swap_returns_group_partial(client):
     assert GROUP_PARTIAL in templates
     assert FULL_PAGE not in templates
     assert 'pp-reveal' in resp.content.decode()
+    # The header's community-stats aggregates are FULL PAGE ONLY (the 2026-08 swap-path guard):
+    # the role/sort swap renders just the grouped list, so the two big-IN aggregates must not run.
+    assert 'company_avg_rating' not in resp.context
+    assert 'company_total_players' not in resp.context
 
 
 def test_detail_no_per_game_n_plus_1(client):

@@ -210,6 +210,10 @@ def test_xhr_returns_rows_partial(client):
     assert GRID_PARTIAL in templates
     assert FULL_PAGE not in templates
     assert 'data-result-count' in resp.content.decode()
+    # Header discovery counts are FULL PAGE ONLY (the 2026-08 swap-path guard): every render
+    # site lives in the full-page header/switcher markup, so the swaps skip the four queries.
+    assert 'category_counts' not in resp.context
+    assert 'newest_added_at' not in resp.context
 
 
 def test_category_switch_returns_view_island(client):

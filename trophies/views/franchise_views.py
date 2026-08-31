@@ -249,26 +249,30 @@ class FranchiseDetailView(DetailView):
         # version_count are named to match what the tile expects.
         opposite_type = 'collection' if franchise.source_type == 'franchise' else 'franchise'
 
-        related_entries = list(
-            Franchise.objects.filter(source_type=opposite_type)
-            .filter(Exists(ConceptFranchise.objects.filter(
-                franchise=OuterRef('pk'),
-                concept_id__in=Subquery(concept_ids_subq),
-            )))
-            .exclude(pk=franchise.pk)
-            .annotate(
-                # Shared with the browse list, over VISIBLE links, so a rail tile and the list agree.
-                game_count=_visible_link_count('concept__igdb_match__igdb_id'),
-                version_count=_visible_link_count('concept__games'),
+        # FULL PAGE ONLY: the rail lives in the header, and the HTMX sort swap renders just the
+        # grouped list -- the Exists-annotated rail query was paid on every swap for nothing.
+        related_entries = []
+        if not getattr(self.request, 'htmx', False):
+            related_entries = list(
+                Franchise.objects.filter(source_type=opposite_type)
+                .filter(Exists(ConceptFranchise.objects.filter(
+                    franchise=OuterRef('pk'),
+                    concept_id__in=Subquery(concept_ids_subq),
+                )))
+                .exclude(pk=franchise.pk)
+                .annotate(
+                    # Shared with the browse list, over VISIBLE links, so a rail tile and the list agree.
+                    game_count=_visible_link_count('concept__igdb_match__igdb_id'),
+                    version_count=_visible_link_count('concept__games'),
+                )
+                .filter(version_count__gt=0)
+                .select_related(
+                    'representative_game', 'representative_game__concept',
+                    'representative_game__concept__igdb_match',
+                )
+                .defer('representative_game__concept__igdb_match__raw_response')
+                .order_by(Lower('name'))
             )
-            .filter(version_count__gt=0)
-            .select_related(
-                'representative_game', 'representative_game__concept',
-                'representative_game__concept__igdb_match',
-            )
-            .defer('representative_game__concept__igdb_match__raw_response')
-            .order_by(Lower('name'))
-        )
 
         # `groups` + `empty_message` are the shared game_groups_list.html contract
         # (also fed to that partial standalone on the HTMX sort swap).
