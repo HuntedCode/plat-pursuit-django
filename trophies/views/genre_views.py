@@ -179,11 +179,6 @@ class TagDetailBaseView(HtmxListMixin, ListView):
         """Subclasses return the Genre or Theme model class (for the related-tags rail lookup)."""
         raise NotImplementedError
 
-    def get_rail_count_path(self):
-        """Subclasses return the reverse path from the tag model to games, for annotating a related tag's
-        game_count (e.g. 'genre_concepts__concept__games')."""
-        raise NotImplementedError
-
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
             self._filter_form = GameSearchForm(self.request.GET)
@@ -242,8 +237,10 @@ class TagDetailBaseView(HtmxListMixin, ListView):
             context['total_game_count'] = stats['games'] or 0
             context['tag_stats'] = stats
 
-            # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered +
-            # game_count-annotated (bounded to RELATED_N tiles). Rendered with the shared .pp-gtile.
+            # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered,
+            # bounded to RELATED_N tiles. Rendered with the shared .pp-gtile, whose game_count
+            # is the DENORM column now (2026-08-31) -- the old distinct-count annotation both
+            # cost a per-tile aggregate and CONFLICTS with the model field.
             related_slugs = list(tag.related_tags or [])
             if related_slugs:
                 Model = self.get_tag_model()
@@ -254,7 +251,6 @@ class TagDetailBaseView(HtmxListMixin, ListView):
                         'representative_game__concept__igdb_match',
                     )
                     .defer('representative_game__concept__igdb_match__raw_response')
-                    .annotate(game_count=Count(self.get_rail_count_path(), distinct=True))
                 )
                 order = {s: i for i, s in enumerate(related_slugs)}
                 rail.sort(key=lambda t: order.get(t.slug, len(order)))
@@ -310,9 +306,6 @@ class GenreDetailView(TagDetailBaseView):
     def get_tag_model(self):
         return Genre
 
-    def get_rail_count_path(self):
-        return 'genre_concepts__concept__games'
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['genre'] = self.genre
@@ -352,9 +345,6 @@ class ThemeDetailView(TagDetailBaseView):
 
     def get_tag_model(self):
         return Theme
-
-    def get_rail_count_path(self):
-        return 'theme_concepts__concept__games'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
