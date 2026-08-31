@@ -249,3 +249,25 @@ def test_download_button_carries_all_three_states(client):
         assert glyph in html, f'{glyph} missing from the download button'
     assert 'pc-btn--go pp-dl' in html, 'the download button is not on the shared state machine'
     assert 'data-dl-label' in html, 'the label has no hook, so busy/done would never be announced'
+
+
+def test_header_stats_gated_off_the_swap_path(client):
+    """The browse-backend audit's PlatCards finding: the three header-stat queries ran on every
+    swap and scroll fetch for a partial that doesn't render them. A swap WITH results computes
+    none of them; an EMPTY swap still gets the totals pair, because the partial's empty state
+    branches on it ('Nothing matches' for a hunter with completions vs 'No completions yet')."""
+    profile = _hunter()
+    _completed_game(profile, with_platinum=True, name='Gated Game')
+    client.force_login(profile.user)
+
+    full = client.get(URL)
+    assert full.context['total_platinums'] >= 1
+    assert full.context['this_year'] is not None
+
+    swap = client.get(URL, HTTP_HX_REQUEST='true')
+    assert 'total_platinums' not in swap.context
+    assert swap.context['this_year'] is None
+
+    empty_swap = client.get(URL, {'query': 'zzz-no-match'}, HTTP_HX_REQUEST='true')
+    assert empty_swap.context['total_platinums'] >= 1     # the empty state's branch data
+    assert 'Nothing matches' in empty_swap.content.decode()

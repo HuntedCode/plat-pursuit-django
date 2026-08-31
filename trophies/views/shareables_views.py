@@ -134,14 +134,25 @@ class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixi
         profile = self.request.user.profile
 
         # Header stats read the unfiltered ladders, so they describe the hunter's career rather than
-        # whatever the toolbar currently shows.
-        total_plats, total_full = cards.hunter_totals(profile)
+        # whatever the toolbar currently shows. FULL PAGE ONLY -- with one precise exception: the
+        # swap partial's empty state branches on the totals ("Nothing matches" for a hunter with
+        # completions vs "No completions yet"), so an EMPTY swap result still computes the pair.
+        # A normal swap/scroll fetch (results present) pays zero of these three queries -- the
+        # browse-backend audit's PlatCards finding.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        serving_partial = getattr(self.request, 'htmx', False) or is_xhr
+        if not serving_partial or not context['object_list']:
+            total_plats, total_full = cards.hunter_totals(profile)
+            context['total_platinums'] = total_plats
+            context['total_completions'] = total_full
+
         themes = get_plat_card_themes()
         year_start = timezone.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         context.update({
-            'total_platinums': total_plats,
-            'total_completions': total_full,
-            'this_year': cards.eligible_completions(profile).filter(last_trophy_at__gte=year_start).count(),
+            'this_year': (
+                cards.eligible_completions(profile).filter(last_trophy_at__gte=year_start).count()
+                if not serving_partial else None
+            ),
             'variant_choices': self.VARIANT_CHOICES,
             'current_variant': self._variant(),
             'sort_choices': self.SORT_CHOICES,
