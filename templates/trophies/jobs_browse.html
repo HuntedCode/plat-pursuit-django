@@ -63,11 +63,16 @@ colour wherever you meet it, and the chip row below spends them as the filter's 
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.contracts_live|default:0 }}">{{ jobs_stats.contracts_live|default:0|intcomma }}</div>
                     <div class="scard__sub">open now</div>
                 </div>
+                {% comment %} Individually gated: this value comes from a DIFFERENT heartbeat
+                try-block than the other three (the anchored+trusted IGDB semi-join, the most
+                failure-prone of the set) -- if its block failed, a 0 here would be a lie. {% endcomment %}
+                {% if jobs_stats.games_in_contracts is not None %}
                 <div class="scard">
                     <div class="scard__label">Games in contracts</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.games_in_contracts|default:0 }}">{{ jobs_stats.games_in_contracts|default:0|intcomma }}</div>
                     <div class="scard__sub">catalogue</div>
                 </div>
+                {% endif %}
                 <div class="scard">
                     <div class="scard__label">Job XP banked</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.job_xp_banked|default:0 }}">{{ jobs_stats.job_xp_banked|default:0|intcomma }}</div>

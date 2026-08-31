@@ -159,7 +159,11 @@ class ProfilesListView(HtmxListMixin, ListView):
             from core.services.site_heartbeat import heartbeat_values
             stats = heartbeat_values(
                 'profiles_total', 'trophies_total', 'platinums_total', 'trophies_24h')
-            context['hunters_stats'] = stats if stats['profiles_total'] is not None else None
+            # TRUTHY gate, not is-not-None: these route through _community_value(default=0),
+            # so a failed community compute caches ZEROS -- and "Hunters tracked 0" on a live
+            # site is a lie, not a stat (the audit's catch). A real zero-profile site never
+            # renders this page anyway.
+            context['hunters_stats'] = stats if stats['profiles_total'] else None
 
         context['form'] = self.get_filter_form()
         context['selected_country'] = self.request.GET.get('country', '')

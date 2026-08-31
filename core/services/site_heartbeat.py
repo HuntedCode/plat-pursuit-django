@@ -209,11 +209,13 @@ def compute_site_heartbeat() -> dict:
             Theme.objects.filter(theme_concepts__concept__games__isnull=False)
             .distinct().count()
         )
+        # Two IN-subqueries rather than OR'd joins: the join form fans out to
+        # games x genres x themes intermediate rows before the DISTINCT.
         games_tagged = (
             Game.objects.filter(
-                _Q(concept__concept_genres__isnull=False)
-                | _Q(concept__concept_themes__isnull=False))
-            .distinct().count()
+                _Q(concept_id__in=ConceptGenre.objects.values('concept_id'))
+                | _Q(concept_id__in=ConceptTheme.objects.values('concept_id')))
+            .count()
         )
         tags_applied = ConceptGenre.objects.count() + ConceptTheme.objects.count()
     except Exception:
@@ -226,7 +228,10 @@ def compute_site_heartbeat() -> dict:
     # its four-stat grid.
     try:
         from trophies.models import Contract, Job, ProfileJobXP
-        jobs_total = Job.objects.exclude(is_fallback=True).count()
+        # The FULL board, fallback included: the /jobs/ wall renders every job (Freelancer
+        # among them) and its own tally counts 25 -- a 24 here contradicted the page it
+        # headlines (the audit's catch).
+        jobs_total = Job.objects.count()
         contracts_live = Contract.objects.filter(is_live=True).count()
         job_xp_banked = ProfileJobXP.objects.aggregate(total=Sum('total_xp'))['total'] or 0
     except Exception:
@@ -245,16 +250,23 @@ def compute_site_heartbeat() -> dict:
         )
         franchises_total = Franchise.objects.filter(source_type='franchise').count()
         series_total = Franchise.objects.filter(source_type='collection').count()
-        franchise_games = Game.objects.filter(concept_id__in=ConceptFranchise.objects.filter(
-            is_excluded=False).values('concept_id')).count()
+        # TROPHY-LIST counts, np-floored, and labeled so: the detail pages' "games" vocabulary
+        # means distinct IGDB ids, while these count Game rows -- calling them games would read
+        # above the sum of the cards below the header (the audit's vocabulary catch).
+        franchise_games = Game.objects.filter(
+            np_communication_id__isnull=False).exclude(np_communication_id='').filter(
+            concept_id__in=ConceptFranchise.objects.filter(
+                is_excluded=False).values('concept_id')).count()
+        # Distinct CONCEPTS, not links: a spin-off typed into two collections is one spin-off.
         franchise_spinoffs = ConceptFranchise.objects.filter(
-            is_excluded=False, is_spinoff=True).count()
+            is_excluded=False, is_spinoff=True).values('concept_id').distinct().count()
         companies_total = Company.objects.count()
         companies_developers = Company.objects.filter(_Exists(ConceptCompany.objects.filter(
             company=_OuterRef('pk'), is_developer=True))).count()
         companies_publishers = Company.objects.filter(_Exists(ConceptCompany.objects.filter(
             company=_OuterRef('pk'), is_publisher=True))).count()
         company_games = Game.objects.filter(
+            np_communication_id__isnull=False).exclude(np_communication_id='').filter(
             concept_id__in=ConceptCompany.objects.values('concept_id')).count()
     except Exception:
         logger.exception("franchise/company browse stats query failed")
@@ -387,7 +399,7 @@ def compute_site_heartbeat() -> dict:
             'tags_applied': {
                 'value': tags_applied,
                 'label': 'Tags applied',
-                'sublabel': 'across the catalogue',
+                'sublabel': 'genre + theme links',
             },
             'jobs_total': {
                 'value': jobs_total,
@@ -416,8 +428,8 @@ def compute_site_heartbeat() -> dict:
             },
             'franchise_games': {
                 'value': franchise_games,
-                'label': 'Games in a franchise',
-                'sublabel': 'catalogue',
+                'label': 'Trophy lists',
+                'sublabel': 'in a franchise or series',
             },
             'franchise_spinoffs': {
                 'value': franchise_spinoffs,
@@ -432,17 +444,17 @@ def compute_site_heartbeat() -> dict:
             'companies_developers': {
                 'value': companies_developers,
                 'label': 'Developers',
-                'sublabel': 'with games',
+                'sublabel': 'credited',
             },
             'companies_publishers': {
                 'value': companies_publishers,
                 'label': 'Publishers',
-                'sublabel': 'with games',
+                'sublabel': 'credited',
             },
             'company_games': {
                 'value': company_games,
-                'label': 'Games with a company',
-                'sublabel': 'catalogue',
+                'label': 'Trophy lists',
+                'sublabel': 'with a known company',
             },
             'ratings_total': {
                 'value': ratings_total,

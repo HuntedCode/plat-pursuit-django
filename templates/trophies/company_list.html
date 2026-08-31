@@ -49,17 +49,19 @@
                 <div class="scard">
                     <div class="scard__label">Developers</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.companies_developers|default:0 }}">{{ company_stats.companies_developers|default:0|intcomma }}</div>
-                    <div class="scard__sub">with games</div>
+                    <div class="scard__sub">credited</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Publishers</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.companies_publishers|default:0 }}">{{ company_stats.companies_publishers|default:0|intcomma }}</div>
-                    <div class="scard__sub">with games</div>
+                    <div class="scard__sub">credited</div>
                 </div>
+                {% comment %} "Trophy lists", not "games": the detail pages' vocabulary says game =
+                distinct IGDB id and this counts Game rows (PSN lists). {% endcomment %}
                 <div class="scard">
-                    <div class="scard__label">Games with a company</div>
+                    <div class="scard__label">Trophy lists</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ company_stats.company_games|default:0 }}">{{ company_stats.company_games|default:0|intcomma }}</div>
-                    <div class="scard__sub">of the catalogue</div>
+                    <div class="scard__sub">with a known company</div>
                 </div>
             </div>
             {% endif %}

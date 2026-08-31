@@ -1639,9 +1639,13 @@ class RecentlyAddedView(HtmxListMixin, ListView):
             # catalogue delta + total scale, both values the cron already computes for the home
             # ribbon. Stale <=2h beside the two LIVE window counts above -- acceptable, they
             # answer different questions and the template labels them so.
+            # TRUTHY gate on the total: games_total routes through _community_value(default=0),
+            # so a failed community compute caches a ZERO -- "Catalogue 0" would be a lie. The
+            # delta rides the same gate (a legit quiet-week 0 delta still renders, because the
+            # gate is on the total).
             _gt = ((get_cached_heartbeat() or {}).get('always') or {}).get('games_total') or {}
-            context['ra_new_this_week'] = _gt.get('delta')
-            context['ra_catalog_total'] = _gt.get('value')
+            context['ra_new_this_week'] = _gt.get('delta') if _gt.get('value') else None
+            context['ra_catalog_total'] = _gt.get('value') or None
 
         # Base-games cards render the shared `.pp-gcard`, so feed it the same batched, whale-safe card
         # context Browse Games uses (progress / DLC counts / ratings / badge + contract pursuer hooks).

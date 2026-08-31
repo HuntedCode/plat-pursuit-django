@@ -73,13 +73,14 @@ def test_a_failed_stat_flags_partial_not_fatal(monkeypatch):
 
 
 def test_jobs_block():
-    """jobs_total excludes the fallback job, contracts_live counts only live, and job_xp_banked
-    sums every hunter's banked XP. The Job catalog itself is migration-seeded (conftest re-seeds
-    it), so jobs_total is pinned by DELTA: adding a fallback job must not move it."""
+    """jobs_total counts the FULL board, fallback included -- the /jobs/ wall renders every job
+    (Freelancer among them) and its own tally counts 25; an exclusion here contradicted the page
+    (the audit's 24-vs-25 catch). Pinned by DELTA against the migration-seeded catalog: adding a
+    fallback job MOVES the count."""
     from tests.factories import ProfileFactory
     from trophies.models import Contract, Job, ProfileJobXP
 
-    seeded = Job.objects.exclude(is_fallback=True).count()
+    seeded = Job.objects.count()
     assert seeded > 0, 'the migration-seeded Job catalog must be present'
     job = Job.objects.exclude(is_fallback=True).first()
     Contract.objects.create(name='Live One', slug='live-one', igdb_id=70001, is_live=True)
@@ -94,7 +95,7 @@ def test_jobs_block():
 
     Job.objects.create(name='Fallback', slug='fallback-x', discipline=job.discipline,
                        is_fallback=True)
-    assert compute_site_heartbeat()['expanded']['jobs_total']['value'] == seeded
+    assert compute_site_heartbeat()['expanded']['jobs_total']['value'] == seeded + 1
 
 
 def test_franchise_and_company_blocks():
@@ -111,6 +112,11 @@ def test_franchise_and_company_blocks():
     ConceptFranchise.objects.create(concept=linked.concept, franchise=fr)
     spin = GameFactory(title_platform=['PS5'])
     ConceptFranchise.objects.create(concept=spin.concept, franchise=fr, is_spinoff=True)
+    # A second spin-off link on the SAME concept (the multi-collection case): spin-offs count
+    # distinct CONCEPTS, not links.
+    series = Franchise.objects.create(igdb_id=502, name='Souls Coll', slug='souls-coll',
+                                      source_type='collection')
+    ConceptFranchise.objects.create(concept=spin.concept, franchise=series, is_spinoff=True)
     hidden = GameFactory(title_platform=['PS5'])
     ConceptFranchise.objects.create(concept=hidden.concept, franchise=fr,
                                     is_excluded=True, is_spinoff=True)
@@ -125,9 +131,9 @@ def test_franchise_and_company_blocks():
 
     exp = compute_site_heartbeat()['expanded']
     assert exp['franchises_total']['value'] == 1
-    assert exp['series_total']['value'] == 1
+    assert exp['series_total']['value'] == 2
     assert exp['franchise_games']['value'] == 2        # excluded link's game not counted
-    assert exp['franchise_spinoffs']['value'] == 1     # excluded spin-off link not counted
+    assert exp['franchise_spinoffs']['value'] == 1     # distinct concepts; excluded link not counted
     assert exp['companies_total']['value'] == 3
     assert exp['companies_developers']['value'] == 1
     assert exp['companies_publishers']['value'] == 1
@@ -237,7 +243,7 @@ def test_company_browse_grid(client):
         }},
         # NOT 'Publishers': the page's own H1 is "Developers & Publishers", which made the
         # cold-state absence assertion impossible -- the marker must be unique to the grid.
-        'Games with a company', 'company_stats', {'HTTP_HX_REQUEST': 'true'},
+        'with a known company', 'company_stats', {'HTTP_HX_REQUEST': 'true'},
     )
 
 
@@ -258,3 +264,26 @@ def test_recently_added_heartbeat_pair(client):
     cold = client.get(reverse('recently_added')).content.decode()
     assert 'New games' in cold                     # the live pair survives a cold cron
     assert 'Catalogue' not in cold and 'New this week' not in cold
+
+
+def test_zeroed_community_stats_never_render(client):
+    """The truthy gates (the audit's zero-lie catch): a failed community compute caches ZEROS
+    through _community_value(default=0) -- Hunters and RA's heartbeat pair must treat a zeroed
+    payload as cold, not render 'Hunters tracked 0' / 'Catalogue 0' for two hours."""
+    from django.core.cache import cache
+    from django.urls import reverse
+
+    key = _warm(always={
+        'profiles_total': {'value': 0}, 'trophies_total': {'value': 0},
+        'trophies_24h': {'value': 0}, 'games_total': {'value': 0, 'delta': 0},
+    }, expanded={'platinums_total': {'value': 0}})
+    try:
+        hunters = client.get('/hunters/')
+        ra = client.get(reverse('recently_added'))
+    finally:
+        cache.delete(key)
+
+    assert hunters.context.get('hunters_stats') is None
+    assert 'Hunters tracked' not in hunters.content.decode()
+    assert ra.context['ra_catalog_total'] is None and ra.context['ra_new_this_week'] is None
+    assert 'Catalogue' not in ra.content.decode()

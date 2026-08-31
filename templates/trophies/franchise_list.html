@@ -50,10 +50,13 @@
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.series_total|default:0 }}">{{ franchise_stats.series_total|default:0|intcomma }}</div>
                     <div class="scard__sub">tracked</div>
                 </div>
+                {% comment %} "Trophy lists", not "games": this page's own vocabulary says game =
+                distinct IGDB id and this counts Game rows (PSN lists) -- a "games" label would
+                read above the sum of the cards below. {% endcomment %}
                 <div class="scard">
-                    <div class="scard__label">Games in a franchise</div>
+                    <div class="scard__label">Trophy lists</div>
                     <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchise_games|default:0 }}">{{ franchise_stats.franchise_games|default:0|intcomma }}</div>
-                    <div class="scard__sub">of the catalogue</div>
+                    <div class="scard__sub">in a franchise or series</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Spin-offs</div>
