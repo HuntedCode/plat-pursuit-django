@@ -228,7 +228,7 @@ class JobsBrowseView(HtmxListMixin, ListView):
     Not under Leaderboards: a catalogue of jobs is a browse surface and sits with Games, Badges,
     Franchises and Companies. Its relationship to Career's Dossier is the one this codebase already
     settled for Collection vs Browse Badges, recorded as "SCOPE, not pagination" -- Career shows YOUR
-    standing across the 24 jobs, this shows what the jobs ARE. They coexist without competing.
+    standing across the 25 jobs, this shows what the jobs ARE. They coexist without competing.
 
     Public by design. An anonymous visitor is exactly who this page is for: it is the readable surface of
     a system they have not signed up for yet. Nothing here reads the viewer, which is also what keeps the
