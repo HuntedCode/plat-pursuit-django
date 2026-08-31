@@ -40,7 +40,7 @@
 
             {% comment %} Heartbeat-fed (hourly cron): hidden until the cache is warm, like every
             browse-header scard grid -- a rendered 0 would be a lie, not a stat. {% endcomment %}
-            {% if genre_count is not None %}
+            {% if genre_count is not None and theme_count is not None %}
             <div class="grid grid-cols-2 gap-2 md:gap-3 mt-3 md:mt-4">
                 <div class="scard">
                     <div class="scard__label">Genres</div>

@@ -172,7 +172,9 @@ def test_header_carries_the_family_tally_and_scard_grid(client):
     assert 'lists shown</span>' in content
     for label in ('Trophy lists', 'Regional', 'With a platinum', 'New this week'):
         assert label in content, label
-    assert '4,821' in content and '912' in content and '3,200' in content and '37' in content
+    # Comma'd values are safe substring pins; bare '37' is not (it lives in footer SVG path
+    # data) -- the exact-dict context assertion below carries new_this_week instead.
+    assert '4,821' in content and '>912<' in content and '3,200' in content
     assert resp.context['tlb_stats'] == {
         'total': 4821, 'regional': 912, 'with_plat': 3200, 'new_this_week': 37,
     }

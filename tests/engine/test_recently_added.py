@@ -216,6 +216,20 @@ def test_xhr_returns_rows_partial(client):
     assert 'newest_added_at' not in resp.context
 
 
+def test_htmx_history_restore_gets_the_full_page_with_counts(client):
+    """The audit's catch: an htmx history-restore sends HX-Request with NO HX-Target and
+    receives the FULL page -- the header guard must mirror get_template_names exactly, or the
+    restored page renders zeroed captions and scards. Pin: full page template + counts present."""
+    GameFactory(title_name='Restored Game', title_platform=['PS5'])
+
+    resp = client.get(reverse('recently_added'), HTTP_HX_REQUEST='true')
+    templates = {t.name for t in resp.templates if t.name}
+
+    assert FULL_PAGE in templates
+    assert resp.context['category_counts']['base_games'] == 1
+    assert resp.context['newest_added_at'] is not None
+
+
 def test_category_switch_returns_view_island(client):
     """The New Games/New DLC switcher HTMX-swaps the #ra-view island (toolbar + grid), not the full page --
     dynamic switch, no reload. The category-scoped toolbar re-renders inside it."""

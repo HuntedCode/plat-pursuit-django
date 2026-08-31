@@ -7,7 +7,7 @@ from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
-from django.db.models import Q, F, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
+from django.db.models import Q, F, Value, IntegerField, FloatField, BooleanField, Avg, Count
 from django.db.models.functions import Coalesce, Lower, Cast
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -1435,6 +1435,17 @@ class RecentlyAddedView(HtmxListMixin, ListView):
     partial_template_name = 'trophies/partials/recently_added/browse_results.html'
     paginate_by = 30
 
+    def _serving_partial(self):
+        """True when this request gets a swap partial rather than the full page. The header
+        guard below MUST share this exact decision: an htmx request with an unrecognized (or
+        absent) target -- e.g. a history-restore, which sends HX-Request with no HX-Target --
+        falls through to the FULL page, and gating its header stats on bare `request.htmx`
+        would render a zeroed header (the audit's catch)."""
+        htmx = getattr(self.request, 'htmx', False)
+        if htmx and self.request.htmx.target in ('ra-view', 'browse-results'):
+            return True
+        return self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     def get_template_names(self):
         # Two HTMX swap scopes: the New Games/New DLC switcher swaps the whole #ra-view island (toolbar + grid,
         # so the category-scoped sorts + Has Platinum filter re-render); a filter/sort change or an
@@ -1442,8 +1453,7 @@ class RecentlyAddedView(HtmxListMixin, ListView):
         htmx = getattr(self.request, 'htmx', False)
         if htmx and self.request.htmx.target == 'ra-view':
             return ['trophies/partials/recently_added/view.html']
-        xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if (htmx and self.request.htmx.target == 'browse-results') or xhr:
+        if self._serving_partial():
             return [self.partial_template_name]
         return [self.template_name]
 
@@ -1607,9 +1617,10 @@ class RecentlyAddedView(HtmxListMixin, ListView):
         # FULL PAGE ONLY (the browse-family guard): every render site lives in the full-page
         # header/switcher markup, and the island/grid swaps were paying these four indexed
         # queries per swap for nothing. Cheap enough to stay live (no heartbeat lag on the
-        # captions), too cheap to keep paying on the infinite-scroll path.
-        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if not self.request.htmx and not is_xhr:
+        # captions), too cheap to keep paying on the infinite-scroll path. The guard MUST
+        # mirror get_template_names (via _serving_partial): a bare `not htmx` check would zero
+        # the header on an htmx history-restore, which renders the full page.
+        if not self._serving_partial():
             window_start = self.get_window_start()
             dlc_qs = TrophyGroup.objects.exclude(trophy_group_id='default')
             context['category_counts'] = {

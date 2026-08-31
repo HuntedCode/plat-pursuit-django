@@ -148,9 +148,11 @@ class GenreThemeListView(HtmxListMixin, ListView):
 
         # Header stats: how many genres / themes actually carry games -- from the hourly site
         # heartbeat (the browse-header standard). These were hot DISTINCT counts over 4-table
-        # joins on EVERY request and filter swap until 2026-08; now a pure cache read (cheap
-        # enough to run on swaps too -- the tab captions ride the swapped island). None until
-        # the cron warms the cache; the template gates on that.
+        # joins on EVERY request and filter swap until 2026-08; now a pure cache read. Runs
+        # unconditionally on purpose: it is one cache GET, and gating it on `request.htmx`
+        # would zero the captions on an htmx history-restore (which renders the FULL page --
+        # the trap the Recently Added guard documents). None until the cron warms the cache;
+        # the template gates on that.
         from core.services.site_heartbeat import get_cached_heartbeat
         _exp = (get_cached_heartbeat() or {}).get('expanded') or {}
         context['genre_count'] = (_exp.get('genres_with_games') or {}).get('value')

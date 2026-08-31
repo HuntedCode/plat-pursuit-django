@@ -79,6 +79,10 @@ def _clear_rarity_cache():
 
     from trophies.services.rarity import COMMUNITY_SIZE_CACHE_KEY
 
+    # site_heartbeat_{date}_{hour} is deliberately NOT here: the consuming views only cache.get
+    # (the hourly cron is the sole writer in prod), so a render can never warm it -- every test
+    # that seeds it does its own try/finally delete. A future test that forgets the finally
+    # would leak it; add the dated key here if that class of bug ever shows up.
     keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions']
 
     def _drop():

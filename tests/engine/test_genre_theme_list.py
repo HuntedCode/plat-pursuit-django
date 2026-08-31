@@ -356,11 +356,17 @@ def test_index_header_counts_ride_the_heartbeat(client):
     }}, 120)
     try:
         with CaptureQueriesContext(connection) as ctx:
-            warm = client.get(reverse('genres_list')).content.decode()
+            warm_resp = client.get(reverse('genres_list'))
     finally:
         cache.delete(key)
+    warm = warm_resp.content.decode()
 
-    assert 'with games' in warm and '23' in warm and '21' in warm
+    assert 'with games' in warm
+    # Context assertions, not substring scans: bare '23'/'21' also live in navbar/footer SVG
+    # path data, which made the rendered-value pin vacuous (the audit's catch).
+    assert warm_resp.context['genre_count'] == 23
+    assert warm_resp.context['theme_count'] == 21
+    assert '>23<' in warm and '>21<' in warm   # the scard value elements render the cached numbers
     # On the genres tab the ONLY thing that ever queried trophies_theme was the header's
     # with-games count -- zero theme queries proves the header compute left the request path
     # (the genre tile grid legitimately joins trophies_genre, so that side can't be pinned).
