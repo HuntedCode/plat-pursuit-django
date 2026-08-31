@@ -7,7 +7,7 @@ from core.services.site_heartbeat import get_cached_heartbeat
 from datetime import datetime, timedelta
 from django.core.cache import cache
 from django.contrib import messages
-from django.db.models import Q, F, Exists, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
+from django.db.models import Q, F, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Count
 from django.db.models.functions import Coalesce, Lower, Cast
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -481,25 +481,6 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
         # duplicating or dropping cards across a page boundary.
         return qs.order_by(*order, 'pk')
 
-    @staticmethod
-    def _build_catalogue_scards():
-        """The four list-level header scards: catalogue scale, the regional slice (this page's
-        point), platinum coverage, fresh-sync momentum. All DB aggregates over the same np
-        floor the grid renders with. (Named to stay grep-distinct from ProfileDetailView's
-        unrelated _build_header_stats.)"""
-        base = Game.objects.filter(np_communication_id__isnull=False).exclude(np_communication_id='')
-        return {
-            'total': base.count(),
-            # is_regional AND a region: every render site (card chips, switcher) gates on both,
-            # and check_and_mark_regional can set the flag before region detection lands -- the
-            # count must match what the page actually shows as regional.
-            'regional': base.filter(is_regional=True).exclude(region=[]).count(),
-            'with_plat': base.filter(Exists(
-                Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum'))).count(),
-            'new_this_week': base.filter(
-                created_at__gte=timezone.now() - timedelta(days=7)).count(),
-        }
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['breadcrumb'] = [
@@ -529,16 +510,21 @@ class TrophyListsBrowseView(HtmxListMixin, ListView):
         )
 
         # Header substance scards (the browse-family header standard), full page only -- the
-        # panel/grid swaps never re-render the header. Four O(catalogue) COUNT aggregates,
-        # cached for an hour and filled LAZILY on the request path (the landing badge-showcase
-        # pattern -- deliberately NOT game_list's heartbeat, which is cron-warmed and never
-        # computes here; this page's traffic doesn't justify a cron slot). At TTL expiry
-        # concurrent visitors can each recompute once (get_or_set is not atomic) -- accepted
-        # for this page's traffic; move to the heartbeat if that ever shows up in monitoring.
+        # panel/grid swaps never re-render the header. Fed by the hourly site heartbeat, exactly
+        # like game_list's header: zero computation on the request path, and the scard grid
+        # stays hidden until the cron warms the cache (tlb_stats is None). Replaced the lazy
+        # cache.get_or_set of the first cut -- the with-a-platinum EXISTS semi-join belongs on
+        # the cron, not on the hour's first visitor.
         is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if not self.request.htmx and not is_xhr:
-            context['tlb_stats'] = cache.get_or_set(
-                'trophy_lists:header_stats', self._build_catalogue_scards, 3600)
+            _exp = (get_cached_heartbeat() or {}).get('expanded') or {}
+            _lt = _exp.get('lists_total') or {}
+            context['tlb_stats'] = {
+                'total': _lt.get('value'),
+                'regional': (_exp.get('lists_regional') or {}).get('value'),
+                'with_plat': (_exp.get('lists_with_plat') or {}).get('value'),
+                'new_this_week': _lt.get('delta'),
+            } if _lt.get('value') is not None else None
 
         # LIST-IDENTITY cards (the page's third card mode): titles come from the observed PSN
         # list names -- Game.display_list_names, the batch that is the ONLY supported grid read

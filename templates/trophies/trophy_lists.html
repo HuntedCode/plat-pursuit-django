@@ -51,10 +51,10 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
                 </div>
             </div>
 
-            {% comment %} Catalogue substance: the family .scard grid, LIST-scoped (the games heartbeat
-            scards stay off this page -- these count lists, its honest unit). Hourly-cached, filled
-            lazily in the view on full-page renders only (never on swaps) -- unlike game_list's
-            cron-warmed heartbeat, tlb_stats is always present here; the guard is belt-and-braces. {% endcomment %}
+            {% comment %} Catalogue substance: the family .scard grid, LIST-scoped (these count lists,
+            this page's honest unit -- not the games heartbeat values). Fed by the hourly site
+            heartbeat like every browse header, so the grid only shows once the cron has warmed the
+            cache; full page only (never re-rendered on swaps). {% endcomment %}
             {% if tlb_stats %}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
                 <div class="scard">

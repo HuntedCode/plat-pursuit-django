@@ -336,3 +336,38 @@ def test_plats_sort_matches_what_the_live_join_counted(client):
         game__concept__concept_genres__genre=genre,
     ).values('profile').distinct().count()
     assert distinct_players == 2 != denormed
+
+
+def test_index_header_counts_ride_the_heartbeat(client):
+    """The Genres/Themes with-games counts come from the hourly site heartbeat (2026-08
+    consolidation) -- they were two hot DISTINCT joins on EVERY request and swap. Warm cache:
+    the scard grid + tab captions render the cached values; cold cache: both are gated off
+    entirely (a rendered 0 would be a lie), and no distinct-join query runs either way."""
+    from django.core.cache import cache
+    from django.test.utils import CaptureQueriesContext
+    from django.db import connection
+    from django.urls import reverse
+    from django.utils import timezone
+
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    cache.set(key, {'expanded': {
+        'genres_with_games': {'value': 23}, 'themes_with_games': {'value': 21},
+    }}, 120)
+    try:
+        with CaptureQueriesContext(connection) as ctx:
+            warm = client.get(reverse('genres_list')).content.decode()
+    finally:
+        cache.delete(key)
+
+    assert 'with games' in warm and '23' in warm and '21' in warm
+    # On the genres tab the ONLY thing that ever queried trophies_theme was the header's
+    # with-games count -- zero theme queries proves the header compute left the request path
+    # (the genre tile grid legitimately joins trophies_genre, so that side can't be pinned).
+    theme_queries = [q for q in ctx.captured_queries if 'trophies_theme' in q['sql']]
+    assert not theme_queries, 'the with-games count must never run on the request path'
+
+    cold = client.get(reverse('genres_list'))
+    assert cold.status_code == 200
+    assert cold.context['genre_count'] is None
+    assert 'with games' not in cold.content.decode()

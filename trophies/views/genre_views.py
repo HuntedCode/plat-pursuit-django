@@ -146,14 +146,15 @@ class GenreThemeListView(HtmxListMixin, ListView):
         context['current_query'] = self.request.GET.get('query', '').strip()
         context['item_count'] = len(context['items'])
 
-        # Header stats: how many genres / themes actually carry games. A distinct existence count is lighter
-        # than a per-tag COUNT(DISTINCT games) aggregate -- we only need "has >=1 game", not the tally.
-        context['genre_count'] = (
-            Genre.objects.filter(genre_concepts__concept__games__isnull=False).distinct().count()
-        )
-        context['theme_count'] = (
-            Theme.objects.filter(theme_concepts__concept__games__isnull=False).distinct().count()
-        )
+        # Header stats: how many genres / themes actually carry games -- from the hourly site
+        # heartbeat (the browse-header standard). These were hot DISTINCT counts over 4-table
+        # joins on EVERY request and filter swap until 2026-08; now a pure cache read (cheap
+        # enough to run on swaps too -- the tab captions ride the swapped island). None until
+        # the cron warms the cache; the template gates on that.
+        from core.services.site_heartbeat import get_cached_heartbeat
+        _exp = (get_cached_heartbeat() or {}).get('expanded') or {}
+        context['genre_count'] = (_exp.get('genres_with_games') or {}).get('value')
+        context['theme_count'] = (_exp.get('themes_with_games') or {}).get('value')
 
         context['seo_description'] = (
             "Browse PlayStation games by genre and theme. "

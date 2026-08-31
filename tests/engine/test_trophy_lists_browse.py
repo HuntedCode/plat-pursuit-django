@@ -135,25 +135,35 @@ def test_region_chips_render_on_these_cards_only(client):
 
 # ── Header: the browse-family standard ────────────────────────────────────────────────────────────
 
+def _warm_heartbeat(**expanded):
+    """Write the hourly heartbeat bucket (the badge-catalog header tests' pattern)."""
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    cache.set(key, {'expanded': expanded}, 120)
+    return key
+
+
 def test_header_carries_the_family_tally_and_scard_grid(client):
     """Jeffrey's beta catch: the header must look/function like the other browse headers --
     the right-aligned headline Tally with its shown-sublabel plus the .scard substance grid,
-    LIST-scoped (the games heartbeat scards stay off this page; lists are its honest unit).
-    Values checked through the context so the hourly cache serves what this fixture built."""
+    LIST-scoped and fed by the hourly site heartbeat (the game_list pattern: zero computation
+    on the request path)."""
     from django.core.cache import cache
 
-    from tests.factories import TrophyFactory
-
-    cache.delete('trophy_lists:header_stats')
-    plat = GameFactory(title_name='Plat List', title_platform=['PS5'])
-    TrophyFactory(game=plat, trophy_type='platinum')
-    GameFactory(title_name='JP List', title_platform=['PS5'], is_regional=True, region=['JP'])
-    # is_regional WITHOUT a region: check_and_mark_regional sets the flag before region
-    # detection lands, and every render site gates on BOTH -- the scard must not count it
-    # (the audit's divergence catch).
-    GameFactory(title_name='Flagged Only', title_platform=['PS5'], is_regional=True)
-
-    resp = client.get(URL)
+    GameFactory(title_platform=['PS5'])
+    GameFactory(title_platform=['PS5'])   # two lists -> the sublabel pluralizes to 'lists shown'
+    key = _warm_heartbeat(
+        lists_total={'value': 4821, 'delta': 37},
+        lists_regional={'value': 912},
+        lists_with_plat={'value': 3200},
+    )
+    try:
+        resp = client.get(URL)
+    finally:
+        cache.delete(key)
     content = resp.content.decode()
 
     # The HEADER tally block specifically -- bare 'lists shown' also lives in the minibar's
@@ -162,25 +172,39 @@ def test_header_carries_the_family_tally_and_scard_grid(client):
     assert 'lists shown</span>' in content
     for label in ('Trophy lists', 'Regional', 'With a platinum', 'New this week'):
         assert label in content, label
+    assert '4,821' in content and '912' in content and '3,200' in content and '37' in content
     assert resp.context['tlb_stats'] == {
-        'total': 3, 'regional': 1, 'with_plat': 1, 'new_this_week': 3,
+        'total': 4821, 'regional': 912, 'with_plat': 3200, 'new_this_week': 37,
     }
 
 
-def test_header_stats_never_run_on_grid_swaps(client):
-    """The gating that keeps the swap path cheap: the XHR/HTMX branches re-render only the grid,
-    so the header stats must not be computed (or fetched) for them."""
-    from django.core.cache import cache
-
-    cache.delete('trophy_lists:header_stats')
+def test_scard_grid_hidden_until_the_cron_warms_the_heartbeat(client):
+    """Cold cache (cron hasn't run) -> tlb_stats is None and the grid is gated off entirely --
+    a rendered 0 would be a lie, not a stat. The page itself still renders fine."""
     GameFactory(title_platform=['PS5'])
 
-    xhr = client.get(URL, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-    htmx = client.get(URL, HTTP_HX_REQUEST='true')
+    resp = client.get(URL)
+
+    assert resp.status_code == 200
+    assert resp.context['tlb_stats'] is None
+    assert 'With a platinum' not in resp.content.decode()
+
+
+def test_header_stats_never_run_on_grid_swaps(client):
+    """The gating that keeps the swap path lean: the XHR/HTMX branches re-render only the grid,
+    so the header block (heartbeat read included) is skipped for them."""
+    from django.core.cache import cache
+
+    GameFactory(title_platform=['PS5'])
+    key = _warm_heartbeat(lists_total={'value': 10, 'delta': 1})
+    try:
+        xhr = client.get(URL, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        htmx = client.get(URL, HTTP_HX_REQUEST='true')
+    finally:
+        cache.delete(key)
 
     assert 'tlb_stats' not in xhr.context
     assert 'tlb_stats' not in htmx.context
-    assert cache.get('trophy_lists:header_stats') is None, 'a swap warmed the header cache'
 
 
 # ── Filters + sort ────────────────────────────────────────────────────────────────────────────────

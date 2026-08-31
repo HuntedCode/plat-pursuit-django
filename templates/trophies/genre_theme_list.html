@@ -38,6 +38,9 @@
                 </div>
             </div>
 
+            {% comment %} Heartbeat-fed (hourly cron): hidden until the cache is warm, like every
+            browse-header scard grid -- a rendered 0 would be a lie, not a stat. {% endcomment %}
+            {% if genre_count is not None %}
             <div class="grid grid-cols-2 gap-2 md:gap-3 mt-3 md:mt-4">
                 <div class="scard">
                     <div class="scard__label">Genres</div>
@@ -50,6 +53,7 @@
                     <div class="scard__sub">with games</div>
                 </div>
             </div>
+            {% endif %}
         </div>
     </section>
 
@@ -78,14 +82,14 @@
                class="pp-switch__chip {% if active_tab == 'genres' %}is-active{% endif %}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
                 <span class="pp-switch__lbl">Genres</span>
-                <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ genre_count|default:0|intcomma }}</span>
+                {% if genre_count is not None %}<span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ genre_count|intcomma }}</span>{% endif %}
             </a>
             <a href="{% url 'genres_list' %}?tab=themes" hx-get="{% url 'genres_list' %}?tab=themes" hx-target="#gt-view" hx-swap="innerHTML" hx-push-url="true"
                role="tab" data-tab="themes" aria-controls="gt-view" aria-selected="{% if active_tab == 'themes' %}true{% else %}false{% endif %}"
                class="pp-switch__chip {% if active_tab == 'themes' %}is-active{% endif %}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
                 <span class="pp-switch__lbl">Themes</span>
-                <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ theme_count|default:0|intcomma }}</span>
+                {% if theme_count is not None %}<span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{{ theme_count|intcomma }}</span>{% endif %}
             </a>
         </div>
     </div>
