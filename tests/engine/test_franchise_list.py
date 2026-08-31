@@ -239,3 +239,18 @@ def test_query_count_is_bounded(client, django_assert_max_num_queries):
     with django_assert_max_num_queries(14):
         resp = raw.get(reverse('franchises_list'))
     assert resp.status_code == 200
+
+
+def test_excluded_only_and_spinoff_only_franchises_stay_hidden(client):
+    """The eligibility rewrite's pin (lane audit): version_count>0 over the VISIBLE-link denorm
+    must preserve the old net behavior -- a franchise whose only links are excluded, or only
+    spin-offs, does not browse."""
+    _franchise('Visible IP', n_games=2, title_platform=['PS5'])
+    _franchise('Excluded Only', n_games=1, excluded=True)
+    _franchise('Spinoff Only', n_games=1, spinoff=True)
+
+    content = client.get(reverse('franchises_list'), {'type': 'all', 'show_solo': '1'}).content.decode()
+
+    assert 'Visible IP' in content
+    assert 'Excluded Only' not in content
+    assert 'Spinoff Only' not in content

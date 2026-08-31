@@ -58,7 +58,10 @@ def _company(name, slug, country=None, logo=None, parent=None, changed_company=N
 def _link(company, title, role='developer'):
     from trophies.models import ConceptCompany
     concept = ConceptFactory(unified_title=title)
-    IGDBMatchFactory(concept=concept, igdb_id=next(_ig_seq))
+    # igdb_name pinned to the title: group display_name PREFERS it, and the factory's
+    # sequence-generated names sort lexicographically ('IGDB Game 10' < 'IGDB Game 9') --
+    # the latent order-dependence that made the alpha-sort test flake across modules.
+    IGDBMatchFactory(concept=concept, igdb_id=next(_ig_seq), igdb_name=title)
     game = GameFactory(concept=concept, title_name=title, defined_trophies=_TROPHIES)
     ConceptCompany.objects.create(concept=concept, company=company, **{_ROLE_FLAG[role]: True})
     return concept, game
@@ -357,3 +360,16 @@ def test_role_swap_returns_page_one_with_has_next(client):
 
     assert resp.content.decode().count('class="fgroup"') == 24
     assert resp['X-Has-Next'] == '1'
+
+
+def test_full_page_ignores_the_page_param(client):
+    """?page= is a partial-branch concept: a hand-edited or shared /companies/x/?page=99 URL
+    renders page 1 of the full page (not a 404, not a mid-list slice the scroller's resume math
+    would double-append -- the lane audit's catch)."""
+    co = _company('Deep Link Pub', 'deep-link-pub')
+    _many_links(co, 30)
+
+    resp = client.get(reverse('company_detail', kwargs={'slug': co.slug}), {'page': '99'})
+
+    assert resp.status_code == 200
+    assert resp.content.decode().count('class="fgroup"') == 24   # page 1, always

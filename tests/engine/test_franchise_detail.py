@@ -52,7 +52,8 @@ def _member(fr, title, igdb_id=None, platforms=None, spinoff=False, excluded=Fal
     from trophies.models import ConceptFranchise
     concept = concept or ConceptFactory(unified_title=title)
     if not hasattr(concept, 'igdb_match'):
-        IGDBMatchFactory(concept=concept, igdb_id=igdb_id or next(_ig_seq))
+        # igdb_name pinned to the title (see test_company_detail._link: display_name prefers it).
+        IGDBMatchFactory(concept=concept, igdb_id=igdb_id or next(_ig_seq), igdb_name=title)
     game = GameFactory(
         concept=concept, title_name=title, title_platform=platforms or ['PS5'], defined_trophies=_TROPHIES,
     )

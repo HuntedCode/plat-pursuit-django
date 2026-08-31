@@ -22,14 +22,13 @@
         scroller = PP.InfiniteScroller.create({
             gridId: 'fgroup-grid', sentinelId: 'co-groups-sentinel', loadingId: 'co-groups-loading',
             paginateBy: 24, cardSelector: '.fgroup',
+            // The reveal engine adds .pp-reveal to the grid, which holds every .fgroup at
+            // opacity:0 until it earns .is-revealed -- so appended nodes MUST go through
+            // revealHandle.observe (the sibling pages' pattern), never a bare one-off fade:
+            // fill:'backwards' reverts to the hidden base style when the animation ends and
+            // the appended groups would flash in and VANISH (the lane audit's High).
             onAppend: function (cards) {
-                // Appended groups arrive un-revealed when the reveal engine is running; fade
-                // them in like the sibling browse pages (guarded: reduced-motion just shows them).
-                cards.forEach(function (el, i) {
-                    if (!el.animate) { return; }
-                    el.animate([{ opacity: 0 }, { opacity: 1 }],
-                               { duration: 320, delay: i * 22, easing: 'ease-out', fill: 'backwards' });
-                });
+                if (revealHandle) { revealHandle.observe(cards); }
             },
         });
     }

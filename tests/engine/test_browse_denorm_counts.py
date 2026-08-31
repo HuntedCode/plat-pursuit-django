@@ -125,8 +125,9 @@ def _page_sql(client, url, params=None):
 
     call_command('recompute_tag_covers', verbosity=0)
     with CaptureQueriesContext(connection) as ctx:
-        assert client.get(url, params or {}).status_code == 200
-    return [q['sql'] for q in ctx.captured_queries]
+        resp = client.get(url, params or {})
+    assert resp.status_code == 200
+    return resp.content.decode(), [q['sql'] for q in ctx.captured_queries]
 
 
 def test_franchise_browse_runs_no_link_subqueries(client):
@@ -139,8 +140,9 @@ def test_franchise_browse_runs_no_link_subqueries(client):
     ConceptFranchise.objects.create(concept=a.concept, franchise=fr)
     ConceptFranchise.objects.create(concept=b.concept, franchise=fr)
 
-    sqls = _page_sql(client, '/franchises/')
+    content, sqls = _page_sql(client, '/franchises/')
 
+    assert 'Pinned' in content   # the seeded row actually rendered -- the zero-queries claim is not vacuous
     offenders = [s for s in sqls if 'trophies_conceptfranchise' in s]
     assert not offenders, offenders[0][:160] if offenders else None
 
@@ -153,7 +155,8 @@ def test_company_browse_runs_no_link_subqueries(client):
     IGDBMatchFactory(concept=g.concept, igdb_id=88012)
     ConceptCompanyFactory(company=co, concept=g.concept, is_developer=True)
 
-    sqls = _page_sql(client, '/companies/')
+    content, sqls = _page_sql(client, '/companies/')
+    assert co.name in content   # the seeded row actually rendered
 
     offenders = [s for s in sqls if 'trophies_conceptcompany' in s]
     assert not offenders, offenders[0][:160] if offenders else None
@@ -167,7 +170,8 @@ def test_players_sort_never_scans_profilegame(client):
     ConceptGenreFactory(concept=g.concept, genre=genre)
     ProfileGameFactory(profile=ProfileFactory(), game=g)
 
-    sqls = _page_sql(client, '/genres/', {'sort': 'players'})
+    content, sqls = _page_sql(client, '/genres/', {'sort': 'players'})
+    assert 'Pinned Genre' in content   # the seeded row actually rendered
 
     offenders = [s for s in sqls if 'trophies_profilegame' in s]
     assert not offenders, offenders[0][:160] if offenders else None

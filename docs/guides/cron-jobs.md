@@ -24,7 +24,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
-| 03:45 UTC daily | `recompute_tag_covers` | Daily | Runs after `recalc_earn_rates` (its browse counts + covers read `Game.plats_earned_count`-class denorms). Since 2026-08-31 also fills `Franchise/Company.game_count+version_count` and `Genre/Theme.game_count+player_count+avg_rating` -- the columns the Franchises/Companies/Genres browse pages FILTER on, so a browse-visible entity's counts are at most a day stale and a brand-new entity appears after this run |
+| 03:45 UTC daily | `recompute_tag_covers` | Daily | Since 2026-08-31 also fills `Franchise/Company.game_count+version_count` and `Genre/Theme.game_count+player_count+avg_rating` -- the columns the Franchises/Companies/Genres browse pages FILTER on, so a browse-visible entity's counts are at most a day stale and a brand-new entity appears after this run. (Its reads are link tables + games/players/ratings; it does NOT depend on `recalc_earn_rates` -- the slot order is historical) |
 | ~~05:30 UTC daily~~ | ~~`recompute_milestones`~~ | **Folded into `nightly` (step 4)** | Do NOT create a separate entry. The old 05:30 slot existed to follow `recalc_profile_counters`, but that dependency is not real: no milestone metric reads any of the four counters that job writes. |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |

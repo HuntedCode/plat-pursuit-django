@@ -243,8 +243,11 @@ class CompanyDetailView(DetailView):
 
     def render_to_response(self, context, **response_kwargs):
         # X-Has-Next stops the scroller one fetch early -- each saved fetch is a whole
-        # links-to-groups rebuild on a big publisher.
+        # links-to-groups rebuild on a big publisher. Vary on the XHR discriminator: the same
+        # URL serves two bodies (HtmxListMixin's contract, mirrored here).
+        from django.utils.cache import patch_vary_headers
         response = super().render_to_response(context, **response_kwargs)
+        patch_vary_headers(response, ('X-Requested-With',))
         if self._serving_partial():
             response['X-Has-Next'] = '1' if getattr(self, '_groups_has_next', False) else '0'
         return response
@@ -417,9 +420,16 @@ class CompanyDetailView(DetailView):
         # longer ships thousands of games of HTML in one response. Past-the-end 404s -- the
         # scroller's fallback stop signal.
         all_tab_groups = active_section['groups'] if active_section else []
-        try:
-            page_number = max(1, int(self.request.GET.get('page', 1)))
-        except (TypeError, ValueError):
+        # ?page= is honored ONLY on the partial branch: the full page is always page 1, so a
+        # hand-edited /companies/x/?page=99 renders the page instead of 404ing, and a shared
+        # ?page=2 URL can't put the scroller's resume math out of step with the DOM (the lane
+        # audit's duplicate-append case).
+        if self._serving_partial():
+            try:
+                page_number = max(1, int(self.request.GET.get('page', 1)))
+            except (TypeError, ValueError):
+                page_number = 1
+        else:
             page_number = 1
         offset = (page_number - 1) * self.GROUPS_PER_PAGE
         page_groups = all_tab_groups[offset:offset + self.GROUPS_PER_PAGE]
