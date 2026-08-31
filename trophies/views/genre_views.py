@@ -1,7 +1,7 @@
 import logging
 
 from django.db.models import (
-    Q, F, Count, Avg, Sum, Subquery, OuterRef, IntegerField, FloatField,
+    Q, F, Count, Avg, Sum, Subquery, OuterRef, IntegerField,
 )
 from django.db.models.functions import Lower
 from django.http import Http404
@@ -83,38 +83,30 @@ class GenreThemeListView(HtmxListMixin, ListView):
                 output_field=output_field,
             )
 
-        # Representative cover is materialized as an FK (recompute_tag_covers), read O(1) here -- no live cover
-        # subquery, so the tile scales regardless of catalogue / contract-catalogue size. select_related the
-        # game + its concept/igdb_match for display_image_url; defer the never-read raw_response blob.
-        items = cfg['model'].objects.annotate(
-            game_count=_through_subquery(IntegerField(), c=Count('concept__games', distinct=True)),
-        ).filter(game_count__gt=0).select_related(
+        # Representative cover + game_count/player_count/avg_rating are MATERIALIZED
+        # (recompute_tag_covers, nightly), read O(1) here. game_count and avg_rating were
+        # per-tag correlated subqueries; 'players' was the browse-backend audit's landmine --
+        # its per-tag DISTINCT-profile count scanned the whole ProfileGame table 2-3x per load
+        # (games carry 2-3 genres each). The stat_* aliases keep the tile's field contract.
+        # select_related the cover game + concept/igdb_match for display_image_url; defer the
+        # never-read raw_response blob.
+        items = cfg['model'].objects.filter(game_count__gt=0).select_related(
             'representative_game', 'representative_game__concept', 'representative_game__concept__igdb_match',
         ).defer('representative_game__concept__igdb_match__raw_response')
 
         if query:
             items = items.filter(name__icontains=query)
 
-        # Sort. The secondary-stat sorts annotate a non-underscore field (template-accessible) so the tile
+        # Sort. The secondary-stat sorts alias a non-underscore field (template-accessible) so the tile
         # can surface the stat it's sorted by. Lower('name') keeps Unicode/emoji names sorting correctly.
         if sort_val == 'games':
             return items.order_by('-game_count', Lower('name'))
         if sort_val == 'avg_rating':
-            return items.annotate(
-                stat_rating=_through_subquery(
-                    FloatField(),
-                    v=Avg('concept__user_ratings__overall_rating',
-                          filter=Q(concept__user_ratings__concept_trophy_group__isnull=True)),
-                ),
-            ).order_by(F('stat_rating').desc(nulls_last=True), Lower('name'))
+            return items.annotate(stat_rating=F('avg_rating')).order_by(
+                F('avg_rating').desc(nulls_last=True), Lower('name'))
         if sort_val == 'players':
-            return items.annotate(
-                stat_players=_through_subquery(
-                    IntegerField(),
-                    # Distinct PROFILES, not ProfileGame rows -- a hunter owning N games in the tag is one player.
-                    c=Count('concept__games__played_by__profile', distinct=True),
-                ),
-            ).order_by(F('stat_players').desc(nulls_last=True), Lower('name'))
+            return items.annotate(stat_players=F('player_count')).order_by(
+                '-player_count', Lower('name'))
         if sort_val == 'plats_earned':
             return items.annotate(
                 stat_plats=_through_subquery(

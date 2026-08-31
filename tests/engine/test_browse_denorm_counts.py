@@ -114,3 +114,60 @@ def test_stale_counts_reset_when_links_vanish():
 
     assert fr.game_count == 0
     assert fr.version_count == 0
+
+
+# ── The request path never touches the link tables any more ───────────────────────────────────────
+
+def _page_sql(client, url, params=None):
+    from django.core.management import call_command
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    call_command('recompute_tag_covers', verbosity=0)
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(url, params or {}).status_code == 200
+    return [q['sql'] for q in ctx.captured_queries]
+
+
+def test_franchise_browse_runs_no_link_subqueries(client):
+    """THE landmine pin: the correlated per-row counts are gone -- a default Franchises browse
+    request touches trophies_conceptfranchise in ZERO queries (columns carry the counts)."""
+    fr = Franchise.objects.create(igdb_id=603, name='Pinned', slug='pinned', source_type='franchise')
+    a, b = GameFactory(title_platform=['PS5']), GameFactory(title_platform=['PS5'])
+    IGDBMatchFactory(concept=a.concept, igdb_id=88010)
+    IGDBMatchFactory(concept=b.concept, igdb_id=88011)
+    ConceptFranchise.objects.create(concept=a.concept, franchise=fr)
+    ConceptFranchise.objects.create(concept=b.concept, franchise=fr)
+
+    sqls = _page_sql(client, '/franchises/')
+
+    offenders = [s for s in sqls if 'trophies_conceptfranchise' in s]
+    assert not offenders, offenders[0][:160] if offenders else None
+
+
+def test_company_browse_runs_no_link_subqueries(client):
+    """Same pin for the worst offender: a default Companies browse request touches
+    trophies_conceptcompany in ZERO queries."""
+    co = CompanyFactory()
+    g = GameFactory(title_platform=['PS5'])
+    IGDBMatchFactory(concept=g.concept, igdb_id=88012)
+    ConceptCompanyFactory(company=co, concept=g.concept, is_developer=True)
+
+    sqls = _page_sql(client, '/companies/')
+
+    offenders = [s for s in sqls if 'trophies_conceptcompany' in s]
+    assert not offenders, offenders[0][:160] if offenders else None
+
+
+def test_players_sort_never_scans_profilegame(client):
+    """The genre landmine pin: the 'players' sort orders by the player_count COLUMN --
+    trophies_profilegame appears in ZERO queries on that request."""
+    genre = GenreFactory(name='Pinned Genre', slug='pinned-genre')
+    g = GameFactory(title_platform=['PS5'])
+    ConceptGenreFactory(concept=g.concept, genre=genre)
+    ProfileGameFactory(profile=ProfileFactory(), game=g)
+
+    sqls = _page_sql(client, '/genres/', {'sort': 'players'})
+
+    offenders = [s for s in sqls if 'trophies_profilegame' in s]
+    assert not offenders, offenders[0][:160] if offenders else None

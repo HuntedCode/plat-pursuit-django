@@ -1,4 +1,4 @@
-from django.db.models import Count, Subquery, OuterRef, Q, Exists, IntegerField
+from django.db.models import Subquery, OuterRef, Exists
 from django.db.models.functions import Lower
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
@@ -17,23 +17,6 @@ FRANCHISE_SORT_CHOICES = [
 
 # Detail-page sort shared between franchise and company pages.
 DETAIL_SORT_CHOICES = grouping.SORT_CHOICES
-
-# Visible-link filter for per-franchise counts: skip admin-excluded rows and collection spin-offs (so a
-# series' counts aren't padded by games it hides). is_spinoff is always False on franchise-type links, so
-# the spinoff clause is a no-op there.
-_VISIBLE_LINK_FILTER = Q(is_excluded=False, is_spinoff=False)
-
-
-def _visible_link_count(field, distinct=True):
-    """A per-franchise COUNT(DISTINCT field) over VISIBLE links, scoped to the outer Franchise row via a
-    Subquery (keeps the outer queryset at one row per franchise). Shared by the browse list counts and the
-    detail related-rail so a rail tile and the browse list report the SAME game/version totals for an entity."""
-    return Subquery(
-        ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
-        .filter(_VISIBLE_LINK_FILTER)
-        .values('franchise').annotate(c=Count(field, distinct=distinct)).values('c')[:1],
-        output_field=IntegerField(),
-    )
 
 
 class FranchiseListView(HtmxListMixin, ListView):
@@ -72,36 +55,14 @@ class FranchiseListView(HtmxListMixin, ListView):
         # exist on IGDB).
         type_val = self._selected_type()
 
-        # Eligibility check via Exists: a franchise row is browse-visible if
-        # it's a series (source_type='collection') OR has at least one
-        # non-excluded link.
-        eligible_link_exists = Exists(
-            ConceptFranchise.objects.filter(
-                franchise=OuterRef('pk'), is_excluded=False,
-            )
-        )
-
-        # Per-franchise game_count / version_count via the shared _visible_link_count Subquery so each row
-        # carries its own scoped count (over VISIBLE links) instead of joining the outer query against
-        # franchise_concepts. This keeps the outer queryset at one row per franchise, and the detail rail
-        # reuses the same helper so its tile counts match this page's for the same entity.
-        qs = super().get_queryset().filter(
-            Q(source_type='collection') | eligible_link_exists,
-        ).annotate(
-            # game_count: distinct IGDB game IDs (the true "game" count).
-            # Two concepts sharing the same igdb_id (e.g. PS3 and PS4
-            # Stick of Truth) count as ONE game. Concepts without an IGDB
-            # match are excluded (NULL igdb_id ignored by COUNT DISTINCT)
-            # which slightly undercounts, but in practice nearly all
-            # concepts in franchise/series pages have IGDB matches.
-            game_count=_visible_link_count('concept__igdb_match__igdb_id'),
-            # version_count: distinct Games, i.e. individual PSN records
-            # (a game on both PS4 and PS5 counts as 2 versions of 1 game).
-            version_count=_visible_link_count('concept__games'),
-        ).filter(
-            Q(source_type='franchise', version_count__gt=0)
-            | Q(source_type='collection', version_count__gt=0),
-        )
+        # game_count / version_count are MATERIALIZED columns (recompute_tag_covers, nightly)
+        # as of 2026-08-31 -- the live version put two correlated aggregate subqueries in the
+        # WHERE clause, so the paginator COUNT + the page + every scroll fetch evaluated them
+        # for every one of ~1.5k franchise rows (the browse-backend audit's finding). The
+        # columns carry the same semantics: distinct IGDB ids / distinct Game rows over VISIBLE
+        # links -- which also makes version_count > 0 the whole eligibility rule (a franchise
+        # with only excluded links denorms to 0).
+        qs = super().get_queryset().filter(version_count__gt=0)
 
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
@@ -271,11 +232,9 @@ class FranchiseDetailView(DetailView):
                     concept_id__in=Subquery(concept_ids_subq),
                 )))
                 .exclude(pk=franchise.pk)
-                .annotate(
-                    # Shared with the browse list, over VISIBLE links, so a rail tile and the list agree.
-                    game_count=_visible_link_count('concept__igdb_match__igdb_id'),
-                    version_count=_visible_link_count('concept__games'),
-                )
+                # game_count / version_count are the materialized columns the browse list also
+                # reads (recompute_tag_covers), so a rail tile and the list agree by sharing
+                # the same denorm rather than the same subquery.
                 .filter(version_count__gt=0)
                 .select_related(
                     'representative_game', 'representative_game__concept',

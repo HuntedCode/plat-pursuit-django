@@ -23,6 +23,22 @@ from tests.factories import (
 
 pytestmark = pytest.mark.django_db
 
+@pytest.fixture
+def client(client):
+    """Browse reads the DENORM columns (recompute_tag_covers fills game/version/player counts,
+    2026-08-31): fixtures build links, so recount right before each page hit -- every test
+    exercises the real pipeline instead of hand-set columns."""
+    from django.core.management import call_command
+    orig = client.get
+
+    def get(*args, **kwargs):
+        call_command('recompute_tag_covers', verbosity=0)
+        return orig(*args, **kwargs)
+
+    client.get = get
+    return client
+
+
 GRID_PARTIAL = 'trophies/partials/genre_theme_list/browse_results.html'
 FULL_PAGE = 'trophies/genre_theme_list.html'
 
@@ -123,14 +139,22 @@ def test_tile_renders_materialized_cover(client):
     assert 'pp-gtile__art--empty' not in content
 
 
-def test_tile_shows_placeholder_before_recompute(client):
-    """Before a tag has been recomputed (representative_game null), the tile shows the placeholder rather
-    than erroring -- the graceful pre-materialization / brand-new-tag state."""
+def test_unrecomputed_tag_is_hidden_until_the_cron():
+    """A brand-new tag (denorm game_count still 0) is HIDDEN until recompute_tag_covers runs --
+    the same wait-for-the-cron contract as the materialized cover. Uses an UNWRAPPED client
+    (this module's client fixture recounts on every GET, which is exactly what this test must
+    not do for its first half)."""
+    from django.test import Client
+
     _genre_with_games('Fresh', title_image='https://example.com/x.jpg')
+    raw = Client()
 
-    content = client.get(reverse('genres_list')).content.decode()
+    before = raw.get(reverse('genres_list')).content.decode()
+    assert 'Fresh' not in before
 
-    assert 'pp-gtile__art--empty' in content
+    call_command('recompute_tag_covers', verbosity=0)
+    after = raw.get(reverse('genres_list')).content.decode()
+    assert 'Fresh' in after
 
 
 # ── recompute_tag_covers: contract preference / fallback / stability ──────────────────────────────────────
@@ -219,6 +243,7 @@ def test_stat_players_counts_unique_profiles(client):
     player = ProfileFactory()
     ProfileGameFactory(profile=player, game=g1)
     ProfileGameFactory(profile=player, game=g2)   # same player owns BOTH games in the genre
+    call_command('recompute_tag_covers', verbosity=0)   # player_count is the DENORM column now
 
     req = RequestFactory().get(reverse('genres_list'), {'tab': 'genres', 'sort': 'players'})
     req.user = AnonymousUser()
@@ -290,8 +315,11 @@ def test_query_count_is_bounded(client, django_assert_max_num_queries):
     for i in range(15):
         _genre_with_games(f'Genre {i}')
 
+    from django.test import Client
+    call_command('recompute_tag_covers', verbosity=0)
+    raw = Client()   # unwrapped: the module's client fixture recounts INSIDE the capture
     with django_assert_max_num_queries(12):
-        resp = client.get(reverse('genres_list'))
+        resp = raw.get(reverse('genres_list'))
     assert resp.status_code == 200
 
 
@@ -349,6 +377,9 @@ def test_index_header_counts_ride_the_heartbeat(client):
     from django.urls import reverse
     from django.utils import timezone
 
+    from django.test import Client
+    raw = Client()   # unwrapped: the module's client fixture recounts, which queries theme tables
+
     now = timezone.now()
     key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
     cache.set(key, {'expanded': {
@@ -357,7 +388,7 @@ def test_index_header_counts_ride_the_heartbeat(client):
     }}, 120)
     try:
         with CaptureQueriesContext(connection) as ctx:
-            warm_resp = client.get(reverse('genres_list'))
+            warm_resp = raw.get(reverse('genres_list'))
     finally:
         cache.delete(key)
     warm = warm_resp.content.decode()
@@ -377,7 +408,7 @@ def test_index_header_counts_ride_the_heartbeat(client):
     theme_queries = [q for q in ctx.captured_queries if 'trophies_theme' in q['sql']]
     assert not theme_queries, 'the with-games count must never run on the request path'
 
-    cold = client.get(reverse('genres_list'))
+    cold = raw.get(reverse('genres_list'))
     assert cold.status_code == 200
     assert cold.context['genre_count'] is None
     assert 'with games' not in cold.content.decode()

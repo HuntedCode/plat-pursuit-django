@@ -16,16 +16,6 @@ from ..forms import CompanySearchForm
 logger = logging.getLogger("psn_api")
 
 
-def _company_count(field):
-    """A per-company COUNT(DISTINCT field) scoped to the outer Company row via a Subquery, so the outer
-    queryset stays at one row per company (no cross-join multiplication between the game/version counts)."""
-    return Subquery(
-        ConceptCompany.objects.filter(company=OuterRef('pk'))
-        .values('company').annotate(c=Count(field, distinct=True)).values('c')[:1],
-        output_field=IntegerField(),
-    )
-
-
 # Detail-page role metadata. Driven by this list so ordering, slugs, and the
 # ConceptCompany role flag all stay in one place.
 _ROLE_SPECS = [
@@ -45,13 +35,12 @@ class CompanyListView(HtmxListMixin, ListView):
     paginate_by = 32
 
     def get_queryset(self):
-        qs = super().get_queryset().annotate(
-            # game_count: distinct IGDB game IDs (the true "game" count).
-            # Two concepts sharing the same igdb_id count as ONE game.
-            game_count=_company_count('concept__igdb_match__igdb_id'),
-            # version_count: distinct Games (individual PSN trophy lists).
-            version_count=_company_count('concept__games'),
-        ).filter(version_count__gt=0)
+        # game_count / version_count are MATERIALIZED columns (recompute_tag_covers, nightly)
+        # as of 2026-08-31 -- the live correlated subqueries sat in the WHERE clause, so the
+        # paginator COUNT + the page + every scroll fetch evaluated them for every one of ~3k
+        # company rows, the browse-backend audit's worst finding (est. 0.3-1s per request).
+        # Same semantics: distinct IGDB ids / distinct Game rows over ALL links.
+        qs = super().get_queryset().filter(version_count__gt=0)
 
         form = CompanySearchForm(self.request.GET)
         order = [Lower('name')]

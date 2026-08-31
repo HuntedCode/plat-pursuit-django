@@ -18,6 +18,22 @@ from tests.factories import (
 
 pytestmark = pytest.mark.django_db
 
+@pytest.fixture
+def client(client):
+    """Browse reads the DENORM columns (recompute_tag_covers fills game/version/player counts,
+    2026-08-31): fixtures build links, so recount right before each page hit -- every test
+    exercises the real pipeline instead of hand-set columns."""
+    from django.core.management import call_command
+    orig = client.get
+
+    def get(*args, **kwargs):
+        call_command('recompute_tag_covers', verbosity=0)
+        return orig(*args, **kwargs)
+
+    client.get = get
+    return client
+
+
 FULL_PAGE = 'trophies/company_detail.html'
 GROUP_PARTIAL = 'trophies/partials/franchise_detail/game_groups_list.html'
 
@@ -274,9 +290,14 @@ def test_detail_no_per_game_n_plus_1(client):
     small = _seed('Small', 3)
     big = _seed('Big', 12)
 
+    from django.core.management import call_command
+    from django.test import Client
+    raw = Client()   # unwrapped: the module's client fixture recounts INSIDE the capture
+
     def _q(slug):
+        call_command('recompute_tag_covers', verbosity=0)   # fill denorms OUTSIDE the capture
         with CaptureQueriesContext(connection) as ctx:
-            assert client.get(reverse('company_detail', kwargs={'slug': slug})).status_code == 200
+            assert raw.get(reverse('company_detail', kwargs={'slug': slug})).status_code == 200
         return len(ctx)
 
     assert _q(small.slug) == _q(big.slug)   # 4x the games, same query count -> no per-game/version N+1

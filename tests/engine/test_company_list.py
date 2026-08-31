@@ -15,6 +15,22 @@ from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
 
 pytestmark = pytest.mark.django_db
 
+@pytest.fixture
+def client(client):
+    """Browse reads the DENORM columns (recompute_tag_covers fills game/version/player counts,
+    2026-08-31): fixtures build links, so recount right before each page hit -- every test
+    exercises the real pipeline instead of hand-set columns."""
+    from django.core.management import call_command
+    orig = client.get
+
+    def get(*args, **kwargs):
+        call_command('recompute_tag_covers', verbosity=0)
+        return orig(*args, **kwargs)
+
+    client.get = get
+    return client
+
+
 GRID_PARTIAL = 'trophies/partials/company_list/browse_results.html'
 FULL_PAGE = 'trophies/company_list.html'
 
@@ -244,9 +260,14 @@ def test_query_count_invariant_across_size(client):
             co = _company(f'{prefix} {i}', f'{prefix}-{i}', country=840, logo=f'lg{prefix}{i}')
             _link(co, f'{prefix} Game {i}')
 
+    from django.core.management import call_command
+    from django.test import Client
+    raw = Client()   # unwrapped: the module's client fixture recounts INSIDE the capture
+
     def _q(params):
+        call_command('recompute_tag_covers', verbosity=0)   # fill denorms OUTSIDE the capture
         with CaptureQueriesContext(connection) as ctx:
-            assert client.get(reverse('companies_list'), params).status_code == 200
+            assert raw.get(reverse('companies_list'), params).status_code == 200
         return len(ctx)
 
     _seed('Small', 5)
