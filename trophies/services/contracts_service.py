@@ -10,12 +10,15 @@ sync's `mark_contract_reached`, never on this render path) plus a single bounded
 progress aggregate. The member-concept set is the curated live-Contract pool (bounded), never
 the user's whole library, so there is no whale-OOM risk.
 """
+from datetime import timedelta
+
 from django.core.paginator import Paginator
 from django.db.models import (
     Avg, BooleanField, Case, CharField, Count, DateTimeField, Exists, F, IntegerField, Max, OuterRef,
     Q, Subquery, Sum, Value, When,
 )
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from trophies.models import (
     Contract, ContractXPGrant, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP, Trophy,
@@ -40,6 +43,7 @@ def _member_at_igdb(prefix):
     return {**_member_gate(prefix), f'{prefix}igdb_match__igdb_id': OuterRef('igdb_id')}
 from trophies.util_modules.constants import (
     ALL_PLATFORMS, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
+    NEW_CONTRACT_WINDOW_DAYS,
 )
 
 CONTRACTS_PER_PAGE = 24
@@ -254,7 +258,14 @@ def _platform_exists(platforms):
     ))
 
 
-def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope=''):
+def new_contract_cutoff():
+    """Contracts that first went live at/after this instant are NEW. One definition, read by the
+    board filter, the card marker and the announcer."""
+    return timezone.now() - timedelta(days=NEW_CONTRACT_WINDOW_DAYS)
+
+
+def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope='',
+                      new_only=False):
     # A `contract=<slug>` exact filter lived here for one afternoon, to back a deep link from job detail's
     # cards. It is gone, and the reason is worth keeping: it was a filter the BOARD CONTROLLER did not
     # know about. `seedFromURL` never read it, so `buildParams` could never re-emit it -- the first chip
@@ -286,6 +297,10 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
     for disc in (disciplines or ()):
         if disc and disc != 'all':
             qs = qs.filter(jobs__discipline=disc)
+    if new_only:
+        # went_live_at is NULL for everything published before the field existed (the launch set),
+        # so they correctly read as "not new" rather than flooding the chip on day one.
+        qs = qs.filter(went_live_at__gte=new_contract_cutoff())
     if platforms:                             # any member game on a selected platform (EXISTS, not a join)
         qs = qs.filter(_platform_exists(platforms))
     if q:
@@ -406,6 +421,9 @@ def project_card(c, member_games=None):
     return {
         'name': c.name or (first_concept.unified_title if first_concept else ''),
         'slug': c.slug,
+        # Drives the card's New marker, so a hunter browsing normally SEES the recent additions
+        # instead of having to think to click the Latest chip. Same window as the chip.
+        'is_new': bool(c.went_live_at and c.went_live_at >= new_contract_cutoff()),
         'cover_game': games[0] if games else None,
         'game_count': len(games),
         'elements': elements,
@@ -492,7 +510,8 @@ def _attach_banked(cards, page_contracts, profile):
 
 
 def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplines=None,
-                   jobs=None, platforms=None, sort='relevance', scope='board', with_ranking=True):
+                   jobs=None, platforms=None, sort='relevance', scope='board', with_ranking=True,
+                   new_only=False):
     """One paginated, filtered, sorted page of card dicts + metadata. `disciplines`/`jobs` are lists
     ANDed together (a contract must level every one). `platforms` defaults to current-gen (PS5/PS4);
     pass an explicit list to include legacy/VR, or [] for all platforms. `scope` splits the board:
@@ -506,7 +525,7 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
     if scope == 'history':
         base = _history_annotate(base, profile, jobs)
     qs = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs,
-                           platforms=platforms, scope=scope)
+                           platforms=platforms, scope=scope, new_only=new_only)
     order = _history_order(sort, jobs) if scope == 'history' else _SORTS.get(sort, _ORDER)
     qs = _card_prefetch(qs.order_by(*order))
     paginator = Paginator(qs, CONTRACTS_PER_PAGE)
@@ -552,6 +571,9 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
     # Status chips: ignore the status filter, respect discipline/job/platform/search + scope. One
     # filtered aggregate (a GROUP BY would be split by the board's relevance/strength annotations).
     s_qs = _filter_contracts(base, q=q, disciplines=disciplines, jobs=jobs, platforms=platforms, scope=scope)
+    # The Latest chip's count rides the SAME filtered set as the status chips, so it reflects the
+    # current discipline/platform/search view rather than the whole catalogue.
+    new_count = s_qs.filter(went_live_at__gte=new_contract_cutoff()).distinct().count()
     status_counts = s_qs.aggregate(
         available=Count('id', filter=Q(status='available'), distinct=True),
         pursuing=Count('id', filter=Q(status='pursuing'), distinct=True),
@@ -581,7 +603,7 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
                              .annotate(c=Count('contracts', distinct=True)).values_list('discipline', 'c'))
     job_counts = dict(member_jobs.values('slug')
                       .annotate(c=Count('contracts', distinct=True)).values_list('slug', 'c'))
-    return {'status': status_counts, 'platform': platform_counts,
+    return {'status': status_counts, 'new': new_count, 'platform': platform_counts,
             'discipline': discipline_counts, 'job': job_counts}
 
 

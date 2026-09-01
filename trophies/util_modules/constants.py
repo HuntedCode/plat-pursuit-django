@@ -85,6 +85,12 @@ BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
 # Every Contract pays the same global total T, split evenly among its jobs, across two
 # tiers: Platinum (the bulk) then 100% (the bonus). No-platinum games pay the FULL T at 100%.
 CONTRACT_XP_TOTAL = 6000        # global base T per Contract (override via Contract.xp_total_override); 6000 splits into clean integer shares across 1-6 jobs
+#: How long a Contract counts as NEW after it first goes live -- the single definition the
+#: board's Latest chip, the card's New marker and the Discord announcement all read, so they
+#: cannot disagree about what "new" means. Keyed on Contract.went_live_at (NOT created_at:
+#: the candidate pipeline stages a contract long before staff publish it).
+NEW_CONTRACT_WINDOW_DAYS = 14
+
 MAX_CONTRACT_JOBS = 6          # hard cap on jobs per Contract (keeps per-job XP >= T/6 meaningful); enforced in auto-suggestion + the admin form
 CONTRACT_PLATINUM_FRAC = 0.70  # share of T paid at the Platinum tier
 CONTRACT_FULL_FRAC = 0.30      # share of T paid at the 100% (full-completion) tier

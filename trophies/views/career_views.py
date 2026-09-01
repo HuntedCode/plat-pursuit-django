@@ -60,12 +60,15 @@ def _board_params(request):
         'platforms': [p for p in g.getlist('platform') if p in _VALID_PLATFORMS] or None,  # absent -> current-gen
         'sort': g.get('sort', 'relevance'),
         'scope': 'history' if g.get('scope') == 'history' else 'board',   # Board (default) | History split
+        'new_only': g.get('new') == '1',   # the Latest chip
     }
 
 
 def _board_facets(profile, disc_levels, params, total):
     """Facet chip counts + (when the board is empty) a 'drop <label> to see N' suggestion, as one dict
     for `json_script`. `params` is `_board_params` output; `total` is the current result count."""
+    # board_facets deliberately does NOT take new_only: each chip's count reflects the OTHER
+    # active filters, so the Latest count must not be narrowed by Latest already being on.
     facet_args = {k: params[k] for k in ('q', 'status', 'disciplines', 'jobs', 'platforms', 'scope')}
     f = contracts_service.board_facets(profile, disc_levels=disc_levels, **facet_args)   # status/platform/discipline/job
     suggest = contracts_service.suggest_relaxation(profile, disc_levels=disc_levels, **facet_args) if total == 0 else None
