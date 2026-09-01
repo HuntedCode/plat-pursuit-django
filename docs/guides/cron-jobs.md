@@ -20,6 +20,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
+| 04:45 UTC daily | `evaluate_contract_candidates` | Daily | Runs AFTER `update_shovelware` (04:00 -- the shovelware override reads the flags): evaluates the media-density contract rule over new/changed trusted matches, auto-STAGES Tier A contracts (`is_live=False`, jobs auto-suggested, `--max-stage 150`/run in player-demand order) and maintains the ContractCandidate review/snooze queues in admin. Idempotent; `--dry-run` to preview |
 | 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
@@ -32,6 +33,16 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 ---
 
 ## Job Details
+
+### evaluate_contract_candidates
+
+Nightly maintenance of the contract-candidate queue (the media-density rule; see
+`trophies/services/contract_candidates.py`). Auto-stages Tier A contracts (`is_live=False`,
+jobs auto-suggested) under `--max-stage 150` per run in player-demand order; review/snooze
+queues live in the ContractCandidate admin. MUST run after `update_shovelware` (04:00): the
+shovelware override reads the flags it writes. Idempotent; one bad row cannot abort the batch
+(per-candidate savepoints). `--dry-run` previews. Only a LIVE contract marks a candidate
+`done`; staged rows wait for publish.
 
 ### refresh_profiles
 
@@ -278,7 +289,8 @@ Key ordering rules:
 1. `refresh_profiles` depends on TokenKeeper being alive to process queued syncs.
 2. `send_monthly_recap_emails` **must** run after `generate_monthly_recaps --finalize`. The 6-hour gap (00:05 to 06:00) on the 3rd of each month ensures this.
 3. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday).
-4. All other jobs are independent and can run in any order relative to each other.
+4. `evaluate_contract_candidates` (04:45) must follow `update_shovelware` (04:00) -- the shovelware override reads the flags it writes.
+5. All other jobs are independent and can run in any order relative to each other.
 
 ---
 

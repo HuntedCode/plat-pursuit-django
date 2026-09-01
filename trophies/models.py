@@ -2720,6 +2720,57 @@ class Contract(models.Model):
         )
 
 
+class ContractCandidate(models.Model):
+    """One row per uncontracted IGDB game the media-density rule has evaluated (the nightly
+    evaluate_contract_candidates pipeline; rule in trophies/services/contract_candidates.py).
+
+    Deliberately keyed on the RAW IGDB id with NO Concept FK -- the Contract precedent: member
+    concepts are DERIVED from the id, so concept churn (splits, absorbs, re-anchors) never
+    touches this table and Concept.absorb() needs no branch for it.
+
+    Status is the STAFF ledger, tier is the RULE's current verdict; the nightly run refreshes
+    tier/players/name but only moves status FORWARD (snoozed -> review/staged on promotion) --
+    `dismissed` is a sticky staff verdict the rule never overrides, and `done` marks an id
+    that gained a real contract.
+    """
+    TIER_CHOICES = [('A', 'A (auto)'), ('B', 'B (review)'), ('C', 'C (snooze)')]
+    STATUS_STAGED = 'staged'       # contract auto-created (is_live=False), awaiting publish
+    STATUS_REVIEW = 'review'       # needs staff eyes
+    STATUS_SNOOZED = 'snoozed'     # no signal yet; re-checked nightly
+    STATUS_DISMISSED = 'dismissed'  # staff said no; sticky
+    STATUS_DONE = 'done'           # a contract exists for this igdb id
+    STATUS_CHOICES = [
+        (STATUS_STAGED, 'Staged'), (STATUS_REVIEW, 'Review'), (STATUS_SNOOZED, 'Snoozed'),
+        (STATUS_DISMISSED, 'Dismissed'), (STATUS_DONE, 'Done'),
+    ]
+
+    igdb_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=500, blank=True)   # snapshot of the IGDB name
+    tier = models.CharField(max_length=1, choices=TIER_CHOICES)
+    reason = models.CharField(max_length=16, blank=True)  # '' | 'blocked' | 'rescued'
+    players = models.PositiveIntegerField(default=0)      # max played_count snapshot (demand rank)
+    # No bare db_index: the (status, -players) composite below leads on status.
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES)
+    contract = models.ForeignKey(
+        Contract, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='candidates',
+        help_text='The auto-staged Contract, when status is staged.',
+    )
+    # When the rule's verdict last CHANGED (unchanged rows are not rewritten nightly).
+    evaluated_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-players']
+        indexes = [
+            models.Index(fields=['status', '-players'], name='contract_cand_queue_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.name} [{self.tier}/{self.status}]'
+
+
 class ContractBundle(models.Model):
     """A grouped set of Concepts that satisfy a Contract as one qualifier (ALL must hit 100%).
     Kept for the niche EPISODIC case: releases whose trophies are split across several Concepts
