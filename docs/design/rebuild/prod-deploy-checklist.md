@@ -400,6 +400,26 @@ Migrations `fundraiser.0006_claim_series_fk` and `art_reveal.0004_item_series_fk
 
 ### Pre-flight for the repoint migrations (run BEFORE taking the window)
 
+> **ORDERING CORRECTION (2026-09-01).** The instruction below to run
+> `convert_series_to_groups --all` "FIRST" **cannot be followed before the deploy**: the command
+> is REBUILD-ONLY (prod is on `fundraiser.0005` / `art_reveal.0003` and has no such command), and
+> it arrives in the same deploy as the migrations that need its output. The SQL in this section,
+> however, DOES run on prod today (every table it touches already exists there), so the real
+> sequence is:
+>
+> 1. **Now, on prod:** run the three queries below. If all three return zero rows, no conversion
+>    is needed at all and the deploy is clean.
+> 2. **If any row comes back:** the deploy must interleave. Deploy the rebuild code with `migrate`
+>    HELD BACK (confirm whether Render's release command runs it automatically), then from a shell
+>    on the new code run `convert_series_to_groups --all`, hand-create anything it skips via
+>    `/staff/badge-create/`, and only then `migrate`.
+> 3. If `migrate` does run automatically and trips, the failure is CLEAN: `fundraiser.0006` builds
+>    its mapping and raises before writing, so earlier migrations stay applied and nothing is
+>    corrupted. Recover by shelling in, converting, and re-running `migrate`.
+>
+> Note also that the legacy `Badge` table is NOT dropped by the rebuild, and must not be: the
+> `art_reveal.0004` mapping READS it (item -> legacy badge -> slug -> BadgeSeries).
+
 Both migrations refuse to run against an unmappable row. Find out in advance rather than mid-deploy:
 
 ```sql
