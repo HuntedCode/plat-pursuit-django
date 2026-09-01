@@ -79,7 +79,7 @@ override their base genre job. Freelancer is the no-specialization fallback, hou
 | `name`, `slug` | display + URL. `name` = the member Concept's `unified_title` (the IGDB-canonical game name) at creation |
 | `igdb_id` | **the raw IGDB game id this Contract keys on.** `IntegerField(null=True, unique=True)` — nullable+unique so episodic (bundle-only) contracts can exist with no id |
 | `is_live` | curation gate (mirrors `Badge.is_live`); hidden until released |
-| `went_live_at` | when it FIRST went live. Stamped by `save()` and by the admin's `make_live` (which uses `queryset.update()` and so bypasses `save()` — it stamps via `Coalesce`). **Never reset**, so un-publishing and re-publishing does not re-announce. Drives everything below |
+| `went_live_at` | when it FIRST went live. Stamped **only on the TRANSITION** to live — by `save()` (which compares against the value `from_db()` recorded) and by the admin's `make_live`, which uses `queryset.update()`, so it stamps `is_live=False` rows itself *before* flipping them. **Never reset**, so un-publishing and re-publishing does not re-announce. Drives everything below |
 | `announced_at` | when `announce_contracts` posted it to Discord. Stamped only after a confirmed 2xx |
 | `jobs` | **M2M → Job** — the job profile (≤ 6); XP splits **evenly** across these |
 | `xp_total_override` | nullable; default uses the global base `T`, override for specials |
@@ -169,8 +169,10 @@ into Contracts → History filtered to that job (per-job count/xp from `job_rend
 ## "Latest" — the 14-day recency window
 
 `NEW_CONTRACT_WINDOW_DAYS` (14) over `went_live_at`, with **one** cutoff helper
-(`contracts_service.new_contract_cutoff`) behind three surfaces, so the filter, its count and the
-card marker can never disagree:
+(`contracts_service.new_contract_cutoff`) behind the filter, its facet count and the card marker,
+so those three can never disagree. A page of cards is passed a single cutoff rather than each
+card reading the clock, which is what makes "never disagree" true at the boundary rather than
+merely nearly true. **The Discord announcer is NOT a fourth reader** — see below.
 
 | surface | how |
 |---|---|
@@ -183,14 +185,23 @@ card marker can never disagree:
 drafted", not "what is new".
 
 **The launch set reads as not-new by design.** Those ~1,000 badge-derived contracts carry
-`went_live_at = NULL`, so the chip starts empty and fills as waves land, rather than calling the
-whole catalogue new on day one.
+`went_live_at = NULL` (they went live before the column existed), so the chip starts empty and
+fills as waves land, rather than calling the whole catalogue new on day one. The transition rule
+in the Gotchas is what keeps that true once curators start editing them.
 
 Two traps this cost us, both recorded as tests:
 
-- `board_facets` deliberately does NOT take `new_only` (each chip's count reflects the OTHER
-  active filters), but `suggest_relaxation` **must** — its counts are promises ("drop platform to
-  see 12"), so they have to be measured with Latest still applied.
+- `new_only` rides the WHOLE facet call. Each chip counts the catalogue filtered by the OTHER
+  active filters, and Latest is an "other filter" to status, platform, discipline and job — it
+  is held back only for the Latest chip's own count, since turning a filter on must not shrink
+  its own number. Holding it back from the whole call meant Latest on, five contracts in the
+  grid, and the status chips still promising "Ready to Claim 12": exactly the failure
+  `_filter_contracts`' comment records from the removed `contract=` filter. `suggest_relaxation`
+  needs it for a sharper reason — its counts are promises ("drop platform to see 12"), so they
+  have to be measured with Latest still applied.
+- **Latest is Board-only, like status.** The toolbar hides both in History, so the server drops
+  them there too — honouring `?scope=history&new=1` would narrow History with no visible control
+  to undo it. Fixing only the client would load narrowed and silently widen on the next fetch.
 - Every key `buildParams` can emit must also be in `syncURL`'s delete list, or switching a filter
   off leaves the URL claiming it and switching it back on appends a duplicate. Same failure the
   removed `contract=` filter caused; `test_contracts_latest` reads both key sets out of the
@@ -208,8 +219,15 @@ contract announceable.**
 
 Idempotency is the `announced_at` COLUMN rather than a Redis watermark: a lost watermark
 re-announces everything behind it, one that runs ahead silently swallows a wave. `MAX_WAVE` (40)
-refuses a bulk publish — the launch seed creates ~1,000 live contracts at once and `save()` stamps
-each — with `--baseline` (record as known, post nothing) as the intended cutover answer.
+refuses a bulk publish — a staff sweep publishing hundreds of staged candidates in one changelist
+action — with `--baseline` (record as known, post nothing) as the operator's answer. NOT the
+launch set: those contracts predate the column and carry NULL, so `pending_contracts()` never
+sees them.
+
+The post's link only filters the board to Latest when the WHOLE wave is still inside that window.
+`announced_at` and `NEW_CONTRACT_WINDOW_DAYS` answer different questions and share no floor, so a
+long webhook outage or a `--limit` trickle produces a legitimate post about contracts that have
+aged out — and a filtered link would land the reader on an empty board.
 
 ## Creating Contracts (admin)
 
@@ -289,7 +307,14 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   change form to fix a typo posts back whatever the page rendered with, clearing the stamp and
   re-announcing a contract the community already heard about. Any NEW machine-stamped lifecycle
   column needs adding to `readonly_fields` for the same reason.
+- **"Live and unstamped" is NOT the same as "being published."** Every contract that went live
+  before `went_live_at` existed is live with a NULL stamp — on prod that is the whole ~1,000
+  launch set — and NULL is honest there: their first publish predates the record. Stamping on any
+  save of such a row meant a curator opening one to fix a typo silently republished it (a New badge
+  for 14 days, and a Discord post about a game that had been on the board since launch), leaking
+  the launch set into "new" one edit at a time. Both writers now key on the **transition**.
 - **`queryset.update()` bypasses `save()`**, so the admin's `make_live` stamps `went_live_at`
-  itself (via `Coalesce`, so a republish keeps the first date). Any other bulk publish path has
+  itself — filtering `is_live=False` **before** the flip, since afterwards there is no way left to
+  tell which rows were already published. Any other bulk publish path has
   to do the same or its contracts are permanently un-announceable — live, but never stamped, so
   invisible to both the Latest chip and the announcer.

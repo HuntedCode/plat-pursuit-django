@@ -41,7 +41,7 @@
 | 1 | **Register `recompute_tag_covers` cron** — new daily Render Cron Job (`python manage.py recompute_tag_covers`, 03:45 UTC) keeping the genre/theme tile covers fresh as games sync. Documented in [cron-jobs.md](../../guides/cron-jobs.md). The one-time backfill is task #4 above; this is the ongoing schedule. | Launch (Render dashboard) | ☐ |
 | 0 | **Review the WHOLE cron list against [cron-jobs.md](../../guides/cron-jobs.md) before creating anything.** The rebuild changed which commands exist and which are folded into `nightly`, and Render crons live in the dashboard rather than in config, so nothing in the repo can reconcile them for you. Two specific traps: (a) `evaluate_badges --all`, `detect_dlc_and_refresh`, `audit_badge_coverage` and `recompute_milestones` are now STEPS OF `nightly` -- a standalone entry for any of them runs it a second time, concurrently, over every profile; (b) `update_leaderboards` was deleted in the rebuild, so any surviving entry fails with `Unknown command` on every fire. Confirm each entry names a command that still exists. | Launch (Render dashboard), FIRST | ☐ |
 | 3 | **Register `evaluate_contract_candidates` cron** — new daily Render Cron Job (`python manage.py evaluate_contract_candidates`, **04:45 UTC**). The slot is LOAD-BEARING: it must follow `update_shovelware` (04:00), because the shovelware override reads the flags that job writes — fire it earlier and a freshly-flagged game can auto-stage. Each run re-evaluates the catalogue, keeps the review/snooze queues current (snoozed rows are re-checked as IGDB pages gain media), and auto-stages up to 150 Tier A contracts per night in player-demand order, always `is_live=False`. Leave the cap at 150: with the ~1,000 badge-derived contracts as the launch set, this queue is the TRICKLE that feeds post-launch publishing waves, not a backlog to clear. Documented in [cron-jobs.md](../../guides/cron-jobs.md); the one-time seed is task #8 above. **Not gated on the rebuild cutover** (pipeline shipped to prod 2026-09-01). | Now (Render dashboard) | ☐ |
-| 4 | **Register `announce_contracts` cron** — new daily Render Cron Job (`python manage.py announce_contracts`, **06:00 UTC**), after `nightly` (04:00) has finished, so a wave published by a curator during the day and one made claimable overnight land in one post. **Silent when nothing is new**, which is most days. **Run `announce_contracts --baseline` BY HAND, once, before registering this** — the launch seed's ~1,000 contracts would otherwise be the first wave. The command refuses a wave over 40, so the failure mode is a loud CommandError rather than a wall in the channel, but the baseline is the intended step. Documented in [cron-jobs.md](../../guides/cron-jobs.md). | Launch (Render dashboard), AFTER the baseline run | ☐ |
+| 4 | **Register `announce_contracts` cron** — new daily Render Cron Job (`python manage.py announce_contracts`, **06:00 UTC**), after `nightly` (04:00) has finished, so a wave published by a curator during the day and one made claimable overnight land in one post. **Silent when nothing is new**, which is most days. **Run `announce_contracts --baseline` BY HAND, once, before registering this.** The launch set does not actually need it (those contracts predate `went_live_at` and carry NULL, and `Contract.save()` only stamps on the transition to live), but it is idempotent, posts nothing, and covers anything published between the deploy and the cron going live. Documented in [cron-jobs.md](../../guides/cron-jobs.md). | Launch (Render dashboard), AFTER the baseline run | ☐ |
 | 2 | **PAUSE the `process_scheduled_notifications` cron** — the notification system is [hidden pending rebuild](rebuild-playbook.md), and this hourly job is the only outbound delivery path still live. With the staff compose UI unrouted nothing new can be scheduled, but the job would keep delivering rows already queued, sending people to a page that redirects home. Un-pausing is the same toggle when the rebuild ships. | Launch (Render dashboard) | ☐ |
 
 ### Manual config (dashboards, env, third-party)
@@ -80,16 +80,23 @@ What that means in practice:
 Each wave gets a Discord post (grouped by job, linking to the board with Latest applied), and the
 Career board + job detail both grow a **Latest** chip over a 14-day `went_live_at` window.
 
-**The one cutover step that matters** is running `announce_contracts --baseline` ONCE, straight
-after the launch seed and before the command is scheduled. The seed creates the ~1,000 badge-derived
-contracts, and any of them created with `is_live=True` gets `went_live_at` stamped by `save()` -- so
-without the baseline the first scheduled run tries to announce the entire catalogue. The command
-refuses a wave over 40 rather than posting it, so the failure mode is a loud CommandError rather
-than a wall in the channel, but baselining is the intended answer and it posts nothing.
+**The launch set needs nothing.** Those ~1,000 contracts went live on prod *before* migration `0320`
+added `went_live_at`, so they carry NULL, and both the Latest chip and the announcer skip NULL rows
+by the same filter that keeps staged candidates out. An earlier draft of this section claimed the
+seed would create them live and `save()` would stamp each one; that was wrong, and the fix that
+matters landed in the code rather than here — **`Contract.save()` only stamps on the TRANSITION to
+live**, so a curator opening a launch-era contract to fix a typo no longer republishes it. Without
+that rule the launch set would have leaked into "new" one edit at a time, which no cutover step
+could have prevented.
 
-Contracts left at `went_live_at = NULL` (the deliberate launch-set state) need no baseline: they are
-excluded by the same filter that keeps staged candidates out. Baseline anyway -- it is idempotent and
-covers whichever way the seed leaves them.
+**Still run `announce_contracts --baseline` once** before registering the cron. It is idempotent,
+costs one UPDATE, posts nothing, and covers the case where a contract was published between the
+deploy and the cron going live. Cheap insurance against a wrong assumption about the seed, which is
+exactly the assumption that was wrong the first time.
+
+The `MAX_WAVE` (40) guard stays, for the case it actually protects: a staff sweep publishing
+hundreds of staged candidates in one changelist action. The command refuses rather than posting a
+wall, and `--dry-run` / `--test-webhook` can both inspect an oversized wave without `--force`.
 
 
 ## Outstanding prod tasks (independent of rebuild launch)

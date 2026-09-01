@@ -183,16 +183,26 @@ replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refres
   triple answers the admin-review question structurally: a staged or review-queued candidate is
   `is_live=False`, so it has no `went_live_at` and can never reach the announcer. **Publishing is
   the only act that makes a contract announceable**, which puts the editorial gate where it belongs.
-- **The launch set is excluded for free**: those ~1,000 badge-derived contracts carry
-  `went_live_at = NULL` by decision, so the first run after cutover says nothing.
+- **The launch set is excluded for free**: those ~1,000 badge-derived contracts went live before
+  the column existed, so they carry NULL and the first run after cutover says nothing. What keeps
+  that true afterwards is `Contract.save()` stamping only on the TRANSITION to live -- under the
+  older "live and unstamped" rule, a curator editing a launch-era contract republished it.
 - **Idempotency**: a COLUMN (`Contract.announced_at`), stamped only after a confirmed 2xx. A failed
   post leaves the whole wave pending for the next run; a second run in the same window is silent. A
   column rather than a Redis watermark deliberately: a lost watermark re-announces everything behind
   it, and one that runs ahead silently swallows a wave.
 - **The wave-size guard**: refuses a wave over `MAX_WAVE` (40) without `--force`. A legitimate wave
-  is 10-30; far past that means a bulk operation stamped a backlog, and the post would be a wall.
-  The operator's answer is `--baseline` (record the backlog as already known, posting nothing) or
-  `--limit N` to trickle.
+  is 10-30; far past that means a bulk publish (a staff sweep over hundreds of staged candidates in
+  one changelist action), and the post would be a wall. The operator's answer is `--baseline`
+  (record the backlog as already known, posting nothing) or `--limit N` to trickle. `--dry-run` and
+  `--test-webhook` are exempt: inspecting an oversized wave is how you decide between those two.
+- **The post's link widens when the wave has aged out.** `announced_at` and the 14-day Latest
+  window answer different questions and share no floor, so a long webhook outage or a `--limit`
+  trickle can produce a legitimate post about contracts already outside the window. The link only
+  filters the board to Latest when the WHOLE wave is still inside it.
+- **Embed size is enforced against the assembled string**, not approximated by the line caps: over
+  Discord's 4096 limit the POST 400s, the wave is never stamped, and the identical wave then fails
+  identically every night until someone runs `--limit` by hand.
 - **Ad hoc**: `--dry-run` prints the payload and writes nothing; `--test-webhook` posts to
   `DISCORD_TEST_WEBHOOK_URL` and deliberately does NOT stamp, so a preview cannot consume a wave.
 - **Failure impact**: the community is not told about a wave. Nothing else depends on it: the
