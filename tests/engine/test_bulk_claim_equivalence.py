@@ -7,7 +7,7 @@ timeout at ~90 queries per contract. Since this is the code the whole XP economy
 contracts in one batch must leave exactly the state that claiming them one at a time would.
 """
 import pytest
-from django.db import connection
+from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
@@ -45,11 +45,16 @@ def _state(profile):
     return {
         'jobs': sorted(ProfileJobXP.objects.filter(profile=profile)
                        .values_list('job_id', 'total_xp', 'level')),
+        # multiplier rides the ledger row (a future double-XP event must record the value that
+        # SIZED the tier); name/from_first_claim are hand-rolled by the batched milestone write,
+        # so they are exactly the fields a regression there would silently change.
         'grants': sorted(ContractXPGrant.objects.filter(profile=profile)
-                         .values_list('job_id', 'amount', 'tier', 'base_t', 'source')),
+                         .values_list('job_id', 'amount', 'tier', 'base_t', 'source',
+                                      'multiplier')),
         'grant_count': ContractXPGrant.objects.filter(profile=profile).count(),
         'milestones': sorted(ProgressionMilestone.objects.filter(profile=profile)
-                             .values_list('kind', 'key', 'job_id', 'level_at')),
+                             .values_list('kind', 'key', 'job_id', 'level_at', 'name',
+                                          'from_first_claim')),
         'accepted': sorted(EarnedContract.objects.filter(profile=profile)
                            .values_list('contract__slug', 'platinum_accepted_at',
                                         'full_accepted_at')),
@@ -67,8 +72,14 @@ def test_bulk_claim_is_identical_to_sequential(n):
     # The bulk twin gets its OWN contracts (igdb_id is unique) with identical shape.
     bulk_contracts = _contracts(bulk_profile, n, start=1000)
 
+    # `first_claim` is threaded the way the OLD claim() threaded it: computed once up front and
+    # passed to every accept, so the whole onboarding burst is flagged consistently. Letting each
+    # sequential accept re-derive it instead would compare claim-all against N INDEPENDENT
+    # single accepts (where only the first is the onboarding claim) -- a different operation, and
+    # the extended milestone comparison below catches exactly that mismatch.
+    seq_first_claim = not contract_service._has_any_job_xp(seq_profile)
     for c in seq_contracts:
-        accept_contract(seq_profile, c)
+        accept_contract(seq_profile, c, first_claim=seq_first_claim)
     accept_contracts_bulk(bulk_profile, bulk_contracts)
 
     seq, bulk = _state(seq_profile), _state(bulk_profile)
@@ -199,3 +210,111 @@ def test_career_standing_rolls_up_once_per_claim():
         contract_service.recompute_career_standing = real
 
     assert len(calls) == 1, f'career standing recomputed {len(calls)}x for one claim'
+
+
+def test_every_grant_is_linked_to_the_contract_that_paid_it():
+    """`earned_contract` is the ledger's idempotency key (unique_together) AND what
+    `reset_claim --contract` deletes by -- the differential test cannot see it (twins hold
+    different contracts), so pin it directly: every grant points at the EarnedContract whose
+    tier produced it, and each (contract, tier) pays exactly its jobs once."""
+    profile = ProfileFactory(is_linked=True)
+    contracts = _contracts(profile, 3, jobs_per=4, start=6000)
+    accept_contracts_bulk(profile, contracts)
+
+    for c in contracts:
+        ec = EarnedContract.objects.get(profile=profile, contract=c)
+        rows = ContractXPGrant.objects.filter(profile=profile, earned_contract=ec)
+        assert rows.count() == 8, 'expected 4 jobs x 2 tiers of grants for this contract'
+        assert set(rows.values_list('tier', flat=True)) == {'platinum', 'full'}
+        assert rows.filter(tier='platinum').count() == 4
+    assert not ContractXPGrant.objects.filter(profile=profile, earned_contract=None).exists()
+
+
+def test_contract_without_a_platinum_pays_full_t_at_100_percent():
+    """`has_platinum=False` is a different tier split (the whole T lands on the 100% tier).
+    Every other fixture here sets it True, so the branch would otherwise never run in a batch."""
+    profile = ProfileFactory(is_linked=True)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:2])
+    c = Contract.objects.create(name='No Plat', slug='no-plat', igdb_id=610000, is_live=True)
+    c.jobs.set(jobs)
+    EarnedContract.objects.create(
+        profile=profile, contract=c, has_platinum=False, full_reached_at=timezone.now())
+
+    accepted, granted = accept_contracts_bulk(profile, [c])
+
+    assert accepted == ['no-plat']
+    tiers = set(ContractXPGrant.objects.filter(profile=profile).values_list('tier', flat=True))
+    assert tiers == {'full'}, 'a platinum-less contract must not pay a platinum tier'
+    assert granted == sum(ContractXPGrant.objects.filter(profile=profile)
+                          .values_list('amount', flat=True))
+
+
+def test_zero_xp_shares_write_no_ledger_row_but_still_stamp():
+    """More jobs than XP: `_split` hands some jobs 0. Those write NO ledger row (the amount<=0
+    filter), while the contract is still stamped accepted -- the rule the old per-grant path had
+    via `if amount <= 0: return 0`."""
+    profile = ProfileFactory(is_linked=True)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:6])
+    c = Contract.objects.create(name='Tiny', slug='tiny', igdb_id=610001, is_live=True,
+                                xp_total_override=4)     # 4 XP over 6 jobs -> two get 0
+    c.jobs.set(jobs)
+    EarnedContract.objects.create(
+        profile=profile, contract=c, has_platinum=False, full_reached_at=timezone.now())
+
+    accept_contracts_bulk(profile, [c])
+
+    amounts = list(ContractXPGrant.objects.filter(profile=profile)
+                   .values_list('amount', flat=True))
+    assert amounts and all(a > 0 for a in amounts), 'a zero share must not reach the ledger'
+    assert len(amounts) < len(jobs), 'fixture did not actually produce a zero share'
+    ec = EarnedContract.objects.get(profile=profile, contract=c)
+    assert ec.full_accepted_at is not None, 'the contract must still be stamped accepted'
+
+
+def test_no_signal_receivers_on_the_bulk_written_models():
+    """bulk_create/bulk_update do NOT fire post_save. The batched primitive is only safe because
+    nothing listens to these four models -- so if someone later attaches a receiver, it would be
+    silently dead for every claim. Fail HERE instead, with the fix spelled out."""
+    import weakref
+
+    from django.db.models.signals import post_delete, post_save, pre_save
+
+    watched = {ContractXPGrant, ProfileJobXP, ProgressionMilestone, EarnedContract}
+    offenders = []
+    for signal in (pre_save, post_save, post_delete):
+        # Django 5.x stores (lookup_key, receiver, is_async); index rather than unpack so this
+        # guard does not break on the tuple shape changing again.
+        for entry in signal.receivers:
+            lookup_key, ref = entry[0], entry[1]
+            _id, sender_id = lookup_key
+            fn = ref() if isinstance(ref, weakref.ReferenceType) else ref
+            for model in watched:
+                if sender_id == id(model):
+                    offenders.append(f'{getattr(fn, "__module__", "?")}.'
+                                     f'{getattr(fn, "__name__", "?")} on {model.__name__}')
+    assert not offenders, (
+        'a save-signal receiver was added to a model the claim path writes in BULK, so it will '
+        'never fire for a claim: ' + ', '.join(offenders) +
+        '. Either call it explicitly from grant_job_xp_bulk/accept_contracts_bulk, or move the '
+        'work into those functions.'
+    )
+
+
+def test_a_missing_cache_row_fails_loudly_instead_of_under_crediting(monkeypatch):
+    """The guard for the invariant's most dangerous failure mode. Ledger rows are written BEFORE
+    the cache rows are locked, so if a ProfileJobXP row were ever missing at that point, skipping
+    it would bank XP the cache never records -- silently breaking ProfileJobXP = Sum(all grants)
+    with no error and no way to notice. (Unreachable on Postgres/READ COMMITTED, where the
+    ensure-then-lock is race-safe; simulated here by neutering the ensure.) It must raise, so the
+    surrounding transaction rolls the whole claim back."""
+    profile = ProfileFactory(is_linked=True)
+    job = Job.objects.exclude(is_fallback=True).first()
+    monkeypatch.setattr(ProfileJobXP.objects, 'bulk_create', lambda *a, **k: [])
+
+    with pytest.raises(RuntimeError, match='no ProfileJobXP row'):
+        with transaction.atomic():
+            grant_job_xp(profile, job, 100)
+
+    assert not ContractXPGrant.objects.filter(profile=profile).exists(), (
+        'the ledger rows must roll back with the failed claim'
+    )

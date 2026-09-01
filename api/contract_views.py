@@ -2,7 +2,7 @@
 
 A Project tier becomes claimable when the sync detects its completion (reached). XP is only
 banked when the user accepts it. This view is the only request path that writes grants; it
-delegates to contract_service.accept_contract / accept_contracts (idempotent, ledger-backed).
+delegates to contract_service.claim (idempotent, ledger-backed, batched).
 """
 import logging
 
