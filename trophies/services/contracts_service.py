@@ -383,10 +383,16 @@ def _platform_cells(games):
     return [{'label': label, 'lit': key in present} for key, label in _CARD_PLATFORMS]
 
 
-def project_card(c, member_games=None):
+def project_card(c, member_games=None, new_cutoff=None):
     """Card display dict for one annotated+prefetched Contract. No per-game progress -- that
     lives in the lazily loaded modal. `member_games` may be pre-resolved by the batch board path;
-    when None (single-card callers) it falls back to the per-contract query."""
+    when None (single-card callers) it falls back to the per-contract query.
+
+    `new_cutoff` is threaded from the caller so a page of cards shares ONE clock read with the
+    queryset that selected them. Reading the clock per card was 24 `now()` calls a page and, worse,
+    made the card's "the marker and the filter can never disagree" claim untrue: the filter used
+    T1 and each card a slightly later T2, so a contract sitting on the boundary could be returned
+    by `new_only=True` and render without its marker."""
     jobs = list(c.jobs.all())
     elements = [job_render.job_atom(j) for j in jobs]
     n = len(jobs) or 1
@@ -423,7 +429,7 @@ def project_card(c, member_games=None):
         'slug': c.slug,
         # Drives the card's New marker, so a hunter browsing normally SEES the recent additions
         # instead of having to think to click the Latest chip. Same window as the chip.
-        'is_new': bool(c.went_live_at and c.went_live_at >= new_contract_cutoff()),
+        'is_new': bool(c.went_live_at and c.went_live_at >= (new_cutoff or new_contract_cutoff())),
         'cover_game': games[0] if games else None,
         'game_count': len(games),
         'elements': elements,
@@ -534,7 +540,9 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
     page_obj = paginator.get_page(page)
     page_contracts = list(page_obj)
     games_by_igdb = _member_games_by_igdb(page_contracts)   # one query for the whole page's members
-    cards = [project_card(c, games_by_igdb.get(c.igdb_id, [])) for c in page_contracts]
+    cutoff = new_contract_cutoff()   # ONE clock read shared by the whole page of cards
+    cards = [project_card(c, games_by_igdb.get(c.igdb_id, []), new_cutoff=cutoff)
+             for c in page_contracts]
     if scope == 'history':
         _attach_banked(cards, page_contracts, profile)
     return {
@@ -633,7 +641,11 @@ def job_contract_counts(job_slug):
     list it describes."""
     base = _filter_contracts(Contract.objects.filter(is_live=True), jobs=[job_slug],
                              platforms=[], scope='')
-    return base.count(), base.filter(went_live_at__gte=new_contract_cutoff()).count()
+    agg = base.aggregate(
+        total=Count('id', distinct=True),
+        new=Count('id', filter=Q(went_live_at__gte=new_contract_cutoff()), distinct=True),
+    )
+    return agg['total'] or 0, agg['new'] or 0
 
 
 def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None,

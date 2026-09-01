@@ -289,3 +289,42 @@ def test_the_rendered_board_ships_facets_that_respect_latest(client):
 
     assert facets['status']['all'] == 1, 'the shipped status chips ignore Latest'
     assert facets['new'] == 1
+
+
+# ── Latest is Board-only, like status ────────────────────────────────────────────────────────────
+
+def test_a_hand_typed_latest_cannot_narrow_history(client):
+    """CSS hides the Latest chip in History, so honouring `?scope=history&new=1` -- a hand-edited
+    URL, a stale bookmark -- would narrow History to the last 14 days with NO visible control to
+    undo it. That is the exact hazard setScope's own comment exists to prevent, arriving by the one
+    path setScope never sees: the initial load."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    params = _board_params_for(client, '/career/?view=contracts&scope=history&new=1')
+
+    assert params['scope'] == 'history'
+    assert params['new_only'] is False
+
+
+def test_the_client_and_the_server_agree_about_it(client):
+    """Fixing only seedFromURL would mean the page loads narrowed by the SSR render and silently
+    widens on the next fetch. Both sides drop it, so both agree."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    src = client.get('/career/?view=contracts').content.decode()
+    seed = src.split('function seedFromURL', 1)[1].split('state.newOnly', 1)[1].split(';', 1)[0]
+
+    assert "'history'" in seed, 'seedFromURL honours ?new=1 in History; the server does not'
+
+
+def _board_params_for(client, url):
+    """Read what the view derived, through a real request."""
+    from django.test import RequestFactory
+
+    from trophies.views.career_views import _board_params
+
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    return _board_params(RequestFactory().get(parsed.path + '?' + parsed.query))

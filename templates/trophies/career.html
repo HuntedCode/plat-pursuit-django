@@ -1193,7 +1193,11 @@ function ppCountUp(el, dur) {
     var searchInput = document.getElementById('rp-search');
     var searchField = null;   // PlatPursuit.wireSearchField handle (clear/Escape/has-value + spinner setBusy)
     var statusBar = document.querySelector('.rp-filters');
-    var newChip = document.querySelector('.rp-chip--new');
+    // Selected by its DATA hook, not its class: the status chips next to it are found by
+    // `data-filter`, so behaviour reads from data attributes here and the class stays styling.
+    // It was a class lookup with an unread `data-new` sitting beside it -- markup that looks
+    // like a hook and is not, which this codebase has been caught by before.
+    var newChip = document.querySelector('[data-new]');
     function syncNewChip() {
         if (!newChip) return;
         newChip.classList.toggle('is-active', !!state.newOnly);
@@ -1621,7 +1625,11 @@ function ppCountUp(el, dur) {
         state.platforms = pl.length ? pl : null;
         if (searchInput) searchInput.value = state.q;
         if (searchField) searchField.sync();   // programmatic value set fires no 'input' event -> sync .has-value (clear-x)
-        state.newOnly = p.get('new') === '1';
+        // Board-only, for the same reason status is (two lines up): CSS hides the Latest chip in
+        // History, so `?scope=history&new=1` -- a hand-edited URL, a stale bookmark -- would narrow
+        // History to the last 14 days with NO visible control to undo it. setScope already clears
+        // it on a user scope switch; this is the load path, which is the one that can arrive there.
+        state.newOnly = (state.scope !== 'history') && p.get('new') === '1';
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
             c.classList.toggle('is-active', (state.status || 'all') === c.dataset.filter);
         });

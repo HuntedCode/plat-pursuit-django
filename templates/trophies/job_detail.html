@@ -154,13 +154,21 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         forward for free (it seeds from window.location.search), the URL is shareable, and Back undoes
         it. `tab=contracts` rides along so the toggle never bounces the reader to the Ranks tab.
 
-        Hidden entirely when the job has nothing new: a chip that can only ever return an empty list is
-        a dead control, and most jobs will sit at zero between publishing waves. {% endcomment %}
+        Hidden entirely when the job has nothing new, where Career shows the same chip dimmed at zero
+        (`.rp-chip--empty`). Not a contradiction, a difference in what surrounds it: on Career it sits
+        in a row of status chips that ALL show their counts, so a zero is one reading among several
+        and dropping it would make the row jump. Here it would be the only control on the page, and a
+        lone dimmed chip that does nothing reads as broken rather than as informative. Most jobs sit
+        at zero between publishing waves, so this is the common case, not the edge. {% endcomment %}
         {% if new_count %}
         <div class="jobd-newbar">
+            {% comment %} `aria-current`, not `aria-pressed`: this is an <a> (a link, so Back undoes
+            it), and aria-pressed is only valid on role="button" -- assistive tech ignores it there,
+            so the active state would reach sighted users through .is-active and nobody else. Career
+            renders the same chip as a <button> and correctly uses aria-pressed. {% endcomment %}
             <a class="rp-chip rp-chip--new{% if new_only %} is-active{% endif %}"
                href="?tab=contracts{% if not new_only %}&amp;new=1{% endif %}"
-               aria-pressed="{{ new_only|yesno:'true,false' }}"
+               {% if new_only %}aria-current="true"{% endif %}
                title="Contracts added in the last {{ new_window_days }} days">Latest<span class="rp-chip__n">{{ new_count }}</span></a>
             {% if new_only %}<span class="jobd-newbar__count">{{ filtered_total }} of {{ contract_total }} shown</span>{% endif %}
         </div>

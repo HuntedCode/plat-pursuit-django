@@ -21,7 +21,9 @@ from django.conf import settings
 from django.db.models import Prefetch
 from django.utils import timezone
 
+from trophies.discord_utils.discord_notifications import escape_md
 from trophies.models import Contract, Job
+from trophies.services.contracts_service import new_contract_cutoff
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +31,38 @@ EMBED_COLOR = 0x003791          # Platinum brand blue, same as the trophy tracke
 #: Career deep-links on `?view=`, NOT `?tab=` (that is job detail's param). Getting it wrong does
 #: not 404 or look broken -- the contracts panel renders correctly filtered but stays `hidden`, so
 #: the reader lands on the Jobs tab and has to go hunting for what the post just told them about.
-BOARD_URL = '/career/?view=contracts&new=1'
+BOARD_URL = '/career/?view=contracts'
+#: Added only when the whole wave is still inside the Latest window. `announced_at` and
+#: NEW_CONTRACT_WINDOW_DAYS answer different questions and share no floor: a webhook misconfigured
+#: for a fortnight, or a backlog trickled out with `--limit`, produces a legitimate post about
+#: contracts that have already aged out. Filtering the board to Latest would then land the reader
+#: on an EMPTY board -- the one place the post promised its contents would be.
+BOARD_URL_LATEST = BOARD_URL + '&new=1'
 
-#: Discord hard-caps an embed description at 4096 characters and we want to stay well clear of it,
-#: so a very large wave lists its biggest jobs and counts the rest. Chosen over truncating the
-#: title list inside each job: "and 40 more" under a job someone follows is a worse read than a
-#: complete picture of the jobs, which is the grouping the post exists to give.
+#: A very large wave lists its biggest jobs and counts the rest. Chosen over truncating the title
+#: list inside each job: "and 40 more" under a job someone follows is a worse read than a complete
+#: picture of the jobs, which is the grouping the post exists to give.
 MAX_JOB_LINES = 12
 #: Per job, before the same treatment applies to its titles.
 MAX_TITLES_PER_JOB = 6
+
+#: Discord's hard cap on an embed description. This is ENFORCED against the assembled string, not
+#: approximated by the line caps above -- those bound the line COUNT, and PlayStation titles are
+#: long enough that twelve jobs of six titles can clear 4096 well inside MAX_WAVE. Overrunning it
+#: is not a cosmetic failure: Discord answers 400, the command raises, the wave is never stamped,
+#: and the identical wave fails identically every night until someone runs --limit by hand. The
+#: fail-closed retry that makes transient errors safe is exactly what makes a deterministic one
+#: permanent, so the deterministic one must not be reachable.
+DISCORD_DESCRIPTION_LIMIT = 4096
+#: Headroom under the cap, so the closing link and tail always fit.
+_BUDGET = DISCORD_DESCRIPTION_LIMIT - 256
+
+#: Contract and job names are curator-authored free text going into a markdown description, so a
+#: game legitimately titled "Sam & Max: *Beyond* Time and Space" should render as its own title and
+#: a mistyped `[text](url)` should not become a live link in the channel. Imported rather than
+#: written here: `discord_notifications` has had this escape set since the badge announcements, and
+#: two definitions of "which characters are dangerous to Discord" is exactly one too many.
+escape_markdown = escape_md
 
 
 def pending_contracts():
@@ -73,24 +98,47 @@ def build_announcement(contracts):
 
     n = len(contracts)
     groups = _by_job(contracts)
-    lines = [
-        f"**{n} new contract{'' if n == 1 else 's'}** just hit the Job Board.",
-        '',
-    ]
+    # Only filter the board to Latest when the whole wave is still inside that window (see
+    # BOARD_URL_LATEST). Every contract here has a stamp -- pending_contracts() requires one.
+    cutoff = new_contract_cutoff()
+    board = BOARD_URL_LATEST if all(c.went_live_at >= cutoff for c in contracts) else BOARD_URL
+    head = f"**{n} new contract{'' if n == 1 else 's'}** just hit the Job Board."
+    lines = [head, '']
+    used = len(head) + 1
+
+    # Take job lines while they FIT, not just while they are under MAX_JOB_LINES. Whatever does not
+    # fit rolls into the same "and N more jobs" tail that the line cap already produces, so an
+    # oversized wave degrades into a shorter post instead of an unpostable one.
+    shown_jobs = 0
     for job_name, titles in list(groups.items())[:MAX_JOB_LINES]:
         shown = titles[:MAX_TITLES_PER_JOB]
         extra = len(titles) - len(shown)
         tail = f" *and {extra} more*" if extra else ''
-        lines.append(f"**{job_name}** — {', '.join(shown)}{tail}")
-    hidden_jobs = len(groups) - MAX_JOB_LINES
+        line = f"**{escape_markdown(job_name)}** — {', '.join(escape_markdown(t) for t in shown)}{tail}"
+        if used + len(line) + 1 > _BUDGET:
+            break
+        lines.append(line)
+        used += len(line) + 1
+        shown_jobs += 1
+
+    hidden_jobs = len(groups) - shown_jobs
     if hidden_jobs > 0:
         lines.append(f"*…and {hidden_jobs} more job{'' if hidden_jobs == 1 else 's'}.*")
 
-    lines += ['', f"[See them on your board]({settings.SITE_URL}{BOARD_URL})"]
+    lines += ['', f"[See them on your board]({settings.SITE_URL}{board})"]
+    description = '\n'.join(lines)
+
+    # Belt and braces. The budget above is computed from the pieces; this measures the result, so a
+    # future edit to the header, tail or link cannot quietly reintroduce a 400.
+    if len(description) > DISCORD_DESCRIPTION_LIMIT:
+        logger.error("Contract announcement description was %d chars; falling back to the summary.",
+                     len(description))
+        description = (f"{head}\n\n[See them on your board]"
+                       f"({settings.SITE_URL}{BOARD_URL})")
 
     return {'embeds': [{
         'title': '📋 New Contracts',
-        'description': '\n'.join(lines),
+        'description': description,
         'color': EMBED_COLOR,
         'footer': {'text': 'Contracts are curated | Powered by Plat Pursuit'},
     }]}

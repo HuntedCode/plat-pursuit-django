@@ -159,8 +159,41 @@ _MAX_BADGE_LINES = 15
 _MD_ESCAPE = str.maketrans({c: f'\\{c}' for c in '*_`~|[]()>'})
 
 
-def _escape_md(text):
+def escape_md(text):
+    """Escape Discord markdown in staff/curator-authored text bound for an embed. PUBLIC because
+    every webhook sender needs it: the contract announcer reimplemented this before noticing it was
+    already here, which is one definition of the escape set too many."""
     return str(text or '').translate(_MD_ESCAPE)
+
+
+_escape_md = escape_md   # the original private name, for this module's own callers
+
+
+class WebhookError(Exception):
+    """Raised by `post_webhook_sync`. Callers in management commands re-raise as CommandError; a
+    dedicated type keeps this module free of a django.core.management import."""
+
+
+def post_webhook_sync(payload, webhook_url, *, label="Webhook", timeout=10):
+    """Synchronous direct POST to a Discord webhook. For MANAGEMENT COMMANDS, which must not use
+    the queue/worker above: a one-shot command's daemon worker thread dies when the process exits,
+    which can drop a message mid-flight, and the worker swallows HTTP errors into a logger where a
+    cron failure is invisible. Returns the response; raises `WebhookError` on transport failure or
+    any 4xx/5xx, so the caller can leave its idempotency stamp unset and retry next run.
+
+    THE URL IS NEVER IN THE RAISED MESSAGE. A `requests` connection or timeout exception embeds the
+    full URL it was calling ("Max retries exceeded with url: /api/webhooks/<id>/<token>"), so
+    interpolating the exception verbatim -- which both callers of this pattern did -- printed the
+    webhook SECRET to stdout and into Render's job log on every transport failure.
+    """
+    try:
+        response = requests.post(webhook_url, json=payload, proxies=PROXIES, timeout=timeout)
+    except requests.RequestException as e:
+        logger.exception("%s direct POST raised", label)
+        raise WebhookError(f"{label} POST failed: {type(e).__name__} (see logs; URL redacted)")
+    if response.status_code >= 400:
+        raise WebhookError(f"{label} returned HTTP {response.status_code}: {response.text[:500]}")
+    return response
 
 
 def send_group_badges_earned_notification(profile, group_badges):

@@ -85,10 +85,17 @@ BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
 # Every Contract pays the same global total T, split evenly among its jobs, across two
 # tiers: Platinum (the bulk) then 100% (the bonus). No-platinum games pay the FULL T at 100%.
 CONTRACT_XP_TOTAL = 6000        # global base T per Contract (override via Contract.xp_total_override); 6000 splits into clean integer shares across 1-6 jobs
-#: How long a Contract counts as NEW after it first goes live -- the single definition the
-#: board's Latest chip, the card's New marker and the Discord announcement all read, so they
-#: cannot disagree about what "new" means. Keyed on Contract.went_live_at (NOT created_at:
-#: the candidate pipeline stages a contract long before staff publish it).
+#: How long a Contract counts as NEW after it first goes live -- one definition behind the board's
+#: Latest chip, its facet count and the card's New marker, so those three cannot disagree. Keyed on
+#: Contract.went_live_at (NOT created_at: the candidate pipeline stages a contract long before staff
+#: publish it).
+#:
+#: The Discord announcement is NOT one of them, despite an earlier comment here claiming so. It asks
+#: a different question -- "have we told anyone yet" (`Contract.announced_at`) rather than "is this
+#: still recent" -- and the two have no shared floor. If the webhook is misconfigured for a fortnight,
+#: or a large backlog is trickled out with `--limit`, a post can legitimately announce contracts that
+#: have already fallen out of this window, and its link would land on a board that excludes them.
+#: `announce_contracts` therefore widens the window for its own link rather than relying on this one.
 NEW_CONTRACT_WINDOW_DAYS = 14
 
 MAX_CONTRACT_JOBS = 6          # hard cap on jobs per Contract (keeps per-job XP >= T/6 meaningful); enforced in auto-suggestion + the admin form

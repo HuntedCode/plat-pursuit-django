@@ -8,12 +8,14 @@ the only act that makes a contract announceable.
 import io
 
 import pytest
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
 from core.management.commands.announce_contracts import MAX_WAVE
 from core.services import contract_announcer
+from core.services.contract_announcer import DISCORD_DESCRIPTION_LIMIT, MAX_JOB_LINES
 from tests.factories import ProfileFactory
 from trophies.models import Contract, Job
 
@@ -33,7 +35,7 @@ def posted(monkeypatch):
         calls.append((url, json))
         return _Resp()
 
-    monkeypatch.setattr('core.management.commands.announce_contracts.requests.post', _fake_post)
+    monkeypatch.setattr('trophies.discord_utils.discord_notifications.requests.post', _fake_post)
     return calls
 
 
@@ -109,7 +111,7 @@ def test_a_failed_post_leaves_the_wave_pending(monkeypatch):
         status_code = 500
         text = 'boom'
 
-    monkeypatch.setattr('core.management.commands.announce_contracts.requests.post',
+    monkeypatch.setattr('trophies.discord_utils.discord_notifications.requests.post',
                         lambda *a, **k: _Resp())
 
     with pytest.raises(CommandError):
@@ -153,8 +155,7 @@ def test_a_multi_job_contract_appears_under_each_of_its_jobs(posted):
 
 
 def test_a_large_wave_summarises_rather_than_listing_everything(posted):
-    """Discord hard-caps a description at 4096 characters, and a wall of titles is unreadable
-    well before that."""
+    """A wall of titles is unreadable well before Discord's cap."""
     job = Job.objects.exclude(is_fallback=True).first()
     for i in range(20):
         _contract('Title Number %02d' % i, jobs=[job])
@@ -162,8 +163,67 @@ def test_a_large_wave_summarises_rather_than_listing_everything(posted):
     _run(force=True)
 
     desc = posted[0][1]['embeds'][0]['description']
-    assert len(desc) < 4096
     assert 'and 14 more' in desc, 'a job with 20 titles should list a few and count the rest'
+
+
+#: A real PlayStation title, not 'Title Number 07'. The size test used to use 15-char names, which
+#: could not approach the 4096 cap from any direction -- its assertion could not fail.
+_LONG_TITLE = "Marvel's Spider-Man: Miles Morales Ultimate Edition Remastered"
+
+
+def _long_wave(count):
+    jobs = list(Job.objects.exclude(is_fallback=True)[:MAX_JOB_LINES + 2])
+    for i in range(count):
+        picked = jobs[i % len(jobs):][:3] or jobs[:3]
+        _contract('%s %02d' % (_LONG_TITLE, i), jobs=picked)
+
+
+def test_realistic_titles_cannot_overrun_discords_cap(posted):
+    """The failure this guards is not cosmetic. Over 4096 Discord answers 400, the command raises,
+    the wave is never stamped, and the IDENTICAL wave fails identically every night until someone
+    runs --limit by hand. Fail-closed retry is what makes a transient error safe and a
+    deterministic one permanent, so the deterministic one must not be reachable."""
+    _long_wave(MAX_WAVE)
+
+    _run(force=True)
+
+    desc = posted[0][1]['embeds'][0]['description']
+    assert len(desc) <= DISCORD_DESCRIPTION_LIMIT, f'{len(desc)} chars would be a 400 from Discord'
+    assert 'See them on your board' in desc, 'the CTA must survive the trim'
+
+
+def test_a_trimmed_wave_still_reads_as_a_wave(posted):
+    """Trimming must degrade the post, not gut it -- the headline count and the link are what make
+    it worth posting at all, and the jobs that did not fit are counted rather than dropped."""
+    _long_wave(MAX_WAVE)
+
+    _run(force=True)
+
+    desc = posted[0][1]['embeds'][0]['description']
+    assert '%d new contracts' % MAX_WAVE in desc
+    assert 'more job' in desc
+
+
+def test_a_curator_typed_link_does_not_become_a_live_link_in_the_channel(posted):
+    """Contract names are curator-authored free text going into a markdown description."""
+    _contract('Free Robux](http://evil.test)')
+
+    _run()
+
+    desc = posted[0][1]['embeds'][0]['description']
+    assert '](http://evil.test)' not in desc
+    assert 'Free Robux' in desc, 'escaping must not eat the name'
+
+
+def test_markdown_in_a_real_title_is_shown_not_interpreted(posted):
+    """A game legitimately titled with asterisks or underscores should read as its own title."""
+    _contract('Sam & Max: *Beyond* Time_and_Space')
+
+    _run()
+
+    desc = posted[0][1]['embeds'][0]['description']
+    assert r'\*Beyond\*' in desc
+    assert r'Time\_and\_Space' in desc
 
 
 def test_the_link_lands_on_the_board_with_latest_applied(posted):
@@ -322,3 +382,115 @@ def test_the_deep_link_scrolls_the_board_into_view(client):
 
     guard = src.split('function scrollToFilteredBoard', 1)[1].split('return;', 2)[1]
     assert "qp.has('new')" in guard, 'a Latest deep link lands above the board it filtered'
+
+
+def test_limit_zero_is_refused_rather_than_announcing_everything(posted):
+    """`--limit 0` fell through a falsy check and posted the ENTIRE wave: the natural "do nothing"
+    value doing the most destructive thing available."""
+    for i in range(3):
+        _contract('Wave %d' % i)
+
+    with pytest.raises(CommandError, match='must be 1 or more'):
+        _run(limit=0)
+
+    assert posted == []
+    assert contract_announcer.pending_contracts().count() == 3
+
+
+def test_a_negative_limit_is_a_clean_refusal_not_a_traceback(posted):
+    """It reached Django's slice and raised a raw ValueError, alone among this command's inputs."""
+    _contract('Wave')
+
+    with pytest.raises(CommandError, match='must be 1 or more'):
+        _run(limit=-1)
+
+    assert posted == []
+
+
+def test_the_test_webhook_can_preview_an_oversized_wave(posted, settings):
+    """Gating a read-only preview behind --force -- the flag that otherwise means "post this for
+    real to the live channel" -- trains exactly the wrong reflex."""
+    settings.DISCORD_TEST_WEBHOOK_URL = 'https://example.test/hook'
+    _long_wave(MAX_WAVE + 3)
+
+    _run(test_webhook=True)
+
+    assert posted and posted[0][0] == 'https://example.test/hook'
+    assert not Contract.objects.filter(announced_at__isnull=False).exists()
+
+
+def test_baseline_does_not_materialise_the_wave_it_is_cleaning_up(posted):
+    """--baseline is what you reach for AFTER a bulk accident, which is the worst moment to pull
+    every pending row plus its prefetched jobs into memory. It needs no objects at all."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    _long_wave(MAX_WAVE + 5)
+
+    with CaptureQueriesContext(connection) as ctx:
+        _run(baseline=True)
+
+    assert posted == []
+    assert not contract_announcer.pending_contracts().exists()
+    assert len(ctx.captured_queries) <= 3, (
+        f"{len(ctx.captured_queries)} queries -- baseline should be an id read plus one UPDATE, "
+        "not a prefetched materialisation")
+
+
+def test_a_transport_failure_does_not_print_the_webhook_secret(monkeypatch):
+    """requests embeds the full URL it was calling in connection/timeout errors ("Max retries
+    exceeded with url: /api/webhooks/<id>/<token>"), so interpolating the exception verbatim put
+    the webhook SECRET on stdout and into Render's job log on every transport failure."""
+    import requests as _requests
+
+    _contract('Fresh Drop')
+    secret = 'https://discord.com/api/webhooks/123456789/SUPERSECRETTOKENVALUE'
+    monkeypatch.setattr(settings, 'DISCORD_PLATINUM_WEBHOOK_URL', secret)
+
+    def _boom(*a, **k):
+        raise _requests.ConnectionError(f"Max retries exceeded with url: {secret}")
+
+    monkeypatch.setattr('trophies.discord_utils.discord_notifications.requests.post', _boom)
+
+    with pytest.raises(CommandError) as exc:
+        _run()
+
+    assert 'SUPERSECRETTOKENVALUE' not in str(exc.value)
+    assert 'ConnectionError' in str(exc.value), 'the operator still needs to know what failed'
+
+
+def test_an_aged_out_wave_links_to_the_unfiltered_board(posted):
+    """`announced_at` and the Latest window answer different questions and share no floor. A
+    webhook misconfigured for a fortnight, or a backlog trickled out with --limit, produces a
+    legitimate post about contracts that have already aged out -- and filtering the board to Latest
+    would land the reader on an EMPTY board, the one place the post promised its contents."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _contract('Long Delayed', days_ago=NEW_CONTRACT_WINDOW_DAYS + 4)
+
+    _run()
+
+    desc = posted[0][1]['embeds'][0]['description']
+    assert 'new=1' not in desc, 'the link filters to a window this contract has already left'
+    assert 'view=contracts' in desc, 'it should still land on the board'
+
+
+def test_a_fresh_wave_still_gets_the_filtered_link(posted):
+    """The widening is a fallback, not the default -- a normal wave should land pre-filtered."""
+    _contract('Fresh Drop', days_ago=1)
+
+    _run()
+
+    assert 'new=1' in posted[0][1]['embeds'][0]['description']
+
+
+def test_a_mixed_wave_takes_the_safe_link(posted):
+    """One aged-out contract is enough: the link has to show the WHOLE wave it just described."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _contract('Fresh Drop', days_ago=1)
+    _contract('Long Delayed', days_ago=NEW_CONTRACT_WINDOW_DAYS + 4)
+
+    _run()
+
+    assert 'new=1' not in posted[0][1]['embeds'][0]['description']

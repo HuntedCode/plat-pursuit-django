@@ -9,6 +9,7 @@ The load-bearing constraint is that it works SIGNED OUT. A job page an anonymous
 defeats the discovery it exists for, and the board being identical for everyone is what keeps it
 cacheable.
 """
+import difflib
 import pathlib
 import re
 
@@ -1278,8 +1279,16 @@ def test_the_contract_state_lookup_is_batched_for_the_page(client):
     with CaptureQueriesContext(connection) as large:
         client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
 
+    # Name the offending query rather than just the counts. A bare "13 != 14" sends the next reader
+    # off to reconstruct both renders by hand before they can even tell whether it is a real N+1
+    # (which would be +12 here) or a single stray -- which is exactly the afternoon this cost once.
     assert len(large.captured_queries) == len(small.captured_queries), (
-        f'{len(small.captured_queries)} queries for 2 contracts but {len(large.captured_queries)} for 14'
+        f'{len(small.captured_queries)} queries for 2 contracts but '
+        f'{len(large.captured_queries)} for 14:\n'
+        + '\n'.join(difflib.unified_diff(
+            [q['sql'][:160] for q in small.captured_queries],
+            [q['sql'][:160] for q in large.captured_queries],
+            'small', 'large', lineterm='', n=0))
     )
 
 
@@ -1767,3 +1776,22 @@ def test_the_launch_set_is_not_new_on_job_detail(client):
 
     assert 'rp-chip--new' not in body, 'an unstamped contract must not light the Latest chip'
     assert 'rp-tile__new' not in body, 'nor wear the New marker'
+
+
+def test_the_latest_link_announces_its_state_to_assistive_tech(client):
+    """aria-pressed is only valid on role="button". On this <a> it is ignored, so the active state
+    would reach sighted users through .is-active and nobody else. Career's chip IS a button and
+    correctly uses aria-pressed -- the attribute was copied across an element-type change."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _aged(_contract('Just Landed', [job]), 1)
+    url = reverse('job_detail', args=['archivist'])
+
+    on = client.get(url, {'tab': 'contracts', 'new': '1'}).content.decode()
+    off = client.get(url, {'tab': 'contracts'}).content.decode()
+
+    chip_on = on.split('rp-chip--new', 1)[1].split('</a>', 1)[0]
+    chip_off = off.split('rp-chip--new', 1)[1].split('</a>', 1)[0]
+    assert 'aria-pressed' not in chip_on, 'aria-pressed is invalid on a link'
+    assert 'aria-current="true"' in chip_on
+    assert 'aria-current' not in chip_off, 'an inactive link must not claim to be current'

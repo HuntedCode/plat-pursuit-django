@@ -16,25 +16,29 @@ window says nothing rather than re-posting.
 import json
 import logging
 
-import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from core.services.contract_announcer import (
     build_announcement,
     mark_announced,
     pending_contracts,
 )
-from trophies.discord_utils.discord_notifications import PROXIES
+from trophies.discord_utils.discord_notifications import WebhookError, post_webhook_sync
+from trophies.models import Contract
 
 logger = logging.getLogger(__name__)
 
-#: Refuse a wave bigger than this without an explicit override. A legitimate publishing wave is
-#: ten to thirty contracts; anything far past that means a bulk operation stamped `went_live_at`
-#: on a backlog -- the cutover seed being the concrete case, where ~1,000 badge-derived contracts
-#: are created live at once. The announcement would be a wall, and being un-postable is the only
-#: way this command can protest before it has already happened. The operator's answer is either
-#: --baseline (record the backlog as already known) or --force.
+#: Refuse a wave bigger than this without an explicit override. A legitimate publishing wave is ten
+#: to thirty contracts; far past that means a bulk operation stamped `went_live_at` on a backlog --
+#: a staff sweep publishing hundreds of staged candidates in one changelist action being the live
+#: case. Being un-postable is the only way this command can protest before the wall is already in
+#: the channel. The operator's answer is --baseline (record the backlog as known) or --force.
+#:
+#: NOT the launch set, despite what the deploy notes first said. Those ~1,000 contracts went live
+#: before `went_live_at` existed, so they carry NULL and `pending_contracts()` never sees them --
+#: and the transition rule in `Contract.save()` keeps it that way when one is edited.
 MAX_WAVE = 40
 
 
@@ -69,23 +73,39 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **opts):
+        limit = opts['limit']
+        if limit is not None and limit < 1:
+            # `--limit 0` used to fall through the falsy check below and post the ENTIRE wave: the
+            # natural "do nothing" value doing the most destructive thing. `--limit -1` reached
+            # Django's slice and raised a raw ValueError traceback, alone among this command's
+            # inputs. Both are now the same clean refusal.
+            raise CommandError(f"--limit must be 1 or more (got {limit}).")
+
         qs = pending_contracts()
-        if opts['limit']:
-            qs = qs[:opts['limit']]
-        contracts = list(qs)
 
         if opts['baseline']:
-            # Before the payload is built: baselining a wave too big to POST is precisely the case
-            # this exists for, so it must not be gated behind the size check below.
-            stamped = mark_announced(contracts)
+            # Ahead of the size check AND of materialising anything: baselining a wave too big to
+            # POST is precisely the case this exists for. It needs no objects at all, so it stays a
+            # single UPDATE -- --baseline is what you reach for after a bulk accident, which is the
+            # worst moment to pull every pending row into memory first.
+            # Through a pk subquery: Django refuses .update() on a sliced queryset, and refuses to
+            # nest a sliced subquery on some backends, so the ids are resolved first.
+            ids = list((qs[:limit] if limit else qs).values_list('pk', flat=True))
+            stamped = Contract.objects.filter(pk__in=ids).update(announced_at=timezone.now())
             self.stdout.write(self.style.SUCCESS(
                 f"Baselined {stamped} contract(s) as already announced. Nothing was posted."))
             return
 
-        # --dry-run is exempt: it posts nothing, and being unable to LOOK at an oversized wave is
-        # exactly backwards -- inspecting it is how an operator decides between --baseline and
-        # --force. The DRY RUN line prints the count, so the size is still stated.
-        if len(contracts) > MAX_WAVE and not opts['force'] and not opts['dry_run']:
+        if limit:
+            qs = qs[:limit]
+        contracts = list(qs)
+
+        # The read-only modes are exempt. Being unable to LOOK at an oversized wave is exactly
+        # backwards -- inspecting it is how an operator decides between --baseline and --force --
+        # and gating a preview behind the flag that otherwise means "post this for real to the live
+        # channel" trains the wrong reflex. Neither writes or posts to the live channel.
+        read_only = opts['dry_run'] or opts['test_webhook']
+        if len(contracts) > MAX_WAVE and not opts['force'] and not read_only:
             raise CommandError(
                 f"{len(contracts)} contracts are pending, over the {MAX_WAVE} safety limit. That "
                 f"usually means a bulk operation published a backlog (the launch seed is the "
@@ -122,12 +142,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Announced and stamped {stamped} contract(s)."))
 
     def _post(self, payload, webhook_url, *, label="Webhook"):
+        """Thin wrapper: the POST itself is shared (see `post_webhook_sync`), this only translates
+        its error into the CommandError a cron run needs to fail visibly."""
         try:
-            response = requests.post(webhook_url, json=payload, proxies=PROXIES, timeout=10)
-        except requests.RequestException as e:
-            logger.exception("%s direct POST raised", label)
-            raise CommandError(f"{label} POST failed: {e}")
-        if response.status_code >= 400:
-            raise CommandError(
-                f"{label} returned HTTP {response.status_code}: {response.text[:500]}")
-        return response
+            return post_webhook_sync(payload, webhook_url, label=label)
+        except WebhookError as e:
+            raise CommandError(str(e))

@@ -54,15 +54,21 @@ def _board_params(request):
     """The Contracts board's filter/sort state from the querystring -- shared by the SSR page-1 render
     and the results endpoint so a shared/reloaded URL rebuilds the exact same filtered board."""
     g = request.GET
+    scope = 'history' if g.get('scope') == 'history' else 'board'   # Board (default) | History split
     return {
         'q': g.get('q', '').strip(),
-        'status': g.get('status', ''),
+        'status': g.get('status', '') if scope != 'history' else '',
         'disciplines': g.getlist('discipline'),   # multi, ANDed
         'jobs': g.getlist('job'),                  # multi, ANDed
         'platforms': [p for p in g.getlist('platform') if p in _VALID_PLATFORMS] or None,  # absent -> current-gen
         'sort': g.get('sort', 'relevance'),
-        'scope': 'history' if g.get('scope') == 'history' else 'board',   # Board (default) | History split
-        'new_only': g.get('new') == '1',   # the Latest chip
+        'scope': scope,
+        # Board-only, exactly like status above: the toolbar hides both in History, so honouring
+        # `?scope=history&new=1` (a hand-edited URL, a stale bookmark) would narrow History to the
+        # last 14 days with no visible control to undo it. Dropped HERE rather than only in the
+        # template's seedFromURL, so the server-rendered first page and the client agree -- fixing
+        # one side alone means the page loads narrowed and silently widens on the next fetch.
+        'new_only': scope != 'history' and g.get('new') == '1',
     }
 
 
