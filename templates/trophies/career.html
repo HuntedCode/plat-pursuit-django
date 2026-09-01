@@ -1310,7 +1310,12 @@ function ppCountUp(el, dur) {
     function syncURL() {
         if (!window.history || !history.replaceState) return;
         var params = new URLSearchParams(location.search);
-        ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'scope'].forEach(function (k) { params.delete(k); });
+        // EVERY key buildParams can emit has to be listed here. A key that is written but never
+        // cleared survives being switched off (the URL keeps claiming a filter the board has
+        // dropped, and seedFromURL turns it back on next reload) and doubles up when switched on
+        // again. That is the exact "a filter the controller does not fully know about" failure
+        // _filter_contracts' own comment records.
+        ['status', 'new', 'q', 'sort', 'discipline', 'job', 'platform', 'scope'].forEach(function (k) { params.delete(k); });
         var bp = new URLSearchParams(buildParams(1)); bp.delete('page');
         bp.forEach(function (v, k) { params.append(k, v); });          // keep any non-board params (e.g. view=contracts)
         var qs = params.toString();

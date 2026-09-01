@@ -197,3 +197,25 @@ def test_scroll_appended_cards_get_the_tooltip_window(client):
 
     assert 'rp-tile__new' in content
     assert 'last %d days' % NEW_CONTRACT_WINDOW_DAYS in content
+
+
+def test_every_board_param_the_url_can_gain_is_also_cleared():
+    """syncURL() wipes a FIXED key list before re-appending what buildParams emits. A key written
+    but never cleared survives being switched off -- the URL keeps claiming a filter the board has
+    dropped, seedFromURL turns it back on next reload, and switching it on again appends a
+    duplicate. Read out of the template rather than asserted by hand so a NEW filter added to
+    buildParams without a matching delete fails here instead of in someone's shared link."""
+    import pathlib
+    import re
+
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+    body = src.split('function buildParams', 1)[1].split('function noFilters', 1)[0]
+    emitted = set(re.findall(r"p\.(?:set|append)\('([a-z_]+)'", body))
+    emitted.discard('page')   # syncURL strips page explicitly
+
+    cleared = set(re.findall(r"'([a-z_]+)'",
+                             src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
+
+    assert emitted <= cleared, f"buildParams emits {emitted - cleared}, which syncURL never clears"
