@@ -34,7 +34,9 @@ from trophies.services import contracts_service
 from trophies.services.career_service import build_career_context
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, discipline_order
 from trophies.util_modules.leveling import xp_for_level
-from trophies.util_modules.constants import ALL_PLATFORMS, CONTRACT_XP_TOTAL
+from trophies.util_modules.constants import (
+    ALL_PLATFORMS, CONTRACT_XP_TOTAL, NEW_CONTRACT_WINDOW_DAYS,
+)
 
 # The internal tabs a `?view=` query may deep-link to (match the template's data-view values).
 _CAREER_VIEWS = frozenset({'jobs', 'radar', 'contracts'})
@@ -71,7 +73,11 @@ def _board_facets(profile, disc_levels, params, total):
     # active filters, so the Latest count must not be narrowed by Latest already being on.
     facet_args = {k: params[k] for k in ('q', 'status', 'disciplines', 'jobs', 'platforms', 'scope')}
     f = contracts_service.board_facets(profile, disc_levels=disc_levels, **facet_args)   # status/platform/discipline/job
-    suggest = contracts_service.suggest_relaxation(profile, disc_levels=disc_levels, **facet_args) if total == 0 else None
+    # suggest_relaxation DOES take it (unlike board_facets above): its counts are promises about what
+    # the user would actually see, so they have to be measured with Latest still applied.
+    suggest = (contracts_service.suggest_relaxation(
+        profile, disc_levels=disc_levels, new_only=params['new_only'], **facet_args)
+        if total == 0 else None)
     return {**f, 'suggest': suggest}
 
 
@@ -105,6 +111,7 @@ class CareerView(LoginRequiredMixin, TemplateView):
         context['contracts_total'] = page1['total']
         context['contract_disciplines'] = contracts_service.job_roster()   # 25-job roster for the card grid
         context['contracts_facets'] = _board_facets(profile, disc_levels, params, page1['total'])
+        context['new_window_days'] = NEW_CONTRACT_WINDOW_DAYS   # the Latest chip's tooltip
         context['profile'] = profile
         context['viewer_has_linked_profile'] = True
         context['xp_total'] = CONTRACT_XP_TOTAL
@@ -148,6 +155,9 @@ class ContractsResultsView(LoginRequiredMixin, View):
         facets = _board_facets(profile, disc_levels, params, data['total']) if page == 1 else None
         resp = render(request, 'trophies/partials/contracts/_results.html', {
             **data, 'profile': profile, 'disciplines': contracts_service.job_roster(), 'facets': facets,
+            # The card's New marker carries a tooltip built from this; without it here, scroll-appended
+            # cards would render "Added in the last  days".
+            'new_window_days': NEW_CONTRACT_WINDOW_DAYS,
         })
         resp['X-Has-Next'] = '1' if data['has_next'] else '0'   # infinite-scroll stop signal
         resp['X-Total'] = str(data['total'])                    # for the board's result count

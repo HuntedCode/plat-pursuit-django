@@ -327,6 +327,13 @@
                     <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim<span class="rp-chip__n" hidden></span></button>
                     {# "Claimed" lives in the History sub-view now; the whole status row hides in History. #}
                 </div>
+                {% comment %} Latest is a TOGGLE, not a status: status chips are single-select, and
+                "recently added" composes with all of them (Latest + Ready to Claim is a real thing to
+                want). Separate group so it never steals the single-select. {% endcomment %}
+                <div class="rp-newfilter" role="group" aria-label="Filter by recency">
+                    <button type="button" class="rp-chip rp-chip--new" data-new aria-pressed="false"
+                            title="Contracts added in the last {{ new_window_days }} days">Latest<span class="rp-chip__n" hidden></span></button>
+                </div>
                 <span id="rp-count" class="rp-count" aria-live="polite">{{ contracts_total }} contract{{ contracts_total|pluralize }}</span>
             </div>
             {% comment %} Advanced panel: discipline -> job drill-down + platform selector. {% endcomment %}
@@ -1186,6 +1193,18 @@ function ppCountUp(el, dur) {
     var searchInput = document.getElementById('rp-search');
     var searchField = null;   // PlatPursuit.wireSearchField handle (clear/Escape/has-value + spinner setBusy)
     var statusBar = document.querySelector('.rp-filters');
+    var newChip = document.querySelector('.rp-chip--new');
+    function syncNewChip() {
+        if (!newChip) return;
+        newChip.classList.toggle('is-active', !!state.newOnly);
+        newChip.setAttribute('aria-pressed', state.newOnly ? 'true' : 'false');
+    }
+    if (newChip) newChip.addEventListener('click', function () {
+        // A toggle, not a status: it narrows whatever the status chips already selected.
+        state.newOnly = !state.newOnly;
+        syncNewChip();
+        fetchPage(1, false);
+    });
     var sortSel = document.getElementById('rp-sort-select');
     var countEl = document.getElementById('rp-count');
     var advToggle = document.getElementById('rp-adv-toggle');
@@ -1201,7 +1220,7 @@ function ppCountUp(el, dur) {
     var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     // jobs + disciplines are multi-select, ANDed server-side (e.g. "driver + slayer game"). `scope` is the
     // Board|History sub-view (Board = actionable, History = fully-banked).
-    var state = { status: '', jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null, scope: 'board' };
+    var state = { status: '', newOnly: false, jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null, scope: 'board' };
     var pageNo = 1, hasNext = list.dataset.hasNext === '1', busy = false;
 
     function buildParams(n) {
@@ -1212,11 +1231,12 @@ function ppCountUp(el, dur) {
         if (state.q) p.set('q', state.q);
         if (state.sort && state.sort !== scopeDefaultSort(state.scope)) p.set('sort', state.sort);   // omit the scope's default (clean URL)
         if (state.platforms) state.platforms.forEach(function (pl) { p.append('platform', pl); });  // null -> server default (current-gen)
+        if (state.newOnly) p.set('new', '1');
         if (state.scope === 'history') p.set('scope', 'history');   // board is the default -> omitted (clean URL)
         p.set('page', String(n));
         return p.toString();
     }
-    function noFilters() { return !state.status && !state.jobs.length && !state.disciplines.length && !state.q && !state.platforms; }
+    function noFilters() { return !state.status && !state.newOnly && !state.jobs.length && !state.disciplines.length && !state.q && !state.platforms; }
 
     // Animated tally: roll the result count to its new value (Tally primitive). Skips on reduced-motion.
     function countText(v) { return v + ' contract' + (v === 1 ? '' : 's'); }
@@ -1261,6 +1281,7 @@ function ppCountUp(el, dur) {
         if (f.status && statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
             var n = f.status[c.dataset.filter]; setChipN(c, n == null ? 0 : n);
         });
+        if (newChip) setChipN(newChip, f.new == null ? 0 : f.new);
         if (f.platform && plats) plats.querySelectorAll('.rp-plat').forEach(function (c) {
             var n = f.platform[c.dataset.plat]; setChipN(c, n == null ? 0 : n);
         });
@@ -1429,6 +1450,8 @@ function ppCountUp(el, dur) {
         // so clear it on a scope switch -- otherwise a stale status could zero out History with no visible
         // chip to undo it. jobs/disciplines/search/platforms are scope-agnostic and carry over.
         state.status = '';
+        state.newOnly = false;   // Latest rides the Board row, which History hides -- same reason
+        syncNewChip();
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
         applyScopeUI(sc);
         if (userAction) {
@@ -1555,7 +1578,8 @@ function ppCountUp(el, dur) {
     // Reset the filters, staying in the current sub-view (Board/History) with its default sort.
     function resetAll() {
         var sc = state.scope;
-        state = { status: '', jobs: [], disciplines: [], q: '', sort: scopeDefaultSort(sc), platforms: null, scope: sc };
+        state = { status: '', newOnly: false, jobs: [], disciplines: [], q: '', sort: scopeDefaultSort(sc), platforms: null, scope: sc };
+        syncNewChip();
         if (searchInput) searchInput.value = '';
         if (searchField) searchField.sync();   // clearing the field -> drop .has-value so the clear-x hides
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
@@ -1574,6 +1598,7 @@ function ppCountUp(el, dur) {
         else if (kind === 'status') { state.status = ''; if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.toggle('is-active', c.dataset.filter === 'all'); }); }
         else if (kind === 'platform') { state.platforms = VALID_PLATS.slice(); if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.add('is-active'); }); }   // widen to ALL platforms (matches the server count)
         else if (kind === 'q') { state.q = ''; if (searchInput) searchInput.value = ''; }
+        else if (kind === 'new') { state.newOnly = false; syncNewChip(); }
         updateAdvCount(); fetchPage(1, false);
     });
 
@@ -1591,9 +1616,11 @@ function ppCountUp(el, dur) {
         state.platforms = pl.length ? pl : null;
         if (searchInput) searchInput.value = state.q;
         if (searchField) searchField.sync();   // programmatic value set fires no 'input' event -> sync .has-value (clear-x)
+        state.newOnly = p.get('new') === '1';
         if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
             c.classList.toggle('is-active', (state.status || 'all') === c.dataset.filter);
         });
+        syncNewChip();
         if (plats) { var act = state.platforms || DEFAULT_PLATS; plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', act.indexOf(c.dataset.plat) !== -1); }); }
         refreshDiscUI();
         applyScopeUI(state.scope);   // sub-chip active + toolbar data-scope + scope-valid sort options (sets sortSel.value)
@@ -1621,7 +1648,7 @@ function ppCountUp(el, dur) {
     document.addEventListener('pp:board-filter', function (e) {
         var f = (e && e.detail) || {};
         state.scope = 'board';
-        state.status = ''; state.q = '';
+        state.status = ''; state.q = ''; state.newOnly = false; syncNewChip();
         state.jobs = f.job ? [f.job] : [];
         state.disciplines = f.discipline ? [f.discipline] : [];
         state.platforms = null;

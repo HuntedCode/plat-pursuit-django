@@ -704,6 +704,23 @@
 @media (prefers-reduced-motion: reduce) { .rp-tile__img--fx { transition: none; } }
 .rp-tile__art-fade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklab, var(--pp-bg-2) 92%, transparent), transparent 55%); pointer-events: none; z-index: 3; }
 .rp-tile__badge { position: absolute; top: 8px; left: 8px; z-index: 4; }
+/* Recency marker. Pinned to the RIGHT so it never collides with the status badge on its left --
+   a contract can legitimately be both new and ready to claim. Accent-tinted rather than a
+   semantic colour: "new" is not a state of the hunter's progress. */
+.rp-tile__new {
+    position: absolute; top: 8px; right: 8px; z-index: 4;
+    font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    line-height: 1; padding: 4px 7px; border-radius: 5px;
+    color: var(--pp-bg-0); background: var(--pp-secondary);
+    box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+}
+/* The Latest toggle sits beside the status chips but is its own group (status is single-select).
+   It hides in History for the same reason the status row does: History is the claimed-contract
+   archive, where "recently published" is not a question anyone is asking. The JS clears newOnly
+   on the scope switch to match, so the hidden control can never leave an invisible filter on. */
+.rp-newfilter { display: inline-flex; align-items: center; margin-left: 6px; }
+.rp-toolbar[data-scope="history"] .rp-newfilter { display: none; }
+.rp-chip--new.is-active { border-color: var(--pp-secondary); color: var(--pp-secondary); }
 /* (Banner-C) Progressive load: a shimmer (z -1, behind the cover) holds the frame until the cover
    image loads; then the shimmer stops and fades out behind the now-painted cover (JS toggles
    .is-loaded on the box). Shimmer animates background-position only -- never color-mix in @keyframes. */

@@ -608,7 +608,7 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
 
 
 def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None,
-                       platforms=None, scope='board'):
+                       platforms=None, scope='board', new_only=False):
     """When a filter combo returns nothing, find the single active filter whose removal yields the most
     results, so the empty state can say 'drop <label> to see N'. Returns {kind, value, label, count} or
     None. Only the removable dimensions are considered; ties break toward the biggest result set. `scope`
@@ -619,8 +619,10 @@ def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=N
     base = annotated_contracts(profile, disc_levels)
 
     def count(**over):
+        # Every candidate count keeps the OTHER filters on, new_only included -- otherwise the empty
+        # state promises "drop platform to see 12" while Latest still filters all 12 back out.
         f = {'q': q, 'status': status, 'disciplines': disciplines, 'jobs': jobs, 'platforms': platforms,
-             'scope': scope}
+             'scope': scope, 'new_only': new_only}
         f.update(over)
         return _filter_contracts(base, **f).count()
 
@@ -638,6 +640,8 @@ def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=N
         candidates.append(('platform', '', 'platform filter', count(platforms=list(ALL_PLATFORMS))))
     if q:
         candidates.append(('q', '', 'search', count(q='')))
+    if new_only:
+        candidates.append(('new', '', 'Latest', count(new_only=False)))
     best = max((c for c in candidates if c[3] > 0), key=lambda c: c[3], default=None)
     return {'kind': best[0], 'value': best[1], 'label': best[2], 'count': best[3]} if best else None
 

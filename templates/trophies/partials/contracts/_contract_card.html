@@ -33,6 +33,10 @@ The map branch stays the default and is what Career renders, untouched.
             {% endwith %}
         {% endif %}
         <span class="rp-tile__art-fade" aria-hidden="true"></span>
+        {% comment %} Recency marker: sits OPPOSITE the status badge so the two never collide -- a
+        contract can be both new and ready to claim. Same window as the Latest chip (one cutoff in
+        contracts_service), so the marker and the filter can never disagree. {% endcomment %}
+        {% if p.is_new %}<span class="rp-tile__new" title="Added in the last {{ new_window_days }} days">New</span>{% endif %}
         {% if p.is_history %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Banked</span>
         {% elif p.status == 'claimable' %}<span class="rp-badge badge badge-sm badge-primary font-bold rp-tile__badge">Ready to Claim</span>
         {% elif p.status == 'accepted' %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Claimed</span>

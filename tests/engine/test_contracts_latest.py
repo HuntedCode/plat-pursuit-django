@@ -104,3 +104,96 @@ def test_new_only_composes_with_other_filters():
              _page(profile, new_only=True, jobs=[jobs[0].slug])['contracts']}
 
     assert names == {'New Driver'}
+
+
+# ── The board UI wiring (chip is a toggle, marker rides the card) ─────────────────────────────────
+
+def test_the_latest_chip_is_a_toggle_not_a_status(client):
+    """Status chips are single-select; Latest must NOT join that group or picking it would clear
+    the status. It renders as its own group with aria-pressed, and the card marker ships too."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    content = client.get('/career/?tab=contracts').content.decode()
+
+    assert 'rp-newfilter' in content, 'the Latest toggle must be its own group'
+    assert 'rp-chip--new' in content and 'aria-pressed="false"' in content
+    # It must not be inside the single-select status row, i.e. carry no data-filter.
+    chip = content.split('rp-chip--new', 1)[1].split('>')[0]
+    assert 'data-filter' not in chip, 'Latest must not be a status chip'
+    assert 'data-new' in chip
+
+
+def _with_member(contract, platform='PS5'):
+    """Give a contract a real member game so it survives the board's default platform filter.
+    Membership is DERIVED: an ANCHORED concept with a TRUSTED match on the contract's igdb_id."""
+    from django.utils import timezone as tz
+
+    from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
+
+    concept = ConceptFactory(unified_title=contract.name)
+    concept.anchor_migration_completed_at = tz.now()
+    concept.save(update_fields=['anchor_migration_completed_at'])
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id, status='accepted')
+    return GameFactory(concept=concept, title_name=contract.name, title_platform=[platform])
+
+
+def test_the_new_marker_renders_only_inside_the_window(client):
+    """The card marker is what makes recency visible without clicking the chip."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    fresh = _contract('Brand New', 'brand-new', 870061, live_days_ago=1)
+    _with_member(fresh)
+    old_c = _contract('Long Standing', 'long-standing', 870062,
+                      live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 3)
+    _with_member(old_c)
+
+    content = client.get('/career/?tab=contracts').content.decode()
+
+    assert 'Brand New' in content and 'Long Standing' in content, 'both contracts should render'
+    assert content.count('rp-tile__new') == 1, 'exactly the in-window contract gets the marker'
+
+
+# ── The empty state must not promise results Latest still filters out ─────────────────────────────
+
+def test_relaxation_counts_are_measured_with_latest_still_on():
+    """The smart-empty panel says 'drop <label> to see N'. N is a PROMISE about what the user will
+    see next, so it has to be counted with Latest still applied -- otherwise dropping the suggested
+    filter lands them back on an empty board."""
+    profile = ProfileFactory(is_linked=True)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:2])
+    # Old contracts under the OTHER job: visible if you drop the job filter, but never if Latest is on.
+    for i, slug in enumerate(('old-a', 'old-b')):
+        _contract(slug.title(), slug, 870101 + i,
+                  live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 5, jobs=[jobs[1]])
+
+    s = contracts_service.suggest_relaxation(
+        profile, jobs=[jobs[0].slug], platforms=[], new_only=True)
+
+    assert s is None, 'nothing to relax: dropping the job still leaves zero NEW contracts'
+    loose = contracts_service.suggest_relaxation(profile, jobs=[jobs[0].slug], platforms=[])
+    assert loose and loose['count'] == 2, 'without Latest the same drop really would show 2'
+
+
+def test_latest_itself_is_offered_as_the_relaxation():
+    """When Latest is the filter doing the emptying, the panel should offer to drop IT."""
+    profile = ProfileFactory(is_linked=True)
+    _contract('Only Old', 'only-old', 870111, live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 9)
+
+    s = contracts_service.suggest_relaxation(profile, platforms=[], new_only=True)
+
+    assert s is not None and s['kind'] == 'new' and s['count'] == 1
+
+
+def test_scroll_appended_cards_get_the_tooltip_window(client):
+    """The results partial renders the same card; it needs new_window_days or the marker's tooltip
+    reads 'Added in the last  days'."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    _with_member(_contract('Scrolled', 'scrolled', 870121, live_days_ago=1))
+
+    content = client.get('/career/contracts/results/',
+                         HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode()
+
+    assert 'rp-tile__new' in content
+    assert 'last %d days' % NEW_CONTRACT_WINDOW_DAYS in content
