@@ -75,6 +75,10 @@ def test_cap_stages_by_demand_and_rest_waits_in_review():
     _run(max_stage=2)
     small.refresh_from_db()
     assert small.status == ContractCandidate.STATUS_STAGED
+    # THE pre-prod audit's F1: run 2 must NOT flip run 1's staged rows to done -- a staged
+    # contract (is_live=False) is not a live one, and the staged queue must survive the night.
+    assert ContractCandidate.objects.get(igdb_id=95011).status == ContractCandidate.STATUS_STAGED
+    assert ContractCandidate.objects.get(igdb_id=95012).status == ContractCandidate.STATUS_STAGED
 
 
 def test_b_and_c_land_in_their_queues():
@@ -173,3 +177,138 @@ def test_siblings_collapse_to_one_candidate():
     cand = ContractCandidate.objects.get(igdb_id=95081)
     assert ContractCandidate.objects.count() == 1
     assert cand.players == 300   # the higher-demand sibling's signal wins
+
+
+def test_staged_becomes_done_only_when_the_contract_goes_live():
+    """Only a LIVE contract marks done: publish the staged contract -> the next run flips the
+    candidate; until then it stays staged (the F1 fix's positive half)."""
+    _game(96001, 'Awaiting Publish', videos=1, played=100)
+    _run()
+    cand = ContractCandidate.objects.get(igdb_id=96001)
+    assert cand.status == ContractCandidate.STATUS_STAGED
+
+    cand.contract.is_live = True
+    cand.contract.save(update_fields=['is_live'])
+    _run()
+
+    cand.refresh_from_db()
+    assert cand.status == ContractCandidate.STATUS_DONE
+
+
+def test_flagged_sibling_blocks_the_whole_group():
+    """The audit's F2: the shovelware override holds at GROUP level. A clean sibling with a
+    trailer must not launder a flagged game's IGDB id into Tier A -- the group lands in review
+    as blocked, and no contract is staged."""
+    _game(96011, 'Clean Sibling', videos=1, played=50)
+    flagged = ConceptFactory(unified_title='Flagged Sibling')
+    flagged.anchor_migration_completed_at = timezone.now()
+    flagged.save(update_fields=['anchor_migration_completed_at'])
+    IGDBMatchFactory(concept=flagged, igdb_id=96011, igdb_name='Flagged Sibling',
+                     igdb_video_youtube_ids=['v1'])
+    GameFactory(concept=flagged, defined_trophies=_REAL, shovelware_status='auto_flagged')
+
+    _run()
+
+    cand = ContractCandidate.objects.get(igdb_id=96011)
+    assert cand.status == ContractCandidate.STATUS_REVIEW
+    assert cand.tier == 'B' and cand.reason == 'blocked'
+    assert not Contract.objects.filter(igdb_id=96011).exists()
+
+
+def test_deleted_staged_contract_recovers_to_review():
+    """The audit's F3: staff deleting a staged Contract (SET_NULL) must not orphan the
+    candidate as staged-forever -- it recovers to review and can stage again."""
+    _game(96021, 'Second Chance', videos=1, played=60)
+    _run()
+    cand = ContractCandidate.objects.get(igdb_id=96021)
+    cand.contract.delete()
+    _run()
+
+    cand.refresh_from_db()
+    # Recovered to review, and (tier A + review) it staged again in the same run.
+    assert cand.status == ContractCandidate.STATUS_STAGED
+    assert cand.contract is not None
+
+
+def test_racing_contract_never_aborts_the_run():
+    """The audit's F4: a contract appearing between the scan and the staging (a staff action
+    mid-run) must not raise IntegrityError and roll the whole batch back -- _stage_contract
+    detects it and skips."""
+    from trophies.management.commands.evaluate_contract_candidates import Command
+
+    _game(96031, 'Raced Game', videos=1, played=70)
+    _run()
+    cand = ContractCandidate.objects.get(igdb_id=96031)
+    # Simulate the race: a contract already exists for the id when staging is attempted.
+    assert Command()._stage_contract(cand) is None
+
+
+def test_double_slug_collision_gets_a_counter():
+    """The audit's F7: base AND base-igdb both taken -> the uniquifier keeps counting instead
+    of raising IntegrityError (which would abort every future nightly run)."""
+    Contract.objects.create(name='Speed Kings', slug='speed-kings', igdb_id=None)
+    Contract.objects.create(name='Speed Kings', slug='speed-kings-96041', igdb_id=None)
+    _game(96041, 'Speed Kings', videos=1)
+
+    _run()
+
+    staged = ContractCandidate.objects.get(igdb_id=96041).contract
+    assert staged.slug == 'speed-kings-96041-2'
+
+
+def test_unchanged_rows_are_not_rewritten():
+    """The audit's F11: a row whose verdict did not change keeps its evaluated_at -- the
+    nightly run must not churn ~16k identical rows."""
+    _game(96051, 'Steady Game', shots=5, played=20)
+    _run()
+    first = ContractCandidate.objects.get(igdb_id=96051).evaluated_at
+
+    _run()
+
+    assert ContractCandidate.objects.get(igdb_id=96051).evaluated_at == first
+
+
+def test_admin_dismiss_skips_staged_rows():
+    """The audit's F6: the dismiss action only touches review/snoozed -- a staged row (real
+    contract behind it) is skipped, keeping the ledger and the Contract table consistent."""
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+    from django.contrib.messages.storage.fallback import FallbackStorage
+
+    from trophies.admin import ContractCandidateAdmin
+
+    _game(96061, 'Staged One', videos=1, played=10)
+    _game(96062, 'Review One', videos=1, shovelware='auto_flagged', played=5)
+    _run()
+
+    admin = ContractCandidateAdmin(ContractCandidate, AdminSite())
+    request = RequestFactory().post('/')
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    admin.dismiss(request, ContractCandidate.objects.all())
+
+    assert ContractCandidate.objects.get(igdb_id=96061).status == ContractCandidate.STATUS_STAGED
+    assert ContractCandidate.objects.get(igdb_id=96062).status == ContractCandidate.STATUS_DISMISSED
+
+
+def test_admin_stage_action_creates_contract():
+    """The stage_contracts action (cap-free staff staging) creates the staged contract and
+    links it, and marks already-contracted rows done instead of crashing."""
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+    from django.contrib.messages.storage.fallback import FallbackStorage
+
+    from trophies.admin import ContractCandidateAdmin
+
+    _game(96071, 'Stage Me', videos=1, shovelware='auto_flagged', played=30)   # review (blocked)
+    _run()
+
+    admin = ContractCandidateAdmin(ContractCandidate, AdminSite())
+    request = RequestFactory().post('/')
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    admin.stage_contracts(request, ContractCandidate.objects.filter(igdb_id=96071))
+
+    cand = ContractCandidate.objects.get(igdb_id=96071)
+    assert cand.status == ContractCandidate.STATUS_STAGED
+    assert cand.contract is not None and cand.contract.is_live is False

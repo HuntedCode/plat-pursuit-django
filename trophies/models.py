@@ -2744,18 +2744,20 @@ class ContractCandidate(models.Model):
         (STATUS_DISMISSED, 'Dismissed'), (STATUS_DONE, 'Done'),
     ]
 
-    igdb_id = models.IntegerField(unique=True, db_index=True)
+    igdb_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=500, blank=True)   # snapshot of the IGDB name
     tier = models.CharField(max_length=1, choices=TIER_CHOICES)
     reason = models.CharField(max_length=16, blank=True)  # '' | 'blocked' | 'rescued'
     players = models.PositiveIntegerField(default=0)      # max played_count snapshot (demand rank)
-    status = models.CharField(max_length=12, choices=STATUS_CHOICES, db_index=True)
+    # No bare db_index: the (status, -players) composite below leads on status.
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES)
     contract = models.ForeignKey(
         Contract, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='candidates',
         help_text='The auto-staged Contract, when status is staged.',
     )
-    evaluated_at = models.DateTimeField()
+    # When the rule's verdict last CHANGED (unchanged rows are not rewritten nightly).
+    evaluated_at = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -4887,9 +4887,11 @@ class ContractCandidateAdmin(admin.ModelAdmin):
     list_filter = ('status', 'tier', 'reason')
     search_fields = ('name', 'igdb_id')
     ordering = ('-players',)
+    list_select_related = ('contract',)
+    raw_id_fields = ('contract',)
     readonly_fields = ('igdb_id', 'name', 'tier', 'reason', 'players', 'evaluated_at',
                        'created_at', 'updated_at')
-    actions = ['stage_contracts', 'dismiss', 'resnooze']
+    actions = ['stage_contracts', 'dismiss']
 
     @admin.action(description='Stage contracts (create is_live=False, auto-suggest jobs)')
     def stage_contracts(self, request, queryset):
@@ -4910,16 +4912,18 @@ class ContractCandidateAdmin(admin.ModelAdmin):
 
     @admin.action(description='Dismiss (sticky: the rule never re-queues these)')
     def dismiss(self, request, queryset):
-        n = queryset.exclude(status=ContractCandidate.STATUS_DONE).update(
-            status=ContractCandidate.STATUS_DISMISSED)
-        self.message_user(request, f'Dismissed {n} candidate(s).')
-
-    @admin.action(description='Re-snooze (back to the nightly re-check pool)')
-    def resnooze(self, request, queryset):
+        # Review/snoozed rows only: a STAGED row has a real contract behind it -- to reject
+        # one, delete its staged Contract in the Contract admin (the nightly run then returns
+        # the candidate to review, where it can be dismissed).
         n = queryset.filter(status__in=(ContractCandidate.STATUS_REVIEW,
-                                        ContractCandidate.STATUS_DISMISSED)).update(
-            status=ContractCandidate.STATUS_SNOOZED)
-        self.message_user(request, f'Re-snoozed {n} candidate(s).')
+                                        ContractCandidate.STATUS_SNOOZED)).update(
+            status=ContractCandidate.STATUS_DISMISSED)
+        skipped = queryset.count() - n
+        msg = f'Dismissed {n} candidate(s).'
+        if skipped:
+            msg += (f' Skipped {skipped} staged/done row(s) -- reject a staged candidate by '
+                    f'deleting its Contract first.')
+        self.message_user(request, msg)
 
 
 @admin.register(Contract)
