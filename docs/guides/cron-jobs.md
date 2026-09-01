@@ -171,6 +171,33 @@ replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refres
 - **Ad hoc**: `--user <psn_username>` for one account, `--dry-run` to preview. Worth running by hand
   right after publishing a Contract if you do not want to wait for the nightly.
 
+### announce_contracts
+
+- **Schedule**: Daily, after `nightly` has finished (so a wave published by a curator during the day
+  and a wave made claimable overnight both land in one post). **Silent when there is nothing new**,
+  which is most days -- publishing happens in bursts.
+- **Command**: `python manage.py announce_contracts`
+- **What it does**: Posts newly published Contracts to Discord (`DISCORD_PLATINUM_WEBHOOK_URL`),
+  grouped by JOB rather than listed flat, with a link to the board with the Latest filter applied.
+- **What counts as "new"**: `is_live=True` AND `went_live_at` stamped AND `announced_at` null. That
+  triple answers the admin-review question structurally: a staged or review-queued candidate is
+  `is_live=False`, so it has no `went_live_at` and can never reach the announcer. **Publishing is
+  the only act that makes a contract announceable**, which puts the editorial gate where it belongs.
+- **The launch set is excluded for free**: those ~1,000 badge-derived contracts carry
+  `went_live_at = NULL` by decision, so the first run after cutover says nothing.
+- **Idempotency**: a COLUMN (`Contract.announced_at`), stamped only after a confirmed 2xx. A failed
+  post leaves the whole wave pending for the next run; a second run in the same window is silent. A
+  column rather than a Redis watermark deliberately: a lost watermark re-announces everything behind
+  it, and one that runs ahead silently swallows a wave.
+- **The wave-size guard**: refuses a wave over `MAX_WAVE` (40) without `--force`. A legitimate wave
+  is 10-30; far past that means a bulk operation stamped a backlog, and the post would be a wall.
+  The operator's answer is `--baseline` (record the backlog as already known, posting nothing) or
+  `--limit N` to trickle.
+- **Ad hoc**: `--dry-run` prints the payload and writes nothing; `--test-webhook` posts to
+  `DISCORD_TEST_WEBHOOK_URL` and deliberately does NOT stamp, so a preview cannot consume a wave.
+- **Failure impact**: the community is not told about a wave. Nothing else depends on it: the
+  Latest chip and the New marker read `went_live_at`, not `announced_at`.
+
 ### process_art_reveals
 
 - **Schedule**: Every 15 minutes, but only needs to run while a Badge Art Reveal event is live. Safe to leave registered year-round (it no-ops when nothing is active).

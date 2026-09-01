@@ -4583,7 +4583,13 @@ class ContractAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug', 'igdb_id')
     prepopulated_fields = {'slug': ('name',)}
     filter_horizontal = ('jobs',)
-    readonly_fields = ('created_at', 'updated_at')
+    # `went_live_at` and `announced_at` are READONLY, not merely uneditable by convention. Both are
+    # machine-stamped lifecycle columns whose whole contract is "set once, never reset", and the form
+    # is `fields = '__all__'` -- so leaving them writable meant a curator opening a change form to fix
+    # a typo would post back whatever the page rendered with, clearing the stamp and re-announcing a
+    # contract the community already heard about. Shown, because knowing when something published and
+    # when it was announced is useful; just not typed into.
+    readonly_fields = ('created_at', 'updated_at', 'went_live_at', 'announced_at')
     inlines = [ContractBundleInline]
     actions = ['suggest_jobs', 'make_live', 'make_not_live']
 

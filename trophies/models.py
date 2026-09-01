@@ -2800,6 +2800,13 @@ class Contract(models.Model):
                    'drafted", not "what is new". Stamped once and never reset, so un-publishing '
                    'and re-publishing does not re-announce a contract.'),
     )
+    announced_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text=('When `announce_contracts` posted this Contract to Discord. A COLUMN rather '
+                   'than a cursor/watermark on the side: a watermark that is lost (a Redis flush, '
+                   'a fresh environment) re-announces everything behind it, and one that is ahead '
+                   'silently swallows a wave. Per-row, the answer is exact and survives both.'),
+    )
     jobs = models.ManyToManyField(
         Job, related_name='contracts', blank=True,
         help_text='The job profile -- job XP splits evenly across these jobs.',
