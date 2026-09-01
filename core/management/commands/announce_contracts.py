@@ -82,7 +82,10 @@ class Command(BaseCommand):
                 f"Baselined {stamped} contract(s) as already announced. Nothing was posted."))
             return
 
-        if len(contracts) > MAX_WAVE and not opts['force']:
+        # --dry-run is exempt: it posts nothing, and being unable to LOOK at an oversized wave is
+        # exactly backwards -- inspecting it is how an operator decides between --baseline and
+        # --force. The DRY RUN line prints the count, so the size is still stated.
+        if len(contracts) > MAX_WAVE and not opts['force'] and not opts['dry_run']:
             raise CommandError(
                 f"{len(contracts)} contracts are pending, over the {MAX_WAVE} safety limit. That "
                 f"usually means a bulk operation published a backlog (the launch seed is the "

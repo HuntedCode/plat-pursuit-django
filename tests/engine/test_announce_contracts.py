@@ -191,6 +191,20 @@ def test_an_oversized_wave_is_refused(posted):
     assert not Contract.objects.filter(announced_at__isnull=False).exists()
 
 
+def test_a_dry_run_can_inspect_an_oversized_wave(posted):
+    """Inspecting the wave is how an operator decides between --baseline and --force, so the guard
+    that refuses to POST one must not also refuse to SHOW it. A dry run posts nothing."""
+    job = Job.objects.exclude(is_fallback=True).first()
+    for i in range(MAX_WAVE + 3):
+        _contract('Bulk %03d' % i, jobs=[job])
+
+    out = _run(dry_run=True)
+
+    assert posted == []
+    assert 'DRY RUN' in out and str(MAX_WAVE + 3) in out
+    assert not Contract.objects.filter(announced_at__isnull=False).exists()
+
+
 def test_baseline_stamps_without_posting(posted):
     """The cutover step. It must work on a wave too big to POST, which is exactly the case it
     exists for -- so it cannot sit behind the size check."""
