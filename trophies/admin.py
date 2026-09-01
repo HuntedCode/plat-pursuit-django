@@ -4639,16 +4639,17 @@ class ContractAdmin(admin.ModelAdmin):
     # which admin screen the curator used.
     @admin.action(description="Mark selected Contracts LIVE")
     def make_live(self, request, queryset):
-        # Coalesce, not a bare assignment: went_live_at records the FIRST publish, so a contract
-        # pulled back and re-published keeps its original date and is not re-announced. This
-        # mirrors Contract.save(), which queryset.update() bypasses.
-        from django.db.models import Value
-        from django.db.models.functions import Coalesce
+        # Stamp only the rows actually TRANSITIONING to live, and stamp them BEFORE the flip -- once
+        # `is_live=True` is written there is no way left to tell which rows were already published.
+        # Mirrors Contract.save(), which queryset.update() bypasses.
+        #
+        # `is_live=False` rather than a Coalesce over the whole selection: every contract published
+        # before this column existed is live with a NULL stamp, which is honest (their first publish
+        # predates the record). Selecting one of those in the changelist and re-running this action
+        # would otherwise stamp it today, announcing a launch-era game as new.
         now = timezone.now()
-        n = queryset.update(
-            is_live=True, updated_at=now,
-            went_live_at=Coalesce('went_live_at', Value(now)),
-        )
+        queryset.filter(is_live=False, went_live_at__isnull=True).update(went_live_at=now)
+        n = queryset.update(is_live=True, updated_at=now)
         self.message_user(request, f"{n} contract(s) marked live.")
 
     @admin.action(description="Mark selected Contracts NOT live")

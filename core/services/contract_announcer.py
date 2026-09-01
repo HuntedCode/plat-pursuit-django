@@ -26,7 +26,10 @@ from trophies.models import Contract, Job
 logger = logging.getLogger(__name__)
 
 EMBED_COLOR = 0x003791          # Platinum brand blue, same as the trophy tracker's default
-BOARD_URL = '/career/?tab=contracts&new=1'   # lands on the board with Latest already applied
+#: Career deep-links on `?view=`, NOT `?tab=` (that is job detail's param). Getting it wrong does
+#: not 404 or look broken -- the contracts panel renders correctly filtered but stays `hidden`, so
+#: the reader lands on the Jobs tab and has to go hunting for what the post just told them about.
+BOARD_URL = '/career/?view=contracts&new=1'
 
 #: Discord hard-caps an embed description at 4096 characters and we want to stay well clear of it,
 #: so a very large wave lists its biggest jobs and counts the rest. Chosen over truncating the

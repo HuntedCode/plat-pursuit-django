@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from core.management.commands.announce_contracts import MAX_WAVE
 from core.services import contract_announcer
+from tests.factories import ProfileFactory
 from trophies.models import Contract, Job
 
 pytestmark = pytest.mark.django_db
@@ -282,3 +283,42 @@ def test_the_lifecycle_stamps_are_not_typeable_in_the_admin():
     readonly = ContractAdmin(Contract, AdminSite()).readonly_fields
 
     assert 'went_live_at' in readonly and 'announced_at' in readonly
+
+
+def test_the_announcement_link_actually_opens_the_contracts_tab(client, posted):
+    """The post's CTA is its whole point, and a wrong param does not look broken: Career renders
+    the contracts panel correctly filtered but leaves it `hidden`, so the reader lands on Jobs.
+    Walked end to end -- the URL is taken OUT of the payload and fetched -- because asserting
+    'new=1' in the string is what let `?tab=` (job detail's param) ship."""
+    import re
+    from urllib.parse import urlparse
+
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    _contract('Fresh Drop')
+    _run()
+
+    href = re.search(r'\]\((https?://[^)]+)\)',
+                     posted[0][1]['embeds'][0]['description']).group(1)
+    parsed = urlparse(href)
+
+    resp = client.get(parsed.path + '?' + parsed.query)
+
+    assert resp.status_code == 200
+    assert resp.context['active_view'] == 'contracts', (
+        f"{href} does not open the Contracts tab")
+    assert resp.context['new_window_days']
+
+
+def test_the_deep_link_scrolls_the_board_into_view(client):
+    """`new` is the one filter that arrives from an EXTERNAL link, so the reader has no idea the
+    board is filtered unless the page takes them to it."""
+    from core.services.contract_announcer import BOARD_URL
+
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+
+    src = client.get(BOARD_URL).content.decode()
+
+    guard = src.split('function scrollToFilteredBoard', 1)[1].split('return;', 2)[1]
+    assert "qp.has('new')" in guard, 'a Latest deep link lands above the board it filtered'

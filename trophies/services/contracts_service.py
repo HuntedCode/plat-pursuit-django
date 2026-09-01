@@ -559,7 +559,7 @@ def claimable_summary(profile):
 
 
 def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None, platforms=None,
-                 scope='board'):
+                 scope='board', new_only=False):
     """Facet counts for the toolbar chips. Each dimension counts the catalog filtered by the OTHER
     active filters (so picking PS5 doesn't zero out PS4's count, and status counts reflect your
     current discipline/platform view). Cheap + whale-safe: the live-Contract catalog is bounded and
@@ -568,24 +568,41 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
     if platforms is None:                     # match contracts_page: absent -> current-gen, so the
         platforms = list(MODERN_PLATFORMS)    # status counts agree with the board's default total
     base = annotated_contracts(profile, disc_levels)
-    # Status chips: ignore the status filter, respect discipline/job/platform/search + scope. One
-    # filtered aggregate (a GROUP BY would be split by the board's relevance/strength annotations).
-    s_qs = _filter_contracts(base, q=q, disciplines=disciplines, jobs=jobs, platforms=platforms, scope=scope)
-    # The Latest chip's count rides the SAME filtered set as the status chips, so it reflects the
-    # current discipline/platform/search view rather than the whole catalogue.
-    new_count = s_qs.filter(went_live_at__gte=new_contract_cutoff()).distinct().count()
+    cutoff = new_contract_cutoff()   # ONE clock read for the whole facet set
+    # `new_only` is an "other filter" to every dimension EXCEPT the Latest chip itself. Leaving it
+    # out of the rest was the bug: Latest on, 5 contracts in the grid, and the status chips still
+    # promising "Ready to Claim 12" -- click it and the board empties. That is verbatim the failure
+    # _filter_contracts' own comment records from the removed `contract=` filter.
+    n_qs = _filter_contracts(base, q=q, disciplines=disciplines, jobs=jobs, platforms=platforms, scope=scope)
+    s_qs = n_qs.filter(went_live_at__gte=cutoff) if new_only else n_qs
+    want_new = scope != 'history'      # History hides the chip, so do not pay for its count there
+    fold_new = want_new and not new_only
+    # Status chips: ignore the status filter, respect discipline/job/platform/search + scope + Latest.
+    # One filtered aggregate (a GROUP BY would be split by the board's relevance/strength annotations).
     status_counts = s_qs.aggregate(
         available=Count('id', filter=Q(status='available'), distinct=True),
         pursuing=Count('id', filter=Q(status='pursuing'), distinct=True),
         claimable=Count('id', filter=Q(status='claimable'), distinct=True),
         accepted=Count('id', filter=Q(status='accepted'), distinct=True),
         all=Count('id', distinct=True),
+        # The Latest chip's own count is measured with Latest OFF (turning a filter on must not
+        # shrink its own number), so it rides this aggregate only when it IS off -- the common case,
+        # and one round-trip instead of two. It reads `n_qs`, so it reflects the current
+        # discipline/platform/search view rather than the whole catalogue.
+        **({'new': Count('id', filter=Q(went_live_at__gte=cutoff), distinct=True)} if fold_new else {}),
     )
+    if not want_new:
+        new_count = 0
+    elif new_only:
+        new_count = n_qs.filter(went_live_at__gte=cutoff).count()   # the one case that cannot fold
+    else:
+        new_count = status_counts.pop('new')
     # Platform chips: ignore the platform filter, respect status/discipline/job/search + scope -- so a
     # legacy platform shows its true total even while the board is defaulted to current-gen. ONE aggregate:
     # alias each platform's member-game EXISTS, then a count-with-FILTER per platform (was a COUNT per
     # platform -- 6 round-trips collapsed to 1; same numbers, EXISTS doesn't multiply rows so distinct holds).
-    p_base = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs, scope=scope)
+    p_base = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs, scope=scope,
+                               new_only=new_only)
     platform_counts = p_base.annotate(**{
         f'_plat_{p}': _platform_exists([p]) for p in ALL_PLATFORMS   # resolve the correlated EXISTS per contract row
     }).aggregate(**{
@@ -597,7 +614,7 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
     # Counted from the Job side (no board annotations there, so the GROUP BY isn't split). `dj_ids` stays
     # a subquery.
     dj_ids = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs,
-                               platforms=platforms, scope=scope).values('id')
+                               platforms=platforms, scope=scope, new_only=new_only).values('id')
     member_jobs = Job.objects.filter(contracts__in=dj_ids)
     discipline_counts = dict(member_jobs.values('discipline')
                              .annotate(c=Count('contracts', distinct=True)).values_list('discipline', 'c'))

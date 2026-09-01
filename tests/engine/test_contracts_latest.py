@@ -78,17 +78,65 @@ def test_card_marker_matches_the_filter():
     assert filtered == {n for n, c in by_name.items() if c['is_new']}
 
 
-def test_facet_count_reflects_the_other_filters_not_itself():
-    """The Latest chip's count rides the same filtered set as the status chips, so narrowing by
-    platform narrows it too -- but turning Latest ON must not shrink its own count."""
+def test_the_latest_count_is_not_shrunk_by_latest_being_on():
+    """Every chip counts the catalogue filtered by the OTHER active filters. For the Latest chip
+    itself that means Latest is the one filter it must ignore -- otherwise switching it on would
+    rewrite its own number to the result count and it could never be switched off knowingly."""
     profile = ProfileFactory(is_linked=True)
     _contract('New One', 'new-one', 870041, live_days_ago=1)
     _contract('New Two', 'new-two', 870042, live_days_ago=3)
     _contract('Old One', 'old-one', 870043, live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 1)
 
-    facets = contracts_service.board_facets(profile, platforms=[])
+    assert contracts_service.board_facets(profile, platforms=[])['new'] == 2
+    assert contracts_service.board_facets(profile, platforms=[], new_only=True)['new'] == 2
 
-    assert facets['new'] == 2
+
+def test_the_latest_count_DOES_narrow_with_the_other_filters():
+    """The other half of the rule the name above promises: it rides the current view, so a job
+    filter narrows it rather than reporting the whole catalogue."""
+    profile = ProfileFactory(is_linked=True)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:2])
+    _contract('New Driver', 'nd', 870044, live_days_ago=1, jobs=[jobs[0]])
+    _contract('New Other', 'no', 870045, live_days_ago=1, jobs=[jobs[1]])
+
+    facets = contracts_service.board_facets(profile, platforms=[], jobs=[jobs[0].slug])
+
+    assert facets['new'] == 1
+
+
+def test_every_OTHER_chip_count_respects_latest():
+    """THE bug: Latest on, a handful of contracts in the grid, and the status chips still promising
+    hundreds. Clicking one empties the board. That is verbatim the failure _filter_contracts'
+    comment records from the removed `contract=` filter, and holding new_only back from
+    board_facets reintroduced it."""
+    profile = ProfileFactory(is_linked=True)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:2])
+    _contract('Recent', 'recent', 870046, live_days_ago=1, jobs=[jobs[0]])
+    for i in range(4):
+        _contract('Ancient %d' % i, 'ancient-%d' % i, 870047 + i,
+                  live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 9, jobs=[jobs[0]])
+
+    facets = contracts_service.board_facets(profile, platforms=[], new_only=True)
+
+    assert facets['status']['all'] == 1, 'the status chips still counted the out-of-window contracts'
+    assert facets['status']['available'] == 1
+    assert facets['job'][jobs[0].slug] == 1, 'the job popover still promised five'
+    assert facets['platform']['PS5'] == 0, 'platform chips ignored Latest'
+
+
+def test_the_facet_counts_agree_with_what_the_board_returns():
+    """The invariant behind all of the above, stated once: for any filter combination, the 'all'
+    chip and the grid must report the same number. A chip that disagrees with its own board is the
+    whole class of bug."""
+    profile = ProfileFactory(is_linked=True)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:2])
+    _contract('Recent', 'recent', 870051, live_days_ago=2, jobs=[jobs[0]])
+    _contract('Older', 'older', 870052, live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 4, jobs=[jobs[0]])
+
+    for new_only in (False, True):
+        facets = contracts_service.board_facets(profile, platforms=[], new_only=new_only)
+        page = _page(profile, new_only=new_only)
+        assert facets['status']['all'] == page['total'], f"disagree at new_only={new_only}"
 
 
 def test_new_only_composes_with_other_filters():
@@ -114,7 +162,7 @@ def test_the_latest_chip_is_a_toggle_not_a_status(client):
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)
 
-    content = client.get('/career/?tab=contracts').content.decode()
+    content = client.get('/career/?view=contracts').content.decode()
 
     assert 'rp-newfilter' in content, 'the Latest toggle must be its own group'
     assert 'rp-chip--new' in content and 'aria-pressed="false"' in content
@@ -148,7 +196,7 @@ def test_the_new_marker_renders_only_inside_the_window(client):
                       live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 3)
     _with_member(old_c)
 
-    content = client.get('/career/?tab=contracts').content.decode()
+    content = client.get('/career/?view=contracts').content.decode()
 
     assert 'Brand New' in content and 'Long Standing' in content, 'both contracts should render'
     assert content.count('rp-tile__new') == 1, 'exactly the in-window contract gets the marker'
@@ -219,3 +267,25 @@ def test_every_board_param_the_url_can_gain_is_also_cleared():
                              src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
 
     assert emitted <= cleared, f"buildParams emits {emitted - cleared}, which syncURL never clears"
+
+
+def test_the_rendered_board_ships_facets_that_respect_latest(client):
+    """The service half is pinned above; this is the WIRING. `_board_facets` builds its kwargs from
+    a hand-listed key tuple, so new_only can be threaded into the service and still never reach it
+    -- and the page would ship chips that disagree with the grid beside them."""
+    import json
+
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    jobs = list(Job.objects.exclude(is_fallback=True)[:1])
+    _with_member(_contract('Recent', 'recent-w', 870061, live_days_ago=1, jobs=jobs))
+    for i in range(3):
+        _with_member(_contract('Ancient %d' % i, 'ancient-w-%d' % i, 870062 + i,
+                               live_days_ago=NEW_CONTRACT_WINDOW_DAYS + 9, jobs=jobs))
+
+    body = client.get('/career/?view=contracts&new=1').content.decode()
+    payload = body.split('id="rp-facets"', 1)[1].split('>', 1)[1].split('</script>', 1)[0]
+    facets = json.loads(payload.replace('\u0022', '"'))
+
+    assert facets['status']['all'] == 1, 'the shipped status chips ignore Latest'
+    assert facets['new'] == 1

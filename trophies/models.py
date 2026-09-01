@@ -2825,18 +2825,36 @@ class Contract(models.Model):
     def __str__(self):
         return self.name
 
-    def save(self, *args, **kwargs):
-        """Stamp `went_live_at` the first time this Contract goes live.
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        """Remember whether this row was live when we loaded it, so `save()` can tell a PUBLISH
+        from an ordinary edit of something already published. Django's standard previous-value
+        pattern; there is no cheaper way for save() to know, and re-reading the row would be a
+        query on every write."""
+        instance = super().from_db(db, field_names, values)
+        instance._was_live = instance.is_live
+        return instance
 
-        Set here rather than in a view so EVERY save path gets it (admin edit, shell, the staging
-        pipeline's later publish). The admin's bulk `make_live` action uses `queryset.update()`,
-        which bypasses this, so it stamps the column itself -- keep the two in step.
+    def save(self, *args, **kwargs):
+        """Stamp `went_live_at` when this Contract TRANSITIONS to live.
+
+        Set here rather than in a view so every save path gets it (admin edit, shell, the staging
+        pipeline's later publish). The admin's bulk `make_live` uses `queryset.update()`, which
+        bypasses this, so it applies the same transition rule itself -- keep the two in step.
+
+        THE TRANSITION IS LOAD-BEARING, not a refinement of "is live and unstamped". Every contract
+        published before this column existed is live with a NULL stamp, which is honest: their first
+        publish predates the record. Stamping on any save of such a row meant a curator opening one
+        to fix a typo silently republished it -- a New badge for 14 days and a Discord post
+        announcing a game that had been on the board since launch. The launch set would have leaked
+        into "new" one edit at a time.
         """
-        if self.is_live and self.went_live_at is None:
+        if self.is_live and not getattr(self, '_was_live', False) and self.went_live_at is None:
             self.went_live_at = timezone.now()
             if kwargs.get('update_fields') is not None:
                 kwargs['update_fields'] = set(kwargs['update_fields']) | {'went_live_at'}
         super().save(*args, **kwargs)
+        self._was_live = self.is_live   # so a second save() in the same instance's life agrees
 
     def member_concept_ids(self):
         """Concept ids belonging to this Contract: every ANCHORED + TRUSTED-matched Concept

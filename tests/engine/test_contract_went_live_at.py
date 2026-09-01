@@ -100,3 +100,67 @@ def test_it_is_distinct_from_created_at():
 
     c.refresh_from_db()
     assert (c.went_live_at - c.created_at).days >= 29
+
+
+# ── The transition rule: only a PUBLISH stamps ───────────────────────────────────────────────────
+# Every contract published before this column existed is live with a NULL stamp -- honest, since
+# their first publish predates the record. The rule below is what stops that launch set leaking
+# into "new" one curator edit at a time.
+
+def _legacy_live(name, igdb_id):
+    """A contract as the ~1,000 launch-set rows actually exist on prod: live, never stamped."""
+    c = Contract.objects.create(name=name, slug=name.lower().replace(' ', '-'),
+                                igdb_id=igdb_id, is_live=True)
+    Contract.objects.filter(pk=c.pk).update(went_live_at=None)
+    return Contract.objects.get(pk=c.pk)   # reloaded, so from_db records _was_live
+
+
+def test_editing_a_launch_era_contract_does_not_publish_it():
+    """THE bug this rule exists for. A curator opens a launch-era contract to fix a typo and saves.
+    Under "live and unstamped", that stamped it -- a New badge for 14 days and a Discord post
+    announcing a game that had been on the board since launch."""
+    c = _legacy_live('Launch Era', 890001)
+
+    c.name = 'Launch Era (fixed typo)'
+    c.save()
+
+    c.refresh_from_db()
+    assert c.went_live_at is None, 'an ordinary edit republished a launch-era contract'
+
+
+def test_a_targeted_save_on_a_launch_era_contract_also_leaves_it_alone():
+    c = _legacy_live('Launch Era', 890002)
+
+    c.notes = 'curated'
+    c.save(update_fields=['notes'])
+
+    c.refresh_from_db()
+    assert c.went_live_at is None
+
+
+def test_the_bulk_action_does_not_stamp_a_contract_that_was_already_live():
+    """Same exposure through the changelist: selecting launch-era rows and re-running "Mark LIVE"
+    must not date them today."""
+    legacy = _legacy_live('Launch Era', 890003)
+    fresh = Contract.objects.create(name='Truly New', slug='truly-new', igdb_id=890004,
+                                    is_live=False)
+
+    admin = ContractAdmin(Contract, AdminSite())
+    admin.make_live(_admin_request(), Contract.objects.filter(pk__in=[legacy.pk, fresh.pk]))
+
+    legacy.refresh_from_db()
+    fresh.refresh_from_db()
+    assert legacy.is_live and legacy.went_live_at is None, 'the launch-era row was re-dated'
+    assert fresh.is_live and fresh.went_live_at is not None, 'the real publish was not stamped'
+
+
+def test_a_real_publish_still_stamps_after_the_transition_rule():
+    """The rule must not cost the thing the column is for."""
+    c = Contract.objects.create(name='Staged', slug='staged-2', igdb_id=890005, is_live=False)
+    c = Contract.objects.get(pk=c.pk)   # as a view or the admin would load it
+
+    c.is_live = True
+    c.save()
+
+    c.refresh_from_db()
+    assert c.went_live_at is not None

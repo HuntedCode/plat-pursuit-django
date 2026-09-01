@@ -1676,7 +1676,10 @@ function ppCountUp(el, dur) {
     function scrollToFilteredBoard() {
         var qp = new URLSearchParams(location.search);
         if (qp.get('view') !== 'contracts') return;
-        if (!(qp.get('scope') === 'history' || qp.has('job') || qp.has('discipline') || qp.has('status') || qp.has('q') || qp.has('platform'))) return;
+        // `new` belongs in this list more than any other key: it is the one filter that arrives
+        // from an EXTERNAL link (the Discord announcement), where the reader has no idea the board
+        // is already filtered unless we take them to it.
+        if (!(qp.get('scope') === 'history' || qp.has('job') || qp.has('discipline') || qp.has('status') || qp.has('q') || qp.has('platform') || qp.has('new'))) return;
         var strip = document.querySelector('.pp-switch');
         if (strip) { strip.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'start' }); }
     }

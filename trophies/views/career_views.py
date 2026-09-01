@@ -69,15 +69,18 @@ def _board_params(request):
 def _board_facets(profile, disc_levels, params, total):
     """Facet chip counts + (when the board is empty) a 'drop <label> to see N' suggestion, as one dict
     for `json_script`. `params` is `_board_params` output; `total` is the current result count."""
-    # board_facets deliberately does NOT take new_only: each chip's count reflects the OTHER
-    # active filters, so the Latest count must not be narrowed by Latest already being on.
-    facet_args = {k: params[k] for k in ('q', 'status', 'disciplines', 'jobs', 'platforms', 'scope')}
+    # new_only rides along with everything else. Each chip counts the catalogue filtered by the
+    # OTHER active filters, and Latest is an "other filter" to all of them -- board_facets keeps it
+    # off only for the Latest chip's OWN count, since turning a filter on must not shrink its own
+    # number. Holding it back from the whole call was the bug: Latest on, five contracts in the
+    # grid, and the status chips still promising "Ready to Claim 12".
+    facet_args = {k: params[k] for k in
+                  ('q', 'status', 'disciplines', 'jobs', 'platforms', 'scope', 'new_only')}
     f = contracts_service.board_facets(profile, disc_levels=disc_levels, **facet_args)   # status/platform/discipline/job
-    # suggest_relaxation DOES take it (unlike board_facets above): its counts are promises about what
-    # the user would actually see, so they have to be measured with Latest still applied.
-    suggest = (contracts_service.suggest_relaxation(
-        profile, disc_levels=disc_levels, new_only=params['new_only'], **facet_args)
-        if total == 0 else None)
+    # Same reason, more sharply: suggest_relaxation's counts are PROMISES about what the user would
+    # actually see next, so they have to be measured with Latest still applied.
+    suggest = (contracts_service.suggest_relaxation(profile, disc_levels=disc_levels, **facet_args)
+               if total == 0 else None)
     return {**f, 'suggest': suggest}
 
 
