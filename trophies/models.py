@@ -2792,6 +2792,14 @@ class Contract(models.Model):
                    'whose concepts come from its bundles instead.'),
     )
     is_live = models.BooleanField(default=False, help_text='Visible/active to users. Curate while False.')
+    went_live_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text=('When this Contract FIRST went live, i.e. when the community could first see '
+                   'it. Distinct from created_at: the pipeline stages a contract (is_live=False) '
+                   'possibly weeks before staff publish it, so created_at answers "when was this '
+                   'drafted", not "what is new". Stamped once and never reset, so un-publishing '
+                   'and re-publishing does not re-announce a contract.'),
+    )
     jobs = models.ManyToManyField(
         Job, related_name='contracts', blank=True,
         help_text='The job profile -- job XP splits evenly across these jobs.',
@@ -2809,6 +2817,19 @@ class Contract(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        """Stamp `went_live_at` the first time this Contract goes live.
+
+        Set here rather than in a view so EVERY save path gets it (admin edit, shell, the staging
+        pipeline's later publish). The admin's bulk `make_live` action uses `queryset.update()`,
+        which bypasses this, so it stamps the column itself -- keep the two in step.
+        """
+        if self.is_live and self.went_live_at is None:
+            self.went_live_at = timezone.now()
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = set(kwargs['update_fields']) | {'went_live_at'}
+        super().save(*args, **kwargs)
 
     def member_concept_ids(self):
         """Concept ids belonging to this Contract: every ANCHORED + TRUSTED-matched Concept

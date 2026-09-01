@@ -4633,7 +4633,16 @@ class ContractAdmin(admin.ModelAdmin):
     # which admin screen the curator used.
     @admin.action(description="Mark selected Contracts LIVE")
     def make_live(self, request, queryset):
-        n = queryset.update(is_live=True, updated_at=timezone.now())
+        # Coalesce, not a bare assignment: went_live_at records the FIRST publish, so a contract
+        # pulled back and re-published keeps its original date and is not re-announced. This
+        # mirrors Contract.save(), which queryset.update() bypasses.
+        from django.db.models import Value
+        from django.db.models.functions import Coalesce
+        now = timezone.now()
+        n = queryset.update(
+            is_live=True, updated_at=now,
+            went_live_at=Coalesce('went_live_at', Value(now)),
+        )
         self.message_user(request, f"{n} contract(s) marked live.")
 
     @admin.action(description="Mark selected Contracts NOT live")
