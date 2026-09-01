@@ -1659,3 +1659,111 @@ def test_the_job_rank_is_read_under_the_SAME_slice_as_the_rows(client):
     sliced = client.get(reverse('job_ranks_panel', args=['archivist']), {'country': 'GB'})
     assert sliced.context['my_rank'] == 1
     assert 'data-lb-viewer-rank="1"' in sliced.content.decode()
+
+
+# ---------------------------------------------------------- the Latest filter ------------------------
+# Same window and same chip as Career's board (`test_contracts_latest.py`), reached differently: this
+# tab has no other filters, so Latest is a LINK rather than a fetch.
+
+def _aged(contract, days_ago):
+    from django.utils import timezone
+    Contract.objects.filter(pk=contract.pk).update(
+        went_live_at=timezone.now() - timezone.timedelta(days=days_ago))
+    contract.refresh_from_db()
+    return contract
+
+
+def test_the_latest_link_narrows_the_tab_to_the_window(client):
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _aged(_contract('Just Landed', [job]), 1)
+    _aged(_contract('Been Here', [job]), NEW_CONTRACT_WINDOW_DAYS + 6)
+    url = reverse('job_detail', args=['archivist'])
+
+    body = client.get(url, {'tab': 'contracts', 'new': '1'}).content.decode()
+
+    assert 'Just Landed' in body
+    assert 'Been Here' not in body, 'Latest is on and an out-of-window contract still rendered'
+    assert 'Just Landed' in client.get(url, {'tab': 'contracts'}).content.decode()
+
+
+def test_the_header_count_stays_the_jobs_own_total(client):
+    """The header stat reads "Contracts / feed this job" -- a fact about the JOB. Filtering the tab must
+    not quietly turn it into a result count, or a job with one recent contract would claim to have one."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _aged(_contract('Just Landed', [job]), 1)
+    for i in range(3):
+        _aged(_contract('Older %d' % i, [job]), NEW_CONTRACT_WINDOW_DAYS + 6)
+
+    body = client.get(reverse('job_detail', args=['archivist']),
+                      {'tab': 'contracts', 'new': '1'}).content.decode()
+
+    assert 'data-countup="4"' in body, 'the header must still count all four contracts'
+    assert '1 of 4 shown' in body, 'the FILTERED count belongs beside the chip, not in the header'
+
+
+def test_the_scroll_endpoint_honours_the_filter(client):
+    """The shared scroller seeds its params from window.location.search, so it DOES send `new=1`. An
+    endpoint that ignored it would append unfiltered pages under a filtered first screenful -- the
+    filter appearing to expire partway down the list."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _aged(_contract('Just Landed', [job]), 1)
+    _aged(_contract('Been Here', [job]), NEW_CONTRACT_WINDOW_DAYS + 6)
+
+    body = client.get(reverse('job_contracts', args=['archivist']), {'new': '1'}).content.decode()
+
+    assert 'Just Landed' in body and 'Been Here' not in body
+
+
+def test_the_chip_is_hidden_when_the_job_has_nothing_new(client):
+    """A control that can only ever return an empty list is a dead control, and most jobs sit at zero
+    between publishing waves."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _aged(_contract('Been Here', [job]), NEW_CONTRACT_WINDOW_DAYS + 6)
+
+    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
+
+    assert 'rp-chip--new' not in body
+    assert 'Been Here' in body, 'hiding the chip must not hide the contracts'
+
+
+def test_a_hand_typed_filter_that_matches_nothing_does_not_claim_the_job_is_empty(client):
+    """The chip is hidden at zero, so `?new=1` is still reachable by hand. Without its own empty state
+    the page would say "No contracts feed this job yet" directly under a header counting one."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _aged(_contract('Been Here', [job]), NEW_CONTRACT_WINDOW_DAYS + 6)
+
+    body = client.get(reverse('job_detail', args=['archivist']),
+                      {'tab': 'contracts', 'new': '1'}).content.decode()
+
+    assert 'No contracts feed this job yet' not in body
+    assert 'Nothing new in the last %d days' % NEW_CONTRACT_WINDOW_DAYS in body
+    assert 'Show them all' in body, 'the empty state has to offer the way back'
+
+
+def test_the_launch_set_is_not_new_on_job_detail(client):
+    """went_live_at is NULL for everything published before the field existed. Those must read as not
+    new here too, or the chip would call the whole launch catalogue recent on day one."""
+    _solo()
+    job = _job('archivist', 'Archivist')
+    _contract('Launch Era', [job])   # created by the helper without a went_live_at stamp
+    Contract.objects.filter(name='Launch Era').update(went_live_at=None)
+
+    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
+
+    assert 'rp-chip--new' not in body, 'an unstamped contract must not light the Latest chip'
+    assert 'rp-tile__new' not in body, 'nor wear the New marker'

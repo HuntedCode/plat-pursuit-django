@@ -149,6 +149,23 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
         looks basically fine. {% endcomment %}
         {% job_icon_sprite %}
 
+        {% comment %} Latest: a LINK, not a fetch. This tab has no other filters, so there is no client
+        filter state to preserve, and navigating means the shared InfiniteScroller carries `new=1`
+        forward for free (it seeds from window.location.search), the URL is shareable, and Back undoes
+        it. `tab=contracts` rides along so the toggle never bounces the reader to the Ranks tab.
+
+        Hidden entirely when the job has nothing new: a chip that can only ever return an empty list is
+        a dead control, and most jobs will sit at zero between publishing waves. {% endcomment %}
+        {% if new_count %}
+        <div class="jobd-newbar">
+            <a class="rp-chip rp-chip--new{% if new_only %} is-active{% endif %}"
+               href="?tab=contracts{% if not new_only %}&amp;new=1{% endif %}"
+               aria-pressed="{{ new_only|yesno:'true,false' }}"
+               title="Contracts added in the last {{ new_window_days }} days">Latest<span class="rp-chip__n">{{ new_count }}</span></a>
+            {% if new_only %}<span class="jobd-newbar__count">{{ filtered_total }} of {{ contract_total }} shown</span>{% endif %}
+        </div>
+        {% endif %}
+
         {% if contracts %}
         {% comment %} The SAME card Career renders, in its job-scoped variant -- see
         `_contract_card.html`. What was here before was a placeholder: a text row per contract with the
@@ -176,10 +193,20 @@ belong to (via `contract_modal_preview`), so a third catalogue would be a third 
             <span class="sr-only">Loading more contracts</span>
         </div>
         {% else %}
+        {% comment %} Two empty states, because they mean different things. A hand-typed `?new=1` on a
+        job with nothing recent hides the chip above (a control that can only return nothing is a dead
+        control), so without this branch the page would claim the job has NO contracts while its own
+        header counts them. {% endcomment %}
         <div class="jobs-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
+            {% if new_only and contract_total %}
+            <p class="jobs-empty__title">Nothing new in the last {{ new_window_days }} days</p>
+            <p class="jobs-empty__sub">This job still has {{ contract_total }} contract{{ contract_total|pluralize }}.
+                <a class="link link-primary" href="?tab=contracts">Show them all</a>.</p>
+            {% else %}
             <p class="jobs-empty__title">No contracts feed this job yet</p>
             <p class="jobs-empty__sub">Contracts are curated. This one is waiting for its first.</p>
+            {% endif %}
         </div>
         {% endif %}
     </div>{# /jobd-view-contracts #}

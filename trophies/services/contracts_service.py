@@ -607,6 +607,18 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
             'discipline': discipline_counts, 'job': job_counts}
 
 
+def job_contract_counts(job_slug):
+    """`(total, new)` for one job's contracts: the header's "feed this job" figure and the Latest chip's.
+
+    Two plain COUNTs rather than reading `contracts_page(...)['total']`, which would build a whole page
+    of hydrated card dicts to reach one number. Both run through `_filter_contracts` with the params job
+    detail's list uses (all platforms, no board/history split), so neither figure can disagree with the
+    list it describes."""
+    base = _filter_contracts(Contract.objects.filter(is_live=True), jobs=[job_slug],
+                             platforms=[], scope='')
+    return base.count(), base.filter(went_live_at__gte=new_contract_cutoff()).count()
+
+
 def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None,
                        platforms=None, scope='board', new_only=False):
     """When a filter combo returns nothing, find the single active filter whose removal yields the most

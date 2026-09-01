@@ -163,6 +163,12 @@
 .jobs-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
 .jobs-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }
 
+/* The Latest toggle above the Contracts grid. The CHIP itself is Career's (`.rp-chip--new`,
+   elements.css) -- the two boards show the same control, so they read from one definition; this is
+   only the row that seats it. */
+.jobd-newbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.jobd-newbar__count { font-size: 0.8rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+
 
 /* ---- Job detail (`/jobs/<slug>/`) -------------------------------------------------------------------
    Moved here WITH the catalogue: one page's vocabulary, and it only lived in `leaderboards.css` for the

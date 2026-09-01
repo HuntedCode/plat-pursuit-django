@@ -467,13 +467,19 @@ class JobContractsView(View):
         job = get_object_or_404(Job, slug=slug)
         profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
         page = board_helpers.clamped_int(request.GET.get('page'), 1, 1, 10_000)
-        data = JobDetailView.contracts_context(job, profile, page=page)
+        # The Latest filter has to be honoured HERE too, not just on the page. The shared scroller seeds
+        # its query params from window.location.search, so it does send `new=1` -- an endpoint that
+        # ignored it would append unfiltered pages under a filtered first screenful, which reads as the
+        # filter silently expiring partway down the list.
+        new_only = request.GET.get('new') == '1'
+        data = JobDetailView.contracts_context(job, profile, page=page, new_only=new_only)
         # NO `disciplines`: that is the 25-job roster the card's MAP branch iterates, and passing `job`
         # takes the pill branch instead -- so it was a query per scroll page feeding a block that never
         # renders. Django leaves an unused variable undefined rather than erroring, and the map branch is
         # unreachable while `job` is set.
         resp = render(request, 'trophies/partials/job_detail/_contract_results.html', {
             'contracts': data['contracts'], 'job': job, 'profile': profile,
+            'new_window_days': NEW_CONTRACT_WINDOW_DAYS,   # the New marker's tooltip on appended cards
         })
         # `X-Has-Next` lets the scroller stop one fetch EARLIER than the empty-page fallback would --
         # the same signal `ContractsResultsView` sends. The shared `InfiniteScroller` reads it as of the
@@ -593,7 +599,7 @@ class JobDetailView(DetailView):
     }
 
     @classmethod
-    def contracts_context(cls, job, profile, page=1):
+    def contracts_context(cls, job, profile, page=1, new_only=False):
         """One page of the contracts that feed this job, as Career's own card dicts.
 
         Reuses `contracts_service.contracts_page` rather than querying Contract here, which is what makes
@@ -606,13 +612,27 @@ class JobDetailView(DetailView):
         # No `disc_levels`: it exists to weight the relevance/strength ordering, which `with_ranking=False`
         # above switches off. Computing it here was a grouped aggregate per request feeding nothing.
         return contracts_service.contracts_page(
-            profile, page=page, jobs=[job.slug], **cls.CONTRACT_PARAMS)
+            profile, page=page, jobs=[job.slug], new_only=new_only, **cls.CONTRACT_PARAMS)
 
     def _contracts(self, job, profile):
-        data = self.contracts_context(job, profile)
+        # Latest is a LINK here, not a fetch. This tab has no other filters, so there is no client filter
+        # state worth preserving -- and navigating means the shared InfiniteScroller carries `new=1`
+        # forward for free (it seeds its query params from window.location.search), the URL is
+        # shareable, and Back undoes it. A client-side swap would have to teach the scroller a filter it
+        # otherwise never needs to know about.
+        new_only = self.request.GET.get('new') == '1'
+        data = self.contracts_context(job, profile, new_only=new_only)
+        # The header stat reads "Contracts / feed this job" -- a fact about the JOB, so `contract_total`
+        # stays UNFILTERED. `data['total']` is the filtered count once Latest is on, which would quietly
+        # turn a header fact into a result count.
+        contract_total, new_count = contracts_service.job_contract_counts(job.slug)
         return {
             'contracts': data['contracts'],
-            'contract_total': data['total'],
+            'new_only': new_only,
+            'new_count': new_count,
+            'new_window_days': NEW_CONTRACT_WINDOW_DAYS,
+            'contract_total': contract_total,
+            'filtered_total': data['total'],
             # The scroller derives its next page number from how many cards are already in the grid, so it
             # has to page by the same number the endpoint does. Passed rather than written as a literal in
             # the template, where a drifted copy would silently skip or repeat a page.

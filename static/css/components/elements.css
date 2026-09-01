@@ -720,7 +720,15 @@
    on the scope switch to match, so the hidden control can never leave an invisible filter on. */
 .rp-newfilter { display: inline-flex; align-items: center; margin-left: 6px; }
 .rp-toolbar[data-scope="history"] .rp-newfilter { display: none; }
-.rp-chip--new.is-active { border-color: var(--pp-secondary); color: var(--pp-secondary); }
+/* Secondary, not primary: `.rp-chip.is-active` tints in primary, and inheriting that background under
+   a secondary border and secondary text is what a half-overridden active state looks like. All three
+   move together. `text-decoration` because job detail renders this chip as an <a> (a link, so Back
+   undoes it) where Career renders a <button>. */
+.rp-chip--new { text-decoration: none; }
+.rp-chip--new.is-active {
+    border-color: var(--pp-secondary); color: var(--pp-secondary);
+    background: color-mix(in oklab, var(--pp-secondary) 14%, var(--pp-bg-2));
+}
 /* (Banner-C) Progressive load: a shimmer (z -1, behind the cover) holds the frame until the cover
    image loads; then the shimmer stops and fades out behind the now-painted cover (JS toggles
    .is-loaded on the box). Shimmer animates background-position only -- never color-mix in @keyframes. */
