@@ -2,6 +2,8 @@
 
 The Frame is the chrome that wraps every badge wherever it renders: tier-tinted backdrop, art layers, plinth with engraving, optional pin chip. It's one of the four signature visual primitives in the PlatPursuit design system (see [visual-identity.md §3](../design/visual-identity.md)). This doc is the implementation reference: data contract, sizes, states, public JS API, theming, the Earn Moment, and gotchas.
 
+> **Note (2026-07):** badges present as medallion OBJECTS via the [Badge Medallion](badge-medallion.md) on both the personal `/collection/` album AND the public Browse **Gallery** (`/badges/?view=gallery`, the per-tier showcase wall — built via `build_badge_frame(..., showcase=True)`, rendered with `.pp-med`). The Frame still renders badges everywhere else (game/badge detail, share cards, the Browse **Series** view's row icon via `partials/badge.html`); a site-wide Frame -> Medallion migration is under evaluation.
+
 ## Quick Start
 
 ```django
@@ -47,7 +49,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 | `static/js/frame.js` | Public `PlatPursuit.Frame` controller |
 | `static/css/input.css` | Tailwind entry — `@import "./components/frame.css"` bundles the component into `output.css` |
 | `templates/base.html` | Mounts the rarity sprite once per page |
-| `templates/design/frame_component_test.html` | State × size × tier test harness at `/design/frame-component/` |
+| ~~`templates/design/frame_component_test.html`~~ | Test harness REMOVED 2026-08 (design-lab strip); verify parity against real product pages instead |
 
 ## Data Contract
 
@@ -62,8 +64,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 | `badge_name` | str | **yes** | Plinth front + back header. |
 | `description` | str | no | Back face only; suppressed if missing. |
 | `art_layers` | list[str] (URLs) | **yes** | Rendered as `<img class="pp-frame__layer">` into `.pp-frame__art`. Three layers is canonical (backdrop, default, foreground) but any number works. |
-| `engraving_rank` | int | no | Earned cards only. `None` suppresses the engraving entirely. Rank `1` triggers the first-earn pulsing animation. Renders alone in the bottom-left corner of the plinth (e.g. `#247`) — the "of all time" subtitle was retired in favor of the cleaner two-corner balance with `set_number`. |
-| `set_number` | int | no | The print-run / edition number engraved in the bottom-right corner of the plinth (zero-padded to 4 digits, e.g. `0247`). Shared across every badge of the same series + tier — the manufacturer's-mark stamp. Renders in earned, in-progress, AND unearned states; tier-color tinted. |
+| `engraving_rank` | int | no | Earned cards only. `None` suppresses the engraving entirely. Rank `1` triggers the first-earn pulsing animation. Renders alone in the bottom-left corner of the plinth (e.g. `#247`) — the "of all time" subtitle was retired. |
 | `current_rank` | int | no | Earned cards only. The user's CURRENT-cycle rank (refreshed each maintenance cycle), printed as ink on chrome alongside the badge name on the front. Distinct from `engraving_rank` (permanent etched mark) — current_rank is the live, mutable count. |
 | `current_cycle` | int | no | Cycle number that pairs with `current_rank` (e.g. `"Cycle 2"`). Falls back to `"Current"` if missing. |
 | `earned_date` | str | no | Pre-formatted display string (e.g. `"Aug 15, 2024"`). |
@@ -88,19 +89,19 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 
 | Size | Use case | Behavior |
 |------|----------|----------|
-| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Title bar shows series (left) + tier label (right). Full plinth: badge name, meta (earned date + rarity), engraving in bottom-left, set-mark in bottom-right. |
-| `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left) and the set-mark (bottom-right); badge name, meta, and cycle print are suppressed. |
+| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Title bar shows series (left) + tier label (right). Full plinth: badge name, meta (earned date + rarity), engraving in bottom-left. |
+| `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left); badge name, meta, and cycle print are suppressed. |
 | `mini` | Inline / leaderboards / chips / Pursuer Card badge peek | 110px max width. **Chrome-only tier identity** — title bar and plinth are hidden entirely. Tier color carries via border + corner notches + backdrop gradient. Mini was briefly trialed with slim chrome (series + engraving + set-mark) but the text became unreadable at typical placements, so the chrome was retired. |
 
-Default + Compact render the textual identifiers when present (series name in the title bar, `engraving_rank` in the bottom-left of the plinth, `set_number` in the bottom-right). Mini drops the text entirely; at that scale the chrome alone has to do the recognition work.
+Default + Compact render the textual identifiers when present (series name in the title bar, `engraving_rank` in the bottom-left of the plinth). Mini drops the text entirely; at that scale the chrome alone has to do the recognition work. (The `set_number` bottom-right stamp was removed 2026-08-23 with the field.)
 
 ## States
 
 | State | Visual | Plinth meta | Engraving |
 |-------|--------|-------------|-----------|
-| `earned` | Full reveal. Title bar shows tier. Hover lift + tier-tinted gleam sweep. | "Earned [date]" + rarity | `#[rank]` in the bottom-left corner of the plinth (first-earn pulse for `#1`); `set_number` mirrored in the bottom-right. |
-| `in_progress` | Blueprint mode: cyan grid, lock icon, Fabricating banner, construction line at the `--pp-build` height. | "[done] of [total] stages" + rarity | Placeholder (the engraving slot stays in its bottom-left position with `visibility:hidden` so the earn-moment etch animation has a settled target); `set_number` still visible in the bottom-right. |
-| `unearned` | Blueprint at 0% with "To Earn" stamp. Lock icon centered. | (empty) | (engraving omitted unless the card is pinned, which falls back to the placeholder); `set_number` still visible. |
+| `earned` | Full reveal. Title bar shows tier. Hover lift + tier-tinted gleam sweep. | "Earned [date]" + rarity | `#[rank]` in the bottom-left corner of the plinth (first-earn pulse for `#1`). |
+| `in_progress` | Blueprint mode: cyan grid, lock icon, Fabricating banner, construction line at the `--pp-build` height. | "[done] of [total] stages" + rarity | Placeholder (the engraving slot stays in its bottom-left position with `visibility:hidden` so the earn-moment etch animation has a settled target). |
+| `unearned` | Blueprint at 0% with "To Earn" stamp. Lock icon centered. | (empty) | (engraving omitted unless the card is pinned, which falls back to the placeholder). |
 
 `is_pinned` is independent of state — any state can be pinned. Pinned cards get a cyan accent border + the map-pin chip at top-left; on blueprint cards the accent pulse takes priority over the schematic-glow hover.
 
@@ -219,13 +220,12 @@ To test: in Chromium DevTools → Rendering → Emulate CSS media feature `prefe
 - **`@property --pp-build` browser support**. Requires Chrome 85+, Firefox 128+, Safari 16.4+. Below those versions the build mask transition snaps instead of animating. Functional but less polished. The pre-existing daisyUI `--radialprogress` build warnings about `@property` are unrelated and harmless.
 - **Inline `style="--pp-build: ..."` and CSP**. The partial emits an inline style attribute for in-progress cards. Verify the site CSP allows `style-src 'unsafe-inline'` (or the equivalent nonce / hash policy) before mounting on a page with a stricter CSP override.
 - **JS file must be loaded per-page, not in base.html**. `static/js/frame.js` is loaded only on pages that mount Frames, via `{% block js_scripts %}`. It's not in `base.html` because most pages don't need it. Auto-init handles all server-rendered Frames; HTMX-swapped Frames need an explicit `PlatPursuit.Frame.init(swappedRoot)` call.
-- **The prototype at `/design/frame/` is the design history, not a stale copy**. It stays referenced in `visual-identity.md` as the source of truth for design rationale. The test harness at `/design/frame-component/` is the production-component verification surface. Don't retire the prototype.
+- **The prototype at `/design/frame/` is the design history, not a stale copy**. It stays referenced in `visual-identity.md` as the source of truth for design rationale, and survived the 2026-08 design-lab strip (staff-gated now). Don't retire the prototype. The `/design/frame-component/` test harness was removed in that strip; verify visual parity on real product pages after CSS / JS changes.
 - **Reduced motion is JS-gated for the earn moment, CSS-gated for everything else**. If you add a new decorative animation to `frame.css`, also add it to the `@media (prefers-reduced-motion: reduce)` block at the bottom of the stylesheet.
 
 ## Reference Implementation
 
-- **Production test harness**: [`/design/frame-component/`](../../templates/design/frame_component_test.html) — every state × size × tier combination rendered through the partial. Use this to verify visual parity after CSS / JS changes.
-- **Design prototype**: [`/design/frame/`](../../templates/design/frame_preview.html) — the original 5000-line workshop. Preserved for design rationale.
+- **Design prototype**: [`/design/frame/`](../../templates/design/frame_preview.html) — the original 5000-line workshop. Preserved for design rationale (staff-gated since 2026-08). The state × size × tier test harness that lived at `/design/frame-component/` was removed in the 2026-08 design-lab strip.
 
 ## Related Docs
 

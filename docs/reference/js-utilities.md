@@ -4,6 +4,8 @@ All shared JavaScript utilities live in `static/js/utils.js` (~1100 lines) and a
 
 The browse pages (Games, Profiles, Trophies, Companies, Genres, Themes, Flagged Games) share an HTMX-driven filter controller in `static/js/browse-filters.js` (~290 lines). It is a separate file rather than a `PlatPursuit.*` utility because it self-initializes against `[data-browse-filters]` containers and is only loaded on browse templates.
 
+That file owns the FILTERING (auto-submit, live search, dual-range sliders). The advanced-filter **drawer** around it is `PlatPursuit.filterPanel` in `utils.js` -- see its row below. The two are separate because a page can want one without the other, and because the drawer has to be created and destroyed per HTMX swap while `browse-filters.js` self-initializes once.
+
 ## Utilities
 
 ### PlatPursuit.ToastManager
@@ -127,19 +129,13 @@ PlatPursuit.UnsavedChangesManager.init({
 
 Requires a `<dialog>` element with buttons: `#unsaved-stay-btn`, `#unsaved-discard-btn`, `#unsaved-save-btn`.
 
-### PlatPursuit.ZoomScaler
-
-Enables uniform sub-768px page scaling via `transform: scale()`.
-
-```js
-PlatPursuit.ZoomScaler.init();  // Call once per page in {% block js_scripts %}
-```
-
-Adds `.zoom-active` to `#zoom-container`, which activates CSS rules in `input.css`. Handles height correction via MutationObserver since `transform: scale()` doesn't change the layout box. See CLAUDE.md for the full zoom wrapper architecture.
-
 ### PlatPursuit.ZoomAwareObserver
 
-Drop-in `IntersectionObserver` replacement that works correctly when ZoomScaler is active.
+Drop-in `IntersectionObserver` replacement. It was built to survive the legacy **ZoomScaler**
+(a sub-768px `transform: scale()` system, now **removed**), whose `overflow: hidden` on
+`#zoom-container` broke `IntersectionObserver` clipping. With ZoomScaler gone it detects no zoom and
+delegates 100% to native `IntersectionObserver`; the scroll-event fallback is dead-but-inert. Kept as
+a drop-in so its several callers don't need touching.
 
 ```js
 const observer = new PlatPursuit.ZoomAwareObserver((entries) => {
@@ -149,8 +145,6 @@ const observer = new PlatPursuit.ZoomAwareObserver((entries) => {
 observer.observe(sentinel);
 observer.disconnect();
 ```
-
-When `ZoomScaler` is active (sub-768px), `overflow: hidden` on `#zoom-container` breaks `IntersectionObserver`'s clipping calculations. `ZoomAwareObserver` detects this and switches to a scroll-event fallback using `getBoundingClientRect()` (which correctly accounts for CSS transforms). On desktop, it delegates to native `IntersectionObserver` with zero overhead.
 
 **Options:** All standard `IntersectionObserver` options, plus `scrollBuffer` (default 100): pixels beyond viewport to trigger detection in scroll fallback mode.
 
@@ -188,19 +182,311 @@ Wraps SortableJS with `forceFallback: true` for consistent cross-browser behavio
 
 Validates page number against min/max before navigation.
 
-### PlatPursuit.CoachMarks
+### PlatPursuit.slideViewIn
 
-Factory for spotlight-style page tours. Dims the page with a dark overlay, cuts a transparent window around the current target, and positions a tooltip beside it with step controls (Prev/Next/Skip + counter).
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `slideViewIn(panel, fromName, toName, order)` | HTMLElement, string, string, string[] | Directional "shared axis" view-switch slide |
 
-| Method | Parameters | Returns | Purpose |
-|--------|-----------|---------|---------|
-| `createTour(config)` | `{ steps, elementIds, dismissUrl }` | tour instance | Build a tour wired to the given overlay/tooltip DOM |
+Applies the shared `.pp-view-in-right` / `.pp-view-in-left` class (`components/motion.css`) to the incoming
+`panel`, picking the direction from `order` (forward in the list slides in from the right, backward from
+the left). No-ops when `fromName === toName` or under `prefers-reduced-motion`. Works for JS toggles (call
+on the now-shown panel) and HTMX island swaps (call on the swapped-in root in `htmx:afterSwap`). Used by
+Career tabs and the Badges Series/Gallery swap. → [motion-patterns.md](../reference/motion-patterns.md) (Directional view switch).
 
-The returned tour exposes `init(autoShow)`, `open()`, `close()`, `next()`, `prev()`, `dismiss(action)`. Step shape: `{ target (CSS selector), title, description, icon (inner SVG markup), position: 'top'|'bottom' }`. The dismiss endpoint receives `{ action, last_step }` as JSON.
+### PlatPursuit.wireTablist / igniteTab / syncViewParam
 
-Tooltip positioning uses `window.visualViewport` when available (so mobile browser chrome and the virtual keyboard are respected) and always clamps the tooltip inside the visible viewport so its controls stay reachable, even when the target is taller than the screen. In that tall-target case the tooltip may overlap the highlighted section, which is preferable to the old behavior where Next/Skip could be pushed off-screen on mobile.
+The shared behavior behind every rebuilt **segmented switcher** (view/tab toggle). Markup/class-agnostic —
+each page keeps its own switch logic and just hands the tabs to these.
 
-Currently used by `badge-detail-tour.js` and `game-detail-tour.js`. Shared CSS: `.coach-overlay`, `.coach-tooltip`, `.coach-target-highlight` in `static/css/input.css`.
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `wireTablist(tabs, opts)` | NodeList/Array, `{onSelect, isActive, manual, ignite}` | WAI-ARIA tablist: roving `tabindex` + Arrow/Home/End nav. Returns `{ syncTabindex }` |
+| `igniteTab(tab)` | HTMLElement | One-shot `.pp-tab-ignite` glow bloom on the just-activated chip (restart-safe, reduced-motion gated) |
+| `syncViewParam(view, opts)` | string, `{default, paramView, params}` | Reflect the active view in `?view=` (default view stays clean) + strip view-scoped params on leave |
+
+`wireTablist` **automatic** activation (default) activates on click OR arrow — for cheap client-side
+switches (Career tabs, Badges Series/Gallery). **Manual** (`opts.manual`) moves focus
+only, letting the tab's own click/Enter activate — for expensive swaps (the Badges Series/Gallery HTMX
+`<a>` chips, where auto-activating per arrow would fire a request each keypress). Call the returned
+`syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX `afterSwap`). → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
+
+### PlatPursuit.virtualBoard / wireBoard / boardEntrance
+
+The leaderboard stack. `virtualBoard` is the engine, `wireBoard` is the per-surface wiring, and
+`boardEntrance` is the entrance animation. Three surfaces run all three (Global Boards, badge detail's
+Ranks tab, job detail's Ranks tab); game detail joined them in 2026-08 -- all four run `wireBoard` on the shared row.
+
+| Function | Args | Returns |
+|---|---|---|
+| `virtualBoard(o)` | `{list, total, rowSelector, rowHeight, fetchRows, pageSize?, rankKey?, youRank?, chromeInset?, onRender?}` | `{jump, refresh, destroy}` |
+| `wireBoard(root, o?)` | `root` = `[data-lb-board]`; `{scope?, chromeInset?, onRender?}` | `{jump, refresh, destroy}`, or **null** for an empty board |
+| `boardEntrance(root)` | `root` = `[data-lb-board]` | — |
+| `wireBoardSearch(o)` | `{input, drop, form, suggestUrl, jump, rankUrl?, total?, itemClass?}` | — |
+
+`wireBoardSearch` is the board typeahead: type a name, pick a hunter, land on their rank. `wireBoard`
+wires it automatically when the jump bar's `extra_partial` slot holds a search field, pointing it at the
+board's own `?suggest=` — so a suggestion always carries a rank on the board being read. Game detail
+calls it directly, because it also passes `rankUrl` (a `?at=` preview of the hunter at a typed rank) and
+mirrors the field into its minibar. Matching is PREFIX, server-side: nothing indexes `icontains` on
+`Profile`, and the navbar's hunter search made the same call.
+
+`fetchRows(start, count)` takes two arguments -- `from` went with `invert`, since a display position IS a
+rank once no board can be read bottom-first.
+
+`virtualBoard` ADDS `lb-wall--virtual` when it mounts and removes it on `destroy()`. The server ships a
+plain flow list: that class absolutely positions every row, and the height reserving their space is set at
+mount, so shipping them together made any board that failed to mount a zero-height pile.
+
+`wireBoard` reads everything else off the root as `data-lb-*` (`total`, `page-size`, `rows-url`,
+`params`, `viewer-rank`), so no caller carries a page size or a URL of its own — that constant would be
+free to disagree with the server that pages by it. Markup comes from
+`templates/trophies/partials/leaderboard_board.html`.
+
+A root **missing `data-lb-page-size` does not fall back to a guess** — `wireBoard` declines to mount and
+returns an inert handle. A guess reproduces exactly the failure the attribute prevents: a client paging
+by one number against a server paging by another does not error, it shows gaps in the rows.
+
+It **always returns a handle, never null**, even with no board. It wires the rank box's `submit` and
+swallows it before anything else, because that `<form>` has no `action` and an unhandled Enter is a
+native GET to the bare path — which silently drops the reader's filters.
+
+The one remaining constant is `virtualBoard`'s `|| 62` row-height fallback, for a wall whose
+`--lb-row-h` did not resolve. That is a stylesheet failure, not a configuration one.
+
+**Do NOT use `staggerReveal` on a virtualized wall** — see below. Use `boardEntrance`.
+
+### The contract-card behaviours
+
+`_contract_card.html` is rendered by TWO pages (Career's Contracts board and job detail's Contracts tab),
+and most of what makes it feel finished is JavaScript. The markup alone is inert or, worse, stuck: adopting
+the template without these calls is how job detail shipped with covers shimmering forever, static figures
+and a still gallery. **If you render this card on a third page, you need all five.**
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `progressiveArt(scope?)` | container | Settles the cover-art skeleton once its image arrives |
+| `coverCarousel(scope?, opts?)` | `{beat?, fade?}` | Cycles the card's `data-gallery` frames while hovered |
+| `cardReveal(opts?)` | `{jobSelector?, threshold?}` | Per-card figure reveal on scroll-in; returns `{observe, reveal, disconnect}` |
+| `staggerCards(cards, opts?)` | `{step?, cap?}` | The batch entrance rise |
+| `ringHoverLink(scope, opts?)` | `{itemSelector?, cardSelector?}` | Cross-highlights a job and its arc in the split ring |
+
+**`progressiveArt`** is the one that is not optional. `.rp-tile__art::before` is a shimmering placeholder
+running an `infinite` animation, and the ONLY thing that stops it is `.is-loaded`, which this adds. A page
+that renders the card without calling it shows every cover pulsing forever -- and because `display: none`
+restarts a CSS animation, hiding and re-showing the container re-syncs them into one page-wide flash. It
+marks loaded on three paths: no image, an image already `complete` from cache (`load` will never fire
+again for it), and the real `load`/`error` pair.
+
+**`coverCarousel`** crossfades two stacked layers so a frame never shows through to the background, drifts
+each one, and draws a segment bar. Frames are preloaded on FIRST hover, not at render -- a wall of 24 cards
+would otherwise fetch every gallery for cards nobody points at. `fade` must match the CSS transition on
+`.rp-tile__img--fx`; it is a parameter precisely so two pages cannot hold different copies of that number.
+
+**`cardReveal`** animates a card's figures into their served values: reward XP counts up, tier bars fill
+from zero, ring arcs draw around, job cells ignite in sequence. The final state is server-rendered, so
+under reduced motion or without `IntersectionObserver` every card simply stays as served. **Call
+`disconnect()` before replacing the cards it watches** -- an observer holds a strong reference to every
+target until it intersects, so a grid that swaps without releasing them retains a detached node per unseen
+card, per swap.
+
+**`staggerCards`** is the card ARRIVING; `cardReveal` is its contents animating as it scrolls past. They
+are different moments and both callers use both.
+
+**`ringHoverLink`** ties a job to its arc in both directions. The lookup is scoped to the hovered element's
+own card, or hovering one job lights that slug on every card in the wall that happens to level it. The item
+selector differs per page (Career's 25-cell map vs job detail's named tiles); everything else is shared.
+
+**Callers:** `career.html` (all five) and `job_detail.html` (all five). Each was extracted the moment a
+second caller appeared -- see the "shuffle" note in [motion-patterns](motion-patterns.md) for why that
+threshold and not sooner.
+
+> **Re-running the inert-hook sweep.** A `data-*` attribute is a promise that something reads it, and five
+> broken promises have been found on these pages. A grep for "is this string mentioned in any JS?" does
+> NOT find them: a hook can be read by a delegated global listener, by a computed `dataset[key]`, or by a
+> class-based controller, and plenty of `data-*` are CSS selectors no JS should touch. What works is a
+> reader-set-vs-renderer-set join done by hand, with those three exceptions checked individually. It is a
+> sweep to run deliberately, not an assertion -- two attempts to automate it failed on correct code
+> (`tests/engine/test_no_inert_hooks.py` records both).
+
+### PlatPursuit.flipGrid
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `flipGrid(opts)` | `{container, itemSelector, key?, enter?, mark?, duration?}` | The "shuffle": survivors GLIDE to their new slots when a grid re-filters or re-sorts |
+
+Returns `{measure, play, run}`. First / Last / Invert / Play, in the two shapes the site actually needs:
+
+| mechanic | call | identity |
+|---|---|---|
+| synchronous (client-side `display` toggles, same nodes) | `run(mutate)` | the element itself |
+| asynchronous (an HTMX swap REPLACES the nodes) | `measure()` on `htmx:beforeSwap`, `play()` on `htmx:afterSwap` | `key(el)` -- a URL, in practice |
+
+**It marks survivors `is-revealed` + `pp-revealing`, and that is the half a hand-rolled copy forgets.**
+Those are exactly the classes `staggerReveal` skips, so the two engines cooperate: the reveal animates
+arrivals, the flip animates everything that was already there. Without the mark, the unchanged part of the
+wall fades in again on every filter. Note that a survivor which did NOT move still gets marked -- the tiles
+that visibly did not change are otherwise the ones that flicker.
+
+`enter: true` fades arrivals in; leave it off wherever `staggerReveal` owns them (two engines animating one
+element is how a card flickers). `mark: false` where nothing re-reveals afterwards.
+
+Under reduced motion `measure()` no-ops, so `play()` has nothing to invert from and the layout is simply
+whatever the mutation produced -- a reduced-motion reader gets no animation, never a grid that fails to
+re-filter.
+
+**Callers:** the Collection gallery (`collection.js`), Browse Hunters (`profile_list.html`), the jobs
+catalogue (`jobs_browse.html`). It was extracted from those three in 2026-08 after they had already drifted
+apart in duration and easing; `tests/engine/test_flip_grid.py` pins the contract and that all three still
+use it.
+
+### PlatPursuit.staggerReveal
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `staggerReveal(opts)` | `{grid, cardSelector, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids |
+
+> **Never on a virtualized list.** It adds `.pp-reveal` to the container permanently and the paired CSS
+> holds rows at `opacity: 0` until an IntersectionObserver grants `.is-revealed`. Rows mounted and evicted
+> by scroll position never reach that observer, so the list renders as blank space. Use `boardEntrance`.
+
+Hides the grid's cards (`hideClass`, default `.pp-reveal`), reveals those already present in ONE DOM-order
+batch, and returns `{ observe(nodes), disconnect() }` — call `observe()` on infinite-scroll-appended cards
+(from `InfiniteScroller`'s `onAppend`) so they reveal as they scroll in. The page supplies the per-card
+animation via `reveal(el, delayMs)` (use WAAPI `el.animate` so arrivals restart on freshly HTMX-swapped
+nodes); the engine owns the reduced-motion gate + batch stagger + observer, and marks each card
+`.is-revealed` once. Returns `null` when motion is off / no cards / no IntersectionObserver. **The standard
+for rebuilt browse grids** (Badges; the pending Challenges/Franchise/Company/Game-Lists/Browse rebuilds).
+**Not** for every reveal — see the note in [motion-patterns.md](../reference/motion-patterns.md) (Staggered grid reveal).
+
+### PlatPursuit.dismissableSheet
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `filterPanel(opts)` | `{form, toggle, panel, countEl?, skip?, count?, chipsHost?, dimTarget?, openOnLoad?}` | The browse toolbar's advanced-filter drawer: open/close with the height tween, the active-filter count badge, the results dim, and the chip-list edge fades |
+| `dismissableSheet(dialog, opts)` | HTMLElement, `{onClose, scrim?, threshold?, handle?}` | iOS-style "swipe down to close" for a modal on touch |
+
+**The common practice for every mobile modal.** Wire it on the modal's dialog: on a downward flick past
+`threshold` (default 90px) it slides the sheet off (fading `scrim`) and calls `onClose` — which should
+**hide instantly** (the helper already did the exit) and run the same cleanup the close button does. Drag
+only starts from the top of the dialog's scroll (mid-content scroll isn't hijacked), and **never from a
+draggable control** (`input`, `textarea`, `select`, `[role="slider"]`) -- a finger sliding a range input
+never travels perfectly horizontally, and the helper preventDefault()s any downward movement, so it was
+dragging the sheet instead of the thumb. Links and buttons are deliberately NOT excluded: they have no
+drag gesture to protect, and excluding them would leave a sheet whose body is a wall of cards with only
+its gutters draggable. Pass **`handle`** (a selector) to restrict the drag to one region -- the quick-rate
+modal uses `'.gd-modal__head'`, because it is the one sheet that is a FORM rather than something you read
+and its grabber pill sits in that header. The helper adds
+`.pp-dismissable` to the dialog, surfacing the shared touch-only grabber handle (`.pp-dismissable::before`):
+it fades in a beat after the sheet opens (`ppGrabIn`), rides the sheet off on a swipe, and fades out on a
+non-drag close (`ppGrabOut`, keyed on the modal's `.is-closing`) — all in `badge-inspect.css`, reduced-motion gated.
+Live on the badge-detail stats + contract modals, the Career job/contract modal, and (via
+`Medallion.detailModal`) every medallion **peek** across collection / badge list / badge detail. The peek
+can't FLIP its disc back from a dragged-off position, so on swipe it instead **returns the object home** --
+the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
+keeps the grow/shrink "put-down". Both routes send the object back to its slot.
+
+### PlatPursuit.CardDownload
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `attach(button, opts)` | HTMLElement, `{url, filename, toast?, onStart?, onError?, labels?, autoBind?}` | Wire a three-state download button. Returns `{run, setBlocked, reset, state}` |
+
+**The common practice for every server-rendered share card.** Pairs with
+`components/download-button.css` (the `.pp-dl` state classes) and
+`partials/download_button_icons.html` (the three glyphs, all shipped, CSS picks one). Live on the plat
+card modal, the recap ceremony, and the recap's below-fold panel — which between them had three copies of
+fetch-blob-anchor before this.
+
+The PNG is composed by headless Chromium on the server, so the press is **not** instant: `busy` is the
+load-bearing state, not `done`. And the file lands somewhere the page cannot see, so `done` is the only
+confirmation there is. Both are why the button is the progress indicator and announces like one
+(`aria-busy`, and the label swaps in place rather than the button being rebuilt).
+
+Fetch-then-save rather than navigating, which is the whole reason it exists: `location.href` is fine
+while the endpoint returns an attachment but its failure paths are not — a render error returns JSON and
+the per-user rate limit returns an HTML 403, either of which replaces the page with a bare error
+document. On the recap that took the open ceremony with it.
+
+Points worth knowing before you touch it:
+
+| Thing | Why |
+|---|---|
+| `url` / `filename` are **functions** | Resolved at press time. The ground and the art index both change while a modal is open, and a URL captured at bind time saves the card the hunter was looking at a minute ago |
+| `disabled` is **derived** | From the caller's reason (`setBlocked`, e.g. preview still loading) and the in-flight one, never written by either. They used to race: a theme swap re-disabled the button while the "Saved" revert timer was queued to re-enable it, and whichever fired last won |
+| idle label belongs to the **caller** | Unless `labels.idle` is passed, idle means "whatever it said before" — the plat card names its variant ("Download 100% card") and a fixed string demoted it to a generic "Download" the first time it was used |
+| the width is **pinned** at press | The stylesheet's `min-width` only knows OUR three labels, so a longer caller label shrank the button 50px mid-press and shuffled the row it sits in. Measured, not guessed — it depends on the font that loaded |
+| `toast: false` inside a takeover | The page toast host is `z-50`. A `<dialog>` gets a top-layer host for free; a takeover div (the recap stage, `z-90`) does not, so a toast fired from inside renders *behind* it. Those surfaces carry their own error line instead |
+| a **download** failure must not block | "Give it a minute" was being shown by the same call that disabled the only button that could take the advice. A *preview* failure blocks (no card exists); a download failure does not |
+
+### PlatPursuit.wireGuidelinesSheet
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `wireGuidelinesSheet()` | none | Wires the Community Guidelines sheet (`#gd-guidelines-modal`) -- close affordances + the `[data-gd-guidelines-open]` open delegate |
+
+Opens the sheet OVER whatever compose surface is showing, so reading the rules never loses an
+in-progress quick take. Idempotent and a no-op when the sheet isn't on the page, so every page that
+composes a surface linking to it can just call it. Read-only: agreement is recorded on submit, not here.
+
+### PlatPursuit.RatingFields / PlatPursuit.QuickRate
+
+Both live in `static/js/quick-rate.js`, not `utils.js` -- one feature's controller rather than a general
+utility, loaded only by the pages that compose it. The file is two layers, because the rating form has
+three hosts and only two of them are modals:
+
+- **`RatingFields`** owns the FORM and knows nothing about presentation.
+- **`QuickRate`** is the modal (`#gd-qr-modal`) wrapped around it.
+
+The fields themselves are one template, `partials/_rating_fields.html`, included by both hosts. The input
+NAMES are the API contract -- do not rename them.
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `RatingFields.attach(form, opts)` | see below | Drives any `<form>` carrying the shared fields; returns a handle |
+| `QuickRate.open(opts)` | the same, plus modal options | Opens + drives the quick-rate modal (`quick_rate_modal.html`) |
+
+```js
+var fields = PlatPursuit.RatingFields.attach(formEl, {
+    conceptId, groupId,          // required -- the POST target
+    existing, blurb,             // prefill; null/'' for a fresh rating
+    submitEl,                    // defaults to [data-gd-qr-submit] INSIDE the form
+    submitLabel, hoursLabel, playtimeHint,
+    onSaved(data, payload), onError(message),
+    onChange({ready, hours}),    // readiness changed -- gate your own button on it
+});
+// -> { setTarget(conceptId, groupId), prefill(existing, blurb), label(opts), submit(), state(), detach() }
+```
+
+`setTarget()` exists for the Rate My Games wizard, which advances through a queue against ONE form:
+detaching and re-attaching per game stacks a fresh set of listeners each time, and one submit then posts
+as many times as you have rated. `onChange` exists for the same host -- its submit button lives outside
+the form, next to Skip, so it gates itself on the hours field rather than letting the controller own it.
+
+```js
+PlatPursuit.QuickRate.open({
+    conceptId, groupId,          // required -- the POST target
+    existing,                    // {difficulty, grindiness, fun_ranking, overall_rating,
+                                 //  hours_to_platinum} or null
+    blurb,                       // existing quick take
+    title, submitLabel, cancelLabel, hoursLabel, playtimeHint,
+    onSaved(data, payload),      // the save landed (the modal has already closed)
+    onCancel(),                  // the explicit secondary button -- NOT a dismiss
+    onDismiss(),                 // X / backdrop / Esc / swipe
+    onOpen(), onClose(),         // lifecycle, for page chrome (e.g. the recede)
+});
+```
+
+The controller owns **everything except what happens after a save**: prefill (including the blurb),
+slider readouts, the character counter, the hours gate, agree-to-guidelines-on-submit, the POST, error
+surfacing, and (in `QuickRate`) every close affordance. Hosts: the Game Detail Ratings tab (its `onSaved`
+live-updates the community panel), the plat-card share modal (its `onSaved` invalidates the preview
+cache), and the Rate My Games wizard, which composes `RatingFields` directly because it renders the form
+inline beside a trophy list.
+
+`onCancel` and `onDismiss` are **deliberately separate**. The share flow opens this as a pre-download
+prompt where the secondary button means "skip, just download" -- so a dismiss must never fire it, or the
+universal get-me-out-of-here affordance hands you a file.
 
 ## Namespace Pattern
 
@@ -217,25 +503,18 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 
 ## Gotchas and Pitfalls
 
-- **Never use raw `IntersectionObserver` for viewport-relative infinite scroll sentinels.** CSS `transform: scale()` combined with `overflow: hidden` (from ZoomScaler) breaks `IntersectionObserver` clipping on sub-768px screens. Always use `ZoomAwareObserver` instead. Observers with a custom `root` element (e.g., inside a modal scroll container) are unaffected and can use `IntersectionObserver` directly.
+- **`ZoomAwareObserver` is now a thin wrapper over native `IntersectionObserver`** (its ZoomScaler reason was removed). New code can use `IntersectionObserver` directly; existing `ZoomAwareObserver` callers are fine as-is.
+- **A modal that rebinds listeners per open must tear down on the dialog's `close` event**, not only
+  on its explicit paths. `dismissableSheet`'s swipe bypasses them, so the next open double-binds and a
+  single submit fires twice. `QuickRate` binds an idempotent teardown to `close` for this reason.
+- **A host that gates its own submit button must be told LAST.** `RatingFields.attach()` resets the
+  button before prefilling, because prefilling announces readiness through `onChange` -- reversing that
+  order re-enabled a button the host had just correctly disabled.
 - **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
 - **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
-
-## Page-Specific Modules
-
-These are standalone JS files loaded only on their respective pages. They follow the same `window.PlatPursuit.*` namespace pattern but are not part of `utils.js`.
-
-| File | Class / Instance | Page | Purpose |
-|------|------------------|------|---------|
-| `static/js/welcome-tour.js` | `WelcomeTourManager` | All (via `base.html`) | 7-step modal carousel teaching hub navigation |
-| `static/js/game-detail-tour.js` | `GameDetailTourManager` (CoachMarks) | Game detail | 4-step coach marks (stats, flags, reviews, lists) |
-| `static/js/badge-detail-tour.js` | `BadgeDetailTourManager` (CoachMarks) | Badge detail | 4-step coach marks (overview, tiers, stages, leaderboards) |
-
-The Welcome Tour is a daisyUI `<dialog>` carousel. The game and badge detail tours share a single implementation through `PlatPursuit.CoachMarks.createTour(config)` (above); each of those files is a thin wrapper supplying step copy, DOM ids, and the dismiss endpoint. All three tour managers expose the same public surface: `init(autoShow)` entry point, `open()`/`dismiss(action)` lifecycle, keyboard nav (arrow keys + Escape), and a dismiss guard to prevent double API calls. See [Tutorial System](../design/tutorial-system.md) for design details.
 
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works
 - [Dashboard](../features/dashboard.md): Uses DragReorderManager for module reordering
 - [Roadmap System](../features/roadmap-system.md): Uses API, UnsavedChangesManager, DragReorderManager in the staff editor
-- [Tutorial System](../design/tutorial-system.md): Welcome Tour, Game Detail Tour, Badge Detail Tour

@@ -1,0 +1,102 @@
+/* ============================================================================
+ * PURSUER CARD -- the Forge. The card is MADE, not faded in: on a fresh sync
+ * completion (and a ?forge preview) it re-materializes, drawing on the Frame's
+ * fabrication vocabulary (chrome ignite, scan-beam reveal, hot arcing sparks,
+ * tier settle). One variant (~2.6s) -- quick + rare enough to use everywhere.
+ * pursuer-card-forge.js adds the state class, inserts the scan-beam + sparks,
+ * and ticks the numbers; this file is the choreography.
+ *
+ * Reduced-motion: the JS skips the whole forge (the card just appears); the
+ * guard below is belt-and-suspenders.
+ * ========================================================================== */
+
+/* NOTE: the card chrome (border-color + rank-glow box-shadow) is deliberately NOT animated
+ * during the forge. Those carry rank-specific *resting* values, so animating them to fixed
+ * keyframes made the glow fade out mid-forge and pop back when the class dropped (transitioning
+ * out of a filled animation is unreliable). The rank glow now stays constant throughout -- a
+ * stable vessel -- and the forge's energy comes from the scan-beam, sparks, and content reveal. */
+
+/* Content resolves in a staggered rise-and-focus, in the scan-beam's wake. */
+.pursuer-card--forging .pursuer-card__top          { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.55s both; }
+.pursuer-card--forging .pursuer-card__stats        { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.85s both; }
+.pursuer-card--forging > .pursuer-card__shelflabel { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.95s both; }
+.pursuer-card--forging .pursuer-card__fams         { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 1.05s both; }
+.pursuer-card--forging .pursuer-card__showcase     { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 1.25s both; }
+@keyframes pcForgeReveal { from { opacity: 0; transform: translateY(9px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* The scan-beam (JS-inserted) sweeps down the card once, hot-white at the leading edge. */
+.pursuer-card__forge-scan {
+    position: absolute; left: 0; right: 0; top: 0; height: 16%; pointer-events: none; z-index: 5; opacity: 0;
+    background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 24%, transparent) 55%, color-mix(in oklab, var(--pp-primary) 75%, #fff) 100%);
+}
+.pursuer-card--forging .pursuer-card__forge-scan { animation: pcForgeScan 1.0s ease-in 0.35s both; }
+/* The beam's hot leading edge (its bottom) sweeps from the card's TOP edge to its BOTTOM edge.
+   The transparent tail starts just above the top (invisible -> no bleed), and the edge reaches
+   the bottom at full opacity, then fades IN PLACE -- so the scan covers the whole card without
+   sliding past it. translateY is in units of the beam's own height (16% of the card): 525% lands
+   the leading edge exactly on the bottom (16% + 525%*16% = 100%). The card is NOT overflow-clipped
+   (cover hover-lift + corner notches must not be cut), so the beam must never travel past 525%. */
+@keyframes pcForgeScan {
+    0%   { opacity: 0; transform: translateY(-100%); }
+    5%   { opacity: 1; }
+    90%  { opacity: 1; transform: translateY(525%); }
+    100% { opacity: 0; transform: translateY(525%); }
+}
+
+/* Hot sparks (JS-inserted, JS-animated with individual arcing/gravity trajectories). */
+.pursuer-card__forge-spark {
+    position: absolute; width: 3px; height: 3px; border-radius: 999px; pointer-events: none; z-index: 6;
+    background: radial-gradient(circle at 35% 30%, #fff, #ffd27a 45%, #ff9a3c 82%);
+    box-shadow: 0 0 6px 1px rgba(255, 170, 80, 0.8);
+}
+
+/* The newly-arrived platinum: no flash. A thick primary ring DRAWS itself clockwise from the top
+   as the cover lands (a conic fill masked to a border, so it traces the rounded edge), then
+   breathes until the user hovers/taps to acknowledge it (the JS clears the class). Lives on a
+   ::after ABOVE the image -- an inset shadow on the cover itself sits under the full-bleed <img>.
+   Inset ring, so the shelf clip can't cut it; a soft drop-shadow glows the stroke. */
+@property --pc-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+/* The newly-arrived platinum's marker. What made a plain self-drawing stroke feel cheap: a hard
+   flat line drawn at uneven (angular, not arc-length) speed, looping forever. The professional
+   move is a soft flowing LIGHT. A faint steady ring keeps the cover marked (::before); several
+   soft highlights of primary/white light flow around the whole lit border (::after), slightly
+   blurred, so it reads as ambient life, not a redraw (and the diffuse glow hides the angular-speed
+   unevenness). Both are masked borders drawn ABOVE the image -- an inset shadow sits under the
+   full-bleed <img>. Clears on first hover/tap. */
+.pursuer-card__cover--new::before,
+.pursuer-card__cover--new::after {
+    content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit;
+    padding: 3px;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    animation: pcRingIn 0.45s ease both;
+}
+.pursuer-card__cover--new::before { background: color-mix(in oklab, var(--pp-primary) 34%, transparent); }
+.pursuer-card__cover--new::after {
+    background: conic-gradient(from var(--pc-angle),
+        transparent 0deg,
+        color-mix(in oklab, #ffffff 60%, var(--pp-primary)) 60deg,
+        transparent 130deg,
+        var(--pp-primary) 210deg,
+        transparent 285deg,
+        color-mix(in oklab, #ffffff 55%, var(--pp-primary)) 330deg,
+        transparent 360deg);
+    filter: blur(0.6px) drop-shadow(0 0 5px color-mix(in oklab, var(--pp-primary) 55%, transparent));
+    animation: pcRingIn 0.45s ease both, pcRingOrbit 3s linear infinite;
+}
+@keyframes pcRingIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pcRingOrbit { to { --pc-angle: 360deg; } }
+
+/* Reduced-motion: no forge at all -- the card is simply present. */
+@media (prefers-reduced-motion: reduce) {
+    .pursuer-card--forging,
+    .pursuer-card--forging .pursuer-card__top, .pursuer-card--forging .pursuer-card__stats,
+    .pursuer-card--forging > .pursuer-card__shelflabel,
+    .pursuer-card--forging .pursuer-card__fams, .pursuer-card--forging .pursuer-card__showcase,
+    .pursuer-card--forging .pursuer-card__forge-scan { animation: none !important; }
+    .pursuer-card__cover--new::before { animation: none; }   /* static ring, no orbiting comet */
+    .pursuer-card__cover--new::after { display: none; }
+    .pursuer-card__forge-scan { display: none; }
+}

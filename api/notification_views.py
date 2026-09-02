@@ -507,10 +507,6 @@ class NotificationRatingView(APIView):
                 # Get updated averages
                 updated_averages = RatingService.get_community_averages(concept)
 
-                # Check for rating milestones
-                from trophies.services.milestone_service import check_all_milestones_for_user
-                check_all_milestones_for_user(profile, criteria_type='rating_count')
-
                 return Response({
                     'success': True,
                     'message': 'Rating updated!' if existing_rating else 'Rating submitted successfully!',
@@ -600,37 +596,3 @@ class AdminTargetCountView(APIView):
                 {'error': 'Failed to estimate recipient count.'},
                 status=http_status.HTTP_400_BAD_REQUEST
             )
-
-
-class AdminUserSearchView(APIView):
-    """
-    GET /api/v1/admin/notifications/user-search/?q=username
-    Search users for individual targeting.
-    """
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    authentication_classes = [SessionAuthentication]
-    throttle_classes = []
-
-    def get(self, request):
-        from django.db.models import Q
-        from trophies.models import Profile
-
-        query = request.GET.get('q', '').strip()
-        if len(query) < 2:
-            return Response({'users': []})
-
-        profiles = Profile.objects.filter(
-            Q(psn_username__icontains=query) |
-            Q(user__email__icontains=query)
-        ).select_related('user').filter(user__isnull=False)[:10]
-
-        users = []
-        for profile in profiles:
-            users.append({
-                'id': profile.user.id,
-                'psn_username': profile.psn_username,
-                'email': profile.user.email,
-                'avatar_url': profile.avatar_url or '',
-            })
-
-        return Response({'users': users})

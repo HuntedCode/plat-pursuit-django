@@ -1,0 +1,29 @@
+/* Button primitive — bespoke, token-driven. The strangler replacement for
+   DaisyUI .btn as surfaces convert; the action accent is carried, not painted on
+   (hover deepens it). Tokens: var(--pp-*) from input.css. */
+.bd-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    font-family: var(--pp-font-body); font-size: 0.78rem; font-weight: 600;
+    padding: 6px 12px; border-radius: var(--pp-radius-md);
+    border: 1px solid transparent; cursor: pointer; text-decoration: none;
+    white-space: nowrap; line-height: 1.2;
+    transition: background var(--pp-dur) var(--pp-ease),
+                border-color var(--pp-dur) var(--pp-ease),
+                color var(--pp-dur) var(--pp-ease);
+}
+.bd-btn svg { width: 0.92em; height: 0.92em; flex-shrink: 0; }
+.bd-btn--sm { font-size: 0.7rem; padding: 4px 9px; gap: 4px; }
+.bd-btn--icon { padding: 5px; border-radius: 999px; }
+.bd-btn--sm.bd-btn--icon { padding: 4px; }
+
+.bd-btn--primary {
+    background: color-mix(in oklch, var(--pp-primary) 18%, var(--pp-bg-2));
+    border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent);
+    color: var(--pp-primary);
+}
+.bd-btn--primary:hover {
+    background: color-mix(in oklch, var(--pp-primary) 26%, var(--pp-bg-2));
+    border-color: var(--pp-primary);
+}
+.bd-btn--ghost { color: var(--pp-text-mute); }
+.bd-btn--ghost:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.05); }

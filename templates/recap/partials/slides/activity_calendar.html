@@ -2,129 +2,74 @@
 {% load custom_filters %}
 {% comment %}
 Recap Slide: Activity Calendar
-Variables: days, max_count, total_active_days, first_day_weekday, first_day_offset, days_in_month, month_name, year
-{% endcomment %}
-<div class="flex items-center justify-center w-full h-full" data-slide-type="activity_calendar">
-    <!-- Display Box -->
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-4 py-6 md:px-8 md:py-7 text-center max-w-md">
-        <p class="text-base text-base-content/70 mb-1">Your activity in</p>
-        <h3 class="text-xl md:text-2xl font-bold text-primary mb-3">{{ month_name }} {{ year }}</h3>
+Variables: days, max_count, total_active_days, first_day_weekday, first_day_offset, days_in_month,
+           month_name, year, flavor_text
 
-        <!-- Calendar Grid -->
-        <div class="mb-3">
-            <!-- Day labels -->
-            <div class="grid grid-cols-7 gap-1 mb-1">
-                <span class="text-xs text-base-content/50">S</span>
-                <span class="text-xs text-base-content/50">M</span>
-                <span class="text-xs text-base-content/50">T</span>
-                <span class="text-xs text-base-content/50">W</span>
-                <span class="text-xs text-base-content/50">T</span>
-                <span class="text-xs text-base-content/50">F</span>
-                <span class="text-xs text-base-content/50">S</span>
+The dot grid IS the slide, so it takes the wide shell and gets the space; everything else is caption. The
+`.activity-dot` / `.activity-level-N` scale lives in recap-deck.css and is shared with the legend below.
+
+Days with a platinum are buttons, not divs: they open the platinum detail and were previously
+keyboard-unreachable. `data-day` / `data-platinums` is the contract monthly-recap.js binds to (in
+wireSlideInteractions, which runs regardless of motion preference -- these handlers used to live inside the
+animation and vanished for anyone with prefers-reduced-motion).
+{% endcomment %}
+<div class="rcp rcp--wide" data-slide-type="activity_calendar">
+    <p class="rcp__kicker">Your activity in</p>
+    <h3 class="rcp__title pp-tally pp-tally--lg">{{ month_name }} {{ year }}</h3>
+
+    <div class="rcp__body">
+        <div class="rcp-cal">
+            <div class="rcp-cal__grid rcp-cal__grid--head" aria-hidden="true">
+                <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
             </div>
 
-            <!-- Calendar days -->
-            <div class="grid grid-cols-7 gap-1">
-                {% comment %}Empty cells before first day{% endcomment %}
+            <div class="rcp-cal__grid">
+                {% comment %} Blank leading cells so day 1 lands on its real weekday. {% endcomment %}
                 {% for i in first_day_offset %}
-                <div class="w-8 h-8 md:w-9 md:h-9"></div>
+                <span class="rcp-cal__cell rcp-cal__cell--empty"></span>
                 {% endfor %}
 
                 {% for day_data in days %}
-                <div class="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center calendar-day stagger-item tooltip tooltip-top {% if day_data.platinum_count > 0 %}cursor-pointer platinum-day{% endif %}"
-                     style="animation-delay: {{ forloop.counter0 }}0ms;"
-                     data-tip="{{ day_data.count }} Trophies | {{ day_data.platinum_count }} Plats"
-                     data-day="{{ day_data.day }}"
-                     {% if day_data.platinum_count > 0 %}
-                     data-platinums='{{ day_data.platinums|tojson }}'
-                     {% endif %}>
-                    <div class="activity-dot activity-level-{{ day_data.level }} rounded-full transition-all duration-300"></div>
-                </div>
+                {% if day_data.platinum_count > 0 %}
+                <button type="button"
+                        class="rcp-cal__cell rcp-cal__cell--plat stagger-item"
+                        style="animation-delay: {{ forloop.counter0 }}0ms;"
+                        title="{{ day_data.count }} trophies, {{ day_data.platinum_count }} platinum{{ day_data.platinum_count|pluralize }}"
+                        aria-label="{{ month_name }} {{ day_data.day }}: {{ day_data.count }} trophies, {{ day_data.platinum_count }} platinum{{ day_data.platinum_count|pluralize }}"
+                        data-day="{{ day_data.day }}"
+                        data-platinums='{{ day_data.platinums|tojson }}'>
+                    <span class="activity-dot activity-level-{{ day_data.level }}"></span>
+                </button>
+                {% else %}
+                <span class="rcp-cal__cell stagger-item"
+                      style="animation-delay: {{ forloop.counter0 }}0ms;"
+                      title="{{ day_data.count }} trophies"
+                      data-day="{{ day_data.day }}">
+                    <span class="activity-dot activity-level-{{ day_data.level }}"></span>
+                </span>
+                {% endif %}
                 {% endfor %}
             </div>
-        </div>
 
-        <!-- Legend -->
-        <div class="flex items-center justify-center gap-2 mb-3">
-            <span class="text-xs text-base-content/50">Less</span>
-            <div class="flex items-center gap-1">
-                <div class="w-3 h-3 rounded-full activity-level-0"></div>
-                <div class="w-3 h-3 rounded-full activity-level-1"></div>
-                <div class="w-3 h-3 rounded-full activity-level-2"></div>
-                <div class="w-3 h-3 rounded-full activity-level-3"></div>
-                <div class="w-3 h-3 rounded-full activity-level-4"></div>
+            <div class="rcp-cal__legend">
+                <span>Less</span>
+                <span class="activity-dot activity-level-0"></span>
+                <span class="activity-dot activity-level-1"></span>
+                <span class="activity-dot activity-level-2"></span>
+                <span class="activity-dot activity-level-3"></span>
+                <span class="activity-dot activity-level-4"></span>
+                <span>More</span>
             </div>
-            <span class="text-xs text-base-content/50">More</span>
         </div>
 
-        <!-- Summary stats -->
-        <div class="text-sm text-base-content/70">
-            <span class="font-bold text-primary">{{ total_active_days }}</span> active day{{ total_active_days|pluralize }}
+        <div class="rcp-cal__totals">
+            <span><strong>{{ total_active_days }}</strong> active day{{ total_active_days|pluralize }}</span>
             {% if max_count > 0 %}
-            <span class="mx-2">|</span>
-            <span class="font-bold text-primary">{{ max_count }}</span> max in a day
+            <span class="rcp-cal__sep" aria-hidden="true"></span>
+            <span><strong>{{ max_count }}</strong> most in a day</span>
             {% endif %}
         </div>
-
-        {% if flavor_text %}
-        <p class="text-xs text-base-content/50 italic mt-3 pr-1">{{ flavor_text }}</p>
-        {% endif %}
     </div>
+
+    {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}
 </div>
-
-<style>
-    .activity-dot {
-        transition: all 0.3s ease;
-    }
-
-    /* Level 0: No activity - faint circle */
-    .activity-level-0 {
-        width: 8px;
-        height: 8px;
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    /* Level 1: Low activity (1-25%) - accent color (orange) */
-    .activity-level-1 {
-        width: 12px;
-        height: 12px;
-        background: rgba(255, 170, 92, 0.8);
-    }
-
-    /* Level 2: Medium-low activity (26-50%) - blend accent toward secondary */
-    .activity-level-2 {
-        width: 16px;
-        height: 16px;
-        background: rgba(186, 128, 178, 0.85);
-    }
-
-    /* Level 3: Medium-high activity (51-75%) - secondary color (purple) */
-    .activity-level-3 {
-        width: 20px;
-        height: 20px;
-        background: rgba(149, 128, 255, 0.9);
-    }
-
-    /* Level 4: Max activity (76-100%) - primary color (blue) */
-    .activity-level-4 {
-        width: 24px;
-        height: 24px;
-        background: rgba(103, 209, 248, 1.0);
-        box-shadow: 0 0 8px rgba(103, 209, 248, 0.5);
-    }
-
-    .calendar-day:hover .activity-dot {
-        transform: scale(1.2);
-    }
-
-    /* Platinum days - extra emphasis */
-    .platinum-day .activity-dot {
-        box-shadow: 0 0 12px rgba(103, 209, 248, 0.7);
-        border: 2px solid rgba(103, 209, 248, 0.5);
-    }
-
-    .platinum-day:hover .activity-dot {
-        transform: scale(1.3);
-        cursor: pointer;
-    }
-</style>

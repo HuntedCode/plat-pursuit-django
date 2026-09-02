@@ -8,34 +8,12 @@ from django.db.models.functions import Lower
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
 
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from trophies.mixins import HtmxListMixin
 from trophies.services import game_grouping_service as grouping
 from ..models import Company, ConceptCompany, Game, UserConceptRating, ProfileGame
 from ..forms import CompanySearchForm
 
 logger = logging.getLogger("psn_api")
-
-
-# Cover-art subquery annotations for company browse cards. The through-path
-# (Game -> Concept -> ConceptCompany -> Company) is the same for all three
-# tiers so we factor it out once.
-def _company_cover_annotations():
-    """Returns the four cover-art Subquery annotations for Company rows."""
-    path = 'concept__concept_companies__company'
-    return {
-        'representative_title_image': grouping.representative_title_image_subquery(
-            through_path=path,
-        ),
-        'representative_concept_icon': grouping.representative_concept_icon_subquery(
-            through_path=path,
-        ),
-        'representative_igdb_cover_id': grouping.representative_igdb_cover_id_subquery(
-            through_path=path,
-        ),
-        'representative_title_icon': grouping.representative_title_icon_subquery(
-            through_path=path,
-        ),
-    }
 
 
 # Detail-page role metadata. Driven by this list so ordering, slugs, and the
@@ -49,7 +27,7 @@ _ROLE_SPECS = [
 ]
 
 
-class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class CompanyListView(HtmxListMixin, ListView):
     """Browse page for game developers and publishers."""
     model = Company
     template_name = 'trophies/company_list.html'
@@ -57,14 +35,12 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     paginate_by = 32
 
     def get_queryset(self):
-        qs = super().get_queryset().annotate(
-            # game_count: distinct IGDB game IDs (the true "game" count).
-            # Two concepts sharing the same igdb_id count as ONE game.
-            game_count=Count('company_concepts__concept__igdb_match__igdb_id', distinct=True),
-            # version_count: distinct Games (individual PSN trophy lists).
-            version_count=Count('company_concepts__concept__games', distinct=True),
-            **_company_cover_annotations(),
-        ).filter(version_count__gt=0)
+        # game_count / version_count are MATERIALIZED columns (recompute_tag_covers, nightly)
+        # as of 2026-08-31 -- the live correlated subqueries sat in the WHERE clause, so the
+        # paginator COUNT + the page + every scroll fetch evaluated them for every one of ~3k
+        # company rows, the browse-backend audit's worst finding (est. 0.3-1s per request).
+        # Same semantics: distinct IGDB ids / distinct Game rows over ALL links.
+        qs = super().get_queryset().filter(version_count__gt=0)
 
         form = CompanySearchForm(self.request.GET)
         order = [Lower('name')]
@@ -138,6 +114,10 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                     )
                 ))
 
+            # The rating/popularity/plats sorts annotate UNDERSCORE-prefixed fields on purpose: they drive
+            # ORDER BY only. Unlike the genre/theme tiles, company tiles do NOT surface a per-tile sort-stat
+            # chip -- the .pp-gtile meta slot carries the studio logo + country instead (richer company
+            # identity), so there's no `stat_*` field for the shared tile to render. Deliberate divergence.
             if sort_val == 'games':
                 order = ['-game_count', Lower('name')]
             elif sort_val == 'games_inv':
@@ -183,7 +163,10 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                 )
                 order = [F('_total_plats').desc(nulls_last=True), Lower('name')]
 
-        return qs.order_by(*order)
+        # Materialized tile cover (recompute_tag_covers) read O(1) via select_related -- no live cover subquery.
+        return qs.select_related(
+            'representative_game', 'representative_game__concept', 'representative_game__concept__igdb_match',
+        ).defer('representative_game__concept__igdb_match__raw_response').order_by(*order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -191,11 +174,29 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Companies'},
         ]
+
+        # Header substance scards from the hourly heartbeat (the browse-family standard): full
+        # page only (guard mirrors HtmxListMixin's template selection). None until the cron
+        # warms the cache; the template hides the grid.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            from core.services.site_heartbeat import heartbeat_values
+            stats = heartbeat_values(
+                'companies_total', 'companies_developers', 'companies_publishers', 'company_games')
+            context['company_stats'] = stats if stats['companies_total'] is not None else None
+
         context['form'] = CompanySearchForm(self.request.GET)
+        context['current_sort'] = self.request.GET.get('sort', '')
+        context['current_query'] = self.request.GET.get('query', '').strip()
         context['selected_roles'] = self.request.GET.getlist('role')
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_genres'] = self.request.GET.getlist('genres')
         context['selected_country'] = self.request.GET.get('country', '')
+        context['total_company_count'] = context['paginator'].count if context.get('paginator') else 0
+        # Any advanced filter engaged (drives the Filters button's active dot + panel-open on load).
+        context['has_advanced_filters'] = any(
+            self.request.GET.getlist(k) for k in ('platform', 'genres', 'badge_series')
+        ) or bool(self.request.GET.get('country'))
 
         context['seo_description'] = (
             "Browse PlayStation game developers and publishers on Platinum Pursuit. "
@@ -205,7 +206,7 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return context
 
 
-class CompanyDetailView(ProfileHotbarMixin, DetailView):
+class CompanyDetailView(DetailView):
     """Detail page for a single company showing their games by role.
 
     Games are grouped by IGDB id so multi-platform releases stack as versions
@@ -215,18 +216,41 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
     """
     model = Company
     template_name = 'trophies/company_detail.html'
-    partial_template_name = 'trophies/partials/company_detail/tab_content.html'
+    # HTMX role-switch / sort changes swap only the grouped list; the header, role
+    # switcher, and sort toolbar stay put (same shape as FranchiseDetailView).
+    partial_template_name = 'trophies/partials/franchise_detail/game_groups_list.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
 
+    # A Sony/EA-sized publisher renders thousands of games of HTML in one role section (the
+    # browse-backend audit's finding: the page weight, not the queries, was the cost). The
+    # grouped list is paginated for the shared InfiniteScroller instead -- Jeffrey's call:
+    # infinite scroll like everything else, not a cap.
+    GROUPS_PER_PAGE = 24
+
+    def _serving_partial(self):
+        """HTMX (role/sort swap) or plain XHR (the InfiniteScroller's ?page fetch)."""
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        return bool(getattr(self.request, 'htmx', False) or is_xhr)
+
     def get_template_names(self):
-        # On HTMX requests (tab switch or sort change), return only the active
-        # tab's body partial so the rest of the page (header, tab bar, ad slot)
-        # stays in place. Non-HTMX requests render the full page so deep links
-        # to ?tab=...&sort=... still work for bookmarks / first paint.
-        if getattr(self.request, 'htmx', False):
+        # On HTMX (role switcher or sort) OR a scroller XHR fetch, return just the grouped-list
+        # partial so the header + switcher + toolbar stay put. Full page otherwise so a
+        # deep-linked ?tab=...&sort=... URL still works for bookmarks / first paint.
+        if self._serving_partial():
             return [self.partial_template_name]
         return [self.template_name]
+
+    def render_to_response(self, context, **response_kwargs):
+        # X-Has-Next stops the scroller one fetch early -- each saved fetch is a whole
+        # links-to-groups rebuild on a big publisher. Vary on the XHR discriminator: the same
+        # URL serves two bodies (HtmxListMixin's contract, mirrored here).
+        from django.utils.cache import patch_vary_headers
+        response = super().render_to_response(context, **response_kwargs)
+        patch_vary_headers(response, ('X-Requested-With',))
+        if self._serving_partial():
+            response['X-Has-Next'] = '1' if getattr(self, '_groups_has_next', False) else '0'
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -351,9 +375,12 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             context['parent_company'] = company.parent
 
         # Community stats across this company's games (unchanged from the
-        # pre-rebuild version — existing aggregation still correct).
+        # pre-rebuild version — existing aggregation still correct). FULL PAGE ONLY: the two
+        # big-IN aggregates below feed header-only stats, and the swap/scroll partials render
+        # just the grouped list -- without this gate every swap AND every scroller fetch paid
+        # them for nothing.
         company_concept_ids = [cc.concept_id for cc in all_concept_companies]
-        if company_concept_ids:
+        if company_concept_ids and not self._serving_partial():
             rating_agg = UserConceptRating.objects.filter(
                 concept_id__in=company_concept_ids,
                 concept_trophy_group__isnull=True,
@@ -364,6 +391,8 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
                 avg_grindiness=Avg('grindiness'),
                 avg_hours=Avg('hours_to_platinum'),
                 rating_count=Count('id'),
+                # Distinct rated games, folded into the same aggregate (was a second query).
+                rated_games=Count('concept_id', distinct=True),
             )
             context['company_avg_rating'] = rating_agg.get('avg_rating')
             context['company_avg_difficulty'] = rating_agg.get('avg_difficulty')
@@ -371,10 +400,7 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             context['company_avg_grindiness'] = rating_agg.get('avg_grindiness')
             context['company_avg_hours'] = rating_agg.get('avg_hours')
             context['company_rating_count'] = rating_agg.get('rating_count', 0)
-            context['company_rated_games'] = UserConceptRating.objects.filter(
-                concept_id__in=company_concept_ids,
-                concept_trophy_group__isnull=True,
-            ).values('concept_id').distinct().count()
+            context['company_rated_games'] = rating_agg.get('rated_games', 0)
 
             # Player stats summed across the company's games.
             game_agg = Game.objects.filter(
@@ -385,6 +411,35 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
         context['sections'] = sections
         context['current_tab'] = current_tab
         context['active_section'] = active_section
+        # `groups` + `empty_message` + `group_reveal` are the shared game_groups_list.html contract (also fed
+        # to that partial standalone on the HTMX role/sort swap). group_reveal gates pp-reveal since company
+        # detail runs staggerReveal on .fgroup.
+        #
+        # PAGINATED for the InfiniteScroller (GROUPS_PER_PAGE groups per fetch): the full role
+        # list still builds server-side (bounded Python), but a Sony-sized role section no
+        # longer ships thousands of games of HTML in one response. Past-the-end 404s -- the
+        # scroller's fallback stop signal.
+        all_tab_groups = active_section['groups'] if active_section else []
+        # ?page= is honored ONLY on the partial branch: the full page is always page 1, so a
+        # hand-edited /companies/x/?page=99 renders the page instead of 404ing, and a shared
+        # ?page=2 URL can't put the scroller's resume math out of step with the DOM (the lane
+        # audit's duplicate-append case).
+        if self._serving_partial():
+            try:
+                page_number = max(1, int(self.request.GET.get('page', 1)))
+            except (TypeError, ValueError):
+                page_number = 1
+        else:
+            page_number = 1
+        offset = (page_number - 1) * self.GROUPS_PER_PAGE
+        page_groups = all_tab_groups[offset:offset + self.GROUPS_PER_PAGE]
+        if page_number > 1 and not page_groups:
+            from django.http import Http404
+            raise Http404(f'Empty group page {page_number}')
+        self._groups_has_next = len(all_tab_groups) > offset + self.GROUPS_PER_PAGE
+        context['groups'] = page_groups
+        context['empty_message'] = 'No games found for this role.'
+        context['group_reveal'] = True
         context['sort_choices'] = grouping.SORT_CHOICES
         context['current_sort'] = sort_val
         context['hero_cover'] = hero_cover
@@ -395,7 +450,8 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
         context['user_progress_stats'] = user_progress_stats
 
         context['seo_description'] = (
-            f"View games developed and published by {company.name} on Platinum Pursuit."
+            f"PlayStation games developed, published, or ported by {company.name}. "
+            f"Browse trophy lists, community ratings, and platinum progress on Platinum Pursuit."
         )
 
         return context

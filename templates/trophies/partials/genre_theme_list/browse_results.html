@@ -1,0 +1,16 @@
+{% comment %} Genre / Theme results grid. Returned on HTMX search/sort swaps (HtmxListMixin serves this
+partial). Each item is a category tile (.pp-gtile): the representative member-game cover as a scrimmed
+backdrop with the grouping name + game count over it, plus the stat it's sorted by. `pp-reveal` is baked in
+only on HTMX swaps; on first load the inline JS adds it before observing (staggerReveal land-in). {% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ item_count }}" data-active-tab="{{ active_tab }}">
+    {% for item in items %}
+    {% include 'trophies/partials/tag_tile.html' with tag=item detail_url_name=detail_url_name item_type=item_type current_sort=current_sort %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <p class="pp-gtile-empty__title">No {% if active_tab == 'themes' %}themes{% else %}genres{% endif %} found</p>
+        <p class="pp-gtile-empty__hint">Nothing matches your search. Try a different term or clear it.</p>
+    </div>
+    {% endfor %}
+</div>

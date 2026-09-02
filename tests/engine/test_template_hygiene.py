@@ -1,0 +1,95 @@
+"""Repo-wide template checks for mistakes that render as VISIBLE TEXT rather than failing.
+
+Nothing here needs a database or a request. These are the failure modes that don't raise: the page
+loads, the tests pass, and the comment you wrote is sitting in the middle of the UI.
+"""
+import re
+from pathlib import Path
+
+import pytest
+
+TEMPLATES = Path(__file__).resolve().parents[2] / 'templates'
+
+#: `{#` ... `#}` spanning a newline. Django's lexer matches `{#.*?#}` WITHOUT DOTALL, so a multi-line
+#: one is never recognised as a comment and every character of it renders.
+MULTILINE_HASH_COMMENT = re.compile(r'\{#(?:(?!#\}).)*?\n(?:(?!#\}).)*?#\}', re.S)
+
+
+def _templates():
+    return sorted(TEMPLATES.rglob('*.html'))
+
+
+def test_no_multiline_hash_comments():
+    """`{# #}` is SINGLE-LINE only. Spanning a newline leaks the comment onto the page -- and into a
+    <script> block it lands mid-object-literal and takes the page's JS down with it, which is how the
+    retired platinum grid was sitting. Use `{% comment %} ... {% endcomment %}` for anything multi-line.
+
+    This has bitten repeatedly, always silently, which is why it is a test and not a note."""
+    offenders = []
+    for path in _templates():
+        text = path.read_text(encoding='utf-8')
+        for match in MULTILINE_HASH_COMMENT.finditer(text):
+            line = text[:match.start()].count('\n') + 1
+            snippet = ' '.join(match.group(0).split())[:70]
+            offenders.append(f'{path.relative_to(TEMPLATES)}:{line}  {snippet}...')
+
+    assert not offenders, (
+        'Multi-line {# #} comments render to the page. Use {% comment %}:\n  '
+        + '\n  '.join(offenders)
+    )
+
+
+STATIC_JS = Path(__file__).resolve().parents[2] / 'static' / 'js'
+
+
+@pytest.mark.parametrize('name,entry', [
+    # ratings-tab.js is the Game page's ratings driver -- the ONE in-page ratings host since the
+    # slim-down took the tab (and its game-detail.js machinery) off List detail.
+    ('ratings-tab.js', 'QuickRate'),
+    ('plat-cards.js', 'QuickRate'),
+    # The wizard is the third host, and the last one to stop carrying its own copy (2026-08). It renders
+    # the form INLINE rather than in a dialog, so it composes the inner layer directly.
+    ('rate-my-games.js', 'RatingFields'),
+])
+def test_the_rating_form_hosts_do_not_re_implement_the_driver(name, entry):
+    """The rating form has three hosts -- Game Detail's Ratings tab, the plat-card share modal, and the
+    Rate My Games wizard -- and each used to carry its own driver. They had already drifted: only Game
+    Detail surfaced the endpoint's field-level `errors`, so a blurb rejected for a banned word explained
+    itself on one page and failed generically on the other, and the wizard's copy had no blurb field at all.
+
+    All three now compose `quick-rate.js`, so none of them may POST the rating itself."""
+    src = (STATIC_JS / name).read_text(encoding='utf-8')
+    assert '/group/' not in src or '/rate/' not in src, (
+        f'{name} posts a rating directly again -- it should compose {entry}'
+    )
+    assert entry in src, f'{name} no longer uses the shared controller'
+
+
+def test_both_hosts_load_the_shared_controller():
+    """`quick-rate.js` defines PlatPursuit.QuickRate and must load BEFORE the page controller that calls
+    it, or the rate button is silently inert."""
+    root = Path(__file__).resolve().parents[2] / 'templates'
+    for page, controller in [
+        ('trophies/game_page.html', 'js/ratings-tab.js'),
+        ('shareables/plat_cards.html', 'js/plat-cards.js'),
+        ('trophies/rate_my_games.html', 'js/rate-my-games.js'),
+    ]:
+        html = (root / page).read_text(encoding='utf-8')
+        assert 'js/quick-rate.js' in html, page
+        assert html.index('js/quick-rate.js') < html.index(controller), f'{page}: load order'
+
+
+@pytest.mark.parametrize('name', [
+    'shareables/partials/share_modal.html',
+    'partials/rate_before_download_modal.html',
+    'shareables/plat_card.html',
+    'shareables/profile_card.html',
+    'trophies/partials/profile_detail/tabs/card_tab.html',
+    'trophies/partials/game_detail/quick_rate_modal.html',
+])
+def test_share_flow_templates_have_balanced_comment_tags(name):
+    """An unclosed `{% comment %}` swallows the rest of the file instead of erroring -- controls simply
+    stop existing. Spot-checked on the share flow, where the comment density is highest."""
+    text = (TEMPLATES / name).read_text(encoding='utf-8')
+
+    assert text.count('{% comment %}') == text.count('{% endcomment %}'), name

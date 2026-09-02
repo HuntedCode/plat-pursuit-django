@@ -1,0 +1,293 @@
+/* ============================================================
+ * BROWSE BADGE GALLERY -- the public catalog's per-tier medallion wall (?view=gallery on /badges/).
+ * The catalog-discovery cousin of the Collection Gallery: SHOWCASE-first (every medallion renders in full
+ * earned colour -- the badge as it exists, for everyone), with a logged-in viewer's ownership shown as a
+ * small CARD-corner marker, NEVER over the medallion. Server-driven filter/sort/paginate. Reuses .pp-med
+ * for the object and the .pp-gallery__ toolbar classes (globally bundled) for the controls.
+ * ============================================================ */
+.pp-bgal { --pp-list-accent: rgba(63, 205, 220, 1); display: flex; flex-direction: column; gap: 16px; }
+
+/* The wall: fixed responsive columns capped at 8 across (a catalog reads better in tidy rows than the
+   Collection's auto-fill, which packs 10-12 on wide screens). */
+.pp-bgal__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+@media (min-width: 480px)  { .pp-bgal__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 768px)  { .pp-bgal__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .pp-bgal__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .pp-bgal__grid { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+
+/* Filter panel: each dimension (Tier / State / Set) is a row of MULTI-select toggle chips, so you can pick
+   several at once (silver + gold, series + developer). Server-driven -- the chips are checkboxes; the form
+   applies on the Search button (not per-toggle, so multi-select doesn't reload on every click). */
+.pp-bgal__filters { display: flex; flex-direction: column; gap: 10px; }
+/* A row holding two groups side by side (Tier + State) -- wraps to stacked when the width runs out. */
+.pp-bgal__crow { display: flex; flex-wrap: wrap; gap: 10px 22px; }
+.pp-bgal__crow > .pp-bgal__cgroup { flex: 0 1 auto; }
+.pp-bgal__cgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.pp-bgal__clabel { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); min-width: 42px; }
+.pp-bgal__chip {
+    display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent);
+    font-size: 12px; font-weight: 600; color: var(--pp-text-mute); cursor: pointer; user-select: none;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.pp-bgal__chip:active { transform: scale(0.94); }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__chip:active { transform: none; } }
+.pp-bgal__chip input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+@media (hover: hover) { .pp-bgal__chip:hover { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); color: var(--pp-text); } }
+.pp-bgal__chip:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 18%, transparent);
+    color: var(--pp-text);
+}
+.pp-bgal__chip:has(input:focus-visible) { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
+/* Rarity chips carry a small class-coloured dot so the filter reads as the grade it selects. */
+.pp-bgal__chip--rarity::before { content: ''; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; flex: 0 0 auto; background: var(--rc, var(--pp-text-mute)); }
+.pp-bgal__chip--rarity[data-rarity="common"]   { --rc: var(--pp-rarity-common); }
+.pp-bgal__chip--rarity[data-rarity="uncommon"] { --rc: var(--pp-rarity-uncommon); }
+.pp-bgal__chip--rarity[data-rarity="rare"]     { --rc: var(--pp-rarity-rare); }
+.pp-bgal__chip--rarity[data-rarity="mythic"]   { --rc: var(--pp-rarity-mythic); }
+.pp-bgal__chip--rarity[data-rarity="unearned"] { --rc: var(--pp-primary); }   /* "Be the first" -> the CTA tint */
+
+/* Toolbar shell for BOTH the Series and Gallery views (they share .pp-bgal__bar now); the base card surface
+   comes from the shared .pp-toolbar-card class (added in the markup). On the badge page we quiet it (below). */
+.pp-bgal__toolbar {
+    padding: 12px 16px; margin-bottom: 18px;
+}
+/* Depth pass: the toolbar is chrome, so it sits BACK. Keep the shared base-200 fill but soften the lift
+   (shadow-md -> a subtle shadow) so the raised content cards below own the "pop", establishing a felt
+   hierarchy (substrate -> quiet toolbar -> lifted cards). Scoped to the badge views (via their wrappers) so
+   it quiets ONLY these toolbars, not the shared .pp-toolbar-card used on other pages. (It wins the cascade
+   because component CSS is @imported unlayered while .pp-toolbar-card lives in @layer base -- unlayered
+   always beats layered, regardless of specificity; the wrapper scoping is about reach, not winning.) */
+.pp-bgal .pp-bgal__toolbar,
+.pp-slist .pp-bgal__toolbar {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+/* Compact toolbar (mirrors the Contracts toolbar): a one-row PRIMARY bar -- search + sort + a Filters
+   toggle -- with the chip groups tucked into a collapsible advanced panel, so the default height is small.
+   Filters apply instantly (HTMX swap on change); no Apply button. */
+.pp-bgal__bar { display: flex; align-items: center; gap: 8px; }
+.pp-bgal__search { position: relative; flex: 1 1 auto; min-width: 0; }
+.pp-bgal__search > svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--pp-text-mute); pointer-events: none; }
+.pp-bgal__search input {
+    width: 100%; padding: 7px 12px 7px 32px; border-radius: 9px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font-size: 13px;
+}
+.pp-bgal__search input:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+/* Shared search-field affordances (opt-in markup, wired by PlatPursuit.wireSearchField): a `/` keyboard hint
+   when empty, a clear (x) button when there's text, an in-flight spinner while a search request runs. Only one
+   shows at a time, driven by `.has-value` / `.is-searching` on the [data-search-wrap] wrapper. Works on ANY
+   positioned search wrapper (browse `.pp-bgal__search`, Collection gallery, Career contracts, Badge list...).
+   See docs/reference/design-system.md "Search toolbar". */
+[data-search-wrap] { position: relative; }
+[data-search-wrap]:has([data-search-clear]) input { padding-right: 30px; }
+/* We render our own .pp-search-clear button, so hide the browser's native type="search" clear
+   glyph (would show as a duplicate, unstyled "x"). */
+[data-search-wrap] input[type="search"]::-webkit-search-cancel-button,
+[data-search-wrap] input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+.pp-search-kbd, .pp-search-clear, .pp-search-spin { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.pp-search-kbd {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; padding: 0 3px;
+    font-size: 9px; font-weight: 700; line-height: 1; color: var(--pp-text-mute); pointer-events: none;
+    background: color-mix(in oklab, var(--pp-text) 8%, transparent); border: 1px solid var(--pp-border); border-radius: 4px;
+}
+.pp-search-clear {
+    display: none; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; cursor: pointer;
+    color: var(--pp-text-mute); background: none; border: none; border-radius: 50%;
+    transition: color 0.14s ease, background 0.14s ease;
+}
+.pp-search-clear svg { width: 12px; height: 12px; }
+.pp-search-clear:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 9%, transparent); }
+.pp-search-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.pp-search-spin {
+    display: none; width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid var(--pp-border); border-top-color: var(--pp-primary); animation: ppSearchSpin 0.6s linear infinite;
+}
+[data-search-wrap].has-value .pp-search-kbd { display: none; }
+[data-search-wrap].has-value .pp-search-clear { display: inline-flex; }
+[data-search-wrap].is-searching .pp-search-kbd,
+[data-search-wrap].is-searching .pp-search-clear { display: none; }
+[data-search-wrap].is-searching .pp-search-spin { display: block; }
+@keyframes ppSearchSpin { to { transform: translateY(-50%) rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pp-search-spin { animation: none; } }
+.pp-bgal__advbtn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px; flex: 0 0 auto;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text-mute);
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.pp-bgal__advbtn:hover, .pp-bgal__advbtn.is-open { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); color: var(--pp-text); }
+.pp-bgal__advbtn:active { transform: scale(0.95); }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__advbtn:active { transform: none; } }
+.pp-bgal__advbtn > svg { width: 16px; height: 16px; }
+.pp-bgal__advbtn__n {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px;
+    border-radius: 999px; background: var(--pp-primary); color: #06140d; font-size: 11px; font-weight: 800; line-height: 1;
+}
+.pp-bgal__advbtn__n.is-pop { animation: ppBadgePop 0.3s var(--pp-ease); }
+@keyframes ppBadgePop { 0% { transform: scale(1); } 40% { transform: scale(1.32); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__advbtn__n.is-pop { animation: none; } }
+/* display: flow-root keeps the panel a BFC even when animatePanel flips it to overflow:visible at the end of the
+   open tween -- otherwise the inner's margin-top collapses OUT through the (now non-BFC) parent and the panel
+   snaps ~12px shorter in one frame (the end-of-open "jump"). BFC throughout = the margin stays contained, so the
+   measured scrollHeight matches the final auto height. overflow:visible still lets popovers escape (flow-root
+   doesn't clip). */
+.pp-bgal__advanced { display: flow-root; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); overflow: hidden; transition: height 0.32s var(--pp-ease), opacity 0.32s var(--pp-ease); }
+@media (prefers-reduced-motion: reduce) { .pp-bgal__advanced { transition: none; } }
+/* Owns its closed state: display:flow-root above would out-rank the UA [hidden] rule if
+   Tailwind preflight ever left the bundle, silently breaking animatePanel + the pre-paint
+   collapse (drawer_precollapse.html). */
+.pp-bgal__advanced[hidden] { display: none; }
+/* Both browse filter panels move their gap/padding/divider onto an inner wrapper (which clips under
+   overflow:hidden), so the panel itself collapses to a TRUE 0. Left on the panel, padding-top(12)+
+   border-top(1) would clamp the collapsed height to 13px under box-sizing:border-box -- 13px that then
+   snap away when `hidden` lands (the end-of-close "jump"). */
+#bgal-advanced, #gbrowse-advanced { margin-top: 0; padding-top: 0; border-top: 0; }
+#bgal-advanced > .pp-bgal__advanced-in,
+#gbrowse-advanced > .pp-bgal__advanced-in { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
+.pp-bgal__clear {
+    margin-top: 10px; align-self: flex-start; background: none; border: none; padding: 2px 0; cursor: pointer;
+    color: var(--pp-primary); font-size: 12px; font-weight: 600;
+}
+.pp-bgal__clear:hover { text-decoration: underline; }
+
+/* Each card frames the showcase medallion. Neutral resting edge (no per-state frame -- state lives in the
+   corner marker, not the card), tier-accent warm on hover. */
+.pp-bgal__card {
+    --tier-c: var(--pp-primary);
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 16px 12px 12px; border-radius: 14px;
+    /* Tier-tinted surface at rest (tier is the catalog's organizing dimension), matching the Series tiles so
+       the two tabs cohere: a subtle tier gradient + tinted border + soft lift -- all cheap props (no
+       filter/blur) so the infinite-scroll wall stays smooth. */
+    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 8%, var(--pp-bg-1)), var(--pp-bg-1));
+    border: 1px solid color-mix(in oklab, var(--tier-c) 22%, var(--pp-border));
+    /* Depth pass: stronger top-highlight + a deeper ambient shadow so the cell reads as catching light and
+       rising off the (now deeper) substrate. */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    text-decoration: none; color: inherit; scroll-margin-top: 96px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.pp-bgal__card[data-tier="bronze"]   { --tier-c: #cf9160; }
+.pp-bgal__card[data-tier="silver"]   { --tier-c: #b9c6d6; }
+.pp-bgal__card[data-tier="gold"]     { --tier-c: #e7c25c; }
+.pp-bgal__card[data-tier="platinum"] { --tier-c: #8fd2ea; }
+.pp-bgal__card .pp-med { --sz: 100px; }
+/* The medallion's own "x / y" count is meaningless in the showcase catalog (state is forced 'earned', so it
+   always reads N / N). The card caption carries the catalog-relevant stage info instead. */
+.pp-bgal__card .pp-med__count { display: none; }
+@media (hover: hover) {
+    .pp-bgal__card:hover {
+        border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--tier-c) 28%, transparent),
+                    0 12px 30px -14px color-mix(in oklab, var(--tier-c) 45%, #000);
+    }
+}
+.pp-bgal__card:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
+
+/* Scroll-reveal: hidden/revealed states for the medallion wall -- the cells materialize onto the wall as
+   they scroll in. JS + the Web Animations API drive the motion (see the shared note in series-list.css);
+   these rules only hold the states. Gated by prefers-reduced-motion; without JS the class is never added. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-bgal__card { opacity: 0; }
+    .pp-reveal .pp-bgal__card.is-revealed { opacity: 1; }
+}
+
+/* Scroll perf: the Browse wall is ALL showcase-'earned' medallions, so every one would carry the earned
+   tier-aura's filter: blur(14px) -- dozens of blur layers re-rastering on scroll cause jank (the Collection
+   only ever has a few earned at once, so it stays smooth). Drop the aura here; the full-colour art + plate +
+   cast shadow still read as premium and scrolling stays smooth. */
+.pp-bgal__card .pp-med__stage::before { display: none; }
+
+/* Ownership marker (logged-in only), pinned to the card corner -- never over the medallion. Earned/held ->
+   a green check; in-progress -> a hollow accent ring. Unearned renders nothing (pure catalog look). */
+.pp-bgal__owned {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 50%;
+}
+.pp-bgal__owned--earned {
+    background: #3fbf7f; color: #06140d;
+    box-shadow: 0 0 8px -1px color-mix(in oklab, #3fbf7f 70%, transparent);
+}
+.pp-bgal__owned--earned svg { width: 11px; height: 11px; }
+.pp-bgal__owned--progress {
+    width: 14px; height: 14px; background: transparent;
+    border: 2px solid var(--pp-primary);
+    box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+}
+/* Maintenance (held but lapsed): a RED ring, distinct from the cyan in-progress ring and the green earned
+   check -- "you had this, it needs re-earning". */
+.pp-bgal__owned--maintenance {
+    width: 14px; height: 14px; background: transparent;
+    border: 2px solid #e23026;
+    box-shadow: 0 0 8px -2px color-mix(in oklab, #e23026 70%, transparent);
+}
+/* Mastered (holo) hold: the earned check on a holographic wash, a step up from the flat green. */
+.pp-bgal__owned--holo {
+    background: linear-gradient(135deg, #8fd2ea, #c9a0ff 55%, #ffd08a);
+    box-shadow: 0 0 9px -1px color-mix(in oklab, #a9c9ff 75%, transparent);
+}
+
+/* Caption: the card name (frame.card_name) + two dim meta lines -- tier/set number, then type/stage progress. */
+.pp-bgal__caption { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 100%; margin-top: auto; padding-top: 4px; }
+.pp-bgal__name {
+    font-size: 12.5px; font-weight: 600; color: var(--pp-text); text-align: center;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-bgal__meta {
+    font-size: 10.5px; color: var(--pp-text-dim); text-align: center; font-variant-numeric: tabular-nums;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Platform-group name tinted in the group's medallion metal (matches the detail page's group colouring). */
+.pp-bgal__card[data-tier="bronze"]   { --card-metal: #cf9160; }
+.pp-bgal__card[data-tier="silver"]   { --card-metal: #b9c6d6; }
+.pp-bgal__card[data-tier="gold"]     { --card-metal: #e7c25c; }
+.pp-bgal__card[data-tier="platinum"] { --card-metal: #8fd2ea; }
+.pp-bgal__pg { color: var(--card-metal, var(--pp-text-dim)); font-weight: 700; }
+/* Live rarity grade on the card -- coloured by the shared --pp-rarity-* tokens (same source as the detail
+   gem). Static glow: a wall of cards must not all pulse. */
+.pp-bgal__grade { font-weight: 800; letter-spacing: 0.02em; }
+/* "Be the first" (no earners yet): an inviting primary-tinted italic, not the muted count grey. */
+.pp-bgal__cta { color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); font-style: italic; font-weight: 700; }
+/* Colour comes from the shared rarity scale (components/rarity.css) via data-rarity on this
+   element or an ancestor. This used to be four hand-rolled rules per surface. */
+.pp-bgal__grade { color: var(--rar-c); text-shadow: 0 0 4px var(--rar-glow); }
+
+/* Empty state. */
+.pp-bgal__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
+.pp-bgal__empty svg { width: 34px; height: 34px; margin: 0 auto 4px; opacity: 0.6; }
+.pp-bgal__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+
+/* ---- Shared results-swap motion (both views target #browse-results; the empty panel is used by both) ----
+   Two touches on the filter/sort HTMX swap so results never blank-flash, both motion-gated (reduced-motion
+   viewers get an instant, flash-free swap -- no dim, no keyframe):
+   1) In-flight settle: the stale grid dims (reads as "working") rather than sitting frozen; the freshly-
+      swapped cards then reveal in over it (see initReveal in badge_list.html). Driven by TWO classes so the
+      settle covers the WHOLE perceived wait, not just the network request: `.is-swapping` is added by JS the
+      instant you change a filter/sort -- so it spans the 250ms hx-trigger debounce, which is most of the
+      felt latency on a fast server (a request-only dim would flash for a few ms after a dead 250ms pause and
+      be missed) -- and `.htmx-request` (via hx-indicator="#browse-results") covers the Enter/submit path.
+   2) Empty-state entrance: a no-results panel fades + rises in instead of hard-cutting. Fresh DOM node per
+      swap, so a plain CSS animation runs reliably on insert (no WAAPI needed here). */
+/* The in-flight dim is a STATE, not motion -- keep it for reduced-motion users too (they lost it when the
+   dim moved off the ungated opacity-50 utility onto .is-swapping). Only the fade transition + empty-state
+   entrance animation are motion, so those stay gated. */
+/* `#tab-results` is the profile page's own results container -- the same settle, on a surface whose
+   results live in a TAB rather than at the page's top level. Named explicitly rather than folded into a
+   bare `.is-swapping` rule, so the class stays inert anywhere it has not been opted in deliberately. */
+#browse-results.htmx-request,
+#browse-results.is-swapping,
+#tab-results.htmx-request,
+#tab-results.is-swapping { opacity: 0.4; }
+@media (prefers-reduced-motion: no-preference) {
+    #browse-results, #tab-results { transition: opacity 0.18s ease; }
+    .pp-bgal__empty, .pp-slist__empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}
+@keyframes ppResultsEmptyIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

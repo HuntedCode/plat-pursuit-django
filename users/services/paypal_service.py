@@ -68,7 +68,8 @@ class PayPalService:
         return PAYPAL_PLAN_TO_TIER.get(plan_id)
 
     @staticmethod
-    def create_subscription(user, tier: str, return_url: str, cancel_url: str) -> str:
+    def create_subscription(user, tier: str, return_url: str, cancel_url: str,
+                            interval: str = 'monthly') -> str:
         """
         Create a PayPal subscription and return the approval URL.
 
@@ -76,7 +77,7 @@ class PayPalService:
 
         Args:
             user: CustomUser instance
-            tier: Subscription tier ('ad_free', 'premium_monthly', etc.)
+            tier: Subscription tier ('premium_monthly', 'supporter', etc.)
             return_url: URL PayPal redirects to after approval
             cancel_url: URL PayPal redirects to if user cancels
 
@@ -88,12 +89,16 @@ class PayPalService:
             requests.HTTPError: If PayPal API call fails
         """
         mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
-        plans = PAYPAL_PLANS.get(mode, {})
-
-        if tier not in plans or not plans[tier]:
-            raise ValueError(f"Invalid or unconfigured PayPal tier: {tier}")
-
-        plan_id = plans[tier]
+        from users.constants import LADDER_SLUGS, PAYPAL_LADDER_PLANS
+        if tier in LADDER_SLUGS:
+            # Ladder branch: PayPal plans are per-interval, so the (slug, interval) pair picks one
+            # of twelve. The legacy flat map below keeps the grandfathered tiers renewable.
+            plan_id = (PAYPAL_LADDER_PLANS.get(mode, {}).get(tier) or {}).get(interval)
+        else:
+            plans = PAYPAL_PLANS.get(mode, {})
+            plan_id = plans.get(tier) or None
+        if not plan_id:
+            raise ValueError(f"Invalid or unconfigured PayPal tier: {tier} ({interval})")
 
         payload = {
             'plan_id': plan_id,
@@ -141,6 +146,57 @@ class PayPalService:
         )
         response.raise_for_status()
         return response.json()
+
+    #: The membership page reads status/next-billing through this snapshot instead of a live
+    #: PayPal call per GET. 8h TTL; busted by every subscription webhook and by the user's own
+    #: cancel action, so state changes show immediately while a quiet subscription costs one
+    #: API call per 8 hours.
+    SUB_CACHE_KEY = 'paypal:sub:' + settings.PAYPAL_MODE + ':{id}'
+    SUB_CACHE_TTL = 60 * 60 * 8
+    #: Failure marker: cached for 60s so a PayPal outage costs one timeout per minute, not one
+    #: 30s hang per page GET (the exact thing the snapshot exists to prevent).
+    SUB_CACHE_MISS = '__paypal_unavailable__'
+    SUB_CACHE_MISS_TTL = 60
+
+    @staticmethod
+    def get_cached_subscription_snapshot(subscription_id: str) -> Optional[dict]:
+        """The three display primitives ({'status', 'next_billing_time', 'plan_id'}), cached.
+
+        Failures cache nothing and return None -- the page renders without the date rather than
+        hanging on PayPal, and the next request retries instead of pinning a miss for 8h.
+        """
+        if not subscription_id:
+            return None
+        key = PayPalService.SUB_CACHE_KEY.format(id=subscription_id)
+        snapshot = cache.get(key)
+        if snapshot == PayPalService.SUB_CACHE_MISS:
+            return None
+        if snapshot is not None:
+            return snapshot
+        try:
+            details = PayPalService.get_subscription_details(subscription_id)
+        except Exception:
+            logger.exception("PayPal subscription snapshot fetch failed for %s", subscription_id)
+            cache.set(key, PayPalService.SUB_CACHE_MISS, PayPalService.SUB_CACHE_MISS_TTL)
+            return None
+        snapshot = {
+            'status': details.get('status'),
+            'next_billing_time': (details.get('billing_info') or {}).get('next_billing_time'),
+            'plan_id': details.get('plan_id'),
+            # The welcome page's ownership check reads through this cache too (an uncached
+            # 30s provider call driven by a query param was the audit find).
+            'custom_id': details.get('custom_id'),
+        }
+        if not snapshot['status']:
+            # A 200 with no status is not a snapshot worth pinning for 8 hours.
+            return None
+        cache.set(key, snapshot, PayPalService.SUB_CACHE_TTL)
+        return snapshot
+
+    @staticmethod
+    def bust_subscription_snapshot(subscription_id: str) -> None:
+        if subscription_id:
+            cache.delete(PayPalService.SUB_CACHE_KEY.format(id=subscription_id))
 
     @staticmethod
     def cancel_subscription(subscription_id: str, reason: str = "User requested cancellation") -> bool:
@@ -214,6 +270,9 @@ class PayPalService:
             logger.warning(f"No subscription_id in PayPal webhook event {event_type}")
             return
 
+        # Every subscription event outdates the membership page's cached snapshot.
+        PayPalService.bust_subscription_snapshot(subscription_id)
+
         # Look up user by paypal_subscription_id
         try:
             user = CustomUser.objects.get(paypal_subscription_id=subscription_id)
@@ -227,14 +286,63 @@ class PayPalService:
                         # Set PayPal fields on the user object without saving yet.
                         # activate_subscription() will save all fields atomically.
                         user.paypal_subscription_id = subscription_id
-                    except (CustomUser.DoesNotExist, ValueError):
-                        logger.warning(f"No user found with custom_id {custom_id} for PayPal sub {subscription_id}")
+                    except ValueError:
+                        # An unparseable custom_id is a malformed/foreign event, NOT a proof the
+                        # subscription is ours-but-orphaned -- never cancel on it.
+                        logger.warning(f"Unparseable custom_id {custom_id!r} for PayPal sub {subscription_id}")
+                        return
+                    except CustomUser.DoesNotExist:
+                        # SELF-HEAL: custom_id is OUR user-id stamp, written at plan creation --
+                        # a valid id with no row means the account died between checkout approval
+                        # and this webhook (the deletion race). Left alone the subscription bills
+                        # forever with no site-side cancel path, so cancel it at PayPal now.
+                        # Behind the same default-off flag as the Stripe heal, and NEVER silent:
+                        # cancel_subscription returns False on a non-204 and requests can raise.
+                        from django.conf import settings as dj_settings
+                        if not getattr(dj_settings, 'PAYMENT_SELF_HEAL_ENABLED', False):
+                            logger.error(
+                                f"Self-heal disabled: PayPal sub {subscription_id} activated for "
+                                f"deleted user {custom_id}; cancel it BY HAND (no PayPal arm in "
+                                f"the audit sweep)")
+                            return
+                        logger.error(
+                            f"SELF-HEAL: PayPal sub {subscription_id} activated for deleted user "
+                            f"{custom_id}; cancelling at the processor")
+                        try:
+                            cancelled = PayPalService.cancel_subscription(
+                                subscription_id,
+                                reason='Account deleted before activation webhook landed',
+                            )
+                        except Exception:
+                            logger.exception(
+                                f"SELF-HEAL FAILED (exception) for PayPal sub {subscription_id}; "
+                                f"cancel it BY HAND in the PayPal dashboard")
+                            return
+                        if not cancelled:
+                            logger.error(
+                                f"SELF-HEAL FAILED (non-204) for PayPal sub {subscription_id}; "
+                                f"cancel it BY HAND in the PayPal dashboard")
                         return
                 else:
                     logger.warning(f"No user found for PayPal subscription {subscription_id}")
                     return
             else:
                 logger.warning(f"No user found with paypal_subscription_id {subscription_id}")
+                return
+
+        # THE PROVIDER GUARD, mirror of the Stripe handler's ("a Stripe event must never end a
+        # PAYPAL subscriber's premium"): a member in PayPal grace can now re-subscribe (the
+        # double-subscribe guard reports False for a cancelled sub), and if they switch to
+        # Stripe, the OLD PayPal sub's later CANCELLED/SUSPENDED/EXPIRED must not strip the
+        # premium their live Stripe subscription is paying for. ACTIVATED and SALE.COMPLETED
+        # stay unguarded: activation is how a provider BECOMES current.
+        if event_type in ('BILLING.SUBSCRIPTION.CANCELLED', 'BILLING.SUBSCRIPTION.SUSPENDED',
+                          'BILLING.SUBSCRIPTION.EXPIRED'):
+            if user.subscription_provider != 'paypal' or user.paypal_subscription_id != subscription_id:
+                logger.info(
+                    f"Ignoring stale PayPal {event_type} for {user.email}: "
+                    f"current provider={user.subscription_provider}, event sub={subscription_id}"
+                )
                 return
 
         if event_type == 'BILLING.SUBSCRIPTION.ACTIVATED':

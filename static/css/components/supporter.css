@@ -1,0 +1,231 @@
+/* ============================================================================================
+   The supporter mark: how a supporter's name looks, anywhere it appears.
+   --------------------------------------------------------------------------------------------
+   ONE animation, six colours. The level changes the hue and nothing else -- no extra glow at the
+   top, no second shape, no escalating amplitude. That is what keeps this on the right side of the
+   guardrail in `visual-identity.md`: flair is a SEPARATE visual language from earned status, never
+   a better one, and *neon is earned by state, not bought*. A treatment that got louder with price
+   would be buying prominence next to hunters who earned their rank.
+
+   REPLACES `.legendary-title` (input.css:485), which is legacy and should not be used. That one was
+   built to animate and never wired -- `background-size: var(--shimmer-size)` referenced a custom
+   property that is not defined anywhere in the codebase, so it had no oversized track to slide
+   along. It also used Montserrat (not a site font), a four-layer text-shadow, and a gold-and-orange
+   palette, which on a trophy site reads as achievement rather than support.
+
+   COLOUR ARRIVES INLINE as `--sup-t`, straight from `SUPPORT_TIERS[*]['colour']` in
+   users/constants.py. There is deliberately no per-level rule here: the palette lived in a Python
+   list AND a CSS block once, and the two could quietly disagree. The constant is the only source.
+
+       <span class="pp-supname" style="--sup-t: {{ tier.colour }}">Hunter</span>
+
+   NOT YET WIRED SITE-WIDE. Every surface that renders a username -- leaderboard rows, comments, the
+   hunters wall -- knows only `Profile.user_is_premium`, a boolean. Colouring by level needs the
+   level denormalized onto Profile beside it (`update_profile_premium` is the single writer and
+   already saves two fields, so it would save a third). That migration is deliberately NOT done yet:
+   the ladder is still placeholders and its names may move, and a migration for a design in flux is
+   how you end up migrating twice.
+   ============================================================================================ */
+
+.pp-supname {
+    font-weight: 700;
+    /* The resting state is a flat tier-coloured name. Everything below is addition, so if any of it
+       fails to apply the name is still legible and still on-brand. */
+    color: var(--sup-t, var(--pp-accent));
+}
+
+/* `background-clip: text` needs `color: transparent` to show through, which means an unsupported
+   browser renders an INVISIBLE username. Gating on support keeps the flat colour above as the
+   fallback rather than nothing at all. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+    .pp-supname {
+        /* Two light values rather than one, mixed here rather than inside the keyframe: lightningcss
+           silently drops @keyframes stops containing color-mix, which is a documented trap here. */
+        --sup-crest: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 26%, white);
+        --sup-swell: color-mix(in oklab, var(--sup-t, var(--pp-accent)) 62%, white);
+
+        /* A TRAIN OF THREE BANDS at irregular widths and spacings, not one sliding highlight. The
+           irregularity is the whole point: evenly spaced bands read as a pulse and the eye locks
+           onto the beat, while uneven ones read as light moving over water.
+
+           The first and last thirds are flat, so the window at 0% and at 100% shows the same thing
+           and the loop's wrap is invisible without needing a fade or a rest beat. */
+        background-image: linear-gradient(
+            100deg,
+            var(--sup-t, var(--pp-accent)) 0%,
+            var(--sup-t, var(--pp-accent)) 30%,
+            var(--sup-swell) 37%,
+            var(--sup-crest) 41%,
+            var(--sup-swell) 45%,
+            var(--sup-t, var(--pp-accent)) 52%,
+            var(--sup-swell) 58%,
+            var(--sup-t, var(--pp-accent)) 63%,
+            var(--sup-swell) 70%,
+            var(--sup-crest) 74%,
+            var(--sup-t, var(--pp-accent)) 80%,
+            var(--sup-t, var(--pp-accent)) 100%
+        );
+        background-size: 300% 100%;
+        background-position: 0% 50%;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+    }
+}
+
+/* Slow enough to be ambient. At this rate it is something you notice on the second look rather than
+   the first, which is the difference between a supporter mark and a mobile-game nameplate.
+   `linear` on purpose: an eased loop accelerates and decelerates once per cycle, which is exactly
+   the beat the irregular bands exist to avoid. */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (background-clip: text) or (-webkit-background-clip: text) {
+        .pp-supname { animation: ppSupFlow 16s linear infinite; }
+    }
+}
+
+/* Offsets a name against its neighbours so a column of them never moves in unison, which is the one
+   thing that would turn this back into a pulse. Set per row where the surface can afford it. */
+.pp-supname[style*="--sup-delay"] { animation-delay: var(--sup-delay); }
+
+/* ------------------------------------------------------------------------------ the star ---- */
+/* ONE SHAPE, a changing count, in the level's own colour.
+
+   The star and the name share a hue on purpose: together they are ONE mark rather than two things
+   that happen to sit next to each other. A pale tint and a constant colour were both tried and both
+   broke that -- the tint read as washed out and the constant stopped telling levels apart.
+
+   No glow. A `drop-shadow` here eventually renders on every supporter name in a virtualized board,
+   and it was not what the mark needed anyway. */
+.pp-supstar {
+    width: 11px;
+    height: 11px;
+    flex: none;
+    fill: var(--sup-t, var(--pp-accent));
+}
+
+/* The entry level, and the only outline: it reads as the start of something rather than a lesser
+   version of it. */
+.pp-supstar.is-outline {
+    fill: none;
+    stroke: var(--sup-t, var(--pp-accent));
+    stroke-width: 2;
+    stroke-linejoin: round;   /* miter points read spiky at 10px; the share cards already round */
+}
+
+/* ---- the mark, composed (components/name_mark.html) --------------------------------------
+   Name + glyph as ONE inline object, everywhere a marked name renders. The name rides the
+   existing .pp-supname (flat colour, flow under no-preference); the glyph slot holds stars for
+   supporter levels or a service glyph (staff wrench / mod shield) stroked in the mark colour. */
+.pp-markname {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* Inside the composed mark the NAME is the flexible part: it ellipsizes, the glyph never does.
+   Scoped here so bare .pp-supname uses elsewhere (storefront examples) keep their natural flow. */
+.pp-markname .pp-supname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    animation-delay: var(--sup-delay, 0ms);   /* set per row by the tag's index param */
+}
+
+.pp-markname__glyph {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex: none;
+}
+
+.pp-markname__svc {
+    width: 12px;
+    height: 12px;
+    color: var(--sup-t, var(--pp-accent));   /* solid fill via currentColor, like the stars */
+}
+
+/* The mark's TITLE ("PlatPursuit Backer" / "Staff") joining a worn-title line. QUIET on
+   purpose, per the register rule: it sits in the EARNED title's slot, so it must never
+   out-weigh or out-chroma its neighbour -- the hue (mixed down against the line's mute) still
+   names the level, at the line's own weight. Roman even in italic slots: a roman coloured
+   phrase in an italic slot reads as a different KIND of thing, which is the whole point. The
+   raw hue arrives inline as --mt-c from the tag. */
+.pp-marktitle {
+    font-weight: 500;
+    font-style: normal;
+    white-space: nowrap;
+    color: color-mix(in oklab, var(--mt-c, var(--pp-accent)) 62%, var(--pp-text-mute));
+}
+
+.pp-marktitle__dot { color: var(--pp-text-mute); margin: 0 4px; font-style: normal; }
+
+/* Compact context (dense rows): slightly smaller glyphs. */
+.pp-markname--sm .pp-markname__svc { width: 11px; height: 11px; }
+.pp-markname--sm .pp-supstar { width: 10px; height: 10px; }
+
+/* Large context (page-header h1s: Career hero, profile header). At 24-30px name sizes the 11px
+   glyph read as debris beside the name; here it scales to stay part of it. */
+.pp-markname--lg { gap: 6px; }
+.pp-markname--lg .pp-supstar { width: 15px; height: 15px; }
+.pp-markname--lg .pp-markname__svc { width: 16px; height: 16px; }
+
+/* Service names hold STILL. The flow is the bought register's signature -- staff and mods get
+   the colour and the glyph, not the shimmer, so three registers stay three renderings. */
+.pp-markname--svc .pp-supname {
+    animation: none;
+    background-image: none;
+    color: var(--sup-t, var(--pp-accent));
+    -webkit-text-fill-color: currentColor;
+}
+
+/* STATE OUT-RANKS IDENTITY. Wherever a surface colours a name to say something about NOW --
+   this row is you, the search landed here, this name is the sort axis, you are hovering it --
+   that colour must win over the mark's, or the state reads as broken for exactly the marked
+   users. The glyph keeps telling the identity; the name answers the state. */
+.lb-row.is-you .pp-supname,
+.lb-row.is-found .pp-supname,
+.lb-row__who:hover .pp-supname,
+.pp-hcard__name--sorted .pp-supname,
+.gd-blurb__name:hover .pp-supname {
+    animation: none;
+    background-image: none;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+}
+
+/* The Pursuer Card is the EARNED signature: the mark keeps its colour and stars but not the
+   flow (which at 22px outranked the 11px rank line -- the paid register must never sit above
+   the earned one), and the card's 800 weight wins over .pp-supname's 700. */
+.pursuer-card__name .pp-supname {
+    font-weight: 800;
+    animation: none;
+    background-image: none;
+    color: var(--sup-t, var(--pp-accent));
+    -webkit-text-fill-color: currentColor;
+}
+
+/* Mobile facepile: in NAME contexts the star run imbricates like an avatar stack -- five stars
+   compress from ~55px to ~26px while the count stays readable as visible mass. Each overlapped
+   star wears a thin rim in the surface colour (paint-order: stroke, cheap vector work -- NOT a
+   drop-shadow, see the perf note above) so same-colour stars never merge into one silhouette.
+   :not(:only-child) keeps single stars (Backer's outline, the perk example) rimless, and product
+   surfaces (tier chips, become-preview) are outside these selectors so they keep the flat run. */
+@media (max-width: 767.98px) {
+    .pp-markname__glyph { gap: 0; }
+
+    .pp-markname .pp-supstar:not(:first-child) { margin-left: -6px; }
+    .pp-markname--sm .pp-supstar:not(:first-child) { margin-left: -5.5px; }
+    .pp-markname--lg .pp-supstar:not(:first-child) { margin-left: -8px; }
+
+    /* The rim reads as separation only when it matches the ground; surfaces that are not bg-1
+       set --mark-rim (e.g. .gd-blurb in game-detail.css). */
+    .pp-markname .pp-supstar:not(:only-child) path {
+        paint-order: stroke;
+        stroke: var(--mark-rim, var(--pp-bg-1));
+        stroke-width: 3;
+        stroke-linejoin: round;
+    }
+}
+

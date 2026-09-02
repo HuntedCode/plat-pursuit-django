@@ -14,9 +14,9 @@ The full visual constitution lives in **[docs/design/visual-identity.md](docs/de
 
 ### Overview
 
-Every page in PlatPursuit is being rebuilt to match the dashboard's design language. This is a full redesign, not a re-style. The dashboard is the reference implementation and the design baseline. The goal: every page should feel like it belongs to the same app as the dashboard.
+Every page in PlatPursuit is being rebuilt into one coherent, polished product. This is a full redesign, not a re-style. The dashboard seeded the design language; the **Career page (`/career/`) is now the finished-quality standard** every page is measured against (see Reference Implementation below). The goal: every page should feel like it belongs to the same app, at the same level of polish.
 
-**Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). Redesigned and legacy pages coexist safely due to the opt-in ZoomScaler architecture.
+**Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). All pages now build mobile-first; the legacy ZoomScaler scaling system has been removed (see below).
 
 ### Three-Part Process Per Page
 
@@ -60,27 +60,22 @@ All styling tokens, patterns, component blueprints, and rules are documented in 
 
 ### Reference Implementation
 
-See `templates/trophies/dashboard.html` and its module partials in `templates/trophies/partials/dashboard/` for the canonical implementation.
+**The Career page (`/career/`) is the finished-quality standard for the rebuild.** Hold every page to its bar for polish and design coherence. See **[docs/design/rebuild/career-reference-standard.md](docs/design/rebuild/career-reference-standard.md)** for the dimensions that define "done" (design coherence, mobile-first fit, premium motion, performance, interaction, URL/state) and the **"what would Google/Apple do here?" polishing lens** that got it there. Exemplar files: `templates/trophies/career.html`, `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css`.
 
-### ZoomScaler Legacy System (Non-Redesigned Pages)
+The dashboard (`templates/trophies/dashboard.html`) seeded the design language and is still a useful token/pattern reference, but it is being sunset; Career is the current bar.
 
-Pages not yet redesigned still use the ZoomScaler transform-scale system. This is being phased out as pages are rebuilt.
+### ZoomScaler (removed)
 
-**How it works**: The `#zoom-container` and `#zoom-wrapper` divs in `base.html` are always present but inert. When a page calls `PlatPursuit.ZoomScaler.init()`, it adds `.zoom-active` which activates CSS transform rules that scale the 768px layout down to fit smaller screens.
+The legacy ZoomScaler transform-scale system (a `.zoom-active` class that scaled a 768px layout down
+to fit smaller screens) has been **removed** -- it had no remaining callers. All pages now build
+mobile-first (`base(375) -> md(768) -> lg(1024)`), so `grid-cols-1 md:grid-cols-2`-style patterns are
+correct everywhere.
 
-**For non-redesigned pages:**
-- Base styles target 768px (tablet), `lg:` targets desktop
-- Do NOT use `grid-cols-1 md:grid-cols-2` patterns (base must show the tablet layout)
-- Verify layout at exactly 768px wide (the baseline that gets scaled down)
-
-**To redesign a page:**
-1. Backend audit: review view, queryset, services for optimization opportunities
-2. Remove `PlatPursuit.ZoomScaler.init()` from the page's JS
-3. Rebuild templates from scratch using design system tokens and component patterns
-4. Run `npm run build` to regenerate Tailwind CSS
-5. Test at 375px, 768px, and 1024px+
-
-Fixed-position elements (toasts, modals, mobile tabbar) live OUTSIDE the wrapper divs in `base.html` and are unaffected by either system.
+The `#zoom-container` / `#zoom-wrapper` divs in `base.html` **remain**, but only as the host for the
+modal/ceremony **recede** effect: JS toggles `.pp-receded` on `#zoom-container` and CSS steps back
+`#page-recede` (the wrapper around block content) so the page sits behind a ceremony/modal. The chrome
+(nav, sub-nav, footer) are siblings of `#page-recede` and hold still. Fixed-position elements (toasts,
+modals, mobile tabbar) live OUTSIDE the wrapper divs and are unaffected.
 
 ---
 
@@ -105,8 +100,6 @@ Currently handled by `absorb()`:
 - StageCompletionEvent.concept (FK, SET_NULL)
 - ConceptJoinReview.proposed_concept (FK, SET_NULL — re-pointed to the survivor. The `game` OneToOne needs no branch: games move out before absorb runs and each `join_review` travels with its Game)
 - ConceptSplitEvent.parent_concept (FK) + .child_concepts (M2M)
-- Genre challenge slots (bulk re-point; `unique_together` is (challenge, genre), so the concept column is unconstrained and the survivor may legitimately fill two genre slots of one challenge)
-- Genre bonus slots (per-slot, NOT a bulk update: `unique_together` is (challenge, **concept**), so re-pointing both concepts' slots in a shared challenge raises IntegrityError. Duplicates collapse onto the survivor's slot, carrying `is_completed`/`completed_at` over, and the doomed slot is DELETED, not skipped: `concept` is SET_NULL, so a skipped duplicate would outlive the source concept as a phantom empty bonus slot). Both paths then refresh the affected `Challenge` counters via `recalculate_challenge_counts`
 - GameFamily (inherit if target has none)
 - Concept.franchises_locked (inherit when `other` was locked, so the curated franchise/collection links the survivor just received stay protected from the next IGDB refresh)
 - IGDB enrichment through-rows (ConceptCompany, ConceptGenre, ConceptTheme, ConceptEngine, ConceptFranchise) + IGDBMatch itself travel TOGETHER, gated on `inherit_match` (target has no IGDBMatch of its own). IGDB enrichment is a deterministic projection of the IGDBMatch, so when the target keeps its OWN match (the re-anchor / reassignment case) the source's enrichment describes a DIFFERENT IGDB game and is DROPPED (cascade-deletes with the source), not merged. Only when the target lacks a match does it inherit the source's match AND its enrichment rows (companies merge roles via OR-of-flags; genres/themes/engines/franchises dedup by their respective id). Merging enrichment unconditionally was the re-anchor data bug: re-pointing an erroneously-matched concept left the survivor showing both matches' developers/genres/themes/franchises stacked together.
@@ -127,7 +120,7 @@ Note: `RoadmapEditLock`, `RoadmapRevision`, `RoadmapNote`, `RoadmapNoteRead`, an
 - In inline-style contexts (share cards rendered by Playwright), use `object-fit: cover; object-position: top`.
 - **Image fallback chain (IGDB-first)**: Use `{{ game.display_image_url }}` (with `{% if game.has_cover_art %}` for styling). This is the single source of truth, defined on the `Game` model. Normal path: **trusted IGDB cover → `concept.concept_icon_url` (PSN MASTER, skipped for `PP_*` stub concepts) → `game.title_image` → `game.title_icon_url`**. When `force_title_icon` is set (admin flag), PSN intermediate sources are skipped: trusted IGDB cover → `title_icon_url`. Never reimplement the chain inline, use the helper.
 - `concept.bg_url` is deliberately **not** in the cover chain (it's landscape and crops badly in portrait containers). Callers that specifically want the landscape image (e.g. share-card backdrops) should reference `concept.bg_url` directly.
-- IGDB cover art is constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size)` / `Concept.cover_url` property. Only used for trusted matches (`is_trusted`). Querysets that render many games **must** `select_related('concept', 'concept__igdb_match')` to keep `display_image_url` from N+1'ing (IGDB is now the first lookup on every render, not the fallback). **Pair every such `select_related` with `.defer('concept__igdb_match__raw_response')`** (or the equivalent path through Trophy / EarnedTrophy / ProfileGame): `raw_response` is the ~30 KB IGDB API blob that is never read by cover-art templates and was the trigger for the May 2026 web-server OOM when concurrent renders piled up the join payload. Pages that genuinely need Tier-2 fields parsed out of `raw_response` (today: `stats_service._compute_game_library` only) opt back in with an explicit `.only('raw_response')` on a targeted queryset.
+- IGDB cover art is constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size)` / `Concept.cover_url` property. Only used for trusted matches (`is_trusted`). Querysets that render many games **must** `select_related('concept', 'concept__igdb_match')` to keep `display_image_url` from N+1'ing (IGDB is now the first lookup on every render, not the fallback). **Pair every such `select_related` with `.defer('concept__igdb_match__raw_response')`** (or the equivalent path through Trophy / EarnedTrophy / ProfileGame): `raw_response` is the ~30 KB IGDB API blob that is never read by cover-art templates and was the trigger for the May 2026 web-server OOM when concurrent renders piled up the join payload. Pages that genuinely need Tier-2 fields parsed out of `raw_response` opt back in with an explicit `.only('raw_response')` on a targeted queryset. (The one former example, `stats_service._compute_game_library`, was deleted with My Stats in the 2026-08 cutover, so there is currently NO live opt-in. Treat a new one as a decision worth justifying, not a pattern to copy.)
 
 ### Trophy Icons
 - Use `object-cover` with square aspect ratio (`w-N h-N` pairs or `w-full aspect-square`)
@@ -205,7 +198,7 @@ When a feature shows a "locked" or "preview" UI for users who don't have access 
 **Never** derive the placeholder from the actual viewing user's data on the request path, no matter how visually you hide it (blur, gradient overlay, etc.). The visual lock is harmless; the data fetching isn't.
 
 **Concrete enforcement points:**
-- `trophies/services/dashboard_service.py` `get_server_module_data` skips `mod.get('is_preview')` items. If a similar orchestrator gets added elsewhere (a stats-page preview loop, a community-page preview loop, etc.), the same skip must be there.
+- There is currently NO module orchestrator in the codebase. The one that existed, `dashboard_service.get_server_module_data`, skipped `mod.get('is_preview')` items and was deleted with the dashboard in the 2026-08 cutover. The rule outlived it: **if a similar orchestrator gets added anywhere** (a stats-page preview loop, a hub preview loop, a premium-teaser grid), the same skip must be built in from the start, because the incident happened the one time it wasn't.
 - When adding a new preview/locked feature, the code review checklist is: "what does this look like for a free-tier user with a maxed-out library?" If the data layer runs at all in that scenario, the design is wrong.
 
 ---
@@ -217,7 +210,7 @@ The global CLAUDE.md defines the three-phase workflow (Plan, Build, Polish). Bel
 ### Phase 1 Additions: Reuse Targets
 
 Before exiting plan mode, specifically search:
-- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomScaler)
+- `static/js/utils.js` for utilities (API, ToastManager, HTMLUtils, debounce, InfiniteScroller, UnsavedChangesManager, ZoomAwareObserver)
 - Existing JS files for similar UI patterns (modals, tabs, infinite scroll, form handling)
 - Existing templates for component patterns that can be reused or extended
 - Existing Django views/services for logic that can be shared rather than duplicated
@@ -231,13 +224,15 @@ In addition to the standard inline audit, check for Django-specific security pit
 The final audit should review every new/modified template and JS file against:
 
 1. **Platinum Pursuit Standard**: Does it feel professional, sleek, and modern while retaining the indie charm? Or does it feel generic/sterile?
-2. **Dashboard cohesion**: Would this component look at home inside a dashboard module? Uses the correct tokens from the design system doc?
-3. **Responsive design compliance**: Three-layout mobile-first system, base styles correct at 375px, proper `md:`/`lg:` progression
-4. **Component pattern compliance**: Page header cards, filter toolbars, browse cards, pagination, empty states all follow the design system patterns
-5. **Interactive polish**: Hover glow (not scale), transitions, focus indicators, loading states
-6. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
-7. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
-8. **Tailwind consistency**: Using project-standard classes rather than one-off values
+2. **Google/Apple polish lens**: For each interactive moment, ask "what would a top-tier Google/Apple product do here?" — real physics (spring settle, not a flat ease), anticipation + follow-through, exits choreographed as carefully as entrances, and deliberate restraint (not motion everywhere). This lens is what got the Career page to its bar; see [career-reference-standard.md](docs/design/rebuild/career-reference-standard.md).
+3. **Rebuild cohesion (Career standard)**: Would this page hold up next to the Career page? Uses the correct `--pp-*`/`--disc-*` tokens and the visual-identity primitives, not one-offs?
+4. **Responsive design compliance**: Three-layout mobile-first system, base styles correct at 375px, proper `md:`/`lg:` progression. Do the real mobile fit pass (compact airiness, restore at `md:`, omit expendable blocks rather than scroll)
+5. **Component pattern compliance**: Page header cards, filter toolbars, browse cards, pagination, empty states all follow the design system patterns
+6. **Interactive polish**: Hover glow (not scale), transitions, focus indicators, loading states
+7. **Performance discipline**: Per-user querysets DB-aggregate (whale-safe); no `filter` transitions on page-sized elements; isolate animations over a `backdrop-filter`. See [motion-patterns](docs/reference/motion-patterns.md) Gotchas
+8. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
+9. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
+10. **Tailwind consistency**: Using project-standard classes rather than one-off values
 
 ---
 

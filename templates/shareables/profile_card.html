@@ -1,132 +1,340 @@
-{% extends 'base.html' %}
-{% load static custom_filters %}
-{% block title %}Profile Card - My Shareables{% endblock %}
-{% block robots %}noindex, nofollow{% endblock %}
+{% load static humanize %}{% comment %}
+Profile Card -- the share image for a hunter's whole career. Landscape only, 1200x630.
 
-{% comment %}
-Profile Card builder page.
+The third sibling in the share-card family. Ground, scrims, Frame, identity strip, brand block and
+hairlines are the plat card's verbatim (pinned by tests/engine/test_profile_card.py the same way the
+recap card is pinned), so the three cards read as one product. What changes is the subject: the plat
+card records ONE completion; this records the HUNTER.
 
-Long-form home for what the dashboard `profile_card_preview` module
-shows in compact form. Renders the same scaled HTML preview from
-/api/v1/profile-card/html/ via the existing dashboard.js
-_initProfileCardPreview routine, which:
+WHY IT LOOKS LIKE THIS
+  - The accent is the platinum cyan (#27ebfe) throughout. The plat card splits cyan/amber by variant;
+    a career has no variant, and cyan is the house colour the brand block already wears.
+  - THREE NAMED SECTIONS, one per system, each under its own eyebrow (tick + small caps): TROPHY
+    RECORD and CAREER side by side in the middle (split by a vertical hairline), COLLECTION as the
+    spine band. The first cut interleaved the three systems' stats and read as one undifferentiated
+    pile -- his exact note. Every figure now lives in the section of the system that produced it,
+    and the section names are the site's own nouns (the Career hub, the Collection page), so the
+    card teaches the product's shape while it shows yours.
+  - Eyebrows share one top line (each panel pins its eyebrow and centers the content below it), so
+    the sectioning reads as a designed grid rather than three floating labels.
+  - The ring is the SAME precomputed geometry the Career hero renders (career_service supplies
+    dash/offset for r=42 in a 120x120 viewBox); only the colours are inlined here, because this
+    document has no stylesheet and no custom properties.
+  - The Collection band shows real medallion art (subject only, no plate, no mask -- the silhouette
+    IS the badge), newest first, with the held-of-catalog count and the closest chase beside it.
+  - NO comparisons, no rarity percentile of the hunter themselves. The card is a self-portrait, not
+    a leaderboard row.
 
-- Fetches the HTML preview
-- Wires the theme picker (opens the shared color grid modal)
-- Wires the download button (with theme nudge)
-- Handles the click-to-enlarge modal
+INLINE STYLES, HEX ONLY -- Playwright renders via page.set_content() in an about:blank origin: no
+stylesheet, no custom properties. The --pp-* map is the same one documented at the top of
+plat_card.html; discipline/medallion/tier hexes come from completion_card_service's maps.
 
-Same DashboardManager piggyback pattern as the Challenges page —
-we instantiate a minimal manager and manually invoke the per-module
-init for the data-module-slug="profile_card_preview" element on this
-page.
-
-Themes are open to all users (matching how every other share-card
-surface — platinum cards, challenge cards, recap cards — works). The
-default theme is the saved fallback.
-
-See trophies/views/shareables_views.py:MyProfileCardView for the
-context shape (card_theme, available_themes).
+Context: core/services/profile_card_service.get_card_data + api/shareable_views.build_profile_card_context.
 {% endcomment %}
+<div class="share-image-content" style="position: relative; width: 1200px; height: 630px; overflow: hidden; box-sizing: border-box; font-family: 'Inter', sans-serif; background: radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%);">
 
-{% block content %}
-{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% comment %}Scrims: INNER layers, so they survive a theme replacing the ground with `!important`.
+    Same two the siblings carry.{% endcomment %}
+    <div style="position: absolute; inset: 0; background: linear-gradient(100deg, rgba(5, 8, 12, 0.74) 0%, rgba(5, 8, 12, 0.52) 52%, rgba(5, 8, 12, 0.20) 100%);"></div>
+    <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(5, 8, 12, 0.66) 0%, rgba(5, 8, 12, 0) 44%);"></div>
 
-{# Page Header #}
-<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-accent shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-3 md:p-4">
-        <div class="flex items-center gap-2 flex-wrap">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
-            </svg>
-            <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Profile Card</h1>
-        </div>
-        <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-            Generate a share image showcasing your trophy profile, badges, and stats.
-        </p>
-    </div>
-</div>
+    {# The Frame, in the house cyan. #}
+    <div style="position: absolute; inset: 16px; border: 2px solid rgba(39, 235, 254, 0.38); border-radius: 14px; box-shadow: inset 0 0 60px rgba(5, 8, 12, 0.55);"></div>
 
-{# Profile Card Preview module markup. data-module-slug must match     #}
-{# 'profile_card_preview' so dashboard.js _initProfileCardPreview      #}
-{# picks it up from the bootstrap script at the bottom of this page.   #}
-<div data-module-slug="profile_card_preview"
-     class="dashboard-module relative card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral"
-     data-card-theme="{{ card_theme }}">
-    <div class="card-body p-3 md:p-5 lg:p-7">
+    <div style="position: relative; height: 630px; padding: 40px 46px; box-sizing: border-box; display: flex; flex-direction: column;">
 
-        {# Preview container — dashboard.js _initProfileCardPreview wires this up #}
-        <div class="profile-card-module-preview relative w-full max-w-3xl mx-auto rounded-lg overflow-hidden border border-base-content/10 bg-white/[0.03] cursor-pointer"
-             style="aspect-ratio: 1200/630;"
-             title="Click to enlarge">
-            <div class="profile-card-module-loading absolute inset-0 flex items-center justify-center">
-                <span class="loading loading-spinner loading-md text-accent"></span>
+        {# ── 1. Identity: the hunter, and the brand ── #}
+        <div style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; box-sizing: content-box; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
+            {% if avatar_image %}
+            <img src="{{ avatar_image }}" alt="" style="width: 58px; height: 58px; border-radius: 50%; object-fit: cover; border: 2px solid #27ebfe; box-sizing: border-box; flex-shrink: 0;" />
+            {% else %}
+            <div style="width: 58px; height: 58px; border-radius: 50%; border: 2px solid #27ebfe; box-sizing: border-box; background: #232a31; flex-shrink: 0;"></div>
+            {% endif %}
+
+            <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
+                    {% include 'components/_mark_glyphs_inline.html' with star_px=15 svc_px=16 %}
+                </div>
+                {% comment %}Worn title, then WHO they are to the site -- the supporter tier's full
+                name (or Staff / Moderator) in the mark's own colour, so the stars above have their
+                words.{% endcomment %}
+                <div style="line-height: 1.35; font-size: 15px; font-weight: 500; color: #9da5b1; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    {% if display_title %}<span style="color: #f0f6fd; font-weight: 600;">{{ display_title }}</span>{% endif %}{% if display_title and mark %}<span style="color: #8a939f;"> &nbsp;&middot;&nbsp; </span>{% endif %}{% if mark %}<span style="color: {{ mark.colour }}; font-weight: 600;">{{ mark.label }}</span>{% endif %}{% if not display_title and not mark %}Trophy hunter{% endif %}
+                </div>
             </div>
-            <div class="profile-card-module-content absolute inset-0 origin-top-left" style="display: none;"></div>
+
+            {# The advert. A stranger sees this card before they ever see the site. #}
+            <div style="flex-shrink: 0; display: flex; align-items: center; gap: 13px;">
+                <img src="{% static 'images/logo.png' %}" alt="" style="width: 50px; height: 50px; border-radius: 9px; object-fit: cover; flex-shrink: 0;" />
+                <div style="text-align: left;">
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #f0f6fd; letter-spacing: 0.02em; line-height: 1.4;">Platinum Pursuit</div>
+                    <div style="line-height: 1.35; font-size: 15px; font-weight: 600; color: #27ebfe; letter-spacing: 0.04em; margin-top: 4px;">platpursuit.com</div>
+                </div>
+            </div>
         </div>
 
-        {# Theme picker + download button #}
-        <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mt-3 max-w-3xl mx-auto">
-            <div class="share-card-swatches flex-1"></div>
-            <button class="profile-card-module-download btn btn-accent btn-sm md:btn-md gap-1.5 shrink-0"
-                    title="Download as PNG">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Download PNG
-            </button>
+        {% comment %}── 2. The middle: TROPHY RECORD | CAREER, split by a vertical hairline. Each
+        panel pins its eyebrow to a shared top line and centers its content in the space below, so
+        the two sections read as one designed grid.{% endcomment %}
+        <div style="flex: 1; display: flex; align-items: stretch; min-height: 0; padding: 16px 0 12px;">
+
+            {# ── Trophy Record ── #}
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; padding-right: 34px;">
+                <div style="display: flex; align-items: center; gap: 9px; flex-shrink: 0;">
+                    <span style="width: 16px; height: 3px; border-radius: 2px; background: #27ebfe; flex-shrink: 0;"></span>
+                    <span style="font-size: 11px; font-weight: 700; color: #8a939f; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1;">Trophy Record</span>
+                </div>
+
+                <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center;">
+                    {% comment %}The single dominant statement -- the number hunters introduce
+                    themselves with. "0 Platinums" renders honestly; the card is only ever the
+                    owner's own.{% endcomment %}
+                    <div style="display: flex; align-items: baseline; gap: 15px;">
+                        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 64px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.025em; line-height: 1;">{{ total_plats|intcomma }}</span>
+                        <div>
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; font-weight: 700; color: #27ebfe; letter-spacing: 0.15em; text-transform: uppercase; line-height: 1.2;">Platinum{{ total_plats|pluralize }}</div>
+                            <div style="font-size: 14px; font-weight: 500; color: #8a939f; margin-top: 2px; line-height: 1.3;">{{ total_completes|intcomma }} game{{ total_completes|pluralize }} at 100%</div>
+                        </div>
+                    </div>
+
+                    {# Proof: the whole cabinet, in the hobby's own vocabulary. #}
+                    <div style="display: flex; align-items: center; gap: 22px; margin-top: 17px; padding: 11px 0; border-top: 1px solid rgba(64, 72, 83, 0.45); border-bottom: 1px solid rgba(64, 72, 83, 0.45);">
+                        {% for tier in tier_counts %}
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="width: 14px; height: 14px; border-radius: 50%; background: {{ tier.colour }}; display: inline-block; flex-shrink: 0;"></span>
+                            <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #f0f6fd; line-height: 1;">{{ tier.count|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                        <div style="margin-left: auto; line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ total_earned|intcomma }} Trophies</div>
+                    </div>
+
+                    {# The trophy numbers. Rarest's % lives on its mini card below, not here. #}
+                    <div style="display: flex; gap: 40px; margin-top: 16px;">
+                        <div>
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_level|intcomma }}</div>
+                            <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Trophy Level</div>
+                        </div>
+                        <div>
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ avg_progress|floatformat:"0" }}%</div>
+                            <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Avg. Completion</div>
+                        </div>
+                        <div>
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ total_games|intcomma }}</div>
+                            <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Games</div>
+                        </div>
+                        {% comment %}Right-aligned so it sits directly under the band's earned
+                        total above: the two figures are one fraction (earned over unearned), and
+                        stacking them on the same edge is what makes that read.{% endcomment %}
+                        <div style="margin-left: auto; text-align: right;">
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 29px; font-weight: 700; color: #8a939f; line-height: 1; letter-spacing: -0.02em;">{{ total_unearned|intcomma }}</div>
+                            <div style="line-height: 1.2; font-size: 12px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 5px;">Unearned</div>
+                        </div>
+                    </div>
+
+                    {% comment %}The rarest and latest platinums as MINI CARDS -- real cover art
+                    (object-cover object-top, the house cover rules), the game's name, and the one
+                    figure each is famous for: the rarest wears its global earn rate, the latest its
+                    date. Names-with-art is what other hunters actually ask about. The service drops
+                    the latest card when it would repeat the rarest, and the row is absent entirely
+                    for a hunter with no platinums (the numbers above still hold the panel).
+                    {% endcomment %}
+                    {% if rarest_plat or latest_plat %}
+                    <div style="display: flex; gap: 14px; margin-top: 15px;">
+                        {% if rarest_plat %}
+                        <div style="flex: 1; min-width: 0; max-width: 348px; display: flex; align-items: center; gap: 11px; padding: 8px 12px 8px 8px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 10px; background: rgba(24, 29, 35, 0.55);">
+                            {% if rarest_plat.cover_cached %}
+                            <img src="{{ rarest_plat.cover_cached }}" alt="" style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; object-fit: cover; object-position: top; background: #232a31;" />
+                            {% else %}
+                            <div style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; background: #232a31; border: 1px solid #404853; box-sizing: border-box;"></div>
+                            {% endif %}
+                            <div style="min-width: 0;">
+                                <div style="font-size: 10px; font-weight: 700; color: #27ebfe; letter-spacing: 0.15em; text-transform: uppercase; line-height: 1.2;">Rarest Platinum</div>
+                                <div style="font-size: 15px; font-weight: 600; color: #f0f6fd; line-height: 1.25; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rarest_plat.name }}</div>
+                                {% if rarest_plat.earn_rate is not None %}
+                                <div style="font-size: 12px; font-weight: 500; color: #8a939f; line-height: 1.2; margin-top: 3px;">{{ rarest_plat.earn_rate }}% of players</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if latest_plat %}
+                        <div style="flex: 1; min-width: 0; max-width: 348px; display: flex; align-items: center; gap: 11px; padding: 8px 12px 8px 8px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 10px; background: rgba(24, 29, 35, 0.55);">
+                            {% if latest_plat.cover_cached %}
+                            <img src="{{ latest_plat.cover_cached }}" alt="" style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; object-fit: cover; object-position: top; background: #232a31;" />
+                            {% else %}
+                            <div style="width: 42px; height: 56px; flex-shrink: 0; border-radius: 6px; background: #232a31; border: 1px solid #404853; box-sizing: border-box;"></div>
+                            {% endif %}
+                            <div style="min-width: 0;">
+                                <div style="font-size: 10px; font-weight: 700; color: #27ebfe; letter-spacing: 0.15em; text-transform: uppercase; line-height: 1.2;">Latest Platinum</div>
+                                <div style="font-size: 15px; font-weight: 600; color: #f0f6fd; line-height: 1.25; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ latest_plat.name }}</div>
+                                {% if latest_plat.earned_at %}
+                                <div style="font-size: 12px; font-weight: 500; color: #8a939f; line-height: 1.2; margin-top: 3px;">{{ latest_plat.earned_at|date:"M j, Y" }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% comment %}── Career ── The Pursuer's whole gamification standing in one panel: ring +
+            rank, the job ledger beside it, the five-discipline makeup below. The first cut scattered
+            these across two columns and a spine chip; one bordered panel is what makes "this is the
+            Career system" legible at a glance.{% endcomment %}
+            <div style="flex-shrink: 0; width: 366px; display: flex; flex-direction: column; border-left: 1px solid rgba(64, 72, 83, 0.55); padding-left: 34px;">
+                <div style="display: flex; align-items: center; gap: 9px; flex-shrink: 0;">
+                    <span style="width: 16px; height: 3px; border-radius: 2px; background: #27ebfe; flex-shrink: 0;"></span>
+                    <span style="font-size: 11px; font-weight: 700; color: #8a939f; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1;">Career</span>
+                </div>
+
+                <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center;">
+                    <div style="display: flex; align-items: center; gap: 18px;">
+                        {% comment %}The disciplines ring framing the Pursuer Level -- the Career
+                        hero's own precomputed geometry. An empty ring (no job XP yet) still shows
+                        the track, so a new Pursuer's card holds its composition.{% endcomment %}
+                        <div style="position: relative; width: 128px; height: 128px; flex-shrink: 0;">
+                            <svg viewBox="0 0 120 120" width="128" height="128" aria-hidden="true">
+                                <circle cx="60" cy="60" r="42" fill="none" stroke="#2f363f" stroke-width="12"></circle>
+                                <g transform="rotate(-90 60 60)">
+                                    {% for f in ring %}<circle cx="60" cy="60" r="42" fill="none" stroke="{{ f.colour }}" stroke-width="12" stroke-dasharray="{{ f.dash }} 999" stroke-dashoffset="{{ f.offset }}"></circle>{% endfor %}
+                                </g>
+                            </svg>
+                            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 31px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ pursuer_level|intcomma }}</span>
+                                <span style="font-size: 10px; font-weight: 600; color: #8a939f; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 3px; line-height: 1.2;">Level</span>
+                            </div>
+                        </div>
+
+                        <div style="flex: 1; min-width: 0;">
+                            {% if rank_label %}
+                            <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 18px; font-weight: 700; color: #27ebfe; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rank_label }}</div>
+                            <div style="font-size: 11px; font-weight: 600; color: #8a939f; letter-spacing: 0.11em; text-transform: uppercase; margin-top: 2px; line-height: 1.2;">Pursuer Rank</div>
+                            {% endif %}
+                            {% comment %}The job ledger, as label/value lines -- fixed shape, zeros
+                            render honestly (a fresh Pursuer's card shows the shape of what's ahead).
+                            {% endcomment %}
+                            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: {% if rank_label %}12px{% else %}0{% endif %};">
+                                <div style="display: flex; align-items: baseline; gap: 10px;">
+                                    <span style="flex: 1; font-size: 13px; font-weight: 500; color: #9da5b1; line-height: 1.3;">Jobs played</span>
+                                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 16px; font-weight: 700; color: #f0f6fd; line-height: 1.3;">{{ jobs_played }}<span style="font-size: 13px; color: #8a939f;"> / {{ jobs_total }}</span></span>
+                                </div>
+                                <div style="display: flex; align-items: baseline; gap: 10px;">
+                                    <span style="flex: 1; font-size: 13px; font-weight: 500; color: #9da5b1; line-height: 1.3;">Tiers earned</span>
+                                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 16px; font-weight: 700; color: #f0f6fd; line-height: 1.3;">{{ tiers_earned|intcomma }}</span>
+                                </div>
+                                <div style="display: flex; align-items: baseline; gap: 10px;">
+                                    <span style="flex: 1; font-size: 13px; font-weight: 500; color: #9da5b1; line-height: 1.3;">Career XP</span>
+                                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 16px; font-weight: 700; color: #f0f6fd; line-height: 1.3;">{{ career_xp_compact }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% comment %}The makeup GRID: six tiles, two columns. Five disciplines (dot,
+                    label, total levels in the ring's own colours) and a sixth slot crowning the
+                    HIGHEST-LEVELED JOB with its real Lucide glyph in its discipline's colour --
+                    the one job this Pursuer is most, named. The job tile only exists once real XP
+                    does (the level-1 floor would otherwise crown an arbitrary untouched job); a
+                    fresh card shows five tiles and the empty sixth reads as room to grow.
+                    {% endcomment %}
+                    {% if ring %}
+                    {% comment %}align-items: flex-start, because the Top Job wrapper is taller than its
+                    row-mate (the caption hangs under it) and the default stretch was inflating the
+                    tile beside it -- Finesse's box grew to match the wrapper's full height.
+                    {% endcomment %}
+                    <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 8px; margin-top: 14px;">
+                        {% for f in ring %}
+                        <div style="width: 47%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(64, 72, 83, 0.45); border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
+                            <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ f.colour }}; flex-shrink: 0;"></span>
+                            <span style="flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: #9da5b1; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.label }}</span>
+                            <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #f0f6fd; line-height: 1.3; flex-shrink: 0;">{{ f.total|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                        {% if top_job %}
+                        {% comment %}Caption OUTSIDE the box (his call): the tile stays the same
+                        single-row shape as its five siblings, and "Top Job" hangs beneath the card
+                        itself like a plaque under a frame.{% endcomment %}
+                        <div style="width: 47%;">
+                            <div style="box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid {{ top_job.colour }}66; border-radius: 8px; background: rgba(24, 29, 35, 0.55);">
+                                {% if top_job.icon_paths %}
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ top_job.colour }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ top_job.icon_paths|safe }}</svg>
+                                {% else %}
+                                <span style="width: 9px; height: 9px; border-radius: 50%; background: {{ top_job.colour }}; flex-shrink: 0;"></span>
+                                {% endif %}
+                                <span style="flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: #f0f6fd; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ top_job.name }}</span>
+                                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: {{ top_job.colour }}; line-height: 1.3; flex-shrink: 0;">Lv {{ top_job.level|intcomma }}</span>
+                            </div>
+                            <div style="font-size: 9px; font-weight: 700; color: {{ top_job.colour }}; letter-spacing: 0.16em; text-transform: uppercase; line-height: 1.2; margin-top: 5px; text-align: center;">Top Job</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
+        {% comment %}── 3. Collection ── The badge system's own band: newest medallions as real
+        objects, the held-of-catalog count with open chases and holo, the nearest unfinished series
+        with its real progress, and the catalog share anchoring the right edge. Nothing from any
+        other system lives here.{% endcomment %}
+        <div style="flex-shrink: 0; padding-top: 13px; border-top: 1px solid rgba(64, 72, 83, 0.55);">
+            <div style="display: flex; align-items: center; gap: 9px;">
+                <span style="width: 16px; height: 3px; border-radius: 2px; background: #27ebfe; flex-shrink: 0;"></span>
+                <span style="font-size: 11px; font-weight: 700; color: #8a939f; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1;">Collection</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 24px; margin-top: 10px; overflow: hidden;">
+                <div style="display: flex; align-items: center; gap: 13px; min-width: 0;">
+                    <div style="min-width: 0; flex-shrink: 0;">
+                        <div style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; white-space: nowrap;">{{ badges.earned|intcomma }} of {{ badges.catalog_total|intcomma }} Badges</div>
+                        <div style="font-size: 14px; line-height: 1.3; color: #8a939f; margin-top: 4px; white-space: nowrap;">{% if badges.chasing %}{{ badges.chasing|intcomma }} chase{{ badges.chasing|pluralize }} open{% endif %}{% if badges.chasing and badges.holo %} &middot; {% endif %}{% if badges.holo %}{{ badges.holo|intcomma }} holographic{% endif %}{% if not badges.chasing and not badges.holo %}The collection so far{% endif %}</div>
+                    </div>
+
+                    {% comment %}The shelf: up to eight newest medallions, filling the band the way
+                    a shelf should, with a "+N" coin saying the collection continues past the edge.
+                    The count block sits FIRST so a short shelf still reads left-anchored beside its
+                    numbers rather than floating in a void.{% endcomment %}
+                    {% if badges.medallions %}
+                    <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; overflow: hidden;">
+                        {% for m in badges.medallions %}
+                        <div style="position: relative; width: 50px; height: 50px; flex-shrink: 0;">
+                            {% for layer in m.layers_cached %}
+                            <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%;{% if m.is_avatar %} object-fit: cover; border-radius: 50%;{% else %} object-fit: contain;{% endif %}" />
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                        {% if badges.more %}
+                        <div style="min-width: 40px; height: 40px; box-sizing: border-box; padding: 0 9px; flex-shrink: 0; border-radius: 999px; border: 1px solid rgba(64, 72, 83, 0.7); background: rgba(24, 29, 35, 0.55); display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 13px; font-weight: 700; color: #8a939f; white-space: nowrap;">+{{ badges.more|intcomma }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% comment %}The nearest unfinished series, with its real progress -- the Collection
+                CTA's own read. A share card that shows what's NEXT invites the question every hunter
+                likes answering. The bar fills in the house cyan: this bar measures the hunter's
+                chase, not one badge's backing metal.{% endcomment %}
+                {% if badges.closest %}
+                <div style="min-width: 0; flex: 1; max-width: 300px;">
+                    <div style="font-size: 14px; line-height: 1.3; color: #8a939f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Closest: <span style="color: #f0f6fd; font-weight: 600;">{{ badges.closest.series_name }}</span></div>
+                    {% if badges.closest.total %}
+                    <div style="display: flex; align-items: center; gap: 9px; margin-top: 6px;">
+                        <span style="position: relative; display: block; flex: 1; min-width: 60px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden;">
+                            <span style="position: absolute; inset: 0; width: {% widthratio badges.closest.cleared badges.closest.total 100 %}%; background: #27ebfe; border-radius: 3px;"></span>
+                        </span>
+                        <span style="font-size: 13px; line-height: 1; font-weight: 600; color: #8a939f; flex-shrink: 0;">{{ badges.closest.cleared }} of {{ badges.closest.total }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# The catalog share, anchoring the band's right edge. #}
+                <div style="margin-left: auto; flex-shrink: 0; text-align: right;">
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 26px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ badges.pct }}%</div>
+                    <div style="line-height: 1.2; font-size: 11px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 4px;">of the catalog</div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
-
-{# Click-to-enlarge modal expected by _initProfileCardPreview #}
-<dialog class="profile-card-module-modal modal backdrop-blur-sm">
-    <div class="modal-box max-w-none w-auto p-4 bg-base-200 border-2 border-base-300" style="max-height: none; overflow: visible;">
-        <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
-        </form>
-        <div class="profile-card-module-modal-content flex justify-center"></div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
-</dialog>
-
-{% endblock %}
-
-{% block js_scripts %}
-<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
-<script src="{% static 'js/dashboard.js' %}"></script>
-<script src="{% static 'js/color-grid-modal.js' %}"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const dashboard = new PlatPursuit.DashboardManager({
-        moduleDataUrl: '/api/v1/dashboard/module/',
-        configUrl: '/api/v1/dashboard/config/',
-        reorderUrl: '/api/v1/dashboard/reorder/',
-        isPremium: false,
-        maxFreeHidden: 0,
-        hiddenModules: [],
-        moduleSettings: {},
-        tabConfig: {},
-        tabs: {},
-    });
-    document.querySelectorAll('[data-module-slug="profile_card_preview"]').forEach(moduleEl => {
-        if (dashboard._moduleInits && dashboard._moduleInits['profile_card_preview']) {
-            dashboard._moduleInits['profile_card_preview'](moduleEl);
-        }
-    });
-});
-</script>
-{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
-{% include 'partials/theme_nudge_modal.html' %}
-{% endblock %}

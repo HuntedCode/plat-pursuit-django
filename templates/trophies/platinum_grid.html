@@ -41,9 +41,9 @@
             </svg>
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold">Want more platinums on your grid?</p>
-                <p class="text-xs text-base-content/50">Upgrade to Premium for up to <span class="font-bold text-warning">500 slots</span>, custom themes, and more.</p>
+                <p class="text-xs text-base-content/50">Supporters get up to <span class="font-bold text-warning">500 slots</span>. {% comment %} "custom themes" removed: retired 2026-08, and this page advertised them for months after. {% endcomment %}</p>
             </div>
-            <a href="{% url 'subscribe' %}" class="btn btn-sm btn-warning gap-1 shrink-0">
+            <a href="{% url 'support_hub' %}" class="btn btn-sm btn-warning gap-1 shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
                 </svg>
@@ -295,8 +295,12 @@
         window.PLAT_GRID_CONFIG = {
             platinums: {{ platinum_data_json|safe }},
             maxIcons: {{ max_icons }},
-            htmlUrl: '{% url "api:platinum-grid-html" %}',
-            pngUrl: '{% url "api:platinum-grid-png" %}',
+            {% comment %}RETIRED 2026-08: these endpoints are unrouted (api/platinum_grid_views.py is
+            parked with this page). Left as literal paths so reviving the view isn't an instant
+            NoReverseMatch -- re-register the routes and these work again. See
+            docs/features/share-images.md.{% endcomment %}
+            htmlUrl: '/api/v1/shareables/platinum-grid/html/',
+            pngUrl: '/api/v1/shareables/platinum-grid/png/',
         };
     </script>
     <script src="{% static 'js/platinum-grid-wizard.js' %}"></script>

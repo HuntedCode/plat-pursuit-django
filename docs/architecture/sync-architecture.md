@@ -124,7 +124,7 @@ _job_sync_complete(profile_id, ...):
       outside the sync path, see the `resync_trophy_groups` command.
   4. update_profile_games (with hide_hiddens fix)
   5. update_profile_trophy_counts
-  6. Badge eval, milestones, challenges (unchanged)
+  6. Badge eval, contracts, milestones (unchanged)
   7. Deferred notifications (unchanged)
   8. Cache invalidation (unchanged)
   9. set_sync_status('synced'), update last_synced
@@ -199,16 +199,16 @@ The refactor preserves every existing integration point in `sync_complete`. What
 
 | System | Hook | Change |
 |---|---|---|
-| Badge evaluation | `check_profile_badges()` in `sync_complete` | Unchanged. Still fires after stats are updated. Retroactive credit principle preserved. |
-| Milestones | `check_all_milestones_for_user()` | Unchanged. |
+| Badge evaluation | `evaluate_for_sync()` in `sync_complete` | Scoped to the SERIES of the touched games (all editions). Replaced the legacy `check_profile_badges` in cutover 5b; retroactive credit principle preserved. |
+| Milestones | `milestones.services.recompute_on_sync()` (in the `finishing` phase, after the trophy-count refresh) | Unchanged. |
 | Challenges (A-Z, Calendar, Genre) | Three check functions in `sync_complete` | Unchanged. |
 | Deferred notifications | Platinum during `sync_trophies`, badge consolidation in `sync_complete` | Unchanged. |
 | IGDB enrichment | `_drain_deferred_igdb_enrich()` at top of `sync_complete` | Unchanged. New concepts created during the walk still defer their enrichment to the same Redis queue. |
 | Scout `games_discovered` | Increment during the walk when a new ProfileGame is created | Unchanged. |
-| Cache invalidation | `invalidate_dashboard_cache`, `invalidate_stats_cache`, `invalidate_timeline_cache` | Unchanged. |
+| Cache invalidation | none | REMOVED in cutover 5b: `dashboard_service` and `stats_service` were both deleted, so `_job_sync_complete` invalidates nothing. (`invalidate_timeline_cache` went earlier, with the profile timeline.) |
 | Site Heartbeat, Community Trophy Tracker | Read sync-derived state on their own crons | Unaffected by the refactor; they read from `EarnedTrophy` and `Profile`. |
 | Discord-verified 12h cadence | Configured in `refresh_profiles` cron | Unchanged. |
-| `bulk_gamification_update()` context | Wraps badge eval | Unchanged. |
+| Badge XP recompute | `recompute_standing`, inside the evaluation | REPLACED in cutover 5b. `bulk_gamification_update()` is deleted; standings are recomputed from scratch per evaluation, so there is nothing to batch. As of 2026-08 the same seam also writes `SeriesEditionStanding` (one row per started edition, backing badge detail's per-edition board) -- no extra evaluation, since the loop already holds each edition's result. |
 | Signal suppression patterns | `sync_signal_suppressor()` and `_sync_previous_earned` stamps | Preserved. The walk still uses the same per-game `sync_trophies` job for trophy data, which already wraps signal suppression correctly. |
 
 The frontend surfaces (hotbar polling, home syncing page, finalize_phase UI, mobile API) are unchanged. `ProfileSyncStatusView` response schema stays stable.
@@ -271,6 +271,6 @@ The work shipped across three phases. The two safety-net phases originally plann
 ## Related Docs
 
 - [token-keeper.md](token-keeper.md): the operational reference for the worker / queue / token system that runs the sync.
-- [sync-optimization.md](sync-optimization.md): historical optimizations preserved by this design (signal suppression, batched updates, deadlock handling).
+- [sync-optimization.md](../guides/management-commands.md): historical optimizations preserved by this design (signal suppression, batched updates, deadlock handling).
 - [Cron Jobs](../guides/cron-jobs.md): scheduling reference for the daily reconciliation crons (`recalc_profile_counters`, `recalc_earn_rates`).
-- [Product Identity](product-identity.md): Pursuer-centric product spine. The reliability of sync (and the hidden-game handling specifically) underpins user trust in their badge progression numbers.
+- [Product Identity](../design/product-identity.md): Pursuer-centric product spine. The reliability of sync (and the hidden-game handling specifically) underpins user trust in their badge progression numbers.

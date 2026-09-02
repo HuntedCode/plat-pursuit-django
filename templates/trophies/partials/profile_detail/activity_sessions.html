@@ -1,0 +1,37 @@
+{% load custom_filters humanize %}{% comment %} Activity, tier 1: a wall of DAY tiles.
+
+Two tiers, each paid for only when asked for: this grid needs day totals and four covers; opening a day
+fetches its sessions AND their trophies in one go.
+
+The tile is the shared `.pp-gtile` grouping tile -- built for "a tile representing a COLLECTION of games",
+which is exactly what a day is. Its mosaic composes around however many covers exist (1-4), so a one-game
+day and a five-game day are both whole tiles rather than one being a stub.
+
+Each tile is a real LINK to `profile_day`, not a JS-only affordance: the profile is public and crawled, so
+a day has to be reachable, linkable and readable without JS. HTMX intercepts the same URL into the modal.
+{% endcomment %}
+{% if activity_days %}
+<div id="trophies-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-act-days>
+    {% include 'trophies/partials/profile_detail/activity_tiles.html' %}
+</div>
+{% comment %}Infinite scroll, as everywhere else on the site -- `?page=N` over DISTINCT DAYS, which is
+bounded by how long someone has been playing rather than by how many trophies they hold.{% endcomment %}
+<div id="trophies-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
+    <span class="loading loading-spinner loading-lg"></span>
+    <span class="sr-only">Loading more days...</span>
+</div>
+<div id="trophies-sentinel" class="h-1"></div>
+
+{% comment %}The day modal's mount. Empty until a tile is opened; the fetched partial brings its own
+dialog markup.{% endcomment %}
+<div id="act-day-modal"></div>
+
+{% else %}
+<div class="pp-act__empty">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    <p class="pp-act__empty-title">No dated activity</p>
+    {% comment %}Named precisely: a hunter CAN have trophies and no activity, because PSN did not date them.
+    "No trophies" would be a lie, and the Log is where those are.{% endcomment %}
+    <p class="pp-act__empty-hint">Trophies without an earn date can&rsquo;t be placed on a day &mdash; look in the Log.</p>
+</div>
+{% endif %}

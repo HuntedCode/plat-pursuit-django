@@ -139,55 +139,15 @@ def _serialize_author(profile):
 
 def _resolve_title_source(user_title):
     """Build a human-readable source string for a UserTitle."""
-    from trophies.models import Badge, Milestone
+    from trophies.models import Badge
     if user_title.source_type == 'badge' and user_title.source_id:
         badge = Badge.objects.filter(id=user_title.source_id).values_list('name', flat=True).first()
         return f"Earned from badge: {badge}" if badge else "Earned from a badge"
-    elif user_title.source_type == 'milestone' and user_title.source_id:
-        milestone = Milestone.objects.filter(
-            id=user_title.source_id
-        ).values('name', 'criteria_type', 'required_value').first()
-        if not milestone:
-            return "Earned from a milestone"
-        line = f"Earned from milestone: {milestone['name']}"
-        desc = _milestone_description(milestone['criteria_type'], milestone['required_value'])
-        if desc:
-            line += f" ({desc})"
-        return line
+    elif user_title.source_type == 'milestone':
+        # Historical: the legacy milestone engine is retired, so there's no source row to name.
+        # The surviving 'milestone' titles are the special one-off awards.
+        return "Earned from a special award"
     return None
-
-
-# Map criteria_type to a human-readable template.
-# {n} is replaced with required_value. Omitted types get no extra description.
-_MILESTONE_DESCRIPTIONS = {
-    'plat_count': '{n} platinums earned',
-    'trophy_count': '{n} trophies earned',
-    'rating_count': '{n} games rated',
-    'playtime_hours': '{n} hours played',
-    'checklist_upvotes': '{n} checklist upvotes received',
-    'badge_count': '{n} badge tiers earned',
-    'unique_badge_count': '{n} unique badges earned',
-    'completion_count': '{n} games 100% completed',
-    'stage_count': '{n} badge stages completed',
-    'az_progress': '{n} A-Z challenge letters',
-    'genre_progress': '{n} genre challenge genres',
-    'subgenre_progress': '{n} subgenre collections',
-    'calendar_months_total': '{n} calendar months completed',
-    'subscription_months': '{n} months subscribed',
-    'review_count': '{n} quality reviews written (150+ words)',
-    'review_helpful_count': '{n} helpful votes received on reviews',
-}
-
-
-def _milestone_description(criteria_type, required_value):
-    """Return a short description like '300 platinums earned', or None."""
-    template = _MILESTONE_DESCRIPTIONS.get(criteria_type)
-    if template and required_value:
-        return template.format(n=required_value)
-    # For boolean-style milestones (psn_linked, is_premium, etc.), use the display label
-    from trophies.models import Milestone
-    label = dict(Milestone.CRITERIA_TYPES).get(criteria_type)
-    return label or None
 
 
 def _serialize_review(review, reviewer_stats=None, user_voted_helpful=False,

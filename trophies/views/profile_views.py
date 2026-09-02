@@ -1,15 +1,11 @@
 import logging
-from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import (
-    Q, F, Prefetch, Max, Case, When, Value, IntegerField, FloatField,
-    Subquery, OuterRef, Avg, OrderBy,
-)
-from django.db.models.functions import Lower, Coalesce, Cast
-from django.http import HttpResponseRedirect, JsonResponse
+from django.db.models import Q, F, Count, Subquery, OuterRef
+from django.db.models.functions import Lower
+from django.http import Http404, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -22,46 +18,62 @@ from trophies.util_modules.cache import redis_client
 from ..forms import (
     ProfileSearchForm,
     ProfileGamesForm,
-    ProfileTrophiesForm,
-    ProfileBadgesForm,
     LinkPSNForm,
 )
 from ..models import (
     Profile,
-    EarnedTrophy,
     ProfileGame,
-    UserTrophySelection,
-    Badge,
-    UserBadge,
-    UserBadgeProgress,
     GameList,
-    Challenge,
-    Review,
-    Trophy,
-    UserConceptRating,
+    TrophyGroup,
+    UserTitle,
 )
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
-from .browse_helpers import annotate_community_ratings
+from trophies.services.activity_service import DAYS_PER_PAGE
+from trophies.mixins import HtmxListMixin
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
 
+#: A search box on a public page: bounded so one visitor cannot hand the database an enormous ILIKE.
+_TROPHY_QUERY_MAX = 80
 
-class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
-    """
-    Display paginated list of user profiles with filtering and sorting.
 
-    Provides profile browsing functionality with filters for:
-    - Username search
-    - Country
-    - Sort options (trophies, platinums, games, completions, average progress)
+class ProfilesListView(HtmxListMixin, ListView):
+    """Browse hunters at `/hunters/` -- a DISCOVERY surface, not a ranking one.
 
-    Useful for discovering other trophy hunters and viewing leaderboards.
+    Rebuilt 2026-08. The framing is the load-bearing decision: `/leaderboards/` owns ranking (it already
+    boards hunters by badges), so this page is a directory of PEOPLE -- who is here, who is active, who
+    just arrived -- and everything that made it a second scoreboard was removed rather than restyled.
+
+    What that cost the sort list, and why each one went:
+
+    - `badges_earned` / `badge_xp` -> Leaderboards. Duplicating that hub's job here is what made the two
+      surfaces read as the same page twice.
+    - `rarest_avg_plat` -> dropped. A connoisseur ranking, and the only sort with no index behind it: a
+      correlated AVG over every EarnedTrophy row per profile, sitewide.
+    - `games` / `completes` / `avg_progress` -> dropped. Three more "who is biggest" orderings on a page
+      that is no longer about biggest.
+
+    The five that remain (alphabetical, recently active, recently joined, trophies, platinums) are each
+    served by an index on Profile, so ordering never costs a scan.
+
+    Card data is deliberately thin -- identity plus two proof stats. `recent_platinum` used to be
+    prefetched for every row and is gone: the card is meant to scan, not to brief.
     """
     model = Profile
     template_name = 'trophies/profile_list.html'
     partial_template_name = 'trophies/partials/profile_list/browse_results.html'
     paginate_by = 30
+
+    #: Ordering per sort value. Every one is index-backed; `Lower('psn_username')` is the stable
+    #: tie-breaker so equal stats never shuffle between pages of the same result set.
+    SORTS = {
+        'alpha': [Lower('psn_username')],
+        'recently_active': [F('last_synced').desc(nulls_last=True), Lower('psn_username')],
+        'recently_joined': ['-created_at', Lower('psn_username')],
+        'trophies': ['-total_trophies', Lower('psn_username')],
+        'plats': ['-total_plats', Lower('psn_username')],
+    }
+    DEFAULT_SORT = 'alpha'
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET and request.user.is_authenticated:
@@ -80,67 +92,54 @@ class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset()
         form = self.get_filter_form()
-        order = [Lower('psn_username')]
 
-        # Always prefetch recent platinum (needed by template regardless of form state)
-        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').defer('trophy__game__concept__igdb_match__raw_response').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
-        qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
+        # The displayed title, folded into the ROW rather than fetched per card. `Profile.displayed_title`
+        # is a method that runs `user_titles.filter(...).first()` and then hops the `title` FK -- two
+        # queries per profile, so ~60 on a 30-card page purely to print a word under each name. The
+        # subquery is served by `usertitle_display_idx` (profile, is_displayed) and costs no extra round
+        # trip. Templates read `display_title`; the method stays for callers rendering ONE profile.
+        qs = qs.annotate(
+            display_title=Subquery(
+                UserTitle.objects
+                .filter(profile_id=OuterRef('pk'), is_displayed=True)
+                .values('title__name')[:1]
+            ),
+        )
+        # Only what a card draws. Profile is a wide row (sync bookkeeping, JSON summaries, PSN payloads)
+        # and none of it is on this page; without this the page pays to haul all of it 30 times.
+        qs = qs.only(
+            # `country_code` is deliberately absent: the card shows `flag` (which holds the code) and the
+            # only other reader was a `title` attribute dropped when the code stopped being aria-hidden.
+            # Anything added here must be READ by the card, and anything the card reads must be here --
+            # a miss is a per-row deferred fetch, i.e. an N+1 wearing a different hat.
+            'psn_username', 'display_psn_username', 'avatar_url', 'flag',
+            'trophy_level', 'total_trophies', 'total_plats', 'total_games', 'user_is_premium',
+            'display_mark',   # the name-mark partial reads it per card; a miss here is the
+                              # exact per-row deferred fetch the comment above warns about
+            'last_synced', 'created_at',
+        )
 
+        # ONE bad field must not take the others down with it. `is_valid()` is all-or-nothing, and both
+        # things a stale `browse_defaults` can carry -- a retired sort, or a country that no longer has any
+        # hunters in the choice list -- invalidate the whole form. Gating the filters on it meant a hunter
+        # whose saved default named a since-removed sort also silently lost their SEARCH, which is a much
+        # stranger failure than landing on the default order. So the filters fall back to the raw params;
+        # both are parameterised by the ORM, and an unknown country simply matches nothing.
         if form.is_valid():
-            query = form.cleaned_data.get('query')
-            country = form.cleaned_data.get('country')
-            sort_val = form.cleaned_data.get('sort')
+            query = form.cleaned_data.get('query') or ''
+            country = form.cleaned_data.get('country') or ''
+        else:
+            query = self.request.GET.get('query', '').strip()
+            country = self.request.GET.get('country', '').strip()
 
-            if query:
-                qs = qs.filter(Q(psn_username__icontains=query))
-            if country:
-                qs = qs.filter(country_code=country)
+        if query:
+            qs = qs.filter(Q(psn_username__icontains=query))
+        if country:
+            qs = qs.filter(country_code=country)
 
-            if sort_val == 'trophies':
-                order = ['-total_trophies', Lower('psn_username')]
-            elif sort_val == 'plats':
-                order = ['-total_plats', Lower('psn_username')]
-            elif sort_val == 'games':
-                order = ['-total_games', Lower('psn_username')]
-            elif sort_val == 'completes':
-                order = ['-total_completes', Lower('psn_username')]
-            elif sort_val == 'avg_progress':
-                order = ['-avg_progress', Lower('psn_username')]
-            elif sort_val == 'recently_active':
-                order = [F('last_synced').desc(nulls_last=True), Lower('psn_username')]
-            elif sort_val == 'badges_earned':
-                qs = qs.annotate(
-                    _badges_earned=Coalesce(
-                        F('gamification__total_badges_earned'), Value(0),
-                        output_field=IntegerField(),
-                    ),
-                )
-                order = ['-_badges_earned', Lower('psn_username')]
-            elif sort_val == 'badge_xp':
-                qs = qs.annotate(
-                    _badge_xp=Coalesce(
-                        F('gamification__total_badge_xp'), Value(0),
-                        output_field=IntegerField(),
-                    ),
-                )
-                order = ['-_badge_xp', Lower('psn_username')]
-            elif sort_val == 'rarest_avg_plat':
-                plat_avg = Subquery(
-                    EarnedTrophy.objects.filter(
-                        profile_id=OuterRef('pk'),
-                        earned=True,
-                        trophy__trophy_type='platinum',
-                    ).values('profile_id').annotate(
-                        val=Avg('trophy__earn_rate'),
-                    ).values('val')[:1],
-                    output_field=FloatField(),
-                )
-                qs = qs.annotate(_avg_plat_rate=plat_avg)
-                qs = qs.filter(_avg_plat_rate__isnull=False)
-                order = ['_avg_plat_rate', Lower('psn_username')]
-            elif sort_val == 'recently_joined':
-                order = ['-created_at', Lower('psn_username')]
-
+        # Read from the raw param against our own map rather than from `cleaned_data`, for the same
+        # reason: an unrecognised sort resolves to the default instead of invalidating anything.
+        order = self.SORTS.get(self.request.GET.get('sort'), self.SORTS[self.DEFAULT_SORT])
         return qs.order_by(*order)
 
     def get_context_data(self, **kwargs):
@@ -148,20 +147,46 @@ class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         # Breadcrumb
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Profiles'},
+            {'text': 'Hunters'},
         ]
+
+        # Header substance scards from the hourly heartbeat (the browse-family standard) --
+        # ALL four are values the heartbeat already computed for the home ribbon, so this page
+        # costs the cron nothing new. Full page only (guard mirrors HtmxListMixin's template
+        # selection); None until the cron warms the cache, and the template hides the grid.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            from core.services.site_heartbeat import heartbeat_values
+            stats = heartbeat_values(
+                'profiles_total', 'trophies_total', 'platinums_total', 'trophies_24h')
+            # TRUTHY gate, not is-not-None: these route through _community_value(default=0),
+            # so a failed community compute caches ZEROS -- and "Hunters tracked 0" on a live
+            # site is a lie, not a stat (the audit's catch). A real zero-profile site never
+            # renders this page anyway.
+            context['hunters_stats'] = stats if stats['profiles_total'] else None
 
         context['form'] = self.get_filter_form()
         context['selected_country'] = self.request.GET.get('country', '')
 
+        # The active sort, resolved the SAME way the queryset resolves it (raw param against the map, with
+        # an unknown value falling back rather than invalidating). The card's third stat follows this, so
+        # the wall always shows the axis it is ordered by -- the page defaults to Recently Active, and
+        # without this it sorts by something no card displays. Set in `get_context_data` so the HTMX
+        # partial gets it too; the grid is what re-renders on a sort change.
+        sort = self.request.GET.get('sort')
+        context['active_sort'] = sort if sort in self.SORTS else self.DEFAULT_SORT
+
+        # No longer mentions leaderboards: ranking moved to /leaderboards/, and describing this page as a
+        # board would set the wrong expectation in a result snippet for what is now a directory.
         context['seo_description'] = (
-            "Browse PlayStation trophy hunter profiles and leaderboards on Platinum Pursuit."
+            "Browse PlayStation trophy hunters on Platinum Pursuit. Find hunters by name or country, "
+            "and see who is active."
         )
 
         return context
 
 
-class ProfileDetailView(ProfileHotbarMixin, DetailView):
+class ProfileDetailView(DetailView):
     """
     Display profile detail page with tabbed interface for games, trophies, and badges.
 
@@ -174,22 +199,33 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
     slug_url_kwarg = 'psn_username'
     context_object_name = 'profile'
 
+    def dispatch(self, request, *args, **kwargs):
+        # One casing, one URL (SEO Lane 1): /hunters/Foo/, /hunters/foo/ and /hunters/FOO/ all
+        # returned 200 with three different self-canonicals. The stored form is lowercase, so
+        # any other casing 301s to it, querystring intact.
+        name = kwargs.get(self.slug_url_kwarg, '')
+        if name != name.lower():
+            target = reverse('profile_detail', kwargs={'psn_username': name.lower()})
+            qs = request.META.get('QUERY_STRING', '')
+            return HttpResponsePermanentRedirect(target + ('?' + qs if qs else ''))
+        return super().dispatch(request, *args, **kwargs)
+
     def get_object(self, queryset=None):
         psn_username = self.kwargs[self.slug_url_kwarg].lower()
         queryset = queryset or self.get_queryset()
         return get_object_or_404(queryset, **{self.slug_field: psn_username})
 
     def _build_header_stats(self, profile):
-        """
-        Build header statistics for profile.
+        """The hero's figures. Five denormalized columns off the Profile row -- no queries at all.
 
-        Args:
-            profile: Profile instance
-
-        Returns:
-            dict: Header stats with trophy counts, completions, and notable trophies
+        It used to also build four NOTABLE PLATINUMS (recent / rarest / fastest / milestone) for tiles the
+        hero rebuild had already retired. Nothing rendered them for weeks while they went on costing three
+        queries per profile render -- one of them `[milestone_number - 1]` on an ordered queryset, i.e. an
+        OFFSET over the profile's entire earned-platinum set -- plus the select_related chain that fed
+        them. Same shape as the timeline that was deleted beside them: a provider outliving its surface,
+        invisible precisely because nothing renders it.
         """
-        header_stats = {
+        return {
             'total_games': profile.total_games,
             'total_earned_trophies': profile.total_trophies,
             'total_unearned_trophies': profile.total_unearned,
@@ -197,92 +233,6 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             'average_completion': profile.avg_progress,
         }
 
-        # Recent platinum
-        if profile.recent_plat:
-            header_stats['recent_platinum'] = {
-                'trophy': profile.recent_plat.trophy,
-                'game': profile.recent_plat.trophy.game,
-                'earned_date': profile.recent_plat.earned_date_time,
-            }
-        else:
-            header_stats['recent_platinum'] = None
-
-        # Rarest platinum
-        if profile.rarest_plat:
-            header_stats['rarest_platinum'] = {
-                'trophy': profile.rarest_plat.trophy,
-                'game': profile.rarest_plat.trophy.game,
-                'earned_date': profile.rarest_plat.earned_date_time,
-            }
-        else:
-            header_stats['rarest_platinum'] = None
-
-        # Fastest platinum (shortest play_duration on a game where plat was earned)
-        fastest_plat_game = ProfileGame.objects.filter(
-            profile=profile,
-            has_plat=True,
-            play_duration__isnull=False,
-            play_duration__gt=timedelta(0),
-        ).select_related('game', 'game__concept', 'game__concept__igdb_match').order_by('play_duration').first()
-
-        if fastest_plat_game:
-            fastest_plat_trophy = EarnedTrophy.objects.filter(
-                profile=profile,
-                trophy__game=fastest_plat_game.game,
-                trophy__trophy_type='platinum',
-                earned=True,
-            ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').first()
-            if fastest_plat_trophy:
-                header_stats['fastest_platinum'] = {
-                    'trophy': fastest_plat_trophy.trophy,
-                    'game': fastest_plat_game.game,
-                    'play_duration': fastest_plat_game.play_duration,
-                    'earned_date': fastest_plat_trophy.earned_date_time,
-                }
-            else:
-                header_stats['fastest_platinum'] = None
-        else:
-            header_stats['fastest_platinum'] = None
-
-        # Milestone platinum (most recent round-number plat: 10, 20, 30, etc.)
-        header_stats['milestone_platinum'] = None
-        if profile.total_plats >= 10:
-            # Find the highest milestone reached (10, 20, 30, ...)
-            milestone_number = (profile.total_plats // 10) * 10
-            # Get the Nth platinum earned chronologically
-            milestone_earned = EarnedTrophy.objects.filter(
-                profile=profile,
-                trophy__trophy_type='platinum',
-                earned=True,
-                earned_date_time__isnull=False,
-            ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').order_by('earned_date_time')
-
-            # Use array slicing to get the Nth item (0-indexed)
-            try:
-                milestone_entry = milestone_earned[milestone_number - 1]
-                header_stats['milestone_platinum'] = {
-                    'trophy': milestone_entry.trophy,
-                    'game': milestone_entry.trophy.game,
-                    'milestone_number': milestone_number,
-                    'earned_date': milestone_entry.earned_date_time,
-                }
-            except (IndexError, Exception):
-                header_stats['milestone_platinum'] = None
-
-        return header_stats
-
-    def _build_timeline(self, profile):
-        """
-        Build timeline events for profile header.
-
-        Args:
-            profile: Profile instance
-
-        Returns:
-            list[dict] or None: Timeline events, or None if too few events
-        """
-        from trophies.services.timeline_service import get_cached_timeline_events
-        return get_cached_timeline_events(profile)
 
     def _build_games_tab_context(self, profile, per_page, page_number):
         """
@@ -307,15 +257,21 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Get form data
         query = form.cleaned_data.get('query')
         platforms = form.cleaned_data.get('platform')
-        game_has_plat = form.cleaned_data.get('game_has_plat')
-        plat_earned = form.cleaned_data.get('plat_earned')
-        is_100 = form.cleaned_data.get('is_100')
+        status = form.cleaned_data.get('status')
         sort_val = form.cleaned_data.get('sort')
 
         # Build queryset
-        games_qs = profile.played_games.all().select_related('game').annotate(
-            annotated_total_trophies=F('earned_trophies_count') + F('unearned_trophies_count')
-        )
+        # `game.display_image_url` resolves a trusted IGDB cover FIRST, so rendering a grid of games walks
+        # Game -> Concept -> IGDBMatch for every row. With only `game` selected that was two extra queries
+        # per card -- measured at 52 Concept + 52 IGDBMatch fetches on a 26-game page, ~104 of the tab's
+        # ~115 queries.
+        #
+        # The `defer` is not optional (project CLAUDE.md): `raw_response` is the ~30 KB IGDB API blob that
+        # no cover-art template reads, and hauling it per row is what triggered the May 2026 web-server
+        # OOM. Widening the join without deferring it trades a query storm for a memory one.
+        games_qs = profile.played_games.all().select_related(
+            'game', 'game__concept', 'game__concept__igdb_match',
+        ).defer('game__concept__igdb_match__raw_response')
 
         # Apply profile settings
         if profile.hide_hiddens:
@@ -333,173 +289,38 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             games_qs = games_qs.filter(platform_filter)
             context['selected_platforms'] = platforms
 
-        # Apply plat status filters (three independent axes)
-        if game_has_plat == 'yes':
-            games_qs = games_qs.filter(game__defined_trophies__platinum__gt=0)
-        elif game_has_plat == 'no':
-            games_qs = games_qs.exclude(game__defined_trophies__platinum__gt=0)
-        if plat_earned == 'yes':
+        # Status -- ONE control replacing what used to be three plat/100% selects plus a completion
+        # range. Those were four fields asking a single question (how far did they get), and the card
+        # already answers it with a five-state completion bar; these options ARE those states, so the
+        # filter and the card read as one vocabulary.
+        if status == 'plat':
             games_qs = games_qs.filter(has_plat=True)
-        elif plat_earned == 'no':
-            games_qs = games_qs.filter(has_plat=False)
-        if is_100 == 'yes':
+        elif status == 'full':
             games_qs = games_qs.filter(progress=100)
-        elif is_100 == 'no':
-            games_qs = games_qs.exclude(progress=100)
+        elif status == 'chase':
+            games_qs = games_qs.filter(game__defined_trophies__platinum__gt=0, has_plat=False)
+        elif status == 'unfinished':
+            games_qs = games_qs.filter(progress__lt=100)
 
-        # --- Genre / Theme filters ---
-        genres = form.cleaned_data.get('genres')
-        if genres:
-            games_qs = games_qs.filter(
-                game__concept__concept_genres__genre_id__in=genres,
-            ).distinct()
-        themes = form.cleaned_data.get('themes')
-        if themes:
-            games_qs = games_qs.filter(
-                game__concept__concept_themes__theme_id__in=themes,
-            ).distinct()
-
-        # --- Completion range ---
-        comp_min = form.cleaned_data.get('completion_min') or 0
-        comp_max = form.cleaned_data.get('completion_max') or 100
-        if comp_min > 0:
-            games_qs = games_qs.filter(progress__gte=comp_min)
-        if comp_max < 100:
-            games_qs = games_qs.filter(progress__lte=comp_max)
-
-        # --- Community flag filters (hide wins on conflict) ---
-        if form.cleaned_data.get('hide_delisted'):
-            games_qs = games_qs.filter(game__is_delisted=False)
-        elif form.cleaned_data.get('show_delisted'):
-            games_qs = games_qs.filter(game__is_delisted=True)
-        if form.cleaned_data.get('hide_unobtainable'):
-            games_qs = games_qs.filter(game__is_obtainable=True)
-        elif form.cleaned_data.get('show_unobtainable'):
-            games_qs = games_qs.filter(game__is_obtainable=False)
-        if form.cleaned_data.get('hide_online'):
-            games_qs = games_qs.filter(game__has_online_trophies=False)
-        elif form.cleaned_data.get('show_online'):
-            games_qs = games_qs.filter(game__has_online_trophies=True)
-        if form.cleaned_data.get('hide_buggy'):
-            games_qs = games_qs.filter(game__has_buggy_trophies=False)
-        elif form.cleaned_data.get('show_buggy'):
-            games_qs = games_qs.filter(game__has_buggy_trophies=True)
-        if form.cleaned_data.get('filter_shovelware'):
-            games_qs = games_qs.exclude(
-                game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            )
-
-        # --- Community rating filters (dual-range) ---
-        rating_min = form.cleaned_data.get('rating_min') or 0
-        rating_max = form.cleaned_data.get('rating_max') or 5
-        diff_min = form.cleaned_data.get('difficulty_min') or 1
-        diff_max = form.cleaned_data.get('difficulty_max') or 10
-        fun_lo = form.cleaned_data.get('fun_min') or 1
-        fun_hi = form.cleaned_data.get('fun_max') or 10
-        has_rating_filter = (
-            rating_min > 0 or rating_max < 5
-            or diff_min > 1 or diff_max < 10
-            or fun_lo > 1 or fun_hi < 10
-        )
-        needs_rating = has_rating_filter or sort_val in ('rating', 'rating_inv')
-
-        if needs_rating:
-            games_qs = annotate_community_ratings(games_qs, 'game__concept_id')
-            if rating_min > 0:
-                games_qs = games_qs.filter(_avg_rating__gte=float(rating_min))
-            if rating_max < 5:
-                games_qs = games_qs.filter(_avg_rating__lte=float(rating_max))
-            if diff_min > 1:
-                games_qs = games_qs.filter(_avg_difficulty__gte=float(diff_min))
-            if diff_max < 10:
-                games_qs = games_qs.filter(_avg_difficulty__lte=float(diff_max))
-            if fun_lo > 1:
-                games_qs = games_qs.filter(_avg_fun__gte=float(fun_lo))
-            if fun_hi < 10:
-                games_qs = games_qs.filter(_avg_fun__lte=float(fun_hi))
-
-        # --- Time-to-beat filter (dual-range, in hours) ---
-        igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
-        igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
-        if igdb_lo > 0 or igdb_hi < 1000:
-            # Trusted matches only — pending/rejected matches have TTB
-            # populated but not reviewed.
-            time_q = Q(
-                game__concept__igdb_match__time_to_beat_completely__isnull=False,
-                game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
-            )
-            if igdb_lo > 0:
-                time_q &= Q(game__concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
-            if igdb_hi < 1000:
-                time_q &= Q(game__concept__igdb_match__time_to_beat_completely__lte=int(igdb_hi) * 3600)
-            games_qs = games_qs.filter(time_q)
+        # The genre/theme pickers, community rating/difficulty/fun ranges, time-to-beat range,
+        # shovelware exclude and eight unrendered show_*/hide_* community flags were removed in
+        # 2026-08 along with eleven sorts. They were DISCOVERY controls inherited wholesale from
+        # Browse Games -- they answer "what should I play next", which is a question about a
+        # catalogue, not about somebody's history. Removing them also drops this tab's
+        # `annotate_community_ratings()` correlated subqueries and its time-to-beat Case.
 
         # --- Sort ---
         order = ['-last_updated_datetime']
         if sort_val == 'oldest':
             order = ['last_updated_datetime']
-        elif sort_val == 'latest_trophy':
-            order = [OrderBy(F('most_recent_trophy_date'), descending=True, nulls_last=True), Lower('game__title_name')]
         elif sort_val == 'alpha':
             order = [Lower('game__title_name')]
         elif sort_val == 'completion':
             order = ['-progress', Lower('game__title_name')]
         elif sort_val == 'completion_inv':
             order = ['progress', Lower('game__title_name')]
-        elif sort_val == 'trophies':
-            order = ['-annotated_total_trophies', Lower('game__title_name')]
         elif sort_val == 'earned':
             order = ['-earned_trophies_count', Lower('game__title_name')]
-        elif sort_val == 'unearned':
-            order = ['-unearned_trophies_count', Lower('game__title_name')]
-        elif sort_val == 'rating' and needs_rating:
-            games_qs = games_qs.filter(_avg_rating__isnull=False)
-            order = ['-_avg_rating', Lower('game__title_name')]
-        elif sort_val == 'rating_inv' and needs_rating:
-            games_qs = games_qs.filter(_avg_rating__isnull=False)
-            order = ['_avg_rating', Lower('game__title_name')]
-        elif sort_val in ('time_to_beat', 'time_to_beat_inv'):
-            games_qs = games_qs.annotate(
-                _time_to_beat=Case(
-                    When(
-                        game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
-                        then=F('game__concept__igdb_match__time_to_beat_completely'),
-                    ),
-                    default=None,
-                    output_field=IntegerField(),
-                ),
-            )
-            if sort_val == 'time_to_beat':
-                order = [OrderBy(F('_time_to_beat'), nulls_last=True)]
-            else:
-                order = [OrderBy(F('_time_to_beat'), descending=True, nulls_last=True)]
-        elif sort_val in ('plat_rarest', 'plat_common'):
-            plat_rate = Subquery(
-                Trophy.objects.filter(
-                    game_id=OuterRef('game_id'), trophy_type='platinum',
-                ).values('earn_rate')[:1],
-                output_field=FloatField(),
-            )
-            games_qs = games_qs.annotate(
-                _plat_rate=Coalesce(plat_rate, Value(0.0), output_field=FloatField()),
-            )
-            if sort_val == 'plat_rarest':
-                order = ['_plat_rate', Lower('game__title_name')]
-            else:
-                order = ['-_plat_rate', Lower('game__title_name')]
-        elif sort_val in ('trophy_count', 'trophy_count_inv'):
-            games_qs = games_qs.annotate(
-                _defined_trophy_count=(
-                    Coalesce(Cast(F('game__defined_trophies__bronze'), IntegerField()), Value(0))
-                    + Coalesce(Cast(F('game__defined_trophies__silver'), IntegerField()), Value(0))
-                    + Coalesce(Cast(F('game__defined_trophies__gold'), IntegerField()), Value(0))
-                    + Coalesce(Cast(F('game__defined_trophies__platinum'), IntegerField()), Value(0))
-                ),
-            )
-            if sort_val == 'trophy_count':
-                order = ['-_defined_trophy_count', Lower('game__title_name')]
-            else:
-                order = ['_defined_trophy_count', Lower('game__title_name')]
 
         games_qs = games_qs.order_by(*order)
 
@@ -511,332 +332,285 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             game_page_obj = games_paginator.get_page(page_number)
 
         context['profile_games'] = game_page_obj
+        # DLC pack count per game -- ONE grouped query, bounded to the games actually on this page (not
+        # the whole library), mirroring how Browse Games builds the same chip. Trophy groups beyond the
+        # base 'default' group are the DLC packs.
+        page_game_ids = [pg.game_id for pg in game_page_obj]
+        context['dlc_map'] = {
+            d['game_id']: d['n']
+            for d in (
+                TrophyGroup.objects.filter(game_id__in=page_game_ids)
+                .exclude(trophy_group_id='default')
+                .values('game_id').annotate(n=Count('id'))
+            )
+        } if page_game_ids else {}
         context['form'] = form
-        context['selected_genres'] = self.request.GET.getlist('genres')
-        context['selected_themes'] = self.request.GET.getlist('themes')
+        # Options come from the form's constants rather than a bound field's `.choices`, because both
+        # controls are CharFields (see ProfileGamesForm.clean_sort). This also matches how the Badges
+        # and Ratings tabs already feed their toolbars.
+        context['sort_options'] = ProfileGamesForm.SORT_CHOICES
+        context['status_options'] = ProfileGamesForm.STATUS_CHOICES
+        context['selected_status'] = status
+        context['selected_sort'] = sort_val
+        # The scroller gates its first fetch on the grid holding a FULL page. This tab never set the size,
+        # so the template's default (30) was measured against a server page of 50 -- the two only agreed by
+        # accident, and the resume arithmetic after a history restore did not.
+        context['scroll_per_page'] = per_page
         return context
 
     def _build_trophies_tab_context(self, profile, per_page, page_number):
+        """The Trophies tab: ONE surface whose shape follows intent.
+
+        No Activity/Log switcher. A search field sits above the day wall; with nothing in it you get the
+        wall, and searching swaps it for the matching trophies. That replaced two views because they were
+        never two ways of browsing -- Activity is how you browse a history, and the Log was an INDEX
+        dressed as a wall. A single trophy has no natural shape (an icon, a name, a percentage), which is
+        why no layout for it read well; as search results it does not need one.
+
+        What went with the Log: its sorts (Activity answers recency far better) and its platform and
+        rarity-range filters (a power-user cross-section of someone ELSE's history). What stayed is the
+        one thing Activity genuinely cannot do -- answer "did they ever get this".
         """
-        Build context for trophies tab with filtering and pagination.
+        query, tiers = self._trophy_search_params()
 
-        Args:
-            profile: Profile instance
-            per_page: Items per page
-            page_number: Current page number
+        context = {'trophy_query': query, 'trophy_selected': tiers, 'trophy_tiers': self._TROPHY_TIERS,
+                   'is_searching': bool(query or tiers),
+                   # The scroller gates its first fetch on the grid being a FULL page, so it needs the size
+                   # of whichever shape is rendered -- days or trophies, which page differently.
+                   'scroll_per_page': per_page if (query or tiers) else DAYS_PER_PAGE}
+        if context['is_searching']:
+            context.update(self._build_trophy_search_context(profile, per_page, page_number, query, tiers))
+        else:
+            context.update(self._build_activity_context(profile))
+        return context
 
-        Returns:
-            dict: Context with trophy_log and form
+    def _trophy_search_params(self):
+        """The validated (query, tiers) pair -- the ONE definition of "is this a search".
+
+        `get_template_names` and the context builder used to decide that separately, and the template
+        chooser read `?tier=` RAW: a bogus tier built the day wall and then rendered it with the search
+        template, which reads a `trophy_log` that does not exist.
+
+        Tiers are a LIST: "their golds and platinums" is one question, and asking it as two searches is
+        the kind of thing a filter exists to avoid. Unknown values are dropped rather than rejected, so a
+        stale or hand-edited link still answers with whatever of it made sense.
         """
-        form = ProfileTrophiesForm(self.request.GET)
-        context = {'profile_games': []}
+        query = (self.request.GET.get('q') or '').strip()[:_TROPHY_QUERY_MAX]
+        known = dict(self._TROPHY_TIERS)
+        tiers = [t for t in self.request.GET.getlist('tier') if t in known]
+        return query, tiers
 
-        if not form.is_valid():
-            context['trophy_log'] = []
-            context['form'] = form
-            return context
+    #: Quick cross-sections worth keeping beside the search box. Tier is the one axis of a trophy that is
+    #: both obvious to ask for and free to filter -- it is a column on Trophy, not a computed grade.
+    _TROPHY_TIERS = [
+        ('platinum', 'Platinums'),
+        ('gold', 'Gold'),
+        ('silver', 'Silver'),
+        ('bronze', 'Bronze'),
+    ]
 
-        # Get form data
-        query = form.cleaned_data.get('query')
-        platforms = form.cleaned_data.get('platform')
-        trophy_type = form.cleaned_data.get('type')
-        sort_val = form.cleaned_data.get('sort', 'recent')
+    def _build_activity_context(self, profile):
+        """The day wall. See `activity_service` for why each tier is fetched only when it is asked for."""
+        from trophies.services.activity_service import DAYS_PER_PAGE, build_activity_page
 
-        # Build queryset
-        trophies_qs = profile.earned_trophy_entries.filter(earned=True).select_related(
-            'trophy', 'trophy__game',
+        try:
+            page = max(int(self.request.GET.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1        # public, crawled URL: a hand-edited ?page= must not 500
+
+        return build_activity_page(profile, page=page)
+
+    def _build_trophy_search_context(self, profile, per_page, page_number, query, tiers):
+        """Matching trophies, newest first.
+
+        Sliced rather than paginated: `Paginator` runs `COUNT(*)` over the whole match set on every page,
+        and a whale's history is 250,000 rows. The scroller stops when a page comes back short, so the
+        count buys nothing. Ordered by recency because that is the only ordering a search result wants --
+        "when did they get it" is the follow-up question to "did they".
+        """
+        try:
+            page = max(int(page_number or 1), 1)
+        except (TypeError, ValueError):
+            page = 1
+        offset = (page - 1) * per_page
+
+        # The cards show COVER ART, and `display_image_url` resolves a trusted IGDB cover first -- so the
+        # chain is joined and its ~30 KB `raw_response` blob deferred, which must always travel together.
+        qs = (
+            # Dated only, so the ordering below can come straight off the index. The partial index is
+            # ASC NULLS LAST; a reverse scan gives DESC NULLS FIRST, so `nulls_last` matches neither
+            # direction and Postgres sorts the entire match set before the LIMIT. Undated trophies have no
+            # place in a recency ordering anyway.
+            profile.earned_trophy_entries.filter(earned=True, earned_date_time__isnull=False)
+            .select_related('trophy', 'trophy__game', 'trophy__game__concept',
+                            'trophy__game__concept__igdb_match')
+            .defer('trophy__game__concept__igdb_match__raw_response')
         )
-
-        # Apply filters
         if query:
-            trophies_qs = trophies_qs.filter(
+            qs = qs.filter(
                 Q(trophy__trophy_name__icontains=query) | Q(trophy__game__title_name__icontains=query)
             )
-        if platforms:
-            platform_filter = Q()
-            for plat in platforms:
-                platform_filter |= Q(trophy__game__title_platform__contains=plat)
-            trophies_qs = trophies_qs.filter(platform_filter)
-            context['selected_platforms'] = platforms
-        if trophy_type:
-            trophies_qs = trophies_qs.filter(trophy__trophy_type=trophy_type)
+        if tiers:
+            qs = qs.filter(trophy__trophy_type__in=tiers)
 
-        # Rarity range filter (PSN earn rate, 0-100%)
-        rarity_min = form.cleaned_data.get('rarity_min') or 0
-        rarity_max = form.cleaned_data.get('rarity_max') or 100
-        if rarity_min > 0:
-            trophies_qs = trophies_qs.filter(trophy__trophy_earn_rate__gte=float(rarity_min))
-        if rarity_max < 100:
-            trophies_qs = trophies_qs.filter(trophy__trophy_earn_rate__lte=float(rarity_max))
+        return {'trophy_log': list(qs.order_by('-earned_date_time')[offset:offset + per_page])}
 
-        # Sort
-        if sort_val == 'oldest':
-            trophies_qs = trophies_qs.order_by(
-                F('earned_date_time').asc(nulls_last=True),
-            )
-        elif sort_val == 'alpha':
-            trophies_qs = trophies_qs.order_by(
-                Lower('trophy__trophy_name'),
-            )
-        elif sort_val == 'rarest_psn':
-            trophies_qs = trophies_qs.order_by(
-                'trophy__trophy_earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'common_psn':
-            trophies_qs = trophies_qs.order_by(
-                '-trophy__trophy_earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'rarest_pp':
-            trophies_qs = trophies_qs.order_by(
-                'trophy__earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'common_pp':
-            trophies_qs = trophies_qs.order_by(
-                '-trophy__earn_rate',
-                F('earned_date_time').desc(nulls_last=True),
-            )
-        elif sort_val == 'type':
-            trophies_qs = trophies_qs.annotate(
-                _type_order=Case(
-                    When(trophy__trophy_type='platinum', then=Value(0)),
-                    When(trophy__trophy_type='gold', then=Value(1)),
-                    When(trophy__trophy_type='silver', then=Value(2)),
-                    When(trophy__trophy_type='bronze', then=Value(3)),
-                    default=Value(4),
-                    output_field=IntegerField(),
-                ),
-            ).order_by(
-                '_type_order',
-                Lower('trophy__trophy_name'),
-            )
-        else:  # 'recent' (default)
-            trophies_qs = trophies_qs.order_by(
-                F('earned_date_time').desc(nulls_last=True),
-            )
-
-        # Paginate
-        trophy_paginator = Paginator(trophies_qs, per_page)
-        if int(page_number) > trophy_paginator.num_pages:
-            trophy_page_obj = []
-        else:
-            trophy_page_obj = trophy_paginator.get_page(page_number)
-
-        context['trophy_log'] = trophy_page_obj
-        context['form'] = form
-        return context
+    # How a visitor can reorder someone's badges. Deliberately SHORTER than the Collection gallery's six:
+    # `edition` is an organisational sort that helps an owner audit their own wall, and this
+    # is a stranger's read-only view. These four are the four questions a visitor actually asks.
+    _BADGE_SORTS = [
+        ('earned', 'Recently earned'),
+        ('progress', 'Closest to earning'),
+        ('rarity', 'Rarest first'),
+        ('series', 'Series (A-Z)'),
+    ]
 
     @staticmethod
-    def _compute_badge_xp(badge_group):
-        """Compute total XP value for a badge group's highest earned tier."""
-        from trophies.services.xp_service import get_tier_xp
-        from trophies.util_modules.constants import BADGE_TIER_XP
-        badge = badge_group['highest_badge']
-        return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
+    def _sort_badges(frames, sort):
+        """Order the badge wall.
 
-    def _sort_badge_groups(self, badge_list, sort_val):
-        """Apply consistent sorting to a list of badge group dicts."""
-        _title = lambda d: (d['highest_badge'].effective_display_title or '').lower()
-        if sort_val == 'name':
-            badge_list.sort(key=lambda d: _title(d))
-        elif sort_val == 'tier':
-            badge_list.sort(key=lambda d: (d['max_tier'], _title(d)))
-        elif sort_val == 'tier_desc':
-            badge_list.sort(key=lambda d: (-d['max_tier'], _title(d)))
-        elif sort_val == 'stages':
-            badge_list.sort(key=lambda d: (-d['highest_badge'].required_stages, _title(d)))
-        elif sort_val == 'stages_inv':
-            badge_list.sort(key=lambda d: (d['highest_badge'].required_stages, _title(d)))
-        elif sort_val == 'xp':
-            badge_list.sort(key=lambda d: (-self._compute_badge_xp(d), _title(d)))
-        elif sort_val == 'xp_inv':
-            badge_list.sort(key=lambda d: (self._compute_badge_xp(d), _title(d)))
-        elif sort_val == 'recent':
-            from datetime import datetime
-            badge_list.sort(
-                key=lambda d: d.get('earned_at') or datetime.min,
-                reverse=True,
-            )
-        else:  # 'series' (default)
-            badge_list.sort(key=lambda d: (d['highest_badge'].effective_display_series or '').lower())
+        Sorted HERE rather than by passing `sort` down to the service: `build_collection_context` does not
+        sort at all. Its `sort` argument only picks the gallery dropdown's initial value, because the gallery
+        reorders itself client-side in JS -- so handing it a sort would have reordered nothing, and this tab
+        has no such JS (importing the gallery's would drag in its whole toolbar).
+
+        Sorting the materialized list is free: it is already built and bounded by engaged series, not by
+        library size, so there is no query and nothing here scales with a big account.
+        """
+        keys = {
+            # Unearned badges carry earned_ts 0, so they land together at the end rather than interleaving.
+            'earned': lambda f: (-f.get('earned_ts', 0), f.get('series_name', '').lower()),
+            # In-progress first, nearest completion at the top -- an earned badge has nothing left to chase
+            # and an untouched one has no progress to rank by, so neither belongs in the middle of this.
+            'progress': lambda f: (f.get('state') != 'in_progress', -f.get('progress_pct', 0),
+                                   f.get('series_name', '').lower()),
+            # Rarity is "% of the community holding it", so low is rare. 0 is NOT the rarest -- it is the
+            # no-data value (an edition nobody holds yet), so it sorts last instead of leading the wall.
+            'rarity': lambda f: (not f.get('rarity_pct'), f.get('rarity_pct', 0),
+                                 f.get('series_name', '').lower()),
+            'series': lambda f: f.get('series_name', '').lower(),
+        }
+        return sorted(frames, key=keys[sort])
 
     def _build_badges_tab_context(self, profile):
+        """Badges this hunter holds and is chasing -- the PUBLIC view of their collection.
+
+        Reads the same service the owner's Collection gallery does. That matters for more than tidiness:
+        `build_collection_context` resolves per-edition progress from the standings' materialized
+        `group_progress` read-model, so it is a handful of bulk reads with no live evaluation and no
+        per-badge queries. Live-evaluating badge state is O(engaged) and times out for a heavy account,
+        which is why the Collection was built that way in the first place.
+
+        It replaces a reader of the LEGACY badge tables (UserBadge / Badge / UserBadgeProgress), which
+        nothing writes any more -- so this tab had been showing a frozen set to everybody.
+
+        In-progress badges are kept rather than filtered out: what someone is chasing is as interesting to a
+        visitor as what they already hold, and the medallion's own state treatment already tells the two
+        apart without needing a filter to separate them.
         """
-        Build context for badges tab with earned badges, in-progress badges, and progress.
+        from trophies.services.collection_service import build_collection_context
 
-        Args:
-            profile: Profile instance
+        context = build_collection_context(profile)
 
-        Returns:
-            dict: Context with grouped_earned_badges, in_progress_badges, and form
+        sort = self.request.GET.get('sort', '')
+        if sort not in dict(self._BADGE_SORTS):
+            sort = self._BADGE_SORTS[0][0]
+        context.update({
+            'list_badges': self._sort_badges(context['list_badges'], sort),
+            'sort': sort,
+            'sort_options': self._BADGE_SORTS,
+        })
+        return context
+
+    def _build_card_tab_context(self, profile):
+        """The owner's Profile Card -- the share-card family's whole-career sibling, previewed inline.
+
+        The preview is the REAL card: the same template the PNG endpoint renders, server-side, with
+        live data -- so what the owner sees is what downloads (the family rule, from the share
+        modal). No ShareImageCache here: this is a real page on the site origin, where every image
+        URL resolves itself, so caching costs land only on the download.
         """
-        form = ProfileBadgesForm(self.request.GET)
-        context = {}
+        from django.template.loader import render_to_string
 
-        if not form.is_valid():
-            context['grouped_earned_badges'] = []
-            context['in_progress_badges'] = []
-            context['form'] = form
-            return context
+        from core.services import profile_card_service
 
-        sort_val = form.cleaned_data.get('sort')
-        badge_type_filter = form.cleaned_data.get('badge_type')
-        tier_filter_val = form.cleaned_data.get('tier')
-
-        # Get earned badge series with max tier per series
-        earned_badges_qs = UserBadge.objects.filter(profile=profile).values(
-            'badge__series_slug'
-        ).annotate(max_tier=Max('badge__tier')).distinct()
-
-        # Collect all series slugs and needed tiers for bulk fetch
-        series_tier_pairs = []
-        earned_series_slugs = set()
-        for entry in earned_badges_qs:
-            slug = entry['badge__series_slug']
-            max_tier = entry['max_tier']
-            earned_series_slugs.add(slug)
-            series_tier_pairs.append((slug, max_tier))
-            series_tier_pairs.append((slug, max_tier + 1))  # next tier
-
-        # Bulk fetch all needed Badge objects in one query
-        if series_tier_pairs:
-            tier_filter = Q()
-            for slug, tier in series_tier_pairs:
-                tier_filter |= Q(series_slug=slug, tier=tier)
-            all_badges = Badge.objects.live().filter(tier_filter).select_related(
-                'base_badge', 'title', 'base_badge__title'
-            )
-            badge_lookup = {(b.series_slug, b.tier): b for b in all_badges}
-        else:
-            badge_lookup = {}
-
-        # Bulk fetch all UserBadgeProgress for this profile
-        progress_lookup = {
-            p.badge_id: p
-            for p in UserBadgeProgress.objects.filter(profile=profile).select_related('badge')
+        try:
+            data = profile_card_service.get_card_data(profile)
+            # The inline render needs the same keys the PNG context carries, uncached.
+            data['avatar_image'] = data['user_avatar_url']
+            for m in data['badges']['medallions']:
+                m['layers_cached'] = m['layers']
+            for key in ('rarest_plat', 'latest_plat'):
+                if data.get(key):
+                    data[key]['cover_cached'] = data[key]['cover_url']
+            card_html = render_to_string('shareables/profile_card.html', data)
+        except Exception:
+            logger.exception("Profile Card build failed for profile %s", profile.id)
+            card_html = ''
+        # The family's curated grounds, game-art backings excluded upstream (they need a game,
+        # and a career is not one) -- recap's exact filter, so the three cards share one palette.
+        from trophies.themes import get_plat_card_themes
+        card_themes = [(k, t) for k, t in get_plat_card_themes() if not t.get('is_game_art')]
+        return {
+            'card_html': card_html,
+            'card_themes': card_themes,
+            'card_png_url': reverse('api:profile-card-png'),
+            'card_filename': f"{profile.display_psn_username or profile.psn_username}-profile-card.png",
         }
 
-        # Bulk fetch earned_at per series (for "Recently Earned" sort)
-        earned_at_lookup = {}
-        if sort_val == 'recent':
-            for ub in UserBadge.objects.filter(profile=profile).values(
-                'badge__series_slug',
-            ).annotate(latest_earned=Max('earned_at')):
-                earned_at_lookup[ub['badge__series_slug']] = ub['latest_earned']
+    def _build_ratings_tab_context(self, profile):
+        """What this hunter thinks of what they have played.
 
-        # Build earned badges list using lookups instead of per-item queries
-        grouped_earned = []
-        for entry in earned_badges_qs:
-            series_slug = entry['badge__series_slug']
-            max_tier = entry['max_tier']
-            highest_badge = badge_lookup.get((series_slug, max_tier))
-            if not highest_badge:
-                continue
+        The one tab that is about TASTE rather than totals. Games, Trophies and Badges all answer "how
+        much"; this answers "and were they any good", which is the only thing on the profile that a second
+        hunter with identical numbers would answer differently.
 
-            next_badge = badge_lookup.get((series_slug, max_tier + 1))
-            is_maxed = next_badge is None
-            if is_maxed:
-                next_badge = highest_badge
+        Two layers, and the top one is why this is not just a list: a summary of everything they have rated
+        (their average score, the hours they have signed off on, and the same synthesized sentence the game
+        pages use, pointed at a person instead of a game), then the wall. A rating with no aggregate above
+        it is a number without a scale -- 6/10 difficulty means one thing from someone whose average is 3
+        and another from someone whose average is 8.
 
-            progress_entry = progress_lookup.get(next_badge.id)
-            if progress_entry and next_badge.required_stages > 0:
-                progress_percentage = (progress_entry.completed_concepts / next_badge.required_stages) * 100
-            else:
-                progress_percentage = 0
-            if is_maxed:
-                progress_percentage = 100
+        Both halves are built in `rating_service`, next to the community-average code they must agree with.
+        """
+        from trophies.services.rating_service import (
+            PROFILE_RATING_SORTS, RATINGS_PER_PAGE, build_profile_ratings_page, profile_rating_summary,
+        )
 
-            grouped_earned.append({
-                'highest_badge': highest_badge,
-                'next_badge': next_badge,
-                'progress': progress_entry,
-                'percentage': progress_percentage,
-                'max_tier': max_tier,
-                'earned_at': earned_at_lookup.get(series_slug),
-            })
+        sort = self.request.GET.get('sort', '')
+        if sort not in dict(PROFILE_RATING_SORTS):
+            sort = PROFILE_RATING_SORTS[0][0]
 
-        # In-memory filters
-        if badge_type_filter:
-            grouped_earned = [
-                g for g in grouped_earned
-                if g['highest_badge'].badge_type in badge_type_filter
-            ]
-        if tier_filter_val:
-            tier_ints = [int(t) for t in tier_filter_val]
-            grouped_earned = [
-                g for g in grouped_earned
-                if g['max_tier'] in tier_ints
-            ]
+        try:
+            page = max(int(self.request.GET.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1        # public, crawled URL: a hand-edited ?page= must not 500
 
-        self._sort_badge_groups(grouped_earned, sort_val)
-        context['grouped_earned_badges'] = grouped_earned
+        # Base games and DLC are separate walls. A DLC pack is rated separately from the game it belongs
+        # to, so a mixed wall shows the same title twice with two different scores and leaves the reader
+        # to work out why. Anything but 'dlc' is games -- a hand-edited `?set=` should land somewhere, not
+        # 404.
+        rating_set = 'dlc' if self.request.GET.get('set') == 'dlc' else 'games'
 
-        # Build in-progress badges (tier 1, some progress, not yet earned)
-        in_progress_qs = UserBadgeProgress.objects.filter(
-            profile=profile,
-            badge__tier=1,
-            completed_concepts__gt=0,
-        ).exclude(
-            badge__series_slug__in=earned_series_slugs,
-        ).select_related('badge', 'badge__base_badge', 'badge__title', 'badge__base_badge__title')
-
-        earned_badge_ids = {b.id for b in badge_lookup.values()}
-
-        in_progress_badges = []
-        for progress in in_progress_qs:
-            badge = progress.badge
-            if badge.id in earned_badge_ids:
-                continue
-
-            if badge.required_stages > 0:
-                percentage = (progress.completed_concepts / badge.required_stages) * 100
-            else:
-                percentage = 0
-
-            in_progress_badges.append({
-                'highest_badge': badge,
-                'next_badge': badge,
-                'progress': progress,
-                'percentage': percentage,
-                'max_tier': 0,
-            })
-
-        in_progress_badges.sort(key=lambda d: (-d['percentage'], (d['highest_badge'].effective_display_title or '').lower()))
-        context['in_progress_badges'] = in_progress_badges
-        context['form'] = form
-        context['selected_badge_types'] = self.request.GET.getlist('badge_type')
-        context['selected_tiers'] = self.request.GET.getlist('tier')
-        return context
+        return {
+            # Not computed for a scroll append: that response is cards only, and the summary describes the
+            # whole set, so it would be an extra aggregate per appended page that nothing renders.
+            'rating_summary_stats': None if self._is_scroll_append() else profile_rating_summary(profile),
+            'profile_ratings': build_profile_ratings_page(
+                profile, sort=sort, page=page, dlc=rating_set == 'dlc',
+            ),
+            'rating_set': rating_set,
+            #: The switcher's two chips, in order. A list rather than two hardcoded anchors so the chip
+            #: markup is written once -- the same reason the recommendation options are looped.
+            'ratings_sets': (('games', 'Games'), ('dlc', 'DLC')),
+            'sort': sort,
+            'sort_options': PROFILE_RATING_SORTS,
+            'scroll_per_page': RATINGS_PER_PAGE,
+        }
 
     def _build_lists_tab_context(self, public_lists_qs):
         """Build context for lists tab — public game lists for this profile."""
         return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
-
-    def _build_challenges_tab_context(self, profile):
-        """Build context for challenges tab — all challenges by this profile."""
-        challenges = Challenge.objects.filter(
-            profile=profile, is_deleted=False
-        ).order_by('-created_at')
-        return {'profile_challenges': challenges}
-
-    def _build_reviews_tab_context(self, profile, per_page, page_number):
-        """Build context for reviews tab — reviews written by this profile."""
-        reviews_qs = Review.objects.filter(
-            profile=profile, is_deleted=False
-        ).select_related(
-            'concept_trophy_group__concept',
-            'concept_trophy_group__concept__igdb_match',
-        ).order_by('-created_at')
-
-        paginator = Paginator(reviews_qs, per_page)
-        if int(page_number) > paginator.num_pages:
-            page_obj = []
-        else:
-            page_obj = paginator.get_page(page_number)
-
-        return {'profile_reviews': page_obj}
 
     def get_context_data(self, **kwargs):
         """Build context for profile detail page with tab-specific content.
@@ -854,62 +628,70 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context = super().get_context_data(**kwargs)
         profile: Profile = self.object
         tab = self.request.GET.get('tab', 'games')
+        # Ownership, resolved early because the Card tab depends on it (edit controls read it too).
+        is_own_profile = (
+            self.request.user.is_authenticated and
+            hasattr(self.request.user, 'profile') and
+            self.request.user.profile == profile
+        )
+        # The Card tab is the owner's own share surface. For anyone else the slug is not a tab at
+        # all, so it normalizes to the default BEFORE the dispatch / template map / chip loop read
+        # it -- half-normalizing is exactly how a visitor would get the card TEMPLATE over the games
+        # CONTEXT. `_resolved_tab` carries the decision to get_template_names, which otherwise
+        # re-reads the raw query string on the HTMX path.
+        if tab == 'card' and not is_own_profile:
+            tab = 'games'
+        self._resolved_tab = tab
         per_page = 50
         page_number = self.request.GET.get('page', 1)
 
-        # Efficiently load profile with denormalized plat FKs
-        profile = Profile.objects.select_related(
-            'recent_plat__trophy__game', 'rarest_plat__trophy__game'
-        ).get(id=profile.id)
-
-        # Build shared context (header stats + timeline)
-        context['header_stats'] = self._build_header_stats(profile)
-
-        # Showcases render for everyone, anonymous included: a shared profile link is
-        # mostly opened logged-out, which is exactly the audience the customization is
-        # for. Every remaining provider is bounded by config or by a small owned table
-        # (<= 20 selected platinums, <= 6 game ids, <= 5 badges, <= 6 titles, 6
-        # date-indexed platinums), so the whole set is cheap regardless of account size.
-        # The one provider that was NOT bounded -- Rarest Trophies, which ranked the
-        # profile's entire earned set on a joined column -- was removed outright rather
-        # than gated, because its cost came from "rank everything I own" and not from
-        # who was looking. See showcase_service.py and migration 0275.
-        from trophies.services.showcase_service import ProfileShowcaseService
-        context['rendered_showcases'] = ProfileShowcaseService.get_rendered_showcases(profile)
-
-        # The timeline IS still gated. It is cached per profile, so a crawler
-        # enumerating distinct profiles has a 0% hit rate by construction -- per-entity
-        # caching cannot protect an enumerable URL space, only gating can. The partial
-        # (profile_timeline.html) self-hides on an empty value, so the anonymous page
-        # loses a section rather than gaining a hole.
+        # Two providers used to run here and neither does any more (2026-08).
         #
-        # The four Platinum Highlight cards in the header are deliberately NOT gated:
-        # they render a "None" empty state when absent, so skipping them would misreport
-        # the profile to logged-out visitors instead of hiding a section. They are also
-        # cheap (two denormed FKs, plus two lookups bounded by the profile's
-        # ProfileGame rows).
-        if self.request.user.is_authenticated and profile.psn_history_public:
-            context['timeline_events'] = self._build_timeline(profile)
+        # SHOWCASES are hidden pending a ground-up rebuild of profile customization -- the doors are
+        # closed but every row is intact, so restoring them is putting this call and the include back.
+        # They were deliberately ungated (a shared profile link is mostly opened logged-out, which is
+        # the audience the customization existed for), so hiding them is a product decision, not a
+        # cost one; the page simply got cheaper on the way.
+        #
+        # The TIMELINE is gone outright. It had rendered nowhere since the header rebuild dropped its
+        # include, while still being built and discarded on every authenticated render of every tab.
+        # Its content had rotted too: a third of its events read the dead legacy UserBadge tables.
+        #
+        # The four Platinum Highlight cards below are deliberately NOT gated and stay: they render a
+        # "None" empty state when absent, so skipping them would misreport the profile to logged-out
+        # visitors rather than hiding a section, and they are cheap (two denormed FKs plus two lookups
+        # bounded by the profile's ProfileGame rows).
+        context['header_stats'] = self._build_header_stats(profile)
 
         # Public game lists count (shown in tab header regardless of active tab)
         public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
         context['profile_lists_count'] = public_lists_qs.count()
 
-        # Challenge count (shown in tab header). Reviews archived 2026-05 —
-        # the reviews tab + count were removed.
-        context['profile_challenge_count'] = Challenge.objects.filter(profile=profile, is_deleted=False).count()
+        # Gaming history is opt-out, and until now the ONLY thing enforcing that was
+        # `{% if profile.psn_history_public %}` in profile_detail.html. An HTMX request is answered with
+        # the tab template DIRECTLY (get_template_names), which never renders that parent -- so
+        # `?tab=games` + `HX-Request: true` returned a private hunter's library to anyone who asked.
+        #
+        # The hole was dormant for badges, whose tab read legacy tables nothing writes, and live for the
+        # rest. Enforced here instead, where both render paths pass: no tab context is built at all, so a
+        # private profile costs nothing to render rather than building a wall that gets thrown away.
+        self._history_visible = profile.psn_history_public
 
         # Delegate to tab-specific handler methods
-        if tab == 'games':
+        if not self._history_visible:
+            tab_context = {}
+        elif tab == 'games':
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
         elif tab == 'trophies':
             tab_context = self._build_trophies_tab_context(profile, per_page, page_number)
         elif tab == 'badges':
             tab_context = self._build_badges_tab_context(profile)
+        elif tab == 'ratings':
+            tab_context = self._build_ratings_tab_context(profile)
         elif tab == 'lists':
             tab_context = self._build_lists_tab_context(public_lists_qs)
-        elif tab == 'challenges':
-            tab_context = self._build_challenges_tab_context(profile)
+        elif tab == 'card':
+            tab_context = self._build_card_tab_context(profile)
         else:
             # Default to games tab if invalid tab specified
             tab_context = self._build_games_tab_context(profile, per_page, page_number)
@@ -919,87 +701,94 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Add shared metadata
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
+            {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
             {'text': f"{profile.display_psn_username}"}
         ]
         context['current_tab'] = tab
+        # The tabs the switcher renders, in order. Lists is deliberately NOT here: Game Lists is parked
+        # and every route into it redirects home, so the tab offered cards whose links bounced the reader
+        # to the homepage. Its builder and template stay (hidden, not deleted); only the door is closed.
+        profile_tabs = [
+            ('games', 'Games'),
+            ('trophies', 'Trophies'),
+            ('badges', 'Badges'),
+            ('ratings', 'Ratings'),
+        ]
+        # The Card tab is owner-only: the share-card family only ever serves your OWN card (same
+        # rule as the plat card endpoints), so a visitor is not offered a chip that would 403.
+        if is_own_profile:
+            profile_tabs.append(('card', 'Card'))
+        context['profile_tabs'] = tuple(profile_tabs)
 
-        # Tab template mapping for {% include %} and HTMX partial returns
-        tab_templates = {
-            'games': 'trophies/partials/profile_detail/tabs/games_tab.html',
-            'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
-            'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
-            'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
-            'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
-        }
-        context['tab_template'] = tab_templates.get(tab, tab_templates['games'])
+        context['tab_template'] = self._TAB_TEMPLATES.get(tab, self._TAB_TEMPLATES['games'])
 
-        # Premium profile personalization
-        if profile.user_is_premium:
-            # Theme accent colors
-            if profile.selected_theme:
-                from trophies.themes import get_theme, get_theme_css
-                theme = get_theme(profile.selected_theme)
-                if theme:
-                    context['profile_theme_accent'] = theme['accent_color']
-                    context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
+        # Own profile check (for edit controls; computed with the tab normalization above)
+        context['is_own_profile'] = is_own_profile
 
-            # Profile banner image: prefer the exact user-picked image, fall
-            # back to the selected background concept's landscape image (IGDB
-            # screenshots -> artworks -> PSN bg_url fallback).
-            bg = profile.selected_background
-            bg_landscape = bg.get_landscape_url() if bg else None
-            banner_url = profile.banner_image_url or bg_landscape
-            if banner_url:
-                context['profile_banner_url'] = banner_url
-                context['profile_banner_position'] = profile.banner_position
-                import json
-                context['profile_banner_data_json'] = json.dumps({
-                    'concept_id': bg.id if bg else None,
-                    'title_name': (bg.unified_title or '') if bg else '',
-                    'icon_url': (bg.cover_url or '') if bg else '',
-                    'bg_url': bg_landscape or '',
-                    'image_url': profile.banner_image_url or '',
-                })
-
-        # Own profile check (for edit controls)
-        context['is_own_profile'] = (
-            self.request.user.is_authenticated and
-            hasattr(self.request.user, 'profile') and
-            self.request.user.profile == profile
-        )
-
-        context['seo_description'] = (
-            f"{profile.display_psn_username}'s PlayStation trophy profile. "
-            f"Level {profile.trophy_level}, {profile.total_trophies} trophies, "
-            f"{profile.total_games} games."
-        )
+        if profile.psn_history_public:
+            context['seo_description'] = (
+                f"{profile.display_psn_username}'s PlayStation trophy profile. "
+                f"Level {profile.trophy_level}, {profile.total_trophies} trophies, "
+                f"{profile.total_games} games."
+            )
+        else:
+            # The page refuses to show this hunter's stats; the meta must not leak them either.
+            context['seo_description'] = (
+                f"{profile.display_psn_username} on Platinum Pursuit."
+            )
 
 
         return context
 
-    # Template maps for HTMX partial responses
+    # Template maps for HTMX partial responses. Also the map `get_context_data` picks `tab_template` from,
+    # so the full-page render and the HTMX swap cannot answer with different templates for the same tab.
     _TAB_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_tab.html',
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
+        'ratings': 'trophies/partials/profile_detail/tabs/ratings_tab.html',
         'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
-        'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
-        'reviews': 'trophies/partials/profile_detail/tabs/reviews_tab.html',
+        'card': 'trophies/partials/profile_detail/tabs/card_tab.html',
     }
     _RESULTS_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/tabs/games_results.html',
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_results.html',
-        'badges': 'trophies/partials/profile_detail/tabs/badges_results.html',
+        'ratings': 'trophies/partials/profile_detail/tabs/ratings_results.html',
     }
     _INFINITE_SCROLL_TEMPLATES = {
         'games': 'trophies/partials/profile_detail/game_list_items.html',
         'trophies': 'trophies/partials/profile_detail/trophy_list_items.html',
-        'reviews': 'trophies/partials/profile_detail/review_list_items.html',
+        'ratings': 'trophies/partials/profile_detail/rating_list_items.html',
+    }
+    #: The trophies tab has two views, and only one of them scrolls tiles -- Activity appends day tiles,
+    #: while the Log appends trophy rows. Keyed by view so the scroller cannot be handed the wrong half.
+    _INFINITE_SCROLL_VIEWS = {
+        ('trophies', 'activity'): 'trophies/partials/profile_detail/activity_tiles.html',
+        ('trophies', 'search'): 'trophies/partials/profile_detail/trophy_list_items.html',
     }
 
+    def _is_scroll_append(self):
+        """True when `InfiniteScroller` is asking for the next page of cards.
+
+        One definition, read by both the context builders (which skip work the append never renders) and
+        `get_template_names` (which answers with the items partial). Two copies of a condition that picks
+        the TEMPLATE and the condition that picks the CONTEXT is exactly how the trophies tab ended up
+        rendering the search template over the day wall's context.
+        """
+        return self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     def get_template_names(self):
-        tab = self.request.GET.get('tab', 'games')
+        # The normalized tab from get_context_data (which always runs first on a real request);
+        # falling back to the raw query string keeps the map's own games default as the backstop.
+        tab = getattr(self, '_resolved_tab', self.request.GET.get('tab', 'games'))
+
+        # A private profile never answers with a tab body, on ANY path. Returning the full page instead
+        # means the request renders profile_detail.html, whose `{% if profile.psn_history_public %}` drops
+        # the tabs -- so the two render paths agree instead of one having its own back door. Defaults to
+        # hidden if the flag was never set: this runs after get_context_data on every real request, and an
+        # unset attribute should fail closed.
+        if not getattr(self, '_history_visible', False):
+            return super().get_template_names()
 
         # HTMX partial swap (tab switch or filter change)
         if getattr(self.request, 'htmx', False):
@@ -1010,262 +799,80 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 return [self._TAB_TEMPLATES[tab]]
 
         # Infinite scroll (XMLHttpRequest from InfiniteScroller)
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if self._is_scroll_append():
+            # The trophies tab appends day TILES while browsing and trophy CARDS while searching, so the
+            # scroller's template follows the same intent the page does.
+            searching = tab == 'trophies' and any(self._trophy_search_params())
+            keyed = self._INFINITE_SCROLL_VIEWS.get((tab, 'search' if searching else 'activity'))
+            if keyed:
+                return [keyed]
             if tab in self._INFINITE_SCROLL_TEMPLATES:
                 return [self._INFINITE_SCROLL_TEMPLATES[tab]]
 
         return super().get_template_names()
 
 
-class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+class ProfileDayView(View):
+    """One day of a hunter's activity: the sessions inside it.
+
+    A REAL URL, not just a modal payload. The profile is public and crawled, and content reachable only by
+    clicking is invisible to a crawler and impossible to link to -- so a day is addressable, the browser's
+    back button works on it, and someone without JS gets a page instead of a dead tile. HTMX asks for the
+    same URL and drops the partial into the modal; the only difference is which template answers.
+
+    Gated on `psn_history_public` in its own right. The tab's guard lives in the profile view, and an
+    endpoint on its own URL would otherwise be a side door around it -- the exact shape of the HTMX bypass
+    that made the tabs leak.
     """
-    Steam-style profile customization editor. Users pick showcase types,
-    reorder them, and configure per-type item selection.
-    """
-    template_name = 'trophies/profile_editor.html'
 
-    def get_context_data(self, **kwargs):
-        from trophies.services.showcase_service import (
-            SHOWCASE_REGISTRY, ProfileShowcaseService,
-            FREE_SLOT_LIMIT, PREMIUM_SLOT_LIMIT, slot_limit_for,
-        )
-
-        context = super().get_context_data(**kwargs)
-
-        profile = self.request.user.profile
-        is_premium = profile.user_is_premium
-
-        all_showcases = ProfileShowcaseService.get_all_showcases(profile)
-        active = [s for s in all_showcases if s.is_active]
-        inactive = [s for s in all_showcases if not s.is_active]
-
-        active_types = {s.showcase_type for s in active}
-
-        # Build available + active lists with descriptor metadata
-        available = []
-        inactive_types = {s.showcase_type for s in inactive}
-        for slug, descriptor in SHOWCASE_REGISTRY.items():
-            if slug in active_types:
-                continue
-            available.append({
-                'slug': slug,
-                'descriptor': descriptor,
-                'locked': descriptor['requires_premium'] and not is_premium,
-                'has_preserved_config': slug in inactive_types,
-            })
-
-        active_with_descriptors = []
-        for showcase in active:
-            descriptor = SHOWCASE_REGISTRY.get(showcase.showcase_type)
-            if not descriptor:
-                continue
-            active_with_descriptors.append({
-                'showcase': showcase,
-                'descriptor': descriptor,
-            })
-
-        inactive_with_descriptors = []
-        for showcase in inactive:
-            descriptor = SHOWCASE_REGISTRY.get(showcase.showcase_type)
-            if not descriptor:
-                continue
-            inactive_with_descriptors.append({
-                'showcase': showcase,
-                'descriptor': descriptor,
-            })
-
-        # Data for pickers: only fetch if that showcase is active
-        fav_showcase = next(
-            (s for s in active if s.showcase_type == 'favorite_games'), None
-        )
-        favorite_games_data = None
-        if fav_showcase:
-            from trophies.models import ProfileGame
-            from django.db.models.functions import Lower
-
-            games_qs = (
-                ProfileGame.objects
-                .filter(profile=profile)
-                .select_related('game', 'game__concept', 'game__concept__igdb_match')
-                .defer(
-                    # Profile trophy case can list 500+ games; the IGDB raw_response
-                    # blob (~30 KB per row) is unused by the card render.
-                    'game__concept__igdb_match__raw_response',
-                )
-                .order_by(Lower('game__title_name'))
+    def get(self, request, psn_username, day):
+        # Same casing rule as the profile page (SEO Lane 1): one casing, one URL.
+        if psn_username != psn_username.lower():
+            return HttpResponsePermanentRedirect(
+                reverse('profile_day', kwargs={'psn_username': psn_username.lower(), 'day': day})
             )
-            all_games = [
-                {
-                    'game_id': pg.game_id,
-                    'title_name': pg.game.title_name,
-                    'icon_url': (
-                        pg.game.title_image
-                        or (pg.game.concept.cover_url if pg.game.concept else '')
-                        or pg.game.title_icon_url
-                        or ''
-                    ),
-                    'progress': pg.progress,
-                    'has_plat': pg.has_plat,
-                    'is_shovelware': pg.game.shovelware_status in ('auto_flagged', 'manually_flagged'),
-                }
-                for pg in games_qs
-            ]
-            favorite_games_data = {
-                'games': all_games,
-                'selected_ids': fav_showcase.config.get('game_ids', []),
-            }
+        from datetime import date
+        from trophies.services.activity_service import day_sessions
 
-        # Badge picker data
-        badge_showcase_entry = next(
-            (s for s in active if s.showcase_type == 'badge_showcase'), None
-        )
-        badge_showcase_data = None
-        if badge_showcase_entry:
-            from trophies.models import UserBadge, ProfileBadgeShowcase
+        # `.lower()` + exact, as ProfileDetailView does: `iexact` compiles to UPPER(col) = UPPER(%s),
+        # which cannot use the unique index and seq-scans every Profile on each modal open.
+        profile = get_object_or_404(Profile, psn_username=psn_username.lower())
+        if not profile.psn_history_public:
+            raise Http404
 
-            earned = (
-                UserBadge.objects.filter(profile=profile)
-                .select_related(
-                    'badge', 'badge__base_badge',
-                    'badge__most_recent_concept',
-                )
-                .order_by('-earned_at')
-            )
-            selected_ids = list(
-                ProfileBadgeShowcase.objects.filter(profile=profile)
-                .order_by('display_order')
-                .values_list('badge_id', flat=True)
-            )
+        try:
+            when = date.fromisoformat(day)
+        except ValueError:
+            raise Http404       # client-supplied; a malformed date is not a 500
 
-            # Keep only the highest tier earned per series_slug
-            tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-            highest_by_series = {}  # series_slug -> (badge, layers)
-            for ub in earned:
-                badge = ub.badge
-                try:
-                    layers = badge.get_badge_layers()
-                except Exception:
-                    continue
-                if not layers.get('has_custom_image'):
-                    continue
-                key = badge.series_slug
-                current = highest_by_series.get(key)
-                if not current or badge.tier > current[0].tier:
-                    highest_by_series[key] = (badge, layers)
+        sessions = day_sessions(profile, when)
+        if not sessions:
+            raise Http404       # a day with nothing in it is not a page
 
-            # If a selected badge isn't the highest tier (shouldn't happen normally
-            # but could if the user earned a higher tier after selecting), include
-            # it so the user can see/deselect it.
-            selected_id_set = set(selected_ids)
-            for ub in earned:
-                badge = ub.badge
-                if badge.id not in selected_id_set:
-                    continue
-                current = highest_by_series.get(badge.series_slug)
-                if current and current[0].id == badge.id:
-                    continue
-                try:
-                    layers = badge.get_badge_layers()
-                except Exception:
-                    continue
-                if layers.get('has_custom_image'):
-                    highest_by_series[f"{badge.series_slug}__sel_{badge.id}"] = (badge, layers)
+        # Both templates render every game OPEN, so both need the trophies in the HTML. One grouped query
+        # for the whole day rather than one per session -- a day has few games, but "few" is not a reason
+        # to write an N+1 into the page crawlers read.
+        from trophies.services.activity_service import attach_day_trophies
+        attach_day_trophies(profile, when, sessions)
+        htmx = getattr(request, 'htmx', False)
 
-            badges = []
-            for _, (badge, layers) in highest_by_series.items():
-                badges.append({
-                    'badge_id': badge.id,
-                    'name': badge.effective_display_series or badge.series_slug,
-                    'tier': badge.tier,
-                    'tier_name': tier_names.get(badge.tier, ''),
-                    'icon_url': layers.get('main') or '',
-                })
-            # Sort by tier desc, then name asc for a stable display
-            badges.sort(key=lambda b: (-b['tier'], b['name'].lower()))
-
-            badge_showcase_data = {
-                'badges': badges,
-                'selected_ids': selected_ids,
-            }
-
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse('home')},
-            {'text': 'My Pursuit', 'url': reverse('my_pursuit_hub')},
-            {'text': 'Profile Editor'},
-        ]
-        context['profile'] = profile
-        context['is_premium'] = is_premium
-        context['available_showcases'] = available
-        context['active_showcases'] = active_with_descriptors
-        context['inactive_showcases'] = inactive_with_descriptors
-        context['slot_limit'] = slot_limit_for(is_premium)
-        context['slots_used'] = len(active)
-        context['slots_remaining'] = max(0, context['slot_limit'] - context['slots_used'])
-        context['free_slot_limit'] = FREE_SLOT_LIMIT
-        context['premium_slot_limit'] = PREMIUM_SLOT_LIMIT
-        # Review picker data
-        review_showcase_entry = next(
-            (s for s in active if s.showcase_type == 'review_showcase'), None
-        )
-        review_showcase_data = None
-        if review_showcase_entry:
-            from trophies.models import Review
-
-            reviews = (
-                Review.objects.filter(profile=profile, is_deleted=False)
-                .select_related('concept', 'concept_trophy_group')
-                .order_by('-created_at')
-            )
-            review_showcase_data = {
-                'reviews': [
-                    {
-                        'review_id': r.id,
-                        'concept_title': r.concept.unified_title if r.concept else 'Unknown',
-                        'icon_url': r.concept.cover_url if r.concept else '',
-                        'recommended': r.recommended,
-                        'body_preview': (r.body or '')[:200],
-                        'helpful_count': r.helpful_count,
-                        'group_label': (
-                            r.concept_trophy_group.display_name
-                            if r.concept_trophy_group and r.concept_trophy_group.trophy_group_id != 'default'
-                            else ''
-                        ),
-                    }
-                    for r in reviews
-                ],
-                'selected_ids': review_showcase_entry.config.get('review_ids', []),
-            }
-
-        # Title picker data
-        title_showcase_entry = next(
-            (s for s in active if s.showcase_type == 'title_showcase'), None
-        )
-        title_showcase_data = None
-        if title_showcase_entry:
-            from trophies.models import UserTitle
-
-            user_titles = (
-                UserTitle.objects.filter(profile=profile)
-                .select_related('title')
-                .order_by('-earned_at')
-            )
-            title_showcase_data = {
-                'titles': [
-                    {
-                        'user_title_id': ut.id,
-                        'name': ut.title.name,
-                        'source_type': ut.source_type,
-                    }
-                    for ut in user_titles
-                ],
-                'selected_ids': title_showcase_entry.config.get('user_title_ids', []),
-            }
-
-        context['favorite_games_data'] = favorite_games_data
-        context['badge_showcase_data'] = badge_showcase_data
-        context['review_showcase_data'] = review_showcase_data
-        context['title_showcase_data'] = title_showcase_data
-        return context
+        context = {
+            'profile': profile,
+            'day': when,
+            'sessions': sessions,
+            'day_trophies': sum(s['trophies'] for s in sessions),
+            'day_platinums': sum(1 for s in sessions if s['has_platinum']),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
+                {'text': profile.display_psn_username or profile.psn_username,
+                 'url': reverse('profile_detail', args=[profile.psn_username])},
+                {'text': when.strftime('%b %d, %Y')},
+            ],
+        }
+        template = ('trophies/partials/profile_detail/activity_day_modal.html'
+                    if htmx else 'trophies/activity_day.html')
+        return render(request, template, context)
 
 
 class LinkPSNView(LoginRequiredMixin, View):
@@ -1282,13 +889,17 @@ class LinkPSNView(LoginRequiredMixin, View):
     Handles profile creation, sync, verification code generation, and final verification.
     """
     template_name = 'account/link_psn.html'
-    login_url = reverse_lazy('login')
+    # 'account_login', NOT 'login' -- no URL carries that name, so the old value turned every
+    # anonymous hit into a NoReverseMatch 500 instead of a login redirect (audit-caught).
+    login_url = reverse_lazy('account_login')
     form_class = LinkPSNForm
 
     def get(self, request):
         if hasattr(request.user, 'profile') and request.user.profile.is_linked:
             messages.info(request, 'This PSN account is already linked to a web account.')
-            return redirect('link_psn')
+            # Home, NOT 'link_psn' -- redirecting back to this same URL was an infinite loop
+            # for every already-linked visitor (audit-caught).
+            return redirect('home')
 
         form = self.form_class()
         context = {'form': form, 'step': 1}

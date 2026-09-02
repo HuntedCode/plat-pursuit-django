@@ -1,0 +1,110 @@
+{% comment %}
+Share modal -- preview a card, pick its ground, download it.
+
+Rebuilt from scratch 2026-08. What it replaces: the `color_grid_modal` swatch wall (built for browsing
+~105 site gradients) driven by share-image.js + shareable-manager.js, which between them carried a
+format toggle, a theme-nudge flow, per-swatch game-art compositing and a rating prompt -- roughly 1,200
+lines for a card that now has one format and a handful of grounds.
+
+The grounds get named cards, not swatches: at this count "which one is this" matters more than
+"how many are there". Eight are fixed; the art grounds are per-card (see below). The preview is the REAL card markup from the HTML endpoint, so what you see
+is what downloads -- the two share one template and one theme list.
+{% endcomment %}
+{% comment %}Only the CURATED grounds reach the JS. The old page dumped all ~105 site gradients into a
+`window.GRADIENT_THEMES` global for a picker that offered all of them; the card renders the curated set,
+so that is what ships -- scoped to this element instead of a global.{% endcomment %}
+{{ card_theme_js|json_script:"pc-theme-data" }}
+
+<dialog id="pc-share" class="pc-modal" aria-labelledby="pc-share-title">
+    <div class="pc-modal__box">
+        <header class="pc-modal__head">
+            {% comment %}The subtitle IS the link out to the game -- the game's name was already the only
+            thing there, and making the existing text the affordance costs no height in a modal that has
+            none to give. Rendered as a link only once a card loads (the JS fills href + text together),
+            because an <a> with no href is a dead control.{% endcomment %}
+            <div class="min-w-0">
+                <h2 id="pc-share-title" class="pc-modal__title">Your card</h2>
+                <p class="pc-modal__sub">
+                    <a class="pc-modal__gamelink" data-share-game hidden>
+                        <span data-share-game-name></span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+                    </a>
+                </p>
+            </div>
+            <button type="button" class="pc-modal__x" data-share-close aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </header>
+
+        {% comment %}The card renders at a fixed 1200x630 and is scaled to fit with a transform, so the
+        preview is the real artifact at real proportions rather than a re-implementation that can drift
+        from it.{% endcomment %}
+        <div class="pc-modal__stage">
+            <div class="pc-modal__frame" data-share-frame>
+                <div class="pc-modal__scaler" data-share-preview></div>
+            </div>
+            {% comment %}A skeleton in the CARD's shape, not a spinner. Generation takes long enough
+            that an indeterminate spinner just reads as "waiting"; showing the shape that's coming sets
+            the expectation and makes the same wait feel shorter.{% endcomment %}
+            <div class="pc-modal__loading" data-share-loading aria-live="polite" aria-label="Building your card">
+                <div class="pc-skel" aria-hidden="true">
+                    <div class="pc-skel__bar pc-skel__cover"></div>
+                    <div class="pc-skel__col">
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                    </div>
+                </div>
+            </div>
+            <p class="pc-modal__error" data-share-error role="alert" hidden></p>
+        </div>
+
+        <div class="pc-modal__controls">
+            <div class="pc-modal__themes" role="radiogroup" aria-label="Card background">
+                {% comment %}Designed grounds are fixed, so they render server-side with their real
+                gradient as the swatch. The ART grounds are per-card -- how many a game has, and what
+                they look like, isn't known until one is opened -- so the JS appends one swatch per
+                image the card actually offers, using the image itself. A game with no usable art gets
+                no art option at all, rather than one that silently falls back to a gradient.
+                {% endcomment %}
+                {% for key, theme in card_themes %}{% if not theme.is_game_art %}
+                <label class="pc-theme" title="{{ theme.description }}" style="--pc-theme-bg: {{ theme.background_css }};">
+                    <input type="radio" name="pc-theme" value="{{ key }}" class="sr-only"
+                           {% if forloop.first %}checked{% endif %} data-share-theme />
+                    <span class="pc-theme__swatch" aria-hidden="true"></span>
+                    <span class="pc-theme__name">{{ theme.name }}</span>
+                </label>
+                {% endif %}{% endfor %}
+                <span data-share-art-slot></span>
+            </div>
+
+            <div class="pc-modal__actions">
+                {% comment %}The hunter's own scores are the biggest thing the card carries, so being able
+                to fix them without leaving is worth a permanent control -- the download prompt only ever
+                offers, and only once per opened card. It drives the SAME shared rate modal, relabelled
+                for the context (saving here doesn't hand over a file). Lives in the existing actions row
+                rather than its own, so it costs the preview no height.{% endcomment %}
+                <button type="button" class="pc-btn pc-btn--ghost pc-btn--rate" data-share-rate hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 3.5 14 9l6 .8-4.4 4.1 1.2 5.9-5.3-3-5.3 3 1.2-5.9L3 9.8 9 9z"/></svg>
+                    <span data-share-rate-label>Rate this game</span>
+                </button>
+                <button type="button" class="pc-btn pc-btn--ghost" data-share-close>Close</button>
+                {% comment %}Three states in one button, swapped by class rather than by rebuilding it: idle,
+                busy (the PNG render is the slowest step in this flow and used to be silent), and done.
+                The glyphs and the states are shared with the recap ceremony's button -- see
+                partials/download_button_icons.html and components/download-button.css.{% endcomment %}
+                <button type="button" class="pc-btn pc-btn--go pp-dl" data-share-download>
+                    {% include 'partials/download_button_icons.html' %}
+                    <span data-dl-label>Download</span>
+                </button>
+            </div>
+        </div>
+
+        {% comment %}Toast host. ToastManager looks for this inside the open dialog and shows it as a
+        top-layer popover -- without it a toast fired while the modal is open renders BEHIND the
+        backdrop. Same pattern as the quick-rate and blurb-report modals.{% endcomment %}
+        <div class="modal-toast-container" popover="manual"></div>
+    </div>
+</dialog>

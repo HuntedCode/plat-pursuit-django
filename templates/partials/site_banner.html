@@ -47,7 +47,7 @@
 </script>
 {% endif %}
 
-{% if hotbar.sync_status == 'syncing' and request.path != '/' %}
+{% if navsync.sync_status == 'syncing' and request.path != '/' %}
 <div id="site-banner-user-syncing"
      class="bg-primary/10 border-b-2 border-primary"
      role="status"

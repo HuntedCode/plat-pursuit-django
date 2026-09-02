@@ -143,6 +143,46 @@ def test_a_user_with_no_stored_customer_id_can_still_be_rescued():
     assert not deactivate.called
 
 
+def test_a_repoint_that_revokes_is_reported_as_an_error_not_fixed():
+    """The log must narrate the OUTCOME, not the intent: if the post-repoint resync declines to
+    activate and premium comes back None, '[FIXED] Repointed' would be a lie in the operator's
+    log while a paying subscriber sits revoked."""
+    user = _stripe_premium_user(customer_id='cus_stale')
+    _djstripe_sub(user, 'cus_actual', 'sub_odd')
+
+    def resync_revokes(u, event_type=None):
+        u.premium_tier = None
+        u.save(update_fields=['premium_tier'])
+        return False
+
+    with patch('users.services.subscription_service.SubscriptionService'
+               '.update_user_subscription', side_effect=resync_revokes):
+        output = _run('--fix')
+
+    assert '[ERROR]' in output and 'REVOKED' in output
+    assert '[FIXED] Repointed' not in output
+
+
+def test_an_unknown_status_row_still_gets_the_mismatch_rescue():
+    """The [UNKNOWN] arm was the one failing row that skipped the resolver: a weird status under
+    the stored customer with a live sub under a sibling customer must repoint like every other
+    failing row."""
+    user = _stripe_premium_user(customer_id='cus_stored')
+    _djstripe_sub(user, 'cus_stored', sub_id='sub_weird', status='paused', link_subscriber=False)
+    _djstripe_sub(user, 'cus_actual', sub_id='sub_live_z')
+
+    with patch('users.services.subscription_service.SubscriptionService'
+               '.update_user_subscription'), \
+            patch('users.services.subscription_service.SubscriptionService'
+                  '.deactivate_subscription') as deactivate:
+        output = _run('--fix')
+
+    user.refresh_from_db()
+    assert '[MISMATCH]' in output
+    assert user.stripe_customer_id == 'cus_actual'
+    assert not deactivate.called
+
+
 # --------------------------------------------------------------- unchanged behaviour pinned ----
 
 def test_a_true_lapse_is_still_deactivated_by_fix():

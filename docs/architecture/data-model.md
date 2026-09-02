@@ -84,65 +84,116 @@ Key relationships:
 
 ## Badge & Gamification Models
 
-Badges are PP's custom achievement system. Players earn badge tiers by completing sets of games (stages) defined by staff.
+Badges are PP's custom achievement system. Staff curate a **series** of games (stages); a hunter earns the
+badge by completing them.
 
-### Badge
-A badge tier (Bronze/Silver/Gold/Platinum) within a series. Grouped by `series_slug`. Higher tiers inherit properties from `base_badge` (the tier-1 badge in the same series). Types include: series, collection, megamix, developer, user, misc. Misc badges use a `requirements` JSON field instead of stages. Key display fields: `name`, `display_title`, `display_series`, `badge_image`. The `is_live` flag controls public visibility.
+> **Rebuilt 2026-08.** A badge is now **series x platform edition**, not one of four tiers. The tier
+> models below (`Badge`, `UserBadge`, `UserBadgeProgress`, `StageCompletionEvent`, `ProfileGamification`)
+> are RETAINED for rollback and audit but have **no writer anywhere in the codebase**. See
+> [badge-system.md](badge-system.md) for how the live engine works.
+
+### The live models
+
+#### PlatformGroup
+A platform set that defines an **edition**, e.g. Ultra HD (PS4/PS5) or Legacy HD (PS3/Vita). Carries the
+shared visual identity every medallion of that edition draws with (`medallion_shape`, `backing_key`,
+`background_image`) plus the routing predicate `matches_platforms()`.
+
+Key fields: `key` (unique), `name`, `platforms` (ArrayField of PSN `title_platform` values),
+`exclude_delisted` (Ultra HD counts delisting; Legacy HD does not), `sort_order`, `is_active`.
+
+#### BadgeSeries
+The abstract series-level definition, one row per `series_slug`. Holds the shared identity and the
+DEFAULTS each edition inherits. **No `is_live` and no `tier`** -- liveness is per-edition.
+
+Key fields: `series_slug` (unique), `name`, `badge_type`, `completion_policy` (`all` / `min_count`),
+`min_required`, `description`, `display_series`, `badge_image`, `holo_badge_image`.
 
 Key relationships:
-- `base_badge` FK to self (nullable, for tier inheritance)
-- `title` FK to `Title` (awarded to user on earn)
-- `most_recent_concept` FK to `Concept`
-- `funded_by` FK to `Profile` (donor who funded artwork)
+- `franchise` / `collection` FK to `Franchise`, `developer` FK to `Company` (drives the coverage audit)
+- `submitted_by` FK to `Profile` (credited on `user` badges; their avatar is the art fallback)
+- `funded_by` FK to `Profile` (donor credited for the artwork -- what the fundraiser writes)
+- `title` FK to `Title` (granted on earning ANY edition of the series)
 
-### Stage
-Defines one "step" in a badge series. Contains the Concepts a player must platinum (or 100%) to complete the stage. `stage_number` 0 marks optional/tangential entries. `required_tiers` limits which badge tiers require this stage.
+#### GroupBadge
+**The earnable thing**: one row per (`BadgeSeries` x `PlatformGroup`), `unique_together`.
+
+Key fields: `is_live` (default False -- hidden until released) and the engine-owned denorms
+`earned_count`, `required_stages`, `rarity_pct`, `rarity_rank`, `rarity_class`.
+
+Per-edition overrides, each null-means-inherit: `badge_image_override`, `holo_badge_image_override`,
+`funded_by_override`. Resolved by `effective_funded_by`, `effective_holo_image`, and `art_layers()` --
+which is the single source of truth for medallion composition, because backdrop and shape come from the
+`PlatformGroup` and a series alone cannot draw itself.
+
+#### UserGroupBadge
+A profile's CURRENT hold. **Binary**: the row exists iff the profile meets the bar, and a revoke DELETES
+it. There is no `maintenance` state and no permanent rank -- rank is the live position among current
+holders ordered by `earned_at`.
+
+Key fields: `earned_at` (the hunter's COMPLETION date, resynced when a badge's iteration changes),
+`created_at` (when WE awarded the row -- use this for "earned this week"), `is_holo`, `is_displayed`.
+
+#### GroupBadgeAnnouncement
+Append-only marker: one row per (profile, group_badge) ever announced to Discord. Never deleted. Exists
+because holds are binary, so a revoke-then-re-earn is indistinguishable from a first earn and would
+re-ping a hunter about a badge they have held for a year.
+
+#### ProfileBadgeStanding / SeriesBadgeStanding / SeriesEditionStanding / ProfileEditionStanding
+The materialized read-models the leaderboards sort on, all recomputed from scratch by
+`badge_xp.recompute_standing` on every evaluation (so they cannot drift):
+
+| model | grain | holds |
+|---|---|---|
+| `ProfileBadgeStanding` | per profile | grand `total_xp`, `badges_held`, `country_code` |
+| `SeriesBadgeStanding` | per (profile, series) | `xp`, `progress_bp`, `stages_cleared`/`total`, `advanced_at`, per-edition `group_progress` |
+| `SeriesEditionStanding` | per (profile, series, STARTED edition) | that edition's `xp`, `stages_cleared`/`gating_count`, and its OWN `advanced_at` |
+| `ProfileEditionStanding` | per (profile, edition) | the same totals pre-sliced, backing the boards' edition filter |
+
+`SeriesEditionStanding` is the one with a membership rule: a row exists only for an edition the hunter has
+STARTED, because it backs a board. `SeriesBadgeStanding.group_progress` deliberately keeps untouched
+editions so the Collection wall has a denominator, so the two are not redundant despite overlapping. Its
+`advanced_at` is the reason it is a table rather than a JSON key -- its parent's is series-wide, and
+tiebreaking one edition's board on another edition's date meant advancing in one could drop a rank in the
+other.
+
+#### Stage
+One "step" in a series: the Concepts a hunter must complete. `stage_number` 0 marks optional entries.
+
+**Joined to a series by the `series_slug` STRING, not an FK** -- so nothing stops a stage existing under a
+slug no series owns, and renaming a slug orphans its stages.
 
 Key relationships:
 - `concepts` M2M to `Concept`
-- Grouped by `series_slug` (matches Badge.series_slug)
+- `concept_bundles` reverse FK to `ConceptBundle` (a concept is in EITHER `concepts` OR a bundle on that
+  stage, never both -- any "which series is this game in" query must check both paths)
 
-### UserBadge
-Records that a profile has earned a specific badge tier. One row per profile-badge pair.
+### Retained tier models (no writer)
 
-Key relationships:
-- `profile` FK to `Profile`
-- `badge` FK to `Badge`
+#### Badge
+A tier (Bronze/Silver/Gold/Platinum) within a series, grouped by `series_slug`, with higher tiers
+inheriting from `base_badge`. Superseded by `BadgeSeries` + `GroupBadge`. No admin registration since the
+2026-08 fundraiser/art_reveal repoint.
 
-### UserBadgeProgress
-Tracks in-progress badge completion for a profile. Stores `completed_concepts` count and `progress_value`.
+#### UserBadge / UserBadgeProgress
+Earn records and in-progress tracking for the tier engine. Superseded by `UserGroupBadge` (holds) and the
+standing tables (progress).
 
-Key relationships:
-- `profile` FK to `Profile`
-- `badge` FK to `Badge`
+#### StageCompletionEvent
+Per-(profile, badge, stage) completion events for time-series analytics. The current engine records none.
 
-### StageCompletionEvent
-Records when a profile completed a specific stage for a specific badge tier. Used for time-series badge analytics. One record per (profile, badge, stage) triple. Automatically created/deleted by `badge_service._record_stage_completions` during badge evaluation.
-
-Key relationships:
-- `profile` FK to `Profile`
-- `badge` FK to `Badge`
-- `stage` FK to `Stage`
-- `concept` FK to `Concept` (SET_NULL, nullable: which concept satisfied the stage)
-
-Key fields:
-- `completed_at`: effective completion date (max of game completion vs badge creation for retroactive credit)
-
-### ProfileGamification
-OneToOne extension of Profile for gamification stats. Stores `total_badge_xp`, per-series XP breakdown (`series_badge_xp` JSON), and total/unique badge counts. Updated via signals when badge progress changes.
-
-Key relationships:
-- `profile` OneToOne to `Profile` (primary key)
+#### ProfileGamification
+OneToOne on Profile holding `total_badge_xp` and a per-series JSON breakdown. **Frozen**: it counts the
+retired tier economy and is NOT comparable to `ProfileBadgeStanding.total_xp`. Never show them as the
+same figure.
 
 ### StatType
-Defines stat categories for the gamification system (e.g., "badge_xp"). Designed for future expansion to additional stats like Power, Luck, Agility.
+Defines stat categories for the gamification system. **Vestigial**: the P.L.A.T.I.N.U.M. 8-stat system it
+was built for was retired in 2026-06; only the `badge_xp` record exists.
 
 ### StageStatValue
-Per-stage stat configuration. Maps a Stage to a StatType with values for each badge tier (bronze_value, silver_value, gold_value, platinum_value).
-
-Key relationships:
-- `stage` FK to `Stage`
-- `stat_type` FK to `StatType`
+Per-stage stat configuration, per badge tier. **Vestigial** for the same reason. The discipline radar
+derives from job levels (`ProfileJobXP`), not this table.
 
 ### GameFamily
 Groups related Concepts across platforms and regions without merging them.
@@ -157,41 +208,18 @@ the full model and flow.
 
 ## Challenge Models
 
-Challenges are long-running goals where players work toward completing sets of platinums under specific constraints.
+**RETIRED 2026-08.** The `Challenge`, `AZChallengeSlot`, `CalendarChallengeDay`, `GenreChallengeSlot`,
+and `GenreBonusSlot` models were dropped in migration `0281_drop_challenge_system`. Challenges will be
+rewritten from scratch; see [challenge-systems](../features/challenge-systems.md) for the design reference.
 
-### Challenge
-Base challenge model shared across all challenge types (`az`, `calendar`, `genre`). The `challenge_type` field determines which child slot model applies. Tracks progress via `total_items`, `filled_count`, `completed_count`, and `is_complete`. Supports soft deletion.
-
-Key relationships:
-- `profile` FK to `Profile`
-
-### AZChallengeSlot
-One of 26 letter slots (A-Z) for an A-Z Challenge. Each slot can hold one Game that the player must platinum.
-
-Key relationships:
-- `challenge` FK to `Challenge`
-- `game` FK to `Game` (nullable, SET_NULL)
-
-### CalendarChallengeDay
-One of 365 calendar day slots (Jan 1 through Dec 31, excluding Feb 29). Filled automatically when the player earns a platinum on that calendar day. Tracks `plat_count` for multiple platinums on the same day.
+### ArchivedAZChallenge
+Frozen A-Z challenge progress, preserved when the Challenge system was retired. One row per archived
+A-Z challenge, keyed on stable PSN ids (`psn_username` + per-slot `np_communication_id` inside the
+`slots` JSON) so a rebuilt system can re-import it. Read-only historical data, not wired into any live
+feature. Calendar and Genre progress were deliberately not preserved.
 
 Key relationships:
-- `challenge` FK to `Challenge`
-- `game` FK to `Game` (nullable, the first game whose platinum filled the day)
-
-### GenreChallengeSlot
-One genre slot in a Genre Challenge. Points to a Concept rather than a Game.
-
-Key relationships:
-- `challenge` FK to `Challenge`
-- `concept` FK to `Concept` (nullable)
-
-### GenreBonusSlot
-Bonus game slot for subgenre hunting in a Genre Challenge, with no genre restriction.
-
-Key relationships:
-- `challenge` FK to `Challenge`
-- `concept` FK to `Concept` (nullable)
+- `profile` FK to `Profile` (nullable, SET_NULL)
 
 ---
 
@@ -298,31 +326,18 @@ _(Not present in the model file as a separate model; checklist voting uses Check
 A cosmetic display title that appears on a user's profile (e.g., "Platinum Hunter"). Created once, shared across all earners.
 
 ### UserTitle
-Join table linking a Profile to a Title with source tracking (`source_type`: badge or milestone, `source_id`), earned timestamp, and `is_displayed` flag (one active at a time per profile).
+Join table linking a Profile to a Title with source tracking (`source_type`: badge, badge_series, or milestone -- the last being historical one-off awards from the retired legacy engine; `source_id`), earned timestamp, and `is_displayed` flag (one active at a time per profile).
 
 Key relationships:
 - `profile` FK to `Profile`
 - `title` FK to `Title`
 
-### Milestone
-An achievement milestone with various criteria types (plat count, discord linked, badge count, calendar progress, subscription months, etc.). Some are premium-only. Has an optional `title` FK to award and optional `discord_role_id`. `required_value` is auto-synced from `criteria_details.target`.
-
-Key relationships:
-- `title` FK to `Title` (nullable)
-
-### UserMilestone
-Records that a profile has earned a specific milestone.
-
-Key relationships:
-- `profile` FK to `Profile`
-- `milestone` FK to `Milestone`
-
-### UserMilestoneProgress
-Tracks in-progress milestone completion for a profile. Stores `progress_value` toward the milestone's `required_value`.
-
-Key relationships:
-- `profile` FK to `Profile`
-- `milestone` FK to `Milestone`
+**Milestone / UserMilestone / UserMilestoneProgress: RETIRED 2026-08.** The legacy milestone engine
+was dropped in migration `0282_drop_legacy_milestone_engine`. Milestones now live in the dedicated
+`milestones` app (`Milestone`, `MilestoneTier`, `EarnedMilestoneTier`, `UserMilestone` there); see
+[milestones-revamp](../design/milestones-revamp.md). The titles the legacy metric ladders granted were
+deleted with it; its one-off manual awards survive as `UserTitle` rows with `source_type='milestone'`
+and a now-dangling `source_id` (a plain integer, not an FK).
 
 ### UserTrophySelection
 Up to 10 hand-picked "showcase" trophies per profile. Enforces the 10-item limit at the model level.
@@ -365,7 +380,7 @@ Logs PSN API calls for token monitoring: endpoint, status code, response time, r
 ## User & Account Models (users app)
 
 ### CustomUser
-Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `default_region`, `email_preferences` (JSON). The `is_premium()` method checks subscription status against both Stripe and PayPal.
+Extends Django's AbstractUser with email-based authentication. Key fields: `stripe_customer_id`, `paypal_subscription_id`, `subscription_provider` (stripe/paypal), `premium_tier`, `user_timezone`, `email_preferences` (JSON). (`default_region` was deleted 2026-08: zero consumers.) The `is_premium()` method checks subscription status against both Stripe and PayPal.
 
 Key relationships:
 - Reverse: `profile` OneToOne from Profile
@@ -398,12 +413,6 @@ Key relationships:
 
 ### NotificationLog
 Audit log for bulk notification sends. Snapshots the sent content and tracks recipient count.
-
-### DeviceToken
-Push notification tokens for mobile devices (iOS/Android). Used by the FCM push notification service.
-
-Key relationships:
-- `user` FK to `CustomUser`
 
 ---
 
@@ -467,7 +476,6 @@ CustomUser
   |-- 1:1 --> Profile
   |-- 1:N --> SubscriptionPeriod
   |-- 1:N --> Notification (as recipient)
-  |-- 1:N --> DeviceToken
   |-- 1:N --> EmailLog
   |-- 1:N --> Donation
 
@@ -481,8 +489,6 @@ Profile
   |-- 1:N --> UserBadge
   |-- 1:N --> UserBadgeProgress
   |-- 1:N --> UserTitle
-  |-- 1:N --> UserMilestone
-  |-- 1:N --> UserMilestoneProgress
   |-- 1:N --> UserTrophySelection
   |-- 1:N --> Comment
   |-- 1:N --> Review

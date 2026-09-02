@@ -29,13 +29,17 @@ from trophies.models import (
     IGDBMatch,
     Profile,
     ProfileGame,
+    ProfileTrophyGroup,
     Review,
     Stage,
     Trophy,
+    TrophyGroup,
     UserBadge,
     UserBadgeProgress,
     UserConceptRating,
     PlatformGroup,
+    BadgeSeries,
+    GroupBadge,
 )
 from users.models import CustomUser
 
@@ -60,13 +64,21 @@ class UserFactory(factory.django.DjangoModelFactory):
 
 
 class ProfileFactory(factory.django.DjangoModelFactory):
-    """A linked Profile. psn_username must match ^[a-zA-Z0-9_-]{3,16}$ and be unique."""
+    """A LINKED Profile. psn_username must match ^[a-zA-Z0-9_-]{3,16}$ and be unique.
+
+    `is_linked=True` is set here rather than left on the model default, which is False. The docstring has
+    always called this a linked profile and dozens of tests pass `is_linked=True` explicitly to get what
+    they thought they already had -- but the leaderboards gate their whole population on that flag, so a
+    default-unlinked factory silently produced profiles that no board would ever rank. Pass
+    `is_linked=False` for the unverified case; several tests already do, and they still get it.
+    """
 
     class Meta:
         model = Profile
 
     user = factory.SubFactory(UserFactory)
     psn_username = factory.Sequence(lambda n: f"hunter{n:04d}")
+    is_linked = True
 
 
 class ConceptFactory(factory.django.DjangoModelFactory):
@@ -225,6 +237,7 @@ class GameFactory(factory.django.DjangoModelFactory):
     title_name = factory.Sequence(lambda n: f"Game {n}")
     np_communication_id = factory.Sequence(lambda n: f"NPWR{n:05d}_00")
     concept = factory.SubFactory(ConceptFactory)
+    title_platform = factory.LazyFunction(lambda: ['PS5'])   # current-gen by default; fresh list per instance
 
 
 class ProfileGameFactory(factory.django.DjangoModelFactory):
@@ -273,6 +286,17 @@ class TrophyFactory(factory.django.DjangoModelFactory):
     trophy_name = factory.Sequence(lambda n: f"Trophy {n}")
 
 
+class TrophyGroupFactory(factory.django.DjangoModelFactory):
+    """A game's trophy group. 'default' is the base game; '001', '002'... are DLC."""
+
+    class Meta:
+        model = TrophyGroup
+
+    game = factory.SubFactory(GameFactory)
+    trophy_group_id = "default"
+    trophy_group_name = factory.Sequence(lambda n: f"Group {n}")
+
+
 class EarnedTrophyFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = EarnedTrophy
@@ -283,6 +307,7 @@ class EarnedTrophyFactory(factory.django.DjangoModelFactory):
     earned_date_time = factory.LazyFunction(timezone.now)
 
 
+# ── Badge rebuild (grouping-badge subsystem) ─────────────────────────────────
 class PlatformGroupFactory(factory.django.DjangoModelFactory):
     """A platform-compatibility group. Defaults to a PS4/PS5 'Ultra HD'-style group."""
 
@@ -318,3 +343,15 @@ class GroupBadgeFactory(factory.django.DjangoModelFactory):
     series = factory.SubFactory(BadgeSeriesFactory)
     platform_group = factory.SubFactory(PlatformGroupFactory)
     is_live = True
+
+
+class ProfileTrophyGroupFactory(factory.django.DjangoModelFactory):
+    """A profile's standing in a game trophy group. progress=100 = base list finished (the base bar)."""
+
+    class Meta:
+        model = ProfileTrophyGroup
+
+    profile = factory.SubFactory(ProfileFactory)
+    trophy_group = factory.SubFactory(TrophyGroupFactory)
+    progress = 100
+    last_trophy_at = factory.LazyFunction(timezone.now)

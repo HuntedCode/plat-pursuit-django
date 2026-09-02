@@ -1,18 +1,14 @@
-{# Reusable region badge row. Usage: {% include 'partials/region_badges.html' with game=game badge_size='badge-sm' %} #}
+{% comment %} Region markers, shown ONLY for region-locked games. Worldwide is the silent default (no tag). badge_size kept for caller compatibility (sizing is fixed). {% endcomment %}
 {% if game.is_regional %}
     {% for region in game.region %}
         {% if region == "NA" %}
-            <div class="badge {{ badge_size|default:'badge-sm' }} badge-primary font-bold italic hover:scale-105">NA</div>
+            <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--primary">NA</span>
         {% elif region == "EU" %}
-            <div class="badge {{ badge_size|default:'badge-sm' }} badge-secondary font-bold italic hover:scale-105">EU</div>
+            <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--secondary">EU</span>
         {% elif region == "JP" %}
-            <div class="badge {{ badge_size|default:'badge-sm' }} badge-accent font-bold italic hover:scale-105">JP</div>
+            <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--accent">JP</span>
         {% else %}
-            <div class="badge {{ badge_size|default:'badge-sm' }} badge-warning font-bold italic hover:scale-105">AS</div>
+            <span class="bd-meta-tag bd-meta-tag--italic bd-meta-tag--warning">AS</span>
         {% endif %}
     {% endfor %}
-{% else %}
-    <div class="badge {{ badge_size|default:'badge-sm' }} badge-ghost font-bold italic hover:scale-105">
-        {% include 'partials/icons/globe.html' with size='w-3.5 h-3.5' %}
-    </div>
 {% endif %}

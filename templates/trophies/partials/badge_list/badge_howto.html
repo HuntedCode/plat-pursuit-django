@@ -1,0 +1,258 @@
+{% load static %}
+{% comment %} "How badges work" -- the teaching moment as a focused MODAL (first-run pattern): it auto-opens once
+on a visitor's first landing (requires dismissing) and never auto-pops again. It is ONE-SHOT: there is no
+recall button anywhere. Keeping one would mean a permanent affordance re-opening a shorter copy of teaching
+that now has a fuller, linkable home at `badge_how_it_works`, and the two copies would drift. Inside is the FORGE JOURNEY: four beats (pick a themed set
+-> platinum every game -> claim the edition medallion -> master it to holographic), then the two editions as the
+reward legend. Beats 3 + 4 are REAL .pp-med medallions built from an actual badge's subject art on each edition's
+metal (forge_meds.*); tapping any opens that badge's quick-peek. The choreography replays each time the modal
+opens (JS arms + lights .pp-forge + mints beat 3) and is fully reduced-motion-safe. {% endcomment %}
+<div class="pp-detail-modal pp-howto" id="badge-howto" hidden>
+    <div class="pp-detail-modal__scrim" data-howto-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="howto-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-howto-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+          <div class="pp-forge" data-forge>
+            <h2 class="pp-howto__title" id="howto-title">
+                <svg class="pp-howto__title-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg>
+                How badges work
+            </h2>
+            <p class="pp-forge__lede">Every badge is a themed set of PlayStation games (a franchise, a studio, a collection). Here is the path from first trophy to mastered:</p>
+
+            {% comment %} A DIV flow (not <ol>): the connector spans are siblings of the beats -- valid here, and
+            the nth-child(2/4/6) reveal choreography depends on that sibling order. Steps read via the numbered
+            captions; the connectors are aria-hidden. {% endcomment %}
+            <div class="pp-forge__flow">
+                <div class="pp-forge__beat" data-beat="1">
+                    <span class="pp-forge__art">
+                        {% comment %} A themed SET: a small fan of game covers (pure CSS, no assets). {% endcomment %}
+                        <span class="pp-forge__fan" aria-hidden="true">
+                            <span class="pp-forge__cover"></span>
+                            <span class="pp-forge__cover"></span>
+                            <span class="pp-forge__cover"></span>
+                        </span>
+                    </span>
+                    <span class="pp-forge__cap"><span class="pp-forge__n">1</span> Pick a set</span>
+                    <span class="pp-forge__desc">A franchise, studio, or collection of games.</span>
+                </div>
+
+                <span class="pp-forge__link" aria-hidden="true">
+                    <span class="pp-forge__line"></span>
+                    <svg class="pp-forge__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                </span>
+
+                <div class="pp-forge__beat" data-beat="2">
+                    <span class="pp-forge__art">
+                        {% comment %} Platinum EVERY game: a cluster of platinum trophies, one per game. {% endcomment %}
+                        <span class="pp-forge__plats" aria-hidden="true">
+                            <img src="{% static 'images/plat.png' %}" alt="" loading="lazy" decoding="async" />
+                            <img src="{% static 'images/plat.png' %}" alt="" loading="lazy" decoding="async" />
+                            <img src="{% static 'images/plat.png' %}" alt="" loading="lazy" decoding="async" />
+                        </span>
+                    </span>
+                    <span class="pp-forge__cap"><span class="pp-forge__n">2</span> Platinum each</span>
+                    <span class="pp-forge__desc">Platinum every game in the set.</span>
+                </div>
+
+                <span class="pp-forge__link" aria-hidden="true">
+                    <span class="pp-forge__line"></span>
+                    <svg class="pp-forge__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                </span>
+
+                <div class="pp-forge__beat" data-beat="3">
+                    <span class="pp-forge__art pp-forge__art--med{% if forge_meds.source_id %} pp-forge-peek{% endif %}" data-forge-mint{% if forge_meds.source_id %} data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect an example badge"{% endif %}>
+                        {% include 'components/badge_medallion.html' with frame=forge_meds.earned no_id=True %}
+                    </span>
+                    <span class="pp-forge__cap"><span class="pp-forge__n">3</span> Claim the badge</span>
+                    <span class="pp-forge__desc">The edition medallion is yours.</span>
+                </div>
+
+                {% comment %} The mastery leg -- a holo-tinted connector into the payoff transformation. {% endcomment %}
+                <span class="pp-forge__link pp-forge__link--master" aria-hidden="true">
+                    <span class="pp-forge__line"></span>
+                    <svg class="pp-forge__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                </span>
+
+                <div class="pp-forge__beat pp-forge__beat--payoff" data-beat="4">
+                    <span class="pp-forge__art pp-forge__art--med{% if forge_meds.source_id %} pp-forge-peek{% endif %}"{% if forge_meds.source_id %} data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect an example badge"{% endif %}>
+                        {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
+                    </span>
+                    <span class="pp-forge__cap"><span class="pp-forge__n">4</span> Master it</span>
+                    <span class="pp-forge__desc">100% every stage, DLC and all, and it turns <span class="pp-forge__holo">holographic</span>.</span>
+                </div>
+            </div>
+
+            <div class="pp-forge__editions" role="group" aria-label="The two editions">
+                <span class="pp-forge__ed" data-tier="platinum">
+                    <span class="pp-forge__ed-med{% if forge_meds.source_id %} pp-forge-peek{% endif %}"{% if forge_meds.source_id %} data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect an example badge"{% endif %}>{% include 'components/badge_medallion.html' with frame=forge_meds.ultra no_id=True %}</span>
+                    <span class="pp-forge__ed-text">
+                        <span class="pp-forge__ed-name">Ultra HD</span>
+                        <span class="pp-forge__ed-scope">PS4 &amp; PS5</span>
+                    </span>
+                </span>
+                <span class="pp-forge__ed" data-tier="gold">
+                    <span class="pp-forge__ed-med{% if forge_meds.source_id %} pp-forge-peek{% endif %}"{% if forge_meds.source_id %} data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect an example badge"{% endif %}>{% include 'components/badge_medallion.html' with frame=forge_meds.legacy no_id=True %}</span>
+                    <span class="pp-forge__ed-text">
+                        <span class="pp-forge__ed-name">Legacy HD</span>
+                        <span class="pp-forge__ed-scope">PS3 &amp; PS Vita</span>
+                    </span>
+                </span>
+            </div>
+
+            <p class="pp-forge__foot">Each edition is earned independently, so chase either on its own.</p>
+
+            {% comment %}"Got it" leads, and the link is the escape hatch rather than the primary path --
+            most people are done here. This modal is now genuinely ONE-SHOT: it greets a first visit,
+            sets `pp-badges-howto-seen`, and has no recall buttons anywhere, because keeping a button to
+            re-open a shorter copy of content that has a fuller home is how the two drift apart. The page
+            is where the teaching lives from the second visit on.{% endcomment %}
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-howto-close>Got it</button>
+                {% comment %} "Learn more", not "How badges work" -- that was this modal's own H2 verbatim,
+                so the link read as though it reopened the thing already on screen. {% endcomment %}
+                <a class="pp-howto__more" href="{% url 'badge_how_it_works' %}" data-howto-more>Learn more &rarr;</a>
+            </div>
+          </div>
+        </div>
+    </div>
+</div>
+{% if dev_howto %}
+{% comment %} Dev-only (settings.DEBUG): replay the first-run modal. It is one-shot by design and gated on a
+localStorage flag, so once dismissed the only way back in a browser is clearing site data by hand. Reuses
+the Collection's `.ccx-dev` panel styling verbatim (claim-ceremony.css); never ships to prod.
+
+"Replay" CLEARS the flag before opening, so the run is repeatable: dismissing re-sets it exactly as a real
+first visit would, and pressing the button again re-arms. That keeps the dev path honest -- you are always
+testing the genuine first-run behaviour, not a special always-open mode that could hide a bug in the
+gating itself. {% endcomment %}
+<div class="ccx-dev">
+    <div class="ccx-dev__title">How badges work</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-howto-replay>Replay</button>
+    </div>
+</div>
+{% endif %}
+{% comment %} First-run controller: auto-opens once on a first visit and never again. There is no re-open path,
+by design -- dismissing sets pp-badges-howto-seen, and from the second visit on the teaching lives at
+`badge_how_it_works`. Each open replays the forge choreography (arm + light + mint beat 3); Escape / scrim /
+close / "Got it" dismiss it. Reduced-motion-safe.
+{% endcomment %}
+<script>
+    (function () {
+        var modal = document.getElementById('badge-howto');
+        if (!modal) { return; }
+        var dialog = modal.querySelector('.pp-detail-modal__dialog');
+        var forge = modal.querySelector('[data-forge]');
+        var SEEN_KEY = 'pp-badges-howto-seen';
+        var reduce = false;
+        try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+        var lastFocus = null, mintTimers = [];
+        function clearMint() {
+            mintTimers.forEach(function (t) { window.clearTimeout(t); });
+            mintTimers = [];
+        }
+        function isEditable(el) {
+            if (!el) { return false; }
+            var t = el.tagName;
+            return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+        }
+
+        function restartForge() {
+            if (!forge) { return; }
+            clearMint();                                  // cancel a prior run's pending strike (fast reopen)
+            forge.classList.remove('is-lit', 'is-armed');
+            var med = forge.querySelector('[data-forge-mint] .pp-med');
+            if (med) { med.classList.remove('is-minting'); }
+            if (reduce) { return; }                       // reduced motion -> static content, no arming
+            forge.classList.add('is-armed');              // hold the hidden start states
+            void forge.offsetWidth;                       // force reflow so re-adding is-lit restarts the run
+            forge.classList.add('is-lit');
+            if (med) {
+                mintTimers.push(window.setTimeout(function () {
+                    med.classList.add('is-minting');      // the real coin-strike on the beat-3 cue
+                    // Drop it once the strike plays -- ppMedMint fills forwards, so leaving it on pins the
+                    // medallion's transform and kills its resting hover-lift.
+                    mintTimers.push(window.setTimeout(function () { med.classList.remove('is-minting'); }, 1100));
+                }, 560));
+            }
+        }
+
+        function open(trigger) {
+            if (!modal.hidden) { return; }
+            lastFocus = trigger || document.activeElement;
+            modal.hidden = false;
+            // Move focus into the dialog EXCEPT on a silent auto-open while the visitor is typing (don't yank
+            // focus out of a field they're using). An explicit button open always takes focus.
+            if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+            restartForge();
+        }
+        function close() {
+            if (modal.hidden) { return; }
+            try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}   // dismissed -> never auto-pops again
+            clearMint();
+            modal.classList.add('is-closing');
+            window.setTimeout(function () {
+                modal.hidden = true;
+                modal.classList.remove('is-closing');
+                if (forge) { forge.classList.remove('is-lit', 'is-armed'); }
+                if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+            }, 200);
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            // Following the link out counts as having been greeted. Without this the reader who takes the
+            // MORE INTERESTED path is the one punished for it: the flag is only written by close(), so
+            // navigating away leaves it unset and the modal auto-pops at them again on their next visit.
+            // No preventDefault -- the navigation is the point; we only record it first.
+            if (e.target.closest('[data-howto-more]')) {
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (err) {}
+                return;
+            }
+            {% if dev_howto %}
+            // Dev-only replay, gated at RENDER time alongside its button rather than just left inert in
+            // prod: shipping a handler for an element that never exists is dead weight in every visitor's
+            // bundle, and it makes "does the recall path ship?" un-greppable.
+            // Clearing the flag first means the reopened modal behaves exactly like a genuine first
+            // visit, including re-setting the flag on dismiss -- so this exercises the real gating
+            // rather than bypassing it.
+            if (e.target.closest('[data-howto-replay]')) {
+                e.preventDefault();
+                try { localStorage.removeItem(SEEN_KEY); } catch (err) {}
+                open(null);
+                return;
+            }
+            {% endif %}
+            if (!modal.hidden && e.target.closest('[data-howto-close]')) { e.preventDefault(); close(); }
+        });
+        document.addEventListener('keydown', function (e) {
+            if (modal.hidden) { return; }
+            // If the quick-peek modal is stacked on top (a forge medallion was tapped), let it own the keys --
+            // otherwise a single Escape would close both.
+            var peek = document.getElementById('badge-peek');
+            if (peek && !peek.hidden) { return; }
+            if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+            if (e.key !== 'Tab' || !dialog) { return; }
+            // Minimal focus trap: keep Tab within the dialog while it's open.
+            var f = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"]),[role="button"]');
+            var list = Array.prototype.filter.call(f, function (el) { return el.offsetParent !== null; });
+            if (!list.length) { return; }
+            var first = list[0], last = list[list.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        });
+
+        // First visit: auto-open once, after paint so it doesn't fight the initial load. Dismissing (or
+        // following the link out) sets the flag, so future visits never auto-pop.
+        var seen = false;
+        try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch (e) {}
+        if (!seen) {
+            window.setTimeout(function () {
+                // Don't interrupt a visitor already typing (e.g. in search); the flag stays unset, so it
+                // auto-opens on a later visit instead.
+                if (isEditable(document.activeElement)) { return; }
+                open(null);
+            }, 450);
+        }
+    })();
+</script>

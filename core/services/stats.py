@@ -1,10 +1,11 @@
-from django.db.models import Case, Count, F, IntegerField, Q, Sum, Value, When
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from datetime import timedelta
-from trophies.models import Profile, EarnedTrophy, Game, Trophy, Badge, Stage, UserBadge, Concept, ProfileGamification
-from trophies.util_modules.constants import (
-    BADGE_TIER_XP, BRONZE_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP, SILVER_STAGE_XP,
+from trophies.models import (
+    Profile, EarnedTrophy, Game, Trophy, Stage, Concept,
+    BadgeSeries, GroupBadge, UserGroupBadge, SeriesBadgeStanding,
 )
+from trophies.services.badge_xp import XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 
 def compute_community_stats():
     now = timezone.now()
@@ -36,61 +37,82 @@ def compute_community_stats():
         ).count(),
     }
 
-    # Badge series count (Tier 1 badges = unique series)
-    badge_series_counts = Badge.objects.live().filter(tier=1).aggregate(
+    # --- Badge figures, on the grouping-badge subsystem (2026-08 cutover) ---
+    # A series counts as live when it has at least one live GroupBadge. `weekly` is new SERIES, so it reads
+    # the series' own created_at, not the group badge's: adding an Ultra HD edition to an existing series is
+    # not a new badge on the ribbon.
+    live_series_slugs = list(
+        BadgeSeries.objects.filter(group_badges__is_live=True)
+        .distinct().values_list('series_slug', flat=True)
+    )
+    badge_series_counts = BadgeSeries.objects.filter(series_slug__in=live_series_slugs).aggregate(
         total=Count('id'),
-        weekly=Count('id', filter=Q(created_at__gte=week_ago))
+        weekly=Count('id', filter=Q(created_at__gte=week_ago)),
     )
 
-    # Total Badge XP earned across all users
-    badge_xp = ProfileGamification.objects.aggregate(
-        total=Sum('total_badge_xp')
-    )
+    # Total badge XP across all hunters, summed from the PER-SERIES standings restricted to live series.
+    #
+    # Not `Sum(ProfileBadgeStanding.total_xp)`, which is the obvious read and is wrong here:
+    # `recompute_standing` re-sums that grand total from ALL of a profile's SeriesBadgeStanding rows, and
+    # it only ever deletes rows for the series it was handed (always live ones). A series that goes
+    # dormant therefore leaves its XP in every holder's total forever, so the ribbon would advertise XP
+    # from badges nobody can see. Every other badge figure on this page gates on `is_live`; this is the
+    # one that could not do it by filtering the same table.
+    badge_xp = SeriesBadgeStanding.objects.filter(
+        series_slug__in=live_series_slugs
+    ).aggregate(total=Sum('xp'))
 
     # Unique concepts across all badge stages
     unique_concepts_total = Concept.objects.filter(
         stages__series_slug__isnull=False
     ).distinct().count()
 
-    # Unique badges earned: sum of per-user distinct series counts
-    per_user_unique = (
-        UserBadge.objects.values('profile')
-        .annotate(unique_series=Count('badge__series_slug', distinct=True))
-        .aggregate(total=Sum('unique_series'))
-    )
-    per_user_weekly = (
-        UserBadge.objects.filter(earned_at__gte=week_ago)
-        .values('profile')
-        .annotate(unique_series=Count('badge__series_slug', distinct=True))
-        .aggregate(total=Sum('unique_series'))
-    )
+    # Badges held across all hunters. Editions do NOT overlap (a group badge belongs to exactly one
+    # platform group), so a flat row count is the honest total -- no per-user DISTINCT needed, unlike the
+    # legacy tier model where four tiers of one series had to collapse to one.
+    #
+    # `weekly` reads created_at (when WE awarded it), NOT earned_at (when the hunter finished the games).
+    # The legacy column meant award time, so repointing onto `earned_at` silently changed the question:
+    # a series shipped today and awarded to hunters who platted it in 2019 would have reported zero.
     badges_earned_counts = {
-        'total': per_user_unique['total'] or 0,
-        'weekly': per_user_weekly['total'] or 0,
+        'total': UserGroupBadge.objects.filter(group_badge__is_live=True).count(),
+        'weekly': UserGroupBadge.objects.filter(
+            group_badge__is_live=True, created_at__gte=week_ago
+        ).count(),
     }
 
-    # --- Catalog (collection) stats: what the badge collection OFFERS, independent of who earned it ---
-    # Total stages to complete across live badge series (stage 0 is the non-counting base stage).
-    live_series_slugs = Badge.objects.live().filter(tier=1).values_list('series_slug', flat=True)
-    badge_stages_total = (
+    # --- Catalog stats: what the collection OFFERS, independent of who earned it ---
+    # Stages per live series (stage 0 is the non-counting base stage). Counted once per SERIES: the stage
+    # list is series-level, and every edition of a series works the same stages.
+    stages_by_series = dict(
         Stage.objects.filter(series_slug__in=live_series_slugs)
         .exclude(stage_number=0)
-        .count()
+        .values('series_slug')
+        .annotate(n=Count('id'))
+        .values_list('series_slug', 'n')
     )
-    # Total earnable badge XP: per live badge, (required_stages * that tier's per-stage XP) + the
-    # flat completion bonus. Mirrors xp_service's formula, aggregated over the whole live catalog.
-    badge_earnable_xp = Badge.objects.live().aggregate(
-        xp=Sum(
-            Case(
-                When(tier=1, then=F('required_stages') * BRONZE_STAGE_XP),
-                When(tier=2, then=F('required_stages') * SILVER_STAGE_XP),
-                When(tier=3, then=F('required_stages') * GOLD_STAGE_XP),
-                When(tier=4, then=F('required_stages') * PLAT_STAGE_XP),
-                default=Value(0),
-                output_field=IntegerField(),
-            ) + Value(BADGE_TIER_XP)
-        )
-    )['xp'] or 0
+    badge_stages_total = sum(stages_by_series.values())
+
+    # Total earnable badge XP over the live catalog: per live GROUP badge (XP accrues per edition, so a
+    # two-edition series is worth twice a one-edition series), stages * XP_PER_STAGE + the flat bonus.
+    #
+    # This is an UPPER BOUND, deliberately. True XP counts only GATING stages, and whether a stage gates
+    # depends on per-game obtainability within that edition -- resolvable only by building the full
+    # catalog, which is far too heavy for an hourly cron. A stage with no obtainable game in an edition
+    # is over-counted here. The legacy figure approximated too (it trusted `required_stages`), and this
+    # is a headline ribbon number, not an accounting figure.
+    live_groups_by_series = dict(
+        GroupBadge.objects.filter(is_live=True)
+        .values('series__series_slug')
+        .annotate(n=Count('id'))
+        .values_list('series__series_slug', 'n')
+    )
+    # Both dicts are keyed by series and bounded by CATALOG size (hundreds), never by user data, so this
+    # loop is not the profile-scoped Python aggregation the performance rule forbids.
+    badge_earnable_xp = sum(
+        editions * (stages_by_series.get(slug, 0) * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS)
+        for slug, editions in live_groups_by_series.items()
+    )
 
     return {
         'profiles': {

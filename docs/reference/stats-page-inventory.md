@@ -1,5 +1,8 @@
 # Stats Page - Stat Inventory
 
+> **The page this inventories was deleted in 2026-08.** Kept as the record of what My Stats computed,
+> which is the useful half when it is rebuilt. The file paths no longer resolve.
+
 > Quick-reference of every stat displayed on `/my-stats/`. Update this doc when adding or removing stats.
 
 ## Section 1: Career Overview (FREE)

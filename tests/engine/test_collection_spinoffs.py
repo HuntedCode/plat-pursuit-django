@@ -17,7 +17,7 @@ from trophies.models import ConceptFranchise, Franchise
 from trophies.services.badge_coverage_service import audit_badge_coverage
 from trophies.services.igdb_service import IGDBService
 from tests.factories import (
-    BadgeFactory, ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+    BadgeSeriesFactory, ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -220,12 +220,12 @@ def test_member_of_one_series_spinoff_of_another_is_scoped_correctly():
     ConceptFranchise.objects.create(concept=concept, franchise=coll_a, is_spinoff=False)  # Member of A
     ConceptFranchise.objects.create(concept=concept, franchise=coll_b, is_spinoff=True)   # Spin-off of B
 
-    badge_a = BadgeFactory(series_slug='ser-a', tier=1)
-    badge_a.collection = coll_a
-    badge_a.save()
-    badge_b = BadgeFactory(series_slug='ser-b', tier=1)
-    badge_b.collection = coll_b
-    badge_b.save()
+    series_a = BadgeSeriesFactory(series_slug='ser-a')
+    series_a.collection = coll_a
+    series_a.save()
+    series_b = BadgeSeriesFactory(series_slug='ser-b')
+    series_b.collection = coll_b
+    series_b.save()
 
     findings = {f['collection']: f for f in audit_badge_coverage()}
 

@@ -1,0 +1,66 @@
+{% comment %}
+First-run timezone confirmation.
+
+Why it exists: the timezone decides which month a trophy falls into. A trophy earned at 23:00 on the 31st
+belongs to the month the hunter experienced it in, and getting that wrong quietly mis-files their whole
+archive. `user_timezone` defaults to 'UTC' and is non-null, so it cannot tell us whether a UTC hunter is
+in London or has simply never been asked -- `timezone_confirmed_at` is what answers that.
+
+Why it is a CONFIRMATION and not a picker: the browser already knows the answer. Opening a list of eighty
+zones and asking someone to find themselves is a chore; showing them the zone they are almost certainly in
+and asking "right?" is one tap. The full picker is behind "Pick a different one" for the cases where the
+guess is wrong (a VPN, a traveller, a shared machine).
+
+Opens by itself only when `timezone_confirmed_at` is null AND this device has not dismissed it. Reopened
+any time from the header button.
+{% endcomment %}
+<dialog id="tz-modal" class="rca-tzm" aria-labelledby="tz-modal-title">
+    <form method="dialog" class="rca-tzm__x">
+        <button class="rca-tzm__xbtn" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" aria-hidden="true"><path d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+    </form>
+
+    <div class="rca-tzm__body">
+        <span class="rca-tzm__ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+        </span>
+
+        <h2 class="rca-tzm__title" id="tz-modal-title">Which clock are you on?</h2>
+        <p class="rca-tzm__lede">
+            Your timezone decides which month a trophy counts toward. A platinum earned late on the 31st
+            belongs to the month you were actually in, not to UTC's.
+        </p>
+
+        {% comment %} Filled by JS from the browser's own zone. Hidden until then, because a guess box with
+        no guess in it is worse than no guess box. {% endcomment %}
+        <div class="rca-tzm__guess" id="tz-modal-guess" hidden>
+            <span class="rca-tzm__guess-label">Looks like you are in</span>
+            <span class="rca-tzm__guess-zone" id="tz-modal-guess-zone"></span>
+        </div>
+
+        <div class="rca-tzm__pick" id="tz-modal-pick" hidden>
+            <label class="rca-tzm__pick-label" for="tz-modal-select">Choose your timezone</label>
+            <select id="tz-modal-select" class="select select-bordered select-sm w-full"></select>
+        </div>
+
+        <div class="rca-tzm__actions">
+            {% comment %} autofocus so the dialog opens on the action, not on Close -- which is first in
+            the DOM and would otherwise take the ring, pointing the hunter at the way out. {% endcomment %}
+            <button type="button" class="btn btn-sm md:btn-md btn-primary" id="tz-modal-confirm" autofocus>
+                <span id="tz-modal-confirm-label">Use this</span>
+            </button>
+            <button type="button" class="btn btn-sm md:btn-md btn-ghost" id="tz-modal-other">
+                Pick a different one
+            </button>
+        </div>
+
+        <p class="rca-tzm__note">
+            You can change it any time from the clock in the header.
+        </p>
+    </div>
+</dialog>

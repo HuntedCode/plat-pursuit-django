@@ -75,7 +75,7 @@ The test for any badge-rendering decision: *does this respect the card metaphor?
 
 If the Frame turns a badge into a trading card, the Badge Gallery turns the collection into an album. The trading-card metaphor doesn't stop at the individual card; it extends to the surface that displays the collection. The Badge Gallery is the kit's canonical "binder / display" — slots for each card, labeled spaces, the satisfaction of seeing your collection housed.
 
-**Implementation: the Binder.** The Album concept was prototyped end-to-end as the **Binder Surface** — a literal three-ring binder vessel for the collection, with cover, spine, rings, page tabs, sleeves, and a 3D page-flip Spread view. The Binder is documented as a Surface (a branded container that arranges Frames) in its own section below; see [Surfaces → The Binder](#surfaces-and-the-binder) and [binder-surface.md](binder-surface.md) for the full design + technical reference. The bullets below are the conceptual rationale that the Binder workshop fulfilled.
+**Implementation: the Binder.** The Album concept was prototyped end-to-end as the **Binder Surface** — a literal three-ring binder vessel for the collection, with cover, spine, rings, page tabs, sleeves, and a 3D page-flip Spread view. The Binder is documented as a Surface (a branded container that arranges Frames) in its own section below; see [Surfaces → The Binder](#surfaces-and-the-binder) and [binder-surface.md](binder-surface.md) for the full design + technical reference. The bullets below are the conceptual rationale that the Binder workshop fulfilled. **Superseded (2026-07):** the collection no longer uses the binder — badges present as medallion OBJECTS in the [Badge Medallion "Case"](../reference/badge-medallion.md); the Binder is now a design lab only. The *Album* idea (a housed, browsable collection) still holds; the Case is its current implementation.
 
 **Visual character (delivered by the Binder workshop).**
 
@@ -108,13 +108,15 @@ The four primitives share a motion and particle language that the Frame prototyp
 - **Scan beams** — bright horizontal or vertical sweeps used to indicate transformative passes (the uncloak, the back-face reveal, future level-ups). Always hot orange-white at the leading edge.
 - Trajectories arc and fall under gravity. Never straight-line. Never confetti-style explosion.
 
-**Where it appears today.** Frame's Earn Moment uses the full vocabulary. **Where it appears next.** Tally's level-up beat, Horizon's progression milestones, Pursuer Card unlock moments — all should draw from this vocabulary, not invent local one-offs.
+**Where it appears today.** Frame's Earn Moment uses the full vocabulary; the **Pursuer Card forge** (sync reveal + new-platinum slot-in) now ships it too. **Where it appears next.** Tally's level-up beat, Horizon's progression milestones — all should draw from this vocabulary, not invent local one-offs. For the *implementation* craft — the CSS recipes + gotchas that make motion read premium rather than cheap (traveling light vs drawn line, fade-don't-pop, glow-above-image, no-FOUC reveals, clip breathing room, restraint) — see [Premium Motion Patterns](../reference/motion-patterns.md).
 
 **Anti-patterns for motion + particles.** Confetti bursts on routine actions. Sparkles on hover states. Frantic counters. "Achievement Unlocked!" pop-ups. Generic mobile-game gamification (see anti-ref #4). The vocabulary is reserved for *meaningful* moments; everywhere else, the kit breathes.
 
 ### The Frame (headline primitive)
 
 **Concept.** The PlatPursuit-branded housing that surrounds badge artwork. Binder slot, museum case, graded-card sleeve. The Frame is the *brand*; the artwork inside is the *content*.
+
+> **Evolution (2026-07).** On `/collection/`, badges now present as **medallion OBJECTS** (the [Badge Medallion](../reference/badge-medallion.md)) rather than boxed in the Frame card — the badge art is *already* a self-contained laurel-framed medallion, so the card chrome double-framed it. The Frame still houses badges everywhere else (game/badge detail, share cards); a site-wide **Frame -> Medallion** migration is under evaluation. If it lands, this section is where the primitive gets redefined.
 
 **Job.**
 
@@ -177,9 +179,9 @@ The Earn Moment is the canonical demonstration of the kit's motion + particle vo
 
 **Visual character.** Card vessel with framed avatar, prominent Master Level rendered in the Tally treatment, Pursuer name, active Title, top Job slot, Horizon bar tracking progress to the next tier, and a recent-badge peek row at the bottom built from mini-Frame chrome. Tier-tinted card with diamond corner notches that echo the Frame's. Premium customization is *additive* to the base; never replaces it. Tier itself is achievement-locked and cannot be purchased.
 
-**Workshop status (locked).** The composition above is workshop-locked. Master Level is the sum of all Job levels (RuneScape-style aggregate). Tier brackets: Bronze 1-199, Silver 200-599, Gold 600-1199, Platinum 1200+. Five sizes ship: Hero (Logbook), Default (Pursuit home), Compact (profile header), Share (vertical share card), Mini (comments/leaderboards). Avatar uses a hybrid PSN-default + PlatPursuit customization model. Workshop: [`/design/pursuer-card/`](../../templates/design/pursuer_card_preview.html). Code extraction (to production partials + CSS + JS in the Frame's style) is deferred until the card gets a real product mounting point.
+**Workshop status (locked).** The composition above is workshop-locked. Master Level is the sum of all Job levels (RuneScape-style aggregate). Tier brackets: Bronze 1-199, Silver 200-599, Gold 600-1199, Platinum 1200+. Five sizes ship: Hero (Logbook), Default (Pursuit home), Compact (profile header), Share (vertical share card), Mini (comments/leaderboards). Avatar uses a hybrid PSN-default + PlatPursuit customization model. Workshop: `/design/pursuer-card/` (removed in the 2026-08 design-lab strip; decisions recorded here). Code extraction (to production partials + CSS + JS in the Frame's style) is deferred until the card gets a real product mounting point.
 
-**Customization slots (workshop-locked, four of five).** The card has five customization slots: background texture, frame overlay, particle/animation, title plate, and badge-peek showcase. The first four are workshop-locked with a menu of variants per slot; badge-peek customization is deferred. Whether each variant ships free / via customization currency / via subscription / via seasonal unlock is intentionally not a property of the workshop — that's an economy decision for later. Sibling workshop: [`/design/pursuer-card-customization/`](../../templates/design/pursuer_card_customization_preview.html).
+**Customization slots (workshop-locked, four of five).** The card has five customization slots: background texture, frame overlay, particle/animation, title plate, and badge-peek showcase. The first four are workshop-locked with a menu of variants per slot; badge-peek customization is deferred. Whether each variant ships free / via customization currency / via subscription / via seasonal unlock is intentionally not a property of the workshop — that's an economy decision for later. Sibling workshop: `/design/pursuer-card-customization/` (removed in the 2026-08 design-lab strip; decisions recorded here).
 
 **Anti-patterns.** Generic "user profile card" (avatar circle + username + bio, like every social app). Card louder than the Pursuer inside it. Inconsistent treatments between hero/compact/mini that break the family read. Customization that fragments recognition. Tier override via cosmetic (the tier is achievement-locked, never purchasable).
 
@@ -197,6 +199,8 @@ The Earn Moment is the canonical demonstration of the kit's motion + particle vo
 
 **Workshop status (locked).** Four forms ship: linear bar (XP / Job rows / Pursuer-tier progression), stepped pips (discrete-stage progressions), radial arc (compact dashboard tiles, badge-tier completion), and vertical fill (column meters). Color progression locked across six completion levels (5/25/50/75/95/99%) cooler-to-warmer. Tally + Horizon composition is the canonical Job-row pairing. Workshop: [`/design/horizon/`](../../templates/design/horizon_preview.html).
 
+**Extracted (2026-06).** Production implementation: `static/css/components/horizon.css` + `static/js/horizon.js` + the `components/horizon.html` partial. **Two tones**, both load-bearing: `band` (the locked cool→warm completion palette, set by `data-horizon-band` / the `horizon_band` templatetag) and `themed` (an accent/family color via `--horizon-accent`, so family-colored surfaces keep their identity). Forms live as `.pp-horizon__track`/`__fill` (linear), `.pp-horizon--segmented` (pips), and `.pp-horizon--arc` (radial). First mounted on the **Milestones page** (tier-ladder progress + overall/category bars, `band` tone); the Lab / Research Panel will keep `themed`. The partial carries `role="progressbar"` + ARIA value attrs.
+
 **Anti-patterns.** Literal arrows (too directive). Heavy dramatic gradients (it's a hint, not a flag). "Click to continue" CTAs (the horizon is mood, not button). Disconnected from real progress data (must always pair with a real percentage, never decorative-only).
 
 ### The Tally
@@ -213,7 +217,9 @@ The Earn Moment is the canonical demonstration of the kit's motion + particle vo
 
 **Visual character.** Distinctive type treatment for headline numbers: heavy weight, tabular figures so digits don't shift width, generous breathing room. Ticking-up animation that has *weight* (a roll or flip with mass, not a frantic counter spinning). Level-up moment: brief celebratory beat with a Horizon-style edge glow. Recently-earned numbers carry a subtle "fresh" treatment that decays over hours, so the level you just earned looks different from one earned weeks ago, just briefly.
 
-**Workshop status (locked).** Display face is **Bricolage Grotesque** (variable axes: `opsz` 12-96, `wdth` 75-100, `wght` 200-800). Selected over Inter / Space Grotesk / JetBrains Mono after side-by-side comparison at every scale. The variable-width axis is load-bearing — wider widths read as "headline / monumental," tighter widths as "ledger / inline." Scale ladder spans headline (96px+) down to micro (12px). Tick-up animation, level-up beat, and fresh-decay treatment all locked. Workshop: [`/design/tally/`](../../templates/design/tally_preview.html).
+**Workshop status (locked).** Display face is **Bricolage Grotesque** (variable axes: `opsz` 12-96, `wdth` 75-100, `wght` 200-800). Selected over Inter / Space Grotesk / JetBrains Mono after side-by-side comparison at every scale. The variable-width axis is load-bearing — wider widths read as "headline / monumental," tighter widths as "ledger / inline." Scale ladder spans headline (96px+) down to micro (12px). Tick-up animation, level-up beat, and fresh-decay treatment all locked. Workshop: `/design/tally/` (removed in the 2026-08 design-lab strip; decisions recorded here).
+
+**Extracted (2026-06).** Production implementation: `static/css/components/tally.css` + the `components/tally.html` partial. Base `.pp-tally` carries only the face (Bricolage Grotesque, 800 weight, tabular figures) and is deliberately **metrics-free** — size, `opsz`, line-height, and letter-spacing live on the size rungs `.pp-tally--{hero,xl,lg,md,sm,xs}`, so retrofitting `.pp-tally` onto existing numbers doesn't shift them. `.pp-tally--glow` adds the earned-state edge glow (color via `--pp-tally-glow`). First mounted on the **Milestones page** (overview stat numbers + tier targets). Tick-up animation + fresh-decay stay workshop-only until a surface needs them.
 
 **Anti-patterns.** Generic dashboard metrics (big-bold number, small label, bordered card). Counters that count up from zero (looks arcade-y, kills weight). Numbers as table cells (alignment-driven, makes them data). Levels that feel like stats screen entries instead of rewards. Tally treatment everywhere it could go (must be reserved for *meaningful* numbers).
 
@@ -234,7 +240,7 @@ The four primitives above are **atomic** — small, repeated units of brand iden
 
 Surfaces share two properties with primitives: they're brand-recognition vehicles, and they carry the full visual-identity weight (principles, anti-references, locked designs). But they fail the atomicity test — a Surface isn't a small reusable unit, it's a vessel. Categorizing them separately keeps the four-primitive framing crisp.
 
-**The Binder (first Surface, prototype-locked).** The literal trading-card binder that displays the badge collection: three-ring sleeve binder with cover, spine, rings, page tabs, pocket sleeves, page numbers, bookmark. Six views — five binder configurations (Single / Compact / Spread × Binder / Gallery presentation, minus Spread × Gallery which isn't meaningful) plus a sibling sortable list view at `/design/badge-collection/` for power users. Spread mode is the headline interaction: a real 3D page-flip with drag-to-flip + arrow-button affordances, rotating around the spine. The Binder is the implementation of the Album concept named above. Workshop lives at [`/design/binder/`](../../templates/design/binder_preview.html); full design + technical reference in [binder-surface.md](binder-surface.md). Full code extraction (to production partials + CSS + JS, in the style of the Frame component) is deferred until the Binder gets a real product mounting point.
+**The Binder (first Surface, prototype-locked).** The literal trading-card binder that displays the badge collection: three-ring sleeve binder with cover, spine, rings, page tabs, pocket sleeves, page numbers, bookmark. Six views — five binder configurations (Single / Compact / Spread × Binder / Gallery presentation, minus Spread × Gallery which isn't meaningful) plus a sibling sortable list view at `/design/badge-collection/` for power users. Spread mode is the headline interaction: a real 3D page-flip with drag-to-flip + arrow-button affordances, rotating around the spine. The Binder is the implementation of the Album concept named above. The workshop at `/design/binder/` (and its list-view sibling at `/design/badge-collection/`) was removed in the 2026-08 design-lab strip — the Badge Medallion Case superseded the Binder on `/collection/` in 2026-07; full design + technical reference in [binder-surface.md](binder-surface.md).
 
 **Future Surfaces.** Plausible siblings the Binder leaves room for: a **Trophy Case** for completed platinums (one-of-one display, plinth-and-pedestal vocabulary), a **Showcase** for the Pursuer Card hero on the Logbook, a **Wall** for milestone displays (100th platinum, badge series completions). Each would be its own Surface entry, not a primitive.
 
@@ -248,15 +254,47 @@ Surfaces share two properties with primitives: they're brand-recognition vehicle
 
 ## 4. Tokens
 
-Deferred. This section will hold concrete CSS variables, type scale, color extensions beyond DaisyUI's defaults, and motion vocabulary once Phase 1 gamification design begins and we know what we're tokenizing toward. Drafting tokens before the surfaces that use them is premature.
+**In active development** (2026-06). The bespoke token foundation is being developed
+as a workshop at [`/design/style-guide/`](../../templates/design/style_guide_preview.html)
+(standalone, DaisyUI-free). Direction is agreed; concrete `@theme` values get promoted
+from the workshop into `static/css/input.css` when the first real surface (Badge detail)
+is rebuilt, and DaisyUI's theme is re-pointed at them for instant site-wide ownership.
+This is a **living layer** — extend it as new surfaces surface new needs.
 
-When this section opens, expected contents:
+Agreed direction:
 
-- Typography pair (display + body) and scale for the Tally treatment
-- Color extensions for tier states, Horizon gradients, and earnest-warm accents
-- Motion vocabulary for level-up beats, badge-earn moments, Pursuer Card animations
-- Spacing additions specific to identity surfaces (badge gallery, Logbook hero)
-- DaisyUI overrides where the default token doesn't carry the identity
+- **Color.** Keep and formalize the existing character (slate surfaces; **cyan =
+  primary/platinum** and the one "active / in progress" accent; violet secondary;
+  warm-orange forge-spark accent; trophy tiers; semantics), re-homed as owned `--pp-*`
+  tokens so templates stop referencing DaisyUI's `base-*`.
+- **Type.** **Bricolage Grotesque** (display, locked in the Tally workshop) reserved for
+  **hero headlines + numbers only**; **Inter** for body and sub-headers. Scarcity makes
+  the display face hit; Inter keeps the broad UI calm and readable.
+- **Shape.** Near-square radii + crisp **2px borders** = the "matted, framed artifact"
+  read. **Material over drop-shadow** for richness: a top-edge light-catch + faint
+  surface gradient ("workbench material") on resting cards; shadow reserved for raised
+  surfaces.
+
+Guiding principles for this layer (the test gates):
+
+- **Neon / glow is earned by *state*, never painted on *surfaces*.** It marks active /
+  hover / near-completion / earn moments using the one cyan accent (tier tints only for
+  tier-specific glows); it never washes backgrounds, body text, or resting chrome.
+  Resting = calm matte; glow = reward energy on top. (Keeps us PS-era-premium, not the
+  cyberpunk / mobile-game / NFT anti-refs in §5.)
+- **Premium substrate, charm seasoning.** Premium is the baseline quality bar on every
+  surface, earned through restraint + craft + consistency (NOT more effects). Indie charm
+  is deliberate moments on top (flavor, easter eggs, personality), never a coat of paint
+  that cheapens. *Prestigious + modern* carry the substrate; *charming + earnest* carry
+  the seasoning.
+- **Signature moments on a budget.** Invest deep craft in a few canonical beats (badge
+  Earn Moment, level-up, first-sync "Pursuer emerges", milestones) and let everything
+  else breathe. The calm makes the wow land. Motion is GPU-friendly (transform/opacity),
+  honors `prefers-reduced-motion`, and never blocks reading — jank reads as cheap.
+
+Still to formalize as the workshop matures: the concrete type scale, spacing scale,
+elevation scale, and the per-surface motion vocabulary (these solidify against real
+surfaces rather than in the abstract).
 
 ---
 
@@ -334,7 +372,7 @@ When this document and a downstream design disagree, this document wins. When th
 - **Tally typography choice** — resolved in the Tally workshop. Bricolage Grotesque with variable axes (`opsz` / `wdth` / `wght`) selected over Inter / Space Grotesk / JetBrains Mono. The Frame's engraving was a first pass; production Frame engraving should be refreshed to use Bricolage when Frame extraction next sees work.
 - **Motion vocabulary ownership** — resolved at the kit level (see § Kit-level vocabulary: Motion + Particles above). Specific easing curves and durations still token-level work for Section 4.
 - **Cyan brand accent application** — committed across Frame (blueprint + Pinned), Horizon (cool-end progression color + step backgrounds), and Pursuer Card (Job XP bar leading edge). One brand accent across the kit, calibrated per surface.
-- **Code extraction priorities for Tally / Horizon / Pursuer Card.** All three are workshop-locked but only the Frame has been extracted to production-quality partial + CSS + JS. Extraction priority should be driven by the gamification update's surface design — extract a primitive when a real surface needs to mount it, not speculatively.
+- **Code extraction priorities for Tally / Horizon / Pursuer Card.** Frame, **Tally**, and **Horizon** are now extracted to production partial + CSS (+ JS for Horizon) — Tally and Horizon were pulled out for the Milestones rebuild (2026-06), the first real surface to mount them, per the "extract when a surface needs it" rule. The **Pursuer Card** remains workshop-only, awaiting its surface. Remaining extraction follow-up: retrofit the earlier hand-rolled treatments on the Lab / Research Panel / Collection onto the shared Tally/Horizon classes (themed tone).
 
 ---
 
@@ -343,10 +381,10 @@ When this document and a downstream design disagree, this document wins. When th
 - [Product Identity](product-identity.md): the strategic frame this visual identity serves. **When this document and product-identity.md disagree, product-identity wins.**
 - [Visual Identity References](visual-identity-references.md): curated real-world references for each primitive (Phase A mood-board content). Working doc for sketching, prototyping, and Figma mood boards.
 - [Frame design preview](../../templates/design/frame_preview.html) (served at `/design/frame/`): the reference implementation for the Frame primitive. Captures the tier variants, states (Earned / Unearned dim / Unearned blueprint / Pinned), engraving treatment, motion + particle vocabulary, and the full Earn Moment choreography. Where this doc and the prototype disagree on Frame details, the prototype is the source of truth — this doc records the strategic shape, the prototype records the committed implementation.
-- [Tally workshop](../../templates/design/tally_preview.html) (served at `/design/tally/`): the typeface showdown, scale ladder, tabular-figure verification, tick-up animation A/B/C, level-up beat, and fresh-decay treatment. Locked: Bricolage Grotesque as the display face.
-- [Horizon workshop](../../templates/design/horizon_preview.html) (served at `/design/horizon/`): four forms (linear bar / stepped pips / radial arc / vertical fill), six-step color progression, scale ladder, marker variants, and the canonical Tally + Horizon Job-row composition.
-- [Pursuer Card workshop](../../templates/design/pursuer_card_preview.html) (served at `/design/pursuer-card/`): canonical card, four tier states, five sizes (Hero / Default / Compact / Share / Mini), the Frame sibling read, the Tally + Horizon composition inside the card, and the five-slot customization map.
-- [Pursuer Card customization workshop](../../templates/design/pursuer_card_customization_preview.html) (served at `/design/pursuer-card-customization/`): sibling deep-dive that workshops the variants per customization slot (background / frame overlay / particle / title plate). Badge-peek showcase deferred. Variants intentionally carry no unlock-type labels (economy decision separate).
-- [Binder Surface](binder-surface.md): the first Surface entry. Full design + technical reference for the Binder workshop ([`/design/binder/`](../../templates/design/binder_preview.html)) and its sibling list view ([`/design/badge-collection/`](../../templates/design/badge_collection_list.html)). The Album concept (named in §3) implemented end-to-end.
+- Tally workshop (`/design/tally/`, removed in the 2026-08 design-lab strip): the typeface showdown, scale ladder, tabular-figure verification, tick-up animation A/B/C, level-up beat, and fresh-decay treatment. Locked: Bricolage Grotesque as the display face.
+- [Horizon workshop](../../templates/design/horizon_preview.html) (served at `/design/horizon/`, staff-gated since the 2026-08 design-lab strip): four forms (linear bar / stepped pips / radial arc / vertical fill), six-step color progression, scale ladder, marker variants, and the canonical Tally + Horizon Job-row composition.
+- Pursuer Card workshop (`/design/pursuer-card/`, removed in the 2026-08 design-lab strip): canonical card, four tier states, five sizes (Hero / Default / Compact / Share / Mini), the Frame sibling read, the Tally + Horizon composition inside the card, and the five-slot customization map. Decisions recorded in §3; the production card partial is the living reference (`/design/pursuer-card-ranks/` previews it per rank).
+- Pursuer Card customization workshop (`/design/pursuer-card-customization/`, removed in the same strip): sibling deep-dive that workshopped the variants per customization slot (background / frame overlay / particle / title plate). Badge-peek showcase deferred. Variants intentionally carried no unlock-type labels (economy decision separate).
+- [Binder Surface](binder-surface.md): the first Surface entry. Full design + technical reference for the Binder workshop and its sibling list view (both removed in the 2026-08 design-lab strip; the doc is the record). The Album concept (named in §3) implemented end-to-end.
 - [Gamification Plan](gamification-plan.md): Phase 1 surfaces (Pursuit home, Logbook, Badge Gallery) are the first major work to be designed natively in this visual identity.
 - [Design System Reference](../reference/design-system.md): the existing site-wide tokens, patterns, and component blueprints. Will be refreshed in service of this identity once Section 4 opens.

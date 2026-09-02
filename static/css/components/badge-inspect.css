@@ -1,0 +1,260 @@
+/* Badge inspect modal ("pick it up"): the .pp-detail-modal shell + the .pp-bdetail medallion-and-facts
+ * layout for one group badge, fetched on tap into a host dialog. Shared by the badge detail peek
+ * (#badge-peek) and the Collection Gallery detail modal (#collection-detail). Extracted from the retired
+ * collection-case.css when the Case grid was removed; only the modal half was still live. */
+
+/* ============================================================
+ * Badge detail modal ("pick it up") -- fetched on tap.
+ * ============================================================ */
+.pp-detail-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+.pp-detail-modal[hidden] { display: none; }
+/* A SOLID dim, not a live backdrop-filter blur: the blur had to re-sample the whole receded page every frame
+   the 3D medallion tilts/flips (worst on the Collection, where the full medallion wall sits behind it), which
+   tanked the inspector's frame rate. The recede-scale already gives depth; a darker scrim reads the same. */
+.pp-detail-modal__scrim { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.8); }
+.pp-detail-modal__dialog {
+    position: relative; z-index: 1; will-change: transform;   /* own layer -- keeps the backdrop blur from re-sampling on repaint */
+    width: min(720px, 100%); max-height: 88vh; overflow: auto;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    padding: 28px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+}
+.pp-detail-modal__close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--pp-text-mute); font-size: 28px; line-height: 1; cursor: pointer; z-index: 2; }
+.pp-detail-modal__close:hover { color: var(--pp-text); }
+.pp-detail-modal__close:focus-visible { color: var(--pp-text); outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm); }
+/* iOS-style drag handle -- shown on touch on ANY dialog wired for swipe-to-close (PlatPursuit.dismissableSheet
+   adds .pp-dismissable). A ::before pill so no markup is needed; floats in the dialog's top padding (or over
+   a headered modal). Tied to .pp-dismissable, not the modal class, so a modal WITHOUT swipe (e.g. the peek's
+   pick-up/put-down) never shows a handle it doesn't honour. Global (used by pp-detail-modal + the emodal). */
+@media (hover: none) and (pointer: coarse) {
+    .pp-dismissable { position: relative; }
+    .pp-dismissable::before {
+        content: ""; position: absolute; top: 9px; left: 50%; transform: translateX(-50%);
+        width: 40px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.5); z-index: 3; pointer-events: none;
+    }
+}
+/* The handle fades in a beat after the sheet opens (a calm "here's how to dismiss" cue) -- consistent
+   whether the modal's chrome enters instantly (peek) or with the dialog (stats/contract). Replays on each
+   open because the modals toggle display via [hidden]. Reduced motion -> the handle is simply present. */
+@keyframes ppGrabIn { from { opacity: 0; } }
+@keyframes ppGrabOut { to { opacity: 0; } }
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+    .pp-dismissable::before { animation: ppGrabIn 0.32s ease 0.15s both; }
+    /* Fade OUT on a non-drag close (close button / tap / Escape / put-down) -- the modal's .is-closing state.
+       The peek's put-down keeps the dialog opaque (only the disc morphs), so the handle wouldn't fade on its
+       own. On a DRAG close no .is-closing is set, so the handle correctly rides the sheet off instead. */
+    .pp-detail-modal.is-closing .pp-dismissable::before { animation: ppGrabOut 0.18s ease forwards; }
+}
+.pp-detail-modal:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrim 0.2s ease; }
+.pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: ppDetailIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ppDetailScrim { from { opacity: 0; } }
+@keyframes ppDetailIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+
+/* --- Container transform (collection.js growInto / shrinkOut): the modal medallion grows from / shrinks
+   to the tapped shelf spot, MORPHING between the shelf rendering (flat, foreground shown) and the modal
+   rendering (parallax raised at 40px, foreground hidden) so the swap at either end is seamless. Same
+   element throughout -- no clone. The medallion stays fully opaque; only the CHROME + the layer morph
+   animate. Both directions reuse these transitions; the JS just toggles the direction. --- */
+/* Chrome transitions (base) so the chrome can fade in on open / out on close. */
+.pp-detail-modal__dialog { transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
+.pp-bdetail__info, .pp-detail-modal__close { transition: opacity 0.3s ease; }
+
+/* is-growing: no spring, overflow visible (the medallion starts positioned out over the grid). */
+.pp-detail-modal.is-growing:not([hidden]) .pp-detail-modal__dialog { animation: none; overflow: visible; }
+
+/* is-opening: the pick-up's START frame -- SHELF look (parallax flat) + transparent chrome, applied
+   INSTANTLY (transition:none). growInto removes it next frame so the layers + chrome transition INTO
+   the modal look (using the default transitions above) as the medallion grows. */
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(2),
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__fill,
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__foil { transform: translateZ(0); transition: none; }
+.pp-detail-modal.is-opening .pp-detail-modal__dialog { background: transparent; border-color: transparent; box-shadow: none; transition: none; }
+.pp-detail-modal.is-opening .pp-bdetail__info,
+.pp-detail-modal.is-opening .pp-detail-modal__close { opacity: 0; transition: none; }
+
+/* is-closing: the put-down -- scrim + chrome fade OUT, and the medallion morphs to the SHELF look
+   (parallax flattens) so it matches the shelf badge on landing. `animation: none` stops the base
+   ppDetailIn from re-triggering (the flash). Medallion stays opaque (JS shrinks it). */
+.pp-detail-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.34s ease forwards; }
+.pp-detail-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: none; overflow: visible; background: transparent; border-color: transparent; box-shadow: none; }
+.pp-detail-modal.is-closing .pp-bdetail__info,
+.pp-detail-modal.is-closing .pp-detail-modal__close { opacity: 0; }
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__l:nth-child(2),
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__fill,
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__foil { transform: translateZ(0); }
+@keyframes ppDetailScrimOut { to { opacity: 0; } }
+
+/* The progress meter stays put -- it's part of the hero (fades in/out with the chrome), NOT transported
+   with the disc (JS transforms only .pp-med__stage). Its twin stays on the shelf the whole time. */
+.pp-bdetail__stage .pp-med__meter { transition: opacity 0.3s ease; margin-top: calc(var(--sz) * 0.09); }   /* clear the backplate, which overflows ~4% below the badge's box */
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__meter { opacity: 0; transition: none; }
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__meter { opacity: 0; }
+
+.pp-bdetail { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
+.pp-bdetail__stage { display: grid; place-items: center; }
+.pp-bdetail__stage .pp-med { --sz: 260px; }
+.pp-bdetail__stage .pp-med__count { display: none; }   /* no text under the hero badge -- the stats grid carries it */
+
+/* "Turn it in your hand" (fine-pointer + motion-OK only; matches collection.js initTilt). The layered
+   parallax only works with perspective on the SCENE (.pp-med__stage) and rotation + depth on the CARD
+   (.pp-med__art) -- the art is the layers' DIRECT parent, so preserve-3d actually reaches them (rotating
+   the stage instead left them a level too deep and flattened). The scene doesn't move, so its pedestal
+   shadow stays grounded while the badge tilts above it. WARNING: a filter / overflow != visible /
+   isolation:isolate on ANY ancestor of the scene silently re-flattens the whole 3D subtree (that's why
+   the dialog's overflow is overridden here and the art's material filter is dropped). */
+.pp-med__glare {
+    position: absolute; inset: -4%; border-radius: 26%; pointer-events: none; z-index: 4;   /* matches the plate footprint */
+    opacity: 0; transition: opacity 0.35s ease;   /* NB: NO mix-blend-mode -- a blend mode on this child isolates a group that FLATTENS the card's preserve-3d */
+    /* Reads as a glass DOME the badge lives inside: a moving specular (layer 1) + a soft ambient top-light
+       on the curved glass (layer 2); the inset box-shadow is the dome's edge wrapping "around the sides"
+       (it follows the rounded-square silhouette). Raised above the art (translateZ, in the 3D block) so it
+       floats as a separate glass surface over the badge. */
+    background:
+        radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.5), transparent 30%),
+        radial-gradient(115% 95% at 32% 22%, rgba(255, 255, 255, 0.12), transparent 48%);
+    box-shadow:
+        inset 0 0 11px 2px rgba(255, 255, 255, 0.13),
+        inset 0 2px 5px rgba(255, 255, 255, 0.1),
+        inset 0 -6px 12px rgba(0, 0, 0, 0.16);
+}
+/* any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, which is `coarse`
+   on touchscreen laptops even with a mouse attached -- that silently no-op'd the whole 3D block. */
+/* --- Modal medallion 3D: shared by the FLIP (all pointers) and the TILT (fine pointer, below). The card
+   does real 3D, so several ancestor "flatteners" (dialog overflow/will-change, stage isolation) are
+   neutralized; the card gets preserve-3d + filter:none (a filter on the card flattens it, so the grounding
+   shadow moves to the backdrop LEAF, which is 3D-safe); and the faces get backface-visibility so the front
+   hides when the card flips to its engraved base. Motion-OK gates it (reduced-motion = flat, no flip). --- */
+@media (prefers-reduced-motion: no-preference) {
+    #collection-detail .pp-detail-modal__dialog { overflow: visible; will-change: auto; }
+    .pp-bdetail__stage .pp-med__stage { perspective: 560px; display: block; isolation: auto; }
+    .pp-bdetail__stage .pp-med__art {
+        filter: none; transform-style: preserve-3d;   /* NB: no will-change:transform here -- it promotes a compositing layer that FLATTENS preserve-3d */
+        transition: transform 0.7s cubic-bezier(0.34, 1.8, 0.42, 1);   /* spring settle: the tilt overshoots flat + wobbles back on release (bigger curve since the tilt angle is small) */
+    }
+    .pp-bdetail__stage .pp-med__art.is-flipping { transition: transform 0.66s cubic-bezier(0.3, 1.32, 0.5, 1); }   /* the base lands with a small settle, like a real object flipping over */
+    /* front faces turn away past 90deg -> the engraved base shows cleanly when flipped */
+    .pp-bdetail__stage .pp-med__l,
+    .pp-bdetail__stage .pp-med__fill,
+    .pp-bdetail__stage .pp-med__foil,
+    .pp-bdetail__stage .pp-med__glare,
+    .pp-bdetail__stage .pp-med__contact,
+    .pp-bdetail__stage .pp-med__plate { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    /* Contact shadow the raised badge casts onto its plate. Sits just above the plate; the badge floats
+       ~40px above it, so the tilt parallax slides this under the badge -- the cue that it's a separate
+       object resting on the mount, not a flat print. A blur on this leaf is 3D-safe. */
+    .pp-bdetail__stage .pp-med__contact {
+        display: block; position: absolute; inset: 4%; border-radius: 28%;
+        background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.26) 52%, transparent 74%);
+        filter: blur(9px);
+        transform: translateZ(-2px);
+        pointer-events: none;
+    }
+    /* Round mount behind the badge: normalizes every badge (any shape) to a round medal body, so the flipped
+       round base reads as its genuine underside. Sits just behind the backdrop (the badge floats above it on
+       tilt); for round badges it hides behind the art, for shields it fills the body round. */
+    /* Base styles the plate (badge-medallion.css); the hero just raises the badge off it in 3D. */
+    .pp-bdetail__stage .pp-med__plate { transform: translateZ(-3px); }
+    /* flip affordance (JS sets role=button on the scene only when a back exists) */
+    .pp-bdetail__stage .pp-med__stage[role="button"] { cursor: pointer; }
+    .pp-bdetail__stage .pp-med__stage:focus-visible { outline: 2px solid var(--med-glow, #cfe8f0); outline-offset: 6px; border-radius: 26%; }
+
+    /* Grounding cast on the BACKDROP leaf (a filter on this leaf is 3D-safe) -- absent in the modal, it
+       fades IN on close / OUT on open, so it grows & shrinks WITH the disc (mirrors the shelf badge's
+       material shadow). Per-state so the filter function lists match and interpolate. */
+    .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); transition: filter 0.4s ease; }
+    .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1) { transition: none; }   /* pick-up START is instant */
+}
+
+/* Tilt enhancement: the layered parallax depths + tilt tuning + the light-tracking glare. Motion-OK on ALL
+   pointers now -- a fine pointer drives it via the cursor, a coarse one (phone) drives it via the gyroscope
+   (collection.js). The hover-only rule below simply no-ops where there's no hover. At rest (no tilt) the
+   raised layers just sit at their Z with no visible parallax, so this is harmless on a gyro-less touch device. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
+    .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
+    .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
+    /* Two-plane look: the backdrop (laurel) stays at the base; the SUBJECT, its rising fill, and the glare
+       lift together onto ONE raised plane above it. (The foreground layer is hidden site-wide.) */
+    .pp-bdetail__stage .pp-med__fill,
+    .pp-bdetail__stage .pp-med__foil { transform: translateZ(40px); transition: transform 0.4s ease; }
+    /* The BACKDROP's rising-colour fill must ride the backdrop's base plane (not the subject's raised one),
+       or the coloured-in portion collapses forward onto the subject and looks flat. A tiny +Z just seats it
+       in front of the grey base backdrop. */
+    .pp-bdetail__stage .pp-med__fill--bg { transform: translateZ(0.5px); }
+    .pp-bdetail__stage .pp-med__glare { transform: translateZ(52px); }   /* raised ABOVE the art (subject is at 40) so the dome floats as its own glass surface */
+    /* Subject (nth-child 2): raised + grounded with a cast shadow (a filter on this LEAF is 3D-safe). It
+       KEEPS its per-state darkening so the hero matches the shelf -- in-progress/maintenance stay only
+       partially coloured (the bright colour comes from the rising fill, not the base), and unearned stays
+       dim. Only earned/platinum are bright. drop-shadow is appended to each so the raised subject grounds. */
+    .pp-bdetail__stage .pp-med__l:nth-child(2) {
+        transform: translateZ(40px);
+        filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+        transition: transform 0.4s ease;
+    }
+    .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(2),
+    .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(2) {
+        filter: grayscale(1) brightness(0.16) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5)); opacity: 0.58;
+    }
+    .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(2) {
+        filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+    }
+    .pp-bdetail__stage .pp-med__art.is-tilting .pp-med__glare { opacity: 1; }
+}
+/* "Not your own" chip -- only set when a badge-detail peek inspects ANOTHER Pursuer's progress
+   (frame.viewing_other_name). The collection's own modal never sets it. */
+.pp-bdetail__viewing { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 10px; padding: 3px 10px; border-radius: 999px; background: color-mix(in oklab, var(--pp-secondary) 16%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 42%, transparent); font-size: 11px; font-weight: 800; color: var(--pp-secondary); }
+.pp-bdetail__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-bdetail__title { font-size: 26px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.01em; }
+.pp-bdetail__state { font-size: 13px; font-weight: 700; color: var(--pp-primary); margin-bottom: 12px; }
+.pp-bdetail__desc { font-size: 14px; color: var(--pp-text-mute); line-height: 1.55; margin: 0 0 18px; }
+.pp-bdetail__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.pp-bdetail__stat { border: 1px solid var(--pp-border); border-radius: 12px; padding: 10px 12px; background: var(--pp-bg-2); }
+.pp-bdetail__stat .k { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-bdetail__stat .v { font-size: 16px; font-weight: 800; margin-top: 2px; }
+.pp-bdetail__funder { font-size: 12px; color: var(--pp-text-mute); margin-top: 14px; }
+.pp-bdetail__funder-name { color: var(--pp-text); font-weight: 700; }
+.pp-bdetail__funder-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.pp-bdetail__funder-name:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 4px; }
+.pp-bdetail__link { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; font-size: 14px; font-weight: 700; color: var(--pp-primary); text-decoration: none; transition: gap 0.16s ease; }
+.pp-bdetail__link svg { width: 15px; height: 15px; }
+.pp-bdetail__link:hover { gap: 10px; }   /* arrow slides forward */
+.pp-bdetail__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .pp-bdetail__link { transition: none; } }
+.pp-bdetail__link:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+    .pp-bdetail { grid-template-columns: 1fr; gap: 18px; justify-items: center; text-align: center; }
+    .pp-bdetail__stage .pp-med { --sz: min(200px, 42vh); }   /* shrink the hero on short/landscape viewports too */
+    .pp-bdetail__stats { text-align: left; }
+    .pp-detail-modal__dialog { padding: 34px 18px 22px; }   /* extra top so the medallion clears the grabber handle */
+}
+/* Fit a tall (earned) peek on a phone WITHOUT flattening the 3D medallion: its ancestors must stay
+   overflow:visible, so the dialog itself can't scroll. Instead cap the INFO column -- a SIBLING of the
+   object, not a 3D ancestor, so its own scroll is safe -- and let it scroll, keeping the medallion fixed
+   above (a product-page feel). Reserve ~medallion + gap + padding. (Reduced motion drops the 3D + the
+   is-growing overflow override, so the dialog scrolls itself there -- no cap needed.) */
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+    .pp-bdetail__info {
+        max-height: calc(88vh - 286px); overflow-y: auto; overscroll-behavior: contain;
+        /* Breathing room INSIDE the scroll: content clears the medallion at the top and the "View full
+           series" link renders fully at the bottom. The fade is aligned to this padding, so it lands on the
+           empty padding (crisp content edges) while still fading content AS IT SCROLLS under the medallion /
+           hinting there's more below. Standard mask-image only (lightningcss autoprefixes -webkit-). */
+        padding-block: 14px 20px;
+        mask-image: linear-gradient(to bottom, transparent, #000 14px, #000 calc(100% - 20px), transparent);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim,
+    .pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: none; }
+}

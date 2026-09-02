@@ -10,10 +10,13 @@ This service manages the creation of "Spotify Wrapped" style monthly recaps:
 import calendar
 import logging
 import pytz
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Callable, Optional
 from django.db import transaction
 from django.db.models import Count, Min, Q, F
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncMonth
+from django.templatetags.static import static
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -196,6 +199,11 @@ class MonthlyRecapService:
         # Get comparison data
         comparison = cls.get_comparison_data(profile, year, month, user_tz=user_tz)
 
+        # Context beats: what they played, how they stack up, and this month across their other years.
+        taste = cls.get_taste_for_month(profile, year, month, user_tz=user_tz)
+        community = cls.get_community_comparison_for_month(profile, year, month, user_tz=user_tz)
+        history = cls.get_month_in_history(profile, year, month, user_tz=user_tz)
+
         return {
             'total_trophies_earned': trophy_counts['total'],
             'bronzes_earned': trophy_counts['bronze'],
@@ -215,6 +223,9 @@ class MonthlyRecapService:
             'quiz_active_day_data': quiz_active_day or {},
             'badge_xp_earned': badge_stats['xp_earned'],
             'badges_earned_count': badge_stats['badges_count'],
+            'taste_data': taste or {},
+            'community_comparison_data': community or {},
+            'month_in_history_data': history or {},
             'badges_data': badge_stats['badges_data'],
             'badge_progress_quiz_data': badge_progress_quiz or {},
             'comparison_data': comparison,
@@ -347,7 +358,7 @@ class MonthlyRecapService:
         Find the rarest trophy (lowest earn_rate) earned in the month.
 
         Returns:
-            dict or None: {name, game, earn_rate, icon_url, trophy_type}
+            dict or None: {name, game, earn_rate, icon_url, trophy_type, rarity_label}
         """
         from trophies.models import EarnedTrophy
 
@@ -369,12 +380,19 @@ class MonthlyRecapService:
             return None
 
         trophy = rarest.trophy
+        # PSN's OWN rarity band, not the site's rarity scale. `earn_rate` here is
+        # Trophy.trophy_earn_rate -- the share of players who own the game and earned this -- whereas
+        # `--pp-rarity-*` / data-rarity grades against the whole PlatPursuit community. Different
+        # populations, so grading a PSN earn rate on the site's thresholds would be a category error.
+        # The plat card labels its platinum from this same map; reused so the two agree.
+        from core.services.completion_card_service import RARITY_LABELS
         return {
             'name': trophy.trophy_name,
             'game': trophy.game.title_name,
             'earn_rate': trophy.trophy_earn_rate,
             'icon_url': trophy.trophy_icon_url or '',
             'trophy_type': trophy.trophy_type,
+            'rarity_label': RARITY_LABELS.get(trophy.trophy_rarity, ''),
         }
 
     @classmethod
@@ -530,173 +548,344 @@ class MonthlyRecapService:
 
     @classmethod
     def get_badge_stats_for_month(cls, profile, year, month, user_tz=None):
-        """
-        Get badge XP and badges earned in the month.
+        """Badges earned in the month, as objects ready for the Medallion.
 
-        Includes both badge completion bonuses (3000 XP per badge) and
-        stage progress XP (tier-specific XP per concept completed).
+        Reads UserGroupBadge -- the badge system. The version this replaced read the legacy `UserBadge`
+        table, which nothing writes any more: the only writer is `badge_service`, which no live path
+        calls (evaluation runs through `badge_apply` from the `evaluate_badges` command). So the slide
+        was showing an empty or frozen set for everybody.
 
-        When a badge is earned, we attribute all its accumulated stage
-        progress XP to that month as a reasonable approximation.
+        XP comes from the engine's dates, not from a ledger -- there is no badge-XP ledger and none is
+        needed. Every cleared gating stage carries the date it fell and every earned badge carries its
+        earn date, so `badge_xp.monthly_xp` buckets the same two components the standings SUM. This runs
+        one evaluation: ~6 catalog queries (profile-independent) plus the two bounded, whale-safe
+        completion reads. It happens once per (profile, month) at GENERATION time, not per page view --
+        `get_or_generate_recap` persists the result -- so the deck's 8-16 concurrent slide requests read
+        the stored number.
+
+        `art_layers` are absolute static URLs and are SNAPSHOTTED onto the recap. Safe because the project
+        serves static through whitenoise's CompressedStaticFilesStorage, which does not hash filenames.
 
         Returns:
             dict: {xp_earned, badges_count, badges_data}
         """
-        from trophies.models import UserBadge
-        from trophies.services.xp_service import calculate_progress_xp_for_badge
-        from trophies.util_modules.constants import BADGE_TIER_XP
+        from trophies.models import UserGroupBadge
+        from trophies.services.badge_detail_service import group_medallion_layers
+        from trophies.services.badge_orchestrator import evaluate_profile
+        from trophies.services.badge_xp import monthly_xp
 
+        user_tz = user_tz or cls._resolve_user_tz(profile)
         start_date, end_date = cls.get_month_date_range(year, month, user_tz)
 
-        # Get badges earned this month
-        badges_earned = UserBadge.objects.filter(
-            profile=profile,
-            earned_at__gte=start_date,
-            earned_at__lt=end_date
-        ).select_related('badge')
+        earned = (
+            UserGroupBadge.objects
+            .filter(profile=profile, earned_at__gte=start_date, earned_at__lt=end_date)
+            .select_related('group_badge__series', 'group_badge__platform_group')
+            .order_by('earned_at')
+        )
 
-        total_xp = 0
         badges_data = []
-
-        for user_badge in badges_earned:
-            badge = user_badge.badge
-
-            # Badge completion bonus (3000 XP)
-            completion_xp = BADGE_TIER_XP
-
-            # Stage progress XP (tier-specific: Bronze/Gold=250, Silver/Plat=75)
-            # Uses badge.required_stages as completed concepts count
-            progress_xp = calculate_progress_xp_for_badge(
-                badge,
-                badge.required_stages if badge.required_stages > 0 else 0
-            )
-
-            total_xp += completion_xp + progress_xp
-
-            # Build badge display data
+        for ugb in earned:
+            gb = ugb.group_badge
             try:
-                layers = badge.get_badge_layers()
-                image_url = layers.get('main', '')
+                tier, layers, is_avatar = group_medallion_layers(gb)
             except Exception:
-                image_url = ''
+                logger.exception("Could not resolve medallion art for group badge %s", gb.id)
+                continue
 
+            # The frame dict components/badge_medallion.html reads. An earned badge needs no progress
+            # meter, so the stage counts are deliberately absent rather than zeroed.
             badges_data.append({
-                'name': badge.effective_display_series or badge.name,
-                'tier': badge.tier,
-                'tier_name': cls._get_tier_name(badge.tier),
-                'series_slug': badge.series_slug,
-                'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
-                'image_url': image_url,
+                'tier': tier,
+                'state': 'earned',
+                'art_layers': layers,
+                'is_avatar': is_avatar,
+                'is_holographic': ugb.is_holo,
+                'series_name': gb.series.name,
+                'badge_name': gb.platform_group.name,      # the edition: "Legacy HD" / "Ultra HD"
+                'series_slug': gb.series.series_slug,
             })
 
+        # One evaluation yields EVERY month's buckets; we keep the one being generated.
+        try:
+            xp_by_month = monthly_xp(evaluate_profile(profile).values(), user_tz)
+        except Exception:
+            logger.exception("Badge XP evaluation failed for profile %s; recording 0 for %s/%s",
+                             profile.id, year, month)
+            xp_by_month = {}
+
         return {
-            'xp_earned': total_xp,
-            'badges_count': len(badges_earned),
+            'xp_earned': xp_by_month.get((year, month), 0),
+            'badges_count': len(badges_data),
             'badges_data': badges_data,
         }
 
     @classmethod
     def get_badge_progress_quiz_snapshot(cls, profile, year, month, user_tz=None):
-        """
-        Capture a snapshot of badge progress state at the end of a month for quiz.
+        """"Which badge are you closest to earning?" -- read from SeriesBadgeStanding.
 
-        Finds Tier 1 badges the user had progress on but hadn't earned by month-end,
-        and creates quiz options. Data is denormalized so it doesn't change over time.
+        Reads the badge subsystem's materialized per-series standing. The version this replaced read
+        `UserBadgeProgress` filtered to `badge__tier=1`, both of which belong to the legacy tier-based
+        system that nothing writes any more.
+
+        MOST RECENT COMPLETED MONTH ONLY. Returns None for anything older, which drops the slide (the
+        frontend already skips quiz slides with no data). SeriesBadgeStanding is LIVE state, recomputed
+        from scratch on every evaluation -- there is no history in it and no way to reconstruct "where you
+        stood in March 2019". Now that every month is openable, generating an old recap would freeze
+        TODAY'S progress into it and label it with that month, permanently, because the snapshot is
+        persisted. A quiz that lies about the past is worse than one slide fewer.
+
+        Progress is in basis points (0-10000): 10000 means the best edition is fully cleared, i.e. earned,
+        so those are excluded rather than filtered against a separate earned-badge list.
 
         Returns:
             dict or None: {correct_badge_id, correct_badge_name, correct_progress_pct,
-                          correct_completed, correct_required, options: [...]}
+                           correct_completed, correct_required, options: [...]}
         """
         import random
-        from trophies.models import Badge, UserBadge, UserBadgeProgress
+        from trophies.models import GroupBadge, SeriesBadgeStanding
+        from trophies.services.badge_detail_service import group_medallion_layers
 
-        # Get date at end of month to capture state at that time
-        _, end_date = cls.get_month_date_range(year, month, user_tz)
-
-        # Get badges earned by end of month
-        earned_badge_ids = UserBadge.objects.filter(
-            profile=profile,
-            earned_at__lt=end_date
-        ).values_list('badge_id', flat=True)
-
-        # Get progress records for tier 1 badges not yet earned by month end
-        # Note: UserBadgeProgress tracks current state, but we filter by earned_at
-        # to determine "earned by month end" status
-        progress_records = UserBadgeProgress.objects.filter(
-            profile=profile,
-            badge__tier=1,
-            completed_concepts__gt=0,
-            last_checked__lte=end_date  # Progress as of month end
-        ).exclude(
-            badge_id__in=earned_badge_ids
-        ).select_related('badge').order_by('-completed_concepts')
-
-        if not progress_records.exists():
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        now_local = timezone.now().astimezone(user_tz)
+        prev_year, prev_month = (now_local.year, now_local.month - 1) if now_local.month > 1             else (now_local.year - 1, 12)
+        if (year, month) != (prev_year, prev_month):
             return None
 
-        # Calculate progress percentage for each
-        badges_with_progress = []
-        for prog in progress_records:
-            badge = prog.badge
-            required = badge.required_stages if badge.required_stages > 0 else 1
-            progress_pct = min(100, int((prog.completed_concepts / required) * 100))
-
-            # Only include if they have any meaningful progress (at least 1%)
-            if progress_pct >= 1:
-                badges_with_progress.append({
-                    'id': str(badge.id),
-                    'name': badge.effective_display_title or badge.name,
-                    'series': badge.effective_display_series or '',
-                    'has_image': bool(badge.badge_image or (badge.base_badge and badge.base_badge.badge_image)),
-                    'icon_url': badge.get_badge_layers().get('main', ''),
-                    'progress_pct': progress_pct,
-                    'completed': prog.completed_concepts,
-                    'required': required,
-                })
-
-        if len(badges_with_progress) < 2:
-            # Need at least 2 badges with progress for a quiz
+        standings = list(
+            SeriesBadgeStanding.objects
+            .filter(profile=profile, progress_bp__gt=0, progress_bp__lt=10000)
+            .order_by('-progress_bp')[:8]
+        )
+        if len(standings) < 2:
             return None
 
-        # Sort by progress percentage descending
-        badges_with_progress.sort(key=lambda x: x['progress_pct'], reverse=True)
+        # One representative edition per series: the one the standing's progress describes, which is the
+        # furthest-along entry in the per-edition read-model. Its art is what the option shows.
+        best_group_key = {}
+        for st in standings:
+            groups = st.group_progress or {}
+            ranked = [
+                (cleared / gating, key)
+                for key, (cleared, gating) in (
+                    (k, v) for k, v in groups.items()
+                    if isinstance(v, (list, tuple)) and len(v) == 2 and v[1]
+                )
+            ]
+            if ranked:
+                best_group_key[st.series_slug] = max(ranked)[1]
 
-        # The closest badge is the one with highest progress
-        closest = badges_with_progress[0]
-        correct_id = closest['id']
+        group_badges = {
+            (gb.series.series_slug, gb.platform_group.key): gb
+            for gb in GroupBadge.objects
+            .filter(series__series_slug__in=[st.series_slug for st in standings])
+            .select_related('series', 'platform_group')
+        }
 
-        # Select up to 3 decoys from the rest
-        others = badges_with_progress[1:]
-        if len(others) >= 3:
-            decoys = random.sample(others, 3)
-        elif len(others) > 0:
-            decoys = others
-        else:
-            # Only 1 badge with progress - can't make a quiz
-            return None
-
-        # Build options and shuffle (will have 2-4 options)
-        options = [closest] + decoys
-        random.shuffle(options)
-
-        # Remove progress info from options (don't give away the answer)
-        clean_options = []
-        for opt in options:
-            clean_options.append({
-                'id': opt['id'],
-                'name': opt['name'],
-                'series': opt['series'],
-                'icon_url': opt['icon_url'],
-                'has_image': opt['has_image'],
+        candidates = []
+        for st in standings:
+            gb = group_badges.get((st.series_slug, best_group_key.get(st.series_slug)))
+            if gb is None:
+                continue
+            try:
+                tier, layers, is_avatar = group_medallion_layers(gb)
+            except Exception:
+                logger.exception("Could not resolve medallion art for group badge %s", gb.id)
+                continue
+            candidates.append({
+                'id': str(gb.id),
+                'name': gb.series.name,
+                'series': gb.platform_group.name,       # the edition, as the option's subtitle
+                'tier': tier,
+                'state': 'unearned',
+                'art_layers': layers,
+                'is_avatar': is_avatar,
+                'progress_pct': round(st.progress_bp / 100),
+                'completed': st.stages_cleared,
+                'required': st.stages_total,
             })
 
+        if len(candidates) < 2:
+            return None
+
+        # Already ordered by progress_bp desc, so the first is the answer.
+        closest, others = candidates[0], candidates[1:]
+        options = [closest] + (random.sample(others, 3) if len(others) >= 3 else others)
+        random.shuffle(options)
+
         return {
-            'correct_badge_id': correct_id,
+            'correct_badge_id': closest['id'],
             'correct_badge_name': closest['name'],
             'correct_progress_pct': closest['progress_pct'],
             'correct_completed': closest['completed'],
             'correct_required': closest['required'],
-            'options': clean_options,
+            # Progress is stripped from the options: it IS the answer.
+            'options': [
+                {k: opt[k] for k in ('id', 'name', 'series', 'tier', 'state', 'art_layers', 'is_avatar')}
+                for opt in options
+            ],
+        }
+
+    @classmethod
+    def get_taste_for_month(cls, profile, year, month, user_tz=None):
+        """What the hunter actually played this month: top genre, and top franchise if there is one.
+
+        Both are DB-aggregated group-bys over the month's earned trophies -- a whale can earn thousands in
+        a month and iterating them in Python to build a Counter is the exact pattern that OOMs the worker.
+
+        Genres come from the IGDB enrichment (ConceptGenre), so an unmatched or PSN-only concept simply
+        contributes nothing rather than skewing toward a placeholder. Excluded franchise links are
+        filtered: `is_excluded` is the admin override that hides a bad IGDB link everywhere else, and this
+        slide must not be the one place it leaks back in.
+
+        Returns:
+            dict or None: {genre, genre_count, runners_up: [(name, count)], franchise, franchise_count}
+        """
+        from trophies.models import EarnedTrophy
+
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
+        earned = EarnedTrophy.objects.filter(
+            profile=profile, earned=True,
+            earned_date_time__gte=start_date, earned_date_time__lt=end_date,
+        )
+
+        genre_field = 'trophy__game__concept__concept_genres__genre__name'
+        genres = list(
+            earned.filter(**{f'{genre_field}__isnull': False})
+            .values(genre_field).annotate(n=Count('id')).order_by('-n', genre_field)[:3]
+        )
+        if not genres:
+            return None
+
+        fr_field = 'trophy__game__concept__concept_franchises__franchise__name'
+        franchise = (
+            earned.filter(**{f'{fr_field}__isnull': False,
+                             'trophy__game__concept__concept_franchises__is_excluded': False})
+            .values(fr_field).annotate(n=Count('id')).order_by('-n', fr_field).first()
+        )
+
+        return {
+            'genre': genres[0][genre_field],
+            'genre_count': genres[0]['n'],
+            'runners_up': [(row[genre_field], row['n']) for row in genres[1:]],
+            'franchise': franchise[fr_field] if franchise else '',
+            'franchise_count': franchise['n'] if franchise else 0,
+        }
+
+    @classmethod
+    def get_community_comparison_for_month(cls, profile, year, month, user_tz=None):
+        """The hunter's completion on this month's headline game, against everyone else's.
+
+        The deck's only outward-looking beat: every other slide is the hunter alone. Uses the community
+        stats already denormalized onto Game (avg_completion, played_count, plats_earned_count) by the
+        nightly recalc, so this costs one indexed read rather than an aggregate over every owner.
+
+        The "headline game" is the one they earned the most trophies in this month -- the game the month
+        was actually about, not their highest completion.
+
+        Returns:
+            dict or None: {game_name, game_image, your_completion, avg_completion, played_count,
+                           plats_earned_count, beats_average}
+        """
+        from trophies.models import EarnedTrophy, ProfileGame
+
+        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
+        top = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True,
+                    earned_date_time__gte=start_date, earned_date_time__lt=end_date)
+            .values('trophy__game_id').annotate(n=Count('id')).order_by('-n', 'trophy__game_id').first()
+        )
+        if not top:
+            return None
+
+        pg = (
+            ProfileGame.objects
+            .filter(profile=profile, game_id=top['trophy__game_id'])
+            .select_related('game', 'game__concept', 'game__concept__igdb_match')
+            .defer('game__concept__igdb_match__raw_response')
+            .first()
+        )
+        # A game with no community sample says nothing worth a slide.
+        if pg is None or not pg.game.played_count:
+            return None
+
+        game = pg.game
+        return {
+            'game_name': game.title_name,
+            'game_image': game.display_image_url or '',
+            'your_completion': round(pg.progress or 0),
+            'avg_completion': round(game.avg_completion or 0),
+            'played_count': game.played_count,
+            'plats_earned_count': game.plats_earned_count,
+            'beats_average': (pg.progress or 0) > (game.avg_completion or 0),
+        }
+
+    @classmethod
+    def get_month_in_history(cls, profile, year, month, user_tz=None):
+        """Every OTHER year's version of this same month, plus the notable thing that happened in one.
+
+        Year-over-year on the same month is a fairer comparison than vs-last-month, which is really a
+        seasonality measurement -- December beats February for almost everyone. And it is the one beat
+        that gets better the longer someone uses the site: a fifth March means a fifth bar.
+
+        DB-aggregated into one row per active month (a couple of hundred rows for a decade-old account),
+        then filtered to this month number in Python. The filter cannot move into SQL without giving up
+        `TruncMonth`'s timezone handling, and the row count it runs over is summary-sized, not trophy-sized.
+
+        Returns:
+            dict or None: {years: [{year, trophies, platinums, is_current}], best_year,
+                           anniversary: {years_ago, game_name, trophy_name} | None}
+        """
+        from trophies.models import EarnedTrophy
+
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+            .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
+            .values('bucket')
+            .annotate(trophies=Count('id'),
+                      platinums=Count('id', filter=Q(trophy__trophy_type='platinum')))
+            .order_by('bucket')
+        )
+
+        years = [
+            {'year': r['bucket'].year, 'trophies': r['trophies'], 'platinums': r['platinums'],
+             'is_current': r['bucket'].year == year}
+            for r in rows if r['bucket'] and r['bucket'].month == month
+        ]
+        # One year is not a history.
+        if len(years) < 2:
+            return None
+
+        # The anniversary: their FIRST platinum ever, if it landed in this month of some earlier year.
+        anniversary = None
+        first_plat = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, trophy__trophy_type='platinum',
+                    earned_date_time__isnull=False)
+            .select_related('trophy', 'trophy__game')
+            .order_by('earned_date_time')
+            .first()
+        )
+        if first_plat:
+            local = first_plat.earned_date_time.astimezone(user_tz)
+            if local.month == month and local.year < year:
+                anniversary = {
+                    'years_ago': year - local.year,
+                    'game_name': first_plat.trophy.game.title_name,
+                    'trophy_name': first_plat.trophy.trophy_name,
+                }
+
+        best = max(years, key=lambda y: y['trophies'])
+        return {
+            'years': years,
+            'best_year': best['year'],
+            # The bar scale. `years` is chronological, so the template cannot find the tallest itself and
+            # scaling against the first year would let later bars exceed 100%.
+            'best_trophies': best['trophies'] or 1,
+            'anniversary': anniversary,
         }
 
     @classmethod
@@ -754,184 +943,203 @@ class MonthlyRecapService:
             if current_total > 0:
                 personal_bests.append("Your first monthly recap!")
 
+        # Same month, previous year. A fairer read than vs-last-month, which mostly measures seasonality:
+        # almost everyone's December beats their February. Empty when there is no such month to compare to,
+        # so a first-year hunter sees nothing rather than a meaningless "+100%".
+        last_year_total = cls.get_trophy_count_for_month(profile, year - 1, month, user_tz=user_tz)
+        if last_year_total > 0:
+            yoy_pct = round(((current_total - last_year_total) / last_year_total) * 100)
+            vs_last_year = f"+{yoy_pct}%" if yoy_pct >= 0 else f"{yoy_pct}%"
+        else:
+            vs_last_year = ''
+
         return {
             'vs_prev_month_pct': vs_prev,
+            'vs_last_year_pct': vs_last_year,
+            'last_year_total': last_year_total,
             'personal_bests': personal_bests,
         }
 
     @classmethod
-    def get_available_months(cls, profile, include_premium_only=True):
+    def months_with_activity(cls, profile, user_tz=None):
+        """Every (year, month) this hunter earned a trophy in, in THEIR local time.
+
+        This is what "months you can open" means, and it is deliberately NOT "months we have already
+        stored a MonthlyRecap row for". Rows are created BY opening a month (`get_or_generate_recap`),
+        so sourcing the picker from stored rows made history unreachable: a month with no row was never
+        offered, so it was never opened, so it never got a row. That chicken-and-egg was the actual thing
+        blocking full history -- not the premium checks.
+
+        DB-aggregated: `TruncMonth` in the hunter's own timezone, GROUPed in Postgres, so a trophy earned
+        at 23:00 on the 31st belongs to the month they experienced it in rather than the UTC one. Served
+        by the partial (profile, earned, earned_date_time) index, and it returns at most one row per
+        month -- never the trophies themselves.
+
+        Scan cost is still O(that profile's trophies), so call it ONCE per render and pass `user_tz` in;
+        a whale's 250k rows is a cheap index scan but not a free one.
+
+        Returns: set of (year, month).
         """
-        Get list of months that have recap data available.
+        from trophies.models import EarnedTrophy
 
-        Args:
-            profile: Profile instance
-            include_premium_only: If False, only returns current month
-
-        Returns:
-            list: [{year, month, month_name, is_current, is_premium_required}, ...]
-        """
-        from trophies.models import MonthlyRecap
-
-        user_tz = cls._resolve_user_tz(profile)
-        now_local = timezone.now().astimezone(user_tz)
-        current_year, current_month = now_local.year, now_local.month
-
-        # Get all months with recaps
-        recaps = MonthlyRecap.objects.filter(
-            profile=profile
-        ).values('year', 'month').order_by('-year', '-month')
-
-        result = []
-        for recap in recaps:
-            is_current = (recap['year'] == current_year and recap['month'] == current_month)
-
-            # Skip past months if not including premium content
-            if not include_premium_only and not is_current:
-                continue
-
-            result.append({
-                'year': recap['year'],
-                'month': recap['month'],
-                'month_name': calendar.month_name[recap['month']],
-                'short_month_name': calendar.month_abbr[recap['month']],
-                'is_current': is_current,
-                'is_premium_required': not is_current,
-            })
-
-        return result
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+            .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
+            .values('bucket')
+            .annotate(n=Count('id'))       # forces the GROUP BY; the count itself is not selected
+            .values_list('bucket', flat=True)
+        )
+        return {(dt.year, dt.month) for dt in rows if dt}
 
     @classmethod
-    def get_available_months_by_year(cls, profile, include_premium_only=True):
-        """
-        Get available months grouped by year for calendar display.
+    def get_archive(cls, profile):
+        """The whole openable history, grouped by year, with what each month actually held.
 
-        Returns year-grouped structure with month metadata for rendering
-        a calendar-style month selector.
+        One structure for the landing page rather than three lookups the template has to reconcile. It
+        costs three DB-aggregated reads total, none of which scale with the size of the return: the
+        activity buckets, their per-type totals, and the rows for months already watched.
 
-        Args:
-            profile: Profile instance
-            include_premium_only: If False, marks old months as premium-required
+        The newest month is pulled out as `latest` because the page leads with it -- it is the one almost
+        everybody came for, and burying it in a grid of twelve makes them hunt for it.
 
         Returns:
             {
-                'years': [
-                    {
-                        'year': 2026,
-                        'months': [
-                            {
-                                'month': 1,
-                                'month_name': 'January',
-                                'short_month_name': 'Jan',
-                                'has_data': True,
-                                'is_current': False,
-                                'is_recent': True,  # Most recent completed month
-                                'is_premium_required': False,
-                                'is_future': False
-                            },
-                            # ... 11 more months
-                        ]
-                    },
-                    # ... more years back to earliest_year
-                ],
-                'earliest_year': 2024,
-                'current_year': 2026,
-                'current_month': 2,
-                'recent_year': 2026,
-                'recent_month': 1
+                'latest': {...month...} | None,
+                'years': [{'year': 2026, 'months': [{...}, ...]}, ...],   # newest first, both levels
+                'month_count': int,
+                'year_count': int,
             }
+        where a month is {year, month, month_name, short_month_name, total, platinums, seen, is_latest}.
+        """
+        user_tz = cls._resolve_user_tz(profile)
+        now_local = timezone.now().astimezone(user_tz)
+        current = (now_local.year, now_local.month)
+
+        # The in-progress month is excluded for the same reason the picker never offered it: the page
+        # refuses to open it, so listing it is a door that does not open.
+        active = sorted(
+            (ym for ym in cls.months_with_activity(profile, user_tz=user_tz) if ym != current),
+            reverse=True,
+        )
+        if not active:
+            return {'latest': None, 'years': [], 'month_count': 0, 'year_count': 0}
+
+        totals = cls.month_activity_totals(profile, user_tz=user_tz)
+        seen = cls.months_already_seen(profile)
+
+        def _month(year, month):
+            t = totals.get((year, month), {'total': 0, 'platinums': 0})
+            return {
+                'year': year,
+                'month': month,
+                'month_name': calendar.month_name[month],
+                'short_month_name': calendar.month_abbr[month],
+                'total': t['total'],
+                'platinums': t['platinums'],
+                'seen': (year, month) in seen,
+                'is_latest': (year, month) == active[0],
+            }
+
+        years = []
+        for year, month in active:
+            if not years or years[-1]['year'] != year:
+                years.append({'year': year, 'months': []})
+            years[-1]['months'].append(_month(year, month))
+
+        return {
+            'latest': _month(*active[0]),
+            'years': years,
+            'month_count': len(active),
+            'year_count': len(years),
+        }
+
+    @classmethod
+    def month_activity_totals(cls, profile, user_tz=None):
+        """Per-month trophy totals and platinum counts, for the archive tiles.
+
+        `months_with_activity` already runs `Count('id')` purely to force the GROUP BY and then discards
+        the number. Adding the trophy type to the grouping turns roughly twelve rows a year into forty
+        eight and gives the tiles something to say -- a picker made of bare month names is what makes the
+        page read as a list of dates rather than a record of a year.
+
+        Whale-safe by the same rule as its sibling: Postgres does the aggregation and returns tens of
+        rows, never the trophies. Do NOT be tempted to fetch the rows and tally types in Python; a 250k
+        library is a cheap index scan here and hundreds of MB there.
+
+        Returns: {(year, month): {'total': int, 'platinums': int}}
+        """
+        from trophies.models import EarnedTrophy
+
+        user_tz = user_tz or cls._resolve_user_tz(profile)
+        rows = (
+            EarnedTrophy.objects
+            .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+            .annotate(bucket=TruncMonth('earned_date_time', tzinfo=user_tz))
+            .values('bucket', 'trophy__trophy_type')
+            .annotate(n=Count('id'))
+            .values_list('bucket', 'trophy__trophy_type', 'n')
+        )
+
+        totals = {}
+        for bucket, trophy_type, n in rows:
+            if not bucket:
+                continue
+            entry = totals.setdefault((bucket.year, bucket.month), {'total': 0, 'platinums': 0})
+            entry['total'] += n
+            if trophy_type == 'platinum':
+                entry['platinums'] += n
+        return totals
+
+    @classmethod
+    def months_already_seen(cls, profile):
+        """The (year, month)s this hunter has already watched.
+
+        A month with no stored MonthlyRecap row has by definition never been opened, so absence IS
+        "unseen" and there is no need to join anything: one bounded read of the rows that do exist.
         """
         from trophies.models import MonthlyRecap
 
-        # Get user timezone and current datetime
+        return {
+            (year, month)
+            for year, month, seen in MonthlyRecap.objects
+            .filter(profile=profile, has_been_viewed=True)
+            .values_list('year', 'month', 'has_been_viewed')
+            if seen
+        }
+
+    @classmethod
+    def get_available_months(cls, profile):
+        """
+        Every month this hunter can open a recap for, newest first.
+
+        Sourced from `months_with_activity`, NOT from stored MonthlyRecap rows -- see that method for
+        why. The current (in-progress) month is excluded: a recap is a retrospective, and the page 404s
+        it anyway, so listing it only ever offered a door that does not open.
+
+        Returns:
+            list: [{year, month, month_name, short_month_name}, ...]
+        """
         user_tz = cls._resolve_user_tz(profile)
         now_local = timezone.now().astimezone(user_tz)
-        current_year = now_local.year
-        current_month = now_local.month
+        current = (now_local.year, now_local.month)
 
-        # Calculate most recent completed month (previous calendar month)
-        if current_month == 1:
-            recent_year, recent_month = current_year - 1, 12
-        else:
-            recent_year, recent_month = current_year, current_month - 1
-
-        # Get all existing recaps for this profile
-        existing_recaps = MonthlyRecap.objects.filter(
-            profile=profile
-        ).values_list('year', 'month')
-        existing_set = set(existing_recaps)
-
-        # Determine earliest year based on user's first earned trophy
-        # This allows premium users to generate recaps for any month since they started earning trophies
-        from trophies.models import EarnedTrophy
-
-        first_trophy = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            earned_date_time__isnull=False
-        ).order_by('earned_date_time').first()
-
-        if first_trophy and first_trophy.earned_date_time:
-            earliest_year = first_trophy.earned_date_time.year
-            earliest_month = first_trophy.earned_date_time.month
-        else:
-            # Fallback: use profile creation date or current year
-            if profile.created_at:
-                earliest_year = profile.created_at.year
-                earliest_month = profile.created_at.month
-            else:
-                earliest_year = current_year
-                earliest_month = 1
-
-        # Build year-by-year structure
-        years_data = []
-        month_names = [calendar.month_name[i] for i in range(1, 13)]
-        short_month_names = [calendar.month_abbr[i] for i in range(1, 13)]
-
-        for year in range(current_year, earliest_year - 1, -1):
-            months = []
-            for month in range(1, 13):
-                has_data = (year, month) in existing_set
-                is_current = (year == current_year and month == current_month)
-                is_recent = (year == recent_year and month == recent_month)
-                is_future = (year > current_year or
-                            (year == current_year and month > current_month))
-
-                # Check if month is before first earned trophy
-                is_before_first_trophy = (year == earliest_year and month < earliest_month)
-
-                # Premium gating logic
-                is_free_month = is_current or is_recent
-                is_premium_required = (has_data and
-                                      not is_free_month and
-                                      not include_premium_only)
-
-                months.append({
-                    'month': month,
-                    'month_name': month_names[month - 1],
-                    'short_month_name': short_month_names[month - 1],
-                    'has_data': has_data,
-                    'is_current': is_current,
-                    'is_recent': is_recent,
-                    'is_premium_required': is_premium_required,
-                    'is_future': is_future,
-                    'is_before_first_trophy': is_before_first_trophy,
-                })
-
-            years_data.append({
+        months = sorted(
+            (ym for ym in cls.months_with_activity(profile, user_tz=user_tz) if ym != current),
+            reverse=True,
+        )
+        result = [
+            {
                 'year': year,
-                'months': months,
-            })
+                'month': month,
+                'month_name': calendar.month_name[month],
+                'short_month_name': calendar.month_abbr[month],
+            }
+            for year, month in months
+        ]
 
-        return {
-            'years': years_data,
-            'earliest_year': earliest_year,
-            'earliest_month': earliest_month,
-            'current_year': current_year,
-            'current_month': current_month,
-            'recent_year': recent_year,
-            'recent_month': recent_month,
-        }
+        return result
 
     @classmethod
     @transaction.atomic
@@ -1009,12 +1217,6 @@ class MonthlyRecapService:
 
         logger.info(f"Generated {count} monthly recaps for {year}/{month:02d}")
         return count
-
-    @staticmethod
-    def _get_tier_name(tier):
-        """Convert tier number to display name."""
-        tier_map = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-        return tier_map.get(tier, 'Bronze')
 
     # =========================================================================
     # QUIZ DATA METHODS
@@ -1131,84 +1333,6 @@ class MonthlyRecapService:
 
         return {
             'correct_trophy_id': correct_id,
-            'options': options,
-        }
-
-    @classmethod
-    def get_quiz_platinum_options(cls, profile, year, month, user_tz=None):
-        """
-        Generate quiz options for "spot your platinums" quiz.
-
-        Returns platinum games + decoy games from the month.
-
-        Returns:
-            dict: {correct_game_ids: [], options: [{id, name, image}, ...]}
-        """
-        import random
-        from trophies.models import EarnedTrophy
-
-        start_date, end_date = cls.get_month_date_range(year, month, user_tz)
-
-        # Get games platinumed this month
-        platinum_games = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            trophy__trophy_type='platinum',
-            earned_date_time__gte=start_date,
-            earned_date_time__lt=end_date
-        ).select_related('trophy__game').values_list('trophy__game', flat=True).distinct()
-
-        platinum_game_ids = list(platinum_games)
-
-        if not platinum_game_ids:
-            return None
-
-        # Get games played this month but NOT platinumed (decoys)
-        from trophies.models import Game
-        games_with_activity = EarnedTrophy.objects.filter(
-            profile=profile,
-            earned=True,
-            earned_date_time__gte=start_date,
-            earned_date_time__lt=end_date
-        ).exclude(
-            trophy__game_id__in=platinum_game_ids
-        ).values_list('trophy__game_id', flat=True).distinct()
-
-        decoy_game_ids = list(games_with_activity)
-
-        # We need at least some decoys to make it a challenge
-        target_total = min(8, len(platinum_game_ids) + max(3, len(decoy_game_ids)))
-        num_decoys = target_total - len(platinum_game_ids)
-
-        if num_decoys > len(decoy_game_ids):
-            num_decoys = len(decoy_game_ids)
-
-        if num_decoys < 2 and len(platinum_game_ids) < 3:
-            # Not enough variety for a good quiz
-            return None
-
-        selected_decoys = random.sample(decoy_game_ids, num_decoys) if decoy_game_ids else []
-
-        # Fetch game data
-        all_game_ids = platinum_game_ids + selected_decoys
-        games = Game.objects.filter(id__in=all_game_ids)
-        games_map = {g.id: g for g in games}
-
-        # Build options
-        options = []
-        for game_id in all_game_ids:
-            game = games_map.get(game_id)
-            if game:
-                options.append({
-                    'id': str(game.id),
-                    'name': game.title_name,
-                    'image': game.display_image_url,
-                })
-
-        random.shuffle(options)
-
-        return {
-            'correct_game_ids': [str(gid) for gid in platinum_game_ids],
             'options': options,
         }
 
@@ -1377,7 +1501,7 @@ class MonthlyRecapService:
                 return 'day_hunter'
 
         # Aggregate by period
-        periods = {'Morning': 0, 'Afternoon': 0, 'Evening': 0, 'Late Night': 0}
+        periods = {name: 0 for name, _ in TIME_PERIODS}
         for item in hourly_counts:
             period = get_period(item['hour'])
             periods[period] += item['count']
@@ -1405,148 +1529,185 @@ class MonthlyRecapService:
 
     @classmethod
     def build_slides_response(cls, recap, include_quizzes=True):
-        """
-        Build the slides array for API response.
+        """Build the ordered slide array for the deck.
+
+        Order is DATA (`DECK`, below), not an append sequence. It used to be ~110 lines of
+        `if ...: slides.append(...)`, which meant the arc could only be understood by reading control flow
+        and could only be changed by editing it. See the module-level `DECK` for the arc itself.
 
         Args:
             recap: MonthlyRecap instance
-            include_quizzes: Whether to include interactive quiz slides
+            include_quizzes: Whether to include the interactive quiz beats
 
         Returns:
             list: Slides array suitable for frontend rendering
         """
+        ctx = {'month_name': calendar.month_name[recap.month], 'year': recap.year}
         slides = []
-        month_name = calendar.month_name[recap.month]
+        for beat in DECK:
+            if beat.is_quiz and not include_quizzes:
+                continue
+            if beat.when is not None and not beat.when(recap):
+                continue
+            slides.append({'type': beat.type, **beat.payload(recap, ctx)})
 
-        # Slide 1: Intro
-        slides.append({
-            'type': 'intro',
-            'title': f"Your {month_name} {recap.year}",
-            'subtitle': "Let's see what you accomplished",
-        })
-
-        # Quiz: Guess total trophies (before reveal)
-        if include_quizzes and recap.quiz_total_trophies_data:
-            slides.append({
-                'type': 'quiz_total_trophies',
-                **recap.quiz_total_trophies_data,
-            })
-
-        # Total Trophies reveal
-        if recap.total_trophies_earned > 0:
-            slides.append({
-                'type': 'total_trophies',
-                'value': recap.total_trophies_earned,
-                'breakdown': {
-                    'bronze': recap.bronzes_earned,
-                    'silver': recap.silvers_earned,
-                    'gold': recap.golds_earned,
-                    'platinum': recap.platinums_earned,
-                },
-            })
-
-        # Platinums reveal
-        if recap.platinums_earned > 0:
-            slides.append({
-                'type': 'platinums',
-                'count': recap.platinums_earned,
-                'games': recap.platinums_data or [],
-            })
-
-        # Quiz: Which was your rarest? (before reveal)
-        if include_quizzes and recap.quiz_rarest_trophy_data:
-            slides.append({
-                'type': 'quiz_rarest_trophy',
-                **recap.quiz_rarest_trophy_data,
-            })
-
-        # Rarest Trophy reveal
-        if recap.rarest_trophy_data:
-            slides.append({
-                'type': 'rarest_trophy',
-                **recap.rarest_trophy_data,
-            })
-
-        # Quiz: Guess most active day of week (before calendar)
-        if include_quizzes and recap.quiz_active_day_data:
-            slides.append({
-                'type': 'quiz_active_day',
-                **recap.quiz_active_day_data,
-            })
-
-        # Most Active Day reveal
-        if recap.most_active_day:
-            slides.append({
-                'type': 'most_active_day',
-                **recap.most_active_day,
-            })
-
-        # Activity Calendar
-        if recap.activity_calendar and recap.activity_calendar.get('days'):
-            slides.append({
-                'type': 'activity_calendar',
-                **recap.activity_calendar,
-                'month_name': month_name,
-                'year': recap.year,
-            })
-
-        # Streak slide (NEW)
-        if recap.streak_data and recap.streak_data.get('longest_streak', 0) >= 2:
-            slides.append({
-                'type': 'streak',
-                **recap.streak_data,
-            })
-
-        # Time-of-day analysis (NEW)
-        if recap.time_analysis_data:
-            slides.append({
-                'type': 'time_analysis',
-                **recap.time_analysis_data,
-            })
-
-        # Games Started/Completed
-        if recap.games_started > 0 or recap.games_completed > 0:
-            slides.append({
-                'type': 'games',
-                'started': recap.games_started,
-                'completed': recap.games_completed,
-            })
-
-        # Quiz: Which badge are you closest to? (before badges slide)
-        if include_quizzes and recap.badge_progress_quiz_data:
-            slides.append({
-                'type': 'quiz_closest_badge',
-                **recap.badge_progress_quiz_data,
-            })
-
-        # Badge XP
-        if recap.badge_xp_earned > 0 or recap.badges_earned_count > 0:
-            slides.append({
-                'type': 'badges',
-                'xp_earned': recap.badge_xp_earned,
-                'badges_count': recap.badges_earned_count,
-                'badges': recap.badges_data or [],
-            })
-
-        # Comparison
-        comparison = recap.comparison_data or {}
-        slides.append({
-            'type': 'comparison',
-            'vs_prev_month': comparison.get('vs_prev_month_pct', '0%'),
-            'personal_bests': comparison.get('personal_bests', []),
-        })
-
-        # Summary
-        highlights = []
-        if recap.platinums_earned > 0:
-            highlights.append(f"{recap.platinums_earned} platinum{'s' if recap.platinums_earned != 1 else ''}")
-        highlights.append(f"{recap.total_trophies_earned} trophies")
-        if recap.games_started > 0:
-            highlights.append(f"{recap.games_started} new game{'s' if recap.games_started != 1 else ''}")
-
-        slides.append({
-            'type': 'summary',
-            'highlights': highlights,
-        })
+        # The score beat only makes sense if there is something to score, so the check runs on the
+        # assembled deck rather than being guessed at up front. It must exclude ITSELF from the count:
+        # `quiz_score` starts with `quiz_` too, so a naive prefix test always found a quiz and the slide
+        # survived into months with nothing to grade, reading "0 / 0 guessed right".
+        scorable = any(s['type'].startswith('quiz_') and s['type'] != 'quiz_score' for s in slides)
+        if not scorable:
+            slides = [s for s in slides if s['type'] != 'quiz_score']
 
         return slides
+
+
+@dataclass(frozen=True)
+class RecapBeat:
+    """One slide in the deck: what it is, whether this month earns it, and what it carries.
+
+    `payload` receives (recap, ctx) and returns the slide's data. `when` receives the recap; None means
+    the beat always appears.
+    """
+    type: str
+    payload: Callable
+    when: Optional[Callable] = None
+    is_quiz: bool = False
+
+
+def _has_streak(recap):
+    # A "streak" of one day is just a day. Two is the smallest number that means anything.
+    return bool(recap.streak_data) and recap.streak_data.get('longest_streak', 0) >= 2
+
+
+def _summary_highlights(recap):
+    """The closing chips. Deliberately not every stat -- three things someone would actually say out loud."""
+    highlights = []
+    if recap.platinums_earned:
+        highlights.append(f"{recap.platinums_earned} platinum{'' if recap.platinums_earned == 1 else 's'}")
+    highlights.append(f"{recap.total_trophies_earned} trophies")
+    if recap.games_started:
+        highlights.append(f"{recap.games_started} new game{'' if recap.games_started == 1 else 's'}")
+    if recap.badges_earned_count:
+        highlights.append(f"{recap.badges_earned_count} badge{'' if recap.badges_earned_count == 1 else 's'}")
+    return highlights
+
+
+# The arc, in order: OPEN -> BUILD -> PEAK -> PAYOFF -> CLOSE.
+#
+# Each quiz sits IMMEDIATELY BEFORE the thing it asks about, so every guess is followed by its answer --
+# guess, then find out. That pairing is the reason the order is data: it is an editorial decision, and it
+# should be legible as a list rather than inferred from a hundred lines of appends.
+#
+# The peak moved. Platinums used to be the FOURTH slide, spending the deck's biggest moment before it had
+# built anything; they now land after rarity, so the sequence climbs volume -> habit -> rarity -> platinums
+# rather than opening on its loudest note and coasting.
+#
+# The payoff is the quiz score, which the deck has always computed (`RecapQuizManager.getScore`) and never
+# shown. It is filled in client-side from the answers actually given, so it has no server payload.
+# The day, in order, with the short labels the slide draws. ONE source: the aggregation seeds its dict
+# from this and the deck reads its bars from it.
+#
+# The order has to be imposed at build time because it cannot survive storage. `periods` lives inside the
+# `time_analysis_data` JSONField, and Postgres `jsonb` does not preserve key order -- it normalises to
+# (key length, then bytes), which turns Morning/Afternoon/Evening/Late Night into
+# Evening/Morning/Afternoon/Late Night on the way back out. The slide draws those as a bar chart, so the
+# stored dict was silently redrawing the day out of sequence: evening first, then morning. Verified with a
+# round trip through the test database, not assumed.
+TIME_PERIODS = (
+    ('Morning', 'Morn'),
+    ('Afternoon', 'Aftn'),
+    ('Evening', 'Eve'),
+    ('Late Night', 'Late'),
+)
+
+
+def _period_bars(periods):
+    """The four periods as an ordered list, so the template never iterates a dict whose order is luck."""
+    return [{'label': short, 'count': periods.get(name, 0)} for name, short in TIME_PERIODS]
+
+
+DECK = [
+    # -- OPEN ------------------------------------------------------------------------------------------
+    RecapBeat('intro', lambda r, c: {
+        'month_name': c['month_name'], 'year': r.year,
+    }),
+
+    # -- BUILD: how much ------------------------------------------------------------------------------
+    RecapBeat('quiz_total_trophies', lambda r, c: dict(r.quiz_total_trophies_data),
+              when=lambda r: bool(r.quiz_total_trophies_data), is_quiz=True),
+    RecapBeat('total_trophies', lambda r, c: {
+        'value': r.total_trophies_earned,
+        'breakdown': {
+            'bronze': r.bronzes_earned, 'silver': r.silvers_earned,
+            'gold': r.golds_earned, 'platinum': r.platinums_earned,
+        },
+    }, when=lambda r: r.total_trophies_earned > 0),
+    RecapBeat('games', lambda r, c: {
+        'started': r.games_started, 'completed': r.games_completed,
+    }, when=lambda r: r.games_started > 0 or r.games_completed > 0),
+    RecapBeat('taste', lambda r, c: {**r.taste_data, 'month_name': c['month_name']},
+              when=lambda r: bool(r.taste_data)),
+
+    # -- BUILD: when, and how consistently ------------------------------------------------------------
+    RecapBeat('quiz_active_day', lambda r, c: dict(r.quiz_active_day_data),
+              when=lambda r: bool(r.quiz_active_day_data), is_quiz=True),
+    RecapBeat('most_active_day', lambda r, c: dict(r.most_active_day),
+              when=lambda r: bool(r.most_active_day)),
+    RecapBeat('activity_calendar', lambda r, c: {
+        **r.activity_calendar, 'month_name': c['month_name'], 'year': r.year,
+    }, when=lambda r: bool(r.activity_calendar) and bool(r.activity_calendar.get('days'))),
+    RecapBeat('streak', lambda r, c: dict(r.streak_data), when=_has_streak),
+    RecapBeat('time_analysis', lambda r, c: {
+        **r.time_analysis_data,
+        # Chronological, imposed at BUILD time rather than trusted from storage -- see TIME_PERIODS.
+        'period_bars': _period_bars(r.time_analysis_data.get('periods') or {}),
+        # Bar heights are a percentage of the busiest period; never 0, which would divide by zero.
+        'max_period_count': max((r.time_analysis_data.get('periods') or {}).values(), default=1) or 1,
+    }, when=lambda r: bool(r.time_analysis_data)),
+
+    # -- PEAK: what it was worth ----------------------------------------------------------------------
+    RecapBeat('quiz_rarest_trophy', lambda r, c: dict(r.quiz_rarest_trophy_data),
+              when=lambda r: bool(r.quiz_rarest_trophy_data), is_quiz=True),
+    RecapBeat('rarest_trophy', lambda r, c: dict(r.rarest_trophy_data),
+              when=lambda r: bool(r.rarest_trophy_data)),
+    RecapBeat('platinums', lambda r, c: {
+        'count': r.platinums_earned, 'games': r.platinums_data or [],
+    }, when=lambda r: r.platinums_earned > 0),
+
+    # -- PEAK: and what it moved ----------------------------------------------------------------------
+    RecapBeat('community', lambda r, c: dict(r.community_comparison_data),
+              when=lambda r: bool(r.community_comparison_data)),
+    RecapBeat('quiz_closest_badge', lambda r, c: dict(r.badge_progress_quiz_data),
+              when=lambda r: bool(r.badge_progress_quiz_data), is_quiz=True),
+    # `badges_data` is a snapshot in whatever shape the generator used at the time, and a finalized recap is
+    # never rewritten -- so months generated before the badge rework still hold the legacy payload
+    # (name/tier_name/image_url) rather than the Medallion frame dict. Those are dropped rather than drawn:
+    # the slide feeds each entry to components/badge_medallion.html, which reads `art_layers`, so a legacy
+    # row renders an EMPTY medallion shell with blank captions -- broken furniture on the slide.
+    #
+    # The COUNT and the XP deliberately survive the filter. Both are stored integers and historically true,
+    # so the slide still reports "2 badges this month" with the stamp beneath it; recomputing the count to
+    # match what we can draw would make the recap understate a real month to tidy its own layout.
+    RecapBeat('badges', lambda r, c: {
+        'xp_earned': r.badge_xp_earned,
+        'badges_count': r.badges_earned_count,
+        'badges': [b for b in (r.badges_data or []) if b.get('art_layers')],
+    }, when=lambda r: r.badges_earned_count > 0),
+    RecapBeat('comparison', lambda r, c: {
+        'vs_prev_month': (r.comparison_data or {}).get('vs_prev_month_pct', '0%'),
+        'vs_last_year': (r.comparison_data or {}).get('vs_last_year_pct', ''),
+        'personal_bests': (r.comparison_data or {}).get('personal_bests', []),
+    }),
+    RecapBeat('month_in_history', lambda r, c: {
+        **r.month_in_history_data, 'month_name': c['month_name'], 'year': r.year,
+    }, when=lambda r: bool(r.month_in_history_data)),
+
+    # -- PAYOFF + CLOSE -------------------------------------------------------------------------------
+    # No payload: the score is whatever the hunter actually answered, so the controller fills it in.
+    RecapBeat('quiz_score', lambda r, c: {}, is_quiz=True),
+    RecapBeat('summary', lambda r, c: {'highlights': _summary_highlights(r)}),
+]
+
+# By type, for the slide-partial view -- so the API renders the same payload the deck was built from.
+DECK_BY_TYPE = {beat.type: beat for beat in DECK}

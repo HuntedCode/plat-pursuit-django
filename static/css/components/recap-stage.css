@@ -1,0 +1,672 @@
+/* ============================================================
+ * MONTHLY RECAP -- the STAGE and the ENTRANCE.
+ *
+ * The slides live in recap-deck.css. This file is the thing around them, and it exists because that was
+ * the actual problem: the deck was rebuilt onto `--pp-*` while its presentation stayed a breadcrumb plus
+ * three nested `card bg-base-200/90 border-2 border-base-300` wrappers with a row of dots and two ghost
+ * circle buttons. Anti-reference #1 in its purest form, and the frame announced "dashboard panel" before
+ * anyone read a word.
+ *
+ * Direction chosen from the three built at /design/recap-stage/: CEREMONY. The recap is an EVENT.
+ *
+ *   1. The Entrance -- the page you land on. A cover, not a dashboard. You choose to begin.
+ *   2. The Stage    -- a full-screen takeover. Story grammar, and a colour world per beat.
+ *
+ * The one move that matters most: on the stage, `.rcp` DISSOLVES. In a takeover the stage IS the frame,
+ * so a bordered card inside it is a frame within a frame -- the same nesting the old presentation had.
+ * The shell keeps doing its real job (type scale, rhythm, anatomy) and stops drawing a box.
+ * ============================================================ */
+
+/* ---- 1. The Entrance -----------------------------------------------------------------------------
+ * Deliberately quiet and deliberately NOT a card grid. One object, centred, with a single action. The
+ * anticipation is the product: this is the moment that makes someone come back on the 1st.
+ */
+.rcx-enter {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0; text-align: center;
+    min-height: min(72vh, 640px);
+    padding: 2rem 1.25rem;
+}
+
+.rcx-enter__cover {
+    position: relative;
+    width: min(24rem, 100%);
+    padding: 2.5rem 1.75rem 2rem;
+    border-radius: var(--pp-radius-lg);
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 65%);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 60px -28px rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+}
+/* A slow sheen across the cover. One gesture, not motion everywhere -- it says "ready" without shouting. */
+.rcx-enter__cover::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%,
+        color-mix(in oklab, var(--pp-primary) 16%, transparent) 50%, transparent 65%);
+    transform: translateX(-100%);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .rcx-enter__cover::after { animation: rcxSheen 7s ease-in-out 1.2s infinite; }
+}
+@keyframes rcxSheen {
+    0% { transform: translateX(-100%); }
+    38%, 100% { transform: translateX(100%); }
+}
+
+.rcx-enter__eyebrow {
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.rcx-enter__month {
+    font-family: var(--pp-font-display); font-weight: 800; line-height: 0.95;
+    font-size: clamp(2.75rem, 12vw, 4rem); color: var(--pp-primary); margin-top: 0.5rem;
+}
+.rcx-enter__year {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 1.5rem;
+    color: var(--pp-text-dim); line-height: 1;
+}
+.rcx-enter__line { font-size: 0.92rem; color: var(--pp-text-dim); margin-top: 1.25rem; }
+.rcx-enter__begin {
+    display: inline-flex; align-items: center; gap: 0.55rem; margin-top: 1.75rem;
+    padding: 0.7rem 1.6rem; border-radius: 999px; cursor: pointer;
+    font-size: 0.9rem; font-weight: 800; letter-spacing: 0.04em;
+    color: var(--pp-bg-0); background: var(--pp-primary); border: 0;
+    box-shadow: 0 8px 24px -10px color-mix(in oklab, var(--pp-primary) 80%, transparent);
+    transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease;
+}
+.rcx-enter__begin:hover { box-shadow: 0 12px 30px -10px color-mix(in oklab, var(--pp-primary) 90%, transparent); }
+.rcx-enter__begin:active { transform: scale(0.97); }
+.rcx-enter__begin:focus-visible { outline: 2px solid var(--pp-text); outline-offset: 3px; }
+.rcx-enter__begin svg { width: 1rem; height: 1rem; }
+.rcx-enter__meta { display: flex; gap: 1.25rem; justify-content: center; margin-top: 1.5rem; }
+.rcx-enter__stat { display: flex; flex-direction: column; gap: 0.15rem; }
+.rcx-enter__stat b { font-family: var(--pp-font-display); font-size: 1.15rem; color: var(--pp-text); }
+.rcx-enter__stat span { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.rcx-enter__aside {
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+    margin-top: 1.5rem; font-size: 0.8rem; color: var(--pp-text-mute);
+    min-height: 44px;   /* the links' hit areas overhang their text; keep the row's own box honest */
+}
+/* Both of these are TEXT links by design -- the primary action is the button above, and giving these
+   button chrome would flatten that hierarchy. But at 0.8rem they were 19px tall, well under the ~44px a
+   thumb needs, on the one screen that is almost only ever seen on a phone. The padding buys the hit area
+   and the equal negative margin gives the layout back, so they still read as text on one quiet line. */
+.rcx-enter__aside a,
+.rcx-enter__link {
+    color: var(--pp-primary); background: none; border: 0; cursor: pointer;
+    font-size: inherit; font-family: inherit;
+    padding: 0.7rem 0.4rem; margin: -0.7rem -0.4rem;
+}
+.rcx-enter__aside a:hover, .rcx-enter__link:hover { text-decoration: underline; }
+.rcx-enter__link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
+
+/* ---- 2. The Stage --------------------------------------------------------------------------------- */
+.rcx {
+    position: fixed; inset: 0; z-index: 90;
+    display: flex; flex-direction: column;
+    background: var(--pp-bg-0);
+    opacity: 0;
+    transition: opacity 0.28s ease;
+}
+.rcx.is-in { opacity: 1; }
+/* The stage is `position: fixed; inset: 0; z-index: 90` and merely TRANSPARENT when idle, so it must
+   actually leave the layout when hidden -- not just fade. It is dismissed two different ways and only one
+   of them worked: the `hidden` ATTRIBUTE is fine, but the no-activity and error paths add the `hidden`
+   CLASS, and Tailwind's utilities are layered while this file is not, so `display: flex` won.
+   The result was an invisible full-screen sheet over the error state, swallowing every click including
+   the Try again button underneath it. Confirmed with `elementFromPoint` at the viewport centre. */
+.rcx.hidden { display: none; }
+
+/* Every beat sets its own accent; the WHOLE stage takes it, not just the card. This is what makes the
+   surface change character between beats instead of being one box with swapped contents.
+ *
+ * REGISTERED as a colour so it can actually TWEEN. `transition: background` on a gradient does nothing
+ * useful -- browsers cannot interpolate two gradient images, so they swap discretely at the halfway
+ * point. The old rule read like a fade and behaved like a snap with a delay in front of it. Registering
+ * the custom property means the ACCENT interpolates, and every surface derived from it -- the ground, the
+ * aura, the type, the stamps -- crossfades together for free. Same trick frame.css and
+ * badge-medallion.css already use for their own animated properties. */
+@property --rcx-accent {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: oklch(86% 0.142 206);   /* --pp-primary; @property cannot reference a var() here */
+}
+.rcx {
+    --rcx-accent: var(--pp-primary);
+    transition: --rcx-accent 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.rcx[data-accent="secondary"] { --rcx-accent: var(--pp-secondary); }
+.rcx[data-accent="accent"]    { --rcx-accent: var(--pp-accent); }
+.rcx[data-accent="success"]   { --rcx-accent: var(--pp-success); }
+
+.rcx__ground {
+    position: absolute; inset: -18%; pointer-events: none;
+    background: radial-gradient(130% 85% at 50% 0%,
+        color-mix(in oklab, var(--rcx-accent) 24%, var(--pp-bg-0)) 0%, var(--pp-bg-0) 62%);
+}
+/* The ground drifts with REAL travel. The first attempt moved it 3% over 26 seconds, which on a soft
+   radial gradient is indistinguishable from stationary -- the motion existed and simply could not be
+   seen. Transform only, so it stays on the compositor: this is a viewport-sized element and animating
+   anything that triggers paint here costs real frames on a phone. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__ground { animation: rcxBreathe 19s ease-in-out infinite alternate; }
+}
+@keyframes rcxBreathe {
+    from { transform: translate3d(-9%, -6%, 0) scale(1.0); }
+    to   { transform: translate3d(9%, 7%, 0) scale(1.35); }
+}
+/* Two slow blooms. Behind everything, never animated per-frame over a backdrop-filter, and the only
+   ambient motion on the surface -- restraint is the difference between atmosphere and a screensaver. */
+.rcx__aura { position: absolute; inset: -25%; pointer-events: none; opacity: 0.6; }
+/* The container turns slowly while the blooms drift inside it. Two motions on different axes at
+   incommensurate periods means the composition never visibly repeats -- which is what separates
+   "atmosphere" from "a looping background". Rotation is what gives it continuous life; the drifts alone
+   only ever swing back and forth. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__aura { animation: rcxTurn 75s linear infinite; }
+}
+@keyframes rcxTurn { to { transform: rotate(360deg); } }
+.rcx__aura span {
+    position: absolute; width: 52%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklab, var(--rcx-accent) 62%, transparent) 0%, transparent 70%);
+    filter: blur(45px);
+    will-change: transform;
+}
+.rcx__aura span:nth-child(1) { left: 2%; top: 4%; }
+.rcx__aura span:nth-child(2) { right: 0%; bottom: 0%; width: 44%; }
+.rcx__aura span:nth-child(3) { left: 34%; bottom: 12%; width: 34%; opacity: 0.75; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcx__aura span:nth-child(1) { animation: rcxDrift 13s ease-in-out infinite alternate; }
+    .rcx__aura span:nth-child(2) { animation: rcxDriftB 17s ease-in-out infinite alternate; }
+    .rcx__aura span:nth-child(3) { animation: rcxDriftC 21s ease-in-out infinite alternate; }
+}
+@keyframes rcxDrift  { from { transform: translate3d(-14%, -8%, 0) scale(0.9); }  to { transform: translate3d(18%, 12%, 0) scale(1.3); } }
+@keyframes rcxDriftB { from { transform: translate3d(12%, -14%, 0) scale(1.25); } to { transform: translate3d(-16%, 10%, 0) scale(0.85); } }
+@keyframes rcxDriftC { from { transform: translate3d(-10%, 10%, 0) scale(1.15); } to { transform: translate3d(14%, -12%, 0) scale(0.95); } }
+
+/* Segmented timer. The clearest possible "this is a story, it has a length and a pace" signal, and the
+   thing a row of dots can never say. */
+.rcx__bars { position: relative; display: flex; gap: 4px; padding: 0.85rem 1rem 0; }
+.rcx__bar { flex: 1; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.rcx__bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: #fff; }
+.rcx__bar.is-done i { width: 100%; }
+.rcx__bar.is-live i { width: 100%; transition: width var(--rcx-beat, 5s) linear; }
+/* HELD: freeze where it stands. `transition: none` alone does NOT freeze an in-flight transition -- it
+   drops the animation and applies the target, which snapped the bar to full. The controller pins the
+   current width inline before this lands (and an inline width outranks the class rules below); this only
+   stops it easing on from there. */
+.rcx.is-held .rcx__bar.is-live i { transition: none; }
+/* A held bar and a LATCHED one look identical otherwise, and the difference matters: one ends when you
+   lift your finger, the other does not. Dimming the playhead says "this is not coming back on its own". */
+.rcx.is-pinned .rcx__bar.is-live i { opacity: 0.45; }
+
+/* WAITING (an unanswered quiz) and MANUAL (a beat with its own Continue): the deck is not counting, it is
+   waiting on the hunter. The segment stays EMPTY and the track pulses.
+ *
+ * This previously left `is-live`'s `width: 100%` in place with the transition removed, so the bar snapped
+ * to FULL the instant either state landed -- every quiz beat opened showing a completed timer, and the
+ * calendar showed one too. A full bar means "this beat elapsed". Nothing had elapsed; that is the whole
+ * point of these two states. Manual used to do it deliberately, which was the same lie told on purpose. */
+.rcx.is-waiting .rcx__bar.is-live i,
+.rcx.is-manual .rcx__bar.is-live i { width: 0; transition: none; }
+@media (prefers-reduced-motion: no-preference) {
+    .rcx.is-waiting .rcx__bar.is-live,
+    .rcx.is-manual .rcx__bar.is-live { animation: rcxWaiting 2s ease-in-out infinite; }
+}
+@keyframes rcxWaiting { 0%, 100% { background: rgba(255, 255, 255, 0.16); }
+                        50%      { background: rgba(255, 255, 255, 0.42); } }
+/* "Tap the sides" is the wrong instruction when the beat has its own Continue control. */
+.rcx.is-manual .rcx__hint { opacity: 0; }
+
+.rcx__top {
+    /* Above the card scene. `.rcx__card` is z-index 3 and takes `inset: 0` in card-only mode, so it
+       covered this bar entirely -- the X was on screen, looked live, and every click on it landed on the
+       card instead. The chrome outranks the content it frames; verified with `elementFromPoint`. */
+    position: relative; z-index: 4;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.75rem; padding: 0.75rem 1rem;
+}
+.rcx__who { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pp-text-dim); min-width: 0; }
+.rcx__who img { width: 1.4rem; height: 1.4rem; border-radius: 50%; object-fit: cover; flex: none; }
+.rcx__who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rcx__exit {
+    display: grid; place-items: center; width: 2rem; height: 2rem; flex: none;
+    border: 0; border-radius: 50%; background: none; color: var(--pp-text-mute); cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.rcx__exit:hover { color: var(--pp-text); background: rgba(255, 255, 255, 0.07); }
+.rcx__exit:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: 2px; }
+.rcx__exit svg { width: 1.1rem; height: 1.1rem; }
+
+.rcx__stage { position: relative; flex: 1; min-height: 0; display: grid; padding: 0.5rem 1rem 1.5rem; }
+/* The controller builds these as `.recap-slide` (unchanged, so its six query sites keep working); the
+   STAGE owns where they sit. Centred by default, top-aligned when taller than the stage -- a centred
+   flex child that overflows clips its own top and becomes unreachable. */
+.rcx .recap-slide {
+    position: absolute; inset: 0.5rem 1rem 1.5rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    overflow-y: auto; opacity: 0; pointer-events: none; z-index: 1;
+}
+.rcx .recap-slide.active { opacity: 1; pointer-events: auto; }
+.rcx .recap-slide.has-overflow { justify-content: flex-start; }
+.rcx .recap-slide::-webkit-scrollbar { width: 5px; }
+.rcx .recap-slide::-webkit-scrollbar-track { background: transparent; }
+.rcx .recap-slide::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+/* Directional, with a spring settle. The outgoing beat leaves the way you sent it and the incoming one
+   arrives from the other side: ONE gesture with two halves, which is what "exits choreographed as
+   carefully as entrances" means in practice. A symmetric fade cannot say which way you went. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx .recap-slide.active { animation: rcxInFwd 0.52s cubic-bezier(0.22, 1.1, 0.36, 1) both; }
+    .rcx.is-back .recap-slide.active { animation-name: rcxInBack; }
+}
+@keyframes rcxInFwd  { from { opacity: 0; transform: translateX(36px) scale(0.965); } to { opacity: 1; transform: none; } }
+@keyframes rcxInBack { from { opacity: 0; transform: translateX(-36px) scale(0.965); } to { opacity: 1; transform: none; } }
+
+/* Tap zones, the way every story UI works. UNDER the slide, so a quiz option always wins the click. */
+/* The zones are keyboard/AT controls only -- pointer advancement is handled at the stage, because these
+   sit UNDER the slide and a real click never reaches them. Kept narrow and edge-hugging to match
+   `isBackwardEdge`. */
+.rcx__zone { position: absolute; top: 0; bottom: 0; z-index: 0; border: 0; background: none; cursor: pointer; }
+.rcx__zone--prev { left: 0;  width: 30%; }
+.rcx__zone--hold { left: 30%; width: 40%; }
+.rcx__zone--next { right: 0; width: 30%; }
+.rcx__zone:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: -4px; }
+
+/* WHICH WAY AM I ABOUT TO GO. Backward was an invisible quarter of the screen, so aiming to skip forward
+   and going back instead felt like a fault rather than a mistake -- nothing had ever suggested backward
+   was possible. These arrows answer that before the click, not after.
+   They sit above the slide but take no pointer events, so they cannot steal a click from a quiz option. */
+.rcx__aim {
+    position: absolute; top: 50%; z-index: 2; pointer-events: none;
+    display: grid; place-items: center;
+    width: 3rem; height: 3rem; margin-top: -1.5rem;
+    border-radius: 50%;
+    color: var(--pp-text);
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    opacity: 0;
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+                background-color 0.22s ease, border-color 0.22s ease;
+}
+.rcx__aim svg { width: 1.35rem; height: 1.35rem; }
+.rcx__aim--prev { left: 1rem;  transform: translateX(8px); }
+.rcx__aim--next { right: 1rem; transform: translateX(-8px); }
+/* Centred on the zone it belongs to, and BELOW the beat's own content rather than over its middle. */
+/* Centred with `left`, NOT a translate. The resting rule below sets `transform: none` on every aim, so a
+   glyph that leaned on a transform to centre itself sat half its own width off-axis the moment it lit --
+   measured 24px right of centre on a 1280 stage, which is exactly half of its 3rem box. The transform is
+   left free to carry the entrance offset alone. */
+.rcx__aim--hold { left: calc(50% - 1.5rem); top: auto; bottom: 3.25rem; margin-top: 0; transform: translateY(6px); }
+.rcx__glyph { width: 1.15rem; height: 1.15rem; grid-area: 1 / 1; }
+.rcx__glyph--play, .rcx.is-pinned .rcx__glyph--pause { display: none; }
+.rcx.is-pinned .rcx__glyph--play { display: block; }
+/* The REGION, not just the direction. The arrows are pinned at the edges while the backward hit area
+   run 30% inward, so they said which way a click would go and nothing about how far that side extends --
+   a click at 20% of the width is nowhere near the left arrow and still goes back. This washes the side
+   you are aiming at across its ACTUAL extent, so the boundary is visible before you commit rather than
+   inferred after being surprised by it. Sized off the same 25/75 split `isBackwardEdge` uses. */
+.rcx__wash {
+    position: absolute; top: 0; bottom: 0; z-index: 1; pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    /* Faded at BOTH ends, because the wash's box is the stage and the stage begins directly under the top
+       bar. A flat `top: 0` therefore drew a hard horizontal edge along the bar's underside -- the tint
+       appeared out of nothing mid-screen and read as the background being clipped rather than as a region
+       lighting up. The horizontal ramp is what carries the boundary; the vertical one only has to make
+       sure the shape has no edge of its own. */
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 76%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 76%, transparent 100%);
+}
+.rcx__wash--prev {
+    left: 0; width: 30%;
+    background: linear-gradient(90deg, color-mix(in oklab, var(--rcx-accent) 20%, transparent), transparent);
+}
+.rcx__wash--next {
+    right: 0; width: 30%;
+    background: linear-gradient(270deg, color-mix(in oklab, var(--rcx-accent) 20%, transparent), transparent);
+}
+/* The middle gets NO wash. It is the part you are reading, and a tint laid over the beat itself would be
+   the one place the affordance costs more than it explains. Its glyph is the whole signal. */
+.rcx.is-aim-back .rcx__wash--prev { opacity: 1; }
+.rcx.is-aim-fwd  .rcx__wash--next { opacity: 1; }
+.rcx.is-ending .rcx__wash, .rcx.is-card-only .rcx__wash { opacity: 0; }
+/* Touch has no hover to preview with, so the wash would only ever flash under a finger mid-tap. */
+@media (hover: none) { .rcx__wash { display: none; } }
+
+/* Reduced motion arms no beats at all, so there is no clock for the middle to stop. The zone goes inert
+   and everything that advertised it goes with it -- an affordance for a control that does nothing is
+   worse than no affordance, because it describes behaviour the hunter will then not get. */
+.rcx.is-static .rcx__hint-pause,
+.rcx.is-static .rcx__aim--hold { display: none; }
+
+/* ALWAYS visible while the deck plays -- not conditional on pointer state at all.
+   Tying their visibility to `is-aim-*` meant they were absent whenever the pointer was outside the
+   window, had not moved since the stage opened, or had triggered a `pointerleave`. An affordance that
+   is only present once you are already interacting is one nobody discovers. The one you are aiming at
+   still lifts to full and takes the accent, so the answer to "which way will this click go" is on screen
+   before you commit -- but the pair itself is simply there. */
+.rcx .rcx__aim { opacity: 0.55; transform: none; }
+/* The two navigation arrows are permanent furniture. The pause glyph is not: it would sit under the
+   middle of every beat saying nothing, so it earns its place only when you aim at it or it is holding
+   the deck. Once latched it goes to full and STAYS -- it is the only thing on screen reporting that the
+   deck is stopped rather than merely slow. */
+.rcx .rcx__aim--hold { opacity: 0; }
+.rcx.is-pinned .rcx__aim--hold { opacity: 1; }
+.rcx.is-aim-back .rcx__aim--prev,
+.rcx.is-aim-hold .rcx__aim--hold,
+.rcx.is-aim-fwd  .rcx__aim--next {
+    opacity: 1;
+    background: color-mix(in oklab, var(--rcx-accent) 26%, transparent);
+    border-color: color-mix(in oklab, var(--rcx-accent) 55%, transparent);
+}
+/* Scene beats aim, and the scene rules must therefore OUTRANK the aim ones rather than merely precede
+   them. `is-aim-fwd` is set the moment the pointer moves and is not cleared by reaching the ending, so an
+   equal-specificity hide placed above simply lost the cascade and left a lit arrow floating beside the
+   card. Doubling the state class settles it by weight, not by line order. */
+.rcx.is-ending.is-ending .rcx__aim,
+.rcx.is-card-only.is-card-only .rcx__aim { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .rcx__aim { transition: opacity 0.22s ease; } }
+/* No `hover: none` guard. A desktop with a touchscreen reports `hover: none` and would have hidden these
+   entirely -- which is very likely why they were reported missing. The arrows are driven by pointer
+   state, so on a genuine touch device they simply never light up; nothing needs to hide them. */
+
+/* THE DISSOLVE. See the file header: on the stage the shell stops drawing a box, and the type grows to
+   carry the beat in its place. */
+.rcx .rcp {
+    background: none; border: 0; box-shadow: none;
+    padding: 0; max-width: 34rem;
+}
+.rcx .rcp .pp-tally--hero { font-size: clamp(3.25rem, 13vw, 5.5rem); }
+/* The hero scale is built for a NUMBER -- one to three glyphs, monumental. Three slides borrow it for a
+   PHRASE (the month, the top genre, "That's a wrap"), and a phrase at number size runs the width of a
+   phone: "That's a wrap" measured 300px of a 375px stage, passing under BOTH nav arrows, and a genre like
+   "Hack and slash/Beat 'em up" spanned the viewport edge to edge.
+ *
+ * The arrows are permanent furniture pinned 1rem in at 3rem wide, so the band a title can occupy without
+ * colliding is the stage less 8rem. Capping the WIDTH there makes the guard structural: any title too long
+ * for the band wraps inside it rather than growing into the arrows.
+ *
+ * Deliberately not a smaller font. "February" already fitted the band at full size, so stepping the scale
+ * down would have cost the deck's opening beat its impact to fix a different slide's overflow. Capped,
+ * "That's a wrap" becomes two balanced lines and keeps the monumental size. */
+@media (max-width: 767px) {
+    .rcx .rcp__title.pp-tally--hero {
+        max-width: calc(100vw - 8.5rem); margin-inline: auto; text-wrap: balance;
+    }
+}
+.rcx .rcp__kicker {
+    font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim);
+}
+.rcx .rcp__caption { font-size: 1.1rem; }
+
+/* A full screen is a lot of room, and a 34rem column centred in it reads as a small card floating in the
+   dark -- the very thing the dissolve was meant to stop. Beats grow into the space they are given: the
+   type scales up, and beats that carry a GRID (covers, medallions, the calendar, the year bars) get real
+   width instead of wrapping inside a column sized for prose. */
+@media (min-width: 1024px) {
+    .rcx .rcp { max-width: 42rem; }
+    .rcx .rcp--wide { max-width: 58rem; }
+    .rcx .rcp .pp-tally--hero { font-size: clamp(4.5rem, 7.5vw, 7.5rem); }
+    .rcx .rcp .pp-tally--xl { font-size: clamp(2.5rem, 4vw, 3.75rem); }
+    .rcx .rcp__kicker { font-size: 1.05rem; }
+    .rcx .rcp__caption { font-size: 1.3rem; }
+    .rcx .rcp__flavor { font-size: 1rem; }
+    /* The SUBJECT of a hero beat scales too. Scaling only the type left the thing the beat is actually
+       about -- a trophy, a date, a streak -- at its in-a-card size, floating in a screen of space. */
+    .rcx .rcp-trophy__icon { width: 9rem; height: 9rem; margin-bottom: 1.75rem; }
+    .rcx .rcp-trophy__name { font-size: 2.4rem; }
+    .rcx .rcp-trophy__game { font-size: 1.15rem; }
+    .rcx .rcp__mark-icon { width: 5rem; height: 5rem; }
+    .rcx .rcp__flame-icon { width: 4.5rem; height: 4.5rem; }
+    .rcx .rcp-date { padding: 1.25rem 2rem; gap: 1.25rem; }
+    .rcx .rcp-date__icon { width: 3rem; height: 3rem; }
+    .rcx .rcp-date__day { font-size: 1.9rem; }
+    .rcx .rcp-date__full { font-size: 1rem; }
+    .rcx .rcp__stamp { font-size: 0.85rem; padding: 0.4rem 1.1rem; }
+    .rcx .rcp__chip { font-size: 0.95rem; padding: 0.55rem 1.1rem; }
+
+    /* The grids themselves get bigger cells, or wider just means more gutter. */
+    .rcx .rcp-covers { gap: 1rem; }
+    .rcx .rcp-med .pp-med { --sz: 132px; }
+    .rcx .rcp-cal__cell { width: 2.75rem; height: 2.75rem; }
+    .rcx .rcp-years__track { width: 3rem; height: 7rem; }
+    .rcx .rcp-clock__track { width: 3.25rem; height: 6rem; }
+    .rcx .rcp__mark svg { width: 6rem; height: 6rem; }
+}
+
+/* Per-beat choreography, on the SHARED primitive rather than a per-slide animation: the parts of a beat
+   arrive in sequence after the beat itself lands (anticipation, then follow-through), which is the whole
+   difference between content appearing and content being presented. `.rcp`'s direct children are exactly
+   the right units -- kicker, figure, caption, body, flavor. `.stagger-item`s inside the body are
+   grandchildren, so their own cascade still runs underneath this one.
+   `backwards` holds the hidden start state through the delay so nothing flashes before its turn. */
+@media (prefers-reduced-motion: no-preference) {
+    .rcx .recap-slide.active .rcp > * {
+        animation: rcxPartIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    }
+    .rcx .recap-slide.active .rcp > *:nth-child(2) { animation-delay: 0.09s; }
+    .rcx .recap-slide.active .rcp > *:nth-child(3) { animation-delay: 0.18s; }
+    .rcx .recap-slide.active .rcp > *:nth-child(4) { animation-delay: 0.27s; }
+    .rcx .recap-slide.active .rcp > *:nth-child(n+5) { animation-delay: 0.34s; }
+}
+@keyframes rcxPartIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* The parts that ARE objects keep their surfaces -- dissolving the shell must not dissolve the content. */
+.rcx .rcp .scard,
+.rcx .rcp .rcp-date,
+.rcx .rcp .rcp-quiz__opt,
+.rcx .rcp .rcp-quiz__reveal { background: color-mix(in oklab, var(--pp-bg-1) 82%, transparent); }
+
+.rcx__hint {
+    position: absolute; left: 50%; bottom: 0.5rem; transform: translateX(-50%);
+    font-size: 0.68rem; color: var(--pp-text-mute); pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+.rcx.is-underway .rcx__hint { opacity: 0; }
+
+/* The ending is ONE composition, not a cut. The summary lands, holds for its beat, and then RISES to
+   become the title of the screen while the card arrives underneath it -- so the last thing the ceremony
+   does is recompose itself, rather than covering itself with a different panel.
+ *
+ * That is why the card is NOT an inset overlay: it occupies the lower half of the same stage, and the
+ * summary is moved up out of its way. Both are visible together, which is the whole point. */
+/* The summary LEAVES. It used to shrink into the end screen's header, and that one decision is what every
+   bug in this transition came out of: two things moving in the same moment, over a band that had to be
+   split between them, with a header whose layout box then had to be argued down to fit its half. The lift
+   scaled the picture but not the box, so on a short stage the title landed on the card's label; the band
+   made the content taller than its box, so the closing line arrived in a scroll well.
+ *
+ * The end screen brings its own mark and title instead (`.rcx__card-head`). So the close is ONE object
+ * arriving -- the card scene, header and all, rising into a stage the summary has vacated -- and the
+ * summary only has to do the simplest thing an element can do on its way out.
+ *
+ * It stays an ANIMATION rather than a transition, which is not stylistic: the entrance (`rcxInFwd`) runs
+ * with fill `both`, so opacity is animation-controlled even after it finishes, and per spec a transition
+ * does not start on a property the previous style was animating. A transition here gives no interpolation
+ * at all -- the browser jumps straight to the end value. A second animation simply replaces the entrance. */
+.rcx.is-ending .recap-slide.active {
+    animation: rcxBow 0.55s cubic-bezier(0.4, 0, 0.8, 1) forwards;
+    pointer-events: none;
+}
+/* A small recede on the way out, not just a dissolve: it reads as the beat stepping BACK to let the card
+   through, which is the handoff. The card's own rise starts at 0.32s, so the two overlap by a beat. */
+@keyframes rcxBow {
+    from { opacity: 1; transform: none; }
+    to   { opacity: 0; transform: translate3d(0, -2%, 0) scale(0.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .rcx.is-ending .recap-slide.active { animation: none; opacity: 0; }
+}
+
+/* Card-only: the stage opened straight at its ending, with the deck's chrome dropped. There is no deck
+   to pace, navigate or scrub, so a timer bar and tap zones would be lying about what this is. */
+.rcx.is-card-only .rcx__bars,
+.rcx.is-card-only .rcx__zone,
+.rcx.is-card-only .rcx__hint,
+.rcx.is-card-only .recap-slide { display: none; }
+/* Both routes end on the SAME screen, so the card scene takes the whole stage in both. It is bottom-62%
+   only while it waits offstage, back when it had to share the room with the summary's header.
+ *
+ * `inset: 0` means THE STAGE, not the viewport -- the scene is a child of `.rcx__stage`, which is the flex
+ * area between the chrome and whatever sits below it. It used to be a sibling, positioned against the whole
+ * surface, so it had to be TOLD where the chrome ended: a `--rcx-bar` token the top bar and the scene both
+ * read. That number was right on desktop and wrong on a phone, where the progress timer sits above the bar
+ * and pushes it 17px further down -- so the header centred into the bar's row and the mark sat behind the
+ * close X. Being inside the box is what makes the offset correct at every breakpoint without a number. */
+.rcx.is-card-only .rcx__card,
+.rcx.is-ending .rcx__card { inset: 0; height: auto; justify-content: center; }
+
+.rcx__card {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.85rem; padding: 0 1rem 1.25rem;
+    height: 62%;
+}
+/* Mounted and LAID OUT for the whole deck, just not visible. `display: none` would skip layout, which
+   only defers the cost to the frame the ending transition starts in -- which is what made it jump.
+   visibility also keeps its controls out of the tab order while it is not the active scene. */
+.rcx__card {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+.rcx.is-ending .rcx__card {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+    /* Rises INTO the space the summary just vacated, a beat behind it, so the two moves read as one
+       gesture handing off rather than two things happening at once. */
+    .rcx.is-ending .rcx__card { animation: rcxCardIn 1.05s cubic-bezier(0.32, 0.72, 0.24, 1) 0.32s both; }
+}
+@keyframes rcxCardIn { from { opacity: 0; transform: translate3d(0, 56px, 0); } to { opacity: 1; transform: none; } }
+
+/* The end screen's own header. Deliberately QUIETER than the deck's hero beats -- the card underneath is
+   the thing being presented, and a display-size title above it would compete with the card's own header
+   for the same job. Same display face and accent as the deck's titles so it still reads as the same
+   voice closing, a size down. */
+.rcx__card-head {
+    display: flex; flex-direction: column; align-items: center; gap: 0.45rem;
+    text-align: center;
+}
+.rcx__card-mark { display: block; line-height: 0; }
+.rcx__card-title {
+    font-family: var(--pp-font-display);
+    font-size: clamp(1.15rem, 4.5vw, 1.6rem); font-weight: 800; line-height: 1.1;
+    color: var(--rcx-accent);
+}
+/* The card renders at its natural share size; the frame scales it to fit whatever room there is rather
+   than letting it overflow or forcing a re-layout of markup that must stay pixel-exact for the PNG. */
+.rcx__card-frame {
+    display: flex; align-items: center; justify-content: center;
+    max-width: 100%; min-height: 0;
+    /* Sized by JS to the card's SCALED height, so the column hugs the card instead of stretching around
+       it -- a growing frame made `justify-content` a no-op and pinned the label to the stage's top edge. */
+    flex: 0 0 auto;
+    overflow: hidden;
+}
+.rcx__card-frame > * {
+    /* The card is a FIXED 1200x630 render and the frame is a flex container, so the default `flex-shrink: 1`
+       let a narrow stage squeeze the card's WIDTH while its inline height held -- 1200x630 became 343x630 on
+       a phone. That is not a smaller card, it is a different one: the internals re-laid out at a third of
+       their design width and landed on top of each other, and `fitCard` then scaled from the wrong natural
+       size. Scaling is the only thing allowed to resize this card; layout must not touch it. */
+    flex: none;
+    transform: scale(var(--rcx-card-scale, 1));
+    transform-origin: center;
+    border-radius: var(--pp-radius-md);
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95);
+}
+
+/* The closing beat hands over to sharing without leaving the stage. */
+.rcx__out { position: relative; display: flex; justify-content: center; gap: 0.6rem; padding: 0 1rem 1.25rem; }
+.rcx__out[hidden] { display: none; }
+.rcx__btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.6rem 1.2rem; border-radius: 999px; cursor: pointer;
+    font-size: 0.82rem; font-weight: 700;
+    color: var(--pp-text); background: rgba(255, 255, 255, 0.07);
+    border: 1px solid color-mix(in oklab, var(--rcx-accent) 30%, var(--pp-border));
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.rcx__btn:hover { border-color: var(--rcx-accent); background: rgba(255, 255, 255, 0.11); }
+.rcx__btn:focus-visible { outline: 2px solid var(--rcx-accent); outline-offset: 2px; }
+.rcx__btn--primary { color: var(--pp-bg-0); background: var(--rcx-accent); border-color: transparent; }
+.rcx__btn--primary:hover { background: var(--rcx-accent); filter: brightness(1.08); }
+/* The ground swatches, WITH the card. They were briefly in the share panel below the fold, whose preview
+   is empty until the card has been opened -- so they sat on the intro screen with nothing to apply
+   themselves to.
+
+   `.pc-theme` itself is the plat card's component (components/plat-cards.css, imported globally); only
+   this container differs. Eight fixed items, so a fixed track count rather than auto-fit: the row reads
+   as one set of eight rather than reflowing to a different shape at every width. The card frame sizes
+   itself from whatever its siblings leave (`availableHeight` in monthly-recap.js), so adding this row
+   simply shrinks the preview to suit rather than pushing anything off the stage. */
+.rcx__grounds {
+    display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px;
+    width: 100%; max-width: 520px; flex: none;
+}
+@media (max-width: 640px) {
+    .rcx__grounds { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 300px; }
+    .rcx__grounds .pc-theme__name { font-size: 10px; }
+}
+
+.rcx__err {
+    margin: 0 auto; max-width: 32rem; padding: 0 1rem 1rem;
+    font-size: 0.78rem; font-weight: 600; text-align: center;
+    color: var(--pp-error);
+}
+.rcx__err[hidden] { display: none; }
+/* The shared three-state download button (components/download-button.css) tints its busy state from
+   this, so on the stage it mutes toward the beat's own accent rather than the site primary -- the whole
+   surface is keyed to the accent and a stock-blue busy button would be the one thing that is not. */
+.rcx__btn--primary.pp-dl { --pp-dl-accent: var(--rcx-accent); }
+
+@media (min-width: 768px) {
+    .rcx__bars { padding: 1rem 1.5rem 0; }
+    .rcx__top { padding: 0.85rem 1.5rem; }
+    .rcx__stage { padding: 1rem 1.5rem 2rem; }
+    .rcx .recap-slide { inset: 1rem 1.5rem 2rem; }
+}
+/* ================================================================
+ * The page's terminal states.
+ * ================================================================ */
+
+/* Terminal states: nothing this month, and the load failed. Both used an emoji at `text-6xl` as their
+   icon, which the rebuild brief calls out by name -- an emoji renders as somebody else's artwork at a
+   size where that is the loudest thing on the page. */
+.rcs-state {
+    max-width: 30rem; margin: 0 auto; padding: 3rem 1rem 4rem;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+/* Tailwind's utilities live in a LAYER and this component file does not, so an unlayered `display: flex`
+   here beats `.hidden { display: none }` no matter what the source order is. Both of these states ship
+   with `hidden` on a month that loaded fine, and both were rendering underneath the share panel -- an
+   empty-state and an error telling the hunter nothing happened, on a page full of what happened.
+   `.rcx__out[hidden]` above has the same guard for the same reason. */
+.rcs-state.hidden,
+.rcs-state[hidden] { display: none; }
+.rcs-state__ico {
+    display: grid; place-items: center; width: 3rem; height: 3rem; margin-bottom: 0.9rem;
+    border-radius: 50%;
+    color: var(--pp-text-mute);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+}
+.rcs-state__ico--warn {
+    color: var(--pp-warning);
+    border-color: color-mix(in oklab, var(--pp-warning) 34%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 10%, transparent);
+}
+.rcs-state__ico svg { width: 1.5rem; height: 1.5rem; }
+.rcs-state__title {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em;
+}
+.rcs-state__body { margin-top: 0.45rem; font-size: 0.85rem; line-height: 1.55; color: var(--pp-text-dim); }
+.rcs-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 1.35rem; }
+
+@media (min-width: 768px) {
+    .rcs-state { padding: 4rem 1rem 5rem; }
+}

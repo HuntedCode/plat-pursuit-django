@@ -1,25 +1,36 @@
 # Navigation & Site Organization
 
-PlatPursuit's navigation uses a **hub-of-hubs IA**: 4 direct-link hub destinations in the global navbar (Dashboard, Browse, Community, My Pursuit), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over, exposing the same 4 hubs at all scroll positions. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
+> **2026-08 IA change.** Community was retired and **Leaderboards** took its hub slot. Profiles moved
+> to Browse (`/profiles/`), Rate My Games to My Pursuit > Tools (`/rate-my-games/`), and the Profile
+> sub-nav tab + ownership-aware profile chrome were removed (the avatar menu is the single route to
+> your own profile). See [ia-and-subnav.md](../architecture/ia-and-subnav.md).
+>
+> **Also 2026-08:** `/` became the **lobby** — hub-less, strip-less, reached by the navbar wordmark (which
+> takes a hub-style active state there) and by landing there after login. Overview was narrowed into it,
+> and **Career is now My Pursuit's landing**, so the My Pursuit button and mobile tab point at `/career/`.
+
+PlatPursuit's navigation uses a **hub-of-hubs IA**: direct-link hub destinations in the global navbar (My Pursuit, Browse, Leaderboards, Support), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
+
+> **Update (gamification Home, 2026-06):** the **Dashboard hub was dissolved** when the legacy dashboard retired and the gamification **Home** (`/`) replaced it. The navbar/tabbar button is now **Home** (`hub_section == 'home'`), backed by an items-less hub, so `/` highlights the button but renders **no sub-nav strip** (the Home page's own launcher cards route). Its former sub-nav items (**My Stats / My Shareables / Recap** + the dynamic **Fundraiser**) moved into **My Pursuit**; the orphaned `/dashboard/*` URLs resolve there via an inherited prefix. Sections below that describe a "Dashboard" hub or its `hub_section == 'dashboard'` active state are historical — this note governs. See [../architecture/ia-and-subnav.md](../architecture/ia-and-subnav.md).
 
 ## Architecture Overview
 
-Navigation is rendered globally via `base.html` includes. The main navbar is sticky at the top of the viewport on every page. A persistent **sub-navigation strip** is sticky just below it on every page that belongs to one of the four hub families (Dashboard, Browse, Community, My Pursuit), URL-prefix matched. On `<lg:` viewports the desktop hub buttons hide and a sticky bottom tab bar takes over for hub navigation. The footer is a sitemap grid that mirrors the hub structure.
+Navigation is rendered globally via `base.html` includes. The main navbar is sticky at the top of the viewport on every page. A persistent **sub-navigation strip** is sticky just below it on every page that belongs to one of the four hub families (My Pursuit, Browse, Leaderboards, Support), URL-prefix matched (the personal My Pursuit strip is auth-gated; Support is landing-only with no strip). On `<lg:` viewports the desktop hub buttons hide and a sticky bottom tab bar takes over for hub navigation. The footer is a sitemap grid that mirrors the hub structure.
 
 Design philosophy: **menus expose the few, hubs expose the many**. The global nav has 4 buttons. Each is a direct link to a hub. The hub does the heavy lifting of "introduce the user to what's in this section." The sub-nav handles "I know what I want, take me to the page." This eliminates the redundancy of having 25 dropdown items spread across menus that duplicate the hubs' job.
 
-A second design principle: **no feature silos**. Every page should link outward to related features. The Challenge Hub links to Milestones. Badge detail links to Titles. Profile pages surface Challenges and Reviews. This "mesh" of cross-links reduces dead ends and increases feature discovery.
+A second design principle: **no feature silos**. Every page should link outward to related features. Badge detail links to Titles. A profile's Ratings tab links each card to the game it rates, and its Games tab uses the site-wide game card so every tile is a route onward. This "mesh" of cross-links reduces dead ends and increases feature discovery.
 
 The four hubs:
 
 | Hub | URL | Mental mode | Sub-nav items |
 |-----|-----|-------------|---------------|
-| **Dashboard** | `/` | "your personal cockpit" | Dashboard, Stats, Shareables, Recap |
-| **Browse** | `/games/` | "find new content" | Games, Trophies, Recently Added, Companies, Franchises, Genres & Themes, Engines, Flagged Games |
-| **Community** | `/community/` | "what's everyone doing" | Hub, Profiles, Reviews, Challenges, Lists, Leaderboards |
-| **My Pursuit** | `/my-pursuit/` | "your trophy hunting identity and progression" | Badges, Milestones, Titles *(today)* |
+| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — `/stats/` redirects to Home pending rebuild.* |
+| **Browse** | `/games/` | "find content" | Catalog: Games, Trophy Lists, Badges, Jobs, Recently Added, Hunters. Curation: Franchises, Companies, Genres & Themes |
+| **Leaderboards** | `/leaderboards/` | "where do I stand" | (no strip -- badge leaderboards are the only kind so far) |
+| **Support** | `/support/` | "ways to support us" | (landing-focused — no strip; houses the fundraiser + the coming store) |
 
-The Browse hub IS the games list page — no separate landing — because games are what most users browse for and the sub-nav handles wayfinding to the other browse pages. The Community and My Pursuit hubs have dedicated landing pages designed as destinations.
+The personal hub is rooted at the logged-in Home (`/` = its Overview) and its pages live at root URLs; Browse IS the games list; Leaderboards + Support have dedicated landings. See [ia-and-subnav.md](../architecture/ia-and-subnav.md) for the full model.
 
 See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, the URL prefix matching rules, and the sub-nav infrastructure.
 
@@ -33,10 +44,8 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, 
 | `templates/partials/footer.html` | Sitemap grid footer (6-column layout matching the hub structure) |
 | `core/context_processors.py` | `hub_subnav_context()` — URL-prefix matcher that drives the sub-nav |
 | `core/constants.py` *(or new `core/hub_subnav.py`)* | `HUB_SUBNAV_CONFIG` — the hub definitions |
-| `templates/trophies/profile_detail.html` | Profile page with 6 tabs (Games, Trophies, Badges, Lists, Challenges, Reviews) |
+| `templates/trophies/profile_detail.html` | Profile page with 4 tabs (Games, Trophies, Badges, Ratings) |
 | `templates/trophies/partials/profile_detail/profile_detail_header.html` | Profile header with quick links row |
-| `templates/trophies/partials/profile_detail/challenge_list_items.html` | Profile Challenges tab content |
-| `templates/trophies/partials/profile_detail/review_list_items.html` | Profile Reviews tab content (supports infinite scroll) |
 | `trophies/views/profile_views.py` | ProfileDetailView with tab handlers |
 
 ## Global Navbar
@@ -47,15 +56,15 @@ The navbar is sticky at `top-0 z-50` so users can hub-jump at any scroll depth. 
 
 | Element | Behavior |
 |---------|----------|
-| **Logo** | Always visible. Direct link to `/` (Dashboard). |
-| **Dashboard** | `hidden lg:flex`. Direct link to `/`. Active when `hub_section == 'dashboard'`. |
+| **Logo** | Always visible. Direct link to `/` (the personal hub's Overview). |
+| **My Pursuit** | `hidden lg:flex`, **login-gated** (`{% if user.is_authenticated %}`). Direct link to `/`. Active when `hub_section == 'my_pursuit'`. |
 | **Browse** | `hidden lg:flex`. Direct link to `/games/`. Active when `hub_section == 'browse'`. |
-| **Community** | `hidden lg:flex`. Direct link to `/community/`. Active when `hub_section == 'community'`. |
-| **My Pursuit** | `hidden lg:flex`. Direct link to `/my-pursuit/`. Active when `hub_section == 'my_pursuit'`. |
+| **Leaderboards** | `hidden lg:flex`. Direct link to `/leaderboards/`. Active when `hub_section == 'leaderboards'`. |
+| **Support** | `hidden lg:flex`. Direct link to `/support/`. Active when `hub_section == 'support'`. |
 | **Notification bell** | Existing dropdown, unchanged. Visible at all breakpoints. |
 | **Avatar dropdown** | Theme · Profile · My Premium · Settings · Staff items · Logout |
 
-That's it. 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. On `<lg:` viewports the 4 hub buttons hide and the bottom tab bar takes over hub navigation, so users still get one-tap access to every hub at any scroll position.
+That's it — up to 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/`, but the **My Pursuit button is hidden for logged-out visitors**: the logo already reaches `/` for them, and anon has no pursuit to show (the entry would be redundant and mislabeled, and wouldn't highlight anyway since the anon strip is gated off). So anon sees 4 buttons (logo + Browse/Leaderboards/Support). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
 
 The "Customization" item that lived in the legacy My Pursuit dropdown is killed entirely — it pointed to `settings`, which the avatar dropdown's Settings link already covers, AND the dashboard already has in-page "Edit Layout" controls for module customization. The site-wide search bar was also dropped during this consolidation: the IA wayfinding (hubs + sub-nav + browse pages with HTMX filters) handles content discovery, so a global search box was redundant chrome.
 
@@ -83,30 +92,31 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the prefix matching a
 
 ## Mobile Bottom Tab Bar
 
-`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The 4 tabs (Dashboard / Browse / Community / My Pursuit) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor.
+`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The tabs (My Pursuit / Browse / Leaderboards / Support) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor. Like the desktop button, the **My Pursuit tab is login-gated**, so logged-out visitors see 3 tabs; the inner's flex `justify-around` distributes 3 or 4 evenly with no CSS change.
 
 Active state details:
-- Each tab compares `hub_section` against its target value (`dashboard`, `browse`, `community`, `my_pursuit`)
-- The Dashboard tab is also treated as active when `hub_section is None` (e.g. settings, notifications, error pages) because those non-hub destinations conceptually belong to "your account" — tapping the Dashboard tab from one of them should always feel correct
+- Each tab compares `hub_section` against its target value (`my_pursuit`, `browse`, `leaderboards`, `support`)
+- On non-hub pages (settings, notifications, errors) `hub_section` is None, so no tab is highlighted
 - Active styling uses `text-primary` to match the desktop navbar's `btn-primary` active state
 
 There is no More drawer, no mobile search overlay, and no mobile-specific notification shortcut — all of that chrome was removed when the navbar collapsed to direct-link buttons. The hub sub-nav strip handles "show me everything in this hub," the bell is in the navbar at all breakpoints, and search was dropped site-wide. The bottom tab bar plus the sticky sub-nav strip together cover every navigation case the old chrome tried to handle.
 
 ## Footer Sitemap Grid
 
-Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`) matching the hub structure:
+Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`), one column per structural area. Post-IA-unify the columns mirror the 4 hubs (My Pursuit merges the pre-unify My Pursuit + Dashboard columns) plus Legal and Connect:
 
-| Browse | Community | My Pursuit | Dashboard | Legal | Connect |
-|--------|-----------|------------|-----------|-------|---------|
-| Games | Hub | Badges | My Profile | Privacy | Social icons |
-| Trophies | Profiles | Milestones | My Stats | Terms | (X, YouTube, Discord) |
-| Companies | Reviews | Titles* | My Shareables | About | |
-| Genres & Themes | Challenges | | Recap | Contact | |
-| Flagged Games | Lists | | | | |
-| | Leaderboards | | | | |
+| Browse | Leaderboards | My Pursuit | Support | Legal | Connect |
+|--------|-----------|------------|---------|-------|---------|
+| Games | Badge Leaderboards | Home* | Support Hub | Privacy | Social icons |
+| Recently Added | | Collection* | Roadmap | Terms | (X, YouTube, Discord) |
+| Franchises | | Career* / Contracts* | Badge Art | About | |
+| Genres & Themes | | Badges / Milestones / Titles* | Membership | How badges work | |
+| Companies | | Plat Cards* / Recap* | | Contact | |
+| Hunters | | Rate My Games* | | | |
 
-- Titles link is auth-gated (only shown to authenticated users with a profile)
-- Dashboard column is auth-gated; guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always)
+- **My Pursuit is auth-aware** (three states, no bogus links): authed-with-profile sees the full personal-hub sitemap (marked `*`); anon/no-profile sees only the public catalog members (Badges, Milestones, Contracts); anon additionally gets Sign In / Sign Up (a divider separates them). This keeps a stable 6-column grid without a separate Account column.
+- **Support** mirrors the rail's four destinations (Support Hub, Roadmap, Badge Art, Membership). Badge Art is the no-args fundraiser landing (302 to the latest campaign), so it works for every viewer where the old slugged link was gated on the linked-profile fundraiser processor. Updated 2026-08-22: the "Membership (soon)" placeholder became a live link when the store shipped, and Rate My Games joined My Pursuit.
+- Column headings are `<h2>` (`font-semibold text-xs uppercase tracking-wider`) per the design-system section-header pattern.
 
 ## Cross-Linking Inventory
 
@@ -124,30 +134,41 @@ These are the cross-links embedded in feature pages. The "mesh" of cross-links r
 | Game detail (header) | Company detail (developer, publisher) | Links in `game_detail_header.html` |
 | Company detail | Game detail (per-role game cards) | Cards in `company_detail/game_section.html` |
 | Genre/Theme detail | Game detail (game cards) | Reuses `game_list/game_cards.html` |
-| Community Hub | Reviews, Challenges, Lists, Leaderboards, Discord | Feature cards on `community/hub.html` (Feature Spotlight design) |
+| ~~Community Hub~~ | RETIRED 2026-08 | The page, its view, service and templates are deleted; `/community/` 301s to `/leaderboards/`. |
 | My Pursuit Hub | Badges, Milestones, Titles | Feature cards on `my_pursuit/hub.html` |
 
 ## Profile Page Tabs
 
-The profile page has 6 tabs, switchable via `?tab=` URL parameter:
+The profile page has **4 tabs**, switchable via the `?tab=` URL parameter:
 
-| Tab | Context Variable | Paginated | Infinite Scroll | Filters |
-|-----|-----------------|-----------|-----------------|---------|
-| Games | `profile_games` | Yes (50/page) | Yes | Platform, completion, sort |
-| Trophies | `profile_trophies` | Yes (50/page) | Yes | Grade, earned status, sort |
-| Badges | `profile_badges` | No | No | Tier, earned status, sort |
-| Lists | `profile_lists` | No | No | None |
-| Challenges | `profile_challenges` | No | No | None |
-| Reviews | `profile_reviews` | Yes (50/page) | Yes | None |
+| Tab | Paginated | Infinite scroll | Filters |
+|-----|-----------|-----------------|---------|
+| Games | Yes (50/page) | Yes | Full browse toolbar: live search, sort, and an advanced drawer (platform, the three platinum axes, genres, themes, flags, completion + time-to-beat ranges) |
+| Trophies | Yes (30 days/page) | Yes | Search + tier chips. TWO shapes behind one tab: the day wall while browsing, trophy cards while searching |
+| Badges | No | No | Sort only |
+| Ratings | Yes | Yes | Sort, plus a Games/DLC switcher |
 
-> **Activity tab deferred**: an earlier iteration of the Community Hub initiative added a 7th `Activity` tab backed by a polymorphic `Event` model, then rolled it back. See [Event System (Deferred)](../architecture/event-system-deferred.md) for the design space if you want to revive a per-profile activity timeline.
+Three tabs were retired rather than rebuilt, and the reasons are in the
+[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (Game Lists is hidden pending a
+revamp, so the tab linked to cards whose links bounced you home), **Challenges** (the system was
+retired), and **Reviews** (text reviews were archived in 2026-05 — the ratings that survived them are
+what the Ratings tab shows). `_build_lists_tab_context` and its template are parked intact with the rest
+of Game Lists; the other two are gone.
+
+There is deliberately **no About tab** — see the Hunter Profile row in the playbook for why the trophy
+timeline and the showcases it was going to pair both came off the page instead.
 
 Tab handlers in `ProfileDetailView`:
-- `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`, `_build_lists_tab_context()`, `_build_challenges_tab_context()`, `_build_reviews_tab_context()`
-- Counts for tab badges: `profile_challenge_count`, `profile_review_count`, `profile_lists_count`
-- AJAX partial templates returned for paginated tabs via `get_template_names()`
+- `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`,
+  `_build_ratings_tab_context()` (plus the parked `_build_lists_tab_context()`)
+- `_TAB_TEMPLATES` maps a tab to its panel; `_RESULTS_TEMPLATES` to the partial an HTMX filter swap
+  returns; `_INFINITE_SCROLL_TEMPLATES` / `_INFINITE_SCROLL_VIEWS` to the bare items a scroll append
+  returns. A tab in the template map with no branch in the dispatcher renders someone else's data, which
+  is what the archived Reviews tab did — pinned by `test_every_mapped_tab_template_can_actually_be_built`.
+- Every paginated tab sets `scroll_per_page`, because the scroller measures the grid against it and a
+  disagreement silently disables the scroll rather than degrading.
 
-Profile pages live under `/community/profiles/<u>/`, so they show the Community sub-nav strip with "Profiles" highlighted as active.
+Profile pages live under `/profiles/<u>/`, so they show the Browse sub-nav strip with "Profiles" highlighted as active. (They moved from `/community/profiles/` in 2026-08; the old paths 301.)
 
 ## Key Flows
 
@@ -160,17 +181,27 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 5. Only the active tab's data is queried (lazy loading)
 6. Scroll position restored from `sessionStorage`
 
-### Infinite Scroll (Reviews Tab)
+### Infinite scroll (Games, Trophies, Ratings)
 
-1. `PlatPursuit.InfiniteScroller.create()` initializes with `reviews-grid`, `reviews-sentinel`, `reviews-loading` IDs
-2. Observer triggers when sentinel enters viewport
-3. AJAX GET to same URL with incremented `?page=` param
-4. View returns `review_list_items.html` partial (detected via `X-Requested-With: XMLHttpRequest`)
-5. New cards appended to `reviews-grid`
+1. `PlatPursuit.InfiniteScroller.create()` initialises against `<tab>-grid`, `<tab>-sentinel`,
+   `<tab>-loading`, told the server's real page size via `scroll_per_page`
+2. The observer fires when the sentinel enters the viewport
+3. AJAX GET to the same URL with an incremented `?page=`, carrying `X-Requested-With: XMLHttpRequest`
+   — which is how `_is_scroll_append()` tells an append from an HTMX filter swap (htmx does not send it)
+4. The view returns the bare items partial for that tab (`_INFINITE_SCROLL_TEMPLATES`, or
+   `_INFINITE_SCROLL_VIEWS` for the Trophies tab, whose two shapes append different things)
+5. New cards are appended to the grid and handed to the reveal, so they land as they scroll in
+
+Two things fail SILENTLY here rather than loudly, and both have bitten: a `cardSelector` that matches
+nothing in the appended HTML reads as "no more pages" and stops the scroll (which is how the Games tab
+lost its scroll when its card was rebuilt onto `.pp-gcard`), and a `paginateBy` that disagrees with the
+server's page size breaks the resume arithmetic. Pinned by
+`test_every_paginated_tab_tells_the_scroller_its_real_page_size` and
+`test_every_grid_gets_the_selector_its_own_cards_use`.
 
 ### Sub-Nav Active State
 
-1. Request comes in to e.g. `/community/profiles/<u>/`
+1. Request comes in to e.g. `/profiles/<u>/`
 2. `hub_subnav_context()` context processor inspects `request.path`
 3. Longest-prefix match against `HUB_SUBNAV_CONFIG` finds `community` hub
 4. Active item determined by matching `request.resolver_match.url_name` against the hub's items
@@ -196,20 +227,19 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 - **Sub-nav must be hidden on non-hub pages.** Settings, auth flows, notification inbox, staff admin pages, and error pages render NO sub-nav. The context processor returns `hub_section=None` and the template `{% if hub_section %}` short-circuits. Test these explicitly when adding new top-level URLs.
 
-- **The Dashboard hub is the personal cockpit.** Its sub-nav is for navigating to personal-utility sub-pages (Stats, Shareables, Recap). The dashboard's existing module tabs (Default + custom) are an in-page premium feature for module organization, separate from the IA-level sub-nav. Don't conflate them.
+- **The personal (My Pursuit) hub is rooted at the logged-in Home (`/`).** Its 10-item auth-gated strip covers the personal surfaces, now at root URLs. The legacy dashboard's in-page module tabs (still load-bearing until the dashboard sunset) are separate from the IA-level sub-nav — don't conflate them.
 
 - **Sticky chrome stacks vertically — keep the budget honest.** On desktop the navbar (64px) + sub-nav (~46px) + hotbar (variable, ~80-110px when expanded) all pin to the top, and on mobile the bottom tab bar (56px) pins to the bottom. With everything visible the user gives up ~190-210px on desktop and ~250px on mobile. The hotbar's collapse toggle is the relief valve — users can shrink it to ~28px (just the toggle button) to reclaim the space. Adding any new sticky chrome (banners, status bars, announcement strips) means subtracting somewhere else. The budget was set deliberately during the Community Hub initiative; revisit `ia-and-subnav.md` before introducing more pinned elements.
 
-- **My Shareables is a landing-page-with-sub-pages distributor.** `/dashboard/shareables/` is the index page that shows 5 sub-feature cards (Platinum Cards, Platinum Grid, Profile Card, Monthly Recap, Challenge Cards). Each sub-page has its own URL and they all map back to `my_shareables` in the sub-nav active-state via `_URL_NAME_TO_SLUG_OVERRIDES` in `core/hub_subnav.py`. New shareable sub-pages must be added to that override map.
+- **My Shareables is one page, not a distributor** (rebuilt 2026-08). `/shareables/` IS the Plat Cards browse; the wayfinder landing and its sub-pages are gone (Platinum Grid and Profile Card retired, Challenge Cards died with the Challenge system, Recap lives at `/recap/` with its own subnav entry). `/shareables/platinums/` redirects to it and keeps its URL name, since platinum notifications deep-link it with `?et=`. The only surviving entry in `_URL_NAME_TO_SLUG_OVERRIDES` for this hub is `my_shareables_platinums`. See [share-images](share-images.md).
 
 ## Onboarding
 
-The hub-of-hubs IA is a power-user design that prioritizes cleanliness over first-visit discoverability. The [Tutorial System](../design/tutorial-system.md) compensates: a 4-step Welcome Tour runs once after PSN linking, walking new users through each hub and its sub-nav strip. Page-level coach marks on the Game Detail and Badge Detail pages teach feature-specific interactions. The "Welcome Tour" button in the avatar dropdown and "Page Guide" buttons on individual pages allow re-triggering.
+The hub-of-hubs IA is a power-user design that prioritizes cleanliness over first-visit discoverability. (A legacy onboarding tour system that once compensated for this was removed as part of the chrome rebuild; if reintroduced it will be rebuilt from scratch.)
 
 ## Related Docs
 
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA structure, sub-nav infrastructure, URL prefix matching
-- [Tutorial System](../design/tutorial-system.md): Welcome Tour, Game Detail Tour, Badge Detail Tour
 - [Community Hub](community-hub.md): the Community hub destination at `/community/`
 - [My Pursuit Hub](my-pursuit-hub.md): the My Pursuit hub destination at `/my-pursuit/`
 - [Dashboard](dashboard.md): the personal cockpit at `/`

@@ -1,0 +1,111 @@
+{% load humanize %}
+{% comment %}
+One title, as a plate on the wall.
+
+The TITLE is the largest thing here. That is the whole correction: the old row gave a 42px column to a
+medallion its own stylesheet called "small on purpose" while setting the title at 1.02rem, so a page
+about words you have earned rendered its words smaller than a thumbnail it said didn't matter.
+
+The medallion survives as the plate's STAMP -- a provenance mark in the corner, which is the role
+visual-identity assigns it, and the only thing that names the series at a glance.
+
+Rarity comes from `badge_rarity.group_rarity`, the SAME grade badge detail and the browse gallery show,
+in the same --pp-rarity-* colours and the same #rarity-* sprite. A second private scheme here would let
+one title read two different rarities depending on which page you were standing on.
+
+`view` adapts only the footer, so all three panels read as one family:
+  yours -> equip control (or the Wearing marker)
+  reach -> a Horizon toward the title + "N of M stages"
+  all   -> how many hunters have EARNED it (holders, not wearers -- see the footer)
+
+`data-ttl-row` / `data-title-id` are unchanged from the old row: titles.js finds plates by those, and
+equipping is still a single `.is-worn` class toggle.
+{% endcomment %}
+<article class="ttl-plate ttl-plate--tile pp-rarity-surface{% if entry.held %} is-held{% endif %}{% if entry.is_displayed %} is-worn{% endif %}{% if entry.is_special %} is-special{% endif %}{% if not entry.held and entry.progress_pct %} is-progress{% endif %}"
+         {% if entry.rarity_class %}data-rarity="{{ entry.rarity_class }}"{% elif not entry.holders and not entry.is_special %}data-rarity="unearned"{% endif %}
+         data-ttl-row data-title-id="{{ entry.title.id }}">
+
+    <div class="ttl-plate__head">
+        <div class="ttl-plate__id">
+            <h3 class="ttl-plate__name">{{ entry.name }}</h3>
+            <p class="ttl-plate__from">
+                {% if entry.source_label %}
+                <span class="ttl-plate__tag{% if not entry.is_special %} ttl-plate__tag--quiet{% endif %}">{{ entry.source_label }}</span>
+                {% else %}
+                <a href="{{ entry.url }}" class="ttl-plate__series">{{ entry.series_name }}</a>
+                {% endif %}
+            </p>
+
+            {% comment %}The grade, from the shared component -- same markup, colours, glyphs and
+            percentage as badge detail, the browse gallery, Frame and the series list. The plate itself
+            carries `data-rarity`, so the label and the surface material read one declaration.{% endcomment %}
+            {% include 'components/rarity_grade.html' with rarity_class=entry.rarity_class pct=entry.rarity_pct unearned=entry.unearned %}
+        </div>
+
+        {% comment %}Provenance stamp: the series' SUBJECT ART, bare.
+
+        Deliberately not components/badge_medallion.html. That component is a precious object designed
+        to be looked at, and shrinking it to stamp size renders all chrome and no art -- at 38px the
+        badge was unreadable mush, which is worse than the 42px row it replaced. It also carries its own
+        in-progress meter, so an unearned plate drew two progress bars.
+
+        The bare subject (art_layers last -- the backdrop plate exists only behind a circle mask) reads
+        at this size, the same finding the plat card's spine produced.{% endcomment %}
+        <div class="ttl-plate__stamp" aria-hidden="true">
+            {% if entry.frame.art_layers %}
+            <img class="ttl-plate__art" src="{{ entry.frame.art_layers|last }}" alt="" loading="lazy" draggable="false">
+            {% elif entry.is_special %}
+            <span class="ttl-plate__spark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ttl-plate__foot">
+        {% if view == 'reach' %}
+        <span class="pp-horizon" role="progressbar" aria-label="Progress toward {{ entry.name }}"
+              aria-valuenow="{{ entry.progress_pct }}" aria-valuemin="0" aria-valuemax="100"
+              style="--horizon-progress: {{ entry.progress_pct }}%;">
+            <span class="pp-horizon__track"><span class="pp-horizon__fill"></span></span>
+        </span>
+        <span class="ttl-plate__cap">
+            {% if entry.stages_total %}<strong class="pp-tally pp-tally--xs">{{ entry.stages_cleared }}</strong> of {{ entry.stages_total }} stages{% else %}{{ entry.progress_pct }}%{% endif %}
+        </span>
+
+        {% elif view == 'yours' %}
+        {% comment %}Both states ship; `.is-worn` on the plate decides which shows (CSS). Equipping only
+        has to toggle that ONE class for the marker and the button to swap, and the previously-worn
+        plate flips back in the same beat.{% endcomment %}
+        <span class="ttl-plate__worn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            Wearing
+        </span>
+        <button type="button" class="ttl-plate__equip" data-ttl-equip data-title-id="{{ entry.title.id }}"
+                data-title-name="{{ entry.name }}">Wear this</button>
+        {% if entry.earned_at %}<span class="ttl-plate__date">{{ entry.earned_at|date:"M j, Y" }}</span>{% endif %}
+
+        {% else %}
+        {% comment %}The raw count, underneath the named grade in the head -- the grade says how rare,
+        this says how many.
+
+        EARNED, not worn. `entry.holders` counts UserTitle rows, and only one of a hunter's titles can
+        be `is_displayed` at a time -- so "wearing" would describe a far smaller population than the
+        number shown, and would make an accurate count read as a wrong one. Wearing is the equip state,
+        and it lives in the `yours` branch above.{% endcomment %}
+        {% if entry.holders %}
+        <span class="ttl-plate__holders"><strong class="pp-tally pp-tally--xs">{{ entry.holders|intcomma }}</strong> earned</span>
+        {% else %}
+        <span class="ttl-plate__holders ttl-plate__holders--none">Nobody has earned this yet</span>
+        {% endif %}
+        {% if entry.held %}
+        <span class="ttl-plate__have">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            Yours
+        </span>
+        {% elif entry.progress_pct %}
+        <span class="ttl-plate__pct pp-tally pp-tally--xs">{{ entry.progress_pct }}%</span>
+        {% endif %}
+        {% endif %}
+    </div>
+</article>

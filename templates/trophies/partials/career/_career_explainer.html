@@ -1,0 +1,239 @@
+{% load job_icons %}
+{% comment %}
+"How your Career works" -- the first-visit teaching as a focused MODAL (the badge howto's
+pattern: auto-opens once, requires dismissing). Gated SERVER-side: data-auto renders only while
+`career_explainer` is absent from the viewer's User.ui_flags, so returning users never get
+auto-popped on any device; dismissing writes the flag through the quick-settings API (with the
+pp-explainer-career-seen localStorage fallback + self-heal when that POST fails).
+
+UNLIKE the badge howto this modal is NOT one-shot-and-gone: badges have a fuller linkable home
+(/badges/how-it-works), so a recall button there would let two copies drift. Career has no
+long-form page -- this modal IS the teaching -- so the summary card carries a .pp-edhint that
+reopens it (data-career-open). One copy, always reachable, no drift.
+
+The dev replay button lives in career.html's EXISTING ceremony dev panel, NOT a second panel
+here: the panel class is fixed to left:12px/bottom:12px, so two instances stack on top of each
+other with the later one eating the earlier one's clicks (the bug that shipped in the first
+cut). This partial must stay panel-free; a guard test scans it for the panel's class name.
+{% endcomment %}
+<div class="pp-detail-modal pp-howto" id="career-howto" {% if show_career_explainer %}data-auto{% endif %} hidden>
+    <div class="pp-detail-modal__scrim" data-career-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="career-howto-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-career-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <h2 class="pp-howto__title" id="career-howto-title">
+                <svg class="pp-howto__title-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+                How your Career works
+            </h2>
+            <p class="pp-forge__lede">Your PlayStation history becomes a career. Three pieces to know:</p>
+
+            <div class="cxp__stack">
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">1</span>
+                    <div>
+                        <div class="cxp__label">25 jobs, five disciplines</div>
+                        <p class="cxp__copy">Each job captures a different niche in gaming, from open worlds to the arcade and everything in between.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">2</span>
+                    <div>
+                        <div class="cxp__label">Contracts</div>
+                        <p class="cxp__copy">Curated sets of games, each assigned jobs based on its genre and theme.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">3</span>
+                    <div>
+                        <div class="cxp__label">Pursuer</div>
+                        <p class="cxp__copy">Complete contracts (finish the games, then claim the contract) to earn XP toward your jobs and your overall Pursuer level.</p>
+                    </div>
+                </div>
+            </div>
+
+            {% comment %} The collage: the three ideas as objects, left to right (real job icons
+            via the inline Lucide tag, the cover-fan classes the badge howto draws its game
+            sets with -- a contract IS a set of games -- and a Pursuer ring). Decorative:
+            captions carry the words, art is aria-hidden. {% endcomment %}
+            <div class="cxp__flow" aria-hidden="true" data-collage>
+                <div class="cxp__cell">
+                    <span class="cxp__jobgrid">
+                        {% job_icon 'swords' 'cxp__jico' %}{% job_icon 'compass' 'cxp__jico' %}{% job_icon 'brain' 'cxp__jico' %}{% job_icon 'wand-sparkles' 'cxp__jico' %}
+                    </span>
+                    <span class="cxp__flowcap">25 jobs</span>
+                </div>
+                <span class="cxp__chev">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                </span>
+                <div class="cxp__cell">
+                    <span class="pp-forge__fan">
+                        <span class="pp-forge__cover"></span>
+                        <span class="pp-forge__cover"></span>
+                        <span class="pp-forge__cover"></span>
+                    </span>
+                    <span class="cxp__flowcap">Complete contracts</span>
+                </div>
+                <span class="cxp__chev">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                </span>
+                <div class="cxp__cell">
+                    <span class="cxp__ring">
+                        <svg viewBox="0 0 48 48">
+                            <circle class="cxp__ring-track" cx="24" cy="24" r="20" pathLength="100"></circle>
+                            <circle class="cxp__ring-arc" cx="24" cy="24" r="20" pathLength="100"></circle>
+                        </svg>
+                        <span class="cxp__ring-lv">Lv</span>
+                    </span>
+                    <span class="cxp__flowcap">Level up</span>
+                </div>
+            </div>
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-career-close>Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('career-howto');
+    if (!modal) { return; }
+    var dialog = modal.querySelector('.pp-detail-modal__dialog');
+    var collage = modal.querySelector('[data-collage]');
+    var SEEN_KEY = 'pp-explainer-career-seen';
+    var lastFocus = null;
+    // Armed = this render carried the auto-open (the server flag was unset). Only an armed
+    // dismissal writes the flag; an edhint reopen on a flagged account closes silently.
+    var armed = modal.hasAttribute('data-auto');
+    var reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+    // The badge forge's arm-then-light restart: default (classless) markup IS the final
+    // state, so no-JS and reduced-motion always see the finished collage. Arming holds the
+    // hidden start states; re-adding is-live after a forced reflow restarts the run on
+    // every open.
+    function restartCollage() {
+        if (!collage) { return; }
+        collage.classList.remove('is-live', 'is-armed');
+        if (reduce) { return; }
+        collage.classList.add('is-armed');
+        void collage.offsetWidth;
+        collage.classList.add('is-live');
+    }
+
+    function flagPost() {
+        if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+        return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+            setting: 'ui_flag', value: 'career_explainer'
+        });
+    }
+    function isEditable(el) {
+        if (!el) { return false; }
+        var t = el.tagName;
+        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+    }
+
+    function open(trigger) {
+        if (!modal.hidden) { return; }
+        lastFocus = trigger || document.activeElement;
+        modal.hidden = false;
+        // Take focus EXCEPT on a silent auto-open while the visitor is typing.
+        if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+        restartCollage();
+    }
+    function close() {
+        if (modal.hidden) { return; }
+        // Dismissed = greeted, durably: the server flag ends the auto-open on every device.
+        // No success toast; on failure the localStorage fallback keeps this device quiet and
+        // the self-heal below retries the write on the next visit. Armed dismissals only:
+        // an edhint reopen on an already-flagged account closes without a write.
+        if (armed) {
+            armed = false;
+            flagPost().catch(function () {
+                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
+            });
+        }
+        modal.classList.add('is-closing');
+        window.setTimeout(function () {
+            modal.hidden = true;
+            modal.classList.remove('is-closing');
+            if (collage) { collage.classList.remove('is-live', 'is-armed'); }
+            if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+        }, 200);
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest) { return; }
+        if (e.target.closest('[data-career-open]')) { e.preventDefault(); open(e.target.closest('[data-career-open]')); return; }
+        {% if explainer_debug %}
+        // Dev-only replay (button lives in the shared ceremony panel), render-gated so the
+        // handler never ships to prod. Replays the OPEN (choreography included); the genuine
+        // auto-open path only runs while the server flag is unset, and a real dismissal
+        // burns that flag durably -- clear `career_explainer` from ui_flags in a shell to
+        // retest the true first visit. The localStorage clear below keeps the device
+        // fallback from muddying that retest.
+        if (e.target.closest('[data-explainer-replay]')) {
+            e.preventDefault();
+            try { localStorage.removeItem(SEEN_KEY); } catch (err) {}
+            open(null);
+            return;
+        }
+        {% endif %}
+        if (!modal.hidden && e.target.closest('[data-career-close]')) { e.preventDefault(); close(); }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (modal.hidden) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key !== 'Tab' || !dialog) { return; }
+        // Minimal focus trap, the badge howto's shape.
+        var f = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])');
+        var list = Array.prototype.filter.call(f, function (el) { return el.offsetParent !== null; });
+        if (!list.length) { return; }
+        var first = list[0], last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    // The on-load choreography gate (audit-caught): the Career page's count-ups, rank
+    // count-down and dossier reveals fire from IntersectionObservers the moment the page
+    // loads -- on the ONE visit the modal auto-opens, they'd all play out behind the scrim.
+    // This script runs before the page's scripts (the include sits at the top of content),
+    // so it publishes the gate synchronously; the page wraps its kick-offs in it. Settled
+    // on close, or immediately when no auto-open will happen.
+    window.ppCareerHowtoPending = false;
+    function settleChoreography() {
+        if (!window.ppCareerHowtoPending) { return; }
+        window.ppCareerHowtoPending = false;
+        document.dispatchEvent(new CustomEvent('career-howto:settled'));
+    }
+    window.ppAfterCareerHowto = function (fn) {
+        if (window.ppCareerHowtoPending) {
+            document.addEventListener('career-howto:settled', function () { fn(); }, { once: true });
+        } else { fn(); }
+    };
+    var _origClose = close;
+    close = function () { _origClose(); settleChoreography(); };
+
+    // First visit (server-gated via data-auto): open once, after paint. The localStorage
+    // fallback suppresses a device whose flag POST failed, and self-heals by retrying the
+    // write once utils.js is up (this inline script runs before end-of-body scripts).
+    if (modal.hasAttribute('data-auto')) {
+        var seen = false;
+        try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch (e) {}
+        if (seen) {
+            document.addEventListener('DOMContentLoaded', function () {
+                flagPost().then(function () { try { localStorage.removeItem(SEEN_KEY); } catch (e) {} }).catch(function () {});
+            });
+        } else {
+            window.ppCareerHowtoPending = true;
+            window.setTimeout(function () {
+                // Typing guard: the skipped auto-open must settle the gate too, or the
+                // page's numbers would wait forever on a modal that never opened.
+                if (isEditable(document.activeElement)) { settleChoreography(); return; }
+                open(null);
+            }, 450);
+        }
+    }
+})();
+</script>

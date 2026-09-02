@@ -6,7 +6,8 @@ cheerful-snacking-wozniak.md):
   1. REACHED  -- detected automatically on sync (`mark_contract_reached` /
      `check_profile_contracts`). Stamps EarnedContract.*_reached_at. Grants NO XP;
      it only makes the reward claimable.
-  2. ACCEPTED -- the user banks the reward (`accept_contract` / `accept_contracts`).
+  2. ACCEPTED -- the user banks the reward (`accept_contracts_bulk`, via `claim` /
+     `accept_contract` / `accept_contracts`).
      ONE accept per Contract grants ALL of its claimable tiers at once (Platinum +
      100% together = full XP, one click), writing the immutable ContractXPGrant ledger
      and bumping the ProfileJobXP cache.
@@ -19,15 +20,18 @@ recomputed from current config). Per-job totals always aggregate in the DB (whal
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum, prefetch_related_objects
 from django.utils import timezone
 
 from trophies.models import (
-    Concept, Contract, ContractXPGrant, EarnedContract, EarnedTrophy, IGDBMatch, ProfileGame,
-    ProfileJobXP, Trophy,
+    Concept, Contract, ContractXPGrant, EarnedContract, EarnedTrophy, IGDBMatch, Job, ProfileGame,
+    ProfileJobXP, ProgressionMilestone, Trophy,
 )
 from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
-from trophies.util_modules.leveling import level_for_xp
+from trophies.util_modules.leveling import (
+    frac_into_level, level_for_xp, next_rank_floor, pursuer_rank_for_level, pursuer_rank_ladder,
+    ranks_crossed, tier_for_level, tier_rank, tiers_crossed,
+)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -71,46 +75,186 @@ def _has_platinum(contract, member_ids):
     return Trophy.objects.filter(game__concept_id__in=concept_ids, trophy_type='platinum').exists()
 
 
+def _has_any_job_xp(profile):
+    """Has this profile ever banked job XP? The first accept from 0 XP is the onboarding claim, so
+    its milestones get `from_first_claim` (the catch-up burst we can group/celebrate later)."""
+    return ProfileJobXP.objects.filter(profile=profile, total_xp__gt=0).exists()
+
+
+def _pursuer_level(profile):
+    """Pursuer Level = sum of every job's level (level-1 floor for untouched jobs), matching
+    job_render.build_profile_jobs' total_level so a logged rank crossing lines up with the display."""
+    n_jobs = Job.objects.count()
+    agg = ProfileJobXP.objects.filter(profile=profile).aggregate(s=Sum('level'), c=Count('id'))
+    return (agg['s'] or 0) + (n_jobs - (agg['c'] or 0))
+
+
+def _log_rank_milestones(profile, old_level, new_level, first_claim):
+    """Log a ProgressionMilestone for each Pursuer rank crossed old -> new (idempotent; no divisions)."""
+    for min_lvl, key, name, _has_div in ranks_crossed(old_level, new_level):
+        ProgressionMilestone.objects.get_or_create(
+            profile=profile, kind=ProgressionMilestone.PURSUER_RANK, key=key, job=None,
+            defaults={'name': name, 'level_at': min_lvl, 'from_first_claim': first_claim},
+        )
+
+
 def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
-                 tier=None, base_t=None, multiplier=None, earned_contract=None):
-    """The SINGLE job-XP grant primitive: write one immutable ledger row + bump the
-    ProfileJobXP cache (re-leveling under the flat curve). Used by contract accepts AND any
-    future source (quests, double-XP events, manual). Keeping all XP flowing through here
-    is what makes ProfileJobXP = Sum(all grants) hold for every source.
+                 tier=None, base_t=None, multiplier=None, earned_contract=None, first_claim=False):
+    """Grant XP for ONE job: a thin wrapper over `grant_job_xp_bulk` called with a list of one.
 
-    Caller owns idempotency + the surrounding transaction. ProfileJobXP is row-locked here
-    because it's shared across all of a profile's grants. Returns the amount (0 if <= 0).
+    The BATCHED version is the primitive, so there is exactly one implementation of "how XP is
+    granted" regardless of how many grants a caller has -- the property the ledger invariant
+    (ProfileJobXP = Sum(all grants)) depends on. Caller owns idempotency + the surrounding
+    transaction. Returns the amount (0 if <= 0).
     """
-    if amount <= 0:
+    return grant_job_xp_bulk(profile, [{
+        'job': job, 'amount': amount, 'source': source, 'source_id': source_id,
+        'tier': tier, 'base_t': base_t, 'multiplier': multiplier,
+        'earned_contract': earned_contract,
+    }], first_claim=first_claim)
+
+
+def grant_job_xp_bulk(profile, grants, *, first_claim=False):
+    """The SINGLE job-XP grant primitive, batched: write the immutable ledger rows + bump each
+    touched ProfileJobXP cache row ONCE (re-leveling under the flat curve). Used by contract
+    accepts AND any future source (quests, double-XP events, manual). Keeping all XP flowing
+    through here is what makes ProfileJobXP = Sum(all grants) hold for every source -- and the
+    single place every job prestige-tier crossing is logged.
+
+    `grants` is an iterable of dicts: {job, amount, source, source_id, tier, base_t, multiplier,
+    earned_contract}. Non-positive amounts are dropped and never reach the ledger.
+
+    WHY BATCHED (2026-09-01): granting one-at-a-time cost ~90 queries per contract, so once the
+    contract catalogue grew past a few hundred, a hunter banking their back catalogue blew the
+    30s request timeout. Nothing about the model had to change -- the real work is per JOB
+    (<= 25 rows), not per grant:
+      - ledger rows go out in one bulk_create instead of N inserts;
+      - each ProfileJobXP row is locked, summed and written ONCE, not once per grant;
+      - `recompute_career_standing` is a recompute-from-scratch, so running it once at the end
+        is exactly equivalent to running it N times (it was the single biggest cost);
+      - level milestones stay correct because `tiers_crossed(old, new)` returns EVERY tier in
+        the span, so a job jumping 1 -> 40 in one claim logs the same rows it would have logged
+        crossing them one grant at a time.
+    Caller owns idempotency + the surrounding transaction. Returns the total XP granted.
+    """
+    rows, totals, job_by_id = [], {}, {}
+    for g in grants:
+        amount = g.get('amount') or 0
+        if amount <= 0:
+            continue
+        job = g['job']
+        multiplier = g.get('multiplier')
+        if multiplier is None:
+            multiplier = Decimal('1.00')
+        rows.append(ContractXPGrant(
+            profile=profile, job=job, amount=amount, multiplier=multiplier,
+            source=g.get('source', 'contract'), source_id=g.get('source_id'),
+            earned_contract=g.get('earned_contract'), tier=g.get('tier'),
+            base_t=g.get('base_t'),
+        ))
+        totals[job.pk] = totals.get(job.pk, 0) + amount
+        job_by_id[job.pk] = job
+    if not rows:
         return 0
-    if multiplier is None:
-        multiplier = Decimal('1.00')
-    ContractXPGrant.objects.create(
-        profile=profile, job=job, amount=amount, multiplier=multiplier,
-        source=source, source_id=source_id,
-        earned_contract=earned_contract, tier=tier, base_t=base_t,
+
+    ContractXPGrant.objects.bulk_create(rows, batch_size=1000)
+
+    # Stamped at BIRTH. Both mirrors default empty/False, and the propagation signal fires only when the
+    # Profile value CHANGES -- so a row created after a hunter's last country move (or after they linked)
+    # would keep the defaults forever. For `country_code` that quietly dropped them from the
+    # country-sliced job board; for `is_linked` it would drop them from the job board entirely.
+    have = set(ProfileJobXP.objects.filter(
+        profile=profile, job_id__in=totals.keys()).values_list('job_id', flat=True))
+    missing = [
+        ProfileJobXP(
+            profile=profile, job=job_by_id[jid],
+            country_code=getattr(profile, 'country_code', '') or '',
+            is_linked=bool(getattr(profile, 'is_linked', False)),
+        )
+        for jid in totals if jid not in have
+    ]
+    if missing:
+        ProfileJobXP.objects.bulk_create(missing, ignore_conflicts=True)   # race-safe create
+
+    now = timezone.now()
+    # ORDER BY is load-bearing, not tidiness: locking the profile's job rows in a deterministic
+    # order is what makes two concurrent claims for the same hunter (a double-clicked Claim All,
+    # or a sync granting XP alongside) queue instead of deadlock. The per-grant version got this
+    # for free by locking one row at a time in Job.Meta.ordering; a batched `IN` lock can
+    # otherwise be acquired in whatever order the planner picks.
+    pjx_rows = list(ProfileJobXP.objects.select_for_update()
+                    .filter(profile=profile, job_id__in=totals.keys())
+                    .order_by('job_id'))
+    if len(pjx_rows) != len(totals):
+        # Unreachable on Postgres/READ COMMITTED (the ensure above is race-safe), but if it ever
+        # happens the ledger rows are already written, so a missing cache row would silently
+        # under-credit the hunter and break ProfileJobXP = Sum(all grants) with no signal. Fail
+        # loudly instead: the surrounding atomic block rolls the whole claim back.
+        missing_ids = set(totals) - {p.job_id for p in pjx_rows}
+        raise RuntimeError(
+            f'grant_job_xp_bulk: no ProfileJobXP row for {sorted(missing_ids)} '
+            f'(profile={profile.pk}); refusing to bank XP the cache cannot record.'
+        )
+    crossings = []
+    for pjx in pjx_rows:
+        old_level = level_for_xp(pjx.total_xp)   # logical level before this claim (floor 1; never Initiate)
+        pjx.total_xp += totals[pjx.job_id]
+        pjx.level = level_for_xp(pjx.total_xp)
+        pjx.updated_at = now                     # bulk_update does not fire auto_now
+        if pjx.level > old_level:
+            crossings.append((job_by_id[pjx.job_id], old_level, pjx.level))
+    ProfileJobXP.objects.bulk_update(
+        pjx_rows, ['total_xp', 'level', 'updated_at'], batch_size=100)
+    # Milestones in ONE write. `uniq_milestone_job` (profile, kind, key, job) makes
+    # ignore_conflicts exactly the get_or_create semantics `_log_job_tier_milestones` uses --
+    # existing rows are left untouched, so a re-claim adds nothing. Doing it per tier was the
+    # last thing that grew with the size of the claim (more contracts -> more levels -> more
+    # crossings), though it was always bounded by tiers x jobs rather than by contracts.
+    milestone_rows = [
+        ProgressionMilestone(
+            profile=profile, kind=ProgressionMilestone.JOB_TIER, key=key, job=job,
+            name=name, level_at=min_lvl, from_first_claim=first_claim,
+        )
+        for job, old_level, new_level in crossings
+        for min_lvl, key, name in tiers_crossed(old_level, new_level)
+    ]
+    if milestone_rows:
+        ProgressionMilestone.objects.bulk_create(milestone_rows, ignore_conflicts=True)
+
+    # The Career XP board's roll-up rides THIS primitive, not the ledger-rebuild function, because this
+    # is the seam every grant actually passes through -- contract accepts, quests, events, manual awards.
+    # Hooking it to `recompute_profile_job_xp` instead (as it first was) meant the board only moved when a
+    # management command was run by hand: a live accept updated ProfileJobXP and left the standing frozen,
+    # so the leaderboard silently stopped at whatever the last backfill produced.
+    #
+    # Recomputed from scratch rather than incremented: it is a Sum over a profile's ~24 job rows, an
+    # accept is a rare user-initiated action rather than a hot path, and a re-derived total cannot drift
+    # the way a running one can.
+    recompute_career_standing(profile)
+    return sum(totals.values())
+
+
+def contract_by_concept_map(concept_ids, *, live_only=True, prefetch_jobs=True):
+    """Batch resolve concept_id -> Contract via the igdb key (ANCHORED + TRUSTED concepts whose
+    raw igdb_id keys a Contract). Two bounded queries instead of a per-concept lookup -- the
+    replacement for the old `ContractMembership.objects.filter(concept_id__in=...)` pattern in
+    the board/views. Concepts with no matching contract are simply absent from the map."""
+    rows = (
+        Concept.objects
+        .filter(id__in=list(concept_ids), anchor_migration_completed_at__isnull=False,
+                igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES)
+        .values_list('id', 'igdb_match__igdb_id')
     )
-    ProfileJobXP.objects.get_or_create(profile=profile, job=job)  # race-safe create
-    pjx = ProfileJobXP.objects.select_for_update().get(profile=profile, job=job)
-    pjx.total_xp += amount
-    pjx.level = level_for_xp(pjx.total_xp)
-    pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
-    return amount
-
-
-def home_contract_for_concept(concept):
-    """Resolve a Concept's Contract: the Contract keyed on its raw IGDB id (only for ANCHORED
-    concepts), then a bundle satisfier (episodic) as a fallback."""
-    if concept.anchor_migration_completed_at is not None:
-        try:
-            igdb_id = concept.igdb_match.igdb_id
-        except IGDBMatch.DoesNotExist:
-            igdb_id = None
-        if igdb_id is not None:
-            hit = Contract.objects.filter(igdb_id=igdb_id).first()
-            if hit:
-                return hit
-    return Contract.objects.filter(bundles__concepts=concept).first()
+    concept_igdb = {cid: gid for cid, gid in rows if gid is not None}
+    if not concept_igdb:
+        return {}
+    cq = Contract.objects.filter(igdb_id__in=set(concept_igdb.values()))
+    if live_only:
+        cq = cq.filter(is_live=True)
+    if prefetch_jobs:
+        cq = cq.prefetch_related('jobs')
+    by_igdb = {c.igdb_id: c for c in cq}
+    return {cid: by_igdb[gid] for cid, gid in concept_igdb.items() if gid in by_igdb}
 
 
 def _detect_tiers(profile, contract, member_ids):
@@ -126,9 +270,19 @@ def _detect_tiers(profile, contract, member_ids):
     """
     platinum_reached = full_reached = False
     if member_ids:
-        platinum_reached = EarnedTrophy.objects.filter(
-            profile=profile, earned=True,
-            trophy__trophy_type='platinum', trophy__game__concept_id__in=member_ids,
+        # SMALL SIDE FIRST, and this is whale-safety not micro-optimisation. Joining
+        # EarnedTrophy -> Trophy -> Game inside the EXISTS lets the planner start from
+        # `(profile, earned)` and apply the join as a filter -- which on a 250,000-trophy hunter with
+        # NO match scans every one of those rows, once per contract, and `LIMIT 1` actively biases it
+        # toward that fast-start shape. Resolving the platinum trophy ids first is catalogue-bounded
+        # (a handful of rows) and turns the check into an unambiguous seek on the
+        # (profile_id, trophy_id) index. Same pattern build_catalog uses for default_tg_ids.
+        platinum_ids = list(
+            Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum')
+            .values_list('id', flat=True)
+        )
+        platinum_reached = bool(platinum_ids) and EarnedTrophy.objects.filter(
+            profile=profile, earned=True, trophy_id__in=platinum_ids,
         ).exists()
         full_reached = ProfileGame.objects.filter(
             profile=profile, game__concept_id__in=member_ids, progress=100,
@@ -137,7 +291,11 @@ def _detect_tiers(profile, contract, member_ids):
         for bundle in contract.bundles.all():
             if platinum_reached and full_reached:
                 break
-            bundle_ids = set(bundle.concepts.values_list('id', flat=True))
+            # `bundle.concepts.all()`, not values_list: callers prefetch `bundles__concepts`,
+            # and values_list on a related manager issues a fresh query that silently bypasses
+            # it. This runs once per CANDIDATE per contract, so it is the hot instance of the
+            # same bug process_contracts._candidate_profiles already fixed on the cold one.
+            bundle_ids = {c.id for c in bundle.concepts.all()}
             if not bundle_ids:
                 continue
             if not full_reached:
@@ -215,56 +373,141 @@ def check_profile_contracts(profile, concepts=None):
 
 # --- gate 2: acceptance (user action) -------------------------------------
 
-@transaction.atomic
-def accept_contract(profile, contract):
-    """User action: bank ALL of this Contract's claimable tiers at once (Platinum + 100%
-    together when both are reached). Writes the ledger + bumps the cache. Idempotent --
-    already-accepted tiers are skipped. Returns total XP granted."""
-    ec = EarnedContract.objects.select_for_update().filter(profile=profile, contract=contract).first()
-    if ec is None:
-        return 0
-    jobs = list(contract.jobs.all())
-    if not jobs:
-        return 0
+_ACCEPTED_FIELD = {'platinum': 'platinum_accepted_at', 'full': 'full_accepted_at'}
 
-    has_platinum = ec.has_platinum  # frozen at first reach (see model + audit B1)
+
+def _pending_tiers(ec, contract):
+    """(tiers, t, multiplier) for an EarnedContract, where tiers is the reached-but-unaccepted
+    [(tier, tier_total_xp), ...].
+
+    The pure XP computation shared by accept_contract (which then grants + stamps the accepted
+    fields) and claimable_summary (which totals + previews) -- no side effects, no queries. The
+    100% tier is (grand total - platinum tier), NOT its fraction rounded independently, so
+    platinum + full always sum to exactly the grand total even at a .5 rounding boundary. Games
+    with no platinum pay the FULL T at 100%. has_platinum is the value frozen on the
+    EarnedContract at first reach (see model + audit B1). Returns the `t` + `multiplier` it used
+    so the caller stamps the grant ledger with the SAME multiplier that sized the tiers -- the two
+    must not diverge (a future dynamic `_active_multiplier` could otherwise size a tier under one
+    value and record another across an event boundary)."""
     t = contract.xp_total_override or CONTRACT_XP_TOTAL
     multiplier = _active_multiplier()
-    now = timezone.now()
-
-    # Compute the 100% tier as (grand total - platinum tier) rather than rounding its
-    # fraction independently, so platinum + full always sum to exactly the grand total
-    # even when xp_total_override or the multiplier produce a .5 rounding boundary.
     grand_total = _tier_total(1.0, t, multiplier)
-    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if has_platinum else 0
-
-    tiers = []  # (tier, tier_total, accepted_field)
-    if has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
-        tiers.append(('platinum', platinum_total, 'platinum_accepted_at'))
+    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if ec.has_platinum else 0
+    tiers = []
+    if ec.has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
+        tiers.append(('platinum', platinum_total))
     if ec.full_reached_at and ec.full_accepted_at is None:
-        # No-platinum games pay the full T at 100%; otherwise the remainder bonus.
-        full_total = (grand_total - platinum_total) if has_platinum else grand_total
-        tiers.append(('full', full_total, 'full_accepted_at'))
-    if not tiers:
-        return 0
+        tiers.append(('full', (grand_total - platinum_total) if ec.has_platinum else grand_total))
+    return tiers, t, multiplier
 
-    # All grants go through the shared primitive (ledger row + row-locked cache bump),
-    # so contracts/quests/events stay consistent and ProfileJobXP = Sum(all grants).
-    granted = 0
-    for tier, tier_total, field in tiers:
-        for job, amount in zip(jobs, _split(tier_total, len(jobs))):
-            granted += grant_job_xp(
-                profile, job, amount, source='contract', tier=tier,
-                base_t=t, multiplier=multiplier, earned_contract=ec,
-            )
-        setattr(ec, field, now)
 
-    ec.save(update_fields=['platinum_accepted_at', 'full_accepted_at'])
+def accept_contract(profile, contract, *, first_claim=None):
+    """User action: bank ALL of this Contract's claimable tiers at once (Platinum + 100%
+    together when both are reached). Writes the ledger + bumps the cache. Idempotent --
+    already-accepted tiers are skipped. Returns total XP granted.
+
+    A thin wrapper over `accept_contracts_bulk` with one contract, so single and bulk accepts
+    share one implementation of the accept rules."""
+    _accepted, granted = accept_contracts_bulk(profile, [contract], first_claim=first_claim)
     return granted
 
 
+@transaction.atomic
+def accept_contracts_bulk(profile, contracts, *, first_claim=None):
+    """Bank every claimable tier across MANY contracts in ONE pass. Returns
+    (accepted_slugs, total_xp).
+
+    The claim-all path: a hunter whose back catalogue just became claimable can hold hundreds
+    of contracts, and accepting them one at a time meant N transactions x ~90 queries each.
+    Here the whole batch is planned in Python (`_pending_tiers` is pure -- no queries, no side
+    effects), then handed to `grant_job_xp_bulk` as a single set of grants, so the cost is
+    driven by the number of JOBS touched (<= 25) rather than the number of contracts.
+
+    Semantics preserved exactly from the per-contract accept:
+      - already-accepted tiers are skipped (idempotent); a contract with nothing pending is
+        simply absent from the result;
+      - a contract is only reported accepted when it actually granted XP (> 0), though its
+        stamps are still written -- matching the old behaviour where a zero-XP tier stamped
+        the EarnedContract but did not count as accepted;
+      - `first_claim` is derived ONCE for the batch, so an onboarding claim-all flags every
+        milestone it creates consistently;
+      - Pursuer-rank crossings are logged once around the whole batch: `ranks_crossed` returns
+        every rank in the span, so a multi-rank jump logs the same rows as the incremental path.
+    One transaction for the batch, as before: `claim` was ALREADY atomic, so the old
+    per-contract accepts were nested savepoints inside one transaction rather than N
+    transactions -- what changes is the query cost, not the all-or-nothing semantics."""
+    contracts = list(contracts)
+    if not contracts:
+        return [], 0
+    # Fill the jobs cache for the whole batch in ONE query. Without this the planning loop's
+    # `contract.jobs.all()` is a query per contract -- the last thing that still scaled with
+    # contract count. Populates the objects the caller handed us (already-prefetched batches,
+    # e.g. from claimable_contracts, are left alone).
+    prefetch_related_objects(
+        [c for c in contracts if 'jobs' not in getattr(c, '_prefetched_objects_cache', {})],
+        'jobs',
+    )
+    # Ordered for the same reason as the job rows below: one statement now takes every
+    # EarnedContract lock, so without an explicit order two overlapping claims could acquire
+    # them in different orders. (`claim()` still pk-sorts its input, but that no longer governs
+    # lock order on its own.)
+    ecs = {
+        ec.contract_id: ec
+        for ec in EarnedContract.objects.select_for_update()
+        .filter(profile=profile, contract__in=contracts)
+        .order_by('contract_id')
+    }
+    if not ecs:
+        return [], 0
+
+    if first_claim is None:
+        first_claim = not _has_any_job_xp(profile)
+    old_pursuer_level = _pursuer_level(profile)
+    now = timezone.now()
+
+    grants, accepted, touched = [], [], []
+    for contract in contracts:
+        ec = ecs.get(contract.pk)
+        if ec is None:
+            continue
+        jobs = list(contract.jobs.all())
+        if not jobs:
+            continue
+        tiers, t, multiplier = _pending_tiers(ec, contract)   # reached-but-unaccepted + T/mult used
+        if not tiers:
+            continue
+        contract_total = 0
+        for tier, tier_total in tiers:
+            for job, amount in zip(jobs, _split(tier_total, len(jobs))):
+                grants.append({
+                    'job': job, 'amount': amount, 'source': 'contract', 'tier': tier,
+                    'base_t': t, 'multiplier': multiplier, 'earned_contract': ec,
+                })
+                if amount > 0:
+                    contract_total += amount
+            setattr(ec, _ACCEPTED_FIELD[tier], now)
+        touched.append(ec)
+        if contract_total > 0:
+            accepted.append(contract.slug)
+
+    if not grants:
+        return [], 0
+
+    # One shared primitive for the whole batch (ledger rows + per-job cache bump + job-tier
+    # milestones), so contracts/quests/events stay consistent and ProfileJobXP = Sum(all grants).
+    granted = grant_job_xp_bulk(profile, grants, first_claim=first_claim)
+    EarnedContract.objects.bulk_update(
+        touched, ['platinum_accepted_at', 'full_accepted_at'], batch_size=500)
+    _log_rank_milestones(profile, old_pursuer_level, _pursuer_level(profile), first_claim)
+    return accepted, granted
+
+
 def claimable_contracts(profile):
-    """EarnedContracts with a reached-but-unaccepted tier (the pending rewards)."""
+    """EarnedContracts with a reached-but-unaccepted tier (the pending rewards).
+
+    Jobs are prefetched because every consumer walks them (the claim payload's per-job deltas,
+    and the accept's XP split); without it a claim-all paid one query PER contract just to read
+    the job list."""
     return (
         EarnedContract.objects.filter(profile=profile)
         .filter(
@@ -272,18 +515,155 @@ def claimable_contracts(profile):
             | Q(full_reached_at__isnull=False, full_accepted_at__isnull=True)
         )
         .select_related('contract')
+        .prefetch_related('contract__jobs')
     )
+
+
+def claimable_summary(profile, peek=3):
+    """Cheap Home-glance summary of a profile's pending Contract rewards: the count, the total XP
+    waiting, a highest-XP-first peek, and how many more sit beyond the peek. Bounded by the curated
+    Contract catalog (dozens at most, never trophy-scale), so the per-row loop is whale-safe -- it
+    costs one select_related query + Decimal arithmetic, no per-row queries (_pending_tiers is pure
+    and `contract` is already joined)."""
+    rows = []
+    total = 0
+    for ec in claimable_contracts(profile):
+        tiers, _t, _mult = _pending_tiers(ec, ec.contract)
+        xp = sum(amount for _tier, amount in tiers)
+        if xp <= 0:
+            continue
+        total += xp
+        rows.append({'name': ec.contract.name, 'xp': xp})
+    rows.sort(key=lambda r: -r['xp'])
+    return {
+        'count': len(rows),
+        'total_xp': total,
+        'items': rows[:peek],
+        'more': max(0, len(rows) - peek),
+    }
 
 
 @transaction.atomic
 def accept_contracts(profile, contracts=None):
     """Bulk accept (QoL): accept every claimable Contract (or a given list) in ONE
-    transaction (all-or-nothing). Contracts are locked in pk order to avoid deadlocks
-    across overlapping bulk accepts. Returns total XP."""
+    transaction (all-or-nothing). Returns total XP.
+
+    Delegates to `accept_contracts_bulk`, which is the batched implementation -- looping
+    `accept_contract` here would have opened a savepoint AND paid the full per-contract query
+    cost for every contract, which is exactly what the batching exists to avoid. Deterministic
+    lock order lives there too (contract_id, then job_id)."""
     if contracts is None:
         contracts = [ec.contract for ec in claimable_contracts(profile)]
+    # first_claim is derived ONCE inside the bulk accept (prior XP == 0), so every contract in
+    # an onboarding claim-all flags its milestones the same way.
+    _accepted, granted = accept_contracts_bulk(profile, contracts)
+    return granted
+
+
+# --- claim (the ceremony-facing accept) ------------------------------------
+
+def _levels_snapshot(profile, job_ids):
+    """{job_id: (logical level, total_xp)} for the given (bounded) jobs; (1, 0) floor for untouched."""
+    snap = {jid: (1, 0) for jid in job_ids}
+    for pjx in ProfileJobXP.objects.filter(profile=profile, job_id__in=job_ids).only('job_id', 'total_xp'):
+        snap[pjx.job_id] = (level_for_xp(pjx.total_xp), pjx.total_xp)
+    return snap
+
+
+def _empty_claim():
+    """A fresh, full-shape empty payload (same keys as the success path so callers see one shape).
+    A function, not a module constant, so each caller gets its own `accepted`/`jobs` lists."""
+    return {'xp': 0, 'accepted': [], 'first_claim': False, 'rank_now': '', 'jobs': [], 'pursuer': None}
+
+
+@transaction.atomic
+def claim(profile, *, contract=None, all_claimable=False):
+    """The ceremony-facing accept: bank the claimable XP (one Contract or every claimable one) and
+    return the full 'what just happened' payload that drives the claim animation -- per-job level
+    deltas + the tier/rank crossings, derived from before/after snapshots. Wraps the existing
+    accept_contract (idempotent, ledger-backed, milestone-logging); adds no new writes of its own.
+
+    The payload:
+        {xp, accepted:[slug], first_claim, rank_now,
+         jobs:[{slug, name, disc, icon, xp, from_level, to_level, from_frac, to_frac, tier,
+                tiers:[{key,name,level,rank}]}],   # every job the claim gave XP to (bar fills; may or may not level)
+         pursuer:{from_level, to_level, from_label, to_label, from_key, to_key, rank_up, div_up,
+                  ranks:[{key,name}], ladder, ladder_pre}}
+    All work is bounded to the claimed Contracts' jobs (never the user's library)."""
+    if all_claimable:
+        contracts = [ec.contract for ec in claimable_contracts(profile)]
+    elif contract is not None:
+        contracts = [contract]
+    else:
+        contracts = []
     contracts = sorted(contracts, key=lambda c: c.pk)
-    return sum(accept_contract(profile, c) for c in contracts)
+    if not contracts:
+        return _empty_claim()
+
+    job_by_id = {j.pk: j for c in contracts for j in c.jobs.all()}   # Job PK is its slug
+    first_claim = not _has_any_job_xp(profile)
+    pre = _levels_snapshot(profile, job_by_id.keys())
+    pre_pursuer = _pursuer_level(profile)
+
+    # ONE batched accept for the whole claim (see accept_contracts_bulk): the cost scales with
+    # the jobs touched, not the contracts claimed, so a hunter banking a back catalogue of
+    # hundreds is the same handful of queries as banking one.
+    accepted, total = accept_contracts_bulk(profile, contracts, first_claim=first_claim)
+    if not accepted:
+        return _empty_claim()
+
+    post = _levels_snapshot(profile, job_by_id.keys())
+    post_pursuer = _pursuer_level(profile)
+    pre_rank = pursuer_rank_for_level(pre_pursuer)
+    post_rank = pursuer_rank_for_level(post_pursuer)
+    # On a rank-up, the footer first fills the OLD rank (from_rank) to 100% -- completed to its top --
+    # BEFORE the hand-off, then swaps to the new rank on return. Basing it on the FROM rank (not the rank
+    # just below the new one) keeps it consistent with the hand-off's from->to on multi-rank skips.
+    # None for a division step.
+    ladder_pre = None
+    if post_rank['key'] != pre_rank['key']:
+        floor = next_rank_floor(pre_rank['key'])
+        if floor is not None:
+            ladder_pre = pursuer_rank_ladder(floor - 1)
+            ladder_pre['fill'] = 100
+
+    jobs = []
+    for jid, job in job_by_id.items():
+        (frm_lvl, frm_xp), (to_lvl, to_xp) = pre[jid], post[jid]
+        if to_xp <= frm_xp:
+            continue   # this job received no XP from the claimed Contracts
+        jobs.append({
+            'slug': job.slug, 'name': job.name, 'disc': job.discipline, 'icon': job.icon,
+            'xp': to_xp - frm_xp,                      # XP this claim gave the job (the "+N" on its tile)
+            'from_level': frm_lvl, 'to_level': to_lvl,
+            'from_frac': frac_into_level(frm_xp),      # where the bar starts / lands within each level band
+            'to_frac': frac_into_level(to_xp),
+            'tier': tier_for_level(to_lvl)['name'],    # the job's RESTING tier (the at-rest subtitle)
+            # `level` = the tier's min_level (blooms exactly when the bar ticks past it); `rank` =
+            # its ladder position (Apprentice 1 .. Legend 7), so the bloom escalates toward Legend.
+            'tiers': [{'key': k, 'name': n, 'level': lvl, 'rank': tier_rank(k)}
+                      for lvl, k, n in tiers_crossed(frm_lvl, to_lvl)],
+        })
+    jobs.sort(key=lambda j: (j['to_level'] - j['from_level'], j['xp']), reverse=True)   # biggest promotions, then XP
+    return {
+        'xp': total,
+        'accepted': accepted,
+        'first_claim': first_claim,
+        'rank_now': post_rank['label'],
+        'jobs': jobs,
+        'pursuer': {
+            'from_level': pre_pursuer, 'to_level': post_pursuer,
+            'from_label': pre_rank['label'], 'to_label': post_rank['label'],
+            'from_key': pre_rank['key'], 'to_key': post_rank['key'],   # for the hand-off screen's per-rank colours
+            # Two finale intensities: rank_up = crossed into a new NAMED rank (heavy); div_up = climbed
+            # a division within the same rank (lighter). Both false = no rank movement, no finale.
+            'rank_up': post_rank['key'] != pre_rank['key'],
+            'div_up': post_rank['key'] == pre_rank['key'] and post_rank['division'] != pre_rank['division'],
+            'ranks': [{'key': k, 'name': n} for _lvl, k, n, _hd in ranks_crossed(pre_pursuer, post_pursuer)],
+            'ladder': pursuer_rank_ladder(post_pursuer),   # the new-rank ladder (footer after a rank-up / all else)
+            'ladder_pre': ladder_pre,                      # rank-up only: old rank filled 100% (footer pre hand-off)
+        },
+    }
 
 
 # --- cache repair ----------------------------------------------------------
@@ -298,7 +678,11 @@ def recompute_profile_job_xp(profile):
     existing = {pjx.job_id: pjx for pjx in ProfileJobXP.objects.filter(profile=profile)}
 
     for job_id, total in sums.items():
-        pjx = existing.get(job_id) or ProfileJobXP(profile=profile, job_id=job_id)
+        pjx = existing.get(job_id) or ProfileJobXP(
+            profile=profile, job_id=job_id,
+            country_code=getattr(profile, 'country_code', '') or '',
+            is_linked=bool(getattr(profile, 'is_linked', False)),
+        )
         pjx.total_xp = total or 0
         pjx.level = level_for_xp(pjx.total_xp)
         pjx.save()
@@ -310,4 +694,43 @@ def recompute_profile_job_xp(profile):
             pjx.level = floor_level
             pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
 
+    recompute_career_standing(profile)
     return sums
+
+
+def recompute_career_standing(profile):
+    """Roll the per-job cache up into ProfileCareerStanding -- the Career XP board's sort key and Pursuer
+    Level.
+
+    Rides this seam rather than getting its own trigger because the rows it sums are written immediately
+    above: anything that changes a profile's job XP comes through here, so the roll-up cannot drift from
+    its source. Both figures are recompute-from-scratch (Sum over the profile's ~24 rows), so a re-run is
+    idempotent and a missed one is self-healing on the next grant.
+
+    Without it, a global Career XP board would aggregate ~24 rows per user across the whole population on
+    every read; with it, the board is an indexed ORDER BY.
+    """
+    from django.db.models import Sum
+    from trophies.models import ProfileCareerStanding, ProfileJobXP
+
+    totals = ProfileJobXP.objects.filter(profile=profile).aggregate(
+        xp=Sum('total_xp'), lvl=Sum('level'),
+    )
+    country = getattr(profile, 'country_code', '') or ''
+    is_linked = bool(getattr(profile, 'is_linked', False))
+    ProfileCareerStanding.objects.update_or_create(
+        profile=profile,
+        defaults={
+            'total_xp': totals['xp'] or 0,
+            'pursuer_level': totals['lvl'] or 0,
+            'country_code': country,
+            'is_linked': is_linked,
+        },
+    )
+    # The job rows carry the same mirror and are NOT written by this function, so they are refreshed here
+    # rather than left to the propagation signal -- which only fires on CHANGE, and so would never reach a
+    # row created after the last time either value moved. See the birth-stamped bulk_create in
+    # `grant_job_xp_bulk`.
+    ProfileJobXP.objects.filter(profile=profile).exclude(
+        country_code=country, is_linked=is_linked,
+    ).update(country_code=country, is_linked=is_linked)

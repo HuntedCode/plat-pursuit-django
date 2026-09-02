@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}How badges work{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% comment %} The badge teaching, at a real address, built as a TUTORIAL rather than a spec sheet.
+
+The artifact leads. `visual-identity.md` says custom badge artwork is the moat and "if the chrome ever
+fights the art, the chrome loses", so a page teaching the badge system that showed no badges was teaching
+around its own subject. Every medallion here is a REAL live badge composed by `badge_forge_medallions()`,
+shared verbatim with the browse page's first-run modal so the two cannot show different art, and every
+one of them is TAPPABLE into the same quick-peek the rest of the site uses.
+
+LANGUAGE NOTE (2026-08): the forging / minting / striking vocabulary is retired from user-facing copy.
+It belonged to an older badge system we moved off, and it now describes something the product does not
+do. The medallions still read as real, physical, collectible OBJECTS, which is the part that was always
+true. Internal names (`.pp-forge__*`, `badge_forge_medallions`, `data-forge`) are untouched on purpose:
+renaming them reaches across the modal and its choreography for no reader-visible gain. If that internal
+vocabulary is ever retired too, `visual-identity.md`'s "fabrication layer" section is the doc to update
+with it, since it still declares that language canon.
+
+Reuse, not re-roll: `.pp-med` medallions, `.pp-forge__fan` / `__plats` / `__holo` art, the shared
+quick-peek (`PlatPursuit.Medallion.detailModal`), `.pp-tally`, `.pp-head-cascade`, `staggerReveal`.
+{% endcomment %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-2 max-w-4xl pp-hiw">
+
+    {% comment %} The view sets breadcrumb (base.html marks it up as BreadcrumbList); the visible
+    trail must exist too or the structured data describes chrome the page doesn't have. {% endcomment %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% comment %} HERO. The mastered medallion is the thing this page is persuading you to want, so it
+    opens rather than illustrating a paragraph further down. {% endcomment %}
+    <section class="pp-hiw__hero pp-head-cascade">
+        <div class="pp-hiw__hero-art">
+            {% comment %} Tappable into the real inspection modal. This is the badge system's best
+            feature and a tutorial that only described it would be underselling it, so the affordance is
+            explicit rather than discoverable. Gated on `source_id`: on an empty catalog the medallions
+            are plate-only illustrations with no badge behind them, and a button that opens nothing is
+            worse than no button. {% endcomment %}
+            <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
+                  {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
+                {% if forge_meds.source_id %}
+                <span class="pp-hiw__poke" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V6a2 2 0 1 1 4 0v5"/><path d="M13 11V4.5a2 2 0 1 1 4 0V13"/><path d="M17 12.5V9a2 2 0 1 1 4 0v7a6 6 0 0 1-6 6h-2a7 7 0 0 1-7-7v-4a2 2 0 1 1 4 0"/></svg>
+                    Tap to inspect
+                </span>
+                {% endif %}
+            </span>
+        </div>
+        <div class="pp-hiw__hero-copy">
+            <p class="pp-hiw__eyebrow">The badge system</p>
+            <h1 class="pp-hiw__h1">Platinum the set.<br>Earn the medallion.</h1>
+            <p class="pp-hiw__lede">
+                Every badge is a themed set of PlayStation games: a franchise, a studio, a collection
+                someone curated. Clear the set and the medallion is yours, with the series' own artwork
+                on its face.
+            </p>
+
+            {% comment %} Live catalogue figures. Gated on `series` so a cold heartbeat cache omits the
+            strip rather than printing zeroes at a first-time reader. {% endcomment %}
+            {% if catalog_stats.series %}
+            <div class="pp-hiw__tally">
+                <span class="pp-hiw__t">
+                    <b class="pp-tally" data-countup="{{ catalog_stats.series }}">{{ catalog_stats.series|intcomma }}</b>
+                    <span class="pp-hiw__t-lbl">series to chase</span>
+                </span>
+                {% if catalog_stats.stages %}
+                <span class="pp-hiw__t">
+                    <b class="pp-tally" data-countup="{{ catalog_stats.stages }}">{{ catalog_stats.stages|intcomma }}</b>
+                    <span class="pp-hiw__t-lbl">games across them</span>
+                </span>
+                {% endif %}
+                {% if catalog_stats.earnable_xp %}
+                <span class="pp-hiw__t">
+                    <b class="pp-tally" data-countup="{{ catalog_stats.earnable_xp }}">{{ catalog_stats.earnable_xp|intcomma }}</b>
+                    <span class="pp-hiw__t-lbl">Points on the table</span>
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} THE JOURNEY. Four beats, each with its own art, revealed as you scroll.
+
+    Wording checked against `badge_engine.py`, not against the modal's shorter captions. The engine's two
+    bars are `base_complete` (the game's DEFAULT trophy group at 100%, which is the platinum on a plat
+    game and the main list on one without) and `full_complete` (the whole game at 100%, DLC included),
+    and those are beats 2 and 4. "Platinum every game" alone leaves a reader holding a non-plat game
+    unable to tell whether it counts. {% endcomment %}
+    <ol class="pp-hiw__steps" data-hiw-steps>
+
+        <li class="pp-hiw__step">
+            <span class="pp-hiw__art">
+                <span class="pp-forge__fan" aria-hidden="true">
+                    <span class="pp-forge__cover"></span>
+                    <span class="pp-forge__cover"></span>
+                    <span class="pp-forge__cover"></span>
+                </span>
+            </span>
+            <div class="pp-hiw__body">
+                <span class="pp-hiw__n" aria-hidden="true">01</span>
+                <h2 class="pp-hiw__cap">Pick a set</h2>
+                <p class="pp-hiw__desc">
+                    A franchise you grew up with, a studio you trust, or a collection someone curated.
+                    Every badge is one of these, and the whole catalogue is browsable before you commit.
+                </p>
+            </div>
+        </li>
+
+        <li class="pp-hiw__step">
+            <span class="pp-hiw__art">
+                <span class="pp-forge__plats" aria-hidden="true">
+                    <img src="{% static 'images/plat.png' %}" alt="" loading="lazy" decoding="async" />
+                    <img src="{% static 'images/plat.png' %}" alt="" loading="lazy" decoding="async" />
+                    <img src="{% static 'images/plat.png' %}" alt="" loading="lazy" decoding="async" />
+                </span>
+            </span>
+            <div class="pp-hiw__body">
+                <span class="pp-hiw__n" aria-hidden="true">02</span>
+                <h2 class="pp-hiw__cap">Earn the platinum in each</h2>
+                <p class="pp-hiw__desc">
+                    Earn the platinum in every game in the set. A game with no platinum counts the moment
+                    its base trophy list hits 100%, so nothing in a set is unwinnable.
+                </p>
+            </div>
+        </li>
+
+        <li class="pp-hiw__step pp-hiw__step--claim">
+            <span class="pp-hiw__art pp-hiw__art--med">
+                <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
+                      {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.earned no_id=True %}
+                </span>
+            </span>
+            <div class="pp-hiw__body">
+                <span class="pp-hiw__n" aria-hidden="true">03</span>
+                <h2 class="pp-hiw__cap">The medallion is yours</h2>
+                <p class="pp-hiw__desc">
+                    The set closes and the badge lands in your Collection, a real object with the series'
+                    artwork on it. Your name joins the list of hunters who finished it.
+                </p>
+            </div>
+        </li>
+
+        {% comment %} The payoff. Beat 4 is the SAME medallion as beat 3, holographic. The transformation
+        is the teaching, and showing it beats describing it.
+
+        A toggle was built here and removed: letting the reader flip it between states sounded better
+        than it read. The two beats sitting next to each other already make the comparison, and a control
+        asking to be pressed turned the payoff into a chore. {% endcomment %}
+        <li class="pp-hiw__step pp-hiw__step--master">
+            <span class="pp-hiw__art pp-hiw__art--med">
+                <span class="pp-hiw__medwrap{% if forge_meds.source_id %} pp-forge-peek{% endif %}"
+                      {% if forge_meds.source_id %}data-badge-id="{{ forge_meds.source_id }}" role="button" tabindex="0" aria-label="Inspect this badge"{% endif %}>
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.mastered no_id=True %}
+                </span>
+            </span>
+            <div class="pp-hiw__body">
+                <span class="pp-hiw__n" aria-hidden="true">04</span>
+                <h2 class="pp-hiw__cap">Master it</h2>
+                <p class="pp-hiw__desc">
+                    Not finished yet. Push every game to a true 100%, DLC and all, and the same medallion
+                    turns <strong class="pp-forge__holo">holographic</strong>. It is the rarest thing you
+                    can put in a Collection.
+                </p>
+            </div>
+        </li>
+    </ol>
+
+    {% comment %} THE ARTWORK. Deliberately given a section of its own rather than a line in the lede:
+    it is the single strongest claim on this page and the actual reason a medallion is worth wanting.
+    Earnest, per the adjectives, and stated plainly without hedging. {% endcomment %}
+    <section class="pp-hiw__craft">
+        <h2 class="pp-hiw__sec">Every badge is drawn by hand</h2>
+        <p class="pp-hiw__craft-body">
+            A small team of artists draws each one from scratch. Nothing in the catalogue is AI
+            generated, and nothing ever will be.
+        </p>
+
+        {% comment %} The pieces themselves, off the medallion. A sentence claiming the art is hand-drawn
+        is worth less than four pieces of it sitting underneath, and the medallion form would work against
+        the point: the plate, shape and backing are identical across an edition, so it is the SUBJECT that
+        shows a person drew this one. One per series for the same reason (see `badge_subject_art`).
+
+        Not tappable, deliberately. The peek opens a badge, and this strip is about the ARTWORK; sending
+        a reader into a badge detail from here would answer a question they did not ask. {% endcomment %}
+        {% if craft_art %}
+        <ul class="pp-hiw__artstrip">
+            {% for piece in craft_art %}
+            <li class="pp-hiw__piece">
+                <img src="{{ piece.src }}" alt="Badge artwork for {{ piece.series }}" loading="lazy" decoding="async">
+                <span class="pp-hiw__piece-cap">{{ piece.series }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+
+    {% comment %} EDITIONS, shown as OBJECTS on their own metals rather than listed in a table. The first
+    edition rides the platinum plate and the rest the gold one, the same distinction the badge detail
+    tabs and the Collection chips draw, so a reader meeting those later recognises the metal.
+
+    Names and platforms come from `PlatformGroup` rows, never retyped: the model owns the mapping, the
+    engine routes games by it, and its docstring calls adding a group "a row, not a schema change". The
+    medallion is matched by INDEX, which is the honest limit of a two-metal illustration: a third seeded
+    edition still gets a correct name, platforms and card, just the second metal. {% endcomment %}
+    <section class="pp-hiw__eds">
+        <h2 class="pp-hiw__sec">One set, two generations</h2>
+        <p class="pp-hiw__sec-sub">
+            A set can span PlayStation eras, so each badge is earned per <strong>edition</strong>. They
+            are earned independently, so you can chase one or both.
+        </p>
+
+        <div class="pp-hiw__edgrid">
+            {% for ed in editions %}
+            <div class="pp-hiw__ed">
+                <span class="pp-hiw__ed-med">
+                    {% if forloop.first %}
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.ultra no_id=True %}
+                    {% else %}
+                    {% include 'components/badge_medallion.html' with frame=forge_meds.legacy no_id=True %}
+                    {% endif %}
+                </span>
+                <span class="pp-hiw__ed-name">{{ ed.name }}</span>
+                <span class="pp-hiw__ed-plats">
+                    {% for p in ed.platforms %}<span class="pp-hiw__ed-plat">{{ p }}</span>{% endfor %}
+                </span>
+            </div>
+            {% empty %}
+            {% comment %}No active PlatformGroup rows. Not reachable in practice (the engine needs them),
+            but an empty grid teaches nothing.{% endcomment %}
+            <p class="text-sm text-base-content/50">Editions are being set up.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% comment %} CLOSE. Exploratory, per the adjectives: the page ends pointing at the next expedition
+    rather than at itself. {% endcomment %}
+    <section class="pp-hiw__close">
+        <h2 class="pp-hiw__sec">Pick your first set</h2>
+        <p class="pp-hiw__sec-sub">Every badge in the catalogue is browsable right now, earned or not.</p>
+        <div class="pp-hiw__cta">
+            <a href="{% url 'badges_list' %}" class="pp-hiw__go">Browse badges</a>
+            {% if user.is_authenticated %}
+            <a href="{% url 'badge_collection' %}" class="pp-hiw__go pp-hiw__go--quiet">Open my Collection</a>
+            {% endif %}
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block fixed_overlays %}
+{% comment %} The quick-peek dialog, identical to the one Browse Badges and the Collection use: a
+medallion tap fetches the public `group_badge_quick_peek` partial into this shell. `data-peek-url` is the
+reverse with a 0 placeholder the JS swaps for the real badge id. {% endcomment %}
+{% if forge_meds.source_id %}
+<div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'group_badge_quick_peek' 0 %}" hidden>
+    <div class="pp-detail-modal__scrim" data-peek-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+        <div class="pp-detail-modal__body" data-peek-body></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+
+{% block js_scripts %}
+<script>
+    (function () {
+        {% comment %} The header tallies COUNT UP, like every other `.pp-tally` on the site. All three
+        carried `data-countup` and nothing on this page ever called `countUp` -- `utils.js` defines it
+        globally but each page has to invoke it, and this one loads no page JS beyond the block below.
+        So the three figures snapped in fully formed while the beats directly under them animated, which
+        reads as a stalled element rather than a style choice.
+
+        Found by a repo-wide sweep after the same bug shipped twice on the jobs pages: a `data-*` hook
+        with no caller is indistinguishable from a working one in the markup. {% endcomment %}
+        var tallies = document.querySelectorAll('.pp-hiw__tally [data-countup]');
+        if (tallies.length && window.PlatPursuit && PlatPursuit.countUp) {
+            tallies.forEach(function (el, i) {
+                setTimeout(function () { PlatPursuit.countUp(el, 900); }, i * 90);
+            });
+        }
+
+        {% comment %}The beats land as you reach them, on the shared `staggerReveal` every wall on the
+        site uses. The helper returns null under reduced motion, and `.pp-reveal` (which sets opacity: 0)
+        is only added when it did NOT, so with JS off or motion reduced the steps are simply visible
+        rather than stuck hidden.{% endcomment %}
+        var list = document.querySelector('[data-hiw-steps]');
+        if (list && window.PlatPursuit && PlatPursuit.staggerReveal) {
+            var handle = PlatPursuit.staggerReveal({
+                grid: list, cardSelector: '.pp-hiw__step', step: 90,
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: 460, delay: delayMs, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+                    el.animate([{ transform: 'translateY(18px)' }, { transform: 'none' }],
+                               { duration: 560, delay: delayMs, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)', fill: 'backwards' });
+                },
+            });
+            if (handle) { list.classList.add('pp-reveal'); }
+        }
+
+        {% comment %}Quick-peek, wired exactly as Browse Badges wires it: the shared pick-up / put-down
+        controller grows the peek FROM the tapped medallion, so the object the reader touched is the one
+        that opens. Keyboard activation is explicit because these are `role="button"` spans rather than
+        native anchors.{% endcomment %}
+        var peekEl = document.getElementById('badge-peek');
+        if (!peekEl || !window.PlatPursuit || !PlatPursuit.Medallion || !PlatPursuit.Medallion.detailModal) { return; }
+        var peek = PlatPursuit.Medallion.detailModal({
+            modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]',
+        });
+
+        function openPeek(cell) {
+            var id = cell && cell.getAttribute('data-badge-id');
+            var tmpl = peekEl.getAttribute('data-peek-url') || '';
+            var url = tmpl.replace(/0\/$/, id + '/');
+            if (!peek || !id || !url || url === tmpl) { return; }
+            peek.open(url, cell);
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest || e.metaKey || e.ctrlKey || e.shiftKey) { return; }
+            var cell = e.target.closest('.pp-forge-peek');
+            if (cell) { e.preventDefault(); openPeek(cell); }
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') { return; }
+            if (!e.target.closest) { return; }
+            var cell = e.target.closest('.pp-forge-peek');
+            if (cell) { e.preventDefault(); openPeek(cell); }
+        });
+    })();
+</script>
+{% endblock %}

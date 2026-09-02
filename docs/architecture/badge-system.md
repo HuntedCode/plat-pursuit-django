@@ -1,416 +1,155 @@
 # Badge System
 
-The Badge System is the core gamification layer of Platinum Pursuit, rewarding users for completing curated sets of PlayStation games organized into badge series. Each series tracks a theme (franchise, developer, or curated collection) and offers up to four tiers of difficulty. Completing stages within a series earns XP, and completing all required stages for a tier awards the badge itself along with a 3,000 XP bonus. The system also includes a parallel Milestone subsystem that rewards cumulative platform-wide achievements (platinum counts, playtime, community engagement, and more) using a pluggable handler architecture. Milestones integrate with Discord role assignments; **badges no longer grant Discord roles** (retired). Both integrate with in-app notifications and a leaderboard system backed by periodic cache refreshes. Earned-badge Discord notifications are sent as ONE consolidated batch per check run (`send_badge_earned_notification`, gated on the profile being Discord-linked), not per badge.
+Badges reward hunters for completing curated sets of PlayStation games. A **series** (e.g. Soulsborne,
+Capcom) defines the theme and the stages; a **group badge** is the separately earnable badge for one
+platform edition of that series. Earning one grants XP, a title, and a Discord announcement.
+
+> **Rewritten 2026-08.** This replaced the tier-based engine (`Badge` tiers 1-4, `UserBadge`,
+> `UserBadgeProgress`, `badge_service`, `xp_service`, Redis leaderboards), removed in badge cutover 5b.
+> Design and cutover history: [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md).
+> The legacy `Badge` / `UserBadge` tables are RETAINED for rollback and audit. No BADGE-ENGINE code writes
+> them, but two live features still do and were never repointed: the **artwork fundraiser**
+> (`donation_service` writes `Badge.funded_by` when a donation completes) and **art_reveal**
+> (`ArtRevealItem.release()` writes `Badge.badge_image`). `BadgeAdmin` also permits manual writes and is
+> deliberately retained. See Gotchas below.
 
 ## Architecture Overview
 
-### Badge Series and Tiers
+### Series x edition, not tiers
 
-A **badge series** is identified by a `series_slug` (e.g., `god-of-war`, `resident-evil`). Each series contains up to four `Badge` rows, one per tier:
+The old model gave each series four tiers of escalating difficulty over one game list. The current model
+splits a series by **platform group** instead: Ultra HD (PS4/PS5) and Legacy HD (PS3/Vita) are different
+badges over the same stages, because they are genuinely different games to hunt.
 
-| Tier | Name     | Stage XP per Concept | Completion Criterion |
-|------|----------|---------------------|----------------------|
-| 1    | Bronze   | 250 XP              | Platinum the game    |
-| 2    | Silver   | 75 XP               | 100% completion      |
-| 3    | Gold     | 250 XP              | Platinum the game    |
-| 4    | Platinum | 75 XP               | 100% completion      |
+| Concept | Model | What it is |
+|---|---|---|
+| Series | `BadgeSeries` | Theme, art, title, completion policy. One row per `series_slug` |
+| Edition | `PlatformGroup` | A platform set (`key`, `platforms`, `exclude_delisted`) |
+| The badge | `GroupBadge` | `BadgeSeries` x `PlatformGroup`. The earnable thing |
+| A hold | `UserGroupBadge` | Binary: the row exists iff the hunter currently meets the bar |
+| Stages | `Stage` (+ `ConceptBundle`) | Series-level. Every edition works the same stage list |
 
-Tiers are sequential prerequisites: you cannot earn Gold without first earning Silver, which requires Bronze. This is enforced by `_check_prerequisite_tier()`.
+**Holds are binary.** There is no `maintenance` state: a revoke DELETES the row. Rank is derived live
+from `earned_at` among current holders, so if a series grows, whoever first clears the harder iteration
+takes #1.
 
-Odd tiers (1, 3) check for `has_plat=True` on ProfileGame. Even tiers (2, 4) check for `progress=100`. This alternating pattern applies to `series`, `collection`, `developer`, `user`, and `genre` badge types. Megamix badges always use platinum checks regardless of tier.
+**`is_holo`** is a live cosmetic flag (100% including DLC on every gating stage). It flips both ways and
+is worth no XP.
 
-### Stages and Concepts
+### Gating vs satisfaction
 
-**Stages** are the building blocks. Each Stage belongs to a `series_slug` and contains one or more **Concepts** via an M2M relationship. A Concept represents an abstract game identity (cross-platform), and each Concept links to one or more **Games**. Stage completion means the user has a qualifying ProfileGame (plat or 100%) for at least one Game within at least one of the Stage's Concepts.
+A stage is **satisfied** if the hunter completed ANY qualifying game in it. A stage **gates** an edition
+only if it holds a game that is obtainable within that edition's platform group. So a stage whose only
+game is PS3-exclusive gates Legacy HD but not Ultra HD, and the same series can require different work in
+each edition without any per-edition stage authoring.
 
-Stage 0 is special: it is always skipped during badge evaluation and serves as an optional/tangential grouping (e.g., "bonus" games that count for XP but not for badge completion).
-
-The `required_tiers` ArrayField on Stage controls tier-specific visibility. An empty array means the stage applies to all tiers. A value like `[3, 4]` means the stage only counts toward Gold and Platinum tiers.
-
-### Badge Types
-
-- **series**: A game series (e.g., God of War). All non-zero stages must be completed.
-- **franchise**: A franchise grouping. Same logic as series (a distinct type so it forms its own collection "set").
-- **collection**: A themed collection across franchises. Same logic as series.
-- **developer**: Groups games by studio. Same logic as series.
-- **user**: User-submitted badges. Same evaluation logic as series/collection/developer. Displays "Submitted by" attribution on the detail page via the `submitted_by` FK.
-- **event**: Event badges. Same evaluation logic as series.
-- **megamix**: Flexible completion. Can use `requires_all` (complete everything) or `min_required` (complete N of M stages). Always uses platinum checks.
-
-These types are grouped into named constants in `trophies/constants.py`:
-- `CONCEPT_BASED_BADGE_TYPES`: series, franchise, collection, developer, user, event (all stages must be complete)
-- `EVALUATABLE_BADGE_TYPES`: concept-based + megamix (all stage-evaluated types)
-
-`set_number` (the edition number engraved on the Frame) is numbered **independently per badge type** (each type's sequence starts at 1) via `Badge.assign_next_set_numbers`, so each type forms its own numbered "set" in the collection album.
-
-### XP System
-
-XP is calculated from two sources:
-
-1. **Progress XP**: `completed_concepts * tier_xp` for each badge tier in the user's progress. Tier XP values are defined in `trophies/util_modules/constants.py`.
-2. **Badge Completion Bonus**: 3,000 XP per fully earned badge (the `BADGE_TIER_XP` constant).
-
-XP is denormalized into `ProfileGamification` (one row per profile) with both a total and a per-series JSONField breakdown. This denormalized data is updated in real-time via Django signals and powers the XP leaderboard without expensive recalculation on every page load.
+`completion_policy` is `all` (every gating stage) or `min_count` (megamix: `min_required` of them).
 
 ## File Map
 
-| File | Purpose |
-|------|---------|
-| `trophies/models.py` | Badge, Stage, ConceptBundle, UserBadge, UserBadgeProgress, ProfileGamification, StatType, StageStatValue, Milestone, UserMilestone, UserMilestoneProgress, Title, UserTitle model definitions |
-| `trophies/managers.py` | BadgeManager, BadgeQuerySet, MilestoneManager, MilestoneQuerySet with custom filter methods |
-| `trophies/services/badge_service.py` | Core badge evaluation, awarding, revocation, Discord role management, and batch checking |
-| `trophies/services/xp_service.py` | XP calculation, ProfileGamification updates, and bulk update context manager |
-| `trophies/services/leaderboard_service.py` | Leaderboard computation: earners, progress, total progress, XP rankings, community XP |
-| `trophies/services/milestone_service.py` | Milestone checking, awarding, and batch processing with notification consolidation |
-| `trophies/milestone_handlers.py` | Pluggable handler registry: one function per `criteria_type` (plat_count, trophy_count, etc.) |
-| `trophies/milestone_constants.py` | Shared constants: MONTH_MAP, ONE_OFF_TYPES, MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES |
-| `trophies/signals.py` | Django signal handlers: earned_count updates, gamification recalculation, stage icon auto-population |
-| `trophies/util_modules/constants.py` | XP constants: BRONZE_STAGE_XP (250), SILVER_STAGE_XP (75), GOLD_STAGE_XP (250), PLAT_STAGE_XP (75), BADGE_TIER_XP (3000) |
-| `trophies/token_keeper.py` | Sync pipeline: calls `check_profile_badges()` and `check_all_milestones_for_user()` after game sync |
-| `core/management/commands/update_leaderboards.py` | Cron command to compute and cache all leaderboard data |
-| `trophies/management/commands/` | Various badge/milestone management commands (see Management Commands section) |
-
-## Data Model
-
-### Badge
-
-The central model. Each row represents one tier of one badge series.
-
-- `series_slug`: Groups tiers together. All tiers of "God of War" share the same slug.
-- `tier`: 1-4 (Bronze through Platinum). Sequential prerequisite chain.
-- `badge_type`: Determines evaluation logic (series/collection/developer/user/genre/megamix/misc).
-- `base_badge`: FK to Tier 1 badge. Higher tiers can inherit display properties (image, title, description) from their base badge via `effective_*` properties.
-- `requires_all` / `min_required`: Megamix flexibility. When `requires_all=False`, only `min_required` stages need completion.
-- `is_live`: Visibility flag. New badges start hidden until released.
-- `earned_count`: Denormalized count, updated via signals on UserBadge create/delete using `F()` expressions.
-- `required_stages`: Denormalized count of applicable stages, updated by `update_required()`.
-- `funded_by`: FK to Profile, tracking badge artwork donors from the fundraiser system.
-- `submitted_by`: FK to Profile, tracking who submitted user-type badges. Inherits through `base_badge` via `effective_submitted_by`.
-- `title`: FK to Title, creating a UserTitle when the badge is awarded.
-
-### Stage
-
-- `series_slug`: Links to the badge series (not a FK; matched by slug).
-- `stage_number`: Position within the series. 0 = optional (skipped during evaluation).
-- `concepts`: M2M to Concept (standalone qualifiers). A stage is "complete" when any Game under any linked Concept meets the tier's criterion, OR when any attached ConceptBundle is fully cleared.
-- `required_tiers`: PostgreSQL ArrayField gating which tier evaluations even consider this stage. Empty = all tiers. `[3, 4]` = only Gold and Platinum tier passes see this stage (used for legacy-console-only stages so Bronze/Silver skip them).
-- `concept_bundles`: Reverse FK to ConceptBundle. Bundles act as additional qualifiers on the stage (see below).
-- `stage_icon`: Auto-populated by the `auto_populate_stage_icon` signal. Precedence: first standalone Concept's `concept_icon_url`, falling back to the first ConceptBundle's first member when no standalone is attached. A parallel signal on `ConceptBundle.concepts.through` keeps bundle-only stages in sync.
-
-### ConceptBundle
-
-A grouped set of Concepts that act as a single qualifier on a Stage. Models episodic releases where a game's trophies are split across multiple Concepts with no real platinum (e.g. Telltale's PS3 episodic releases — five per-chapter trophy lists, none of which carry a platinum, but together represent one complete game).
-
-- `stage`: FK to the Stage this bundle qualifies on.
-- `label`: Display label, e.g. "PS3 Episodic".
-- `concepts`: M2M to Concept. Members of the bundle.
-- `sort_order`: Display order within the Stage.
-
-**Satisfaction rules.** Two paths, auto-detected from member trophy data:
-
-1. **Real platinum on any member** (plat-check tiers 1/3 + megamix only). Models the Elder Scrolls Online case: a bundle holds the PS4 base trophy list (which has a real platinum) plus an "additional trophies" list (no platinum). Earning the base platinum satisfies Bronze/Gold without requiring 100% on the additional list.
-
-2. **Synthesized platinum**: every member at `progress=100`. Always available; counts as both the plat-check (tiers 1/3) and the progress-check (tiers 2/4). Models the Telltale BttF case where no member has a real platinum trophy — clearing all chapters synthesizes a platinum.
-
-For plat-check tiers (1/3): bundle is satisfied if EITHER path holds.
-For progress-check tiers (2/4): bundle is satisfied only via the synthesized path (every member at 100%).
-
-Auto-detection works because the "real platinum" path keys off `ProfileGame.has_plat` for any member concept. BttF chapters have no platinum trophy in their data, so `has_plat=True` is never possible for them and the real-plat path simply doesn't trigger — no admin flag needed. ESO base concept has a platinum trophy, so platting it surfaces immediately.
-
-**Membership exclusivity:** a Concept must not appear both in `Stage.concepts` and in a `ConceptBundle.concepts` on the same Stage. Admin (`StageAdminForm.clean_concepts` and `ConceptBundleInlineFormSet.clean`) enforces this in both directions. A Concept may be a bundle member on Stage A and a standalone on Stage B — the constraint is per-Stage only.
-
-**StageCompletionEvent when satisfied by a bundle:** the event's `concept` is set to the bundle member with the latest `most_recent_trophy_date` among members at `progress=100` (the "tipper" that finished the bundle), and `completed_at` is that date (or `badge.created_at` if retroactive). See `_find_stage_completion_details`.
-
-### UserBadge
-
-Join table: Profile + Badge. `unique_together` constraint prevents duplicates.
-- `earned_at`: Auto-set on creation.
-- `is_displayed`: User-selectable display badge for their profile.
-
-### UserBadgeProgress
-
-Tracks incremental progress per profile per badge.
-- `completed_concepts`: Count of completed stages for this badge tier.
-- `last_checked`: Timestamp of last evaluation.
-
-### ProfileGamification
-
-Denormalized XP summary (OneToOneField to Profile).
-- `total_badge_xp`: Sum of all progress XP + badge completion bonuses.
-- `series_badge_xp`: JSONField mapping `series_slug` to per-series XP totals.
-- `total_badges_earned`: Count of all earned badge tiers.
-- `unique_badges_earned`: Count of distinct series where at least one tier is earned.
-
-### StatType and StageStatValue
-
-Future-proofing models for the P.L.A.T.I.N.U.M. gamification system. `StatType` defines stat categories (currently just `badge_xp`). `StageStatValue` allows per-stage, per-tier stat grants. These are not yet actively used in badge evaluation (XP still uses the constant-based tier map) but the schema is ready for expansion.
-
-### Milestone
-
-Platform-wide achievement definitions.
-- `criteria_type`: Determines which handler evaluates progress (e.g., `plat_count`, `trophy_count`, `badge_count`).
-- `criteria_details`: JSONField with handler-specific config, typically `{"target": N}`.
-- `required_value`: Denormalized from `criteria_details.target` on every save.
-- `premium_only`: Some milestones (subscription loyalty) are restricted to premium users.
-- `title` / `discord_role_id`: Same reward pattern as badges.
-
-### UserMilestone / UserMilestoneProgress
-
-Same pattern as badge equivalents. `UserMilestone` records the award, `UserMilestoneProgress` tracks current value vs. target.
-
-### Relationship Diagram
-
-```
-Badge (series_slug, tier)
-  |-- base_badge --> Badge (tier 1)
-  |-- title --> Title
-  |-- funded_by --> Profile
-  |-- submitted_by --> Profile
-  |-- earned_by: UserBadge --> Profile
-  |-- progress_for: UserBadgeProgress --> Profile
-  |
-  +-- series_slug links to Stage.series_slug
-        |-- concepts --> Concept (M2M, standalone qualifiers)
-        |     |-- games --> Game
-        |           |-- ProfileGame --> Profile (has_plat, progress)
-        |
-        +-- concept_bundles --> ConceptBundle (grouped qualifiers)
-              |-- concepts --> Concept (M2M, members)
-                    |-- games --> Game
-                          |-- ProfileGame --> Profile (progress=100 on all members satisfies bundle)
-
-ProfileGamification (1:1 Profile)
-  |-- total_badge_xp, series_badge_xp, total_badges_earned
-
-Milestone
-  |-- criteria_type --> MILESTONE_HANDLERS registry
-  |-- UserMilestone --> Profile
-  |-- UserMilestoneProgress --> Profile
-```
-
-## Key Flows
-
-### Badge Evaluation Flow
-
-The primary evaluation path runs during PSN sync completion:
-
-1. **Sync triggers** (`token_keeper.py: _job_sync_complete`): After trophies and profile games are updated, `check_profile_badges(profile, touched_profilegame_ids)` is called.
-
-2. **Scope reduction**: The service resolves which badge series could be affected:
-   - ProfileGame IDs -> Game concept_ids -> Stages containing those concepts -> series_slugs -> Badges with those slugs.
-   - Only `is_live=True` badges are evaluated. Results are ordered by tier (ascending) so prerequisites are checked first.
-
-3. **Context pre-fetch** (`_build_badge_context`): A single batch query gathers:
-   - All earned badge IDs for this profile (avoids per-badge existence checks).
-   - A `badges_by_key` dict keyed by `(series_slug, tier)` for prerequisite lookups.
-   - All stage data: `series_slug -> [(stage_number, required_tiers, game_ids, bundles)]` where `bundles` is a list of `(bundle_id, frozenset[member_concept_id])` tuples.
-   - Sets of `plat_game_ids` and `complete_game_ids` for the profile (for standalone qualifier checks).
-   - `fully_earned_concept_ids`: set of bundle-member concept IDs where any of the concept's games is at `progress=100` for this profile (synthesized-plat path).
-   - `platted_concept_ids`: set of bundle-member concept IDs where any of the concept's games has `has_plat=True` for this profile (real-plat path; plat-check tiers only).
-
-   This context turns what would be O(2B) queries (2 per badge for stage completion + profile game checks) into O(0) during iteration.
-
-4. **Bulk gamification wrapper**: All badge evaluations run inside `bulk_gamification_update()`, which defers ProfileGamification recalculation until the entire batch is done (one recalc instead of N).
-
-5. **Per-badge evaluation** (`handle_badge`):
-   - **Prerequisite check**: Tier > 1 must have the previous tier earned. Uses context for fast lookups.
-   - **Stage completion**: Uses `_get_stage_completion_from_cache()` to check each stage against pre-fetched plat/complete game ID sets. Stage 0 is always skipped.
-   - **Completion logic**:
-     - Series/collection/developer/user: ALL non-zero stages must be complete.
-     - Megamix with `requires_all=True`: ALL non-zero stages must be complete.
-     - Megamix with `requires_all=False`: At least `min_required` stages must be complete.
-   - **Progress update**: `_update_badge_progress()` writes `completed_concepts` count to UserBadgeProgress.
-   - **Award/revoke**: `_process_badge_award_revoke()` creates or deletes UserBadge, updates context in-place so subsequent tier checks see the new state. `handle_badge` is pure award logic and sends NO notifications.
-
-6. **Post-evaluation**: each caller collects the badges `handle_badge` reports as newly-created and sends ONE consolidated Discord embed via `send_badge_earned_notification` (no per-badge pings, no roles, Discord-linked profiles only). On-site + email go through the `DeferredNotificationService` (consolidated, highest tier only per series). `refresh_badge_series` accepts `--no-notifications` to silence all three channels for bulk re-evaluations.
-
-### Initial Badge Check
-
-`initial_badge_check(profile)` is used for first-time syncs or full recalculations. It differs from the incremental path:
-- Checks ALL ProfileGames, not just recently updated ones.
-- Collects every newly-earned badge `handle_badge` reports and sends ONE consolidated Discord batch (`send_badge_earned_notification`) when `discord_notify` is set and the profile is Discord-linked.
-
-### XP Calculation
-
-XP follows a two-component formula:
-
-```
-Total XP = Sum(completed_concepts * tier_xp for each badge/tier)
-         + Sum(BADGE_TIER_XP for each fully earned badge)
-```
-
-Where tier XP values are:
-- Bronze (tier 1): 250 XP per concept
-- Silver (tier 2): 75 XP per concept
-- Gold (tier 3): 250 XP per concept
-- Platinum (tier 4): 75 XP per concept
-- Badge completion bonus: 3,000 XP per earned badge
-
-The asymmetry (250/75/250/75) is intentional. Bronze and Gold check for platinums (harder), while Silver and Platinum check for 100% completion (also hard, but different). Both paths are rewarded, but the platinum-check tiers get more XP per stage.
-
-**Update triggers**: ProfileGamification is recalculated via Django signals:
-- `UserBadgeProgress` saved: progress XP changed.
-- `UserBadge` created: badge completion bonus added.
-- `UserBadge` deleted: badge completion bonus removed.
-
-During sync (bulk operations), the `bulk_gamification_update()` context manager collects affected profiles in a thread-local set and runs one `update_profile_gamification()` call per profile after the context exits.
-
-### Milestone System
-
-Milestones use a **handler registry pattern**:
-
-1. `milestone_handlers.py` defines a `MILESTONE_HANDLERS` dict populated by the `@register_handler(criteria_type)` decorator.
-
-2. Each handler receives `(profile, milestone, _cache=None)` and returns `{'achieved': bool, 'progress': int}`.
-
-3. Handlers use the `_cache` dict for value reuse across tiers of the same criteria type. For example, the `plat_count` handler queries once and caches the count, so checking 20 tiers of plat_count milestones makes 1 DB query instead of 20.
-
-4. `check_all_milestones_for_user()` orchestrates batch checking:
-   - Groups milestones by `criteria_type`.
-   - For **tiered types** (plat_count, trophy_count, etc.): checks all tiers but only sends an in-app notification for the highest newly earned tier. This prevents notification spam when a user qualifies for multiple tiers at once.
-   - For **one-off types** (psn_linked, discord_linked, calendar months): notifies individually since there is at most one tier.
-   - Returns `(all_awarded, notified_user_milestones)` tuple. The second value is used for consolidated milestone emails.
-   - `send_email` parameter (default `True`): when `True`, sends a consolidated email immediately. The sync path passes `False` so `token_keeper.py` can collect milestones from multiple calls and send one email.
-
-5. Calendar month milestones use a parameterized handler: a single `_handle_calendar_month()` function is registered for all 12 `calendar_month_*` types. It shares a pre-fetched `_calendar_month_counts` cache across all months to avoid 12 separate COUNT queries.
-
-6. **Manual milestone awarding**: `award_milestone_directly(profile, milestone)` bypasses handler evaluation and directly creates the `UserMilestone`, increments `earned_count`, creates `UserTitle`, and handles Discord role + notification side effects. `award_manual_milestone(profile, milestone_name)` is a convenience wrapper that looks up the milestone by name (filtered to `criteria_type='manual'`). Used by the easter egg claim API, fundraiser donation service, and `grant_milestone` management command.
-
-**Currently registered handlers** (21 types):
-`manual`, `plat_count`, `psn_linked`, `discord_linked`, `rating_count`, `playtime_hours`, `trophy_count`, `checklist_upvotes`, `badge_count`, `unique_badge_count`, `completion_count`, `stage_count`, `az_progress`, `genre_progress`, `subgenre_progress`, `calendar_month_jan` through `calendar_month_dec`, `calendar_months_total`, `calendar_complete`, `is_premium`, `subscription_months`.
-
-### Leaderboard Calculation
-
-Leaderboards are maintained in Redis sorted sets with incremental signal-driven updates. A reconciliation cron rebuilds from source data periodically. See [Leaderboard System](leaderboard-system.md) for full architecture, computation details, Redis keys, and gotchas.
-
-**Five leaderboard types:** three per-series (earners, progress, community XP) and two global (total progress, total XP). User rank lookups use `ZREVRANK` for O(log n) lookups. Pagination uses `ZREVRANGE` to fetch only the requested page.
-
-## Integration Points
-
-### Sync Pipeline (token_keeper.py)
-`_job_sync_complete()` calls `check_profile_badges()` after all trophy data is processed, then calls `check_all_milestones_for_user()` excluding challenge-specific types (those are checked by their own services). Milestone achievements generate in-app notifications only. Deferred badge notifications are consolidated afterward via `DeferredNotificationService`.
-
-### Discord Bot
-- **Role assignment**: `notify_bot_role_earned()` calls POST to `BOT_API_URL/assign-role`.
-- **Role removal**: `notify_bot_role_removed()` calls POST to `BOT_API_URL/remove-role`.
-- **Full role sync**: `sync_discord_roles()` iterates all earned badge and milestone roles plus premium roles and re-assigns them (idempotent). Called when a user first verifies via Discord.
-- All Discord HTTP calls are deferred via `transaction.on_commit()` to avoid holding database connections.
-- Calls are skipped entirely when `settings.DEBUG` is True.
-
-### Notification System
-- Badge notifications are deferred and consolidated by `DeferredNotificationService` (one notification per series, highest tier only).
-- Milestone notifications use `create_milestone_notification()` from `notifications/signals.py`.
-- Tiered milestones only notify for the highest newly earned tier in a batch.
-
-### Title System
-Both badges and milestones can award Titles. When a badge/milestone is earned, `UserTitle` is created with `source_type='badge'|'milestone'` and `source_id=badge.id|milestone.id`. Titles are revoked when badges are revoked.
-
-### Fundraiser System
-The `funded_by` field on Badge tracks which donor funded the badge artwork. Higher tiers inherit this via the `effective_funded_by` property through `base_badge`.
-
-### User-Submitted Badges
-The `submitted_by` field on Badge tracks which user submitted the badge concept. Higher tiers inherit this via the `effective_submitted_by` property through `base_badge`. Both `funded_by` and `submitted_by` can display simultaneously on the badge detail page.
-
-### Challenge System
-Challenge-related milestones (`az_progress`, `genre_progress`, `subgenre_progress`, calendar types) are excluded from the main milestone check in the sync pipeline and are instead checked by their respective challenge services (`check_az_challenge_progress`, `check_calendar_challenge_progress`, `check_genre_challenge_progress`).
+| File | Responsibility |
+|---|---|
+| `trophies/services/badge_engine.py` | PURE evaluation. No ORM. Stage/group inputs -> `GroupBadgeResult` |
+| `trophies/services/badge_apply.py` | The ORM seam: plan, diff, apply, announce, recompute. Owns `earned_count` |
+| `trophies/services/badge_xp.py` | XP + progress model. Writes the three standing tables |
+| `trophies/services/badge_adapters.py` | Side effects: titles, events, the Discord announcement |
+| `trophies/services/badge_leaderboards.py` | All board reads ("Lane B") |
+| `trophies/services/collection_service.py` | The hunter's Collection wall + `closest_badge` |
+| `trophies/services/badge_coverage_service.py` | Curator audit: games missing from a series' stages |
+| `trophies/management/commands/evaluate_badges.py` | The only runner: one hunter, `--all`, `--series`, `--dry-run` |
+
+## Entry points
+
+| Caller | Function | Notify? |
+|---|---|---|
+| Sync (`_job_sync_complete`) | `evaluate_for_sync(profile, pg_ids)` | Yes |
+| Discord link / PSN verify | `evaluate_and_apply(profile, notify=True)` | Yes |
+| Bot `/recheck-badges` | `evaluate_and_apply(..., notify=False)` | No (the bot replies with the deltas) |
+| Nightly cron | `evaluate_badges --all` -> `evaluate_and_apply_batch` | No |
+| Admin action | `evaluate_and_apply` per selected profile | No |
+| DLC detection | `evaluate_and_apply_batch` | No |
+
+## XP
+
+Flat and deliberately simple, all constants in `badge_xp.py`:
+
+- `XP_PER_STAGE = 500` per gating stage cleared
+- `XP_BADGE_COMPLETION_BONUS = 600` once, when the base badge is earned
+- Holo is worth nothing
+
+XP accrues **per group badge**, so a two-edition series is worth twice a one-edition series. It sums into
+`SeriesBadgeStanding` (per series) and `ProfileBadgeStanding` (grand total), with `ProfileEditionStanding`
+holding the same totals sliced per edition to back the boards' edition filter.
+
+`recompute_standing` writes a fourth store in the same pass: `SeriesEditionStanding`, one row per (profile,
+series, STARTED edition), carrying that edition's points AND its own `advanced_at`. It costs no extra
+EVALUATION -- the loop already holds each edition's `GroupBadgeResult`, and `_advanced_at` is a pure
+function of one of those, so the per-edition date was always derivable; `compute_series_standings` simply
+only ever asked for the furthest-along edition's. It backs badge detail's per-edition board; see
+[leaderboard-system.md](leaderboard-system.md).
+
+Calibrated to the "1,000,000 Club": over a projected mature catalog (~400 group badges, ~5 gating stages
+each) a completionist lands ~1.24M. See `test_million_club_calibration`.
 
 ## Gotchas and Pitfalls
 
-### Stage 0 is silently skipped
-Stage 0 is never counted toward badge completion but still contributes XP through progress tracking. If you add a concept to a Stage 0 expecting it to be required for the badge, it will not be. This is by design for "bonus" stages.
+**Two live features still write the legacy `Badge` table, and one of them is a payment flow.**
+`fundraiser/services/donation_service.py` credits a donor with
+`Badge.objects.filter(series_slug=...).update(funded_by=...)` when an artwork donation completes, and the
+fundraiser's badge picker reads `Badge.objects.live().filter(tier=1)`. But the medallion renders
+`GroupBadge.effective_funded_by`, which resolves `funded_by_override or series.funded_by` -- neither of
+which the fundraiser touches. **A donor who funds artwork today is credited on a row nothing displays.**
+`art_reveal.ArtRevealItem.release()` similarly writes `Badge.badge_image`. Repointing both onto
+`BadgeSeries` is outstanding work, and it is what actually retires the tier model; `BadgeAdmin` cannot be
+deleted until then (see below).
 
-### Prerequisite chain is strict
-If a user somehow loses their Bronze badge (e.g., a game's concept is reassigned and the stage no longer qualifies), all higher tiers in the chain will also be revoked on the next evaluation pass. The context is updated in-place during iteration so downstream tier checks immediately see the revocation.
+**`BadgeAdmin` is retained deliberately.** `art_reveal.ArtRevealItem` has a live FK to `Badge`, and its
+inline's `autocomplete_fields` requires a registered admin for the model. Deleting the registration fails
+the ENTIRE admin site's system check with `admin.E039`, not just art_reveal.
 
-### Context mutation during batch processing
-`_process_badge_award_revoke()` mutates the `_context['earned_badge_ids']` set in-place when badges are awarded or revoked. This is intentional: it allows subsequent tiers in the same batch to see the correct state without a DB round-trip. However, this means the context is only valid within its evaluation loop and should not be reused across separate calls.
+**Scope by SERIES, never by badge.** `recompute_standing` REPLACES a series' standing from only the
+editions it is handed. Evaluate one edition of a two-edition series and the other's XP silently becomes
+zero. Every entry point resolves to series, then to all live editions of them.
 
-### Gamification signal handlers must check bulk state
-The `post_save` and `post_delete` signals on UserBadge and UserBadgeProgress always fire. When a bulk update context is active (`is_bulk_update_active()`), handlers must defer the profile to `defer_profile_update()` instead of immediately recalculating. Forgetting this check would cause N redundant ProfileGamification recalculations during sync.
+**Bundled games are not in `Stage.concepts`.** A concept is either a direct stage member or a
+`ConceptBundle` member on that stage, never both. Any query that finds "the series a game belongs to"
+must check `Q(concepts=...) | Q(concept_bundles__concepts=...)`. Matching only the first misses every
+bundled game, which was a real bug in both engines.
 
-### earned_count uses F() expressions for race safety
-Both Badge and Milestone `earned_count` fields are updated via `F('earned_count') + 1` / `F('earned_count') - 1` to prevent race conditions when multiple workers award the same badge concurrently. Direct read-then-write would lose increments under concurrency.
+**Editions overlap for trophies but not for badges.** A cross-gen game counts toward both editions'
+trophy figures, but a `GroupBadge` belongs to exactly one `PlatformGroup`. So per-edition badge counts sum
+to the total and per-edition trophy counts do not.
 
-### Leaderboard data is cached, not live
-Badge views read leaderboard data from cache. If the `update_leaderboards` cron fails or the cache is flushed, leaderboard pages will show empty results until the next successful cron run. The 7-hour TTL means data can be up to 7 hours stale under normal operation.
+**Announcements are at-most-once, and need to be.** Because a hold is binary, a revoke-then-re-earn is
+indistinguishable from a first earn. `GroupBadgeAnnouncement` records every (hunter, badge) ever
+announced and is never deleted. A Redis cooldown is not a substitute: any TTL short enough to be a
+cooldown has expired by the time year-later PSN flux re-triggers the earn.
 
-### `requires_all` vs `min_required` only matters for megamix
-For series, collection, developer, user, and genre badges, ALL non-zero qualifying stages must be complete regardless of the `requires_all` flag. The `min_required` field is only consulted when `badge_type='megamix'` and `requires_all=False`.
+**Announce BEFORE `recompute_standing`.** `apply_changes` is atomic and has committed; the recompute is
+not and can time out. Announcing after it meant a timeout swallowed the announcement permanently, since
+`awarded` is a transition that never fires again.
 
-### Milestone handler caching is per-batch, not persistent
-The `_cache` dict passed to milestone handlers lives only for the duration of a single `check_all_milestones_for_user()` call. It prevents redundant queries across tiers of the same type within that call, but the next call starts with a fresh cache.
+**`earned_count` is a manual denorm owned by `apply_changes`** (no signals). The revoke decrement is
+clamped with `Greatest(..., 0)`: the column has a `>= 0` check constraint and the apply is one
+transaction, so unclamped drift aborted the whole evaluation, not just the counter.
 
-### Calendar handlers share a single challenge instance
-All 12 calendar month handlers plus `calendar_months_total` share a single `_calendar_challenge` cached reference (the most-progressed calendar challenge). If a user has multiple calendar challenges, only the one with the highest `completed_count` is evaluated for milestones.
+**A `Profile` delete bypasses `apply_changes`.** The cascade drops holds without decrementing, so
+`reconcile_group_badge_earned_counts_on_profile_delete` (a `pre_delete` signal) handles it.
 
-### Discord calls are skipped in DEBUG mode
-`notify_bot_role_earned()` and `notify_bot_role_removed()` short-circuit when `settings.DEBUG` is True. This means local development never triggers Discord API calls, which is correct but can make debugging role-related issues difficult. Test in staging with DEBUG=False if investigating Discord integration.
-
-### `Concept.absorb()` must handle badge-related relationships
-When a Concept is reassigned (and the old one orphaned), `absorb()` migrates data. Badge-related data flows through `Stage.concepts` (M2M), `ConceptBundle.concepts` (M2M), and `Badge.most_recent_concept` (FK). All three are handled in absorb(), but if new Concept relationships are added, absorb() must be updated or badge evaluation may reference stale data.
-
-### ConceptBundle membership is scoped per-Stage, not global
-A Concept can be a bundle member on Stage A AND a standalone qualifier on Stage B without conflict — the exclusivity rule only applies within a single Stage. Admin validation in `StageAdminForm` and `ConceptBundleInlineFormSet` enforces the per-Stage rule. If you bypass admin (e.g. via shell or a data migration), nothing stops you from putting the same concept both in `Stage.concepts` and a bundle on the same Stage; the eval logic is still correct (satisfying either path satisfies the stage, both are idempotent), but it's confusing UX.
-
-### Bundle satisfaction has two paths and the tier matters
-Plat-check tiers (1/3, megamix) accept EITHER (a) any member at `has_plat=True` (real platinum earned), OR (b) every member at `progress=100` (synthesized platinum). Progress-check tiers (2/4) accept only the synthesized path. The two paths are evaluated independently; either one alone is enough to satisfy a plat-check tier. Do not collapse them or restrict the synthesized path to bundles where no member has a platinum trophy — both paths must remain available so a power user who 100%s every member of an ESO-style bundle gets credit even if for some reason they skipped the base list's platinum.
-
-### Series slug is a string match, not a FK
-Stages link to badges via `series_slug` string matching, not a foreign key. This means orphan stages (with a slug that no Badge uses) and orphan badges (with a slug that no Stage references) are possible. The `update_badge_requirements` command reconciles these but it must be run manually after structural changes.
+**`is_live` gates evaluation AND every figure.** A dormant edition is invisible to XP, to `badges_held`,
+to the digest and to the community stats. Counting held rows without that filter made a curator's
+smoke-test badge show up in a real hunter's totals.
 
 ## Management Commands
 
-### Badge Commands
-
 | Command | Usage | Purpose |
-|---------|-------|---------|
-| `populate_badges` | `--username <user>`, `--notify` | Run `initial_badge_check` for one user or all profiles |
-| `check_all_badges` | `--username <user>`, `--dry-run` | Full badge recheck for all profiles with before/after diff reporting |
-| `refresh_badge_series` | `--series <slug>` (required) | Check all profiles against a specific badge series; consolidates notifications |
-| `check_profile_badge_series` | `--username <user>`, `--series <slug>` (both required) | Check one user against one badge series |
-| `update_badge_requirements` | (no args) | Recalculate `required_stages` and `most_recent_concept` for all badges |
-
-### Milestone Commands
-
-| Command | Usage | Purpose |
-|---------|-------|---------|
-| `populate_milestones` | `--dry-run` | Create/update all milestone definitions and associated Titles (idempotent) |
-| `populate_user_milestones` | `--type <criteria_type>`, `--username <user>`, `--silent` | Batch check milestones for all or one user |
-| `grant_milestone` | `<name>`, `--username <user>`, `--usernames <csv>`, `--dry-run`, `--silent` | Manually grant a milestone (with full side effects) |
-| `check_subscription_milestones` | `--silent`, `--dry-run` | Daily cron: check subscription_months milestones for active subscribers only |
-
-### Gamification Commands
-
-| Command | Usage | Purpose |
-|---------|-------|---------|
-| `recalculate_gamification` | `--profile <user>`, `--dry-run` | Recalculate ProfileGamification XP from source data |
-| `audit_profile_gamification` | `--profile <user>`, `--fix`, `--verbose` | Compare denormalized XP values against recalculated totals; optionally fix mismatches |
-
-### Leaderboard Commands
-
-| Command | Usage | Purpose |
-|---------|-------|---------|
-| `update_leaderboards` | (no args) | Compute and cache all leaderboard data for all live badge series |
-
-## Cache Keys
-
-All leaderboard cache keys are set by the `update_leaderboards` management command with a 7-hour (25,200 second) TTL.
-
-| Key Pattern | Type | Description |
-|-------------|------|-------------|
-| `lb_earners_{series_slug}` | list[dict] | Earners leaderboard for a badge series |
-| `lb_earners_{series_slug}_refresh_time` | str (ISO datetime) | When the earners leaderboard was last computed |
-| `lb_progress_{series_slug}` | list[dict] | Progress leaderboard for a badge series |
-| `lb_progress_{series_slug}_refresh_time` | str (ISO datetime) | When the progress leaderboard was last computed |
-| `lb_community_xp_{series_slug}` | int | Total community XP for a badge series |
-| `lb_total_progress` | list[dict] | Global progress leaderboard across all badge games |
-| `lb_total_progress_refresh_time` | str (ISO datetime) | When the total progress leaderboard was last computed |
-| `lb_total_xp` | list[dict] | Global XP leaderboard from ProfileGamification |
-| `lb_total_xp_refresh_time` | str (ISO datetime) | When the total XP leaderboard was last computed |
+|---|---|---|
+| `evaluate_badges` | `<username>`, `--all`, `--series <slug>`, `--dry-run`, `--compare-legacy` | The runner. Nightly `--all` is the reconcile that keeps every figure honest |
+| `audit_badge_coverage` | `--dry-run`, `--always` | Emails franchise/collection/developer series that are missing games |
+| `convert_series_to_groups` | see `--help` | Cutover seeding: builds `BadgeSeries` + `GroupBadge` from the legacy rows |
 
 ## Related Docs
 
-- [Gamification](gamification.md): Badge XP foundation that's currently active (`ProfileGamification.total_badge_xp`)
-- [Gamification Vision](../design/gamification-vision.md): Full P.L.A.T.I.N.U.M. stats, Jobs system, and future XP expansion plans (unimplemented)
-- [Dashboard](../features/dashboard.md): Dashboard modules that display badge progress and XP
-- [Review Hub](../features/review-hub.md): Reviews and ratings system (feeds into `rating_count` milestones)
+- [badge-backend-rebuild.md](../design/rebuild/badge-backend-rebuild.md): design + cutover record
+- [leaderboard-system.md](leaderboard-system.md): the board reads
+- [gamification.md](gamification.md): the other XP economy (jobs / Pursuer Level)

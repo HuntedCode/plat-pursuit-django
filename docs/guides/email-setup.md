@@ -75,24 +75,53 @@ Users can opt out of emails via token-based preference URLs. `EmailPreferenceSer
 | `weekly_digest` | `emails/weekly_digest.html` | Cron: `send_weekly_digest` (Monday 08:00 UTC). Community-focused "This Week in PlatPursuit" newsletter. | `weekly_digest` |
 | `badge_earned` | `emails/badge_earned.html` | Sync: `DeferredNotificationService._flush_profile_badges()` | `badge_notifications` |
 | `welcome` | `emails/welcome.html` | Verification: `VerificationService.link_profile_to_user()` | None (transactional) |
+| `launch_announcement` | `emails/launch_announcement.html` | Manual: `send_launch_announcement --send` (a few days post-cutover) | `global_unsubscribe`; also gated by `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` |
 | `admin_announcement` | `emails/broadcast.html` | Admin: Notification Center broadcast | `admin_announcements` |
 | `subscription_welcome` | `emails/subscription_welcome.html` | `activate_subscription()` (first time) | `subscription_notifications` |
 | `payment_succeeded` | `emails/payment_succeeded.html` | Stripe/PayPal renewal webhook | `subscription_notifications` |
 | `payment_failed` | `emails/payment_failed.html` | Stripe `invoice.payment_failed` webhook | `subscription_notifications` |
-| `payment_failed_final` | `emails/payment_failed_final.html` | Final retry failure | `subscription_notifications` |
 | `payment_action_required` | `emails/payment_action_required.html` | 3D Secure or action needed | `subscription_notifications` |
 | `subscription_cancelled` | `emails/subscription_cancelled.html` | Cancellation confirmation | `subscription_notifications` |
-| `donation_receipt` | `emails/donation_receipt.html` | Donation completion | None (transactional) |
+| `donation_receipt` | `emails/donation_receipt.html` | Donation completion | None (transactional). Carries the amount, campaign, provider display name, date and `provider_transaction_id`: it is the record a donor quotes back at us, so it has to be quotable. |
 | `badge_claim_confirmation` | `emails/badge_claim_confirmation.html` | Fundraiser badge claim | None (transactional) |
 | `artwork_complete` | `emails/artwork_complete.html` | Admin marks artwork done | None (transactional) |
 
-### Email Template Pattern
+### Email Template Pattern: two bases, mid-migration
 
-All email templates extend `templates/emails/base_email.html` which provides:
-- PlatPursuit branding and logo
-- Responsive table-based layout (email client compatible)
-- Footer with unsubscribe link
-- Consistent gradient styling
+Emails are moving onto a rebuilt base one template at a time. Both bases coexist until the
+last child migrates, at which point the legacy base and this table row die together.
+
+| Base | Children | Notes |
+|------|----------|-------|
+| `base_email_v2.html` | every template with a live sender: `welcome.html`, `launch_announcement.html`, `email_verification.html`, `password_reset.html`, `payment_action_required.html`, `payment_succeeded.html`, `subscription_welcome.html`, `subscription_cancelled.html`, `payment_failed.html`, `donation_receipt.html`, `badge_claim_confirmation.html`, `artwork_complete.html` | The target. Extend this for anything new or rebuilt. |
+| `base_email.html` (legacy) | `badge_earned` (no sender), `monthly_recap` + `weekly_digest` (both flag-gated off), and **`broadcast` (LIVE, unflagged)** | Div-based, no MSO handling, no preheader, `#667eea` purple that exists nowhere in the site's brand. Three of the four cannot reach a user today, but a staff member scheduling a Notification Center broadcast ships a legacy-base email right now (`scheduled_notification_service`, driven by the `process_scheduled_notifications` cron). Migrate `broadcast` with the notification rebuild; the legacy base dies with the last child. |
+
+**What v2 provides:**
+- A `role="presentation"` table scaffold with MSO ghost tables, so Outlook renders it.
+- A **bulletproof CTA** via `{% include 'emails/_cta_button.html' with url=... label=... %}` (a VML
+  roundrect for Outlook plus an anchor for everyone else). A styled `<a>` alone collapses in Outlook.
+- A **`preheader` block**: the inbox preview line. Write a real sentence (see the plaintext rule below).
+- **Light content body, dark brand bands.** Settled deliberately: Gmail and Outlook force their own
+  transforms in dark mode and are worst on committed-dark email (near-black body with near-white text
+  is what partial inversion mangles into grey-on-grey). A light body transforms predictably; the brand
+  lands in the bands, which survive inversion far better. `color-scheme` is declared light, with a
+  `prefers-color-scheme` tune for Apple Mail.
+- Brand hex converted from the site's `oklch` tokens, which no email client can parse.
+- The system font stack. The site's self-hosted Bricolage and Inter never reach an inbox.
+
+**Blocks:** `title`, `preheader`, `extra_styles`, `header_content`, `content`, `footer_note`.
+A child migrates by changing its `{% extends %}` line and adding a preheader.
+
+### The plaintext rule (load-bearing)
+
+There are no `.txt` templates. The `text/plain` part of every email is the HTML with
+`<style>`/`<script>` elements dropped and then `strip_tags` applied, which **discards every href**.
+(Dropping those elements first matters: `strip_tags` removes tags, not their contents, so
+stripping straight from the source used to dump the entire stylesheet into the plaintext part
+before the first sentence.) So any URL the reader must be able to reach has to appear as **visible
+text**, not only as a link target. `emails/welcome.html` shows the pattern (a CTA button followed by
+"Or paste this into your browser: ..."), and `tests/engine/test_auth_pages.py` pins the same rule for
+the verification link.
 
 ### Badge Earned Email
 
@@ -120,11 +149,12 @@ Emails are gated by the `admin_announcements` preference. `NotificationLog` trac
 
 ### Email Preferences Access
 
-Users can manage email preferences via:
-- Token-based links in email footers (works without login)
-- Settings page: `/users/settings/` has an "Email Preferences" section that generates a token and redirects to the preference page
-
-The `EmailPreferencesRedirectView` at `/users/email-preferences/redirect/` handles the logged-in redirect flow.
+**PARKED (2026-08)** with the non-vital emails, pending the email-system rebuild. Only vital
+emails send now (auth, billing, fundraiser, membership welcome) and all are transactional, so
+there is nothing to opt out of. Both `/users/email-preferences/` routes 302 to Settings (old
+tokened footer links land there); `EmailPreferencesView`, `EmailPreferencesRedirectView`, the
+form and `EmailPreferenceService` are kept unrouted as the rebuild's starting point. Kept
+templates' footers link Account Settings instead of the preference page.
 
 ### Testing Emails
 
@@ -195,6 +225,14 @@ For email to work correctly, the domain needs:
 - **EmailLog vs email sending**: `log_email_type` creates an audit record. The email still sends even without it, but you lose tracking.
 - **Suppressed emails**: If a user opts out via `EmailPreferenceService`, use `log_suppressed()` to record that the email was intentionally not sent.
 - **PayPal double-email guard**: For payment_succeeded emails, the system checks for a recent `subscription_welcome` EmailLog to prevent sending both welcome + payment emails on initial subscription.
+- **Receipt amounts come from `format_charge`** (`users/services/subscription_service.py`): Stripe reports most currencies in minor units but zero-decimal ones (JPY, KRW) in major units, so the helper branches rather than always dividing by 100, and it only attaches a dollar sign to USD. It returns `None` when there is no invoice in hand (the PayPal renewal path and admin resends), and both receipt rows are `{% if %}`-guarded so an absent value omits the row instead of printing "None" to a paying customer.
+- **The badge page shows no artwork-claim status**: `/badges/<slug>/` renders the badge and knows nothing about claims. Only the fundraiser page does ("Your claimed badges" with a state chip, plus the public claim wall), which is why `badge_claim_confirmation` carries a `claim_url` pointing there. The funder credit is a separate thing and IS reachable from the badge page, but one tap deep: "Artwork funded by <name>" lives in the medallion peek dialog (`components/group_badge_modal.html`, reading `effective_funded_by`), not on the page surface.
+- **The receipt date is UTC and says so**: `TIME_ZONE` is UTC and the webhook that sends the receipt activates no timezone, so a donor west of UTC paying in the evening gets a receipt dated the next day. The row is labelled rather than silently off by one.
+- **Marks in email are Unicode stars on a dark panel, and both halves are forced**: the site draws a mark as an inline `<svg>` star run (`components/_mark_glyphs_inline.html`), but Gmail strips `<svg>` outright and Outlook's Word engine cannot draw it, so the real glyph renders as nothing for most readers. `&#9733;`/`&#9734;` render everywhere, survive image blocking and come through the plaintext part. The panel is dark because the six ladder colours are tuned for the site's dark surfaces: on `#FFFFFF` they run 2.15:1 to 3.91:1, on `#0F1720` 4.61:1 to 8.38:1. The name is 20px bold, which is WCAG large text (a 3:1 bar, not 4.5:1), so the precise claim is that Backer, Contributor and Cornerstone fail even the large-text bar on white: half the ladder illegible, which is enough. `#0F1720` is a hard number too, not "some dark" -- Patron clears AA on it by 0.11, so lightening the ground to `#1B2430` drops it to 4.00 and fails. Any future email showing a mark inherits both constraints, and re-measures the ramp before changing either hex.
+- **The mark panel is named from `worn_level_dict`, not from the worn slug**: a grandfathered tier wears the price-nearest level's colour and stars but keeps the name it BOUGHT (the rule `templates/support/welcome.html` already follows). Naming the panel from the worn mark instead would tell a `supporter` subscriber they are a "Sponsor", a tier they never bought.
+- **A staff or mod subscriber is shown no mark**: service marks outrank the ladder in `resolve_display_mark`, so they keep wearing the wrench or the shield. `_welcome_supporter_mark` returns None for them and the panel is skipped, because showing stars no page will draw is a promise we do not keep.
+- **Blank `series_name` on a badge claim**: the denormalized name on `DonationBadgeClaim` is `blank=True` and fed the subject line directly, so an empty one shipped "Badge claimed: " over an email that never named the badge. Both twins now take a `series_name` derived by `DonationService._claim_series_name` (denorm, then the live series, then a phrase).
+- **The fundraiser emails greet by PSN name**: signup collects no name, so the old `first_name|default:user.email` greeting addressed nearly every donor by their raw email address. `_build_email_base_context` takes the donor's Profile and resolves `display_psn_username or psn_username`.
 - **SendGrid rate limits**: Bulk email commands use `--batch-size` (default 100) to avoid hitting SendGrid's API limits.
 - **Broadcast emails iterate individually**: Each recipient gets a personalized email (with their name and preference token). This uses `iterator(chunk_size=200)` to avoid loading all users into memory at once.
 - **Badge email consolidation**: One email per sync cycle, matching the in-app notification consolidation pattern. All badges earned in that sync are listed in a single email.

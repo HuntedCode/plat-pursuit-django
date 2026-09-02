@@ -6,7 +6,7 @@ PlatPursuit accepts payments through two providers (Stripe and PayPal) for two d
 
 The payment architecture has four key design decisions:
 
-1. **Two providers, one lifecycle.** Stripe and PayPal each have their own checkout and webhook flows, but both converge on `SubscriptionService.activate_subscription()` and `deactivate_subscription()` for state changes. This means premium tier assignment, Discord role management, email notifications, milestone checks, and `SubscriptionPeriod` tracking all live in exactly one place.
+1. **Two providers, one lifecycle.** Stripe and PayPal each have their own checkout and webhook flows, but both converge on `SubscriptionService.activate_subscription()` and `deactivate_subscription()` for state changes. This means premium tier assignment, Discord role management, email notifications, and `SubscriptionPeriod` tracking all live in exactly one place.
 
 2. **Two payment types sharing webhook endpoints.** Rather than separate webhook URLs for subscriptions vs. donations, each provider has a single endpoint (`/stripe/webhook/` and `/paypal/webhook/`). Donation events are identified by metadata and intercepted first; everything else falls through to subscription logic.
 
@@ -40,12 +40,12 @@ Payment-related fields on the user model:
 | `stripe_customer_id` | CharField | Stripe Customer ID, set on first checkout |
 | `paypal_subscription_id` | CharField | Active PayPal subscription ID, set by ACTIVATED webhook |
 | `subscription_provider` | CharField | `'stripe'` or `'paypal'`, tracks which provider is active |
-| `premium_tier` | CharField | Current tier: `ad_free`, `premium_monthly`, `premium_yearly`, or `supporter` |
+| `premium_tier` | CharField | Current tier: `premium_monthly`, `premium_yearly`, or `supporter` |
 | `paypal_cancel_at` | DateTimeField | When a cancelled PayPal subscription will expire (NULL = not cancelling) |
 
 ### SubscriptionPeriod (users/models.py)
 
-Tracks continuous subscription windows for loyalty milestone calculations. A new period is created on activation; `ended_at` is set on deactivation. During payment recovery (past_due to active), the most recently closed period is reopened if it was closed within the last 14 days.
+Tracks continuous subscription windows, which feed the milestones app's `premium_months` ladder. A new period is created on activation; `ended_at` is set on deactivation. During payment recovery (past_due to active), the most recently closed period is reopened if it was closed within the last 14 days.
 
 ### Donation (fundraiser/models.py)
 
@@ -63,13 +63,13 @@ General-purpose audit trail for all platform emails. Every email sent or suppres
 
 ### Subscription Checkout Flow (Stripe)
 
-1. User visits `/users/subscribe/` (the `subscribe()` view).
-2. `has_active_subscription()` checks for existing active subscriptions across both providers. If active, user is redirected to subscription management.
+1. User visits `/support/` (`SupportStorefrontView`, which serves the checkout form and answers its POST; the old `/users/subscribe/` 302s there).
+2. `has_active_subscription()` checks for existing active subscriptions across both providers. If active, user is redirected to the membership page.
 3. User selects a tier and clicks subscribe. POST handler calls `SubscriptionService.create_checkout_session()`.
 4. Checkout session is created with `mode='subscription'`, accepted payment methods (`card`, `us_bank_account`, `amazon_pay`, `cashapp`, `link`), and tier metadata.
 5. If user has no Stripe customer, one is created via `Customer.get_or_create()` (djstripe). The `stripe_customer_id` is saved on the user.
 6. User is redirected (303) to the Stripe-hosted checkout page.
-7. On success, Stripe redirects to `/users/subscribe/success/?session_id={id}`. The view verifies payment status and shows a success message.
+7. On success, Stripe redirects to `/users/subscribe/success/?session_id={id}` (FROZEN URL). The view renders the membership WELCOME page: from the real denorm when the webhook already landed, else optimistically from the session's tier metadata with a settling note (ownership-guarded; in DEBUG it inline-activates with no event type so dev sees the real state without announcing).
 8. Stripe fires `checkout.session.completed` and `customer.subscription.created` webhooks. The webhook handler calls `update_user_subscription()`, which maps the product ID to a tier and delegates to `activate_subscription()`.
 
 ### Subscription Checkout Flow (PayPal)
@@ -77,7 +77,7 @@ General-purpose audit trail for all platform emails. Every email sent or suppres
 1. Same subscribe page, but user selects PayPal as provider.
 2. POST handler calls `PayPalService.create_subscription()`, which creates a subscription via `/v1/billing/subscriptions` with the user's `custom_id` set to their user ID.
 3. User is redirected to PayPal's approval URL.
-4. After approval, PayPal redirects to `/users/subscribe/success/?provider=paypal`. A success message is shown, but activation happens asynchronously via webhook.
+4. After approval, PayPal redirects to `/users/subscribe/success/?provider=paypal&subscription_id=...`. The view renders the welcome page, recovering the tier display-only from the subscription details (custom_id ownership check); activation stays asynchronous via webhook.
 5. PayPal fires `BILLING.SUBSCRIPTION.ACTIVATED`. The handler looks up the user by `custom_id` (since `paypal_subscription_id` is not yet stored), sets it on the user object, maps `plan_id` to tier, and delegates to `activate_subscription()`.
 
 ### Donation Checkout Flow (Stripe)
@@ -87,7 +87,7 @@ General-purpose audit trail for all platform emails. Every email sent or suppres
 3. User completes payment on Stripe's hosted page.
 4. Stripe fires `checkout.session.completed`. In `stripe_webhook()`, the routing logic checks metadata for `type == 'fundraiser_donation'` BEFORE passing to subscription handling.
 5. `DonationService.handle_stripe_payment_completed()` looks up the pending Donation by ID and calls `complete_donation()`.
-6. Completion: status set to `completed`, badge picks calculated, fundraiser milestone granted, receipt email sent, Discord notification posted.
+6. Completion: status set to `completed`, badge picks calculated, receipt email sent, Discord notification posted.
 
 ### Donation Checkout Flow (PayPal)
 
@@ -167,7 +167,6 @@ When a subscription becomes active (any provider, any event), `activate_subscrip
 4. Send Discord embed notification (new subscriptions only, not renewals)
 5. Assign Discord role via `notify_bot_role_earned()` (deferred via `on_commit`)
 6. Send welcome email (new subscriptions only)
-7. Check `is_premium` and `subscription_months` milestones
 
 ### deactivate_subscription() Side Effects
 
@@ -184,7 +183,7 @@ When a subscription becomes active (any provider, any event), `activate_subscrip
 | **Discord** | New subscription embed via `send_subscription_notification()`. Role assignment/removal via `notify_bot_role_earned/removed()`. Donation embeds via `queue_webhook_send()`. All deferred via `on_commit`. |
 | **Email** | All emails routed through `EmailService.send_html_email()` with `EmailLog` recording. Email preference checks (`EmailPreferenceService.should_send_email()`) gate every email. Suppressed emails are logged via `EmailService.log_suppressed()`. |
 | **Notifications** | In-app notifications for: payment failures, payment action required, subscription cancellation, donation receipts, badge claims, artwork completion. All via `NotificationService.create_notification()`. |
-| **Milestones** | `activate_subscription()` triggers `check_all_milestones_for_user()` for `is_premium` and `subscription_months` criteria. Donations trigger the "Badge Artwork Patron" manual milestone. |
+| **Milestones** | Premium tenure is recognized by the `milestones` app's `premium_months` ladder, recomputed by its nightly sweep off `SubscriptionPeriod` -- the webhooks no longer trigger milestone checks. |
 | **Admin Dashboard** | `/staff/subscriptions/` reads `SubscriptionPeriod`, payment failure notifications (with `next_payment_attempt` metadata), and `EmailLog` records. Admin actions include resend email/notification and force deactivate. |
 | **Fundraiser** | `/staff/fundraiser/` manages donation/claim tables. Claim status transitions trigger `send_artwork_complete_email()` and `send_artwork_complete_notification()`. |
 | **djstripe** | Stripe events are processed through `DJStripeEvent.process()` for record-keeping. `Subscription`, `Customer`, and `Price` models from djstripe are used for querying Stripe state. |
@@ -212,13 +211,13 @@ Getting these wrong either revokes access the user paid for or grants indefinite
 
 `users/constants.py` has completely separate product/price/plan ID dictionaries for test and live modes. The mode is determined by `settings.STRIPE_MODE` and `settings.PAYPAL_MODE`. If IDs are mixed (e.g., a live price ID in the test dictionary), webhook events will fail to map to tiers, and `update_user_subscription()` will deactivate the user's subscription due to "unknown product ID." PayPal sandbox plan IDs are currently empty strings (unconfigured), which means PayPal is only testable in live mode.
 
-### ad_free Tier Is Not Premium
+### ACTIVE_PREMIUM_TIERS Is Not PREMIUM_TIER_CHOICES
 
-The `ad_free` tier exists in `PREMIUM_TIER_CHOICES` and has real Stripe/PayPal products, but `ACTIVE_PREMIUM_TIERS` only includes `premium_monthly`, `premium_yearly`, and `supporter`. The `ad_free` tier removes ads but does not set `profile.user_is_premium = True`, does not grant Discord roles, and does not trigger milestone checks. Code that checks `is_tier_premium()` will return False for `ad_free`.
+Every live tier currently grants premium features, so the two lists happen to hold the same values, and that makes it tempting to collapse them or to test `bool(profile.premium_tier)` instead. Don't. They answer different questions: what can be *bought* versus what *unlocks features*. The retired `ad_free` tier (removed 2026-08 with AdSense itself) was exactly the case that separated them — a real paid tier, with real Stripe/PayPal products, that granted no premium features and no Discord role. A future non-feature tier would separate them again. `tests/engine/test_ads_removed.py` asserts `ACTIVE_PREMIUM_TIERS` stays a subset of the valid choices, since removing a tier from one list and not the other is a live possibility.
 
 ### SubscriptionPeriod Pause During past_due
 
-When a Stripe subscription enters `past_due` (payment failing, Stripe still retrying), `update_user_subscription()` closes the `SubscriptionPeriod` but keeps premium features active. This prevents milestone time from accumulating during an unpaid window. When payment succeeds (back to `active`), `activate_subscription()` attempts to reopen the most recently closed period (within 14 days) rather than creating a new one. This preserves the user's loyalty streak.
+When a Stripe subscription enters `past_due` (payment failing, Stripe still retrying), `update_user_subscription()` closes the `SubscriptionPeriod` but keeps premium features active. This prevents premium-tenure time from accumulating during an unpaid window. When payment succeeds (back to `active`), `activate_subscription()` attempts to reopen the most recently closed period (within 14 days) rather than creating a new one. This preserves the user's loyalty streak.
 
 ### Donation provider_transaction_id Lifecycle
 
@@ -244,7 +243,6 @@ If the `BILLING.SUBSCRIPTION.CANCELLED` event arrives without a `next_billing_ti
 
 | Tier | Grants Premium | Discord Role | Stripe Product (live) | PayPal Plan (live) |
 |------|---------------|--------------|----------------------|-------------------|
-| `ad_free` | No | None | `prod_ThtXPwe3AD46Au` | `P-51097223GD3632526NGLBPBA` |
 | `premium_monthly` | Yes | Premium | `prod_ThsI3EuCssYlTT` | `P-6FE79903U4175840ENGLBP2A` |
 | `premium_yearly` | Yes | Premium | `prod_ThsIi3Xd8fY2Hk` | `P-3SY42188DC612830VNGLBQMY` |
 | `supporter` | Yes | Supporter (Premium+) | `prod_ThtYQAPoY5pSCN` | `P-5PM309711C131563TNGLBQ3Q` |

@@ -1,148 +1,97 @@
-{% load static custom_filters humanize %}
+{% load humanize custom_filters mark_tags %}{% comment %} One hunter, as a card on the browse wall.
+
+Deliberately THIN -- a face, a name, the title they chose to wear, where they are, and three numbers. This
+grid paints 30 cards a page and grows by 30 on every scroll, so anything that costs a query or an image per
+row does not belong here. Notably absent by decision, not omission: the hunter's most recent platinum (it
+was prefetched for every row and cut -- the card is meant to scan, not to brief) and the bronze/silver/gold
+breakdown (depth this surface does not need).
+
+`display_title` is the ANNOTATION from ProfilesListView, not `Profile.displayed_title` -- the method runs
+two queries per profile, which on a 30-card page is ~60 queries to print a word under each name.
+
+Every field read here must appear in the view's `.only(...)`, or Django re-fetches the row per card and the
+grid N+1s on a deferred load. {% endcomment %}
 {% for profile in object_list %}
-    <a href="{% url 'profile_detail' profile.psn_username %}"
-       class="card bg-base-200/70 border-2 {% if profile.user_is_premium %}shimmer{% else %}border-base-300{% endif %}
-              shadow-md shadow-neutral cursor-pointer transition-all duration-300
-              hover:shadow-lg hover:shadow-primary/30 hover:border-primary hover:z-10 group h-full">
-        <div class="relative card-body m-0 p-2 md:p-3 flex flex-col items-center">
-
-            {# ── Top badges (absolute) ── #}
-            {% if not profile.psn_history_public %}
-                <div class="absolute top-2 left-2 z-10" title="Game Data Privated">
-                    {% include 'partials/icons/privacy_warning.html' with size='w-5 h-5 md:w-6 md:h-6' %}
-                </div>
-            {% elif profile.user_is_premium %}
-                <div class="absolute top-2 left-2 z-10" title="Premium Hunter">
-                    <img src="{% static 'images/badges/default.png' %}" alt="Premium" class="w-5 h-5 md:w-6 md:h-6" />
-                </div>
-            {% endif %}
-            <div class="absolute top-2 right-2 text-base md:text-lg">{{ profile.flag }}</div>
-
-            {# ── Avatar ── #}
-            <div class="mt-3 mb-2">
-                <div class="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden
-                            ring-2 {% if profile.user_is_premium %}ring-primary{% else %}ring-base-300{% endif %}
-                            group-hover:ring-primary transition-all">
-                    <img src="{{ profile.avatar_url }}" alt="{{ profile.psn_username }}"
-                         class="w-full h-full object-cover" />
-                </div>
-            </div>
-
-            {# ── Username ── #}
-            <h3 class="text-sm md:text-base font-bold line-clamp-1 text-center group-hover:text-primary transition-colors">{{ profile.display_psn_username }}</h3>
-
-            {# ── About me ── #}
-            <p class="text-xs text-base-content/50 text-center line-clamp-2 min-h-[2rem] mt-0.5">{{ profile.about_me }}</p>
-
-            {# ── Title ── #}
-            <span class="text-sm md:text-base line-clamp-1 pr-1 italic text-center
-                         {% if profile.displayed_title %}{% if profile.user_is_premium %}legendary-title{% else %}text-base-content/60{% endif %}{% else %}invisible{% endif %}">
-                {% if profile.displayed_title %}{{ profile.displayed_title }}{% else %}&nbsp;{% endif %}
-            </span>
-
-            {# ── Stats Panel ── #}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 mt-auto w-full space-y-1">
-                {% if not profile.psn_history_public %}
-                    {# Private state #}
-                    <div class="flex items-center justify-center gap-1.5 py-3">
-                        {% include 'partials/icons/privacy_warning.html' with size='w-4 h-4' %}
-                        <span class="text-xs text-error italic">Profile data is private</span>
-                    </div>
-
-                {% elif profile.sync_status == 'syncing' %}
-                    {# Syncing state #}
-                    <div class="flex flex-col items-center gap-1 py-3">
-                        <span class="loading loading-infinity loading-md"></span>
-                        <span class="text-xs text-base-content/50 italic">Syncing profile...</span>
-                    </div>
-
-                {% else %}
-                    {# Trophy counts: labeled 4-col grid #}
-                    <div class="grid grid-cols-4 gap-0.5 text-center">
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-black" style="color: var(--color-trophy-bronze)">{{ profile.total_bronzes|intcomma }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
-                        </div>
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-black" style="color: var(--color-trophy-silver)">{{ profile.total_silvers|intcomma }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
-                        </div>
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-black" style="color: var(--color-trophy-gold)">{{ profile.total_golds|intcomma }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
-                        </div>
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-black" style="color: var(--color-trophy-platinum)">{{ profile.total_plats|intcomma }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
-                        </div>
-                    </div>
-
-                    <div class="border-t border-base-content/10"></div>
-
-                    {# Compact stats: labeled 4-col grid #}
-                    <div class="grid grid-cols-4 gap-0.5 text-center">
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-bold text-accent">{{ profile.trophy_level }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">LVL</div>
-                        </div>
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-bold text-warning">{{ profile.total_games }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GAMES</div>
-                        </div>
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-bold text-success">{{ profile.total_completes }}</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">100%</div>
-                        </div>
-                        <div class="rounded p-0.5">
-                            <div class="text-xs font-bold">{{ profile.avg_progress|floatformat:0 }}%</div>
-                            <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">AVG</div>
-                        </div>
-                    </div>
-
-                    {# Recent platinum #}
-                    <div class="border-t border-base-content/10"></div>
-                    {% with profile.recent_platinum.0.trophy as recent %}
-                        {% if recent %}
-                            <div class="flex items-center gap-1.5 p-0.5">
-                                <div class="w-7 h-7 rounded-md overflow-hidden shrink-0 border border-trophy-platinum">
-                                    <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}"
-                                         class="w-full h-full object-cover" loading="lazy" />
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-xs font-semibold line-clamp-1">{{ recent.trophy_name }}</div>
-                                    <div class="text-[0.6rem] text-accent italic line-clamp-1 pr-1">{{ recent.game.title_name }}</div>
-                                </div>
-                            </div>
-                        {% else %}
-                            <div class="flex items-center gap-1.5 p-0.5" title="No recent platinum">
-                                <div class="w-7 h-7 rounded-md shrink-0 border border-dashed border-base-content/20 bg-white/[0.03] flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"></path>
-                                        <path d="M17 5h2a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3M7 5H5a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3"></path>
-                                    </svg>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-xs font-semibold text-base-content/40 line-clamp-1">No recent platinum</div>
-                                    <div class="text-[0.6rem] text-base-content/30 italic line-clamp-1 pr-1">Still on the hunt</div>
-                                </div>
-                            </div>
-                        {% endif %}
-                    {% endwith %}
-                {% endif %}
-            </div>
+<article class="pp-hcard">
+    <div class="pp-hcard__id">
+        <div class="pp-hcard__avatar{% if not profile.avatar_url %} pp-hcard__avatar--none{% endif %}">
+            <img src="{{ profile.avatar_url|default:'' }}" alt="" loading="lazy" decoding="async">
+            <svg class="pp-hcard__ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
         </div>
-    </a>
-{% empty %}
-    <div class="col-span-full">
-        <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body items-center text-center py-12 md:py-16">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No hunters found</p>
-                <p class="text-base-content/40 text-xs md:text-sm">Try adjusting your search or filters</p>
+
+        <div class="pp-hcard__who">
+            <div class="pp-hcard__namerow">
+                {% comment %} The name is the real link (so it reads as one to assistive tech and shows the
+                URL on hover); ::after stretches it over the whole card for the pointer target. {% endcomment %}
+                {% comment %} Under Alphabetical the NAME is the sort axis, so it takes the accent the
+                stat cells take under every other ordering -- the one sort that previously highlighted
+                nothing, because no stat explains it. {% endcomment %}
+                {% comment %} The mark (components/name_mark.html) rides the name link: level stars in
+                the level's colour, or the staff wrench / mod shield. At this density the mark is the
+                supporter treatment -- a shimmering border was tried and read as "featured". {% endcomment %}
+                <a class="pp-hcard__link pp-hcard__name{% if active_sort == 'alpha' %} pp-hcard__name--sorted{% endif %}" href="{% url 'profile_detail' profile.psn_username %}">{% name_mark name=profile.display_psn_username|default:profile.psn_username mark=profile.display_mark size='sm' index=forloop.counter0 %}</a>
+                {% comment %} NOT aria-hidden. `Profile.flag` holds a country CODE ("US"), which is real
+                content and the card's only statement of where someone is -- hiding it would be right for a
+                decorative emoji flag and wrong for this. {% endcomment %}
+                {% if profile.flag %}<span class="pp-hcard__flag">{{ profile.flag }}</span>{% endif %}
             </div>
+            {% comment %} Held (not dropped) when a hunter wears no title, so a card without one stays the
+            same height as the card beside it and the wall keeps its rhythm. {% endcomment %}
+            {% comment %} The supporter title joins the worn title after a dot (or fills an empty
+            slot) -- the level in words, static, the name keeps the motion. {% endcomment %}
+            <p class="pp-hcard__title{% if not profile.display_title and not profile.display_mark|mark_title_label %} pp-hcard__title--empty{% endif %}">{% if profile.display_title %}{{ profile.display_title }}{% mark_title profile.display_mark sep=True %}{% elif profile.display_mark|mark_title_label %}{% mark_title profile.display_mark %}{% else %}No title{% endif %}</p>
         </div>
     </div>
+
+    {% comment %} Every stat has a PERMANENT home. An earlier cut made the third slot adaptive -- it became
+    whatever you had sorted by -- which meant a cell's content changed under you on every filter change, and
+    a card that rearranges its own contents while the wall is also rearranging is two things moving at once.
+    So the achievements sit in one band and the dates in another, and nothing on the card ever swaps out.
+
+    What still follows the sort is the ACCENT, and only the accent: a hue moving between cells is legible
+    where a content swap is jarring, and it keeps what the adaptive slot was actually for -- being able to
+    see WHY a hunter sits where they do. Exactly one value is coloured, or none at all under Alphabetical,
+    which is the one ordering no stat on this card explains. {% endcomment %}
+    <div class="pp-hcard__stats">
+        <div class="pp-hcard__stat">
+            <span class="pp-hcard__val">{{ profile.trophy_level|intcomma }}</span>
+            <span class="pp-hcard__lbl">Level</span>
+        </div>
+        <div class="pp-hcard__stat">
+            <span class="pp-hcard__val{% if active_sort == 'trophies' %} pp-hcard__val--sorted{% endif %}">{{ profile.total_trophies|intcomma }}</span>
+            <span class="pp-hcard__lbl">Trophies</span>
+        </div>
+        <div class="pp-hcard__stat">
+            <span class="pp-hcard__val{% if active_sort == 'plats' %} pp-hcard__val--sorted{% endif %}">{{ profile.total_plats|intcomma }}</span>
+            <span class="pp-hcard__lbl">Platinums</span>
+        </div>
+    </div>
+
+    {% comment %} The QUIETER three -- context rather than achievement. Giving these the numeric treatment
+    would put six big figures on a card built for scanning, so they take a smaller, muted, label-first
+    register instead (a short phrase reads as a sentence with its label in front).
+
+    Games leads the band deliberately: it is the only count here, so it sits under Level, keeping a number
+    under a number and the two date phrases under Trophies and Platinums. It also gives the row above its
+    meaning -- 79 platinums out of 312 games is a different hunter from 79 out of 2,000.
+
+    Every field is in the view's `.only(...)`: all three are denormalized columns on Profile, so the whole
+    band is free. `compact_since`, not `naturaltime` -- the latter returns things like "2 days, 19 hours
+    ago", far wider than this cell. A profile that has never synced says so rather than rendering blank.
+    {% endcomment %}
+    <div class="pp-hcard__meta">
+        <div class="pp-hcard__mcell">
+            <span class="pp-hcard__mlbl">Games</span>
+            <span class="pp-hcard__mval pp-hcard__mval--num">{{ profile.total_games|intcomma }}</span>
+        </div>
+        <div class="pp-hcard__mcell">
+            <span class="pp-hcard__mlbl">Last seen</span>
+            <span class="pp-hcard__mval{% if active_sort == 'recently_active' %} pp-hcard__val--sorted{% endif %}">{% if profile.last_synced %}{{ profile.last_synced|compact_since }}{% else %}Never{% endif %}</span>
+        </div>
+        <div class="pp-hcard__mcell">
+            <span class="pp-hcard__mlbl">Joined</span>
+            <span class="pp-hcard__mval{% if active_sort == 'recently_joined' %} pp-hcard__val--sorted{% endif %}">{{ profile.created_at|date:"M Y" }}</span>
+        </div>
+    </div>
+</article>
 {% endfor %}

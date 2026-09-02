@@ -1,0 +1,254 @@
+{% extends 'base.html' %}
+{% load static humanize job_icons %}
+
+{% block title %}Jobs{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block meta_description %}The 25 Platinum Pursuit jobs: what each one is, the contracts that feed it, and who leads its board. Every job is public to browse.{% endblock %}
+
+{% comment %} `/jobs/` -- the public catalogue, in the BROWSE hub.
+
+Its relationship to Career's Dossier is the split this codebase already settled for Collection vs Browse
+Badges, recorded as "SCOPE, not pagination": Career shows YOUR standing across the 24 jobs, this shows
+what the jobs ARE. They coexist without competing, and this one is readable signed out -- an anonymous
+visitor is exactly who it is for. Nothing on this page reads the viewer, which is what keeps it cacheable.
+
+FIVE ACROSS at `lg`, which is not an arbitrary column count: the catalogue is 5 disciplines x 5 jobs, so
+in the default (discipline) order every row IS a discipline. The grouping the old flat wall left to the
+accent colour alone now falls out of the layout, without spending vertical space on five headings -- and
+it degrades honestly, because a search, a discipline filter or either of the other two sorts breaks the
+rows up and the accent is still there to carry it.
+
+Accents come from the shared `--disc-*` tokens the Career page already uses, so a job reads the same
+colour wherever you meet it, and the chip row below spends them as the filter's own vocabulary.
+{% endcomment %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="pp-bhead flex items-start justify-between gap-3 flex-wrap">
+                <div class="pp-bhead__id min-w-0">
+                    <div class="pp-bhead__title flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Jobs</h1>
+                    </div>
+                    <p class="pp-bhead__sub text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        Every pursuit specialises. Pick a job to see what feeds it and who is ahead.
+                    </p>
+                </div>
+                {% comment %} The tally counts what is SHOWN, so it moves with the filters -- which means it
+                is swapped by HTMX like the wall, not left behind announcing 25 under a filtered row of
+                four. `data-countup` was inert here for as long as it existed (nothing on this page ever
+                called `countUp`); the script below runs it now, on first paint only. {% endcomment %}
+                <div class="pp-bhead__tally shrink-0 text-right">
+                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-jobs-count data-countup="{{ jobs|length }}">{{ jobs|length }}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">job{{ jobs|length|pluralize }}</div>
+                </div>
+            </div>
+
+            {% comment %} Catalogue substance: the family .scard grid, fed by the hourly site heartbeat
+            (hidden until the cron warms the cache; full page only, never re-rendered on swaps). {% endcomment %}
+            {% if jobs_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Jobs</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.jobs_total|default:0 }}">{{ jobs_stats.jobs_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">on the board</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Live contracts</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.contracts_live|default:0 }}">{{ jobs_stats.contracts_live|default:0|intcomma }}</div>
+                    <div class="scard__sub">open now</div>
+                </div>
+                {% comment %} Individually gated: this value comes from a DIFFERENT heartbeat
+                try-block than the other three (the anchored+trusted IGDB semi-join, the most
+                failure-prone of the set) -- if its block failed, a 0 here would be a lie. {% endcomment %}
+                {% if jobs_stats.games_in_contracts is not None %}
+                <div class="scard">
+                    <div class="scard__label">Games in contracts</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.games_in_contracts|default:0 }}">{{ jobs_stats.games_in_contracts|default:0|intcomma }}</div>
+                    <div class="scard__sub">catalogue</div>
+                </div>
+                {% endif %}
+                <div class="scard">
+                    <div class="scard__label">Job XP banked</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ jobs_stats.job_xp_banked|default:0 }}">{{ jobs_stats.job_xp_banked|default:0|intcomma }}</div>
+                    <div class="scard__sub">all-time</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} The toolbar. Same HTMX contract as every other browse page (`data-browse-form` +
+    `#browse-results`), which is what `browse-filters.js` drives -- and adopting it is what finally makes
+    the search field's clear button and in-flight spinner real: the wrapper carried `data-search-wrap` for
+    months with nothing wired to it, because this page never called `wireSearchField`.
+
+    `data-live-search` gives the debounced live filter. The difference from the old inline script is not
+    the debounce, it is that this one SWAPS instead of navigating -- so the field keeps focus and the page
+    keeps its scroll position while you type. {% endcomment %}
+    <form data-browse-form data-live-search id="jobs-form"
+          hx-get="{% url 'jobs_browse' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="pp-toolbar-card jobs-toolbar">
+            <div class="jobs-bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="search" name="q" value="{{ q }}" placeholder="Search jobs&hellip;" aria-label="Search jobs by name or description" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
+
+                <label class="jobs-bar__sel">
+                    <span class="sr-only">Sort jobs</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% comment %} Values must match `JobsBrowseView.SORTS` -- the control showing one
+                        ordering while the wall is built with another is the failure this pairing has on
+                        every browse page. {% endcomment %}
+                        <option value="discipline"{% if sort == 'discipline' %} selected{% endif %}>Discipline</option>
+                        <option value="contracts"{% if sort == 'contracts' %} selected{% endif %}>Most contracts</option>
+                        <option value="alpha"{% if sort == 'alpha' %} selected{% endif %}>A &ndash; Z</option>
+                    </select>
+                </label>
+            </div>
+
+            {% comment %} The discipline filter, on the SHARED browse filter-chip primitive
+            (`.pp-bgal__cgroup` + `.pp-bgal__chip`, from browse-gallery.css) that Browse Badges and Browse
+            Games already use. It was hand-rolled here first and was the same thing rebuilt: a `<label>`
+            wrapping a visually-hidden input, an active state off `:has(input:checked)`, a focus ring off
+            `:has(input:focus-visible)`, and a press-scale.
+
+            The only thing this page adds is `--disc`, exactly as the badge gallery adds `--rarity`: the
+            chip takes its own discipline's hue, which is the colour that job then wears on its tile, on
+            the Career radar and on its own page. A select hid both the axis and the vocabulary.
+
+            RADIOS, where the shared chips are usually checkboxes: discipline is single-choice, so the
+            native control gives arrow-key movement and one querystring name for free -- and it means the
+            active state is CSS-only, correct on click rather than after the swap returns. {% endcomment %}
+            {% comment %} `radiogroup`, not `group`: the shared `.pp-bgal__cgroup` is written for
+            CHECKBOX filters, where `group` is right. A single-choice set needs the stronger role so a
+            screen reader announces "1 of 6" and treats arrow keys as selection. {% endcomment %}
+            <div class="pp-bgal__cgroup jobs-chips" role="radiogroup" aria-label="Filter by discipline">
+                <span class="pp-bgal__clabel" aria-hidden="true">Discipline</span>
+                <label class="pp-bgal__chip">
+                    <input type="radio" name="discipline" value=""{% if not selected_discipline %} checked{% endif %}>
+                    All
+                </label>
+                {% for d in disciplines %}
+                <label class="pp-bgal__chip pp-bgal__chip--disc" style="--disc: var(--disc-{{ d.key }});">
+                    <input type="radio" name="discipline" value="{{ d.key }}"{% if d.key == selected_discipline %} checked{% endif %}>
+                    <span class="jobs-chip__ic">{% job_icon d.icon '' %}</span>
+                    {{ d.label }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        <noscript><button type="submit" class="jobs-bar__go">Apply</button></noscript>
+    </form>
+
+    {% comment %} Results, and the swap is ANNOUNCED. Filtering to a discipline takes the wall from 25
+    tiles to 5 with no page reload, which is silent to a screen reader without a live region -- the reader
+    operates a control and is told nothing happened. `polite` so it waits for a pause rather than cutting
+    across the chip they just chose; `aria-busy` marks the in-flight moment. {% endcomment %}
+    <div id="browse-results" aria-live="polite" aria-busy="false">
+        {% include 'trophies/partials/jobs_browse/browse_results.html' %}
+    </div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/browse-filters.js' %}"></script>
+<script>
+    (function () {
+        var PP = window.PlatPursuit;
+        var results = document.getElementById('browse-results');
+        if (!PP || !results) { return; }
+        var SPRING = 'cubic-bezier(.2,.9,.25,1.2)';
+        var FADE = 'cubic-bezier(.2,.7,.3,1)';
+        var handle = null;
+
+        function wall() { return results.querySelector('[data-jobs-wall]'); }
+
+        // The tally lives in the page HEADER, outside the swap target, so it has to be told what the wall
+        // now holds. Counted off the rendered tiles rather than threaded through the partial: the number
+        // then cannot disagree with the thing it counts.
+        //
+        // It TICKS from the old value to the new one on every filter, which is the site-wide behaviour
+        // (`tickCount` on Browse Hunters is the same six lines). This page shipped counting up on first
+        // paint only, on the theory that animating a number the reader is driving reads as lag -- but a
+        // figure that animates on arrival and then snaps silently afterwards reads as broken, and a tally
+        // ticking 25 -> 5 is the clearest signal that the filter did something.
+        var tally = document.querySelector('[data-jobs-count]');
+        var countLast = null;
+        function syncTally() {
+            if (!tally || !PP.countUp) { return; }
+            var next = results.querySelectorAll('.jobt').length;
+            if (countLast === null) { countLast = parseFloat(tally.dataset.countup); }
+            tally.dataset.countup = next;                  // countUp reads its target from the dataset
+            // `from` the previous value, not from zero: a filter that trims 25 to 24 should tick one step,
+            // not sweep up from nothing. Unchanged counts are set flat -- re-running the same animation on
+            // the same number is a flicker with no information in it.
+            if (!isNaN(countLast) && countLast !== next) { PP.countUp(tally, 700, { from: countLast }); }
+            else { tally.textContent = next.toLocaleString(); }
+            countLast = next;
+        }
+
+        // The reveal engine, re-created per swap: `hx-swap="innerHTML"` replaces the wall element itself,
+        // so the handle from the previous render points at a detached node.
+        function initReveal() {
+            if (handle) { handle.disconnect(); handle = null; }
+            var g = wall();
+            if (!g || !PP.staggerReveal) { return; }
+            handle = PP.staggerReveal({
+                grid: g, cardSelector: '.jobt', step: 22,
+                // Opacity and movement as SEPARATE animations, the house recipe: the spring's >1 control
+                // point applied to opacity spikes it to 1 immediately and reads as a flash.
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: 380, delay: delayMs, easing: FADE, fill: 'backwards' });
+                    el.animate([{ transform: 'translateY(10px) scale(0.98)' }, { transform: 'none' }],
+                               { duration: 460, delay: delayMs, easing: SPRING, fill: 'backwards' });
+                },
+            });
+        }
+
+        // THE SHUFFLE, on the shared `flipGrid` primitive (utils.js) -- the same one the Collection
+        // gallery and Browse Hunters run. With five columns over a fixed 25-tile catalogue a discipline
+        // chip does not replace the wall so much as REARRANGE it: most tiles survive into new slots, and
+        // animating that is the difference between "the list changed" and "these moved".
+        //
+        // Keyed on href, because an HTMX swap replaces the nodes and the URL is the only identity a
+        // server-rendered tile carries across it. The helper also marks survivors `is-revealed`, which is
+        // what stops the reveal engine below from fading in a tile that was already on screen.
+        var flipper = PP.flipGrid ? PP.flipGrid({
+            container: results, itemSelector: '.jobt',
+            key: function (el) { return el.getAttribute('href'); },
+        }) : null;
+        results.addEventListener('htmx:beforeSwap', function () { if (flipper) { flipper.measure(); } });
+
+        // ORDER MATTERS: move and mark the survivors first, then start the reveal engine so it only
+        // animates tiles that are genuinely new to the wall.
+        results.addEventListener('htmx:afterSwap', function () {
+            if (flipper) { flipper.play(); }
+            initReveal();
+            syncTally();
+        });
+
+        initReveal();
+        // First paint sweeps up from zero; every filter after it ticks from the previous value (above).
+        if (tally && PP.countUp) { PP.countUp(tally, 850); }
+        if (PP.countUp) { document.querySelectorAll('[data-scard-count]').forEach(function (el) { PP.countUp(el, 900); }); }
+    })();
+</script>
+{% endblock %}

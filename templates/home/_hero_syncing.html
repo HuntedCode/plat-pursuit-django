@@ -1,0 +1,160 @@
+{% load humanize custom_filters %}
+{% comment %}
+The syncing hero of the gates surface (home/landing.html renders this when home_state ==
+'syncing'; the landing's cached sections follow below it). Carried from the retired
+home/syncing.html shell -- the id/data-attribute set here is a CONTRACT with syncing.js
+(personalization + enter finale), navsync.js (the poll events), and the inline mirrors in
+landing.html's js_scripts block. Do not rename hooks.
+
+The card keeps its DaisyUI status-card styling on purpose: it is a status object reporting live
+state, not a marketing block, and the finale's is-emerged accent flip + .swf styles live in
+static/css/components/syncing.css. No breadcrumb here: the merged template's _messages.html is
+the one messages renderer (a second one double-renders every login message).
+{% endcomment %}
+<section class="land-hero">
+    <div class="container mx-auto px-4">
+        <div class="max-w-4xl mx-auto">
+
+            <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 {% if psn_outage %}border-l-info{% elif profile.sync_status == 'error' %}border-l-error{% else %}border-l-warning{% endif %} shadow-lg shadow-neutral" data-sync-card>
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    {% comment %} Everything syncing-related lives inside data-sync-live so the enter
+                    finale (first syncs only, below) can swap the card's contents in place. {% endcomment %}
+                    <div class="flex flex-col md:flex-row items-center gap-4 md:gap-6" data-sync-live>
+
+                        {# Avatar with spinner ring while syncing #}
+                        <div class="avatar shrink-0">
+                            <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-full ring-2 {% if psn_outage %}ring-info{% elif profile.sync_status == 'error' %}ring-error{% else %}ring-warning animate-pulse{% endif %}">
+                                {% include 'partials/_avatar.html' with url=profile.avatar_url alt=profile.display_psn_username|default:profile.psn_username eager=True %}
+                            </div>
+                        </div>
+
+                        <div class="flex-1 min-w-0 text-center md:text-left w-full">
+                            <div class="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+                                <h1 class="text-xl md:text-2xl lg:text-3xl font-bold">
+                                    {% comment %}
+                                    PSN outage takes precedence over every other state. While PSN
+                                    is down the user can't act on an error anyway (the trigger sync
+                                    endpoint returns 503), so showing "Sync paused" with the outage
+                                    explanation is more accurate and reassuring than "We hit a snag,
+                                    retry from your account menu" which they literally cannot do.
+                                    {% endcomment %}
+                                    {% if psn_outage %}
+                                        Sync paused
+                                    {% elif profile.sync_status == 'error' %}
+                                        We hit a snag
+                                    {% elif is_initial_sync %}
+                                        Setting up your Pursuit...
+                                    {% else %}
+                                        Pulling your trophies...
+                                    {% endif %}
+                                </h1>
+                                <span id="home-sync-badge"
+                                      class="badge badge-sm md:badge-md {% if psn_outage %}badge-info{% elif profile.sync_status == 'error' %}badge-error{% else %}badge-warning{% endif %} font-bold"
+                                      role="status">
+                                    {% if psn_outage %}PSN Down{% else %}{{ profile.sync_status|sync_status_display }}{% endif %}
+                                </span>
+                                {% if not psn_outage %}{% if profile.sync_status == 'syncing' or preview_syncing %}
+                                {# Elapsed timer. The inline mirror in landing.html counts up from data-elapsed. #}
+                                <span id="home-sync-elapsed"
+                                      class="text-xs md:text-sm text-base-content/50 font-semibold tabular-nums"
+                                      data-elapsed="{{ sync_elapsed_seconds }}"
+                                      aria-label="Time elapsed since sync started">
+                                    Started just now
+                                </span>
+                                {% endif %}{% endif %}
+                            </div>
+                            <p class="text-xs md:text-sm text-base-content/60 mt-1 italic pr-1">
+                                {% if psn_outage %}
+                                    PlayStation Network is currently unavailable, so we've parked your sync where it is. The moment PSN is back, we'll pick up right where we left off, no action needed on your end.
+                                {% elif profile.sync_status == 'error' %}
+                                    Something tripped up the last sync. Try again from your account menu in the top-right. If it keeps happening, double-check that your PSN "Gaming History" permission is set to "Anyone".
+                                {% elif is_initial_sync %}
+                                    Welcome aboard, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>.
+                                    {% comment %} PSN's own totals land seconds into the sync; the page may render
+                                    before them. Both sentences ship, JS fills the spans and swaps when the
+                                    payload's psn_found arrives (navsync's sync-progress ride-along). {% endcomment %}
+                                    <span data-psn-line {% if not psn_found %}hidden{% endif %}>We found <b class="text-base-content/80 tabular-nums" data-psn-found-total>{{ psn_found.total|default:0|intcomma }}</b> trophies and <b class="text-base-content/80 tabular-nums" data-psn-found-plats>{{ psn_found.plats|default:0|intcomma }}</b> platinums on your PSN profile, and we're pulling every single one.</span>
+                                    <span data-psn-pending {% if psn_found %}hidden{% endif %}>Your first sync is the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN.</span>
+                                    This can take 10-30 minutes depending on the size of your library, but every future refresh will be much faster. Stretch, grab a drink, and have a look around below while we work.
+                                {% else %}
+                                    Welcome back, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. Quick refresh in progress, this should only take a moment. The instant we're done, you'll land straight on your Home.
+                                {% endif %}
+                            </p>
+
+                            {% if not psn_outage %}{% if profile.sync_status == 'syncing' or preview_syncing %}
+                            {% comment %}
+                            Live progress bar. Initial values are server-rendered; navsync.js dispatches
+                            'platpursuit:sync-progress' on every poll and the inline mirror in landing.html
+                            keeps these elements in lockstep with the navbar sync panel's progress.
+                            {% endcomment %}
+                            <div class="mt-3 md:mt-4">
+                                <div class="flex items-center justify-between text-xs md:text-sm mb-1.5">
+                                    <span class="text-base-content/60 font-semibold">Sync progress</span>
+                                    <span id="home-sync-progress-text" class="text-base-content/80 font-bold tabular-nums">
+                                        {% if profile.sync_progress_target %}
+                                            {{ profile.sync_progress_value|intcomma }} / {{ profile.sync_progress_target|intcomma }} tasks
+                                        {% else %}
+                                            Getting started...
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                <progress id="home-sync-progress-bar"
+                                          class="progress progress-warning w-full h-3"
+                                          value="{{ profile.sync_percentage|floatformat:0|default:0 }}"
+                                          max="100"
+                                          aria-label="Sync progress"></progress>
+                                {% if is_initial_sync %}
+                                {% comment %} The banked tally climbs alongside the bar (syncing.js
+                                ticks it old-to-new off the poll payload's live_tally). {% endcomment %}
+                                <p class="text-xs md:text-sm text-base-content/70 mt-2 font-semibold">
+                                    <b class="text-warning tabular-nums" data-sync-tally data-countup="{{ live_tally|default:0 }}">{{ live_tally|default:0|intcomma }}</b>
+                                    trophies banked so far
+                                </p>
+                                {% endif %}
+                                <p id="home-sync-phase-text" class="text-[10px] md:text-xs text-base-content/40 mt-1.5">
+                                    {% if is_initial_sync %}This updates live as we go. The moment everything is in, your Pursuit opens up right here.{% else %}This updates live as we go. The second it flips to synced, we'll take you straight to your Home.{% endif %}
+                                </p>
+                            </div>
+                            {% endif %}{% endif %}
+                        </div>
+                    </div>
+
+                    {% if is_initial_sync %}
+                    {% comment %} The enter finale ("Your Pursuer has emerged", gamification-plan.md's
+                    phrase for this exact moment). Hidden until syncing.js sees the synced transition;
+                    first syncs only -- a returning user mid-quick-refresh keeps the instant reload.
+                    Stats fill from the poll payload; the slots render 0 until then. {% endcomment %}
+                    <div class="text-center py-2 md:py-4 pp-head-cascade" data-sync-complete hidden aria-live="polite">
+                        <p class="text-[0.65rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-success">Sync complete</p>
+                        <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">Your Pursuer has emerged</h2>
+                        <p class="text-xs md:text-sm text-base-content/60 mt-2">Every trophy counted, every badge weighed, every job leveled. Here is your opening tally.</p>
+                        <div class="grid grid-cols-4 gap-2 md:gap-3 max-w-md mx-auto mt-4">
+                            <div class="swf__stat swf__stat--plat"><b class="swf__n tabular-nums" data-complete-stat="plats">0</b><span class="swf__l">Platinum</span></div>
+                            <div class="swf__stat swf__stat--gold"><b class="swf__n tabular-nums" data-complete-stat="golds">0</b><span class="swf__l">Gold</span></div>
+                            <div class="swf__stat swf__stat--silver"><b class="swf__n tabular-nums" data-complete-stat="silvers">0</b><span class="swf__l">Silver</span></div>
+                            <div class="swf__stat swf__stat--bronze"><b class="swf__n tabular-nums" data-complete-stat="bronzes">0</b><span class="swf__l">Bronze</span></div>
+                        </div>
+                        <a href="{% url 'home' %}" class="btn btn-primary btn-wide mt-5 md:mt-6 font-bold" data-enter-pursuit>Enter your Pursuit</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if sync_dev %}
+            {% comment %} Dev-only (settings.DEBUG): drive the whole client state machine without a real
+            10-30 minute sync. "Simulate synced" dispatches status-changed BEFORE the trailing progress
+            event, exactly navsync's real ordering, so the idempotent stat re-fill is what gets
+            exercised. Reuses the Collection's .ccx-dev panel styling; never ships to prod. {% endcomment %}
+            <div class="ccx-dev" data-sync-dev>
+                <div class="ccx-dev__title">Sync hero</div>
+                <div class="ccx-dev__row">
+                    <button type="button" class="ccx-dev__btn" data-sync-dev-progress>Simulate progress</button>
+                    <button type="button" class="ccx-dev__btn" data-sync-dev-live>Simulate live sync</button>
+                    <button type="button" class="ccx-dev__btn" data-sync-dev-synced>Simulate synced</button>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</section>

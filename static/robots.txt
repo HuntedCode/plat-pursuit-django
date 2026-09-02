@@ -50,7 +50,6 @@ User-agent: *
 Allow: /
 Crawl-delay: 5
 
-Sitemap: https://platpursuit.com/sitemap.xml
 
 # Admin and API endpoints
 Disallow: /admin/
@@ -59,25 +58,56 @@ Disallow: /api/
 # Internal pages
 Disallow: /staff/
 Disallow: /monitoring/
+Disallow: /design/
 
 # Guides (temporarily hidden during redesign)
 Disallow: /guides/
 Disallow: /my-guides/
 
-# Profile-scoped variants of canonical pages. These are duplicates of the
-# canonical pages on the <username> axis and dilute crawl budget. Canonical
-# /games/<np_id>/ and /my-pursuit/badges/<badge>/ pages remain crawlable.
-Disallow: /games/*/*
-Disallow: /my-pursuit/badges/*/*
+# Profile-scoped variants of canonical pages (/games/<np>/<user>/ etc.) are NOT
+# handled here any more (2026-08-23, SEO Lane 0). The old wildcard rules
+# (/games/*/*) ALSO matched the canonical pages themselves: in robots syntax `*`
+# matches zero or more characters, so /games/<np_id>/ matched /games/ * / * --
+# every game, badge and jobs detail page on the site was blocked while three
+# sitemaps advertised them. There is no robots pattern for "exactly two path
+# segments." The variants are defended instead by the bot canonical 301
+# (BotCanonicalRedirectMiddleware) and the anonymous-visitor gate, which both
+# survive URL renames the way this file cannot.
+
+# Bare HTML fragment endpoints (no <html>, no title, no canonical) -- these are
+# fetched into tabs/modals by JS and must not be indexed as pages.
+Disallow: /jobs/*/ranks/
+Disallow: /jobs/*/contracts/
+Disallow: /badge-ranks/
+Disallow: /leaderboards/rows/
+Disallow: /group-badge-peek/
+Disallow: /group-badge-progress-peek/
+Disallow: /career/contracts/
+# The per-game leaderboard URL serves a headless HTML fragment (the HTMX panel) -- no head, no
+# canonical, and the most expensive query on the site. ~35k URLs a crawler has no use for.
+Disallow: /games/*/leaderboard/
 
 # Filtered / paginated / tabbed variants of a profile. The canonical
-# /community/profiles/<username>/ page stays crawlable -- profiles are the free
-# floor of the product and should keep their search and share value -- but the
+# /profiles/<username>/ page stays crawlable -- profiles are the free floor of
+# the product and should keep their search and share value -- but the
 # ?tab= / ?page= / ?sort= permutations are duplicates of it on axes that multiply
 # out into an unbounded crawl space, and each one costs a real query.
 #
 # The `/` before `?` is load-bearing: `*` matches the empty string, so the simpler
-# /community/profiles/*?* would also match /community/profiles/?page=2 and block the
-# profile INDEX's pagination -- the very thing a crawler should walk to discover
-# profiles. Requiring a path segment first confines this to profile detail URLs.
+# /profiles/*?* would also match /profiles/?page=2 and block the profile INDEX's
+# pagination -- the very thing a crawler should walk to discover profiles.
+# Requiring a path segment first confines this to profile detail URLs.
+#
+# ALL THREE spellings: the section moved twice in 2026-08, /community/profiles/ ->
+# /profiles/ -> /hunters/. Like the Cloudflare origin guard, this file holds hardcoded
+# paths that do NOT follow a rename the way {% url %} does -- leaving only an old line
+# would silently un-throttle crawling of the exact pages whose crawl cost started the
+# 2026-08 outage. The superseded lines stay while their 301s do, since a crawler
+# re-walking them still passes through the old path first.
+Disallow: /hunters/*/?*
+Disallow: /profiles/*/?*
 Disallow: /community/profiles/*/?*
+
+# Below the group on purpose: Sitemap is a non-group directive, and mid-group placement is the
+# one structure in this file that leans on parser generosity rather than being unambiguous.
+Sitemap: https://platpursuit.com/sitemap.xml

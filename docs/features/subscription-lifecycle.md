@@ -46,7 +46,7 @@ The admin dashboard at `/staff/subscriptions/` provides subscriber stats, an att
 | `paypal_subscription_id` | CharField (nullable) | PayPal Subscription ID, set by webhook |
 | `subscription_provider` | CharField (nullable) | "stripe" or "paypal" |
 | `paypal_cancel_at` | DateTimeField (nullable) | When PayPal sub expires after cancellation |
-| `premium_tier` | CharField (nullable) | Internal tier name: ad_free, premium_monthly, etc. |
+| `premium_tier` | CharField (nullable) | Internal tier name: premium_monthly, premium_yearly, supporter |
 | `email_preferences` | JSONField | Dict of preference key to boolean |
 
 ### SubscriptionPeriod
@@ -115,6 +115,32 @@ A DB partial unique constraint prevents duplicate open periods. Total subscripti
 6. Removes Discord premium role via `on_commit` callback
 7. Sends farewell email and creates in-app notification with resubscribe link
 
+### The Membership Page's State Read
+
+`/support/membership/` renders from `SubscriptionService.membership_status(user)` (read-only,
+richer than the boolean `has_active_subscription`, which deliberately reports `(False, None)`
+during grace (both providers) so the double-subscribe guard lets a cancelled member re-subscribe):
+
+| State | Meaning | Source |
+|---|---|---|
+| `active` | live sub; `cancels_at` set when a cancel is scheduled (`cancel_at_period_end` OR a bare `cancel_at`) | Stripe active/trialing sub, or PayPal with no `paypal_cancel_at` |
+| `past_due` | payment retrying, premium kept | Stripe `past_due` sub |
+| `grace` | cancelled with paid time left (`grace_until`) | Stripe `canceled` + future `current_period_end`, or future `paypal_cancel_at` |
+| `none` | no membership | everything else |
+
+Ordering guard: an ACTIVE Stripe sub outranks PayPal (a real re-subscribe), but for a
+`provider='paypal'` user STALE Stripe rows (past_due/canceled) never claim the page.
+
+Companions: `premium_tenure(user)` (member-since / total months from `SubscriptionPeriod`; the
+milestones `premium_months` metric delegates to it) and `describe_billing(user, membership)`
+(amount + cycle for display -- Stripe from the djstripe plan, PayPal ladder via the cached
+snapshot's plan id, PayPal legacy cycle-only; unknown values are omitted, never guessed).
+
+The Stripe billing portal is a POST action (`stripe_billing_portal`) -- sessions are minted on
+click, never on page GET. PayPal status/next-billing comes from a cached snapshot
+(`paypal:sub:{mode}:{id}`, 8h TTL, 60s failure marker, busted by every PayPal subscription
+webhook and the user's own cancel) so the page never hangs on a live PayPal call.
+
 ### Successful Renewal Payment
 
 1. Stripe `invoice.paid` webhook fires
@@ -135,7 +161,7 @@ A DB partial unique constraint prevents duplicate open periods. Total subscripti
 
 1. Before creating a checkout session or PayPal subscription, `has_active_subscription(user)` is called
 2. Checks Stripe: queries `djstripe.Subscription` for active or past_due status
-3. Checks PayPal: verifies stored subscription ID, tier, and that `paypal_cancel_at` has not passed
+3. Checks PayPal: verifies stored subscription ID, tier, and that `paypal_cancel_at` is UNSET (a cancelled sub will not renew, so it does not block re-subscribing; expiry is handled by webhooks)
 4. Returns `(True, provider_name)` if active sub exists, blocking the new subscription attempt
 
 ## API Endpoints

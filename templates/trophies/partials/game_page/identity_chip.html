@@ -1,0 +1,14 @@
+{% comment %}
+The identity chip: which list you are looking at, and its escape hatch, as ONE object (the IA
+doc's rule -- identity and the link to List detail travel together). Rendered inside the viewport
+so a swap always carries the right identity.
+{% endcomment %}
+<div class="gp-idchip">
+    <span class="gp-idchip__label">Viewing list</span>
+    <span class="gp-idchip__name">{{ selected_list_name }}</span>
+    {% for plat in selected_game.title_platform %}<span class="gp-lchip__plat">{{ plat }}</span>{% endfor %}
+    <a class="gp-idchip__link" href="{% url 'game_detail' selected_game.np_communication_id %}">
+        List details, leaderboard &amp; stats
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="w-3.5 h-3.5"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
+    </a>
+</div>

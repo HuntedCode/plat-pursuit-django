@@ -21,10 +21,7 @@ class ArtRevealEventView(TemplateView):
             return ctx
 
         items = list(
-            event.items.select_related(
-                'badge', 'badge__base_badge',
-                'badge__funded_by', 'badge__base_badge__funded_by',
-            ).order_by('order')
+            event.items.select_related('series', 'series__funded_by').order_by('order')
         )
         released = [i for i in items if i.released]
         ctx.update({

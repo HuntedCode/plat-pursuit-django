@@ -1,127 +1,142 @@
-{% load custom_filters %}
+{% load custom_filters job_icons humanize %}
 {% for game in object_list %}
-{% with game.platinum_trophy|first as plat %}
-{% with user_game_map|dict_get:game.id as user_pg %}
-{% with rating_map|dict_get:game.concept_id as ratings %}
-    <a href="{% url 'game_detail' game.np_communication_id %}"
-       class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral cursor-pointer
-              transition-all duration-300 hover:shadow-lg hover:shadow-{{ game|platform_color }}/30
-              hover:border-{{ game|platform_color }} hover:z-10 group h-full">
+{% with user_pg=user_game_map|dict_get:game.id ratings=rating_map|dict_get:game.concept_id dlc_n=dlc_map|dict_get:game.id %}
+    {% comment %}Condensed grids (Browse Games, tag detail -- condensed_cards set) link the
+    concept GAME page and title by the concept; Recently Added and conceptless rows keep the
+    List-detail link + list title (a new list is that page's point; a conceptless row has no
+    Game page). The flags overlay + played_count below stay the ELECTED row's own columns on
+    purpose: the election picks the most-played real row, so played ~= the partition max --
+    never sum siblings (auto-pop double-counts). rating/badge/DLC maps stay elected-row /
+    host-concept keyed (the Game page's recorded split-concept interim). Search matches
+    title_name (the LIST) while the card displays unified_title -- same recorded divergence as
+    the alpha sort; a stack-specific query can return a card whose visible title omits the
+    query string. THIRD MODE -- list_identity_cards (Trophy Lists browse only): the title/alt
+    come from the observed PSN list name (list_name_map, the display_list_names batch), the href
+    stays the uncondensed game_detail branch. The two flags are mutually exclusive by
+    construction: only Browse Games/tag detail set condensed_cards, only Trophy Lists browse
+    sets list_identity_cards.{% endcomment %}
+    <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard>
+        {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
+        icons overlay top-left; the quick-add button top-right (signed in); the viewer's progress rides the
+        bottom edge (platinum-tinted once earned). {% endcomment %}
+        <div class="pp-gcard__cover">
+            <img src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
+                 class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
 
-        {# ── Image ── #}
-        <figure class="relative aspect-[3/4] bg-base-300/20 rounded-t-lg overflow-hidden">
-            <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}"
-                 class="w-full h-full {% if game.has_cover_art %}object-cover object-top transition-transform duration-300 group-hover:scale-105{% else %}object-contain p-3{% endif %}" loading="lazy" />
-
-            {# Flag badges (top-left stack, icon-only) #}
             {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}
 
-            {% if user.is_authenticated and user.profile %}
-            <button class="quick-add-trigger absolute top-1 right-1 z-20 btn btn-xs btn-circle btn-info opacity-0 group-hover:opacity-100 transition-opacity"
-                    data-game-id="{{ game.id }}"
-                    onclick="event.preventDefault(); event.stopPropagation();"
-                    aria-label="Add {{ game.title_name }} to a list">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-            </button>
+            {% comment %}Add-to-list: removed while the Game Lists system is hidden pending its revamp. A
+        button that files a game into somewhere nobody can open is worse than no button -- it
+        collects data the revamp then has to reconcile. Restore with the system.{% endcomment %}
+
+            {% comment %} Progress fill colour encodes completion state (5 states): plat+100% = platinum;
+            plat earned but <100% (post-plat DLC) = muted teal; 100% w/o a plat = green; a plat available but
+            not yet earned = amber (the hunt); in progress w/o a plat = slate. {% endcomment %}
+            {% if user_pg and user_pg.progress > 0 %}
+            <span class="pp-gcard__bar"><span class="pp-gcard__barfill pp-gcard__barfill--{% if user_pg.has_plat and user_pg.progress == 100 %}plat{% elif user_pg.has_plat %}platdlc{% elif user_pg.progress == 100 %}full{% elif game.defined_trophies.platinum %}chase{% else %}prog{% endif %}" style="width: {{ user_pg.progress }}%"></span></span>
+            {% endif %}
+        </div>
+
+        <div class="pp-gcard__body">
+            <h3 class="pp-gcard__title">{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}</h3>
+
+            {% comment %} Facts: community rating + the trophy breakdown as colored B/S/G/P counts + the plat
+            availability tag (platinum-coloured once the viewer has earned it). {% endcomment %}
+            <div class="pp-gcard__facts">
+                {% if ratings %}
+                <span class="pp-gcard__fact"><svg class="pp-gcard__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ ratings.avg_rating|floatformat:1 }}</span>
+                {% else %}
+                <span class="pp-gcard__fact pp-gcard__fact--none"><svg class="pp-gcard__star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>&mdash;</span>
+                {% endif %}
+                {% with dt=game.defined_trophies %}
+                <span class="pp-gcard__mid">
+                    <span class="pp-gcard__tro" title="Bronze / Silver / Gold / Platinum"><span style="color: var(--color-trophy-bronze)">{{ dt.bronze|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-silver)">{{ dt.silver|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-gold)">{{ dt.gold|default:0 }}</span><span class="pp-gcard__tro-d">/</span><span style="color: var(--color-trophy-platinum)">{{ dt.platinum|default:0 }}</span></span>
+                    {% if game.has_trophy_groups %}<span class="pp-gcard__dlc" title="{% if dlc_n %}{{ dlc_n }} DLC trophy pack{{ dlc_n|pluralize }}{% else %}Has DLC trophies{% endif %}">DLC{% if dlc_n %}<span class="pp-gcard__dlc-n">&times;{{ dlc_n }}</span>{% endif %}</span>{% endif %}
+                </span>
+                {% if dt.platinum %}
+                <span class="pp-gcard__plat{% if user_pg.has_plat %} is-earned{% endif %}" title="{% if user_pg.has_plat %}Platinum earned{% else %}Has a platinum{% endif %}">Plat</span>
+                {% else %}
+                <span class="pp-gcard__plat--no" title="No platinum">No Plat</span>
+                {% endif %}
+                {% endwith %}
+            </div>
+
+            {% comment %} Pursuer hooks (Browse Games only -- gated on show_game_hooks so the shared card stays
+            unaffected on the other browse pages). Badge series the game belongs to + its home contract, both
+            batched concept-keyed in the view. Placeholders keep a consistent height when a game has neither. {% endcomment %}
+            {% if show_game_hooks %}
+            {% with binfo=badge_map|dict_get:game.concept_id cinfo=contract_map|dict_get:game.concept_id %}
+            {% if binfo %}
+            <div class="pp-gcard__badges" title="In {{ binfo.total }} badge series">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                <span class="pp-gcard__badges-n">{{ binfo.total }}</span>
+                <span class="pp-gcard__badges-names">{% for name in binfo.names %}{{ name }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}{% if binfo.more %} +{{ binfo.more }}{% endif %}</span>
+            </div>
+            {% else %}
+            <div class="pp-gcard__badges pp-gcard__badges--empty" title="Not part of any badge series">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                <span class="pp-gcard__badges-names">No badges</span>
+            </div>
             {% endif %}
 
-        </figure>
+            {% if cinfo %}
+            <span class="pp-gcard__ctr" style="{% if cinfo.band_bg %}background: {{ cinfo.band_bg }};{% endif %} --ctr-accent: {{ cinfo.accent }};" title="Contract: {{ cinfo.name }} &middot; {{ cinfo.xp }} XP">
+                <span class="pp-gcard__ctr-jobs">{% for job in cinfo.jobs %}<span class="pp-gcard__ctr-job" style="color: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'w-full h-full' %}</span>{% endfor %}</span>
+                <span class="pp-gcard__ctr-xp">{{ cinfo.xp }} XP</span>
+            </span>
+            {% else %}
+            <span class="pp-gcard__ctr pp-gcard__ctr--empty" title="No contract">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                <span class="pp-gcard__ctr-label">No contract</span>
+            </span>
+            {% endif %}
+            {% endwith %}
+            {% endif %}
 
-        {# ── Content ── #}
-        <div class="p-1.5 md:p-2 space-y-1 flex flex-col flex-1">
-            <h3 class="text-xs font-bold line-clamp-2 h-8 mt-auto group-hover:text-{{ game|platform_color }} transition-colors">{{ game.title_name }}</h3>
-
-            <div class="flex flex-wrap gap-0.5 items-center">
-                {% for platform in game.title_platform reversed %}
-                    <div class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
-                {% endfor %}
-                {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
-            </div>
-
-            {# ── Stats panel (dashboard inner panel) ── #}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 space-y-1">
-                {# Trophy counts: labeled stat cells #}
-                <div class="grid grid-cols-4 gap-0.5 text-center">
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">BRZ</div>
-                    </div>
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">SLV</div>
-                    </div>
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">GLD</div>
-                    </div>
-                    <div class="rounded p-0.5">
-                        <div class="text-xs font-black" style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum|default:"—" }}</div>
-                        <div class="text-[0.55rem] text-base-content/40 font-medium leading-none">PLT</div>
-                    </div>
-                </div>
-
-                <div class="border-t border-base-content/10"></div>
-
-                {# Community + player data #}
-                <div class="flex items-center justify-between text-xs">
-                    {% if ratings %}
-                        <div class="flex items-center gap-0.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-warning" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <span class="font-bold">{{ ratings.avg_rating|floatformat:1 }}</span>
-                        </div>
-                        <span class="text-base-content/50 hidden md:inline">D:{{ ratings.avg_difficulty|floatformat:0 }}</span>
-                    {% else %}
-                        <div class="flex items-center gap-0.5 text-base-content/30">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                            <span>—</span>
-                        </div>
-                        <span class="text-base-content/30 hidden md:inline">D:—</span>
-                    {% endif %}
-                    <div class="flex items-center gap-0.5 text-base-content/40">
-                        {% include 'partials/icons/user.html' with size='w-3 h-3' %}
-                        <span>{{ game.played_count }}</span>
-                    </div>
-                </div>
-
-                {# User progress (always present for authenticated users) #}
-                {% if user.is_authenticated and user.profile %}
-                    <div class="border-t border-base-content/10 pt-1">
-                        <div class="flex items-center justify-between mb-0.5">
-                            <span class="text-[0.55rem] text-base-content/40 font-medium uppercase">Progress</span>
-                            {% if user_pg.has_plat %}
-                                <span class="text-[0.6rem] font-bold" style="color: var(--color-trophy-platinum)">Platinum</span>
-                            {% elif user_pg and user_pg.progress > 0 %}
-                                <span class="text-[0.6rem] font-bold text-{{ game|platform_color }}">{{ user_pg.progress }}%</span>
-                            {% else %}
-                                <span class="text-[0.6rem] text-base-content/30">Not started</span>
-                            {% endif %}
-                        </div>
-                        <div class="bg-base-300/50 rounded-full h-1">
-                            {% if user_pg.has_plat %}
-                                <div class="h-full rounded-full transition-all" style="width: 100%; background-color: var(--color-trophy-platinum)"></div>
-                            {% elif user_pg and user_pg.progress > 0 %}
-                                <div class="h-full rounded-full bg-{{ game|platform_color }} transition-all" style="width: {{ user_pg.progress }}%"></div>
-                            {% endif %}
-                        </div>
-                    </div>
+            {% comment %} Footer: platforms on the left (the partition UNION on condensed grids,
+            this list's own on the others), the lists chip when the work has stacks, player count
+            on the right. Region chips removed 2026-08-30 (owner call: the card describes the
+            WORK; region stays a filter). Zero queries either way. {% endcomment %}
+            {% with union=platform_union_map|dict_get:game.id list_n=list_count_map|dict_get:game.id %}
+            {% comment %}The lists chip is PARTITION metadata, not platform metadata -- it must
+    not vanish with an empty platform set (final-audit #8), so it joins the gate; the
+    list-identity mode's region chips join it for the same reason (a platform-less regional
+    list still shows its region).{% endcomment %}
+            {% if union or game.title_platform or list_n > 1 or list_identity_cards %}
+            <div class="pp-gcard__foot">
+                <span class="pp-gcard__plats">
+                    {% for p in union|default:game.title_platform %}<span class="pp-gcard__plat">{{ p }}</span>{% endfor %}
+                    {% if list_n > 1 %}<span class="pp-gcard__lists" title="{{ list_n }} trophy lists -- regional and platform stacks share this page">{{ list_n }} lists</span>{% endif %}
+                    {% comment %}Region chips, LIST-IDENTITY MODE ONLY (Trophy Lists browse):
+                    each card IS one list, and regional variants are that page's point. The
+                    condensed/work cards stay region-free (.pp-gcard__plat--region remains
+                    retired); this is the mode's own class.{% endcomment %}
+                    {% if list_identity_cards %}{% if game.is_regional and game.region %}{% for r in game.region %}<span class="pp-gcard__region">{{ r }}</span>{% endfor %}{% else %}<span class="pp-gcard__region pp-gcard__region--global">Global</span>{% endif %}{% endif %}
+                </span>
+                {% if game.played_count %}
+                <span class="pp-gcard__players" title="{{ game.played_count|intcomma }} players own this game">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ game.played_count|compact_number }}
+                </span>
                 {% endif %}
             </div>
+            {% endif %}
+            {% endwith %}
         </div>
     </a>
 {% endwith %}
-{% endwith %}
-{% endwith %}
 {% empty %}
-    <div class="col-span-full">
-        <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body items-center text-center py-12 md:py-16">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
-                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No games found</p>
-                <p class="text-base-content/40 text-xs md:text-sm">Try expanding your search or adjusting your filters</p>
-            </div>
-        </div>
+    <div class="pp-gcard-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+        <p class="pp-gcard-empty__title">No games found</p>
+        <p class="pp-gcard-empty__hint">Nothing matches your current filters. Try widening your search or clearing one.</p>
+        {% if request.GET.query or has_advanced_filters or request.GET.letter %}
+        {% comment %} Full-nav reset (not an HTMX swap) so the filter panel + toolbar controls reset too, not
+        just the grid. empty_reset_url lets a tag-scoped page (genre/theme detail) reset to its own path instead
+        of ejecting to Browse Games; Browse omits it and gets the modern-platform default. {% endcomment %}
+        <a href="{% if empty_reset_url %}{{ empty_reset_url }}{% else %}{% url 'games_list' %}?platform=PS5&amp;platform=PS4{% endif %}" class="pp-gcard-empty__reset">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Reset filters
+        </a>
+        {% endif %}
     </div>
 {% endfor %}

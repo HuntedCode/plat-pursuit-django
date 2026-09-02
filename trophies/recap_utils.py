@@ -5,6 +5,14 @@ import pytz
 from django.utils import timezone
 
 
+#: Lower sanity bound for a recap URL, shared by the page view and the API. NOT a claim about any
+#: hunter -- their real floor is their own first trophy, which enforces itself (a month with no activity
+#: yields no recap). This only keeps nonsense out of date arithmetic: `datetime(year, month, 1)` raises
+#: for year 0 and `datetime(year + 1, 1, 1)` overflows at the max int, both reachable from `<int:year>`.
+#: PSN trophies date to 2008.
+MIN_RECAP_YEAR = 2006
+
+
 def get_user_local_now(request):
     """Get current time in the authenticated user's timezone."""
     now = timezone.now()

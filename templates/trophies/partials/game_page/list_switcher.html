@@ -1,0 +1,39 @@
+{% comment %}
+The list switcher: one chip per trophy list, carrying PAYLOAD (raw list name, platforms, viewer %
+and plat state) -- so it doubles as the stack-comparison view. A deliberate control of its own
+(.gp-lswitch), not a .pp-switch: the site-standard chip is a 12px icon+label pill and cannot carry
+payload (the playbook's secondary-control carve-out, precedent .jlayout__btn).
+
+Chips are REAL LINKS (?list=...) so the page degrades to full reloads with no JS, enhanced with an
+htmx swap into the persistent #gp-viewport. hx-push-url=false: game-page.js owns the URL via
+syncViewParam so the default list keeps a bare URL. Lives OUTSIDE the viewport target -- a swap
+replaces the grid, not the switcher; active-chip state is synced client-side.
+{% endcomment %}
+{% if switcher_entries|length > 0 %}
+<nav class="gp-lswitch{% if switcher_entries|length == 1 %} gp-lswitch--solo{% endif %}" role="tablist" aria-label="Trophy lists"
+     hx-sync="this:replace">
+    {% for entry in switcher_entries %}
+        <a href="?list={{ entry.game.np_communication_id }}"
+           hx-get="?list={{ entry.game.np_communication_id }}"
+           hx-target="#gp-viewport" hx-swap="innerHTML" hx-push-url="false"
+           role="tab" aria-controls="gp-viewport" aria-selected="{% if entry.is_selected %}true{% else %}false{% endif %}"
+           data-np="{{ entry.game.np_communication_id }}"
+           class="gp-lchip{% if entry.is_selected %} is-active{% endif %}">
+            <span class="gp-lchip__name">{{ entry.name }}</span>
+            <span class="gp-lchip__meta">
+                {% for plat in entry.game.title_platform %}<span class="gp-lchip__plat">{{ plat }}</span>{% endfor %}
+                {% comment %}Region chips, when the list IS regional: stacks often differ by region
+                alone (same platform), and without these the chips read as duplicates. Secondary
+                tint = list META, the Trophy Lists browse card's vocabulary.{% endcomment %}
+                {% if entry.game.is_regional and entry.game.region %}{% for r in entry.game.region %}<span class="gp-lchip__region">{{ r }}</span>{% endfor %}{% endif %}
+                {% if entry.progress is not None %}
+                    <span class="gp-lchip__pct pp-tally{% if entry.has_plat %} gp-lchip__pct--plat{% endif %}"
+                          title="{% if entry.has_plat %}Platinum earned &middot; {% endif %}Your progress">
+                        {% if entry.has_plat %}<span class="gp-lchip__platdot" aria-hidden="true"></span>{% endif %}{{ entry.progress }}%
+                    </span>
+                {% endif %}
+            </span>
+        </a>
+    {% endfor %}
+</nav>
+{% endif %}

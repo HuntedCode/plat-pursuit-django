@@ -1,5 +1,12 @@
 # Community Hub
 
+> **RETIRED 2026-08.** This page no longer exists: `/community/` 301s to `/leaderboards/`, and the
+> view, service (`community_hub_service.py`) and templates are deleted. Everything it hosted moved --
+> Profiles to Browse, Rate My Games to My Pursuit > Tools, Leaderboards to their own hub; Challenges,
+> Reviews and Lists were already retired/archived/hidden. Kept as the record of what the hub was and
+> why, for whoever rebuilds a community surface. See
+> [ia-and-subnav.md](../architecture/ia-and-subnav.md) for the IA that replaced it.
+
 The Community Hub is PlatPursuit's site-wide community destination at `/community/`. Where the dashboard at `/` is "your personal cockpit", the Community Hub is "the front door to everything PlatPursuit's community has to offer". It is a wayfinder + marketing surface that introduces each community feature (Rate My Games, Challenges, Game Lists, Leaderboards, Discord) with a tagline, a small slice of real signal, and a CTA to its dedicated page.
 
 > **2026-05 update**: the **Reviews** feature card was replaced by a **Rate My Games** card when the text-review system was archived (see [Review Hub](review-hub.md)). The Rate My Games card's top half is the `most_rated_games` spotlight (top concepts by community rating count, avg overall rating as the score, rows linking to game detail); the bottom half is `personal_rating_stats` (Rated / Waiting counts). Service helpers: `_get_most_rated_games_spotlight` + `_get_personal_rating_stats` in `core/services/community_hub_service.py`. The old `_get_recently_reviewed_titles_spotlight` / `_get_personal_review_stats` were replaced. Rate My Games is also a Community sub-nav item now.
@@ -36,13 +43,13 @@ The personal halves do NOT violate the "wayfinder, not aggregator" rule. They an
 
 The Community Hub is a single fixed-layout page (no drag-and-drop, no module library, no per-user customization) composed of feature spotlight cards plus a hero, an optional fundraiser banner, and a permanent Discord callout. All four feature cards are read-only aggregations that pull from existing services (no new data layer was needed).
 
-`CommunityHubView` lives in `core/views.py` next to `HomeView` for symmetry. It is a `TemplateView` with `ProfileHotbarMixin`. The page-data assembler is `core/services/community_hub_service.py`, which orchestrates calls to the underlying services (`ReviewHubService`, `redis_leaderboard_service`, the `Challenge` and `GameList` models directly) and assembles a single context dict.
+`CommunityHubView` lives in `core/views.py` next to `HomeView` for symmetry. It is a `TemplateView`. The page-data assembler is `core/services/community_hub_service.py`, which orchestrates calls to the underlying services (`ReviewHubService`, `redis_leaderboard_service`, the `Challenge` and `GameList` models directly) and assembles a single context dict.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `core/views.py` | `CommunityHubView` (TemplateView, ProfileHotbarMixin). Resolves the viewer profile and collapses anonymous / unlinked into a single None signal so the personal-half helpers all branch on one thing. |
+| `core/views.py` | `CommunityHubView` (TemplateView). Resolves the viewer profile and collapses anonymous / unlinked into a single None signal so the personal-half helpers all branch on one thing. |
 | `core/services/community_hub_service.py` | Page-data assembler. Houses the four community-pulse helpers, the four personal-hook helpers, and `_pad_to_limit` (which right-pads each list to `SPOTLIGHT_LIMIT` rows so cards stay visually balanced). |
 | `templates/community/hub.html` | Community Hub page template |
 | `templates/community/partials/personal_half_empty.html` | Shared empty-state for the personal half of every feature card. Renders a "Sign in" CTA for anonymous viewers and a "Link your PSN" CTA for authenticated-but-unlinked viewers, in a dashed box that matches the populated bottom half's vertical space. |

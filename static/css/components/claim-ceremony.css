@@ -1,0 +1,443 @@
+/* ================================================================
+ * Claim Ceremony -- the payoff overlay when a Pursuer banks Contract XP.
+ *
+ * A rare, deliberate moment, so it takes the whole screen: the award arrives, then the XP flows
+ * into the jobs it leveled (bars fill, levels tick). Choreography is JS-driven
+ * (static/js/claim-ceremony.js); this file is the look + the discrete state animations it toggles.
+ *
+ * lightningcss guards observed: NO color-mix() inside @keyframes (pre-mixed into --ccx-* / --disc-*
+ * custom props, referenced as var()); the scrim blur transitions from blur(0), never `none`.
+ * ================================================================ */
+
+.ccx-open { overflow: hidden; }   /* lock the board behind the scrim */
+
+.ccx {
+    position: fixed; inset: 0; z-index: 80;
+    display: flex; align-items: center; justify-content: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+
+/* ---- Scrim ---- */
+.ccx__scrim {
+    position: absolute; inset: 0;
+    background: radial-gradient(120% 90% at 50% 42%,
+        color-mix(in oklab, var(--pp-bg-0, #05070a) 82%, transparent) 0%,
+        color-mix(in oklab, var(--pp-bg-0, #05070a) 94%, transparent) 70%);
+    opacity: 0;
+    /* NO backdrop-filter: TRANSITIONING a blur re-blurred the whole page every frame of the 0.42s reveal AND
+       every frame the ceremony animates on top of it -- it lagged the entire ceremony. The radial dim above is
+       already near-opaque, so a plain opacity fade reads the same. See motion-patterns.md (modal-scrim gotcha). */
+    transition: opacity 0.32s ease;
+}
+.ccx.is-in .ccx__scrim { opacity: 1; }
+
+/* ---- Stage ---- */
+.ccx__stage {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 460px;   /* --list; widened per mode below so many jobs fit without scrolling */
+    max-height: calc(100dvh - 32px);
+    display: flex; flex-direction: column;
+    padding: 26px 22px 20px;
+    border-radius: 20px;
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)) 0%, var(--pp-bg-1, var(--pp-bg-2)) 60%);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+    box-shadow: 0 24px 70px -18px rgba(0, 0, 0, 0.7),
+        0 0 0 1px color-mix(in oklab, var(--pp-primary) 12%, transparent),
+        inset 0 1px 0 color-mix(in oklab, var(--pp-primary) 20%, transparent);
+    opacity: 0; transform: translateY(14px) scale(0.965);
+    transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ccx.is-in .ccx__stage { opacity: 1; transform: none; }
+
+/* Gold aura behind the award. */
+.ccx__glow {
+    position: absolute; left: 50%; top: 10%; width: 320px; height: 320px;
+    transform: translate(-50%, 0) scale(0.6);
+    border-radius: 50%; pointer-events: none; z-index: -1; opacity: 0;
+    background: radial-gradient(circle,
+        color-mix(in oklab, var(--pp-primary) 42%, transparent) 0%, transparent 68%);
+    transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ccx.is-in .ccx__glow { opacity: 0.9; transform: translate(-50%, 0) scale(1); }
+
+/* ---- Award ---- */
+.ccx__eyebrow {
+    text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--pp-primary) 78%, var(--pp-text));
+}
+.ccx__award {
+    display: flex; align-items: baseline; justify-content: center; gap: 4px;
+    margin: 6px 0 4px; line-height: 1;
+    color: var(--pp-primary);   /* the reward accent; the hero number's glow comes from .pp-tally--glow */
+}
+/* The award is Tally (face + size + glow come from .pp-tally--hero.--glow); these only tune the
+ * satellite +/XP marks so they sit against the hero number. */
+.ccx__plus { font-size: clamp(24px, 6vw, 32px); }
+.ccx__unit { font-size: clamp(15px, 4vw, 20px); letter-spacing: 0.05em; opacity: 0.85; }
+.ccx__award.is-hit { animation: ccxAwardHit 0.5s cubic-bezier(0.22, 1.4, 0.4, 1) both; }
+@keyframes ccxAwardHit {
+    0% { transform: scale(0.72); opacity: 0.2; }
+    60% { transform: scale(1.06); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+/* ---- Job tiles ----
+ * A page holds up to 5 tiles in the roomy single-column list -- it never scrolls. Bigger claims
+ * paginate (5 at a time) and the pager below flips between pages. */
+.ccx__jobs {
+    list-style: none; margin: 14px 0 6px; padding: 2px; min-height: 0;
+    display: flex; flex-direction: column; gap: 6px;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old 5 out */
+
+/* Manual arrow flips: Material "shared axis" (X). Outgoing leaves toward the pressed direction,
+ * incoming arrives from the opposite side -- spatial, directional, GPU-only (transform + opacity). */
+@keyframes ccxPageOutL { to { opacity: 0; transform: translateX(-30px); } }
+@keyframes ccxPageOutR { to { opacity: 0; transform: translateX(30px); } }
+@keyframes ccxPageInR  { from { opacity: 0; transform: translateX(30px); } }
+@keyframes ccxPageInL  { from { opacity: 0; transform: translateX(-30px); } }
+
+.ccx__job {
+    /* --disc set inline; pre-mix the derived tones here so @keyframes can use them as var(). */
+    --disc-soft: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-3));
+    --disc-glow: color-mix(in oklab, var(--disc) 55%, transparent);
+    position: relative;   /* anchors the tier stamp overlay */
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+    padding: 7px 12px; border-radius: 12px;
+    background: color-mix(in oklab, var(--disc) 6%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--disc) 24%, var(--pp-border));
+    opacity: 0; transform: translateY(10px);
+    transition: opacity 0.42s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ccx__job.is-in { opacity: 1; transform: none; }
+
+.ccx__ji {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px;
+    color: var(--disc); background: var(--disc-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--disc) 40%, transparent),
+        0 0 14px color-mix(in oklab, var(--disc) 22%, transparent);
+}
+.ccx__ji svg { width: 22px; height: 22px; }
+
+.ccx__jbody { min-width: 0; }
+.ccx__jrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.ccx__jname {
+    font-size: 14px; font-weight: 700; color: var(--pp-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ccx__jgain { flex: 0 0 auto; font-size: 12px; color: var(--disc); }
+
+/* Resting-tier subtitle (list-item supporting text). Space is reserved from build; the content is
+ * revealed in place at settle -- staggered top-to-bottom -- so the tier "arrives" with zero reflow. */
+.ccx__jtier {
+    display: inline-flex; align-items: center; gap: 3px;
+    height: 14px; margin-bottom: 2px; line-height: 14px; max-width: 100%;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--disc) 45%, var(--pp-text));
+    opacity: 0; transform: translateY(3px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    transition-delay: calc(var(--i, 0) * 60ms);
+}
+.ccx__jtier-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Improved-this-claim: brighter family colour + a soft glow, and an up-chevron that pops on reveal. */
+.ccx__jtier.is-up { color: var(--disc); }
+.ccx__jtier.is-up .ccx__jtier-name { text-shadow: 0 0 8px var(--disc-glow); }
+.ccx__jtier-chev { width: 11px; height: 11px; flex: 0 0 auto; }
+
+/* Revealed per PAGE (once its bars finish), so every page shows its tiers -- not just the last. */
+.ccx__jobs.show-tiers .ccx__jtier, .ccx.is-static .ccx__jtier { opacity: 1; transform: none; }
+/* The improved tiers KEEP flaring on a loop while the screen is up (staggered = a repeating wave): the
+ * chevron pulse-pops and the name glows brighter for a beat, then both rest for the remainder of the cycle. */
+.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-chev { animation: ccxChevPop 3.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
+.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-name { animation: ccxTierGlow 3.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
+@keyframes ccxChevPop {
+    0% { transform: translateY(2px) scale(0.85); opacity: 0.6; }
+    8% { transform: translateY(-2px) scale(1.16); opacity: 1; }
+    16%, 100% { transform: translateY(0) scale(1); opacity: 1; }   /* pop early, rest the remainder */
+}
+@keyframes ccxTierGlow {
+    0% { text-shadow: 0 0 8px var(--disc-glow); }
+    8% { text-shadow: 0 0 16px var(--disc-glow), 0 0 6px var(--disc); }   /* flare */
+    20%, 100% { text-shadow: 0 0 8px var(--disc-glow); }                  /* back to the resting glow */
+}
+
+/* The bar is a Horizon primitive (.pp-horizon, themed --horizon-accent: var(--disc)). Only slow its
+ * fill to the ceremony's deliberate pace -- the look/gradient/glow all come from horizon.css. */
+.ccx__bar { --horizon-h: 6px; }
+.ccx__job .pp-horizon__fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Mobile trims the tile's airiness (padding, gap, subtitle margin, bar height) so a full page of 5 clears
+ * a short phone with no scroll -- the icon (40px) and name (14px) are untouched, so the tiles keep their
+ * weight. Tablet/desktop have the vertical room, so they get the roomier tile back. */
+@media (min-width: 768px) {
+    .ccx__jobs { gap: 8px; }
+    .ccx__job { padding: 10px 12px; }
+    .ccx__jtier { margin-bottom: 4px; }
+    .ccx__bar { --horizon-h: 8px; }
+}
+
+.ccx__lv {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; height: 30px; padding: 0 8px; border-radius: 8px;
+    color: var(--disc); background: var(--disc-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--disc) 34%, transparent);
+}
+.ccx__lvn { font-size: 15px; }   /* Tally face; size only (bare .pp-tally is metrics-free) */
+.ccx__lv.is-levelup { animation: ccxLevelPop 0.55s cubic-bezier(0.22, 1.5, 0.4, 1) both; }
+@keyframes ccxLevelPop {
+    0% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+    35% { transform: scale(1.28); box-shadow: 0 0 20px var(--disc-glow), inset 0 0 0 1px var(--disc); }
+    100% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+}
+/* Threshold pulse: a bigger, brighter flare on the level chip while it's PAUSED on a tier level --
+ * the chip is the hero of the moment, so the eye ties the frozen number to the tier that emerges. */
+.ccx__lv.is-threshold { animation: ccxThreshold 0.62s cubic-bezier(0.22, 1.5, 0.4, 1) both; }
+@keyframes ccxThreshold {
+    0% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+    40% { transform: scale(1.55); box-shadow: 0 0 30px var(--disc), 0 0 12px var(--disc), inset 0 0 0 2px var(--disc); }
+    100% { transform: scale(1); box-shadow: 0 0 14px var(--disc-glow), inset 0 0 0 1px var(--disc); }
+}
+
+/* ---- Tier promotion callout ("Lv 10  APPRENTICE"): stamps in at the CARD CENTER while the chip is
+ * paused + flaring (sparks still fire from the chip, so the cause stays anchored to the level). ---- */
+.ccx__tierstamp {
+    position: absolute; top: 50%; left: 50%; z-index: 3; pointer-events: none;
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+    color: var(--pp-bg-0, #05070a); background: var(--disc);
+    box-shadow: 0 0 18px var(--disc-glow), 0 2px 8px rgba(0, 0, 0, 0.4);
+    transform: translate(-50%, -50%) scale(0.4); opacity: 0;
+}
+.ccx__ts-lv { font-size: 9px; font-weight: 800; letter-spacing: 0.03em; opacity: 0.8; }
+.ccx__ts-name { font-size: 11px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+.ccx__tierstamp.is-in { animation: ccxStampIn 0.42s cubic-bezier(0.22, 1.5, 0.4, 1) forwards; }
+.ccx__tierstamp.is-out { animation: ccxStampOut 0.36s ease forwards; }   /* declared after is-in -> wins */
+@keyframes ccxStampIn {
+    0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+    60% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@keyframes ccxStampOut {
+    from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    to { transform: translate(-50%, -80%) scale(1.03); opacity: 0; }
+}
+/* Tier-up stamp: sized to match the roomier tile on tablet/desktop (mobile keeps it tighter, above, so it
+ * doesn't dwarf the compacted tiles). Placed after the base rules so it wins the same-specificity tie. */
+@media (min-width: 768px) {
+    .ccx__tierstamp { gap: 5px; padding: 4px 11px; }
+    .ccx__ts-lv { font-size: 10px; }
+    .ccx__ts-name { font-size: 12px; }
+}
+
+/* Hot sparks: fixed layer over everything; JS spawns + animates each (arc + gravity). */
+.ccx__sparks { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
+.ccx__spark {
+    position: fixed; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 999px;
+    background: radial-gradient(circle, #fff 0%, var(--sc, var(--pp-primary)) 70%);
+    box-shadow: 0 0 6px var(--sc, var(--pp-primary)); will-change: transform, opacity;
+}
+
+/* ---- End summary: "Tiers earned  Apprentice x2 . Adept" (revealed at settle) ----
+ * Omitted on mobile: it's the only unbounded block in the stack (its wrapped-chip height grows with the
+ * number of tiers crossed) and the most redundant (every tier it tallies just bloomed on its own tile and
+ * keeps a resting-tier subtitle). Dropping it is what keeps a full page of 5 tiles from overflowing a short
+ * phone with no scroll. Tablet/desktop have the room, so they keep the full tally. */
+.ccx__summary {
+    display: none; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+    margin-top: 10px; opacity: 0; transition: opacity 0.45s ease;
+}
+.ccx.is-settled .ccx__summary, .ccx.is-static .ccx__summary { opacity: 1; }
+@media (min-width: 768px) { .ccx__summary:not([hidden]) { display: flex; } }
+.ccx__summary-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--pp-text) 55%, transparent); }
+.ccx__summary-chip {
+    padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-3));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
+}
+
+/* ---- Pager (multi-page claims only). Space is reserved from the start (min-height) so nothing
+ * shifts, but it stays hidden until the whole reveal is done -- the arrows appear at the end. ---- */
+.ccx__pager {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    margin-top: 10px; min-height: 28px;
+    opacity: 0; transition: opacity 0.45s ease;
+}
+.ccx__pager[hidden] { display: none; }
+.ccx.is-live .ccx__pager, .ccx.is-static .ccx__pager { opacity: 1; }
+.ccx__dots { display: flex; align-items: center; gap: 6px; }
+.ccx__dot {
+    width: 7px; height: 7px; padding: 0; border: none; border-radius: 999px; cursor: pointer;
+    background: color-mix(in oklab, var(--pp-text) 28%, transparent);
+    transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+.ccx__dot:hover { background: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-text)); }
+.ccx__dot.is-on {
+    background: var(--pp-primary); transform: scale(1.3);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+}
+.ccx__pg {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px; cursor: pointer; padding: 0;
+    color: var(--pp-text); background: var(--pp-bg-3); border: 1px solid var(--pp-border);
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.ccx__pg svg { width: 16px; height: 16px; }
+.ccx__pg:hover:not(:disabled) { border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-3)); color: var(--pp-primary); }
+.ccx__pg:disabled { opacity: 0.3; cursor: default; }
+.ccx__pg:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ---- Resting Pursuer rank ladder (the hero's .pgl--rank, static). Space reserved from build so
+ * nothing shifts; the ladder is injected + revealed at settle. ---- */
+.ccx__rankbar {
+    min-height: 34px; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid color-mix(in oklab, var(--pp-primary) 14%, var(--pp-border));
+    opacity: 0; transition: opacity 0.45s ease;
+}
+.ccx.is-settled .ccx__rankbar, .ccx.is-static .ccx__rankbar { opacity: 1; }
+.ccx__rankbar .pgl { margin-top: 0; }   /* the .pgl default top margin isn't needed here */
+
+/* ---- Footer (just Continue now; the rank lives in the ladder above) ---- */
+.ccx__foot {
+    display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 10px;
+    opacity: 0; transform: translateY(6px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+}
+.ccx.is-live .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
+.ccx__done { flex: 0 0 auto; }
+
+/* ---- Rank finale: a takeover played after the pages when the Pursuer rank moves. Two intensities:
+ * a division step is lighter; a full rank-up (.is-heavy) adds the scan-beam + a bigger label. ---- */
+.ccx__finale {
+    position: absolute; inset: 0; z-index: 5; overflow: hidden; border-radius: inherit;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(120% 90% at 50% 40%,
+        color-mix(in oklab, var(--pp-primary) 20%, var(--pp-bg-1, var(--pp-bg-2))) 0%, var(--pp-bg-1, var(--pp-bg-2)) 72%);
+    opacity: 0; transition: opacity 0.34s ease;
+}
+.ccx__finale[hidden] { display: none; }
+.ccx__finale.is-in { opacity: 1; }
+
+/* Bottom flood: the rank colour washes up from the bottom edge. --from (old rank) is present pre
+ * hand-off; at the hand-off it fades out as --to (new rank) fades in -- so the whole card's colour
+ * changes with the labels. For a division step old==new colour, so it simply stays that hue. */
+.ccx__finale-flood {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 58%; z-index: 0; pointer-events: none;
+    background: linear-gradient(to top,
+        var(--flood-c, var(--pp-primary)) 0%,
+        color-mix(in oklab, var(--flood-c, var(--pp-primary)) 35%, transparent) 38%,
+        transparent 100%);
+    opacity: 0; transition: opacity 0.6s ease;
+}
+.ccx__finale.is-in .ccx__finale-flood--from { opacity: 0.5; }
+.ccx__finale.is-hand .ccx__finale-flood--from { opacity: 0; }
+.ccx__finale.is-hand .ccx__finale-flood--to { opacity: 0.55; transition-delay: 0.22s; }
+
+.ccx__finale-body { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; padding: 0 26px; text-align: center; }
+.ccx__finale-eyebrow {
+    font-size: 12px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--pp-primary) 80%, var(--pp-text));
+}
+/* ---- The rank hand-off: old rank lifts away, new rank rises in and lands (each its own colour). ----
+ * Both labels occupy the same centred slot; is-hand animates the changing of the guard. --rc is each
+ * label's rank colour (set inline). */
+.ccx__handoff { position: relative; width: 100%; min-height: 4.8rem; display: flex; align-items: center; justify-content: center; }
+.ccx__ho-from, .ccx__ho-to {
+    position: absolute; left: 0; right: 0; line-height: 1; color: var(--rc, var(--pp-primary));
+}
+
+/* OLD rank: fades in (is-in), GLOWS as a wind-up (is-glow), then lifts away (is-hand). The first two
+ * are transitions so they compose; only the lift-off is a keyframe animation. */
+.ccx__ho-from {
+    font-size: 1.9rem; opacity: 0; transform: translateY(10px); text-shadow: 0 0 0 transparent;
+    transition: opacity 0.5s ease, transform 0.5s ease, text-shadow 0.65s ease;
+}
+.ccx__finale.is-in .ccx__ho-from { opacity: 0.9; transform: translateY(0); }
+.ccx__finale.is-glow .ccx__ho-from { opacity: 1; text-shadow: 0 0 26px var(--rc), 0 0 9px var(--rc); }
+.ccx__finale.is-hand .ccx__ho-from { animation: ccxHoFromOut 0.72s cubic-bezier(0.4, 0, 0.9, 0.3) both; }
+
+/* NEW rank: hidden until the hand-off, then rises up and lands with an overshoot. */
+.ccx__ho-to {
+    font-size: 2.4rem; opacity: 0; transform: translateY(44px) scale(0.78);
+    text-shadow: 0 0 30px color-mix(in oklab, var(--rc, var(--pp-primary)) 52%, transparent);
+}
+.ccx__finale.is-heavy .ccx__ho-to { font-size: 3.1rem; }
+.ccx__finale.is-hand .ccx__ho-to { animation: ccxHoToIn 1s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.22s; }
+
+/* Specular sheen: a quick diagonal glint sweeps across the freshly-landed rank (fires just after it settles). */
+.ccx__ho-to::after {
+    content: ''; position: absolute; top: -4px; bottom: -4px; left: 0; width: 28%;
+    background: linear-gradient(100deg, transparent 15%, rgba(255, 255, 255, 0.72) 50%, transparent 85%);
+    opacity: 0; pointer-events: none; mix-blend-mode: screen; transform: skewX(-12deg) translateX(-160%);
+}
+.ccx__finale.is-hand .ccx__ho-to::after { animation: ccxHoSheen 0.62s ease 1.05s both; }
+
+/* the up-chevron ascent streak between them */
+.ccx__ho-arrow { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--pp-primary); opacity: 0; }
+.ccx__ho-arrow svg { width: 15px; height: 15px; }
+.ccx__finale.is-hand .ccx__ho-arrow { animation: ccxHoArrow 0.85s ease both; }
+
+@keyframes ccxHoFromOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-48px) scale(0.9); } }
+@keyframes ccxHoArrow { 0% { opacity: 0; transform: translateY(20px); } 40% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-34px); } }
+/* Damped spring settle: rise, overshoot, a small undershoot bounce, then rest (Apple-style physics). The
+   expo-out timing on the animation lets these stops own the bounce instead of doubling it up. */
+@keyframes ccxHoToIn {
+    0%   { opacity: 0; transform: translateY(44px) scale(0.78); }
+    52%  { opacity: 1; transform: translateY(-3px) scale(1.09); }   /* overshoot past the mark */
+    70%  { transform: translateY(1px) scale(0.978); }               /* damped undershoot */
+    85%  { transform: translateY(0) scale(1.014); }                 /* smaller second overshoot */
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ccxHoSheen {
+    0%   { opacity: 0; transform: skewX(-12deg) translateX(-160%); }
+    22%  { opacity: 1; }
+    100% { opacity: 0; transform: skewX(-12deg) translateX(380%); }
+}
+
+/* Continue lives on the screen, hidden until it's HELD -- the user closes it themselves (screenshot / admire). */
+.ccx__finale-done { margin-top: 12px; opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity 0.4s ease, transform 0.4s ease; }
+.ccx__finale.is-held .ccx__finale-done { opacity: 1; transform: none; pointer-events: auto; }
+
+/* Scan-beam sweep (heavy only): a bright band crossing the screen once (GPU transform + opacity). */
+.ccx__finale-scan {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 40%; z-index: 6; pointer-events: none;
+    opacity: 0; transform: translateX(-130%); filter: blur(2px);
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--pp-primary) 55%, white) 50%, transparent);
+}
+.ccx__finale.is-scan .ccx__finale-scan { animation: ccxScanSweep 0.85s ease-in-out both; }
+@keyframes ccxScanSweep {
+    0% { transform: translateX(-130%); opacity: 0; }
+    15% { opacity: 0.9; }
+    85% { opacity: 0.9; }
+    100% { transform: translateX(320%); opacity: 0; }
+}
+
+/* ---- Reduced motion: no reveal, no bloom -- just show the summary. ---- */
+@media (prefers-reduced-motion: reduce) {
+    .ccx__scrim { transition: none; }
+    .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__summary, .ccx__rankbar, .ccx__jtier, .ccx__job .pp-horizon__fill { transition: none; }
+    .ccx__award.is-hit, .ccx__lv.is-levelup, .ccx__lv.is-threshold { animation: none; }
+    .ccx__sparks { display: none; }   /* blooms are skipped in reduced motion anyway; belt + braces */
+}
+.ccx.is-static .ccx__scrim { opacity: 1; }
+.ccx.is-static .ccx__stage, .ccx.is-static .ccx__glow, .ccx.is-static .ccx__job { opacity: 1; transform: none; }
+
+/* ---- Dev replay harness (DEBUG only; see career.html) ---- */
+.ccx-dev {
+    position: fixed; left: 12px; bottom: 12px; z-index: 70;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 10px; border-radius: 12px;
+    background: color-mix(in oklab, var(--pp-bg-2) 92%, black); border: 1px dashed color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    font-size: 12px;
+}
+.ccx-dev__title { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in oklab, var(--pp-primary) 80%, var(--pp-text)); }
+.ccx-dev__row { display: flex; flex-wrap: wrap; gap: 6px; max-width: 220px; }
+.ccx-dev__btn {
+    padding: 5px 9px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+    color: var(--pp-text); background: var(--pp-bg-3); border: 1px solid var(--pp-border);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ccx-dev__btn:hover { border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-3)); }

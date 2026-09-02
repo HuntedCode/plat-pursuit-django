@@ -1,19 +1,17 @@
 {% load custom_filters %}
 {% if target_profile and data.user_stage_stats and data.user_stage_stats.games_played > 0 %}
-<div class="flex flex-wrap gap-1.5 items-center px-1 py-1">
+<div class="bd-stage__stats">
     {% if data.user_stage_stats.total_playtime %}
-    <span class="badge badge-ghost badge-xs font-bold gap-0.5 text-info">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    <span class="bd-stage__stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
         {{ data.user_stage_stats.total_playtime|timedelta_hours }}
     </span>
     {% endif %}
-    <span class="badge badge-ghost badge-xs font-bold gap-0.5">
-        {{ data.user_stage_stats.games_played }}/{{ data.user_stage_stats.total_games }} game{{ data.user_stage_stats.total_games|pluralize }}
-    </span>
+    <span class="bd-stage__stat">{{ data.user_stage_stats.games_played }}/{{ data.user_stage_stats.total_games }} played</span>
     {% if data.user_stage_stats.platinums > 0 %}
-    <span class="badge badge-ghost badge-xs font-bold gap-0.5 text-trophy-platinum">
+    <span class="bd-stage__stat">
         {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-2.5 h-2.5' %}
-        {{ data.user_stage_stats.platinums }}
+        {{ data.user_stage_stats.platinums }} plat{{ data.user_stage_stats.platinums|pluralize }}
     </span>
     {% endif %}
 </div>

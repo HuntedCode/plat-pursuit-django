@@ -30,8 +30,7 @@ from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPP
 from trophies.util_modules.language import detect_asian_language
 from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
-from trophies.services.badge_service import check_profile_badges
-from trophies.services.milestone_service import check_all_milestones_for_user
+from trophies.services.badge_apply import evaluate_for_sync
 from trophies.services.concept_anchor_service import try_anchor_new_game
 from trophies.services.psn_metadata_service import (
     capture_psn_concept_data,
@@ -663,8 +662,20 @@ class TokenKeeper:
                         self._handle_outage_recovery(profile)
                     except Profile.DoesNotExist:
                         pass
-            except Exception as e:
-                logger.error(f"Error in job worker: {e}")
+            except Exception:
+                # THE most consequential handler on this surface: it catches every job method, and the
+                # `finally` below still calls `_complete_job`, so the per-profile counter decrements and
+                # the pending `sync_complete` fires AS IF THE JOB HAD SUCCEEDED. Anything raising inside a
+                # job is therefore both invisible and destructive.
+                #
+                # It used to log `f"Error in job worker: {e}"` -- no traceback, and naming neither the
+                # profile nor the job type, so the one line nobody reads could not even tell you which
+                # hunter lost what. exc_info and the identifiers are the difference between a diagnosable
+                # incident and a shrug.
+                logger.exception(
+                    "Job worker error: job_type=%s queue=%s profile_id=%s",
+                    job_type, queue_name, profile_id,
+                )
                 # Reset any instances stuck in busy state for too long
                 self._check_stuck_instances()
             finally:
@@ -1490,14 +1501,30 @@ class TokenKeeper:
             _set_phase('stats_badges')
             profile.update_plats()
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-            check_profile_badges(profile, touched_profilegame_ids)
+            # The badge subsystem (GroupBadge/UserGroupBadge + the standings that back the leaderboards).
+            # Scoped to the series the touched games belong to; see evaluate_for_touched_games.
+            #
+            # This is now the ONLY badge evaluation on the sync path. The legacy `check_profile_badges`
+            # ran here alongside it until the 5b cutover, which is why announcements were suppressed:
+            # both engines announced to the same webhook, so a hunter finishing a series got pinged twice.
+            # With the legacy engine gone, this one announces (see `evaluate_for_sync`).
+            #
+            # `evaluate_for_sync` owns its own error handling, deliberately: a try/except here would wrap
+            # the import too, so an ImportError degraded to a log line forever, and a block inside this
+            # method is unreachable by a test -- deleting it passed the whole suite.
+            evaluate_for_sync(profile, touched_profilegame_ids)
 
             # Mark Contract (job XP) tiers as REACHED for the games touched this sync.
             # Detection only -- no XP is granted here; the user banks it later by ACCEPTING
             # the Contract. Wrapped so a failure never breaks the sync.
+            # IMPORTS OUTSIDE THE GUARD, deliberately. This block had them inside, which is the exact
+            # shape of the bug that motivated `tests/engine/test_no_dangling_imports.py`: the deleted
+            # `dashboard_service` import lived in a broad try here, so a ModuleNotFoundError became one
+            # log line and every sync silently skipped the rest of the job. The guard below is for
+            # RUNTIME failures in detection; a missing module is a deploy error and must be loud.
+            # (ProfileGame is already imported at module level; only the service needs hoisting.)
+            from trophies.services.contract_service import check_profile_contracts
             try:
-                from trophies.models import ProfileGame
-                from trophies.services.contract_service import check_profile_contracts
                 touched_concept_ids = [
                     cid for cid in ProfileGame.objects
                     .filter(id__in=touched_profilegame_ids)
@@ -1508,37 +1535,18 @@ class TokenKeeper:
             except Exception:
                 logger.exception(f"[profile {profile_id}] sync_complete contract detection failed")
 
-            # Create consolidated badge notifications
-            try:
-                from notifications.services.deferred_notification_service import DeferredNotificationService
-                DeferredNotificationService.create_badge_notifications(profile_id, profile=profile)
-            except Exception as e:
-                logger.error(f"[profile {profile_id}] sync_complete badge notification failed: {e}", exc_info=True)
-            _set_phase('milestones')
-            from trophies.milestone_constants import ALL_CALENDAR_TYPES, ALL_GENRE_TYPES
-            # Challenge-specific types are excluded here because they're checked
-            # separately by their respective check_*_challenge_progress() functions below
-            check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES)
+            # Badge notifications are NOT flushed here any more. The only producer that ever filled the
+            # `pending_badges:{profile_id}` queue was `notify_badge_awarded`, a post_save on the legacy
+            # `UserBadge` that the 5b cutover deleted -- so this was a Redis read per sync for a queue
+            # nothing writes. Worse, on the first post-deploy sync it would have flushed any surviving
+            # keys into notifications carrying tier-shaped context (`badge_tier`, `next_tier_progress`)
+            # that no longer describes anything. The new subsystem announces to Discord from
+            # `badge_adapters.announce_badges_earned`; wiring an on-site badge notification is part of the
+            # notification-inbox rebuild.
 
-            _set_phase('challenges')
-            # Check A-Z challenge progress
-            from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress, check_genre_challenge_progress
-            try:
-                check_az_challenge_progress(profile)
-            except Exception:
-                logger.exception(f"Failed to check A-Z challenge progress for profile {profile_id}")
-
-            # Check Calendar challenge progress
-            try:
-                check_calendar_challenge_progress(profile)
-            except Exception:
-                logger.exception(f"Failed to check calendar challenge progress for profile {profile_id}")
-
-            # Check Genre challenge progress
-            try:
-                check_genre_challenge_progress(profile)
-            except Exception:
-                logger.exception(f"Failed to check genre challenge progress for profile {profile_id}")
+            # NOTE: the new milestones app (platinums/trophies/completions/badges/level/playtime) is recomputed
+            # LATER, in the 'finishing' phase below -- it reads the post-sync denorm counts (total_trophies /
+            # total_completes) that update_profile_trophy_counts refreshes there, so it must run after them.
 
             _set_phase('finishing')
             # Refresh denormalized stats from authoritative post-sync state.
@@ -1546,30 +1554,19 @@ class TokenKeeper:
             # consistent even when the user toggles that setting between syncs.
             update_profile_games(profile)
             update_profile_trophy_counts(profile)
-            profile.set_sync_status('synced')
 
-            from trophies.services.timeline_service import invalidate_timeline_cache
-            invalidate_timeline_cache(profile_id)
-
-            from trophies.services.stats_service import invalidate_stats_cache
-            invalidate_stats_cache(profile_id)
-
-            # Bulletproof dashboard invalidation: badge_service has its own hook
-            # but it can early-return on no-op syncs. Invalidating here guarantees
-            # every full sync refreshes all dashboard modules regardless of which
-            # sub-services ran.
-            from trophies.services.dashboard_service import invalidate_dashboard_cache
-            invalidate_dashboard_cache(profile_id)
-
-            # Re-render forum signature if enabled (SVG only: fast, no Playwright)
+            # New milestones app: recompute off the now-fresh post-sync signals (plats, badges, and the
+            # trophy/completion denorms just refreshed above). recompute_on_sync reconciles Discord only when a
+            # role-bearing tier was newly crossed, so a routine sync never re-asserts roles against the bot.
+            # (Stays under the 'finishing' phase -- it's quick and part of finalize.)
+            # Import outside the guard: see the contract-detection note above.
+            from milestones.services import recompute_on_sync
             try:
-                from trophies.models import ProfileCardSettings
-                if ProfileCardSettings.objects.filter(profile_id=profile_id, public_sig_enabled=True).exists():
-                    from core.services.profile_card_renderer import render_sig_svg
-                    render_sig_svg(profile)
-                    logger.debug(f"[profile {profile_id}] forum sig re-rendered")
+                recompute_on_sync(profile)
             except Exception:
-                logger.exception(f"[profile {profile_id}] forum sig render failed")
+                logger.exception(f"[profile {profile_id}] milestone recompute failed")
+
+            profile.set_sync_status('synced')
 
             # (job-worker bookend logs DONE; trailing narration line dropped)
         except PSNOutageError:
@@ -2535,7 +2532,7 @@ class TokenKeeper:
                 job_counter += 2  # sync_trophies = +2 (one without progress, one with)
                 # Only games whose EarnedTrophy aggregates need recomputation are
                 # added to touched_profilegame_ids. update_profilegame_stats and
-                # check_profile_badges scope their work to this list, so adding
+                # evaluate_for_sync scope their work to this list, so adding
                 # untouched games is wasted DB / badge-eval cycles.
                 touched_profilegame_ids.append(profile_game.id)
 

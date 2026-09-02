@@ -5,9 +5,35 @@ This module handles the calculation and caching of community rating averages
 for game concepts, including difficulty, grindiness, fun, and time estimates.
 Supports both base game ratings (concept_trophy_group=NULL) and DLC group ratings.
 """
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Max, Q, Sum
+from django.db.models.functions import Lower
 from django.core.cache import cache
 from trophies.util_modules.language import calculate_trimmed_mean
+
+
+def _percentages(counts):
+    """Integer percentages that sum to exactly 100 (largest remainder).
+
+    Naive rounding is fine for one figure and visibly wrong for a set: three equal shares round to
+    33/33/33 and read as a missing percent, while 1/3/3 of 7 rounds to 14/43/43 and reads as an extra
+    one. These are printed side by side and expected to total, so the leftover is handed to whichever
+    options were rounded down hardest.
+
+    Returns all zeroes for an empty set rather than dividing by it.
+    """
+    total = sum(counts)
+    if not total:
+        return [0] * len(counts)
+
+    exact = [c / total * 100 for c in counts]
+    out = [int(v) for v in exact]
+    # Hand out what integer truncation left over, biggest fractional part first. Ties break on the
+    # earlier option, which keeps the result stable for identical inputs.
+    leftover = 100 - sum(out)
+    order = sorted(range(len(counts)), key=lambda i: (-(exact[i] - out[i]), i))
+    for i in order[:leftover]:
+        out[i] += 1
+    return out
 
 
 class RatingService:
@@ -26,6 +52,8 @@ class RatingService:
         Returns:
             dict or None
         """
+        from trophies.models import UserConceptRating
+
         if not ratings_qs.exists():
             return None
 
@@ -34,8 +62,57 @@ class RatingService:
             avg_grindiness=Avg('grindiness'),
             avg_fun=Avg('fun_ranking'),
             avg_rating=Avg('overall_rating'),
-            count=Count('id')
+            count=Count('id'),
         )
+
+        # overall_rating is 0.5-5.0 on a 0.5 grid == 10 exact values; give each its own bucket (no rounding,
+        # so 3.5 is 3.5, not "4"). The DISTRIBUTION shows the SHAPE a single average hides (polarizing vs.
+        # consensus). Group-by returns <=10 rows (whale-safe); we snap any off-grid legacy value to the grid.
+        # Bucket key is the integer half-step 1..10 (0.5->1 ... 5.0->10) so the template data-* and the JSON the
+        # live-update reads match exactly (a float like 1.0 renders "1.0" in one place, "1" in the other).
+        raw = ratings_qs.values_list('overall_rating').annotate(c=Count('id')).values_list('overall_rating', 'c')
+        counts = {step: 0 for step in range(1, 11)}
+        for value, c in raw:
+            counts[min(10, max(1, round(value * 2)))] += c
+        total = aggregates['count'] or 1
+        peak = max(counts.values()) or 1   # scale bar heights to the tallest column so the shape reads clearly
+        aggregates['distribution'] = [
+            {'step': step, 'value': step / 2,
+             'starnum': step // 2 if step % 2 == 0 else None,   # labeled only under whole stars (2,4,6,8,10)
+             'count': counts[step], 'pct': round(counts[step] / total * 100),
+             'bar': round(counts[step] / peak * 100)}
+            for step in range(1, 11)   # 0.5 (left) -> 5.0 (right)
+        ]
+
+        # The RECOMMENDATION split -- the one aggregate that is a verdict rather than an average. Grouped
+        # in the database (<=5 rows back), and it rides the caller's existing cache entry because this
+        # whole dict is what gets cached: no new key, no new invalidation path.
+        #
+        # ALL THREE options, always -- including the ones nobody picked. A split that showed only the
+        # recommend share reports "everybody said Do it" and "most said Do it, one said skip it" as the
+        # same 100%-vs-83%, when the interesting part of a verdict is often the dissent. Zeroes are
+        # information too: no one calling a platinum a slog is a fact about the game.
+        by_rec = dict(
+            ratings_qs.exclude(recommendation='')
+            .values_list('recommendation')
+            .annotate(c=Count('id'))
+        )
+        answered = sum(by_rec.values())
+        counts = [by_rec.get(value, 0) for value, _label in UserConceptRating.RECOMMENDATIONS]
+        aggregates['recommendation_split'] = {
+            # Ordered to match RECOMMENDATIONS so no display has to know the vocabulary itself: a reworded
+            # label, or a fourth option, reaches every surface without a template edit.
+            'options': [
+                {'value': value, 'label': label, 'count': count, 'pct': pct}
+                for (value, label), count, pct in zip(
+                    UserConceptRating.RECOMMENDATIONS, counts, _percentages(counts)
+                )
+            ],
+            # The DENOMINATOR is answered ratings, not all of them: every rating written before the field
+            # existed carries no answer, and counting those as "would not recommend" would misreport a
+            # beloved game as divisive for as long as the backlog takes to clear.
+            'answered': answered,
+        }
 
         hours_list = list(ratings_qs.values_list('hours_to_platinum', flat=True))
         aggregates['avg_hours'] = (
@@ -229,3 +306,229 @@ class RatingService:
             f"concept:averages:{concept.id}:group:{concept_trophy_group.id}"
         )
         cache.delete(cache_key)
+
+
+# --------------------------------------------------------------------------- #
+#  One HUNTER's ratings -- the profile Ratings tab
+#
+#  The class above answers "what does the community think of this game". This half answers the mirror
+#  question, "what does this person think of games", and it lives in the same file on purpose: both read
+#  UserConceptRating, and a second module would be where the two definitions of "the community average"
+#  drift apart.
+# --------------------------------------------------------------------------- #
+
+#: A page of the ratings wall. Smaller than the 50 the other tabs use because these cards are tall (cover +
+#: score + three stats + an optional quick take), so 50 of them is a very long first paint.
+RATINGS_PER_PAGE = 24
+
+#: The orderings offered, and the only ones -- the template's options come from this list, so the control
+#: cannot advertise a sort the view does not implement.
+#:
+#: SIX, not the eight the columns would allow. Grindiness and Fun were dropped, not forgotten: grind is
+#: what hours-to-platinum measures in a unit people actually feel, and "most fun" and "highest rated" rank
+#: almost the same shelf. A sort list is a list of QUESTIONS, and two of the eight were the same question
+#: asked twice.
+PROFILE_RATING_SORTS = [
+    ('recent', 'Recently rated'),
+    ('highest', 'Highest rated'),
+    ('lowest', 'Lowest rated'),
+    ('hardest', 'Hardest first'),
+    ('longest', 'Longest first'),
+    ('title', 'Title (A-Z)'),
+]
+
+#: Every ordering ends on `-updated_at`, which is unique enough per profile to be a stable tiebreak. Without
+#: one, a wall paged by OFFSET can repeat or skip a card between pages whenever scores tie -- and scores tie
+#: constantly here (a 1-10 integer over a few hundred rows).
+_RATING_SORT_ORDERS = {
+    'recent': ('-updated_at',),
+    'highest': ('-overall_rating', '-updated_at'),
+    'lowest': ('overall_rating', '-updated_at'),
+    'hardest': ('-difficulty', '-updated_at'),
+    'longest': ('-hours_to_platinum', '-updated_at'),
+    'title': (Lower('concept__unified_title'), '-updated_at'),
+}
+
+
+def profile_rating_summary(profile):
+    """This hunter's taste, in one row.
+
+    ONE aggregate over their whole rating set, never a Python pass over the rows: the wall is paged, but
+    the summary describes everything they have rated, and "iterate the queryset to build totals" is the
+    exact shape that OOMs a big account.
+
+    Returns a dict shaped for `rating_summary` / `rating_verdict` (the same keys the game-detail conditions
+    card uses), so the synthesized sentence can be reused verbatim rather than re-worded here. `count` is 0
+    for a hunter who has rated nothing; the caller renders nothing at all in that case.
+    """
+    from trophies.models import UserConceptRating
+
+    row = UserConceptRating.objects.filter(profile=profile).aggregate(
+        count=Count('id'),
+        avg_rating=Avg('overall_rating'),
+        avg_difficulty=Avg('difficulty'),
+        avg_grindiness=Avg('grindiness'),
+        avg_fun=Avg('fun_ranking'),
+        hours=Sum('hours_to_platinum'),
+        # The EXTREME, not another average. The synthesized sentence already carries all three averages, so
+        # a cell repeating one of them would print the same fact twice in two formats -- where "the hardest
+        # thing they have scored" is precisely what an average hides.
+        toughest=Max('difficulty'),
+        # Quick takes are counted through the SAME predicate `visible_blurbs()` reads by, so the header's
+        # figure can never promise takes the cards then withhold as staff-hidden.
+        takes=Count('id', filter=~Q(blurb='') & Q(blurb_hidden=False)),
+        # How often this hunter sends people after a platinum -- their own recommend rate, on the same
+        # value the community split counts. Same one aggregate, so it costs nothing.
+        answered=Count('id', filter=~Q(recommendation='')),
+        recommends=Count('id', filter=Q(recommendation='worth_it')),
+        # The two halves the wall is split into. Counted here rather than by a second query because they
+        # are chip captions on a switcher that renders above the wall -- and because the summary itself
+        # deliberately stays WHOLE: it describes the hunter's taste, which does not divide at the DLC line.
+        base_count=Count('id', filter=Q(concept_trophy_group__isnull=True)),
+        dlc_count=Count('id', filter=Q(concept_trophy_group__isnull=False)),
+    )
+    # Denominated in ANSWERED ratings: everything they rated before the field existed carries no answer,
+    # and counting those against them would read as a hunter who recommends almost nothing.
+    row['recommend_pct'] = (
+        round(row['recommends'] / row['answered'] * 100) if row['answered'] else None
+    )
+    return row
+
+
+def _community_scores(rows):
+    """The community's score for each (concept, group) on THIS PAGE. One grouped query, whatever the page.
+
+    Not `annotate_community_ratings`: that helper correlates on the concept alone and hard-filters to
+    `concept_trophy_group__isnull=True`, so a DLC rating would be scored against the base game's average --
+    a comparison that renders convincingly and means something else. Correlating on the group instead is
+    not a fix either, because a base-game rating carries a NULL group and `NULL = NULL` never matches in
+    SQL, so every base row would silently come back unmatched.
+
+    Grouping in the database and pairing up in Python sidesteps both. The GROUP BY returns one row per
+    (concept, group) touched, so it is bounded by the page, not by how heavily rated those games are.
+    """
+    from trophies.models import UserConceptRating
+
+    if not rows:
+        return {}
+
+    wanted = {(r.concept_id, r.concept_trophy_group_id) for r in rows}
+    grouped = (
+        UserConceptRating.objects
+        .filter(concept_id__in={c for c, _ in wanted})
+        .values('concept_id', 'concept_trophy_group_id')
+        .annotate(avg=Avg('overall_rating'), n=Count('id'))
+    )
+    return {
+        (g['concept_id'], g['concept_trophy_group_id']): g
+        for g in grouped
+        if (g['concept_id'], g['concept_trophy_group_id']) in wanted
+    }
+
+
+def _games_for_concepts(profile, concept_ids):
+    """The Game each rated concept is, for this hunter: one bulk query for the whole page.
+
+    A rating hangs off a CONCEPT, but a cover and a link need a GAME -- `display_image_url` is the site's
+    one cover chain and `game_detail_with_profile` is keyed on `np_communication_id`. A concept can span
+    several platform SKUs, so the pick is ordered: the one they platinumed, then the one they got furthest
+    in, then the id as a stable tiebreak. Anything less deterministic would let a card change which version
+    it links to between two loads of the same page.
+
+    `raw_response` is deferred alongside the `igdb_match` join, per the standing rule -- it is ~30 KB of
+    unread IGDB JSON per row and the cover template never touches it.
+    """
+    from trophies.models import ProfileGame
+
+    if not concept_ids:
+        return {}
+
+    owned = (
+        ProfileGame.objects
+        .filter(profile=profile, game__concept_id__in=concept_ids)
+        .select_related('game', 'game__concept', 'game__concept__igdb_match')
+        .defer('game__concept__igdb_match__raw_response')
+        .order_by('game__concept_id', '-has_plat', '-progress', 'game__np_communication_id')
+    )
+    out = {}
+    for pg in owned:
+        out.setdefault(pg.game.concept_id, pg.game)
+    return out
+
+
+def concepts_defining_a_platinum(concept_ids):
+    """Of these concepts, the ones that define a platinum trophy at all.
+
+    Page-bounded and index-backed. Asked of the CONCEPT rather than of any one game because "does this
+    have a platinum" is a fact about the title, not about which SKU a particular hunter happens to own.
+    """
+    if not concept_ids:
+        return set()
+
+    from trophies.models import Trophy
+
+    return set(
+        Trophy.objects
+        .filter(game__concept_id__in=concept_ids, trophy_type='platinum')
+        .values_list('game__concept_id', flat=True)
+        .distinct()
+    )
+
+
+def build_profile_ratings_page(profile, sort='recent', page=1, per_page=RATINGS_PER_PAGE, dlc=False):
+    """One page of a hunter's ratings, with everything each card draws already attached.
+
+    Four queries flat on the base wall, three on the DLC one: the ratings themselves, the community scores
+    for the concepts on it, the games behind those concepts, and (base only) which of those concepts define
+    a platinum, for the verdict wording. Nothing here scales with the size of the account -- only with
+    `per_page`.
+
+    Sliced rather than paginated. `Paginator` runs a `COUNT(*)` over the whole set on every page, and the
+    header already knows the total from `profile_rating_summary`, so paying for it again per page buys
+    nothing.
+    """
+    from trophies.models import UserConceptRating
+
+    if sort not in _RATING_SORT_ORDERS:
+        sort = PROFILE_RATING_SORTS[0][0]
+    page = max(int(page), 1)
+    offset = (page - 1) * per_page
+
+    # Base game or DLC, never both. A DLC pack is rated separately from the game it belongs to, so a mixed
+    # wall shows the same title twice with different scores and leaves the reader working out why -- which
+    # is the confusion the split removes. `concept_trophy_group` IS the distinction: null = base game.
+    rows = list(
+        UserConceptRating.objects
+        .filter(profile=profile, concept_trophy_group__isnull=not dlc)
+        .select_related('concept', 'concept__igdb_match', 'concept_trophy_group')
+        .defer('concept__igdb_match__raw_response')
+        .order_by(*_RATING_SORT_ORDERS[sort])
+        [offset:offset + per_page]
+    )
+
+    community = _community_scores(rows)
+    games = _games_for_concepts(profile, {r.concept_id for r in rows})
+    plat_concepts = concepts_defining_a_platinum(
+        set() if dlc else {r.concept_id for r in rows}
+    )
+
+    for r in rows:
+        r.card_game = games.get(r.concept_id)
+        # Shown only when someone OTHER than this hunter has rated it too: "you 4.5, community 4.5" against
+        # a sample of one is not a comparison, it is the same number printed twice.
+        stats = community.get((r.concept_id, r.concept_trophy_group_id))
+        r.community_avg = stats['avg'] if stats and stats['n'] > 1 else None
+        r.community_n = stats['n'] if stats else 1
+
+        # The verdict, worded for the set it is about: "tough plat" is wrong on a DLC pack (which
+        # never has one) and on a game that never defined one.
+        #
+        # Read off the CONCEPT, not off `card_game`. `card_game` is the hunter's own highest-progress SKU
+        # and can be missing entirely (a concept merge re-points a rating onto a survivor whose copies
+        # they do not own) -- which used to fall through to False and stamp the no-platinum wording on a
+        # real platinum. It is also the wrong question: a hunter whose only copy is a no-platinum port
+        # still rated a concept that defines one.
+        has_plat = r.concept_id in plat_concepts
+        r.recommendation_text = r.recommendation_label(has_plat) if r.recommendation else ''
+
+    return rows

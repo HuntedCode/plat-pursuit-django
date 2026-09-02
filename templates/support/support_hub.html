@@ -1,0 +1,597 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Support{% endblock %}
+{% block meta_description %}Support Platinum Pursuit: become a member, back the fundraiser, and help an independent trophy-tracking site stay fast, ad-free, and full of new ideas.{% endblock %}
+
+{% comment %}
+The Support landing IS the membership storefront. Served by users.views.SupportStorefrontView, which
+also answers this page's checkout POST (the form carries no action, so handler and form share a URL).
+
+THE PAGE IS THREE SECTIONS: the split header (the ask), the paid band (how it is funded), and the
+Credits (who funds it), plus the perks modal. It was stripped to the header alone mid-rebuild and
+built back one agreed piece at a time -- earlier sections (a four-beat prose arc, an evidence band,
+a roadmap strip, a signed note) live in this file's git history and are headed for /support/roadmap/
+and About.
+
+THE HEADER IS SPLIT: the statement on the left, the ask on the right in a decorated box. That puts the
+decision above the fold rather than below several sections of argument.
+
+THE BOX IS AMOUNT-FIRST. You pick a number and the page tells you what that makes you, rather than
+comparing six named rows -- borrowed from Blender's Development Fund widget. Entirely CSS-driven off
+`:has(:checked)`: both the cycle switch and the amount grid are real radios, so all of it works with
+JavaScript off. The script only adds the `is-active` class the shared `.pp-switch` look keys on.
+
+THE LADDER IS PLACEHOLDERS. Buttons are inert until its twelve Stripe prices and twelve PayPal plans
+exist. The POST handler, success_url, subscribe_success and both webhooks underneath are untouched, so
+switching it on is wiring a button to a contract that already works. The view forces placeholders off
+in live mode, so production can never render a dead buy button.
+
+Everything sits on the standard card chrome. Nothing on this site sets prose directly on the page
+substrate, and an earlier version of this page did, which is most of why it read as foreign.
+{% endcomment %}
+
+{% block content %}
+<div class="sup">
+
+    {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
+    page does not carry -- so without this block every checkout rejection ("invalid tier", "already
+    subscribed") was SILENTLY swallowed. {% endcomment %}
+    {% include 'partials/_messages.html' %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral sup-headcard">
+        <div class="card-body p-4 md:p-6 lg:p-8">
+            <div class="sup-head">
+
+                <div class="sup-head__say pp-head-cascade">
+                    <p class="sup-head__eyebrow">Support Platinum Pursuit</p>
+                    <h1 class="sup-head__h1">Help us build the best home for trophy&nbsp;hunting.</h1>
+                    {% comment %} The INVITATION leads. An earlier draft opened on "PlatPursuit is
+                    free, and always will be" and then listed three more things we do not do to you --
+                    free, no paywall, no ads, nothing locked -- which is four negatives before a single
+                    positive. That reads as a disclaimer rather than an ask. The free-forever promise
+                    is reassurance and belongs here, underneath, where it lands as generosity instead
+                    of as a defence. {% endcomment %}
+                    <p class="sup-head__lede">
+                        We are trophy hunters making the tools we always wanted to use, and there is a
+                        great deal more we want to build. PlatPursuit stays free for everyone, and
+                        supporters are the reason it keeps growing.
+                    </p>
+
+                    {% comment %} The artwork the whole thing is in aid of. Live rows, so it never
+                    goes stale, and omitted entirely on a catalogue with no commissioned art rather
+                    than rendering empty frames. {% endcomment %}
+                    {% if badge_art %}
+                    <div class="sup-head__art">
+                        <ul class="sup-art">
+                            {% for art in badge_art %}
+                            <li class="sup-art__cell" style="--i: {{ forloop.counter0 }}">
+                                <img src="{{ art.src }}" alt="{{ art.series }} badge artwork" loading="lazy" decoding="async">
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        <p class="sup-art__cap">Every badge gets handcrafted, beautiful artwork. No AI.</p>
+                    </div>
+                    {% endif %}
+
+                    {% comment %} The factual floor under the ask. Omitted whole on a cold heartbeat
+                    cache rather than printing zeroes -- "we currently serve 0 hunters" on the page
+                    asking you to fund the thing is worse than saying nothing at all. {% endcomment %}
+                    {% if today %}
+                    <div class="sup-serve">
+                        <p class="sup-serve__k">We currently serve</p>
+                        <dl class="sup-serve__row">
+                            <div class="sup-serve__cell">
+                                <dt>Hunters</dt>
+                                <dd class="pp-tally" data-countup="{{ today.hunters }}">{{ today.hunters|intcomma }}</dd>
+                            </div>
+                            <div class="sup-serve__cell">
+                                <dt>Trophies tracked</dt>
+                                <dd class="pp-tally" data-countup="{{ today.trophies }}">{{ today.trophies|intcomma }}</dd>
+                            </div>
+                            <div class="sup-serve__cell">
+                                <dt>Platinums earned</dt>
+                                <dd class="pp-tally" data-countup="{{ today.platinums }}">{{ today.platinums|intcomma }}</dd>
+                            </div>
+                            <div class="sup-serve__cell">
+                                <dt>Hours hunted</dt>
+                                <dd class="pp-tally" data-countup="{{ today.hours }}">{{ today.hours|intcomma }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% comment %} ------------------------------------------- the ask ------------- {% endcomment %}
+                {% if viewer_is_member and not store_preview %}
+                <div class="sup-box sup-box--member">
+                    <svg class="sup-box__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                    </svg>
+                    <p class="sup-box__thanks">You already back this.</p>
+                    <p class="sup-box__thanksub">
+                        Genuinely, thank you. The servers, the bills and everything still to come run
+                        on people doing what you did.
+                    </p>
+                    <a href="{% url 'subscription_management' %}" class="sup-box__manage">Manage your membership</a>
+                    <button type="button" class="sup-box__perklink" data-perks-open>What your membership includes</button>
+                    {% if beta_store_preview %}
+                    <a href="?preview=store" class="sup-box__betapeek">Preview the store card (beta)</a>
+                    {% endif %}
+                </div>
+
+                {% elif pricing_available %}
+                {% comment %} The box's per-level hue, emitted from the ONE source (SUPPORT_TIERS)
+                rather than a parallel CSS block that could drift. The selected amount's radio drives
+                `--sup-t` on the whole box, which is what lets the CTA and the level block wear the
+                level's colour -- a stylesheet copy of these six rules once claimed to do this and
+                never could, because the inline `--sup-t` lived on sibling elements the button does
+                not inherit from. {% endcomment %}
+                <style>
+                    {% for tier in tiers %}
+                    .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) { --sup-t: {{ tier.colour }}; }
+                    .sup-box:has(input[name="tier"][value="{{ tier.slug }}"]:checked) .sup-go__t--{{ tier.slug }} { display: inline; }
+                    {% endfor %}
+                    {% comment %} The no-:has() fallback: the default tier's name shows
+                    unconditionally so the CTA is never the dangling "Become a"; browsers WITH
+                    :has() hide it again whenever a different tier is the one checked. {% endcomment %}
+                    .sup-go__t--{{ default_tier }} { display: inline; }
+                    .sup-box:has(input[name="tier"]:checked:not([value="{{ default_tier }}"])) .sup-go__t--{{ default_tier }} { display: none; }
+                </style>
+                <div class="sup-box">
+                    {% comment %} Inside the box, not a grid sibling: as a sibling it claimed the
+                    header grid's second column and wrapped the box itself to the next row. {% endcomment %}
+                    {% if store_preview and viewer_is_member %}
+                    <p class="sup-box__betapeek-note">
+                        Beta preview: you are seeing the store as a non-member.
+                        <a href="{{ request.path }}">Back to your card</a>
+                    </p>
+                    {% endif %}
+                    {% comment %} A REAL FORM, and the audit finding that mattered most on this page:
+                    the tier radios and both submit buttons floated in plain divs, and a submit
+                    button outside a form is inert -- so at ladder go-live the enabled buttons would
+                    have silently done nothing, with CI green forever because every checkout test
+                    POSTs via the test client and never exercises the markup. The missing
+                    `{% templatetag openvariable %}csrf{% templatetag closevariable %}` would then
+                    have 403'd every submission anyway. `test_the_checkout_is_a_real_form` now ties
+                    the contract tests to the page.
+
+                    No `action`, deliberately: it self-POSTs to /support/, which is why the handler
+                    lives on this view. It reads `tier`, `provider` and the `sup-cycle` radio, and
+                    prices the interval server-side. {% endcomment %}
+                    <form method="post">
+                    {% csrf_token %}
+                    <div class="pp-switch sup-box__switch" role="radiogroup" aria-label="Billing cycle">
+                        <label class="pp-switch__chip">
+                            <input type="radio" name="sup-cycle" value="monthly" class="sr-only" checked>
+                            <span class="pp-switch__lbl">Monthly</span>
+                        </label>
+                        <label class="pp-switch__chip">
+                            <input type="radio" name="sup-cycle" value="yearly" class="sr-only">
+                            <span class="pp-switch__lbl">Yearly</span>
+                            {% comment %} Static on the chip, not inside the box: the pitch is
+                            visible before you switch, and the box never resizes between tabs.
+                            Yearly is priced at ten months, so the claim is exactly true. {% endcomment %}
+                            <span class="sup-cycle__bonus">2 months free</span>
+                        </label>
+                    </div>
+
+                    <div class="sup-buy">
+                        <fieldset class="sup-amts">
+                            <legend class="sr-only">How much would you like to give?</legend>
+                            {% for tier in tiers %}
+                            <label class="sup-amt" style="--sup-t: {{ tier.colour }}">
+                                <input type="radio" name="tier" value="{{ tier.slug }}" class="sr-only"
+                                       {% if tier.slug == default_tier %}checked{% endif %}>
+                                <span class="sup-stars" aria-hidden="true">{% include 'support/_stars.html' with tier=tier %}</span>
+                                <span class="sup-amt__m">${{ tier.monthly }}</span>
+                                <span class="sup-amt__y">${{ tier.yearly }}</span>
+                            </label>
+                            {% endfor %}
+                        </fieldset>
+
+                        {% comment %} PLACEHOLDER, and marked as one in the copy. What belongs here is
+                        the supporter mark shown IN CONTEXT -- your own name on a leaderboard row,
+                        wearing the level you are about to pick -- which is the single most persuasive
+                        thing this box could show, and the reason it is worth designing properly rather
+                        than approximating. The row below is a mock: real geometry, real name, stand-in
+                        mark. All six ship and the checked amount reveals its own, so the swap is a
+                        state change. {% endcomment %}
+                        {% for tier in tiers %}
+                        <div class="sup-becomes" data-for="{{ tier.slug }}"
+                             style="--sup-t: {{ tier.colour }}">
+                            <p class="sup-becomes__h">
+                                You would appear as a <b>{{ tier.name }}</b>
+                                <span class="sup-becomes__stars" aria-hidden="true">{% include 'support/_stars.html' with tier=tier %}</span>
+                            </p>
+
+                            {% comment %} The preview: your own name on a leaderboard row, wearing
+                            the level you are about to pick -- the most persuasive thing this box can
+                            show. Geometry matches the LIVE row (.lb-row__title), so wiring the mark
+                            site-wide later is a swap, not a redesign. {% endcomment %}
+                            <div class="sup-prev" aria-hidden="true">
+                                <span class="sup-prev__rank">#12</span>
+                                <span class="sup-prev__av">{% include 'partials/_avatar.html' with url=viewer_avatar alt='' %}</span>
+                                <span class="sup-prev__who">
+                                    <span class="sup-prev__name">
+                                        {% comment %} The real primitive, not a mock: `.pp-supname`
+                                        is the site-wide supporter name treatment, and this is the
+                                        one place it can be used today because the level is in
+                                        context. Every other surface that renders a username knows
+                                        only the boolean `Profile.user_is_premium`. {% endcomment %}
+                                        <span class="pp-supname">{{ viewer_name }}</span><span class="sup-prev__mark">{% include 'support/_stars.html' with tier=tier %}</span>
+                                    </span>
+                                    {% comment %} The line a leaderboard row already puts under a
+                                    name, carrying the worn title. The level joins it after a dot, in
+                                    words, so somebody reading a board can see what a supporter IS
+                                    rather than decoding a star count.
+
+                                    "PlatPursuit Patron", not "Patron Supporter": the level names now
+                                    come from the giving register, so they are already supporter-words
+                                    and appending "Supporter" said the same thing twice. Naming the
+                                    site instead removes the ambiguity on a stranger's row and matches
+                                    the "permanent PlatPursuit Supporter credit" wording in the perk
+                                    list. {% endcomment %}
+                                    <span class="sup-prev__sub">
+                                        {% if viewer_title %}{{ viewer_title }}<span class="pp-marktitle__dot" aria-hidden="true">&middot;</span>{% endif %}<span class="pp-marktitle" style="--mt-c: {{ tier.colour }}">PlatPursuit {{ tier.name }}</span>
+                                    </span>
+                                </span>
+                                <span class="sup-prev__score">1,204</span>
+                            </div>
+
+                            {% comment %} The first line is the SAME at every level and links to the
+                            modal, because the answer does not change with the amount -- that is the
+                            whole model, stated at the moment of choosing. Every line under it is the
+                            same at every level too, now that everyone supporting is credited -- what
+                            changes between levels is the mark, not the list. {% endcomment %}
+                            <ul class="sup-gets">
+                                <li>
+                                    <button type="button" class="sup-gets__modal" data-perks-open>
+                                        Every supporter perk, whatever you give
+                                    </button>
+                                </li>
+                                {% comment %} The level's name wears the treatment it is describing,
+                                so the sentence demonstrates itself rather than asking you to imagine
+                                it. `--sup-t` comes from `.sup-becomes` above, so the word is already
+                                in the right colour.
+
+                                "The", not "A": the names are not all consonant-initial ("A Ally"),
+                                and an article that has to branch per level is worse than one the
+                                sentence does not need. {% endcomment %}
+                                <li>The <span class="pp-supname">{{ tier.name }}</span> mark beside your name, site-wide</li>
+                                <li>Your name in the credits, with our thanks</li>
+                            </ul>
+                        </div>
+                        {% endfor %}
+
+                        {% comment %} ONE BUTTON PER PROVIDER, not a provider toggle followed by a
+                        single button. The server takes `provider` as its own field, so each button
+                        can simply carry its own -- which removes a step and puts PayPal where people
+                        look for it, since it is a brand they recognise rather than a setting.
+
+                        The card button covers everything Stripe Checkout is configured for in
+                        `create_checkout_session`: card, US bank, Amazon Pay, Cash App and Link. {% endcomment %}
+                        <div class="sup-pays">
+                            <button type="submit" name="provider" value="stripe" class="sup-buy__go"
+                                    {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
+                                {% comment %} Floating stars, the Blender-hearts move in our own
+                                vocabulary: the SAME star path as the supporter mark (one shape at
+                                every level, per visual-identity -- a second shape here would be a
+                                second mark), wearing the SELECTED level's colour through --sup-t.
+                                Pick Cornerstone and the button breathes rose; Backer, teal.
+                                Decorative only: aria-hidden, pointer-events none, gone under
+                                prefers-reduced-motion, and only on the PRIMARY button -- the
+                                PayPal outline is deliberately the quiet alternative. {% endcomment %}
+                                <span class="sup-go__rise" aria-hidden="true">
+                                    {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                                </span>
+                                {% comment %} The CTA names what you become, not what you pay:
+                                "Become a Patron" / "A year as a Patron". One hidden span per
+                                level, revealed by the same :has() rules that set --sup-t, so the
+                                words and the colour change in the same instant. Both faces sit
+                                position:relative so the text paints ABOVE the rising stars. {% endcomment %}
+                                <span class="sup-buy__go-m">Become a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}<span class="sr-only">, pay by card</span></span>
+                                <span class="sup-buy__go-y">A year as a{% for tier in tiers %}<span class="sup-go__t sup-go__t--{{ tier.slug }}"> {{ tier.name }}</span>{% endfor %}<span class="sr-only">, pay by card</span></span>
+                            </button>
+
+                            {% comment %} Gated on PayPal actually being configured for this mode --
+                            the sandbox plan IDs are empty, so `paypal_available` is False in dev.
+                            Shown anyway while the ladder is placeholders, because nothing here is
+                            real yet and the point of the placeholder is to review the shape. {% endcomment %}
+                            {% if paypal_available or tiers_are_placeholders %}
+                            <button type="submit" name="provider" value="paypal" class="sup-buy__go sup-buy__go--pp"
+                                    {% if tiers_are_placeholders %}disabled aria-disabled="true"{% endif %}>
+                                {% comment %} No stars here: the PayPal button runs the CURRENT
+                                instead -- the same ppSupFlow water the supporter name wears,
+                                drifting the level's hue across the fill. Two ambient motions,
+                                two characters: the primary rises, the alternative flows.
+
+                                The label is deliberately PLAIN text: a styled recreation of the
+                                PayPal wordmark was tried and pulled (recreating a registered mark
+                                is what brand guidelines prohibit; plain nominative text is
+                                zero-risk). The official monogram SVG from their brand kit can
+                                slot in when wanted. {% endcomment %}
+                                <span class="sup-go__ppword">PayPal</span><span class="sr-only">, pay the selected level with PayPal</span>
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        {% if tiers_are_placeholders %}
+                        <p class="sup-box__soon">Not live yet. We are building the checkout behind it.</p>
+                        {% endif %}
+                    </div>
+
+                    </form>
+                </div>
+
+                {% else %}
+                <div class="sup-box sup-box--off">
+                    <p class="sup-box__thanks">Memberships are briefly unavailable</p>
+                    <p class="sup-box__thanksub">We are sorting something out on our end. Nothing on the site has changed.</p>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </section>
+
+    {% comment %} ===================================================== the road ============= {% endcomment %}
+    {% comment %} The roadmap band: part of the pitch, directly under the ask. What your support
+    BUILDS, compressed to one strip -- each certainty tier and a few of its feature names, from
+    ROADMAP_FEATURES, the same list /support/roadmap/ walks in full. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3 pp-arrive" data-sup-road>
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <div class="sup-road__head">
+                {% comment %} A real heading: the band was invisible to the page outline and the
+                dl had no accessible name. {% endcomment %}
+                <h2 class="sup-road__k" id="sup-road-heading">Where this is going</h2>
+                <a href="{% url 'support_roadmap' %}" class="sup-road__link">
+                    The full roadmap
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </a>
+            </div>
+            {% comment %} The page's own tier vocabulary, compressed: each certainty tier and a
+            few of its feature names. One story across both surfaces, no separate skeleton. {% endcomment %}
+            {% comment %} Each cell is the roadmap page's tier presentation in miniature: the
+            same chip primitive, the same temperature semantics (works lit, next cool, wishlist
+            dashed outline) -- the band previews the page it links to. {% endcomment %}
+            <dl class="sup-road__tiers" aria-labelledby="sup-road-heading">
+                {% for tier in roadmap_teaser %}
+                <div class="sup-road__cell is-{{ tier.key }} pp-arrive__it" style="--i: {{ forloop.counter0 }}">
+                    <dt><span class="rm-tier__chip">{{ tier.name }}</span></dt>
+                    {% comment %} A real list inside the dd, so each feature is an audible item
+                    rather than three names run together as one string. {% endcomment %}
+                    <dd>
+                        <ul>
+                            {% for feat in tier.feats %}
+                            <li class="sup-road__feat">
+                                <span class="rm-feat__icon" aria-hidden="true">{% include 'support/_roadmap_icon.html' with key=feat.key %}</span>
+                                {{ feat.name }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </dd>
+                </div>
+                {% endfor %}
+            </dl>
+        </div>
+    </section>
+
+    {% comment %} ===================================================== how it is paid ======== {% endcomment %}
+    {% comment %} Deliberately a DIFFERENT question from the band inside the header. That one says
+    what the site serves; this says how it is paid for. Same four-cell rhythm, opposite subject.
+
+    The supporter count includes the legacy tiers, and has to: every real supporter today holds
+    `premium_monthly`, `premium_yearly` or `supporter`, so a band counting only the new ladder would
+    read zero on a live site. The money is a MONTHLY EQUIVALENT, yearly pledges divided by twelve, so
+    one figure means one thing. {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3" data-sup-paid>
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            {% comment %} No heading and no lede: four labelled figures already say "here is how this
+            is paid for" without a sentence telling you so. {% endcomment %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                {% comment %} The two supporter cells only render when there is somebody to count.
+                "$0 a month from 0 supporters" on the page asking you to fund the thing is worse than
+                a shorter band. {% endcomment %}
+                {% if supporter_count %}
+                <div class="scard">
+                    <div class="scard__label">Supporters</div>
+                    <div class="scard__value pp-tally text-primary" data-countup="{{ supporter_count }}">{{ supporter_count|intcomma }}</div>
+                    <div class="scard__sub">chipping in right now</div>
+                </div>
+                {% comment %} Omitted rather than shown as zero when Stripe prices are unavailable:
+                the view returns None for "we cannot say", which is not the same as nothing. {% endcomment %}
+                {% if supporter_monthly is not None %}
+                <div class="scard">
+                    <div class="scard__label">Monthly support</div>
+                    <div class="scard__value pp-tally" data-countup="{{ supporter_monthly }}" data-countup-prefix="$">${{ supporter_monthly|intcomma }}</div>
+                    <div class="scard__sub">from our generous supporters</div>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <div class="scard">
+                    <div class="scard__label">Months running</div>
+                    <div class="scard__value pp-tally" data-countup="{{ months_running }}">{{ months_running }}</div>
+                    <div class="scard__sub">live since January 2026</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Ads served</div>
+                    <div class="scard__value pp-tally">0</div>
+                    <div class="scard__sub">and it stays that way</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} ======================================================== the wall =========== {% endcomment %}
+    {% comment %} Who is keeping it running, by name.
+
+    Only ever shows people who consented. A PSN name is already public everywhere on this site; the
+    fact that somebody PAYS is not, and that is new information about a person -- so the wall reads
+    `Profile.show_on_supporter_wall`, which defaults True to auto-opt-in whoever was already
+    supporting when this shipped, and which anyone can switch off from subscription management.
+
+    Omitted entirely when nobody is on it, rather than rendering an empty frame under a heading that
+    promises names. {% endcomment %}
+    {% if wall %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3 pp-arrive" data-sup-wall>
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            {% comment %} CREDITS, not a donor board. The word is doing real work: credits are
+            about contribution, where "the people paying for it" reads as a transaction -- and this
+            is the section thanking people, not the one asking.
+
+            Flat, not grouped by level. Each card names its own level, which makes per-level headings
+            redundant, and a single run reads as a credit roll rather than a tiered list. Ordered
+            highest level first, alphabetically within a level, pre-ladder supporters last.
+
+            The names do NOT wear `.pp-supname`: it is a continuous animation, and running two
+            hundred at once is the wall of pulsing names this treatment has avoided since it was a
+            sheen. It belongs where a supporter appears individually. {% endcomment %}
+            <h2 class="sup-credits__h">Credits</h2>
+            <p class="sup-credits__p">The people who are making this project happen!</p>
+
+            <ul class="sup-credits">
+                {% comment %} THE SAME CLASSES AS THE PURCHASE BOX'S PREVIEW ROW, not a lookalike.
+                The preview's promise is "this is how you will appear", and the credits are that
+                promise kept -- so they share `.sup-prev` markup and styling outright, and the two
+                surfaces cannot drift apart. The `--credit` modifier only drops the mock rank/score
+                columns and adds the grid entrance.
+
+                One deliberate difference: the preview's name wears `.pp-supname`, the continuous
+                flow. Two hundred of those at once is the pulsing wall this treatment has avoided
+                since it was a sheen (and a test forbids it here), so the credit name takes the same
+                tier colour STATICALLY via `.sup-prev__cname`. {% endcomment %}
+                {% for person in wall %}
+                <li class="sup-prev sup-prev--credit{% if forloop.counter0 < 24 %} pp-arrive__it{% endif %}{% if not person.tier %} is-legacy{% endif %}"
+                    style="--i: {{ forloop.counter0 }}{% if person.tier %}; --sup-t: {{ person.tier.colour }}{% endif %}{% if person.service_colour %}; --svc-t: {{ person.service_colour }}{% endif %}">
+                    <span class="sup-prev__av">
+                        {% include 'partials/_avatar.html' with url=person.avatar alt='' %}
+                    </span>
+                    <span class="sup-prev__who">
+                        <span class="sup-prev__name">
+                            {% comment %} Service people wear their GLYPH here, not their paid
+                            level's stars (his call): a backer star beside the word "Staff" read
+                            as the wrong icon, and the wrench/shield is the mark the rest of the
+                            site knows them by. Same paths as components/name_mark.html. {% endcomment %}
+                            <span class="sup-prev__cname">{{ person.name }}</span>{% if person.service_key %}<span class="sup-prev__mark sup-prev__mark--svc" aria-hidden="true">{% if person.service_key == 'staff' %}<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>{% else %}<svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>{% endif %}</span>{% elif person.tier %}<span class="sup-prev__mark" aria-hidden="true">{% include 'support/_stars.html' with tier=person.tier %}</span>{% endif %}
+                        </span>
+                        {% comment %} Service roles say so, plainly, in their colour ("Staff" /
+                        "Moderator") -- more obvious than a crimson name alone. Everyone else
+                        keeps their level line. {% endcomment %}
+                        <span class="sup-prev__sub">
+                            {% if person.service_label %}{{ person.service_label }}{% elif person.tier %}<span class="pp-marktitle" style="--mt-c: {{ person.tier.colour }}">PlatPursuit {{ person.tier.name }}</span>{% else %}Supporter{% endif %}
+                        </span>
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </section>
+    {% endif %}
+
+    {% comment %} ============================================================ perks modal ==== {% endcomment %}
+    {% comment %} The dial invariant lives in the DATA now: every perk keeps an
+        'everyone' side in PREMIUM_PERKS (test_every_perk_names_what_a_free_user_gets fails on a
+        wall), and the member lines fold the free side into their own copy. {% endcomment %}
+    <dialog id="sup-perks" class="sup-modal" aria-labelledby="sup-perks-h">
+        <div class="sup-modal__head">
+            <h2 id="sup-perks-h">What every supporter gets</h2>
+            <button type="button" class="sup-modal__x" data-perks-close aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+
+        <p class="sup-modal__lede">
+            It all builds on what everyone already gets. Every level carries every perk, and
+            higher levels are simply seen more.
+        </p>
+
+        {% comment %} Icon tiles in the roadmap's card language (one tile per perk, keyed icon
+        partial like _roadmap_icon.html) -- the comparison table read as a spreadsheet. The
+        member line leads; what everyone gets rides underneath so the dial framing survives. {% endcomment %}
+        <div class="sup-perks-grid">
+            {% for perk in premium_perks %}
+            <div class="sup-perk{% if perk.wide %} sup-perk--wide{% endif %}" style="--perk-c: {{ perk.colour }}">
+                <span class="rm-feat__icon sup-perk__icon" aria-hidden="true">{% include 'support/_perk_icon.html' with key=perk.slug %}</span>
+                <div class="sup-perk__body">
+                    <h3 class="sup-perk__name"{% if perk.asterisk %} aria-describedby="sup-perks-fn"{% endif %}>{{ perk.name }}{% if perk.asterisk %}<span class="sup-perk__ast" aria-hidden="true">*</span>{% endif %}</h3>
+                    <p class="sup-perk__mem">{{ perk.member }}</p>
+                    {% comment %} The flavour beat: a coloured example of the perk in use. The
+                    mark's example is not described, it is RENDERED -- your own name wearing the
+                    star, the same object the purchase box previews. {% endcomment %}
+                    {% if perk.slug == 'mark' %}
+                    {% comment %} THE primitive, not a re-description: pp-supname + the star,
+                    sharing one hue through --sup-t exactly as every real supporter mark does. {% endcomment %}
+                    <p class="sup-perk__ex sup-perk__ex--mark" style="--sup-t: {{ perk.colour }}"><span class="pp-supname">{{ viewer_name }}</span> <svg class="pp-supstar" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg></p>
+                    {% elif perk.example %}
+                    <p class="sup-perk__ex">{{ perk.example }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% for perk in premium_perks %}{% if perk.footnote %}
+        <p class="sup-modal__fn" id="sup-perks-fn">* {{ perk.footnote }}</p>
+        {% endif %}{% endfor %}
+
+        <p class="sup-modal__foot">
+            If you ever find something on PlatPursuit locked behind a payment, we got it wrong.
+        </p>
+    </dialog>
+
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<script>
+    {% comment %} Arms the section arrival BEFORE first paint (motion.css .pp-arrive); without
+    JS this never runs and nothing is hidden. {% endcomment %}
+    document.documentElement.classList.add('pp-arm');
+</script>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+(function () {
+    'use strict';
+    var PP = window.PlatPursuit || {};
+    if (!PP.onPageReady || !PP.arriveOnScroll) {
+        document.documentElement.classList.remove('pp-arm');
+        return;
+    }
+
+    PP.onPageReady(function (first) {
+        if (!first) return;
+
+        PP.arriveOnScroll();
+
+        // The purchase box needs no JS at all: the cycle switch and the amount grid are radios
+        // driving :has() rules, and the shared switcher.css styles the chips off :has(input:checked)
+        // -- including the keyboard focus ring. A sync block used to mirror the checked state into
+        // an .is-active class and a state attribute; both were redundant with CSS that already
+        // existed, and the attribute made the no-JS story false.
+
+        // Native <dialog>: Escape and the focus trap are the browser's job, not ours.
+        var perks = document.getElementById('sup-perks');
+        if (perks) {
+            document.querySelectorAll('[data-perks-open]').forEach(function (btn) {
+                btn.addEventListener('click', function () { perks.showModal(); });
+            });
+            perks.querySelectorAll('[data-perks-close]').forEach(function (btn) {
+                btn.addEventListener('click', function () { perks.close(); });
+            });
+            // Click outside to dismiss. The dialog element itself fills the viewport, so a click that
+            // lands on IT rather than on a child is a click on the backdrop.
+            perks.addEventListener('click', function (e) {
+                if (e.target === perks) perks.close();
+            });
+        }
+
+        document.querySelectorAll('.pp-tally[data-countup]').forEach(function (el) {
+            PP.countUp(el);
+        });
+    });
+})();
+</script>
+{% endblock %}

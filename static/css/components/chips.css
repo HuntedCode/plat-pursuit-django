@@ -1,0 +1,52 @@
+/* Chip / tag primitive — small informational pills (platform, region, game
+   flags, etc.). Bespoke, token-driven; the strangler replacement for DaisyUI
+   `.badge` as shared atoms convert. Tonal color variants tint bg + border +
+   text from a single accent var so a flag's meaning reads at a glance without
+   shouting. Tokens: var(--pp-*) from input.css. */
+.bd-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 6px;
+    border: 1px solid var(--pp-border);
+    border-radius: 999px;
+    background: var(--pp-bg-2);
+    color: var(--pp-text-dim);
+    font-family: var(--pp-font-body);
+    font-size: 0.6rem; font-weight: 700; line-height: 1.45;
+    white-space: nowrap;
+}
+.bd-chip svg { width: 0.85em; height: 0.85em; flex-shrink: 0; }
+.bd-chip--icon { padding: 2px; }          /* icon-only */
+.bd-chip--italic { font-style: italic; }
+
+/* Tonal variants — color + tinted border/fill from one accent. */
+.bd-chip--primary   { --c: var(--pp-primary); }
+.bd-chip--secondary { --c: var(--pp-secondary); }
+.bd-chip--accent    { --c: var(--pp-accent); }
+.bd-chip--info      { --c: var(--pp-info); }
+.bd-chip--success   { --c: var(--pp-success); }
+.bd-chip--warning   { --c: var(--pp-warning); }
+.bd-chip--error     { --c: var(--pp-error); }
+.bd-chip--primary, .bd-chip--secondary, .bd-chip--accent, .bd-chip--info,
+.bd-chip--success, .bd-chip--warning, .bd-chip--error {
+    color: var(--c);
+    border-color: color-mix(in oklch, var(--c) 40%, transparent);
+    background: color-mix(in oklch, var(--c) 12%, var(--pp-bg-2));
+}
+.bd-chip--ghost { color: var(--pp-text-mute); }
+
+/* Flat metadata tag — quiet, non-interactive markers (platform, region). No
+   border or pill shape, so they read as facts about the item, not buttons.
+   Reserve .bd-chip (bordered pill) for noteworthy *alerts* (game flags). */
+.bd-meta-tag {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 5px; border-radius: var(--pp-radius-sm);
+    font-family: var(--pp-font-body); font-size: 0.58rem; font-weight: 700;
+    letter-spacing: 0.02em; line-height: 1.5; white-space: nowrap;
+    color: var(--c, var(--pp-text-dim));
+    background: color-mix(in oklch, var(--c, var(--pp-text-mute)) 14%, transparent);
+}
+.bd-meta-tag--italic { font-style: italic; }
+.bd-meta-tag--primary   { --c: var(--pp-primary); }
+.bd-meta-tag--secondary { --c: var(--pp-secondary); }
+.bd-meta-tag--accent    { --c: var(--pp-accent); }
+.bd-meta-tag--warning   { --c: var(--pp-warning); }

@@ -1,0 +1,31 @@
+{% comment %}Title card for the Badge + Special grids (art is the point). Expects `entry`
+(title, earned, is_displayed, earned_at, state, source), `premium`, optional `special`.
+Earned shows equip/Equipped + date; unearned (badge) shows the "Earn <badge>" link.
+Equipped/legendary/state are server-rendered semantic classes.{% endcomment %}
+{% with source=entry.source %}
+<div class="tt-card tt-tcard is-{{ entry.state }}{% if entry.is_displayed %} is-equipped{% endif %}{% if premium %} is-legendary{% endif %}"
+     data-title-id="{{ entry.title.id }}" data-title-name="{{ entry.title.name }}"
+     data-earned-at="{% if entry.earned_at %}{{ entry.earned_at|date:'Y-m-d' }}{% endif %}" data-state="{{ entry.state }}">
+    {% if source.layers %}
+        <div class="tt-tcard__art">{% include 'partials/badge.html' with layers=source.layers %}</div>
+    {% elif source.image %}
+        <div class="tt-tcard__art"><img src="{{ source.image }}" alt="" loading="lazy"></div>
+    {% elif special %}
+        <div class="tt-tcard__art tt-tcard__art--ph" style="color: var(--pp-accent);"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0L14.59 8.41L23 12L14.59 15.59L12 24L9.41 15.59L1 12L9.41 8.41Z"/></svg></div>
+    {% else %}
+        <div class="tt-tcard__art tt-tcard__art--ph" style="color: var(--pp-secondary);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+    {% endif %}
+    <div class="tt-tcard__name">{{ entry.title.name }}</div>
+    <div class="tt-tcard__foot">
+        {% if entry.earned %}
+            <button type="button" class="tt-equip" data-action="equip">Equip</button>
+            <span class="tt-equipped-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Equipped</span>
+            {% if entry.earned_at %}<span class="tt-tcard__date">{{ entry.earned_at|date:"M j, Y" }}</span>{% endif %}
+        {% elif source.url %}
+            <a href="{{ source.url }}" class="tt-tcard__earn">Earn <b>{{ source.name }}</b>{% if source.detail %} &middot; {{ source.detail }}{% endif %} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        {% else %}
+            <span class="tt-tcard__earn">{{ source.detail|default:'Locked' }}</span>
+        {% endif %}
+    </div>
+</div>
+{% endwith %}

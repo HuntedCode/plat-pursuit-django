@@ -5,81 +5,88 @@
 
             {# Browse hub — content discovery #}
             <nav aria-label="Browse pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Browse</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Browse</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'games_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Games</a></li>
-                    <li><a href="{% url 'trophies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Trophies</a></li>
+                    <li><a href="{% url 'trophy_lists' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Trophy Lists</a></li>
                     <li><a href="{% url 'recently_added' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Recently Added</a></li>
-                    <li><a href="{% url 'flagged_games' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Flagged Games</a></li>
                     <li><a href="{% url 'franchises_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Franchises</a></li>
                     <li><a href="{% url 'genres_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Genres &amp; Themes</a></li>
                     <li><a href="{% url 'companies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Companies</a></li>
-                    <li><a href="{% url 'engines_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Engines</a></li>
+                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Hunters</a></li>
                 </ul>
             </nav>
 
-            {# Community hub — people/social discovery. Profiles relocated here from Browse. #}
-            <nav aria-label="Community pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h3>
+            {% comment %}Leaderboards -- their own hub since 2026-08, when Community was retired.
+            Profiles moved to the Browse column above with the rest of the catalogue.{% endcomment %}
+            <nav aria-label="Leaderboard pages">
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Leaderboards</h2>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'community_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Community Hub</a></li>
-                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
-                    <li><a href="{% url 'challenges_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Challenges</a></li>
-                    <li><a href="{% url 'lists_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Game Lists</a></li>
-                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Leaderboards</a></li>
+                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badge Leaderboards</a></li>
                 </ul>
             </nav>
 
-            {# My Pursuit hub — personal progression. Renamed from Achievements; #}
-            {# forward-compatible with the gamification initiative.              #}
+            {# My Pursuit hub — the personal, login-gated cockpit (rooted at / post-IA-unify). #}
+            {# Merges the pre-unify My Pursuit + Dashboard columns into one hub sitemap.        #}
             <nav aria-label="My Pursuit pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h2>
                 <ul class="space-y-1.5 text-sm">
+                    {% if user.is_authenticated and user.profile %}
+                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Home</a></li>
+                    <li><a href="{% url 'badge_collection' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Collection</a></li>
+                    <li><a href="{% url 'career' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Career</a></li>
+                    <li><a href="{% url 'career' %}?view=contracts" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contracts</a></li>
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
-                    {% if user.is_authenticated and user.profile %}
                     <li><a href="{% url 'my_titles' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Titles</a></li>
+                    <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Plat Cards</a></li>
+                    <li><a href="{% url 'recap_index' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Recap</a></li>
+                    <li><a href="{% url 'rate_my_games' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Rate My Games</a></li>
+                    {% else %}
+                    {# Anon/no-profile: only the public catalog members of the hub. #}
+                    <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
+                    <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
+                    <li><a href="{% url 'career' %}?view=contracts" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contracts</a></li>
+                    {% if not user.is_authenticated %}
+                    <li class="pt-1.5 mt-1.5 border-t border-neutral-content/10"><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign In</a></li>
+                    <li><a href="{% url 'account_signup' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign Up</a></li>
+                    {% endif %}
                     {% endif %}
                 </ul>
             </nav>
 
-            {# Dashboard hub / Account #}
-            {% if user.is_authenticated and user.profile %}
-            <nav aria-label="Dashboard pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Dashboard</h3>
+            {% comment %} Support hub — mirrors the rail's four destinations (hub_subnav
+            SUPPORT_HUB). The Badge Art landing 302s to the latest campaign, so it works for
+            every viewer where the old slugged link was gated on the linked-profile
+            fundraiser processor. {% endcomment %}
+            <nav aria-label="Support pages">
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Support</h2>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Dashboard</a></li>
-                    <li><a href="{% url 'my_stats' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Stats</a></li>
-                    <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Shareables</a></li>
-                    <li><a href="{% url 'recap_index' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Recap</a></li>
-                    <li><a href="{% url 'my_challenges' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Challenges</a></li>
-                    <li><a href="{% url 'my_lists' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Lists</a></li>
+                    <li><a href="{% url 'support_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Support Hub</a></li>
+                    <li><a href="{% url 'support_roadmap' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Roadmap</a></li>
+                    <li><a href="{% url 'support_fundraiser' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badge Art</a></li>
+                    <li><a href="{% url 'subscription_management' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Membership</a></li>
                 </ul>
             </nav>
-            {% else %}
-            <nav aria-label="Account pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Account</h3>
-                <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign In</a></li>
-                    <li><a href="{% url 'account_signup' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign Up</a></li>
-                </ul>
-            </nav>
-            {% endif %}
 
             {# Legal #}
             <nav aria-label="Legal pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Legal</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Legal</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'privacy' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Privacy</a></li>
                     <li><a href="{% url 'terms' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Terms</a></li>
                     <li><a href="{% url 'about' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">About</a></li>
+                    {% comment %} Sits with About/Contact rather than in a badge column: this is the badge
+                    system's one permanent address, and the informational pages already live here.
+                    {% endcomment %}
+                    <li><a href="{% url 'badge_how_it_works' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">How badges work</a></li>
                     <li><a href="{% url 'contact' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contact</a></li>
                 </ul>
             </nav>
 
             {# Connect #}
             <nav aria-label="Social media links">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Connect</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Connect</h2>
                 <div class="flex gap-3">
                     <a href="https://www.x.com/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X" class="text-neutral-content/50 hover:text-neutral-content transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -91,7 +98,7 @@
                             <path d="M12.04 3.5c.59 0 7.54.02 9.34.5a3.02 3.02 0 0 1 2.12 2.15C24 8.05 24 12 24 12v.04c0 .43-.03 4.03-.5 5.8A3.02 3.02 0 0 1 21.38 20c-1.76.48-8.45.5-9.3.51h-.17c-.85 0-7.54-.03-9.29-.5A3.02 3.02 0 0 1 .5 17.84c-.42-1.61-.49-4.7-.5-5.6v-.5c.01-.9.08-3.99.5-5.6a3.02 3.02 0 0 1 2.12-2.14c1.8-.49 8.75-.51 9.34-.51zM9.54 8.4v7.18L15.82 12 9.54 8.41z"/>
                         </svg>
                     </a>
-                    <a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Join our Discord" class="text-neutral-content/50 hover:text-neutral-content transition-colors">
+                    <a href="{{ discord_invite_url }}" target="_blank" rel="noopener noreferrer" aria-label="Join our Discord" class="text-neutral-content/50 hover:text-neutral-content transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
                             <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/>
                         </svg>

@@ -1,164 +1,126 @@
 {% extends 'base.html' %}
-{% load static custom_filters %}
-
-{% block title %}Browse Game Lists{% endblock %}
+{% load static %}
+{% load humanize %}
+{% block title %}Game Lists{% endblock %}
 
 {% block content %}
-{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-{# Page Header #}
-<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-3 md:p-4 lg:p-5">
-        <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>
-                    </svg>
-                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Game Lists</h1>
-                    <span class="badge badge-sm badge-ghost font-bold">{{ total_lists }}</span>
+    {# ── Page header: accented card + the opening-beat cascade, same shell as every rebuilt browse. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Game Lists</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        A backlog, a ranking, a run in order. Lists other hunters made and published.
+                    </p>
                 </div>
-                <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                    {% if query %}
-                        Searching for "{{ query }}"{% if game_lists %} across {{ total_lists }} community list{{ total_lists|pluralize }}{% endif %}
-                    {% else %}
-                        Discover community-curated lists. Find your next adventure.
+
+                <div class="flex items-center gap-3 shrink-0">
+                    <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                        <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
+                    </div>
+                    {% if user.is_authenticated and user.profile %}
+                    <a href="{% url 'my_lists' %}" class="btn btn-sm md:btn-md btn-primary gap-1.5 shrink-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        <span class="hidden md:inline">My lists</span>
+                    </a>
                     {% endif %}
-                </p>
+                </div>
             </div>
-            {% if user.is_authenticated and user.profile %}
-                <a href="{% url 'my_lists' %}" class="btn btn-sm md:btn-md btn-primary gap-1 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
-                    </svg>
-                    <span class="hidden md:inline">My Lists</span>
-                </a>
-            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: identity + live count + a quick search/sort proxy, re-surfaced once the
+    toolbar scrolls away. OUTSIDE #browse-results so it survives every filter swap. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#gl-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span class="pp-minibar__title">Lists</span>
+                <span class="pp-minibar__count" data-minibar-count title="shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ query }}" placeholder="Search&hellip;" aria-label="Search lists" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort results"></select>
+            </div>
         </div>
     </div>
-</div>
 
-{# Search & Sort Toolbar #}
-<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-3 md:p-4">
-        <form method="GET" class="flex flex-col md:flex-row gap-2 md:gap-3" data-browse-form
-              hx-get="{% url 'lists_browse' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="outerHTML" hx-select="#browse-results" hx-trigger="submit">
-            <div class="relative flex-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input type="text" name="q" value="{{ query }}"
-                       placeholder="Search by name or creator..."
-                       class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10" />
-            </div>
-            <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-48">
-                <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most Popular</option>
-                <option value="recent" {% if sort == 'recent' %}selected{% endif %}>Most Recent</option>
-                <option value="most_games" {% if sort == 'most_games' %}selected{% endif %}>Most Games</option>
-                <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Recently Updated</option>
-                <option value="alpha" {% if sort == 'alpha' %}selected{% endif %}>Alphabetical</option>
-            </select>
-            <button type="submit" class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <span class="hidden md:inline">Search</span>
-            </button>
-            <div class="flex items-center gap-2 w-full md:w-auto">
-                <span class="text-xs text-base-content/40 shrink-0">Games:</span>
-                <input type="number" name="min_games" value="{{ request.GET.min_games }}" min="0" placeholder="Min"
-                       class="input input-bordered input-xs w-16" />
-                <span class="text-xs text-base-content/40">-</span>
-                <input type="number" name="max_games" value="{{ request.GET.max_games }}" min="0" placeholder="Max"
-                       class="input input-bordered input-xs w-16" />
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="browse-results">
-{# Results Grid #}
-{% if game_lists %}
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5 md:gap-2 mb-3">
-        {% for game_list in game_lists %}
-            {% include 'partials/game_list_card.html' with game_list=game_list show_author=True %}
-        {% endfor %}
-    </div>
-
-    {# Pagination #}
-    {% if is_paginated %}
-        <div class="bg-base-300/30 rounded-lg px-3 py-2 md:px-4 md:py-2.5">
-            <div class="flex flex-wrap justify-center items-center gap-2">
-                {% if page_obj.has_previous %}
-                    <a href="?page=1{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
-                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10 gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="11 17 6 12 11 7"></polyline>
-                            <polyline points="18 17 13 12 18 7"></polyline>
-                        </svg>
-                        <span class="hidden md:inline">First</span>
-                    </a>
-                    <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
-                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10 gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="15 18 9 12 15 6"></polyline>
-                        </svg>
-                        <span class="hidden md:inline">Previous</span>
-                    </a>
-                {% endif %}
-
-                <span class="btn btn-xs md:btn-sm btn-primary no-animation cursor-default font-bold">
-                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    {% comment %} Toolbar: search + sort + the game-count range, all auto-applying through
+    browse-filters.js (HTMX grid swap). No segmented switcher here -- unlike Franchises there is no second
+    KIND of list to toggle between, and a switcher with one option is chrome pretending to be a control.
+    {% endcomment %}
+    <form data-browse-form data-live-search id="gl-form"
+          hx-get="{% url 'lists_browse' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="pp-toolbar-card pp-gbrowse__toolbar mt-4">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="q" value="{{ query }}" placeholder="Search lists or creators&hellip;" aria-label="Search by list name, description or creator" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
                 </span>
 
-                {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
-                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10 gap-1">
-                        <span class="hidden md:inline">Next</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                    </a>
-                    <a href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
-                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10 gap-1">
-                        <span class="hidden md:inline">Last</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="13 17 18 12 13 7"></polyline>
-                            <polyline points="6 17 11 12 6 7"></polyline>
-                        </svg>
-                    </a>
-                {% endif %}
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% for value, display in sort_choices %}
+                        <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                {% comment %} The size range, kept from the old toolbar but folded into one quiet control
+                instead of two loose number boxes with a label between them. {% endcomment %}
+                <span class="pp-gl-range" title="Filter by how many games a list holds">
+                    <span class="pp-gl-range__label">Games</span>
+                    <input type="number" name="min_games" value="{{ request.GET.min_games }}" min="0" inputmode="numeric" placeholder="min" aria-label="Minimum games" />
+                    <span class="pp-gl-range__dash" aria-hidden="true">&ndash;</span>
+                    <input type="number" name="max_games" value="{{ request.GET.max_games }}" min="0" inputmode="numeric" placeholder="max" aria-label="Maximum games" />
+                </span>
             </div>
         </div>
-    {% endif %}
-{% else %}
-    {# Empty State #}
-    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body items-center text-center py-12 md:py-16">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>
-            </svg>
-            {% if query %}
-                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No lists match "{{ query }}"</p>
-                <p class="text-base-content/40 text-xs md:text-sm">Try a different search term or browse all lists</p>
-                <a href="{% url 'lists_browse' %}" class="btn btn-sm btn-primary mt-4">Clear Search</a>
-            {% else %}
-                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No public lists yet</p>
-                <p class="text-base-content/40 text-xs md:text-sm">Be the first to create and share a game list!</p>
-                {% if user.is_authenticated and user.profile %}
-                    <a href="{% url 'list_create' %}" class="btn btn-sm btn-primary mt-4">Create the First List</a>
-                {% else %}
-                    <a href="{% url 'account_login' %}" class="btn btn-sm btn-primary mt-4">Login to Create a List</a>
-                {% endif %}
-            {% endif %}
-        </div>
+
+        <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
+    </form>
+
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar. Outside the swap. #}
+    <span id="gl-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
+    <div id="browse-results">
+        {% include 'trophies/partials/lists/browse_results.html' %}
     </div>
-{% endif %}
+
+    {% comment %} Infinite scroll: sentinel + spinner OUTSIDE #browse-results so they persist across filter
+    swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. {% endcomment %}
+    <div id="gl-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="gl-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
 </div>
 {% endblock %}
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/lists-browse.js' %}"></script>
 {% endblock %}

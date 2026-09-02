@@ -1,186 +1,114 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+Dunning, sent by subscription_service._send_payment_failed_email.
 
-{% block extra_styles %}
-    <style>
-        /* Alert box */
-        .alert-box {
-            border-radius: 12px;
-            padding: 25px 30px;
-            margin: 25px 0;
-            text-align: center;
-        }
+THE ONE EMAIL WHOSE COLOUR IS SEMANTIC, not decorative. `is_final_warning` forks everything:
+subject, preheader, headline, panel colour, whether the perk list appears, and the tone. Red
+means "you are about to lose access"; amber means "we will retry, nothing has happened yet".
+Base v2 has a single brand accent, so the urgency is expressed as inline bgcolor on the panel
+cell rather than a class -- collapsing the two branches into one tone would either panic a
+customer whose card merely bounced or under-warn one who is about to be cancelled.
 
-        .alert-box-warning {
-            background-color: #fff8f0;
-            border: 2px solid #f59e0b;
-        }
+Copy that must survive verbatim in meaning:
+  - first branch: "your premium access remains active" (without it an informational note reads
+    as a cancellation notice) and the reasons paragraph (expired card / funds / bank issue).
+  - final branch: the perk list in LOSS framing (from PREMIUM_PERKS, never hand-written; the
+    old list threatened the loss of themes and premium checklists, neither of which existed).
 
-        .alert-box-urgent {
-            background-color: #fef2f2;
-            border: 2px solid #ef4444;
-        }
-
-        .alert-icon {
-            font-size: 36px;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .alert-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin: 0 0 8px 0;
-            color: #333333;
-        }
-
-        .alert-message {
-            font-size: 15px;
-            color: #555555;
-            margin: 0;
-            line-height: 1.6;
-        }
-
-        /* What you might lose */
-        .features-list {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px 25px;
-            margin: 25px 0;
-        }
-
-        .features-list h3 {
-            margin: 0 0 12px 0;
-            font-size: 16px;
-            color: #333333;
-        }
-
-        .features-list ul {
-            margin: 0;
-            padding-left: 20px;
-            color: #555555;
-        }
-
-        .features-list li {
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-
-        /* CTA override for urgent */
-        .cta-button-urgent {
-            display: inline-block;
-            background: #ef4444;
-            color: #ffffff !important;
-            text-decoration: none;
-            padding: 16px 40px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
-            border: none;
-        }
-
-        .cta-button-warning {
-            display: inline-block;
-            background: #f59e0b;
-            color: #ffffff !important;
-            text-decoration: none;
-            padding: 16px 40px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
-            border: none;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .alert-box {
-                padding: 20px 15px;
-            }
-
-            .cta-button-urgent,
-            .cta-button-warning {
-                padding: 14px 30px;
-                font-size: 16px;
-            }
-        }
-    </style>
-{% endblock %}
+`portal_url` is a single-use Stripe billing-portal session and the only way to fix the problem,
+so it is printed as visible text too: strip_tags keeps no hrefs, and a plaintext reader who
+cannot reach the portal loses their subscription.
+{% endcomment %}
 
 {% block title %}{% if is_final_warning %}Action Required: Subscription at Risk{% else %}Payment Update Needed{% endif %}{% endblock %}
 
+{% block preheader %}{% if is_final_warning %}Your {{ tier_name }} subscription will be cancelled unless your payment method is updated.{% else %}Your last payment did not go through. We will retry in a few days and your access stays active.{% endif %}{% endblock %}
+
 {% block header_content %}
-    {% if is_final_warning %}
-        <h1>Action Required</h1>
-        <p>Your subscription needs your attention</p>
-    {% else %}
-        <h1>Payment Update Needed</h1>
-        <p>A quick heads up about your {{ tier_name }} subscription</p>
-    {% endif %}
+    <div style="margin-top: 18px;">
+        {% if is_final_warning %}
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Action required</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your subscription needs your attention.</p>
+        {% else %}
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Payment update needed</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">A quick heads up about your {{ tier_name }} subscription.</p>
+        {% endif %}
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>,</p>
 
     {% if is_final_warning %}
-        <div class="alert-box alert-box-urgent">
-            <span class="alert-icon">&#9888;&#65039;</span>
-            <p class="alert-title">Your premium access is at risk</p>
-            <p class="alert-message">
-                We've been unable to process your payment after multiple attempts.
-                Your {{ tier_name }} subscription will be cancelled unless you update your payment method.
-            </p>
-        </div>
+    {% comment %} Red: the account is genuinely about to be cancelled. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#D6453D" style="background-color: #D6453D; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 14px 16px; background-color: #FDF3F2; border-radius: 0 8px 8px 0;">
+                <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">Your premium access is at risk</p>
+                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">We have not been able to process your payment after several attempts. Your {{ tier_name }} subscription will be cancelled unless the payment method is updated.</p>
+            </td>
+        </tr>
+    </table>
 
-        <p class="intro">
-            We don't want to see you lose access to the features you love. Updating your payment
-            method only takes a minute and will keep everything running smoothly.
-        </p>
+    <p class="pp-p">Updating takes about a minute and keeps everything exactly as it is. Here is what switches off if the subscription lapses:</p>
 
-        <div class="features-list">
-            <h3>What you'll lose without an active subscription:</h3>
-            <ul>
-                <li>Priority sync scheduling and faster profile updates</li>
-                <li>Premium badges, themes, and customization options</li>
-                <li>Access to premium checklists and advanced features</li>
-                <li>Your Discord premium role</li>
-            </ul>
-        </div>
+    {% comment %} Loss framing. Loop markup identical to subscription_welcome/cancelled. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {% for perk in premium_perks %}
+        <tr>
+            <td style="padding: 0 0 10px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="{{ perk.colour }}" style="background-color: {{ perk.colour }}; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 13px 16px;">
+                            <p class="pp-card-t" style="margin: 0; font-size: 15px; font-weight: 700; color: #10151C;">{{ perk.name }}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
 
-        <div class="cta-container">
-            <a href="{{ portal_url }}" class="cta-button-urgent">Update Payment Method</a>
-        </div>
-
-        <p class="intro" style="margin-top: 25px; text-align: center; font-size: 14px; color: #777777;">
-            Don't let your trophy hunting setup slip away. We're rooting for you!
-        </p>
+    <div style="margin-top: 18px;">
+        {% include 'emails/_cta_button.html' with url=portal_url label="Update payment method" %}
+    </div>
 
     {% else %}
-        <div class="alert-box alert-box-warning">
-            <span class="alert-icon">&#128179;</span>
-            <p class="alert-title">We couldn't process your payment</p>
-            <p class="alert-message">
-                Your most recent payment for the {{ tier_name }} plan didn't go through.
-                This can happen for a number of reasons: an expired card, insufficient funds, or a temporary bank issue.
-            </p>
-        </div>
+    {% comment %} Amber: nothing has been lost yet, and saying so is the point. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#D9903B" style="background-color: #D9903B; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 14px 16px; background-color: #FDF8F1; border-radius: 0 8px 8px 0;">
+                <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">We couldn't process your payment</p>
+                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">Your most recent {{ tier_name }} payment did not go through. That usually means an expired card, insufficient funds, or a temporary hold at the bank.</p>
+            </td>
+        </tr>
+    </table>
 
-        <p class="intro">
-            No worries! We'll automatically retry in a few days. In the meantime, your premium
-            access remains active. However, we recommend updating your payment method to avoid
-            any interruption to your subscription.
-        </p>
+    <p class="pp-p">Nothing has been lost. <strong>Your premium access remains active</strong>, and we will retry the payment automatically in a few days. We do recommend updating your payment method now so there is no interruption if the retry fails too.</p>
 
-        <div class="cta-container">
-            <a href="{{ portal_url }}" class="cta-button-warning">Update Payment Method</a>
-        </div>
-
-        <p class="intro" style="margin-top: 25px; text-align: center; font-size: 14px; color: #777777;">
-            No trophy hunter should be left behind. Let's keep your streak alive!
-        </p>
+    <div style="margin-top: 18px;">
+        {% include 'emails/_cta_button.html' with url=portal_url label="Update payment method" %}
+    </div>
     {% endif %}
+
+    {% comment %} The plaintext lifeline. This link is the only way to fix the problem, so it
+    cannot be href-only. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 0;">
+        <tr>
+            <td class="pp-fallback" style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
+                <p class="pp-fallback-t" style="margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #4A5768;">If the button does not work, paste this into your browser:</p>
+                <p class="pp-fallback-u" style="margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all;">{{ portal_url }}</p>
+            </td>
+        </tr>
+    </table>
+
+    <p class="pp-small" style="margin: 20px 0 0; text-align: center;">{% if is_final_warning %}We would much rather keep you. Any trouble at all, just reply.{% else %}No trophy hunter left behind. Let's keep the streak alive.{% endif %}</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you have an active subscription on PlatPursuit.<br>
-    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+    You're receiving this because you have an active subscription on PlatPursuit.
+    Manage your account settings from the link above.
 {% endblock %}

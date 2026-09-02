@@ -1,0 +1,154 @@
+/* ==========================================================================================
+   MEMBERSHIP WELCOME (/users/subscribe/success/ -- the frozen post-checkout URL). The
+   storefront preview's promise fulfilled: the buyer's name wearing the new mark at hero
+   scale. Composes the Support family (sup-perks tiles, the star emitter, fnd-cta buttons);
+   this file owns only the .supw- hero furniture. Everything animated gates on
+   prefers-reduced-motion at source.
+   ========================================================================================== */
+
+.supw {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 60rem;
+    margin-inline: auto;
+}
+
+.supw__eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+/* The NEW chip: the level's colour, quietly proud. Pulse gated at source. */
+.supw-new {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 55%, transparent);
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 14%, transparent);
+    color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 80%, var(--pp-text));
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    /* Hoisted for the keyframes below: color-mix INSIDE @keyframes is the documented
+       lightningcss trap (frames compile empty, silently). */
+    --supw-glow: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .supw-new { animation: supwNewGlow 2.6s var(--pp-ease) 3; }
+}
+
+/* Three gentle pulses then still: announced, not nagging. The mix lives on the element
+   (--supw-glow above); the keyframes reference only the var. */
+@keyframes supwNewGlow {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    50% { box-shadow: 0 0 12px 0 var(--supw-glow); }
+}
+
+/* ---- the hero identity row -------------------------------------------------------------- */
+.supw-id {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    margin-top: 4px;
+}
+
+.supw-id__av {
+    flex: none;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 60%, transparent);
+    box-shadow: 0 0 18px color-mix(in oklab, var(--sup-t, var(--pp-primary)) 22%, transparent);
+}
+
+.supw-id__av img { width: 100%; height: 100%; object-fit: cover; }
+
+.supw-id__who { min-width: 0; display: grid; gap: 3px; }
+
+.supw-id__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.5rem;
+    line-height: 1.1;
+}
+
+@media (min-width: 768px) {
+    .supw-id__name { font-size: 1.9rem; }
+    .supw-id__av { width: 76px; height: 76px; }
+}
+
+.supw-id__name .pp-supname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.supw-id__mark { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.supw-id__mark .pp-supstar { width: 16px; height: 16px; }
+
+.supw-id__sub {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--pp-text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.supw__lede {
+    max-width: 62ch;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+    margin-top: 6px;
+}
+
+.supw__settling {
+    font-size: 0.83rem;
+    color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 70%, var(--pp-text-dim));
+    margin-top: 2px;
+}
+
+/* ---- sections --------------------------------------------------------------------------- */
+.supw__h2 {
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--pp-text);
+}
+
+.supw__sub { font-size: 0.83rem; color: var(--pp-text-dim); margin-top: 2px; }
+.supw__flavour { font-size: 0.78rem; font-style: italic; color: var(--pp-text-mute); }
+.supw__flavour a { text-decoration: underline; }
+.supw__flavour a:hover { color: var(--pp-text); }
+
+.supw-perks { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.supw-perks__fn { font-size: 0.76rem; color: var(--pp-text-mute); }
+
+/* The perk tiles arrive on load (everything is at/near the fold on this page), the shared
+   ppRevealIn curve with the family cap. */
+@media (prefers-reduced-motion: no-preference) {
+    .supw-perks .pp-arrive__it {
+        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
+        animation-delay: calc(min(var(--i, 0), 10) * 70ms);
+    }
+}
+
+.supw-next { display: grid; gap: 12px; justify-items: start; }
+.supw-next__row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

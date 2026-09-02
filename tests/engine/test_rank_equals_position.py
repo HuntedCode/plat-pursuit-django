@@ -1,0 +1,241 @@
+"""A hunter's rank must be the row they find when they scroll to it (2026-08 audit).
+
+There are two independent definitions of "rank" in the leaderboard layer, and a reader meets both:
+
+  `page()`      numbers rows by SLOT     -> offset + i + 1        (the number beside their name)
+  `*_rank()`    counts everyone AHEAD    -> count(ahead) + 1      (the number in the header)
+
+They agree only if no two rows can tie. Ties are not an edge case here: Badge Points is quantized to
+`500a + 600b`, so hundreds of hunters land on exactly 1,600; `progress_bp` is `cleared / gating`, so a
+3-stage series stacks every chaser onto 1/3 or 2/3. Counting only the visible sort keys returned the tie
+group's FIRST slot to every member of it -- the twelfth hunter on 1,600 points was told "#7" in the header
+and then found their own name at row 18.
+
+The fix is the one `game_leaderboard_service` already made: end every board's canonical order in
+`profile_id`, a unique final key that makes the order TOTAL, and express that same full key list in the
+rank count. Its docstring calls the unique tail "load-bearing, not decoration". These tests hold that
+property for the badge/career/job boards, which had the tail in their ORDER BY and not in their counts.
+
+Written as "the two agree", never as "rank == 7": an assertion on a specific number would pin today's
+fixture, and this is a property about two functions matching each other.
+"""
+import datetime as dt
+
+import pytest
+
+from trophies.models import (
+    ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
+    SeriesBadgeStanding,
+)
+from trophies.services import badge_leaderboards as lb
+from tests.factories import ProfileFactory
+
+pytestmark = pytest.mark.django_db
+
+
+def _positions(rows):
+    """{profile_id: 1-based slot} for a board read, i.e. exactly what `page()` would number them."""
+    return {row[0]: i + 1 for i, row in enumerate(rows)}
+
+
+def _assert_agrees(rows, rank_fn, label):
+    """Every row's slot equals the rank function's answer for that profile."""
+    positions = _positions(rows)
+    assert positions, f'{label}: fixture produced no rows'
+    mismatches = {
+        pid: (slot, rank_fn(pid)) for pid, slot in positions.items() if rank_fn(pid) != slot
+    }
+    assert not mismatches, (
+        f'{label}: the header rank disagrees with the row a reader would find. '
+        f'{{profile: (slot_in_wall, rank_reported)}} = {mismatches}'
+    )
+
+
+# ------------------------------------------------------------------ Badge Points -------------------------
+
+def test_badge_points_rank_equals_position_across_a_large_tie():
+    """The realistic shape: XP is quantized, so a tie group is the norm. Twelve hunters on one value is
+    what produced the original report."""
+    tied = [ProfileFactory() for _ in range(12)]
+    for p in tied:
+        ProfileBadgeStanding.objects.create(profile=p, total_xp=1600, is_linked=True)
+    ProfileBadgeStanding.objects.create(
+        profile=ProfileFactory(), total_xp=9000, is_linked=True)   # clear leader above the tie
+    ProfileBadgeStanding.objects.create(
+        profile=ProfileFactory(), total_xp=100, is_linked=True)     # and one below it
+
+    _assert_agrees(lb.xp_rows(limit=100), lb.xp_rank, 'Badge Points')
+
+
+def test_trophies_rank_equals_position_when_both_figures_tie():
+    """Two sort keys, so the tie has to be on BOTH before the tail decides. Stopping the count at
+    `total_trophies` looks correct and still ties everyone matching on both."""
+    for _ in range(8):
+        ProfileFactory(is_linked=True, total_plats=5, total_trophies=120)
+    ProfileFactory(is_linked=True, total_plats=5, total_trophies=400)    # same plats, more trophies
+    ProfileFactory(is_linked=True, total_plats=9, total_trophies=10)     # more plats
+
+    _assert_agrees(lb.trophy_rows(limit=100), lb.trophy_rank, 'Trophies')
+
+
+def test_career_rank_equals_position_across_a_tie():
+    for _ in range(6):
+        ProfileCareerStanding.objects.create(profile=ProfileFactory(), total_xp=750, pursuer_level=4, is_linked=True)
+    ProfileCareerStanding.objects.create(profile=ProfileFactory(), total_xp=2000, pursuer_level=9, is_linked=True)
+
+    _assert_agrees(lb.career_xp_rows(limit=100), lb.career_xp_rank, 'Career XP')
+
+
+def test_job_rank_equals_position_across_a_tie():
+    from trophies.models import Job
+
+    job = Job.objects.create(slug='ranker', name='Ranker', discipline='combat')
+    for _ in range(5):
+        ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=300, level=2, is_linked=True)
+    ProfileJobXP.objects.create(profile=ProfileFactory(), job=job, total_xp=1200, level=6, is_linked=True)
+
+    _assert_agrees(lb.job_rows('ranker', limit=100), lambda pid: lb.job_rank('ranker', pid), 'Job board')
+
+
+# ------------------------------------------------------------------ the per-series board -----------------
+
+def test_series_board_rank_equals_position_including_the_null_advance_date():
+    """The hardest ordering: a discrete progress key, a nullable date tiebreak that sorts NULLS LAST, and
+    then the unique tail. All three have to be in the count."""
+    def standing(bp, on):
+        return SeriesBadgeStanding.objects.create(
+            profile=ProfileFactory(), series_slug='ranks', xp=1, progress_bp=bp, advanced_at=on, is_linked=True)
+
+    standing(10000, dt.date(2026, 1, 1))
+    standing(10000, dt.date(2026, 5, 1))
+    for _ in range(4):
+        standing(6667, dt.date(2026, 2, 1))     # same rung, same date -> only the tail separates them
+    standing(6667, None)                        # no advance date: sorts LAST within its rung
+    standing(3333, dt.date(2026, 1, 15))
+
+    rows = lb.series_board_rows('ranks', limit=100)
+    _assert_agrees(rows, lambda pid: lb.series_board_rank('ranks', pid), 'Series board')
+
+    # The null explicitly sorts below the dated rows on the same rung, not above them.
+    ids = [r[0] for r in rows]
+    null_row = SeriesBadgeStanding.objects.get(series_slug='ranks', advanced_at__isnull=True)
+    dated_same_rung = SeriesBadgeStanding.objects.filter(
+        series_slug='ranks', progress_bp=6667, advanced_at__isnull=False)
+    for other in dated_same_rung:
+        assert ids.index(null_row.profile_id) > ids.index(other.profile_id), (
+            'a hunter with no advance date outranked one who has advanced, on the same rung'
+        )
+
+
+# ------------------------------------------------------------------ the filters compose ------------------
+
+def test_rank_equals_position_under_a_country_slice():
+    """A slice is a different board with a different population, so the property has to hold inside it --
+    the rank must be counted against the same slice the rows came from."""
+    for _ in range(5):
+        ProfileBadgeStanding.objects.create(
+            profile=ProfileFactory(country_code='CA'), total_xp=1600,
+            country_code='CA', is_linked=True)
+    for _ in range(3):
+        ProfileBadgeStanding.objects.create(
+            profile=ProfileFactory(country_code='GB'), total_xp=1600,
+            country_code='GB', is_linked=True)
+
+    _assert_agrees(lb.xp_rows(limit=100, country='CA'),
+                   lambda pid: lb.xp_rank(pid, country='CA'), 'Badge Points (CA)')
+
+
+def test_rank_equals_position_under_an_edition_slice():
+    for _ in range(5):
+        ProfileEditionStanding.objects.create(
+            profile=ProfileFactory(), platform_group_key='ultra-hd', total_xp=1600, is_linked=True)
+    ProfileEditionStanding.objects.create(
+        profile=ProfileFactory(), platform_group_key='legacy-hd', total_xp=9999, is_linked=True)
+
+    _assert_agrees(lb.xp_rows(limit=100, edition='ultra-hd'),
+                   lambda pid: lb.xp_rank(pid, edition='ultra-hd'), 'Badge Points (Ultra HD)')
+
+
+def test_series_EDITION_board_rank_equals_position_on_that_editions_own_date():
+    """The same property one level down, and the store that made it cheap.
+
+    Both the rows and the rank read `SeriesEditionStanding`, so the assertion is the usual one -- but the
+    fixture is built to catch the specific failure the store was created to fix: every hunter here carries
+    a SERIES-wide date that contradicts their edition date. A board that reached for the wrong one would
+    still produce a total order, so rank and position would agree and this test would pass; the ORDER
+    itself is checked below.
+    """
+    from trophies.models import SeriesEditionStanding
+
+    def standing(xp, on, series_wide):
+        prof = ProfileFactory(is_linked=True)
+        SeriesBadgeStanding.objects.create(
+            profile=prof, series_slug='eds', xp=xp, progress_bp=5000,
+            advanced_at=series_wide, is_linked=True)
+        return SeriesEditionStanding.objects.create(
+            profile=prof, series_slug='eds', platform_group_key='legacy-hd',
+            xp=xp, stages_cleared=1, gating_count=4, advanced_at=on, is_linked=True)
+
+    # Series-wide dates run OPPOSITE to the edition dates throughout, so an ordering that used them would
+    # come back exactly reversed rather than subtly wrong.
+    first = standing(500, dt.date(2026, 1, 1), dt.date(2026, 12, 1))
+    second = standing(500, dt.date(2026, 4, 1), dt.date(2026, 9, 1))
+    for _ in range(3):
+        standing(500, dt.date(2026, 6, 1), dt.date(2026, 6, 1))   # tied on both -> only the tail separates
+    standing(500, None, dt.date(2020, 1, 1))                       # no advance date -> last within the rung
+    standing(1000, dt.date(2026, 8, 1), dt.date(2020, 1, 1))       # more points -> above all of them
+
+    rows = lb.series_edition_rows('eds', 'legacy-hd', limit=100)
+    _assert_agrees(rows, lambda pid: lb.series_edition_rank('eds', 'legacy-hd', pid), 'Edition board')
+
+    ids = [r[0] for r in rows]
+    assert ids.index(first.profile_id) < ids.index(second.profile_id), (
+        'the edition board ordered on the series-wide date, not this edition\'s'
+    )
+    null_row = SeriesEditionStanding.objects.get(series_slug='eds', advanced_at__isnull=True)
+    assert ids.index(null_row.profile_id) == len(ids) - 1, 'the undated row did not sort last in its rung'
+
+
+# ------------------------------------------------------------------ the key lists are honest -------------
+
+@pytest.mark.parametrize('keys, label', [
+    (lb.XP_KEYS, 'XP_KEYS'),
+    (lb.TROPHY_KEYS, 'TROPHY_KEYS'),
+    (lb.CAREER_KEYS, 'CAREER_KEYS'),
+    (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
+    # The per-EDITION series board. It IS `SERIES_BOARD_KEYS` since migration 0313 gave it a store whose
+    # columns match its parent's, and it is listed separately anyway: the name is what the board declares,
+    # and a future divergence has to stay covered without anyone remembering to add it back.
+    (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'),
+    (lb.JOB_KEYS, 'JOB_KEYS'),
+    (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
+])
+def test_every_board_order_ends_in_the_unique_key(keys, label):
+    """The property the tests above depend on. Without a unique final key the order is not total, ties are
+    resolved arbitrarily by Postgres, and rank/position can disagree run to run rather than consistently --
+    which is far harder to notice than a stable wrong number."""
+    assert keys[-1] in (('profile_id', lb._ASC), ('id', lb._ASC)), (
+        f'{label} does not end in a unique key, so its ordering is not total'
+    )
+
+
+def test_every_module_level_keys_tuple_is_covered_by_the_test_above():
+    """The parametrize list is hand-maintained, and that is exactly how two ranks escaped it.
+
+    `series_rank` and `earners_rank` had no `*_KEYS` tuple at all -- they counted a bare `xp__gt` /
+    `earned_at__lt` -- so they were invisible here while every declared board was covered, and the file
+    read as though the whole module was checked. (`series_rank` was subsequently deleted outright: it
+    ranked the same population as the per-series board on a different key, so the badge page showed two
+    contradictory "rank" figures one click apart.) This asserts the list is COMPLETE, so declaring a new
+    board without adding it fails rather than passing silently.
+    """
+    declared = {name for name in dir(lb) if name.endswith('_KEYS')}
+    covered = {label for _keys, label in [
+        (lb.XP_KEYS, 'XP_KEYS'), (lb.TROPHY_KEYS, 'TROPHY_KEYS'), (lb.CAREER_KEYS, 'CAREER_KEYS'),
+        (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
+        (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'), (lb.JOB_KEYS, 'JOB_KEYS'),
+        (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
+    ]}
+    assert declared == covered, (
+        f'uncovered key tuples: {sorted(declared - covered)}. Add them to the parametrize list above.'
+    )

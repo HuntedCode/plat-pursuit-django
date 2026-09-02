@@ -1,0 +1,17 @@
+/* ============================================================
+ * TAG DETAIL (Genre / Theme) -- the per-tag game list. Header is the standard accented card (no art -- a
+ * single game's cover reads thin/muddy as a genre hero); everything else reuses the Browse Games system
+ * (.pp-gbrowse toolbar, .pp-gcard grid, infinite scroll). Only the related-tags rail needs its own CSS.
+ *
+ * Related-tags rail: a compact grid of the shared .pp-gtile tiles (co-occurring tags, materialized).
+ * ============================================================ */
+.pp-related { margin-top: 1.25rem; }
+.pp-related__head { display: flex; align-items: center; gap: 8px; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.pp-related__head svg { width: 18px; height: 18px; color: var(--pp-primary); flex-shrink: 0; }
+.pp-related__title { font-size: 0.95rem; font-weight: 800; color: var(--pp-text); }
+.pp-related__sub { font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; }
+.pp-related__grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+@media (min-width: 640px)  { .pp-related__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-related__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }

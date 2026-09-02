@@ -1,365 +1,362 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Settings{% endblock %}
+{% block title %}Settings - PlatPursuit{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto">
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+<div class="stg">
 
-    {# Page Header #}
-    <div class="card bg-base-200/70 border-2 border-base-300 border-l-4 border-l-primary shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4">
-            <div class="flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Settings</h1>
-            </div>
+    {% comment %} The page drops the breadcrumb partial (the site's only messages renderer), so
+    Django messages need a home of their own: every save on this page answers through one. {% endcomment %}
+    {% include 'partials/_messages.html' %}
+
+    {% comment %} ============================================== header ==================== {% endcomment %}
+    <section aria-label="Settings" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+        <div class="card-body p-5 md:p-7 pp-head-cascade">
+            <p class="stg__eyebrow">Account &middot; Settings</p>
+            <h1 class="stg__h1">Settings.</h1>
+            <p class="stg__lede">How PlatPursuit fits you: your timezone, your library, your account.</p>
+            <p class="stg__facts">
+                {% if profile %}<span>{{ profile.display_psn_username|default:profile.psn_username }}</span><span aria-hidden="true">&middot;</span>{% endif %}
+                <span>{{ user.user_timezone }}</span>
+                {% if is_member %}<span aria-hidden="true">&middot;</span><span>PlatPursuit {{ level.name }}</span>{% endif %}
+            </p>
         </div>
-    </div>
+    </section>
 
-    {# ═══ Regional Settings ═══ #}
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4">
-            <h2 class="text-sm md:text-base font-bold flex items-center gap-2 mb-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                Regional Settings
-            </h2>
-            <form method="post" class="space-y-3" id="user-settings-form">
+    {% comment %} ============================================== regional ================== {% endcomment %}
+    <section aria-labelledby="stg-regional-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+        <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
+            <div class="stg-sec__head">
+                <h2 class="stg-sec__h" id="stg-regional-h">Regional</h2>
+                <p class="stg-sec__sub">Dates and times across the site, your Monthly Recap boundaries included.</p>
+            </div>
+            <form method="post" class="stg-form">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="update_user">
-
-                <div class="form-control">
-                    <label class="text-xs font-semibold text-base-content/60 mb-1" for="{{ user_form.user_timezone.id_for_label }}">Timezone</label>
-                    <div class="flex items-center gap-2">
-                        <div class="flex-1">{{ user_form.user_timezone }}</div>
-                        <button type="button" class="btn btn-ghost btn-xs md:btn-sm gap-1" id="detect-timezone-btn" title="Detect from browser">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                            <span class="hidden md:inline">Detect</span>
-                        </button>
+                <input type="hidden" name="action" value="regional">
+                <div class="stg-field">
+                    <label class="stg-field__label" for="stg-tz">Timezone</label>
+                    <div class="stg-field__row">
+                        <select id="stg-tz" name="user_timezone" class="stg-select" autocomplete="off" aria-describedby="stg-tz-hint">
+                            {% for tz in timezones %}
+                            <option value="{{ tz }}"{% if tz == user.user_timezone %} selected{% endif %}>{{ tz }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-tz-detect>Detect</button>
                     </div>
-                    {% if user_form.user_timezone.errors %}<div class="text-xs text-error mt-1">{{ user_form.user_timezone.errors }}</div>{% endif %}
+                    <p class="stg-field__hint" id="stg-tz-hint" data-tz-hint role="status" hidden></p>
                 </div>
-
-                <div class="form-control">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        {{ user_form.use_24hr_clock }}
-                        <span class="text-sm">Use 24-hour clock</span>
-                    </label>
-                    <p class="text-xs text-base-content/40 mt-1 ml-7">Example: 23:00 instead of 11:00 PM</p>
-                    {% if user_form.use_24hr_clock.errors %}<div class="text-xs text-error mt-1">{{ user_form.use_24hr_clock.errors }}</div>{% endif %}
+                <label class="stg-toggle">
+                    <input type="checkbox" name="use_24hr_clock" class="checkbox checkbox-primary checkbox-sm"{% if user.use_24hr_clock %} checked{% endif %}>
+                    <span class="stg-toggle__body">
+                        <span class="stg-toggle__name">Use the 24-hour clock</span>
+                        <span class="stg-toggle__sub">23:00 instead of 11:00 PM.</span>
+                    </span>
+                </label>
+                <div class="stg-form__foot">
+                    <button type="submit" class="pp-cta">Save regional settings</button>
                 </div>
-
-                <button type="submit" class="btn btn-primary btn-sm w-full" id="user-settings-save-btn" disabled>Save Regional Settings</button>
             </form>
         </div>
-    </div>
+    </section>
 
+    {% comment %} ============================================== library =================== {% endcomment %}
     {% if profile %}
-    {# ═══ Profile Settings (PSN identity + game visibility) ═══ #}
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4">
-            <h2 class="text-sm md:text-base font-bold flex items-center gap-2 mb-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                Profile Settings
-            </h2>
-
-            {# PSN Identity + Unlink #}
-            <div class="flex items-center gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 mb-3">
-                <div class="w-8 h-8 rounded-full overflow-hidden ring-2 ring-primary shrink-0">
-                    <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}" alt="" class="w-full h-full object-cover" loading="lazy" />
-                </div>
-                <div class="flex-1 min-w-0">
-                    <span class="text-sm font-bold">{{ profile.display_psn_username }}</span>
-                    <p class="text-xs text-base-content/40">Last sync: {{ profile.last_synced|date:"M j, Y" }}</p>
-                </div>
-                <button type="button" onclick="document.getElementById('unlink-modal').showModal()" class="btn btn-ghost btn-xs text-error gap-1 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    Unlink
-                </button>
+    <section aria-labelledby="stg-library-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+        <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
+            <div class="stg-sec__head">
+                <h2 class="stg-sec__h" id="stg-library-h">Library</h2>
+                <p class="stg-sec__sub">What counts toward your totals and what shows on your profile.</p>
             </div>
 
-            {# Game Visibility #}
-            <form method="post" class="space-y-3" id="profile-settings-form">
+            <div class="stg-who">
+                <span class="stg-who__av">{% include 'partials/_avatar.html' with url=profile.avatar_url alt='' %}</span>
+                <span class="stg-who__id">
+                    <span class="stg-who__name">{{ profile.display_psn_username|default:profile.psn_username }}</span>
+                    <span class="stg-who__sub">Last synced {{ profile.last_synced|timesince }} ago</span>
+                </span>
+            </div>
+
+            <form method="post" class="stg-form">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="update_profile">
-
-                <label class="flex items-center gap-2 cursor-pointer">
-                    {{ profile_form.hide_hiddens }}
-                    <div>
-                        <span class="text-sm font-semibold">Hide hidden/deleted games</span>
-                        <p class="text-xs text-base-content/40">Remove hidden or deleted games from your profile view.</p>
-                    </div>
+                <input type="hidden" name="action" value="library">
+                <label class="stg-toggle">
+                    <input type="checkbox" name="hide_hiddens" class="checkbox checkbox-primary checkbox-sm"{% if profile.hide_hiddens %} checked{% endif %}>
+                    <span class="stg-toggle__body">
+                        <span class="stg-toggle__name">Hide hidden and deleted games</span>
+                        <span class="stg-toggle__sub">Games you have hidden on PSN stay out of your totals, lists and completion stats.</span>
+                    </span>
                 </label>
-
-                <label class="flex items-center gap-2 cursor-pointer">
-                    {{ profile_form.hide_zeros }}
-                    <div>
-                        <span class="text-sm font-semibold">Hide zero-progress games</span>
-                        <p class="text-xs text-base-content/40">Hide games where you haven't earned any trophies yet.</p>
-                    </div>
+                <label class="stg-toggle">
+                    <input type="checkbox" name="hide_zeros" class="checkbox checkbox-primary checkbox-sm"{% if profile.hide_zeros %} checked{% endif %}>
+                    <span class="stg-toggle__body">
+                        <span class="stg-toggle__name">Hide games with no progress</span>
+                        <span class="stg-toggle__sub">Games at 0% never touch your completion average.</span>
+                    </span>
                 </label>
-
-                <button type="submit" class="btn btn-primary btn-sm w-full" id="profile-settings-save-btn" disabled>Save Profile Settings</button>
+                <p class="stg-form__note">Saving recalculates your totals, so the change lands everywhere at once.</p>
+                <div class="stg-form__foot">
+                    <button type="submit" class="pp-cta">Save library settings</button>
+                </div>
             </form>
 
-            {# Unlink Modal #}
-            <dialog id="unlink-modal" class="modal">
-                <div class="modal-box max-w-sm bg-base-200 border-2 border-error">
-                    <h3 class="font-bold text-base text-error">Unlink PSN Profile?</h3>
-                    <p class="text-sm text-base-content/60 mt-2">This will disconnect your PSN account. You can relink later, but some features may be restricted.</p>
-                    <div class="modal-action">
-                        <form method="dialog"><button class="btn btn-ghost btn-sm">Cancel</button></form>
-                        <form method="post">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="unlink_profile">
-                            <button type="submit" class="btn btn-error btn-sm">Unlink</button>
-                        </form>
-                    </div>
+            <div class="stg-danger">
+                <div class="stg-danger__say">
+                    <span class="stg-danger__name">Unlink this PSN account</span>
+                    <span class="stg-danger__sub">Your trophy data stays on the profile and relinking later picks it back up.</span>
                 </div>
-                <form method="dialog" class="modal-backdrop"><button>close</button></form>
-            </dialog>
+                <button type="button" class="pp-cta pp-cta--danger" data-unlink-open>Unlink</button>
+            </div>
         </div>
-    </div>
-
-    {# ═══ Site Theme (Premium) ═══ #}
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4">
-            <div class="flex items-center justify-between mb-2">
-                <h2 class="text-sm md:text-base font-bold flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                    Site Theme
-                    {% if not profile.user_is_premium %}
-                        <span class="badge badge-xs badge-warning gap-0.5 ml-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg>
-                            Premium
-                        </span>
-                    {% endif %}
-                </h2>
-                {% if selected_theme_name %}
-                <span class="text-xs text-base-content/50">Current: <span id="selected-theme-name" class="font-semibold">{{ selected_theme_name }}</span></span>
-                {% else %}
-                <span id="selected-theme-name" class="text-xs text-base-content/40 italic">No theme selected</span>
-                {% endif %}
+    </section>
+    {% else %}
+    <section aria-labelledby="stg-library-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+        <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
+            <div class="stg-sec__head">
+                <h2 class="stg-sec__h" id="stg-library-h">Library</h2>
+                <p class="stg-sec__sub">No PSN account linked yet. Linking one is where the pursuit starts.</p>
             </div>
-
-            {# Preview #}
-            <div id="theme-preview-container" class="h-12 md:h-16 rounded-lg border border-base-content/10 flex items-center justify-center overflow-hidden mb-3"
-                 style="background: {% if selected_theme_css %}{{ selected_theme_css }}{% else %}linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34){% endif %}">
-                <span class="text-white font-bold text-sm drop-shadow-lg">{{ profile.display_psn_username }}</span>
+            <div class="stg-form__foot">
+                <a href="{% url 'link_psn' %}" class="pp-cta">Link your PSN account</a>
             </div>
-
-            {% if not profile.user_is_premium %}
-            <div class="bg-warning/10 border border-warning/30 rounded-lg p-2.5 flex items-center gap-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg>
-                <div class="flex-1">
-                    <p class="text-xs text-base-content/50">Upgrade to Premium to customize your site theme.</p>
-                </div>
-                <a href="{% url 'subscribe' %}" class="btn btn-warning btn-xs shrink-0">Upgrade</a>
-            </div>
-            {% else %}
-            {% if premium_form %}
-            <form method="post" id="premium-settings-form">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="update_premium">
-                <input type="hidden" name="selected_background" id="settings-bg-input" value="{{ profile.selected_background_id|default:'' }}">
-
-                {# Collapsible theme grid #}
-                <div class="collapse collapse-arrow bg-white/[0.03] rounded-lg border border-base-content/5">
-                    <input type="checkbox" />
-                    <div class="collapse-title py-2 min-h-0 text-xs md:text-sm font-semibold text-base-content/60">
-                        Browse 100+ themes
-                    </div>
-                    <div class="collapse-content">
-                        {% include 'partials/color_grid.html' with grid_id='theme-grid' selected_theme=profile.selected_theme available_themes=available_themes grouped=True %}
-                    </div>
-                </div>
-
-                <div class="hidden">{{ premium_form.selected_theme }}</div>
-
-                <button type="submit" class="btn btn-secondary btn-sm w-full mt-3" id="premium-settings-save-btn" disabled>Save Theme</button>
-            </form>
-            {% endif %}
-            {% endif %}
         </div>
-    </div>
+    </section>
+    {% endif %}
 
-    {# ═══ Password ═══ #}
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4">
-            <h2 class="text-sm md:text-base font-bold flex items-center gap-2 mb-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                Change Password
-            </h2>
-            <form method="post" class="space-y-3">
+    {% comment %} ============================================== account =================== {% endcomment %}
+    <section aria-labelledby="stg-account-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral pp-arrive">
+        <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
+            <div class="stg-sec__head">
+                <h2 class="stg-sec__h" id="stg-account-h">Account</h2>
+                <p class="stg-sec__sub">Your sign-in details.</p>
+            </div>
+
+            <div class="stg-row">
+                <div class="stg-row__say">
+                    <span class="stg-row__name">Email</span>
+                    <span class="stg-row__sub">{{ user.email }}</span>
+                </div>
+                <a href="{% url 'account_email' %}" class="pp-cta pp-cta--ghost">Manage email addresses</a>
+            </div>
+
+            <form method="post" class="stg-form" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="change_password">
-                <div class="form-control">
-                    <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_old_password">Current Password</label>
-                    <input type="password" name="old_password" id="id_old_password" class="input input-bordered input-sm w-full" autocomplete="current-password" required>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div class="form-control">
-                        <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_new_password1">New Password</label>
-                        <input type="password" name="new_password1" id="id_new_password1" class="input input-bordered input-sm w-full" autocomplete="new-password" required>
+                <p class="stg-form__label">Change password</p>
+                {% if password_form.non_field_errors %}
+                <p class="stg-field__error" role="alert">{{ password_form.non_field_errors.0 }}</p>
+                {% endif %}
+                <div class="stg-pw">
+                    <div class="stg-field">
+                        <label class="stg-field__label" for="id_old_password">Current password</label>
+                        <input type="password" id="id_old_password" name="old_password" class="stg-input" autocomplete="current-password" required{% if password_form.old_password.errors %} aria-invalid="true" aria-describedby="old-password-error"{% endif %}>
+                        {% if password_form.old_password.errors %}<p class="stg-field__error" id="old-password-error" role="alert">{{ password_form.old_password.errors.0 }}</p>{% endif %}
                     </div>
-                    <div class="form-control">
-                        <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_new_password2">Confirm Password</label>
-                        <input type="password" name="new_password2" id="id_new_password2" class="input input-bordered input-sm w-full" autocomplete="new-password" required>
+                    <div class="stg-field">
+                        <label class="stg-field__label" for="id_new_password1">New password</label>
+                        <input type="password" id="id_new_password1" name="new_password1" class="stg-input" autocomplete="new-password" required{% if password_form.new_password1.errors %} aria-invalid="true" aria-describedby="new-password1-error"{% endif %}>
+                        {% if password_form.new_password1.errors %}<p class="stg-field__error" id="new-password1-error" role="alert">{{ password_form.new_password1.errors.0 }}</p>{% endif %}
+                    </div>
+                    <div class="stg-field">
+                        <label class="stg-field__label" for="id_new_password2">Confirm new password</label>
+                        <input type="password" id="id_new_password2" name="new_password2" class="stg-input" autocomplete="new-password" required{% if password_form.new_password2.errors %} aria-invalid="true" aria-describedby="new-password2-error"{% endif %}>
+                        {% if password_form.new_password2.errors %}<p class="stg-field__error" id="new-password2-error" role="alert">{{ password_form.new_password2.errors.0 }}</p>{% endif %}
                     </div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm w-full">Change Password</button>
+                <div class="stg-form__foot">
+                    <button type="submit" class="pp-cta">Change password</button>
+                </div>
+            </form>
+
+            <div class="stg-danger">
+                <div class="stg-danger__say">
+                    <span class="stg-danger__name">Delete your account</span>
+                    {% if deletion_blocked %}
+                    <span class="stg-danger__sub">Your membership is still active. Cancel it first, and deletion opens the moment it ends. Paid time is always honoured.</span>
+                    {% else %}
+                    <span class="stg-danger__sub">Permanently removes your sign-in and personal data. Your PSN profile and trophy history stay public, the same as any hunter who never registered.</span>
+                    {% endif %}
+                </div>
+                {% if deletion_blocked %}
+                <a href="{% url 'subscription_management' %}" class="pp-cta pp-cta--ghost">Manage membership</a>
+                {% else %}
+                <button type="button" class="pp-cta pp-cta--danger" data-delete-open>Delete account</button>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {% comment %} ============================================== membership ================ {% endcomment %}
+    <section aria-labelledby="stg-membership-h" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral stg-membership pp-arrive"{% if is_member %} style="--sup-t: {{ level.colour }}"{% endif %}>
+        <div class="card-body p-4 md:p-6 stg-sec pp-arrive__it">
+            <div class="stg-sec__head">
+                <h2 class="stg-sec__h" id="stg-membership-h">Membership</h2>
+                <p class="stg-sec__sub">
+                    {% if is_member %}
+                    {% if level.is_legacy %}{{ level.display_name }}, wearing the {{ level.name }} mark.{% else %}PlatPursuit {{ level.name }}.{% endif %}
+                    Billing, your level and the supporter wall all live on the membership page.
+                    {% else %}
+                    Not a member. Membership backs the project and comes with a little more of what everyone here already gets.
+                    {% endif %}
+                </p>
+            </div>
+            <div class="stg-form__foot">
+                {% if is_member %}
+                <a href="{% url 'subscription_management' %}" class="pp-cta">Manage membership</a>
+                {% else %}
+                <a href="{% url 'support_hub' %}" class="pp-cta pp-cta--ghost">See the support page</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {% comment %} No-JS fallbacks for the two confirm dialogs, INSIDE the reading column so
+    they align with everything above. Without JS the dialog openers are inert, so these render
+    as static two-steps: the required checkbox is the confirm, and for deletion the password
+    field stays the real gate. {% endcomment %}
+    {% if not deletion_blocked %}
+    <noscript>
+        <div class="stg-danger stg-danger--noscript">
+            <div class="stg-danger__say">
+                <span class="stg-danger__name">Delete your account?</span>
+                <span class="stg-danger__sub">
+                    Permanent. Your PSN profile and ratings stay public.
+                    {% if has_blurbs %}Your written quick takes are erased, so <a href="{% url 'export_quick_takes' %}">download a copy</a> first if you want to keep them.{% endif %}
+                    {% if deletion_grace_until %}Your remaining membership time (through {{ deletion_grace_until|date:"F j, Y" }}) ends now and cannot be refunded.{% endif %}
+                </span>
+            </div>
+            <form method="post">{% csrf_token %}
+                <input type="hidden" name="action" value="delete_account">
+                <label class="sr-only" for="stg-noscript-pw">Your password</label>
+                <input type="password" id="stg-noscript-pw" name="password" class="stg-input" placeholder="Your password" autocomplete="current-password" required>
+                <label class="stg-danger__confirm">
+                    <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" required>
+                    <span>Yes, permanently delete my account</span>
+                </label>
+                <button type="submit" class="pp-cta pp-cta--danger">Delete my account</button>
             </form>
         </div>
-    </div>
-
-    {# ═══ Email Preferences ═══ #}
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4">
-            <div class="flex items-center justify-between">
-                <h2 class="text-sm md:text-base font-bold flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    Email Preferences
-                </h2>
-                <a href="{% url 'email_preferences_redirect' %}" class="btn btn-ghost btn-xs gap-1">
-                    Manage
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </a>
-            </div>
-            <p class="text-xs text-base-content/40 mt-1 pr-1">Control badge notifications, milestone alerts, weekly digests, and announcements.</p>
-        </div>
-    </div>
-
-    {% else %}
-    {# No profile linked #}
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 text-center">
-            <p class="text-base-content/60">No PSN profile linked.</p>
-            <a href="{% url 'link_psn' %}" class="btn btn-primary btn-sm mt-2">Link PSN Account</a>
-        </div>
-    </div>
+    </noscript>
     {% endif %}
+    {% if profile %}
+    <noscript>
+        <div class="stg-danger stg-danger--noscript">
+            <div class="stg-danger__say">
+                <span class="stg-danger__name">Unlink your PSN account?</span>
+                <span class="stg-danger__sub">Nothing is deleted, and relinking later picks everything back up.</span>
+            </div>
+            <form method="post">{% csrf_token %}
+                <input type="hidden" name="action" value="unlink_profile">
+                <label class="stg-danger__confirm">
+                    <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" required>
+                    <span>Yes, unlink this PSN account</span>
+                </label>
+                <button type="submit" class="pp-cta pp-cta--danger">Unlink</button>
+            </form>
+        </div>
+    </noscript>
+    {% endif %}
+
 </div>
+
+{% comment %} ============================================== delete dialog =================
+The specific warning, not boilerplate: what survives (the public pursuit) and what is
+destroyed (the account, and the words -- permanently, even on a return). The blurb warning
+and the download link render only when there is at least one blurb to lose. The typed phrase
+is client-side friction; the password is the server-side gate. {% endcomment %}
+{% if not deletion_blocked %}
+<dialog id="stg-delete" class="sup-modal" aria-labelledby="stg-delete-h">
+    <div class="sup-modal__head">
+        <h2 id="stg-delete-h">Delete your account?</h2>
+        <button type="button" class="sup-modal__x" data-delete-close aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+    </div>
+    <p class="sup-modal__lede">
+        Your sign-in and personal data are permanently removed from PlatPursuit. Stripe and
+        PayPal keep their own transaction records, as they are required to.
+        {% if profile %}Your PSN profile and trophy history stay public, and your game ratings
+        stay with them. If you ever return and relink, your pursuit picks up where it left off.{% endif %}
+    </p>
+    {% if has_blurbs %}
+    <p class="sup-modal__lede stg-delete__warn">
+        Your written quick takes are erased permanently. They will not come back, even if you
+        return and relink. <a href="{% url 'export_quick_takes' %}">Download a copy</a> first
+        if you want to keep your words.
+    </p>
+    {% endif %}
+    {% if deletion_grace_until %}
+    <p class="sup-modal__lede stg-delete__warn">
+        Your remaining membership time (through {{ deletion_grace_until|date:"F j, Y" }}) ends
+        now and cannot be refunded.
+    </p>
+    {% endif %}
+    <form method="post" class="stg-delete__form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_account">
+        <div class="stg-field">
+            <label class="stg-field__label" for="stg-delete-pw">Your password</label>
+            <input type="password" id="stg-delete-pw" name="password" class="stg-input" autocomplete="current-password" required>
+        </div>
+        <div class="stg-field">
+            <label class="stg-field__label" for="stg-delete-phrase" id="stg-delete-phrase-label">Type <span class="stg-delete__phrase">"delete my account"</span> to confirm</label>
+            <input type="text" id="stg-delete-phrase" class="stg-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="stg-confirm__row">
+            <button type="button" class="stg-confirm__keep" data-delete-close autofocus>Keep my account</button>
+            {% comment %} aria-describedby points at the phrase label so assistive tech hears
+            WHY the button is disabled. {% endcomment %}
+            <button type="submit" class="stg-confirm__go" data-delete-go disabled aria-describedby="stg-delete-phrase-label">Delete my account</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+
+{% comment %} ============================================== unlink dialog ================= {% endcomment %}
+{% if profile %}
+<dialog id="stg-unlink" class="sup-modal" aria-labelledby="stg-unlink-h">
+    <div class="sup-modal__head">
+        <h2 id="stg-unlink-h">Unlink your PSN account?</h2>
+        <button type="button" class="sup-modal__x" data-unlink-close aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+    </div>
+    <p class="sup-modal__lede">
+        {{ profile.display_psn_username|default:profile.psn_username }} will be disconnected from this
+        account. Nothing is deleted: the trophy history stays with the profile, and relinking later
+        picks everything back up.
+    </p>
+    <div class="stg-confirm__row">
+        <form method="dialog"><button class="stg-confirm__keep" autofocus>Keep it linked</button></form>
+        <form method="post">{% csrf_token %}
+            <input type="hidden" name="action" value="unlink_profile">
+            <button type="submit" class="stg-confirm__go">Unlink</button>
+        </form>
+    </div>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<script>
+    {% comment %} Arms the section arrival BEFORE first paint (motion.css .pp-arrive): the hidden
+    state gates on html.pp-arm so incremental painting can never flash a card visible before the
+    boot script hides it. Without JS this never runs and nothing is hidden. FAILSAFE: the disarm
+    lives in an EXTERNAL file (settings-page.js), so if that file 404s or is blocked, nothing
+    would ever reveal the cards -- the load-event check below disarms unless the boot left its
+    marker. Harmless when the boot ran (pp-arm stays, the observers own the reveal). {% endcomment %}
+    document.documentElement.classList.add('pp-arm');
+    window.addEventListener('load', function () {
+        setTimeout(function () {
+            if (!document.documentElement.hasAttribute('data-stg-booted')) {
+                document.documentElement.classList.remove('pp-arm');
+            }
+        }, 400);
+    });
+</script>
 {% endblock %}
 
 {% block js_scripts %}
-<script src="{% static 'js/game-background-picker.js' %}"></script>
-<script>const initialBgData = {{ initial_background_json|safe }};</script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const isPremium = {% if profile and profile.user_is_premium %}true{% else %}false{% endif %};
-
-    // Theme Grid Handler
-    const themeGrid = document.getElementById('theme-grid');
-    const themeSelect = document.getElementById('selected-theme-select');
-    const previewContainer = document.getElementById('theme-preview-container');
-    const selectedThemeName = document.getElementById('selected-theme-name');
-
-    if (themeGrid && themeSelect) {
-        themeGrid.addEventListener('click', function(e) {
-            const btn = e.target.closest('.theme-preview-btn');
-            if (!btn) return;
-
-            const themeKey = btn.dataset.themeKey;
-            const themeName = btn.dataset.themeName;
-
-            themeGrid.querySelectorAll('.theme-preview-btn').forEach(b => {
-                b.classList.remove('border-primary', 'ring-2', 'ring-primary');
-                b.classList.add('border-base-300');
-            });
-            btn.classList.remove('border-base-300');
-            btn.classList.add('border-primary', 'ring-2', 'ring-primary');
-
-            themeSelect.value = themeKey;
-            themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-
-            if (previewContainer) previewContainer.style.background = btn.style.background;
-            if (selectedThemeName) selectedThemeName.textContent = themeName || 'Default';
-
-            document.body.style.background = btn.style.background;
-            document.body.style.backgroundAttachment = 'fixed';
-        });
-    }
-
-    // Unsaved Changes & Save Button Activation
-    const trackedForms = [
-        { formId: 'user-settings-form', saveBtn: 'user-settings-save-btn', canSave: true },
-        { formId: 'premium-settings-form', saveBtn: 'premium-settings-save-btn', canSave: isPremium },
-        { formId: 'profile-settings-form', saveBtn: 'profile-settings-save-btn', canSave: true }
-    ];
-    const originalValues = {};
-
-    function captureOriginalState() {
-        trackedForms.forEach(({ formId }) => {
-            const form = document.getElementById(formId);
-            if (!form) return;
-            form.querySelectorAll('input, select, textarea').forEach(el => {
-                if (el.type === 'hidden' && (el.name === 'action' || el.name === 'csrfmiddlewaretoken')) return;
-                if (el.type === 'password') return;
-                const key = `${formId}:${el.name || el.id}`;
-                originalValues[key] = el.type === 'checkbox' ? el.checked : el.value;
-            });
-        });
-    }
-
-    function formHasChanges(formId) {
-        const form = document.getElementById(formId);
-        if (!form) return false;
-        for (const el of form.querySelectorAll('input, select, textarea')) {
-            if (el.type === 'hidden' && (el.name === 'action' || el.name === 'csrfmiddlewaretoken')) continue;
-            if (el.type === 'password') continue;
-            const key = `${formId}:${el.name || el.id}`;
-            const current = el.type === 'checkbox' ? el.checked : el.value;
-            if (originalValues[key] !== current) return true;
-        }
-        return false;
-    }
-
-    function updateSaveButtons() {
-        trackedForms.forEach(({ formId, saveBtn, canSave }) => {
-            const btn = document.getElementById(saveBtn);
-            if (btn) btn.disabled = !formHasChanges(formId) || !canSave;
-        });
-    }
-
-    trackedForms.forEach(({ formId }) => {
-        const form = document.getElementById(formId);
-        if (!form) return;
-        form.querySelectorAll('input, select, textarea').forEach(el => {
-            if (el.type === 'hidden' && (el.name === 'action' || el.name === 'csrfmiddlewaretoken')) return;
-            el.addEventListener('change', updateSaveButtons);
-            el.addEventListener('input', updateSaveButtons);
-        });
-    });
-
-    captureOriginalState();
-    updateSaveButtons();
-
-    PlatPursuit.UnsavedChangesManager.init({
-        hasUnsavedChanges: function() { return trackedForms.some(({ formId }) => formHasChanges(formId)); },
-        showSaveButton: false
-    });
-});
-
-// Detect timezone from browser
-document.getElementById('detect-timezone-btn')?.addEventListener('click', function() {
-    try {
-        const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (!detected) { PlatPursuit.ToastManager.error('Could not detect timezone.'); return; }
-        const select = document.getElementById('id_user_timezone');
-        if (select) {
-            const option = [...select.options].find(o => o.value === detected);
-            if (option) {
-                select.value = detected;
-                select.dispatchEvent(new Event('change', { bubbles: true }));
-                PlatPursuit.ToastManager.success('Timezone detected: ' + detected);
-            } else {
-                PlatPursuit.ToastManager.warning('Detected timezone (' + detected + ') not in list.');
-            }
-        }
-    } catch (e) {
-        PlatPursuit.ToastManager.error('Could not detect timezone.');
-    }
-});
-</script>
+<script src="{% static 'js/settings-page.js' %}"></script>
 {% endblock %}

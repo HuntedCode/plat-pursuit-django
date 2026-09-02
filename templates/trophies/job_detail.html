@@ -1,0 +1,456 @@
+{% extends 'base.html' %}
+{% load static humanize job_icons %}
+
+{% block title %}{{ job.name }}{% endblock %}
+{% block meta_description %}{{ job.name }} on Platinum Pursuit: {{ job.description|truncatechars:140 }}{% endblock %}
+
+{% comment %} `/jobs/<slug>/` -- what a job IS, what feeds it, and who leads it.
+
+Two `.pp-switch` tabs, with the anon/authed split PER TAB rather than per page (game detail's model):
+
+  Contracts -> the aggregation that exists nowhere else. A contract is keyed to one Concept, so its
+               natural home is the game; grouping BY JOB is the view this page adds. Anon sees the games
+               and what they pay; a linked viewer additionally sees their own state on each.
+  Ranks     -> identical for everyone, which is what keeps it cacheable. A board a signed-out visitor
+               cannot see would defeat the discovery this page exists for.
+
+There is no public Contracts BROWSE, deliberately: contracts already have a public home on the game they
+belong to (via `contract_modal_preview`), so a third catalogue would be a third view of one dataset.
+{% endcomment %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 shadow-lg shadow-neutral mb-3"
+             style="--disc: var(--disc-{{ job.discipline }}); border-left-color: var(--disc);">
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            {% comment %} The shared page-header shape (`.pp-bhead` / `__id` / `__tally`), the one every
+            rebuilt browse and detail page uses, with this page's own discipline-tinted icon chip kept
+            because nothing shared carries it. It was a bespoke `.jobd__head` flex row: fine at the time,
+            and one more place the header had to be re-solved. {% endcomment %}
+            <div class="pp-bhead jobd__head">
+                <span class="jobd__ic" style="--disc: var(--disc-{{ job.discipline }});">{% job_icon job.icon '' %}</span>
+                <div class="pp-bhead__id min-w-0">
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ job.name }}</h1>
+                    <p class="jobd__disc">{{ job.get_discipline_display }}</p>
+                </div>
+            </div>
+
+            {% if job.description %}
+            <p class="jobd__desc">{{ job.description }}</p>
+            {% endif %}
+
+            {% comment %} WHAT THIS JOB IS, objectively -- the shared `.scard` row every rebuilt detail
+            header uses (franchise, company, genre, collection). It replaced two hand-placed figures in the
+            title row, which was a pill with numbers beside it rather than a header.
+
+            All three are already computed for this page, so the row costs nothing: contracts and XP come
+            from the same places the Contracts tab does, and hunters from the same count the Ranks tab
+            uses.
+
+            HUNTERS IS BACK, and that is a deliberate reversal. It was dropped from the CATALOGUE tile for
+            saying more about which games are popular than about the job, and dropped from this header
+            when it was the sole headline figure. As one of three on the job's own page, with its board a
+            click away, it is a fact about the job rather than a claim about its worth. {% endcomment %}
+            <div class="grid grid-cols-3 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Contracts</div>
+                    <div class="scard__value pp-tally" data-countup="{{ contract_total }}">{{ contract_total|intcomma }}</div>
+                    <div class="scard__sub">feed this job</div>
+                </div>
+                {% comment %} "Total XP", not "XP to earn": this is the job's whole SUPPLY across every
+                live contract, not what is left for the viewer. A hunter who has banked five of six
+                contracts would read the full figure under a label promising it is still earnable. {% endcomment %}
+                <div class="scard" style="--scard-accent: var(--disc);">
+                    <div class="scard__label">Total XP</div>
+                    <div class="scard__value pp-tally" data-countup="{{ xp_supply }}">{{ xp_supply|intcomma }}</div>
+                    <div class="scard__sub">across its contracts</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Pursuers</div>
+                    <div class="scard__value pp-tally" data-countup="{{ board_total }}">{{ board_total|intcomma }}</div>
+                    <div class="scard__sub">have banked XP</div>
+                </div>
+            </div>
+
+            {% if show_my_standing %}
+            {% comment %} YOUR standing in this job, once and in the header -- the same rule the Global
+            Boards landing follows: a per-row personal marker would make the board per-viewer and forfeit
+            caching for a page that is otherwise identical for everyone.
+
+            It was the rank alone, in a bare `.lb-mine` pill, which answered "where am I" and nothing
+            about the thing the page is actually about. Level and banked XP are what a job MEANS to a
+            hunter, and the Horizon under them is the shape every other progress read-out on the site
+            takes (franchise detail's "Your progress" is the model this follows).
+
+            Rendered for every linked viewer, ranked or not: gating the whole block on `my_rank` made it
+            simply absent for a hunter who has banked nothing here, which reads as a missing feature
+            rather than as the answer to the question they opened the page with. {% endcomment %}
+            <div class="jobd__mine" style="--disc: var(--disc-{{ job.discipline }});">
+                <div class="jobd__mine-head">
+                    <span class="jobd__mine-k">Your standing</span>
+                    {% if my_rank %}
+                    <a class="jobd__mine-rank pp-tally" href="?tab=ranks">#{{ my_rank|intcomma }}</a>
+                    {% else %}
+                    <span class="jobd__mine-rank jobd__mine-rank--none">Not ranked yet</span>
+                    {% endif %}
+                </div>
+                <div class="jobd__mine-figs">
+                    <span class="jobd__mine-fig">
+                        <b class="pp-tally">{{ my_job_level|default:"1" }}</b>
+                        <span>level</span>
+                    </span>
+                    <span class="jobd__mine-fig">
+                        <b class="pp-tally">{{ my_job_banked|intcomma }}</b>
+                        <span>XP banked</span>
+                    </span>
+                    <span class="jobd__mine-fig jobd__mine-fig--next">
+                        <b class="pp-tally">{{ my_job_to_next|intcomma }}</b>
+                        <span>to next level</span>
+                    </span>
+                </div>
+                {% include 'components/horizon.html' with progress=my_job_next_pct accent='var(--disc)' height='6px' %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} A real tablist over real tabpanels, switched IN PLACE -- the mechanism game detail and
+    badge detail use, so the same board does not feel instant on one page and a full reload on the next.
+
+    This was a nav of `?tab=` links, with a comment explaining that `role="tab"` would be a lie because
+    nothing switched in place. That was the correct fix for the behaviour at the time; the behaviour has
+    changed, so the semantics change back.
+
+    The `?tab=` links still work: the view honours the param on arrival, so old bookmarks land on the
+    right tab. {% endcomment %}
+    <div class="lb-bar">
+        <div class="pp-switch" id="jobd-switch" role="tablist" aria-label="Job view">
+            <a href="?tab=contracts" id="jobd-tab-contracts" aria-controls="jobd-view-contracts" role="tab"
+               aria-selected="{% if active_tab == 'contracts' %}true{% else %}false{% endif %}"
+               class="pp-switch__chip{% if active_tab == 'contracts' %} is-active{% endif %}" data-view="contracts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
+                <span class="pp-switch__lbl">Contracts</span>
+            </a>
+            <a href="?tab=ranks" id="jobd-tab-ranks" aria-controls="jobd-view-ranks" role="tab"
+               aria-selected="{% if active_tab == 'ranks' %}true{% else %}false{% endif %}"
+               class="pp-switch__chip{% if active_tab == 'ranks' %} is-active{% endif %}" data-view="ranks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+                <span class="pp-switch__lbl">Ranks</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="jobd-view" id="jobd-view-contracts" role="tabpanel" aria-labelledby="jobd-tab-contracts"
+         data-view="contracts"{% if active_tab == 'ranks' %} hidden{% endif %}>
+        {% comment %} The icon sprite, defined ONCE for the page. `job_icon_use` inside the cards renders
+        a `<use href="#jobicon-...">`, which resolves to nothing at all if the sprite is absent -- the
+        pills would draw their names with an invisible gap where the glyph belongs, on a page that still
+        looks basically fine. {% endcomment %}
+        {% job_icon_sprite %}
+
+        {% comment %} Latest: a LINK, not a fetch. This tab has no other filters, so there is no client
+        filter state to preserve, and navigating means the shared InfiniteScroller carries `new=1`
+        forward for free (it seeds from window.location.search), the URL is shareable, and Back undoes
+        it. `tab=contracts` rides along so the toggle never bounces the reader to the Ranks tab.
+
+        Hidden entirely when the job has nothing new, where Career shows the same chip dimmed at zero
+        (`.rp-chip--empty`). Not a contradiction, a difference in what surrounds it: on Career it sits
+        in a row of status chips that ALL show their counts, so a zero is one reading among several
+        and dropping it would make the row jump. Here it would be the only control on the page, and a
+        lone dimmed chip that does nothing reads as broken rather than as informative. Most jobs sit
+        at zero between publishing waves, so this is the common case, not the edge. {% endcomment %}
+        {% if new_count %}
+        <div class="jobd-newbar">
+            {% comment %} `aria-current`, not `aria-pressed`: this is an <a> (a link, so Back undoes
+            it), and aria-pressed is only valid on role="button" -- assistive tech ignores it there,
+            so the active state would reach sighted users through .is-active and nobody else. Career
+            renders the same chip as a <button> and correctly uses aria-pressed. {% endcomment %}
+            <a class="rp-chip rp-chip--new{% if new_only %} is-active{% endif %}"
+               href="?tab=contracts{% if not new_only %}&amp;new=1{% endif %}"
+               {% if new_only %}aria-current="true"{% endif %}
+               title="Contracts added in the last {{ new_window_days }} days">Latest<span class="rp-chip__n">{{ new_count }}</span></a>
+            {% if new_only %}<span class="jobd-newbar__count">{{ filtered_total }} of {{ contract_total }} shown</span>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if contracts %}
+        {% comment %} The SAME card Career renders, in its job-scoped variant -- see
+        `_contract_card.html`. What was here before was a placeholder: a text row per contract with the
+        name, its jobs as bare words, and a state label, rebuilding a worse version of a card that already
+        existed a tab away.
+
+        Grid columns match Career's so a reader who knows one board can read the other, capped a column
+        narrower: this page has no filter rail beside it, so the cards get the full width and a fifth
+        column would shrink the cover art below the size that makes a contract read as a GAME. {% endcomment %}
+        {% comment %} No `data-has-next` here, deliberately. Career's grid carries one because its own
+        scroller seeds itself from it; this page uses the shared `InfiniteScroller`, which learns
+        end-of-list from the `X-Has-Next` response header. An attribute nothing reads is the decoy this
+        codebase has now been caught by four times. {% endcomment %}
+        <div id="jobd-contracts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
+             data-results-url="{% url 'job_contracts' job.slug %}">
+            {% include 'trophies/partials/job_detail/_contract_results.html' %}
+        </div>
+        {% comment %} Sentinel + spinner for `PlatPursuit.InfiniteScroller` -- the SHARED scroller the
+        browse walls use, not Career's bespoke board controller. Career's carries filters, facets, tokens
+        and a scope toggle, none of which exist here; this tab is one fixed list that only ever needs its
+        next page. {% endcomment %}
+        <div id="jobd-contracts-sentinel" aria-hidden="true"></div>
+        <div id="jobd-contracts-loading" class="hidden py-6 text-center">
+            <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+            <span class="sr-only">Loading more contracts</span>
+        </div>
+        {% else %}
+        {% comment %} Two empty states, because they mean different things. A hand-typed `?new=1` on a
+        job with nothing recent hides the chip above (a control that can only return nothing is a dead
+        control), so without this branch the page would claim the job has NO contracts while its own
+        header counts them. {% endcomment %}
+        <div class="jobs-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
+            {% if new_only and contract_total %}
+            <p class="jobs-empty__title">Nothing new in the last {{ new_window_days }} days</p>
+            <p class="jobs-empty__sub">This job still has {{ contract_total }} contract{{ contract_total|pluralize }}.
+                <a class="link link-primary" href="?tab=contracts">Show them all</a>.</p>
+            {% else %}
+            <p class="jobs-empty__title">No contracts feed this job yet</p>
+            <p class="jobs-empty__sub">Contracts are curated. This one is waiting for its first.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>{# /jobd-view-contracts #}
+
+    {% comment %} Ranks: an EMPTY panel, filled from `job_ranks_panel` on first activation. Game detail's
+    model -- the cheap panel is server-rendered hidden, the expensive one is fetched. That is what keeps
+    the "build one tab, not both" saving the `?tab=` version got for free from a full page reload: a
+    visitor who never opens Ranks never pays for the board. {% endcomment %}
+    <div class="jobd-view" id="jobd-view-ranks" role="tabpanel" aria-labelledby="jobd-tab-ranks"
+         data-view="ranks" data-ranks-src="{% url 'job_ranks_panel' job.slug %}"{% if active_tab != 'ranks' %} hidden{% endif %}>
+        <div class="bd2-ranks__body" data-ranks-body>
+            <div class="bd2-ranks__loading" data-ranks-loading>
+                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block js_scripts %}
+{{ block.super }}
+<script>
+    // The header figures COUNT UP on arrival, like every other Tally on the site. Both carried
+    // `data-countup` and nothing ever called `countUp` on this page -- the attribute was inert here
+    // before this rebuild (on the hunter tally it replaced) and I doubled it before noticing. A
+    // `data-*` hook with no caller is indistinguishable from a working one in the markup, which is
+    // exactly why it survives.
+    //
+    // First paint only, with no tick-on-change: unlike the catalogue's tally these figures are static
+    // for the page -- nothing here filters them.
+    (function () {
+        if (!(window.PlatPursuit && PlatPursuit.countUp)) { return; }
+        document.querySelectorAll('.pp-head-cascade [data-countup]').forEach(function (el, i) {
+            setTimeout(function () { PlatPursuit.countUp(el, 850); }, i * 90);
+        });
+    })();
+
+    // ---- Contracts: infinite scroll -------------------------------------------------------------
+    // The SHARED `InfiniteScroller` (utils.js), the one the browse walls use -- not Career's board
+    // controller, which is ~500 lines of filters, facets, tokens and a scope toggle this tab has none of.
+    // What it needs is the next page of a fixed list, which is exactly what the shared one does.
+    //
+    // Wired at page load even though the tab may be hidden: the scroller observes a sentinel, and a
+    // sentinel inside a `hidden` panel simply never intersects, so it costs nothing until the tab opens.
+    (function () {
+        var grid = document.getElementById('jobd-contracts');
+        if (!grid || !window.PlatPursuit || !PlatPursuit.InfiniteScroller) { return; }
+        // THE COVER SKELETON. `.rp-tile__art::before` shimmers on an infinite loop until JS adds
+        // `.is-loaded`, so a page that renders this card without calling `progressiveArt` shows every
+        // cover pulsing forever -- and since `display: none` restarts a CSS animation, switching tabs
+        // re-syncs all of them into one page-wide flash. Run for the first page here and for every
+        // appended page below.
+        PlatPursuit.progressiveArt(grid);
+        // THE HOVER GALLERY. The card ships its extra frames in `data-gallery` and Career plays them;
+        // this page rendered the attribute and nothing read it, so the art sat still -- the same
+        // markup-without-behaviour omission as the cover skeleton above, found the same way.
+        if (PlatPursuit.coverCarousel) { PlatPursuit.coverCarousel(grid); }
+
+        // The scroll-in reveal: each card's XP counts up, its tier bars fill from zero, its ring draws
+        // around and its job tiles ignite as it comes into view. Shared with Career, whose 25-cell map
+        // is the only difference -- hence the selector.
+        var revealer = PlatPursuit.cardReveal
+            ? PlatPursuit.cardReveal({ jobSelector: '.rp-jobtile' }) : null;
+        if (revealer) { revealer.observe(grid.querySelectorAll('.rp-row')); }
+
+        // The entrance rise, ONCE. Career replays it on every return to its Contracts tab; this page has
+        // two tabs a reader flips between, and re-staggering 24 cards each time you come back is the
+        // busyness the tab-flash fix just removed. So: on load if the panel is showing, else on the first
+        // activation of the tab -- which is what "on load" means for a panel that starts hidden.
+        var staggered = false;
+        function staggerOnce() {
+            if (staggered || !PlatPursuit.staggerCards) { return; }
+            staggered = true;
+            PlatPursuit.staggerCards(grid.querySelectorAll('.rp-row'));
+        }
+        var contractsPanel = document.getElementById('jobd-view-contracts');
+        if (contractsPanel && !contractsPanel.hidden) { staggerOnce(); }
+        else if (contractsPanel) {
+            document.addEventListener('pp:jobd-contracts-shown', staggerOnce);
+        }
+
+        // Hovering a job pill lights its arc in that card's split ring, and hovering an arc lights its
+        // pill -- the shared `ringHoverLink`, the same one Career runs over its 25-cell map. Delegated
+        // from the grid, so scroll-appended cards need no re-binding. The item selector differs because
+        // this page shows the jobs as named pills; everything else, including scoping each lookup to the
+        // hovered card, is shared.
+        if (PlatPursuit.ringHoverLink) {
+            PlatPursuit.ringHoverLink(grid, { itemSelector: '.rp-jobtile' });
+        }
+
+        PlatPursuit.InfiniteScroller.create({
+            gridId: 'jobd-contracts',
+            sentinelId: 'jobd-contracts-sentinel',
+            loadingId: 'jobd-contracts-loading',
+            onAppend: function (nodes) {
+                nodes.forEach(function (n) {
+                    PlatPursuit.progressiveArt(n);
+                    if (PlatPursuit.coverCarousel) { PlatPursuit.coverCarousel(n); }
+                });
+                // An appended page gets the same entrance and the same scroll-in reveal as the first.
+                if (revealer) { revealer.observe(nodes); }
+                if (PlatPursuit.staggerCards) { PlatPursuit.staggerCards(nodes); }
+            },
+            // MUST match `CONTRACTS_PER_PAGE`, which is what the endpoint pages by: the scroller derives
+            // its next page number from how many cards are already in the grid, so a mismatch here skips
+            // or repeats a page rather than failing.
+            paginateBy: {{ contracts_per_page }},
+            cardSelector: '.rp-row',
+            url: grid.dataset.resultsUrl,
+        });
+    })();
+
+    // Content tabs: Contracts | Ranks. The mechanism badge detail and game detail use (shared
+    // wireTablist + igniteTab + syncViewParam over real role="tabpanel" islands), so all three detail
+    // pages switch identically.
+    (function () {
+        var strip = document.getElementById('jobd-switch');
+        if (!strip || !window.PlatPursuit) { return; }
+        var tabs = Array.prototype.slice.call(strip.querySelectorAll('.pp-switch__chip[data-view]'));
+        var panels = Array.prototype.slice.call(document.querySelectorAll('.jobd-view[data-view]'));
+        var tablist = null;
+        var loaded = false;
+
+        // The board is fetched, not server-rendered: the cheap panel ships hidden and the expensive one
+        // arrives when asked for. `loaded` guards a re-open, so switching back and forth fetches once.
+        var handle = null;      // the live board, so a retry cannot leave two mounted
+
+        // The sticky chrome a jump must land below, measured live: the nav's height differs across
+        // breakpoints, so a hardcoded inset would be wrong on one of them.
+        function chromeInset() {
+            var nav = document.querySelector('.pp-nav') || document.querySelector('header');
+            return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+        }
+
+        function loadRanks(panel, qs) {
+            if (loaded && !qs) { return; }
+            loaded = true;
+            var body = panel.querySelector('[data-ranks-body]');
+            fetch(panel.dataset.ranksSrc + (qs ? '?' + qs : ''),
+                  { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
+                .then(function (html) {
+                    if (handle) { handle.destroy(); handle = null; }
+                    body.innerHTML = html;
+                    if (!PlatPursuit.wireBoard) { return; }
+                    var root = body.querySelector('[data-lb-board]');
+                    // Called even when `root` is null: `wireBoard` still wires the rank box's submit and
+                    // swallows it, so an empty board cannot navigate the page away on Enter.
+                    handle = PlatPursuit.wireBoard(root, { scope: panel, chromeInset: chromeInset });
+                    PlatPursuit.boardEntrance(root, panel);
+                })
+                .catch(function () {
+                    // Tear the board down before replacing the body. Only the SUCCESS path did, so a
+                    // failed re-fetch left a mounted engine holding window scroll/resize listeners on a
+                    // detached wall -- inert, but one pair per failure for the life of the page. Game
+                    // detail's loader already did this; the three surfaces disagreed.
+                    if (handle) { handle.destroy(); handle = null; }
+                    // A board that fails to load must say so. A spinner left spinning reads as "still
+                    // counting" forever, which is worse than an honest failure.
+                    loaded = false;   // let a re-open retry
+                    body.innerHTML = '<p class="bd2-ranks__err">The board could not be loaded. Refresh to try again.</p>';
+                });
+        }
+
+        // The tab order, for the directional slide -- see badge detail's copy of this. Every other
+        // segmented switcher on the site glides; a tab that swaps instantly reads as a jump.
+        var ORDER = tabs.map(function (t) { return t.dataset.view; });
+
+        function showView(name, fromPop) {
+            var changed = false, active = null, shown = null, from = null;
+            tabs.forEach(function (t) {
+                var on = t.dataset.view === name;
+                if (t.classList.contains('is-active')) { from = t.dataset.view; }
+                if (on && !t.classList.contains('is-active')) { changed = true; }
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) { active = t; }
+            });
+            panels.forEach(function (p) {
+                p.hidden = p.dataset.view !== name;
+                if (p.dataset.view === name) { shown = p; }
+            });
+            if (changed && shown && PlatPursuit.slideViewIn) {
+                PlatPursuit.slideViewIn(shown, from, name, ORDER);
+            }
+            if (tablist) { tablist.syncTabindex(); }
+            if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
+            // PUSH, uniquely on this page: its tabs are real `<a href="?tab=...">` links, so before the
+            // in-place switch they were navigations that left a history entry. `wireTablist` swallows the
+            // navigation now, and without pushing here Back would skip past the whole page -- open a job,
+            // read its board, press Back, and land on `/jobs/` instead of the tab you came from.
+            // `fromPop` suppresses it when the change WAS a Back, or every Back would push a new entry
+            // and the reader could never leave.
+            if (PlatPursuit.syncViewParam) {
+                PlatPursuit.syncViewParam(name, { default: 'contracts', param: 'tab', push: !fromPop });
+            }
+            // LAST: the fetch is the expensive part, so tab state is fully settled before it starts.
+            if (name === 'ranks' && shown) { loadRanks(shown); }
+            // Announced so the contracts wiring can play its one-time entrance for a reader who arrived
+            // on `?tab=ranks`. An event rather than a direct call because the two blocks are separate
+            // IIFEs -- the same shape Career's `pp:contracts-shown` uses.
+            if (name === 'contracts' && changed) { document.dispatchEvent(new CustomEvent('pp:jobd-contracts-shown')); }
+        }
+
+        tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });
+
+        // Back/Forward move between the tabs the reader actually visited. The server reads `?tab=` on a
+        // fresh load; this is the same reading for an in-page history move, so the two agree.
+        window.addEventListener('popstate', function () {
+            var want = new URLSearchParams(location.search).get('tab');
+            showView(want === 'ranks' ? 'ranks' : 'contracts', true);
+        });
+
+        // Arriving on `?tab=ranks` (an old bookmark, a shared link) renders the Ranks panel already
+        // selected, so the fetch has to be kicked off without a click.
+        //
+        // The pager interception that stood here is gone with the pager itself. `?page=` is no longer
+        // honoured anywhere and is not redirected either: it was only ever a job-board URL, the board it
+        // named is now reachable by scrolling or by the rank box, and a redirect would be machinery kept
+        // alive for links that only ever existed inside a control that no longer ships.
+        var opened = document.querySelector('.jobd-view[data-view="ranks"]:not([hidden])');
+        if (opened) { loadRanks(opened); }
+
+        // The country filter re-fetches the PANEL in place rather than reloading the page, which would
+        // drop the reader back on the Contracts tab having just asked a question about the board. THE
+        // WHOLE FORM is serialized, not the field that changed -- badge detail shipped the one-field
+        // version and each filter cleared the other.
+        var ranksPanel = document.querySelector('.jobd-view[data-view="ranks"]');
+        if (ranksPanel) {
+            ranksPanel.addEventListener('change', function (ev) {
+                var select = ev.target.closest && ev.target.closest('[data-filter-form] select');
+                if (!select) { return; }
+                var form = select.closest('[data-filter-form]');
+                loadRanks(ranksPanel, new URLSearchParams(new FormData(form)).toString());
+            });
+        }
+    })();
+</script>
+{% endblock %}

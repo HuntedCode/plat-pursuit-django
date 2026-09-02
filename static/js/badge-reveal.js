@@ -51,10 +51,10 @@
             var checkboxes = document.querySelectorAll('.pool-checkbox');
             var activeIds = new Set();
             checkboxes.forEach(function(cb) {
-                if (cb.checked) activeIds.add(cb.dataset.badgeId);
+                if (cb.checked) activeIds.add(cb.dataset.seriesId);
             });
             return this._allBadges.filter(function(b) {
-                return activeIds.has(String(b.badge_id));
+                return activeIds.has(String(b.series_id));
             });
         },
 
@@ -93,7 +93,7 @@
                 coverApiUrl: null,
                 coverPayload: null,
                 gridSelector: null,
-                winnerKey: function(s) { return String(s.badge_id); },
+                winnerKey: function(s) { return String(s.series_id); },
             });
 
             this._spinner.bind('badge-reveal-spin-btn');

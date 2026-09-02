@@ -1,116 +1,168 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
-{% block title %}Franchise Directory{% endblock %}
+{% block title %}Franchises & Series{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# -- Header Card -- #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 lg:p-5">
-            <div class="flex items-center gap-2 flex-wrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                    <path d="M12 11h4"></path>
-                    <path d="M12 16h4"></path>
-                    <path d="M8 11h.01"></path>
-                    <path d="M8 16h.01"></path>
-                </svg>
-                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Franchises &amp; Series</h1>
+    {# ── Page header: accented card (primary/cyan accent) + --pp-* substance, opening-beat cascade. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M12 11h4"></path><path d="M12 16h4"></path><path d="M8 11h.01"></path><path d="M8 16h.01"></path>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Franchises &amp; Series</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        The sagas that keep us coming back. Browse PlayStation's biggest franchises (umbrella IPs) and the series within them.
+                    </p>
+                    <p class="text-[0.7rem] md:text-xs text-base-content/40 mt-1">
+                        Data sourced from
+                        <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-hover">IGDB</a>.
+                    </p>
+                </div>
+
+                <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                    <span id="fr-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-fr-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span id="fr-sublabel" class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">
+                        {% if current_type == 'series' %}series shown{% elif current_type == 'all' %}shown{% else %}franchises shown{% endif %}
+                    </span>
+                </div>
             </div>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                The sagas that keep us coming back. Browse PlayStation's greatest franchises and the series within them, and discover your next saga to conquer. Use the Type filter to flip between franchises (umbrella IPs) and series (sub-series like a main numbered line).
-                Data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
-            </p>
+
+            {% comment %} Catalogue substance: the family .scard grid, fed by the hourly site heartbeat
+            (hidden until the cron warms the cache; full page only, never re-rendered on swaps). {% endcomment %}
+            {% if franchise_stats %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Franchises</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchises_total|default:0 }}">{{ franchise_stats.franchises_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Series</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.series_total|default:0 }}">{{ franchise_stats.series_total|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked</div>
+                </div>
+                {% comment %} "Trophy lists", not "games": this page's own vocabulary says game =
+                distinct IGDB id and this counts Game rows (PSN lists) -- a "games" label would
+                read above the sum of the cards below. {% endcomment %}
+                <div class="scard">
+                    <div class="scard__label">Trophy lists</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchise_games|default:0 }}">{{ franchise_stats.franchise_games|default:0|intcomma }}</div>
+                    <div class="scard__sub">in a franchise or series</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Spin-offs</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ franchise_stats.franchise_spinoffs|default:0 }}">{{ franchise_stats.franchise_spinoffs|default:0|intcomma }}</div>
+                    <div class="scard__sub">tracked separately</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: identity + live count + quick search/sort, re-surfaced when the toolbar
+    scrolls away. OUTSIDE #browse-results so it persists across filter swaps. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#fr-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M8 11h.01"/></svg>
+                <span class="pp-minibar__title">Franchises</span>
+                <span class="pp-minibar__count" data-minibar-count title="shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ request.GET.query }}" placeholder="Search&hellip;" aria-label="Search franchises or series" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort results"></select>
+            </div>
         </div>
     </div>
 
-    {# -- Search + Sort Toolbar -- #}
-    <form data-browse-form
+    {% comment %} Toolbar: the Franchise/Series/All type toggle (a segmented FILTER -- radios styled as
+    .pp-switch, so switching preserves the active search/sort; native checked state + browser Back stay correct
+    with no JS) over a quiet search + sort + show-solo bar. Everything auto-applies via browse-filters.js (HTMX
+    grid swap). {% endcomment %}
+    <form data-browse-form data-live-search id="fr-form"
           hx-get="{% url 'franchises_list' %}"
           hx-target="#browse-results"
           hx-push-url="true"
           hx-swap="innerHTML"
-          hx-trigger="submit">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-            <div class="card-body p-3 md:p-4">
-                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                    <div class="relative flex-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" name="query" value="{{ request.GET.query }}"
-                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                               placeholder="Search franchises or series..." />
-                    </div>
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="flex items-center justify-center md:justify-end mt-4 mb-3">
+            <div class="pp-switch" role="group" aria-label="Franchise type">
+                {% for value, display in type_choices %}
+                <label class="pp-switch__chip">
+                    <input type="radio" name="type" value="{{ value }}" class="sr-only" {% if current_type == value %}checked{% endif %} />
+                    {% if value == 'franchise' %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M8 11h.01"/></svg>
+                    {% elif value == 'series' %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    {% else %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                    {% endif %}
+                    {{ display }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
 
-                    <select name="sort"
-                            class="select select-bordered select-sm md:select-md w-full md:w-48">
+        <div class="pp-toolbar-card pp-gbrowse__toolbar">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="query" value="{{ request.GET.query }}" placeholder="Search franchises or series&hellip;" aria-label="Search by name" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
+
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort</span>
+                    <select name="sort" class="pp-gallery__select">
                         {% for value, display in sort_choices %}
-                            <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                        <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
                         {% endfor %}
                     </select>
+                </label>
 
-                    <button type="button" data-submit-btn
-                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <span class="hidden md:inline">Search</span>
-                    </button>
-                </div>
-
-                {% comment %}
-                    Type filter: Franchise vs Series. IGDB classifies these in
-                    separate namespaces (an umbrella franchise like "Resident
-                    Evil" vs. a sub-series like "Resident Evil Main Series"),
-                    and most users only want one type at a time when searching.
-                    Default chip is Franchise; users can flip to Series or All.
-                {% endcomment %}
-                <div class="flex flex-wrap items-center gap-1.5 mt-2">
-                    <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
-                    {% for value, display in type_choices %}
-                        <label class="cursor-pointer">
-                            <input type="radio" name="type" value="{{ value }}"
-                                   class="sr-only peer" {% if current_type == value %}checked{% endif %} />
-                            <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                {{ display }}
-                            </span>
-                        </label>
-                    {% endfor %}
-                </div>
-
-                {% comment %}
-                    Solo-entry toggle. Default view hides franchises and series
-                    with only one game (IGDB noise around standalone titles);
-                    this checkbox opts into the full list.
-                {% endcomment %}
-                <label class="flex items-center gap-2 mt-1.5 cursor-pointer w-fit">
-                    <input type="checkbox" name="show_solo" value="1"
-                           class="checkbox checkbox-sm checkbox-primary"
-                           {% if show_solo %}checked{% endif %} />
-                    <span class="text-xs md:text-sm text-base-content/70">
-                        Show single-game entries
-                        <span class="text-base-content/40 italic">(franchises or series with only 1 game)</span>
-                    </span>
+                <label class="pp-bgal__chip" title="Franchises or series with only one game (usually IGDB noise around a standalone title)">
+                    <input type="checkbox" name="show_solo" value="1" {% if show_solo %}checked{% endif %} />
+                    Single-game entries
                 </label>
             </div>
         </div>
+
         <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
     </form>
 
-    {% include 'partials/ad_unit.html' with ad_slot="8944812256" %}
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar. Outside the swap. #}
+    <span id="fr-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/franchise_list/browse_results.html' %}
     </div>
 
+    {% comment %} Infinite scroll: sentinel + spinner OUTSIDE #browse-results so they persist across filter
+    swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. {% endcomment %}
+    <div id="fr-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="fr-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/franchise-list.js' %}"></script>
 {% endblock %}

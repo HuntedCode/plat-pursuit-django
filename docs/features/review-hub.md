@@ -65,9 +65,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 | `trophies/views/game_views.py` | `_build_concept_context()` provides review/recommendation context for game detail community section |
 | `templates/trophies/partials/game_detail/community_section.html` | Unified community card: recommendation banner, ratings grid, user review, Review Hub CTA |
-| `trophies/views/admin_views.py` | `ReviewModerationView`, `ReviewModerationActionView`, `ReviewModerationLogView` |
-| `templates/trophies/moderation/review_moderation.html` | Review moderation dashboard |
-| `templates/trophies/moderation/review_moderation_log.html` | Review moderation action log |
+| ~~Review moderation views + templates~~ | REMOVED 2026-08 (staff strip-down): the three `ReviewModeration*` views and both moderation templates were deleted (see Admin Moderation below) |
 
 ## Data Model
 
@@ -168,13 +166,13 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 **Route**: `/reviews/` (public, no auth required)
 
-**ReviewHubLandingView** extends `ProfileHotbarMixin` + `TemplateView`. Shows a game search typeahead (searches concepts via `ConceptReviewSearchView` API), community stats (total reviews, ratings, reviewers, helpful votes), most-reviewed games sidebar, trending reviews sidebar, and an infinite-scroll recent reviews feed (sortable by newest/most helpful) via `RecentReviewsView` API. Authenticated users see a CTA card with unrated/unreviewed platinum counts. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
+**ReviewHubLandingView** extends `TemplateView`. Shows a game search typeahead (searches concepts via `ConceptReviewSearchView` API), community stats (total reviews, ratings, reviewers, helpful votes), most-reviewed games sidebar, trending reviews sidebar, and an infinite-scroll recent reviews feed (sortable by newest/most helpful) via `RecentReviewsView` API. Authenticated users see a CTA card with unrated/unreviewed platinum counts. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
 
 ### Detail Page
 
 **Route**: `/reviews/<slug>/` with optional `?group=<trophy_group_id>` query param (public, no auth required).
 
-**ReviewHubDetailView** extends `ProfileHotbarMixin` + `BackgroundContextMixin` + `DetailView`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged. Games queryset is cached in `get_object()` to avoid redundant queries.
+**ReviewHubDetailView** extends `BackgroundContextMixin` + `DetailView`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged. Games queryset is cached in `get_object()` to avoid redundant queries.
 
 **Layout**: Two-column on desktop (sidebar 33%, main 67%), stacked on tablet. Tab bar for trophy groups (hidden if only base game).
 
@@ -186,7 +184,7 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 **Route**: `/reviews/rate-my-games/` (requires login)
 
-**RateMyGamesView** extends `LoginRequiredMixin` + `ProfileHotbarMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
+**RateMyGamesView** extends `LoginRequiredMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
 
 **Split submit buttons**: Two distinct submit actions: "Submit Rating" (or "Submit Rating & Review" when review is ready) submits the rating and optionally the review. "Submit Review Only" submits just the review without touching the rating. The review-only button is hidden when the game already has a review.
 
@@ -213,7 +211,12 @@ The review feed uses **client-side rendering** from JSON API responses (not serv
 
 ## Admin Moderation (Phase 6)
 
-Three staff-only views mirror the comment moderation system:
+> **REMOVED 2026-08** (staff strip-down): all three review-moderation views, their templates, and
+> their routes were deleted — the review system had been archived since 2026-05, so the queue could
+> no longer receive new reports. `ReviewReport` / `ReviewModerationLog` tables are retained.
+> The table below is historical.
+
+Three staff-only views mirrored the comment moderation system:
 
 | Route | View | Purpose |
 |-------|------|---------|
@@ -262,7 +265,7 @@ The game detail page shows a single unified "Community" card (`community_section
 - **Reply count decrement**: Uses `Greatest(F('reply_count') - 1, Value(0))` for safe clamping (prevents negative counts).
 - **Client-side rendering**: Review feed is JSON from API, not server-rendered partials. This is intentional for infinite scroll performance.
 - **ZoomAwareObserver**: Infinite scroll sentinels use `ZoomAwareObserver` (not raw `IntersectionObserver`) to work correctly when the page is scaled via `ZoomScaler` on sub-768px screens.
-- **Admin moderation remains staff-only**: `ReviewModerationView`, `ReviewModerationActionView`, and `ReviewModerationLogView` use `StaffRequiredMixin`. All other Review Hub pages are public.
+- **Admin moderation was removed 2026-08** (staff strip-down): the three `ReviewModeration*` views are gone; `ReviewReport` rows live in Django admin. All surviving Review Hub pages are public.
 - **Rating form removed from game detail**: The `GameDetailView.post()` method and `UserConceptRatingForm` usage were removed. Ratings are submitted exclusively via the Review Hub's rating panel.
 - **Hours-to-platinum must be > 0**: Enforced by `UserConceptRatingForm.clean_hours_to_platinum()` on the backend and client-side validation in all 3 JS files (rate-my-games.js, review-hub.js, notification-inbox.js). The wizard disables the rating button until hours is set; the other two forms show a toast error.
 

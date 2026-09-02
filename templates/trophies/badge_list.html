@@ -1,151 +1,447 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load query_tags %}
 {% load humanize %}
-{% load custom_filters %}
 {% block title %}Browse Badges{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Header Card ── #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 lg:p-5">
-            <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
+    {# ── Page Header (rebuild standard: DaisyUI card shell + --pp-* substance, mirroring the Collection header) ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        {% comment %} `p-3` on a phone, matching the hunter-profile header. Same treatment, same reason:
+        16px of padding on all four sides of a card whose contents are already tight is the cheapest 8px
+        on the page. Restores to p-5/p-6 where there is room. {% endcomment %}
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            {% comment %} `pp-bhead` exists for the phone layout ONLY, and does what `pp-phero__id` does on
+            the profile header: reflow into the dead space instead of stacking.
+
+            The lede is nested under the title, so on a phone it renders in a ~233px column beside the
+            tally and wraps to two lines -- while the corner under the tally (~60px wide, ~24px tall) sits
+            empty. Below 768px the row becomes a grid with the lede spanning BOTH columns, where its ~263px
+            fits on one line in the 303px available. Costs nothing, saves ~16px, and the DOM is unchanged
+            so md: up is still exactly the flex row these utility classes describe.
+
+            `display: contents` on the id block is what lets the title and the lede be placed separately
+            without unwrapping them in the markup -- the one thing that property is actually for.
+            {% endcomment %}
+            <div class="pp-bhead flex items-start justify-between gap-3 flex-wrap">
+                <div class="pp-bhead__id min-w-0">
+                    <div class="pp-bhead__title flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="8" r="7"></circle>
                             <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Badges</h1>
-                        {% with sort_val=request.GET.sort %}
-                            {% if sort_val %}
-                                {% for value, display in form.sort.field.choices %}
-                                    {% if value == sort_val %}
-                                        <span class="badge badge-sm badge-ghost">{{ display }}</span>
-                                    {% endif %}
-                                {% endfor %}
-                            {% else %}
-                                <span class="badge badge-sm badge-ghost">Alphabetical</span>
-                            {% endif %}
-                        {% endwith %}
                     </div>
-                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                        {% if request.GET.series_slug %}
-                            Searching for "{{ request.GET.series_slug }}"
-                            {% if is_paginated %}across {{ paginator.count|intcomma }} badge series...{% endif %}
-                        {% elif selected_badge_type %}
-                            {{ paginator.count|intcomma|default:"No" }} {{ selected_badge_type }} badge series to explore.
+                    <p class="pp-bhead__sub text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        {% if view == 'gallery' %}
+                            Every badge in the catalog. Filter by platform, set, and more.
+                        {% elif request.GET.series_slug %}
+                            Searching for "{{ request.GET.series_slug }}".
                         {% else %}
-                            {{ paginator.count|intcomma }} badge series to conquer. Collect them all.
+                            Every badge series to conquer. Collect them all.
                         {% endif %}
                     </p>
                 </div>
 
-                {# Navigation links #}
-                <div class="flex flex-col md:flex-row items-stretch md:items-center gap-1 md:gap-1.5 shrink-0">
-                    <a href="{% url 'overall_badge_leaderboards' %}" class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
-                        Leaderboards
-                    </a>
-                    <a href="{% url 'milestones_list' %}" class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                        Milestones
-                    </a>
-                    {% if user.is_authenticated and user.profile %}
-                    <a href="{% url 'my_titles' %}" class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"></path></svg>
-                        Titles
-                    </a>
-                    {% endif %}
+                {# Catalog size as a Tally stat (mirrors the Collection header's headline number). #}
+                <div class="pp-bhead__tally shrink-0 text-right">
+                    <div class="pp-tally text-2xl md:text-3xl text-primary leading-none" data-badge-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1" data-badge-count-label>{% if view == 'gallery' %}badge{{ paginator.count|pluralize }}{% else %}series{% endif %}</div>
                 </div>
+            </div>
+
+            {% comment %} Generalized catalogue stats (what the collection OFFERS) -- NOT the viewer's own
+            progress, since this is a browse page.
+
+            The "how badges work" teaching is NOT here and no longer has a button here either. It greets a
+            first visit once as a modal (badge_howto.html) and then lives at `badge_how_it_works` -- a real
+            URL, because support links it, search indexes it, and three surfaces render these edition
+            names without being able to explain them (the gallery filter chips below, the badge detail
+            group tabs, and the Collection stats -- each now carries a `.pp-edhint`). A header button for a
+            one-time explainer was ~37px of the header and the wrong anchor: the confusion happens where
+            the edition tabs are, not here. {% endcomment %}
+            {% include 'trophies/partials/badge_list/badge_catalog_stats.html' %}
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: "Browse Badges" + the Series/Gallery switch + a Filters reach, re-surfaced
+    when the header + toggle scroll away. Sits OUTSIDE #badge-view (like the real toggle) so it persists across
+    view swaps; its chips duplicate the .pp-switch__chip links (HTMX drives the swap, and updateToggleActive
+    syncs .is-active across ALL chips after each swap). Sentinel after the real toggle below. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#badges-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                <span class="pp-minibar__title">Browse Badges</span>
+            </span>
+            {% comment %} Plain links, NOT a second role=tablist (would duplicate the real toggle's landmark when pinned);
+               HTMX drives the swap and updateToggleActive syncs .is-active across all .pp-switch__chip. {% endcomment %}
+            <div class="pp-minibar__controls">
+                <div class="pp-switch">
+                    <a href="{% url 'badges_list' %}" hx-get="{% url 'badges_list' %}" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
+                       class="pp-switch__chip{% if view != 'gallery' %} is-active{% endif %}" data-view="series" aria-label="Series view"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg><span class="pp-switch__lbl">Series</span></a>
+                    <a href="{% url 'badges_list' %}?view=gallery" hx-get="{% url 'badges_list' %}?view=gallery" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
+                       class="pp-switch__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" aria-label="Gallery view"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg><span class="pp-switch__lbl">Gallery</span></a>
+                </div>
+                <button type="button" class="pp-minibar__filters" data-minibar-badge-filters aria-label="Open filters">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span class="pp-minibar__flbl">Filters</span>
+                </button>
             </div>
         </div>
     </div>
 
-    {# ── User Badge Stats ── #}
-    {% include 'trophies/partials/badge_list/badge_user_stats.html' %}
-
-    {# ── Education Header ── #}
-    {% include 'trophies/partials/badge_list/badge_list_header.html' %}
-
-    {# ── Search + Sort Toolbar Card ── #}
-    <form id="filter-form" method="get" data-browse-form
-          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-            <div class="card-body p-3 md:p-4">
-                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                    <div class="relative flex-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" name="series_slug" id="id_query" value="{{ request.GET.series_slug }}"
-                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                               placeholder="Search for a badge series..." />
-                    </div>
-
-                    <select name="sort" id="id_sort"
-                            class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-52">
-                        {% for value, display in form.sort.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-
-                    <select name="badge_type" id="id_badge_type"
-                            class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-52">
-                        {% for value, display in form.badge_type.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.badge_type == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-
-                    {% if user.is_authenticated %}
-                    <select name="completion_status" id="id_completion_status"
-                            class="select select-bordered select-sm md:select-md w-full md:w-36 lg:w-44">
-                        {% for value, display in form.completion_status.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.completion_status == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-                    {% endif %}
-
-                    <button type="button" data-submit-btn
-                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <span class="hidden md:inline">Search</span>
-                    </button>
-                    <input type="hidden" name="page" value="1" />
-                </div>
-            </div>
+    {% comment %} View toggle: Series (per-series tiles) vs Gallery (per-tier medallion wall). The segmented
+    switcher standard, right-aligned; each chip HTMX-swaps the #badge-view island (target='badge-view', no full
+    reload), with its href kept as the no-JS fallback. {% endcomment %}
+    <div class="flex items-center justify-end mt-5 mb-3">
+        <div class="pp-switch" role="tablist" aria-label="Badge view">
+            <a href="{% url 'badges_list' %}" hx-get="{% url 'badges_list' %}" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
+               class="pp-switch__chip{% if view != 'gallery' %} is-active{% endif %}" data-view="series" role="tab" aria-controls="badge-view" aria-selected="{% if view != 'gallery' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+                Series
+            </a>
+            <a href="{% url 'badges_list' %}?view=gallery" hx-get="{% url 'badges_list' %}?view=gallery" hx-target="#badge-view" hx-swap="innerHTML" hx-push-url="true"
+               class="pp-switch__chip{% if view == 'gallery' %} is-active{% endif %}" data-view="gallery" role="tab" aria-controls="badge-view" aria-selected="{% if view == 'gallery' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                Gallery
+            </a>
         </div>
-    </form>
+    </div>
+    {# Sentinel: once the real toggle scrolls under the chrome, StickyReveal pins the mini-bar. #}
+    <span id="badges-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 
-    {# ── Active Filter Summary ── #}
-    <div class="flex flex-wrap items-center gap-1.5 mb-3 text-xs text-base-content/50">
-        <span class="font-semibold">Showing:</span>
-        {% if selected_badge_type %}
-            <span class="badge badge-xs badge-ghost">{{ selected_badge_type|capfirst }}</span>
+    {% comment %} View island -- HTMX-swapped by the toggle. The view returns JUST this partial for
+    htmx.target=='badge-view'; the full page otherwise. {% endcomment %}
+    <div id="badge-view">
+        {% if view == 'gallery' %}
+        {% include 'trophies/partials/badge_list/gallery.html' %}
         {% else %}
-            <span class="badge badge-xs badge-ghost">All Types</span>
+        {% include 'trophies/partials/badge_list/series_view.html' %}
         {% endif %}
-        {% if request.GET.series_slug %}
-            <span class="text-base-content/30">&middot;</span>
-            <span class="badge badge-xs badge-ghost">"{{ request.GET.series_slug }}"</span>
-        {% endif %}
-        <a href="{% url 'badges_list' %}" class="link link-primary text-xs ml-1">Reset</a>
     </div>
 
-    {% include 'partials/ad_unit.html' with ad_slot="8195453976" %}
+    {% comment %} "How badges work" first-run modal: auto-opens once and never again (there is no recall
+    button; from the second visit on the teaching lives at `badge_how_it_works`). Placed BEFORE the
+    quick-peek modal so a medallion tap inside it opens the peek stacked on top, and OUTSIDE #badge-view
+    so a view-toggle swap does not re-render its <script> and double-register the document listeners.
+    {% endcomment %}
+    {% include 'trophies/partials/badge_list/badge_howto.html' %}
 
-    <div id="browse-results">
-        {% include 'trophies/partials/badge_list/browse_results.html' %}
+    {% comment %} Quick-peek modal (shared by both views): a medallion tap fetches the public
+    group_badge_quick_peek partial (the grouping-badge showcase) into the body. Reuses the collection's
+    .pp-detail-modal chrome (global CSS). data-peek-url is the reverse with a 0 placeholder the JS swaps for
+    the tapped GroupBadge id. {% endcomment %}
+    <div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'group_badge_quick_peek' 0 %}" hidden>
+        <div class="pp-detail-modal__scrim" data-peek-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+            <div class="pp-detail-modal__body" data-peek-body></div>
+        </div>
     </div>
 
 {% endblock %}
 
 {% block js_scripts %}
-    <script src="{% static 'js/browse-filters.js' %}"></script>
+    {% comment %} Both views (Series rows + Gallery medallion wall) share this controller: filters apply
+    INSTANTLY via HTMX (the form hx-swaps #browse-results on change), so there's no Apply button and multi-
+    select is fine. We (re)create InfiniteScroller after each swap (the grid is replaced), and wire the
+    collapsible Filters panel + its active-count badge. The only per-view differences are the card selector
+    and page size, injected below. {% endcomment %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Header: count the catalog number up on load. countUp() honours prefers-reduced-motion (jumps
+        // straight to the target); the header's fade-in reveal masks the brief reset-to-zero.
+        // Element state -- (re)assigned by wireView() on first load AND on HTMX Back/Forward history restore
+        // (which swaps in fresh nodes without re-firing afterSwap). The body-level listeners below are added
+        // once and persist across a restore (document.body survives), so wireView must NOT re-add them.
+        var scroller = null, revealHandle = null, peek = null, peekEl = null, vtoggles = [];
+        // The filter drawer's handle. Page-level because the toolbar is REPLACED on every view swap, so
+        // each wireFilters() must destroy the previous one rather than stack a second set of listeners.
+        var panelHandle = null;
+        // Read the active view from the swapped-in island (the toggle HTMX-swaps #badge-view, no full
+        // reload): the Gallery root is .pp-bgal, the Series root .pp-slist; each carries its own page size.
+        function viewConfig() {
+            var g = document.querySelector('#badge-view .pp-bgal');
+            if (g) { return { view: 'gallery', card: '.pp-bgal__card', page: parseInt(g.getAttribute('data-page-size'), 10) || 48 }; }
+            var s = document.querySelector('#badge-view .pp-slist');
+            if (s) { return { view: 'series', card: '.pp-scard', page: parseInt(s.getAttribute('data-page-size'), 10) || 30 }; }
+            return null;
+        }
+        // The view showing before the next swap, for the directional slide (Series -> Gallery = forward).
+        var lastView = (viewConfig() || {}).view || 'series';
+        // Cards reveal (staggered) as they scroll into view -- Series TILES rise, Gallery MEDALLIONS
+        // materialize onto the wall. Skipped under reduced motion / no IO. The .pp-reveal class is added ONLY
+        // when we're going to observe, so cards never stick hidden. Uses the Web Animations API (not a CSS-
+        // class animation) so the arrival restarts RELIABLY on freshly HTMX-swapped nodes, via the shared
+        // PlatPursuit.staggerReveal engine (batch + observer + reduced-motion gate); we supply just the
+        // per-card WAAPI animation. revealHandle.observe() runs for infinite-scroll-appended cards too.
+        function initReveal() {
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }   // tear down the prior grid's observer
+            var cfg = viewConfig();
+            var grid = document.getElementById('items-grid');
+            if (!cfg || !grid) { return; }
+            var ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+            var gallery = cfg.view === 'gallery';
+            revealHandle = PlatPursuit.staggerReveal({
+                grid: grid, cardSelector: cfg.card, step: gallery ? 16 : 28,   // denser wall -> tighter stagger
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    if (gallery) {
+                        // Medallion materializes: fade + rise + a subtle scale-up settle (soft spring).
+                        el.animate([{ opacity: 0, transform: 'translateY(10px) scale(0.92)' }, { opacity: 1, transform: 'none' }],
+                                   { duration: 480, delay: delayMs, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)', fill: 'backwards' });
+                        return;
+                    }
+                    // Series tile: a clean fade + rise (its group medallions ride in with the tile).
+                    el.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }],
+                               { duration: 500, delay: delayMs, easing: ease, fill: 'backwards' });
+                },
+            });
+        }
+        function initScroller(cfg) {
+            if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+            if (!cfg || !(window.PlatPursuit && PlatPursuit.InfiniteScroller)) { return; }
+            scroller = PlatPursuit.InfiniteScroller.create({
+                gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
+                paginateBy: cfg.page, cardSelector: cfg.card,
+                onAppend: function (nodes) {   // observe infinite-scroll-appended cards so they reveal too
+                    if (revealHandle) { revealHandle.observe(nodes); }
+                },
+            });
+        }
+
+        // Quick-peek modal: a medallion tap GROWS the PUBLIC group_badge_quick_peek partial into the shared
+        // #badge-peek dialog -- the collection's .pp-detail-modal chrome + the shared pick-up/put-down
+        // controller (PlatPursuit.Medallion.detailModal). data-peek-url is the reverse with a 0 placeholder.
+        // peekEl / peek are (re)created in wireView() (the #badge-peek dialog is a fresh node after a restore).
+        // Grow the peek from the tapped source cell. sourceEl is the Series group cell (.pp-scard__group) or
+        // the Gallery cell (.pp-bgal__card) -- both hold the .pp-med the controller measures + hides.
+        function openPeek(badgeId, sourceEl) {
+            if (!peek || !badgeId) { return; }
+            var tmpl = peekEl.getAttribute('data-peek-url') || '';
+            var url = tmpl.replace(/0\/$/, badgeId + '/');
+            if (!url || url === tmpl) { return; }
+            peek.open(url, sourceEl);
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            // Let modified clicks (open-in-new-tab/window) fall through to native anchor navigation instead of
+            // being hijacked into the modal -- every tile element is a real anchor with an href.
+            if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
+            // Medallion tap -> quick-peek modal, now ONLY for the header forge illustrations (.pp-forge-peek).
+            // The Series/Gallery cards are plain anchors that link straight to the badge detail page with the
+            // right edition tab open (?group=<key>), so they navigate natively -- no modal.
+            var cell = e.target.closest('.pp-forge-peek');
+            if (cell && cell.getAttribute('data-badge-id')) {
+                e.preventDefault();
+                openPeek(cell.getAttribute('data-badge-id'), cell);
+                return;
+            }
+            // Whole-tile click: a Series tile's real anchors (the name heading, the group cells) navigate
+            // themselves; a click anywhere ELSE on the tile (its padding + the gaps around those links) still
+            // goes to the series detail, so the whole card is clickable rather than just the links.
+            if (e.target.closest('a')) { return; }
+            var tile = e.target.closest('.pp-scard');
+            if (tile) {
+                var open = tile.querySelector('.pp-scard__open');
+                if (open && open.href) { window.location.href = open.href; }
+            }
+        });
+
+        // Keyboard activation for the forge illustrations (role=button spans, not native anchors): Enter/Space
+        // opens the same peek. The Series/Gallery cells are real anchors, so they already activate by keyboard.
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') { return; }
+            if (!e.target.closest) { return; }
+            var pk = e.target.closest('.pp-forge-peek');
+            if (pk && pk.getAttribute('data-badge-id')) {
+                e.preventDefault();
+                openPeek(pk.getAttribute('data-badge-id'), pk);
+            }
+        });
+
+        // Filter UI (clear button + active-count badge + collapsible Filters panel). Re-wired on each view
+        // swap since the form/toolbar are replaced; the actual filtering is HTMX-native (the form's hx-trigger).
+        function wireFilters() {
+            var form = document.getElementById('filter-form');
+            var clearBtn = document.getElementById('bgal-clear');
+            function activeCount() {
+                // Checked boxes, not set params: this toolbar's only filters ARE checkboxes, and counting
+                // FormData would fold in the search box and the view.
+                return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
+            }
+            function searchInput() {
+                // Both toolbars share the .pp-bgal__search wrapper (Gallery = name="q", Series = name="series_slug").
+                return form ? form.querySelector('.pp-bgal__search input') : null;
+            }
+            function searchValue() {
+                var qi = searchInput();
+                return qi ? qi.value.trim() : '';
+            }
+            // The panel, its badge, the dim and the open-on-load rule all come from the shared controller;
+            // the CLEAR button is this page's own, so its visibility is refreshed alongside.
+            if (panelHandle && panelHandle.destroy) { panelHandle.destroy(); }
+            panelHandle = window.PlatPursuit && PlatPursuit.filterPanel && PlatPursuit.filterPanel({
+                form: form,
+                toggle: '#bgal-filters-toggle',
+                panel: '#bgal-advanced',
+                countEl: '#bgal-filter-count',
+                count: activeCount,
+                // Open if anything is applied INCLUDING the search, so what is filtering stays visible.
+                openOnLoad: activeCount() > 0 || !!searchValue(),
+            });
+            function refreshControls() {
+                if (panelHandle) { panelHandle.refresh(); }
+                if (clearBtn) { clearBtn.hidden = (activeCount() === 0 && !searchValue()); }  // shown only when something's set
+            }
+            if (form) {
+                form.addEventListener('change', refreshControls);
+                form.addEventListener('input', refreshControls);   // live-update while typing in search
+            }
+            if (clearBtn && form) {
+                clearBtn.addEventListener('click', function () {
+                    form.querySelectorAll('input[type="checkbox"]:checked').forEach(function (c) { c.checked = false; });
+                    var qi = searchInput();
+                    if (qi) { qi.value = ''; }
+                    refreshControls();
+                    form.requestSubmit();  // fires the form's submit -> HTMX reloads the (now unfiltered) results
+                });
+            }
+            // Shared search-field affordances (clear x / Escape-to-clear / has-value state + the `/` hint).
+            // Clearing the field re-submits the now-unfiltered form. Re-wired per view (fresh input each swap).
+            var qi = searchInput();
+            if (qi && window.PlatPursuit && PlatPursuit.wireSearchField) {
+                PlatPursuit.wireSearchField(qi, { onClear: function () { refreshControls(); if (form) { form.requestSubmit(); } } });
+            }
+            refreshControls();
+        }
+
+        // Keep the toggle's active chip in sync after a view swap (the toggle sits outside #badge-view).
+        function updateToggleActive(cfg) {
+            var v = cfg ? cfg.view : 'series';
+            document.querySelectorAll('.pp-switch__chip[data-view]').forEach(function (chip) {
+                var on = chip.getAttribute('data-view') === v;
+                chip.classList.toggle('is-active', on);
+                chip.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) { PlatPursuit.igniteTab(chip); }   // the chip that just became active blooms once (shared with Career/Collection)
+            });
+            vtoggles.forEach(function (tl) { tl.syncTabindex(); });   // keep each toggle's roving tabindex in sync after the swap
+        }
+        // (Re)wire everything that belongs to the current view island.
+        function initView() {
+            var cfg = viewConfig();
+            initReveal();   // before initScroller so revealHandle exists for its onAppend hook
+            initScroller(cfg);
+            wireFilters();
+            updateToggleActive(cfg);
+        }
+        // Header result-count tick (old -> new). Read the new total off the swapped content's hidden
+        // [data-result-count] marker (reliable -- it rides the main swap target), animate the header count
+        // from the JS-tracked last value (survives any data-countup reset), and on a VIEW swap refresh the
+        // series/badges label too. Mirrors the games browse header.
+        var badgeCountLast = null;
+        function syncBadgeCount(container, view) {
+            var marker = container.querySelector('[data-result-count]');
+            var countEl = document.querySelector('[data-badge-count]');
+            if (!marker || !countEl) { return; }
+            var newVal = parseFloat(marker.getAttribute('data-result-count'));
+            if (isNaN(newVal)) { return; }
+            if (badgeCountLast === null) { badgeCountLast = parseFloat(countEl.dataset.countup); }
+            countEl.dataset.countup = newVal;
+            if (window.PlatPursuit && PlatPursuit.countUp && !isNaN(badgeCountLast) && badgeCountLast !== newVal) {
+                PlatPursuit.countUp(countEl, 700, { from: badgeCountLast });
+            } else {
+                countEl.textContent = newVal.toLocaleString();
+            }
+            badgeCountLast = newVal;
+            if (view) {
+                var label = document.querySelector('[data-badge-count-label]');
+                if (label) { label.textContent = (view === 'gallery') ? ('badge' + (newVal === 1 ? '' : 's')) : 'series'; }
+            }
+        }
+        document.body.addEventListener('htmx:afterSwap', function (e) {
+            // Use HTMX's explicit swap target (e.detail.target). e.target can be the swapped-IN child
+            // (.pp-slist, no id) rather than the target element, which made the view-swap branch never fire.
+            var t = (e.detail && e.detail.target) || e.target;
+            if (!t || !t.id) { return; }
+            if (t.id === 'browse-results') {   // filter swap: just the grid
+                t.classList.remove('is-swapping'); initReveal(); initScroller(viewConfig());
+                syncBadgeCount(t);
+            } else if (t.id === 'badge-view') {   // view swap: whole island (leave scroll put, like Collection/Career)
+                initView();
+                var nv = (viewConfig() || {}).view || 'series';
+                PlatPursuit.slideViewIn(t, lastView, nv, ['series', 'gallery']);   // directional slide, shared with Career/Collection
+                lastView = nv;
+                syncBadgeCount(t, nv);
+            }
+        });
+        // Safety net: clear the settle dim when the FILTER request itself completes, incl. errors where
+        // afterSwap never fires. Scoped to the filter form's own request (via e.detail.elt) so an unrelated
+        // HTMX request finishing mid-debounce can't cut the dim short.
+        document.body.addEventListener('htmx:afterRequest', function (e) {
+            var elt = e.detail && e.detail.elt;
+            if (!elt || elt.id !== 'filter-form') { return; }
+            var results = document.getElementById('browse-results');
+            if (results) { results.classList.remove('is-swapping'); }
+            var sw = elt.querySelector('[data-search-wrap]');
+            if (sw) { sw.classList.remove('is-searching'); }   // clear the search-field spinner
+        });
+        // Don't re-fetch the view you're already on (a re-click on the already-active chip); + search spinner.
+        document.body.addEventListener('htmx:beforeRequest', function (e) {
+            var el = e.detail && e.detail.elt;
+            if (el && el.classList && el.classList.contains('pp-switch__chip') && el.classList.contains('is-active')) { e.preventDefault(); return; }
+            if (el && el.id === 'filter-form') {
+                var sw = el.querySelector('[data-search-wrap]');
+                var si = sw && sw.querySelector('input');
+                // Only spin the search field when SEARCH triggered the fetch (input focused), not a sort/checkbox.
+                if (sw && si && document.activeElement === si) { sw.classList.add('is-searching'); }
+            }
+        });
+        // Sticky mini-bar "Filters" reach: scroll the current view's toolbar into view + open its panel (both
+        // re-rendered per swap, so query fresh at click time).
+        function onMbBadgeFiltersClick() {
+            var toggle = document.getElementById('bgal-filters-toggle');
+            if (toggle && toggle.getAttribute('aria-expanded') !== 'true') { toggle.click(); }   // open the panel
+            var tb = document.getElementById('filter-form');
+            if (tb) { tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        }
+
+        // (Re)wire everything that belongs to the CURRENT DOM -- run on first load AND on HTMX history restore
+        // (Back/Forward), which replaces the page's nodes without re-firing afterSwap. This mirrors the shared
+        // PlatPursuit.onPageReady contract (rebuild-playbook section 7), applied inline here since this script
+        // predates the helper. Every binding below targets a freshly-resolved node, so restores don't leak; the
+        // body/document listeners above are added once (they survive the restore) and are NOT re-added here.
+        function wireView(first) {
+            if (first && window.PlatPursuit && PlatPursuit.countUp) {   // count up on first load only, not on restore
+                var catalogCount = document.querySelector('[data-badge-count]');
+                if (catalogCount) { PlatPursuit.countUp(catalogCount, 900); }
+                document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
+            }
+            // Quick-peek modal controller on the (fresh) #badge-peek dialog. Tear down the prior controller
+            // first so its document keydown handler doesn't accumulate across history restores.
+            if (peek && peek.destroy) { peek.destroy(); }
+            peekEl = document.getElementById('badge-peek');
+            peek = (peekEl && window.PlatPursuit && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
+                ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
+                : null;
+            // Keyboard-enable the Series/Gallery toggle(s): roving tabindex + Arrow/Home/End move focus. MANUAL
+            // activation -- the chips are HTMX <a> links, so Enter/click does the swap natively. Toolbar + mini-bar.
+            vtoggles = Array.prototype.slice.call(document.querySelectorAll('.pp-switch')).map(function (grp) {
+                return PlatPursuit.wireTablist(grp.querySelectorAll('.pp-switch__chip'), { manual: true });
+            });
+            lastView = (viewConfig() || {}).view || 'series';
+            badgeCountLast = null;
+            initView();
+            if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+            var mbBadgeFilters = document.querySelector('[data-minibar-badge-filters]');
+            if (mbBadgeFilters) { mbBadgeFilters.addEventListener('click', onMbBadgeFiltersClick); }
+        }
+        wireView(true);
+        document.body.addEventListener('htmx:historyRestore', function () { wireView(false); });
+    });
+    </script>
 {% endblock %}

@@ -32,6 +32,19 @@ STATIC_ROOT = Path(settings.STATIC_ROOT) if settings.STATIC_ROOT else Path(setti
 SHARE_TEMP_DIR = Path(settings.BASE_DIR) / 'share_temp_images'
 FONTS_DIR = STATIC_ROOT / 'fonts'
 
+# Uploaded media (badge art, group backdrops) needs the same treatment as /static/. Derived from
+# MEDIA_URL rather than hardcoded, and only when it is root-relative: when media is served off a
+# bucket, FileField.url is already absolute and the callers cache it as a remote image instead.
+MEDIA_ROOT = Path(settings.MEDIA_ROOT) if settings.MEDIA_ROOT else None
+_MEDIA_URL = settings.MEDIA_URL or ''
+MEDIA_URL_PREFIX = _MEDIA_URL if _MEDIA_URL.startswith('/') else None
+
+# Uploaded art is authored at source resolution (badge art is commonly 850x850) but renders tiny --
+# the plat card's medallion is 52px. Embedding at full size cost up to 647 KB of base64 per layer;
+# 256 is still ~5x the largest render and cuts that to ~100 KB. Unlike /static/, which is our own
+# right-sized assets, media is whatever a contributor uploaded, so it gets a ceiling.
+MEDIA_MAX_PX = 256
+
 # Card dimensions
 DIMENSIONS = {
     'landscape': (1200, 630),
@@ -190,18 +203,58 @@ def _resolve_urls(html, resize_images=False, image_max_size=200):
 
     # Replace /static/... with base64 data URIs (never resized)
     def replace_static(match):
-        path = match.group(1)
-        file_path = STATIC_ROOT / path
-        data_uri = _file_to_data_uri(file_path)
-        return data_uri if data_uri else match.group(0)
+        return _local_data_uri(STATIC_ROOT, match.group(1)) or match.group(0)
+
+    # The negative lookbehind keeps these passes from matching a path PREFIX inside an absolute URL:
+    # "https://cdn.example.com/static/x.png" contains "/static/x.png", and without the guard the
+    # substitution would splice a data URI into the middle of it and corrupt the src outright. Only a
+    # quote, paren, whitespace or the start of the string can precede a genuine root-relative path.
+    root_relative = r'(?<![\w:/.-])'
 
     html = re.sub(
-        r'/static/([^\s"\'<>]+)',
+        root_relative + r'/static/([^\s"\'<>]+)',
         replace_static,
         html
     )
 
+    # ...and /media/ the same way. Uploaded art (a badge's custom image, a platform group's backdrop)
+    # comes through FileField.url, which is root-relative whenever media is served locally -- and
+    # set_content() runs in an about:blank origin, so a root-relative src has nothing to resolve
+    # against and silently renders as nothing. This is why a badge with custom art appeared complete in
+    # the browser preview (a real page on the site origin) and lost its subject in the downloaded PNG.
+    if MEDIA_ROOT and MEDIA_URL_PREFIX:
+        def replace_media(match):
+            return _local_data_uri(MEDIA_ROOT, match.group(1), max_size=MEDIA_MAX_PX) or match.group(0)
+
+        html = re.sub(
+            root_relative + re.escape(MEDIA_URL_PREFIX) + r'([^\s"\'<>]+)',
+            replace_media,
+            html
+        )
+
     return html
+
+
+def _local_data_uri(root, rel_path, max_size=None):
+    """Embed a file under `root`, or '' if it is missing or escapes the root.
+
+    The containment check matters because media filenames can originate from user uploads (community
+    badge submissions), and this turns a URL from the rendered HTML straight into a filesystem read.
+
+    `max_size` caps the embedded pixel dimensions. Alpha survives it -- the resizer only drops to JPEG
+    for images that have none, so a medallion keeps its transparency.
+    """
+    from urllib.parse import unquote
+
+    candidate = (root / unquote(rel_path)).resolve()
+    try:
+        candidate.relative_to(Path(root).resolve())
+    except ValueError:
+        logger.warning("[PLAYWRIGHT] refusing path outside %s: %s", root, rel_path)
+        return ''
+    if max_size:
+        return _file_to_data_uri_resized(candidate, max_size=max_size)
+    return _file_to_data_uri(candidate)
 
 
 def _build_font_faces():
@@ -211,10 +264,23 @@ def _build_font_faces():
         return _cached_font_faces
 
     font_faces = []
+    # A card can only use a typeface listed here -- set_content() runs in an about:blank origin, so
+    # nothing loads from disk or the network at render time. Adding a weight means dropping the TTF in
+    # static/fonts/ AND adding it to this map. See static/fonts/README.md.
+    #
+    # The declared family name wins over the file's internal name, which matters for the SemiBold
+    # instances: Google Fonts names that file "Bricolage Grotesque SemiBold", and without this mapping
+    # it would register as a separate family that no template asks for.
     font_map = {
+        # Display -- the --pp-font-display voice, so cards speak in the site's own typeface.
+        'BricolageGrotesque-Regular.ttf': ('Bricolage Grotesque', 'normal', '400'),
+        'BricolageGrotesque-SemiBold.ttf': ('Bricolage Grotesque', 'normal', '600'),
+        'BricolageGrotesque-Bold.ttf': ('Bricolage Grotesque', 'normal', '700'),
+        # Body
         'Inter-Regular.ttf': ('Inter', 'normal', '400'),
         'Inter-SemiBold.ttf': ('Inter', 'normal', '600'),
         'Inter-Bold.ttf': ('Inter', 'normal', '700'),
+        # Legacy -- the recap card still asks for Poppins.
         'Poppins-Regular.ttf': ('Poppins', 'normal', '400'),
         'Poppins-SemiBold.ttf': ('Poppins', 'normal', '600'),
         'Poppins-Bold.ttf': ('Poppins', 'normal', '700'),

@@ -1,0 +1,1042 @@
+/* Badge detail page — section components. The header is first, then the tier selector; leaderboard /
+   stage sections follow. Bespoke, token-driven, DaisyUI-free. Tokens: var(--pp-*) from input.css. */
+
+/* ── Rebuild header (badge detail, v3) ──────────────────────────────────────
+   Derived from the Career / Collection header language, not the old page: a Medallion hero + neutral
+   identity + a LEAN at-a-glance readout. Colour is restrained (neutral by default; the one primary accent
+   is the Earners Tally + the progress Horizon; Difficulty / Avg-Hours carry the single earned semantic
+   traffic-light). Everything else is shared components + Tailwind utilities -- the only bespoke bits are the
+   medallion sizing and the compact facts strip (which mirrors Collection's tier-composition strip). */
+.bdh-med { display: flex; justify-content: center; position: relative; }
+.bdh-med .pp-med { --sz: 116px; cursor: pointer; }   /* tap to inspect (pick-up / put-down peek) */
+
+/* One-shot specular sheen on an EARNED hero medallion (JS adds .is-sheen once per session). A single
+   diagonal light band sweeps across -- the canonical PlatPursuit reward gesture, calm (not the Earn Moment).
+   Clipped to a circle (medallions are ~round) so the light reads as crossing the badge. */
+.bdh-med__sheen { position: absolute; inset: 0; z-index: 4; border-radius: 50%; overflow: hidden; pointer-events: none; opacity: 0; }
+.bdh-med.is-sheen .bdh-med__sheen { opacity: 1; }
+.bdh-med.is-sheen .bdh-med__sheen::before {
+    content: ""; position: absolute; top: -25%; left: 0; width: 42%; height: 150%;
+    background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.5), transparent);
+    transform: translateX(-170%) rotate(8deg); mix-blend-mode: screen;
+    animation: bdhSheen 900ms cubic-bezier(0.3, 0.7, 0.4, 1) forwards;
+}
+@keyframes bdhSheen { to { transform: translateX(360%) rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) { .bdh-med.is-sheen .bdh-med__sheen { opacity: 0; } }
+
+/* Earn-rank engraving directly under the medallion -- a faux-deboss serial ("Earn #47"), with a rare-earn
+   flourish: first-to-earn (gold + crown + a one-time glow pulse) or a top-1% early earner (accent + star). */
+/* Earn rank (provenance serial) -- a quiet inline label below the identity/description, not under the
+   medallion, so the earned header stays the same height as the unearned (no extra row grows the medallion
+   column; the identity column absorbs it against the taller medallion beside it). */
+.bdh-earnrank {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 12px;
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-text-mute); text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
+}
+.bdh-earnrank .pp-tally { font-size: 0.82rem; font-weight: 800; letter-spacing: 0; color: var(--pp-text-dim); }
+.bdh-earnrank__ico { width: 13px; height: 13px; }
+.bdh-earnrank__tag {
+    font-size: 0.56rem; font-weight: 800; padding: 1px 6px; border-radius: 999px; letter-spacing: 0.05em;
+    background: color-mix(in oklab, currentColor 15%, transparent); border: 1px solid color-mix(in oklab, currentColor 34%, transparent);
+}
+.bdh-earnrank--first { color: #e7c25c; --first-glow: color-mix(in oklab, #e7c25c 60%, transparent); }
+.bdh-earnrank--first .pp-tally { color: #e7c25c; }
+.bdh-earnrank--early { color: var(--pp-accent); }
+.bdh-earnrank--early .pp-tally { color: var(--pp-accent); }
+/* One-time celebratory glow for the first-to-earn (colour hoisted -- never color-mix inside @keyframes). */
+@keyframes bdhFirstPulse {
+    0%, 100% { text-shadow: 0 1px 0 oklch(1 0 0 / 0.06); }
+    45% { text-shadow: 0 1px 0 oklch(1 0 0 / 0.06), 0 0 11px var(--first-glow); }
+}
+@media (prefers-reduced-motion: no-preference) { .bdh-earnrank--first { animation: bdhFirstPulse 1.7s ease-out 0.7s; } }
+@media (min-width: 768px) { .bdh-med .pp-med { --sz: 140px; } }
+/* the substance band carries progress; keep the object itself clean (no meter/count stacked under it) */
+.bdh-med .pp-med__count, .bdh-med .pp-med__meter { display: none; }
+.bdh-headline { text-decoration: none; color: inherit; }
+
+/* Header progress bar tinted with the SELECTED tier's colour (via the Horizon --horizon-accent), so it
+   matches the medallion's own meter + the badge-list Series tiles rather than a generic accent. */
+.bdh-progress[data-tier="bronze"]   { --horizon-accent: #cf9160; }
+.bdh-progress[data-tier="silver"]   { --horizon-accent: #b9c6d6; }
+.bdh-progress[data-tier="gold"]     { --horizon-accent: #e7c25c; }
+.bdh-progress[data-tier="platinum"] { --horizon-accent: #8fd2ea; }
+
+/* "Viewing someone else's progress" banner (the /<slug>/<username>/ variant) -- secondary accent so it
+   clearly reads as NOT your own. */
+
+/* At-a-glance facts: a row of stacked mini-facts (value over micro-label), echoing the Collection header's
+   tier-composition strip. Values are neutral; only Difficulty / Avg-Hours are tinted (traffic-light). */
+.bdh-facts { display: flex; flex-wrap: wrap; gap: 12px 22px; }
+.bdh-fact { display: flex; flex-direction: column; gap: 3px; }
+.bdh-fact__v { font-size: 1.15rem; font-weight: 800; line-height: 1; font-variation-settings: "opsz" 18, "wght" 800; }   /* engage the Tally optical-size axis */
+.bdh-fact__u { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+.bdh-fact__k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* ── Shared "matted board" surface ──────────────────────────────────────────
+   The same material as .bd-hero, reused by every post-hero section so the page
+   reads as one framed set: light-catch top edge + faint surface body. No glow —
+   glow is earned by STATE, never painted on resting chrome. */
+.bd-card {
+  position: relative;
+  border: var(--pp-border-w) solid var(--pp-border);
+  border-radius: var(--pp-radius-lg);
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.04), oklch(1 0 0 / 0) 45%), var(--pp-bg-1);
+}
+.bd-card::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.28), transparent);
+  border-top-left-radius: inherit; border-top-right-radius: inherit;
+}
+
+/* ── Tier selector (rebuild) ────────────────────────────────────────────────
+   A colour-forward tier LADDER (not a segmented switcher -- the tiers are a collectible progression). Tier
+   colour is the one accent, using the rebuild's medallion tier family (bronze/silver/gold/platinum) scoped
+   to the ladder steps + the requirements' left accent; everything else is neutral, with success-green only
+   on completed stages (real info). */
+.bd-tiers { scroll-margin-top: 1rem; }
+
+/* Tier swap settle: dim the island while the tier request is in flight (hx-indicator="#badge-tier-view"),
+   so the swap reads as a deliberate update rather than a hard flash. Motion-gated (reduced-motion = instant). */
+@media (prefers-reduced-motion: no-preference) {
+    #badge-tier-view { transition: opacity 0.18s ease; }
+    #badge-tier-view.htmx-request { opacity: 0.55; }
+}
+
+/* The ladder: four equal tier steps, read left-to-right as the progression. */
+/* Tier ascent rail: a slim shared .pgl (progression ladder, --static so no mount choreography inside the
+   swap island) above the tier steps -- filled through the tiers you've EARNED, each rung in its tier
+   colour. An at-a-glance "how high have I climbed" that the four big steps below don't give on their own. */
+.bd-tierrail { margin: 0 0 10px; }
+.bd-tierrail .pgl__rung { height: 6px; }
+.bd-tierrail .pgl__rung--bronze   { --rung-c: #cf9160; }
+.bd-tierrail .pgl__rung--silver   { --rung-c: #b9c6d6; }
+.bd-tierrail .pgl__rung--gold     { --rung-c: #e7c25c; }
+.bd-tierrail .pgl__rung--platinum { --rung-c: #8fd2ea; }
+.bd-tierlad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.bd-tierstep {
+    --tier-c: var(--pp-text-mute);
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 12px 8px 10px; border-radius: var(--pp-radius-lg);
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); text-decoration: none;
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+.bd-tierstep--bronze   { --tier-c: #cf9160; }
+.bd-tierstep--silver   { --tier-c: #b9c6d6; }
+.bd-tierstep--gold     { --tier-c: #e7c25c; }
+.bd-tierstep--platinum { --tier-c: #8fd2ea; }
+.bd-tierstep__mark {
+    width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center;
+    border: 2px solid color-mix(in oklab, var(--tier-c) 50%, var(--pp-border)); color: var(--pp-bg-0);
+}
+.bd-tierstep__mark svg { width: 12px; height: 12px; }
+.bd-tierstep.is-earned .bd-tierstep__mark { background: var(--tier-c); border-color: var(--tier-c); }
+/* Held-but-lapsed rung: a red "M" disc instead of the tier-filled earned check (site-wide maintenance red). */
+.bd-tierstep.is-maintenance .bd-tierstep__mark {
+    background: var(--pp-maint, #e23026); border-color: var(--pp-maint, #e23026);
+    color: #fff; font-size: 0.72rem; font-weight: 800; line-height: 1;
+}
+.bd-tierstep__name { font-size: 0.82rem; font-weight: 800; color: var(--pp-text-dim); }
+.bd-tierstep__req { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); }
+@media (hover: hover) { .bd-tierstep:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); transform: translateY(-1px); } }
+.bd-tierstep.is-active {
+    border-color: color-mix(in oklab, var(--tier-c) 60%, var(--pp-border));
+    background: linear-gradient(180deg, color-mix(in oklab, var(--tier-c) 15%, var(--pp-bg-2)), var(--pp-bg-2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px color-mix(in oklab, var(--tier-c) 30%, transparent), 0 6px 18px -10px color-mix(in oklab, var(--tier-c) 50%, #000);
+}
+.bd-tierstep.is-active .bd-tierstep__name { color: var(--tier-c); }
+.bd-tierstep:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ── Selected tier's requirements ───────────────────────────────────────────
+   A panel with the tier-colour left accent (the one accent); neutral text, success-green only on the
+   completed-stage checks. */
+/* A discrete SECTION of the page (the Ask headline, a quiet progress/XP line, then the stage-tile grid) --
+   so it lives in a proper card, NOT free on the page bg (free content is reserved for the big page-filling
+   grids like the stage journey below; prose/stats sections get a card). Uses the CURRENT rebuild card
+   treatment -- the depth-pass lift (inset top-highlight + ambient shadow, same as the Career tiles), NOT the
+   flat pre-depth-pass box the old panel had -- so it sits at the same depth as the rest of the page. The
+   tier-colour left accent ties it to the selected tier and mirrors the header card's border-l. */
+.bd-req {
+    --tier-c: var(--pp-primary);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border); border-left: 3px solid var(--tier-c);
+    border-radius: var(--pp-radius-lg); padding: 14px 16px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+}
+.bd-req--bronze   { --tier-c: #cf9160; }
+.bd-req--silver   { --tier-c: #b9c6d6; }
+.bd-req--gold     { --tier-c: #e7c25c; }
+.bd-req--platinum { --tier-c: #8fd2ea; }
+/* The Ask: the section headline -- what earning this tier takes. */
+.bd-req__ask { display: flex; align-items: center; gap: 10px; }
+.bd-req__ask-ico { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; }
+.bd-req__ask-ico img { width: 24px; height: 24px; }
+.bd-req__pct { font-size: 0.72rem; font-weight: 800; letter-spacing: -0.02em; color: var(--tier-c); }
+.bd-req__ask-text { font-size: 0.98rem; font-weight: 700; line-height: 1.25; color: var(--pp-text); }
+.bd-req__ask-text b { font-family: var(--pp-font-display); font-weight: 800; color: var(--tier-c); }
+/* Quiet supporting line: stage progress + the XP reward (breakdown in the title tooltip). */
+.bd-req__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; font-size: 0.78rem; color: var(--pp-text-mute); }
+.bd-req__meta .pp-tally { font-weight: 700; color: var(--pp-text-dim); }
+.bd-req__count b { color: var(--pp-text); }
+.bd-req__plats { font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-dim); }
+.bd-req__xp { cursor: help; }
+/* The stages: compact tile grid (replaced the full-width rows -- art fills the space, names stay visible). */
+/* Wider min (200 vs a cramped 150) so the game name gets ~60% more room (2 lines hold long titles like
+   "Crash Team Racing Nitro-Fueled"); the title tooltip catches the rare extreme. ~3 cols desktop, 1 up
+   mobile. Height is unchanged per tile -- widening trades a column, not tile height, so it stays compact. */
+.bd-req__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 12px; }
+.bd-req__tile {
+    position: relative; display: flex; align-items: center; gap: 9px; padding: 9px 10px;
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    text-decoration: none; color: var(--pp-text-dim);
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+@media (hover: hover) { .bd-req__tile:hover { border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border)); color: var(--pp-text); } }
+.bd-req__tile-ico { width: 40px; height: 40px; border-radius: var(--pp-radius-sm); object-fit: cover; flex-shrink: 0; }
+.bd-req__tile-meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bd-req__tile-num { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd-req__tile-name { font-size: 0.8rem; font-weight: 600; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.bd-req__tile.is-done { background: color-mix(in oklab, var(--pp-success) 8%, var(--pp-bg-2)); border-color: color-mix(in oklab, var(--pp-success) 28%, var(--pp-border)); }
+.bd-req__tile-check { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--pp-success); color: #06140d; display: grid; place-items: center; box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-success) 70%, transparent); }
+.bd-req__tile-check svg { width: 11px; height: 11px; }
+
+/* ── My Stats modal (rebuilt from scratch) ───────────────────────────────────
+   A narrative of the viewer's journey with the series -- hero investment (big Tally numbers) -> stage
+   progress (segmented Horizon) -> trophy haul -> a first/last timeline -> a quiet series-context footer.
+   Differentiated by importance (not a uniform tile grid); composes the approved primitives only. */
+.bd-mystats { display: flex; flex-direction: column; gap: 18px; padding: 2px; }
+.bd-mystats__title { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); padding-right: 30px; }
+/* Hero: three big investment numbers (XP carries the one accent). */
+/* minmax(0,1fr) so a large value (whale XP/playtime) can't force horizontal overflow at 375px. */
+.bd-mystats__hero { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.bd-mystats__big { display: flex; flex-direction: column; gap: 3px; }
+.bd-mystats__big-v { font-family: var(--pp-font-display); font-size: 1.7rem; font-weight: 800; line-height: 1; color: var(--pp-text); }
+.bd-mystats__big-v--xp { color: var(--pp-primary); }
+.bd-mystats__big-u { font-size: 0.85rem; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
+.bd-mystats__big-k { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
+/* Standing chip: one earned insight (earner percentile). The ONE accent in the modal's readout -- brand
+   primary, quiet, a single line that turns the raw numbers into "where you stand". */
+.bd-mystats__standing {
+    display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 6px 12px;
+    border-radius: 999px; font-size: 0.8rem; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 28%, transparent);
+}
+.bd-mystats__standing svg { width: 15px; height: 15px; flex: none; color: var(--pp-primary); }
+.bd-mystats__standing b { color: var(--pp-primary); font-weight: 800; }
+/* Progress + haul rows. */
+.bd-mystats__row { display: flex; flex-direction: column; gap: 7px; }
+.bd-mystats__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.bd-mystats__row-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-dim); }
+.bd-mystats__row-val { font-size: 0.82rem; color: var(--pp-text-mute); }
+.bd-mystats__row-val b { font-family: var(--pp-font-display); font-weight: 800; color: var(--pp-text); }
+.bd-mystats__haul { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.bd-mystats__loot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.bd-mystats__pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+/* Timeline: the viewer's span with the series. */
+.bd-mystats__timeline { display: flex; align-items: center; gap: 12px; padding: 16px 0 12px; border-top: 1px solid var(--pp-divider); }
+.bd-mystats__tl-pt { display: flex; flex-direction: column; gap: 1px; }
+.bd-mystats__tl-pt--end { text-align: right; }
+.bd-mystats__tl-date { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); }
+.bd-mystats__tl-cap { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd-mystats__tl-line { position: relative; flex: 1; height: 2px; border-radius: 1px; background: linear-gradient(90deg, var(--pp-primary), color-mix(in oklab, var(--pp-primary) 20%, transparent)); }
+.bd-mystats__tl-line::before, .bd-mystats__tl-line::after { content: ""; position: absolute; top: 50%; width: 7px; height: 7px; border-radius: 50%; transform: translateY(-50%); }
+.bd-mystats__tl-line::before { left: 0; background: var(--pp-primary); }
+.bd-mystats__tl-line::after { right: 0; background: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-bg-2)); box-shadow: 0 0 0 1px var(--pp-primary); }
+/* Quiet series-context footer -- not the viewer's stats, so demoted. */
+.bd-mystats__context { display: flex; flex-direction: column; gap: 5px; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.bd-mystats__ctx-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd-mystats__ctx-items { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.76rem; color: var(--pp-text-mute); }
+.bd-mystats__ctx-items span { white-space: nowrap; }
+
+/* ── Section header (generic, reusable across sections) ─────────────────────── */
+.bd-head {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--pp-text-dim);
+}
+.bd-head::before {
+    content: ""; width: 3px; height: 12px; border-radius: 2px;
+    background: var(--pp-text-mute);
+}
+
+/* ── Context band ────────────────────────────────────────────────────────────
+   Condensed competitive/rarity layer below the header: ONE stacked rarity bar (per-tier earn distribution)
+   + legend, then a foot row of your ranks + the Leaderboards CTA + a My Stats button. Depth-pass card. */
+.bd-band { padding: 14px 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30); }
+.bd-band__rarity { display: flex; flex-direction: column; gap: 9px; }
+
+/* The stacked bar: each segment's width is that tier's share of all tier-earns (tiers are independent, so
+   every tier earned counts). A thin inner seam separates tiers without gaps that would distort proportions. */
+.bd-rbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--pp-bg-3); }
+.bd-rbar__seg { height: 100%; min-width: 5px; box-shadow: inset -1px 0 0 rgba(2, 4, 8, 0.35); }
+.bd-rbar__seg:last-child { box-shadow: none; }
+.bd-rbar__seg--bronze   { background: #cf9160; }
+.bd-rbar__seg--silver   { background: #b9c6d6; }
+.bd-rbar__seg--gold     { background: #e7c25c; }
+.bd-rbar__seg--platinum { background: #8fd2ea; }
+/* Selected tier: an inner ring (not clipped by the bar's overflow) + a touch brighter, tying it to the switcher. */
+.bd-rbar__seg.is-selected { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9); filter: brightness(1.08); }
+
+/* Legend: tier swatch + name + count (matching the bar's per-tier earn counts). */
+.bd-rlegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.72rem; color: var(--pp-text-mute); }
+.bd-rlegend__item { display: inline-flex; align-items: center; gap: 5px; }
+.bd-rlegend__dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.bd-rlegend__item--bronze   .bd-rlegend__dot { background: #cf9160; }
+.bd-rlegend__item--silver   .bd-rlegend__dot { background: #b9c6d6; }
+.bd-rlegend__item--gold     .bd-rlegend__dot { background: #e7c25c; }
+.bd-rlegend__item--platinum .bd-rlegend__dot { background: #8fd2ea; }
+.bd-rlegend__item b { color: var(--pp-text-dim); font-family: var(--pp-font-display); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Foot: ranks (left) + actions (right) -- one row on tablet+, stacked on mobile. */
+.bd-band__foot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-divider); display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 640px) { .bd-band__foot { flex-direction: row; align-items: center; justify-content: space-between; gap: 18px; } }
+.bd-band__ranks { display: flex; flex-wrap: wrap; gap: 5px 20px; }
+.bd-rank { font-size: 0.8rem; color: var(--pp-text-mute); white-space: nowrap; }
+.bd-rank b { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+.bd-rank__of { color: var(--pp-text-mute); }
+.bd-band__actions { display: flex; gap: 8px; flex-shrink: 0; }
+/* Leaderboards CTA + My Stats: matched compact buttons; the cyan action accent is earned on hover. */
+.bd-band__cta, .bd-band__stats-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 12px; border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border); background: var(--pp-bg-2); color: var(--pp-text-dim);
+    font-size: 0.8rem; font-weight: 700; text-decoration: none; cursor: pointer;
+    transition: border-color var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.bd-band__cta svg, .bd-band__stats-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.bd-band__cta-arrow { width: 13px; height: 13px; color: var(--pp-text-mute); transition: transform var(--pp-dur) var(--pp-ease); }
+@media (hover: hover) {
+    .bd-band__cta:hover, .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklch, var(--pp-primary) 6%, var(--pp-bg-2)); }
+    .bd-band__cta:hover .bd-band__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
+}
+
+/* ── Stage game card (rebuilt: cover-forward + a CONTRACT footer band) ────────
+   Curated to what a hunter needs at a glance -- cover (state overlay + one progress bar), name, your % +
+   plat status, community difficulty/hours -- plus the game's home Contract (jobs + XP) as a distinct hook
+   into the gamification layer. Card body links to the game; the contract band is its OWN link. */
+.bd-gcard { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease), transform 120ms var(--pp-ease); }
+/* Tactile press (mobile has no hover glow, so this is its only down-state). */
+.bd-gcard:active { transform: scale(0.99); }
+.bd-gcard.is-done { border-color: color-mix(in oklch, var(--pp-success) 40%, transparent); }
+.bd-gcard.is-plat { border-color: color-mix(in oklch, var(--pp-warning) 40%, transparent); }
+.bd-gcard__main { display: flex; flex-direction: column; flex: 1; text-decoration: none; color: inherit; }
+@media (hover: hover) {
+    .bd-gcard:hover { border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent); box-shadow: 0 0 16px color-mix(in oklch, var(--pp-primary) 18%, transparent); }
+    .bd-gcard.is-done:hover { border-color: var(--pp-success); box-shadow: 0 0 16px color-mix(in oklch, var(--pp-success) 22%, transparent); }
+    .bd-gcard.is-plat:hover { border-color: var(--pp-warning); box-shadow: 0 0 16px color-mix(in oklch, var(--pp-warning) 22%, transparent); }
+    .bd-gcard:hover .bd-gcard__name { color: var(--pp-primary); }
+}
+/* Cover */
+.bd-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-3); }
+.bd-gcard__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform 0.45s var(--pp-ease); }
+/* Slow cover zoom on hover -- the art (the moat) responds; clipped by the cover's overflow, compositor-cheap. */
+@media (hover: hover) { .bd-gcard:hover .bd-gcard__cover img { transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .bd-gcard__cover img { transition: none; } }
+.bd-gcard__cover.is-dim img { opacity: 0.42; }
+.bd-gcard__flag { position: absolute; display: grid; place-items: center; border-radius: 999px; box-shadow: 0 1px 3px oklch(0 0 0 / 0.5); }
+.bd-gcard__flag--done { top: 5px; right: 5px; width: 20px; height: 20px; background: var(--pp-success); color: var(--pp-bg-0); }
+.bd-gcard__flag--done svg { width: 12px; height: 12px; }
+.bd-gcard__flag--plat { top: 5px; right: 5px; box-shadow: none; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
+.bd-gcard__flag--guide { top: 5px; left: 5px; width: 18px; height: 18px; background: color-mix(in oklch, var(--pp-accent) 88%, transparent); color: var(--pp-bg-0); }
+.bd-gcard__flag--guide svg { width: 11px; height: 11px; }
+.bd-gcard__cbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: oklch(0 0 0 / 0.45); }
+.bd-gcard__cbar span { display: block; height: 100%; }
+.bd-gcard__cbar--low { background: var(--pp-error); }
+.bd-gcard__cbar--mid { background: var(--pp-warning); }
+.bd-gcard__cbar--high { background: var(--pp-success); }
+.bd-gcard__cbar--max { background: var(--pp-primary); }
+/* Body */
+.bd-gcard__body { display: flex; flex-direction: column; gap: 5px; padding: 8px 9px; flex: 1; }
+.bd-gcard__name { font-size: 0.76rem; font-weight: 600; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: color var(--pp-dur) var(--pp-ease); }
+.bd-gcard__badges { display: flex; flex-wrap: wrap; gap: 3px; }
+.bd-gcard__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: auto; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }
+.bd-gcard__pct { color: var(--pp-text-dim); font-weight: 700; font-variant-numeric: tabular-nums; }
+.bd-gcard__pct.is-done { color: var(--pp-success); }
+.bd-gcard__plat { display: inline-flex; align-items: center; gap: 3px; }
+.bd-gcard__plat.is-earned { color: var(--pp-warning); }
+.bd-gcard__plat.is-none { color: color-mix(in oklch, var(--pp-error) 70%, var(--pp-text-mute)); }
+.bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
+.bd-gcard__rt--good { color: var(--pp-success); }
+.bd-gcard__rt--mid { color: var(--pp-warning); }
+.bd-gcard__rt--hard { color: var(--pp-error); }
+/* Contract footer band -- the hook into the gamification system. Its background blends the contract's job
+   DISCIPLINE family colours (set inline via band_bg; --ctr-accent = the dominant one) so the band says what
+   kind of contract it is; the real job icons sit on top. Falls back to the secondary accent when no jobs. */
+.bd-gcard__ctr { display: flex; align-items: center; gap: 8px; padding: 7px 9px; text-decoration: none;
+    position: relative; overflow: hidden;
+    background: color-mix(in oklab, var(--pp-secondary) 12%, var(--pp-bg-1));
+    border-top: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 30%, var(--pp-border)); }
+/* Specular sheen sweep on hover -- reads more premium AND is compositor-friendly (the old brightness filter
+   re-rasterized the family-mix gradient every frame). The band clips the sweep via overflow:hidden. */
+.bd-gcard__ctr::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 32%, oklch(1 0 0 / 0.22) 50%, transparent 68%);
+    transform: translateX(-100%); opacity: 0; }
+@media (hover: hover) {
+    .bd-gcard__ctr:hover::after { animation: bdCtrSheen 0.7s var(--pp-ease); }
+    .bd-gcard__ctr:hover .bd-gcard__ctr-arrow { transform: translateX(2px); }
+}
+@keyframes bdCtrSheen { 0% { transform: translateX(-100%); opacity: 1; } 100% { transform: translateX(100%); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bd-gcard__ctr:hover::after { animation: none; } }
+.bd-gcard__ctr-jobs { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+.bd-gcard__ctr-job { width: 15px; height: 15px; flex-shrink: 0; }
+.bd-gcard__ctr-more { font-size: 0.6rem; font-weight: 800; color: var(--pp-text-dim); }
+.bd-gcard__ctr-xp { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; }
+.bd-gcard__ctr-arrow { width: 12px; height: 12px; color: var(--ctr-accent, var(--pp-secondary)); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
+/* Contract modal: the ContractModalView (.rpm__*) partial injected in place. Match the career page's contract
+   dialog (.emodal__dialog--wide: 680px, padding 0 so the rpm content owns its own spacing) so the modal reads
+   at the SAME proportions as on the contracts board. */
+.pp-detail-modal--contract .pp-detail-modal__dialog { width: min(680px, 100%); max-height: 88vh; overflow-y: auto; padding: 0; }
+.pp-detail-modal--contract .pp-detail-modal__body { min-height: 0; }
+/* Onward hook: a sticky footer link from one game's contract into the whole board. */
+.bd-ctrmodal__more { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 11px; background: var(--pp-bg-1); border-top: 1px solid var(--pp-border); color: var(--pp-primary); font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: background var(--pp-dur) var(--pp-ease); }
+.bd-ctrmodal__more svg { width: 14px; height: 14px; }
+@media (hover: hover) { .bd-ctrmodal__more:hover { background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-1)); } }
+/* Sign-up / link-PSN CTA footer (anon/unlinked): replaces "Browse all Contracts" at the moment the Job
+   Board sells itself. Shared by the contract modal on game detail + badge detail (sticky, like __more). */
+.bd-ctrmodal__cta { position: sticky; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 9px; padding: 14px 18px 16px; background: var(--pp-bg-1); border-top: 1px solid var(--pp-border); }
+.bd-ctrmodal__cta p { font-size: 0.84rem; color: var(--pp-text-dim); }
+.bd-ctrmodal__cta .gd-btn { align-self: flex-start; }
+.bd-ctrmodal__alt { font-size: 0.74rem; color: var(--pp-text-mute); }
+.bd-ctrmodal__alt a { color: var(--pp-primary); font-weight: 600; text-decoration: none; }
+.bd-ctrmodal__alt a:hover { text-decoration: underline; }
+
+/* ── Stage section ──────────────────────────────────────────────────────────
+   A stage is a .bd-card holding a clickable header (collapse toggle), an
+   optional stats row, and a collapsible body of game cards / bundles. Complete
+   stages earn a success tint on the header. */
+.bd-stage { scroll-margin-top: 1rem; }
+
+.bd-stage__head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; cursor: pointer;
+    border-radius: var(--pp-radius-lg);
+    transition: background var(--pp-dur) var(--pp-ease), transform 120ms var(--pp-ease);
+}
+.bd-stage__head:hover { background: oklch(1 0 0 / 0.03); }
+.bd-stage__head:active { transform: translateY(1px); }   /* tactile press (esp. mobile, no hover) */
+.bd-stage__head:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.bd-stage--done .bd-stage__head { background: color-mix(in oklch, var(--pp-success) 8%, transparent); }
+.bd-stage--done .bd-stage__head:hover { background: color-mix(in oklch, var(--pp-success) 13%, transparent); }
+
+/* Stage art */
+.bd-stage__ico { width: 44px; height: 44px; border-radius: var(--pp-radius-md); overflow: hidden; border: 1px solid var(--pp-border); flex-shrink: 0; }
+.bd-stage--done .bd-stage__ico { border-color: color-mix(in oklch, var(--pp-success) 40%, transparent); }
+.bd-stage__ico img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Identity: eyebrow over the title + a quiet stats caption. */
+.bd-stage__id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.bd-stage__eyebrow { font-size: 0.56rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-accent); }
+.bd-stage--done .bd-stage__eyebrow { color: var(--pp-success); }
+/* Lowest open stage -- the whole eyebrow ("Stage N * Up next") goes cyan to echo the pulsing spine node. */
+.bd-stage__eyebrow--next { color: var(--pp-primary); }
+.bd-stage__title { font-size: 0.92rem; font-weight: 700; color: var(--pp-text); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Dots + pill share a wrapper (a row on desktop -- looks as before; a right-aligned column on mobile). */
+.bd-stage__meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+/* Tiers this stage feeds -- small tier-colour dots, filled when done for that tier. */
+.bd-stage__tiers { display: flex; gap: 4px; flex-shrink: 0; }
+.bd-stage__tier { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--tier-c); }
+.bd-stage__tier.is-done { background: var(--tier-c); box-shadow: 0 0 5px color-mix(in oklab, var(--tier-c) 55%, transparent); }
+.bd-stage__tier--bronze   { --tier-c: #cf9160; }
+.bd-stage__tier--silver   { --tier-c: #b9c6d6; }
+.bd-stage__tier--gold     { --tier-c: #e7c25c; }
+.bd-stage__tier--platinum { --tier-c: #8fd2ea; }
+
+/* X/Y state pill (games meeting this tier's requirement). */
+.bd-stage__pill { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem; padding: 2px 9px; border-radius: 999px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.bd-stage__pill--done { background: color-mix(in oklab, var(--pp-success) 15%, var(--pp-bg-2)); color: var(--pp-success); border: 1px solid color-mix(in oklab, var(--pp-success) 32%, transparent); }
+.bd-stage__pill--partial { background: color-mix(in oklab, var(--pp-warning) 13%, var(--pp-bg-2)); color: var(--pp-warning); border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent); }
+.bd-stage__pill--todo { background: var(--pp-bg-2); color: var(--pp-text-mute); border: 1px solid var(--pp-border); }
+
+/* Static game-count pill -- the always-present slot shown for anon viewers and bonus stages (the signed-in
+   X/Y progress pill takes its place otherwise). No JS toggles it; kept present so expanding never shifts. */
+.bd-stage__count { font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); padding: 1px 7px; border-radius: 999px; background: var(--pp-bg-2); flex-shrink: 0; }
+.bd-stage__chevron { width: 18px; height: 18px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
+
+/* Per-stage personal metrics -- a quiet caption under the title (muted so it never competes with the
+   completed-green header). */
+.bd-stage__stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
+.bd-stage__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
+.bd-stage__stat svg { width: 10px; height: 10px; flex-shrink: 0; }
+
+/* Collapse body — the grid-rows trick (JS toggles grid-template-rows on
+   [data-stage-games]). The inner grid is padded so card hover-glows breathe
+   instead of clipping at the overflow:hidden boundary. */
+.bd-stage__collapse { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 300ms var(--pp-ease); }
+.bd-stage__collapse-inner { overflow: hidden; }
+.bd-stage__grid {
+    display: grid; gap: 10px; padding: 14px;
+    grid-template-columns: 1fr;                              /* one card per row on phones */
+}
+@media (min-width: 640px)  { .bd-stage__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 768px)  { .bd-stage__grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .bd-stage__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1280px) { .bd-stage__grid { grid-template-columns: repeat(5, 1fr); } }
+
+/* Unobtainable / delisted titles — a quiet, collapsible strip above the grid. These can't be earned
+   anymore, so they read muted; the summary icon + a hairline left rail carry the done/partial state. */
+.bd-delisted {
+    margin: 0 14px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    background: color-mix(in oklch, var(--pp-bg-1) 60%, transparent);
+    position: relative; overflow: hidden;
+}
+.bd-delisted::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 2px;
+    background: var(--pp-text-mute); opacity: 0.5;
+}
+.bd-delisted.is-done::before { background: var(--pp-success); opacity: 0.8; }
+.bd-delisted.is-partial::before { background: var(--pp-warning); opacity: 0.8; }
+.bd-delisted__summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    padding: 8px 11px 8px 13px; font-size: 0.74rem; font-weight: 600; color: var(--pp-text-dim);
+}
+.bd-delisted__summary::-webkit-details-marker { display: none; }
+.bd-delisted__ico { display: grid; place-items: center; width: 15px; height: 15px; flex-shrink: 0; color: var(--pp-text-mute); }
+.bd-delisted.is-done .bd-delisted__ico { color: var(--pp-success); }
+.bd-delisted.is-partial .bd-delisted__ico { color: var(--pp-warning); }
+.bd-delisted__ico svg { width: 100%; height: 100%; }
+.bd-delisted__label { flex: 1; min-width: 0; }
+.bd-delisted__count { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.66rem; color: var(--pp-text-mute); flex-shrink: 0; letter-spacing: 0.02em; }
+.bd-delisted__caret { width: 14px; height: 14px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
+.bd-delisted[open] .bd-delisted__caret { transform: rotate(180deg); }
+.bd-delisted__list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px 11px; }
+.bd-delisted__row {
+    display: flex; align-items: center; gap: 8px; padding: 4px 6px;
+    border-radius: var(--pp-radius-sm); text-decoration: none;
+    transition: background var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) { .bd-delisted__row:hover { background: oklch(1 0 0 / 0.05); } }
+.bd-delisted__status { display: grid; place-items: center; width: 15px; height: 15px; flex-shrink: 0; }
+.bd-delisted__status svg { width: 14px; height: 14px; }
+.bd-delisted__status--done { color: var(--pp-success); }
+.bd-delisted__thumb { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); overflow: hidden; flex-shrink: 0; }
+.bd-delisted__thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bd-delisted__thumb.is-dim img { opacity: 0.4; }
+.bd-delisted__name {
+    flex: 1; font-size: 0.72rem; color: var(--pp-text-mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 0.25rem;
+}
+.bd-delisted__pct { font-size: 0.58rem; font-weight: 700; color: var(--pp-text-mute); flex-shrink: 0; }
+
+/* Concept-bundle qualifier — a grouped set of lists that TOGETHER satisfy a stage. Reads as a titled
+   sub-panel: a header row (mark + label + status + requirement) over its own game grid. */
+.bd-qual {
+    margin: 0 14px 4px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    background: color-mix(in oklch, var(--pp-bg-1) 55%, transparent);
+}
+.bd-qual.is-done { border-color: color-mix(in oklch, var(--pp-success) 30%, var(--pp-border)); }
+.bd-qual__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 12px; }
+.bd-qual__mark { display: grid; place-items: center; width: 17px; height: 17px; flex-shrink: 0; color: var(--pp-text-mute); }
+.bd-qual.is-done .bd-qual__mark { color: var(--pp-success); }
+.bd-qual__mark svg { width: 100%; height: 100%; }
+.bd-qual__label { font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
+.bd-qual__status {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 0.66rem; letter-spacing: 0.02em;
+    color: var(--pp-text-dim); padding: 2px 8px; border-radius: 999px;
+    background: color-mix(in oklch, var(--pp-bg-2) 70%, transparent); border: 1px solid var(--pp-border);
+}
+.bd-qual.is-done .bd-qual__status {
+    color: var(--pp-success); border-color: color-mix(in oklch, var(--pp-success) 35%, transparent);
+    background: color-mix(in oklch, var(--pp-success) 10%, transparent);
+}
+.bd-qual__req { font-size: 0.65rem; font-style: italic; color: var(--pp-text-mute); margin-left: auto; padding-right: 0.25rem; }
+.bd-qual__grid {
+    display: grid; gap: 10px; padding: 0 12px 12px;
+    grid-template-columns: 1fr;                              /* one card per row on phones */
+}
+@media (min-width: 640px)  { .bd-qual__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 768px)  { .bd-qual__grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .bd-qual__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1280px) { .bd-qual__grid { grid-template-columns: repeat(5, 1fr); } }
+
+/* Stage list as a vertical journey. A neutral spine ties the stages into one set
+   (it shows through the gaps between cards) with a NUMBERED milestone node per
+   stage. Stages complete in ANY order, so the rail never encodes progress — each
+   node is independent: a green check when done, the plain number when to-do, a
+   cyan "up next" pulse on the lowest open stage, a star for bonus stages. */
+.bd-stages { position: relative; padding-left: 52px; }
+.bd-stages > .bd-stage { position: relative; z-index: 1; }
+/* Connector rail: runs from below this node down to the next stage's node. Uses ::after (NOT ::before --
+   .bd-card::before is the top-highlight hairline). Geometry tracks the node (top 16px, height 34px) + the
+   mt-3 (12px) card gap: node centre sits at x -35px from the card's left edge. */
+.bd-stages > .bd-stage::after {
+    content: ""; position: absolute; left: -35px; top: 50px; bottom: -32px;
+    width: 2px; z-index: 0; background: var(--pp-border);
+}
+.bd-stages > .bd-stage:last-child::after { display: none; }
+/* Living rail (any-order safe): the connector segment BELOW a completed stage tints toward success. Each
+   segment reflects ONLY its own stage's state, so it never implies a linear order (stages complete in any
+   order -- the rail deliberately doesn't encode cumulative progress). */
+.bd-stages > .bd-stage--done::after { background: color-mix(in oklab, var(--pp-success) 42%, var(--pp-border)); }
+.bd-node {
+    position: absolute; left: -52px; top: 16px; z-index: 2;
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 0.9rem;
+    background: var(--pp-bg-2); border: 2px solid var(--pp-border); color: var(--pp-text-mute);
+    transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
+}
+.bd-node svg { width: 16px; height: 16px; }
+.bd-node--done { background: var(--pp-success); border-color: var(--pp-success); color: #06140d; }
+/* The done node's check DRAWS itself as its stage scrolls in -- reuses the shared ppDrawIn keyframe
+   (components/motion.css); pathLength="1" on the polyline normalizes the dash. Gated on the stage reveal
+   (.is-inview) and delayed a beat so the stage rises first, THEN the check ticks. Reduced-motion / pre-
+   reveal / no-JS: the check is drawn solid (dashoffset 0). */
+.bd-node--done svg * { stroke-dasharray: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .bd-stages--armed.is-inview .bd-stage--done .bd-node--done svg * { animation: ppDrawIn 0.5s var(--pp-ease, ease) 0.28s both; }
+}
+.bd-node--next {
+    border-color: var(--pp-primary); color: var(--pp-primary);
+    background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2));
+    --pulse-col: var(--pp-primary); animation: bd-node-pulse 2.2s var(--pp-ease) infinite;
+}
+.bd-node--bonus {
+    border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent);
+    background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-2));
+}
+/* Pulse colour comes from a hoisted var (never color-mix inside a keyframe). */
+@keyframes bd-node-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--pulse-col); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .bd-node { animation: none !important; } }
+
+/* Mobile stage journey: the ladder gutter + node shrink to reclaim horizontal space, the head tightens,
+   and the tier dots + games pill stack into a right-aligned column -- all so the title gets more room. */
+@media (max-width: 640px) {
+    /* Slimmer ladder gutter (52 -> 34) + node (34 -> 28); connector re-centres on the smaller node. */
+    .bd-stages { padding-left: 34px; }
+    .bd-node { left: -34px; width: 28px; height: 28px; top: 16px; font-size: 0.78rem; }
+    .bd-node svg { width: 13px; height: 13px; }
+    /* Node centre now sits at x -20px (left -34 + half of 28); rail starts at the node's bottom (16+28). */
+    .bd-stages > .bd-stage::after { left: -20px; top: 44px; }
+
+    /* Uncramp the header: tighter gap/padding + a smaller stage icon. */
+    .bd-stage__head { gap: 10px; padding: 10px 12px; }
+    .bd-stage__ico { width: 38px; height: 38px; }
+
+    /* Stack the dots over the pill, right-aligned, so the title reclaims the horizontal band. */
+    .bd-stage__meta { flex-direction: column; align-items: flex-end; gap: 5px; }
+    /* Dial the X/Y pill down a notch -- stacked on its own it reads large at phone sizes. */
+    .bd-stage__pill { font-size: 0.64rem; padding: 2px 8px; }
+}
+
+/* Bulk "collapse/expand all" toggle (a quiet text button). */
+.bd-collapse-all {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--pp-font-body); font-size: 0.72rem; font-weight: 600;
+    color: var(--pp-text-mute); background: none; border: none; cursor: pointer;
+    padding: 4px 8px; border-radius: var(--pp-radius-sm);
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.bd-collapse-all:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); }
+.bd-collapse-all svg { width: 14px; height: 14px; transition: transform var(--pp-dur) var(--pp-ease); }
+
+/* "Stages required only for higher tiers" disclosure. */
+.bd-other-tiers__summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    padding: 9px 14px; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim);
+    background: var(--pp-bg-1); border: var(--pp-border-w) solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+}
+.bd-other-tiers__summary::-webkit-details-marker { display: none; }
+.bd-other-tiers__summary::after {
+    content: ""; width: 7px; height: 7px; margin-left: auto;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
+}
+.bd-other-tiers[open] .bd-other-tiers__summary::after { transform: rotate(-135deg); }
+
+/* ── Accessibility ──────────────────────────────────────────────────────────
+   A consistent keyboard focus ring across the page's interactive controls (matches .bd-tierstep /
+   .bd-stage__head, which already define their own). Without this they fall back to the low-contrast UA
+   default on our dark surfaces. */
+.bdh-med:focus-visible,
+.bdh-headline:focus-visible,
+.bd-gcard__main:focus-visible,
+.bd-gcard__ctr:focus-visible,
+.bd-req__tile:focus-visible,
+.bd-delisted__row:focus-visible,
+.bd-delisted__summary:focus-visible,
+.bd-other-tiers__summary:focus-visible,
+.bd-band__cta:focus-visible,
+.bd-band__stats-btn:focus-visible,
+.bd-collapse-all:focus-visible,
+.bd-ctrmodal__more:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+/* The hero medallion is round -- give its focus ring room to clear the art. */
+.bdh-med:focus-visible { outline-offset: 4px; border-radius: 50%; }
+
+/* Respect reduced motion for the stage collapse + chevron (the pulse, tier-swap dim, modal entrance,
+   count-up, and the contract reveal are already gated at their own definitions). */
+@media (prefers-reduced-motion: reduce) {
+    .bd-stage__collapse { transition: none; }
+    .bd-stage__chevron { transition: none; }
+    .bd-collapse-all svg { transition: none; }
+}
+
+/* Choreographed EXIT for the badge Stats + Contract modals (the peek modal already grows back to source;
+   these used to snap shut -- a named miss vs the Career bar). JS adds .is-closing, hides on animationend.
+   Higher specificity (id) than the shared .pp-detail-modal entrance rule, so it wins the reverse. */
+@keyframes bdModalOut { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+#badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__dialog,
+#badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: bdModalOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+#badge-stats-modal.is-closing:not([hidden]) .pp-detail-modal__scrim,
+#badge-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
+
+/* Stage-stack reveal: settles in as one set (reuses the shipped ppRevealIn). Fires when the journey scrolls
+   INTO view (JS adds .is-inview) rather than on load -- it's usually below the fold, so a load-time reveal is
+   missed. Armed by JS (.bd-stages--armed) so no-JS keeps the stages visible; default-collapsed = headers only
+   animate, so it stays cheap; `both` fill holds the from-state so there's no FOUC once armed. */
+@media (prefers-reduced-motion: no-preference) {
+    .bd-stages--armed > .bd-stage { opacity: 0; }
+    .bd-stages--armed.is-inview > .bd-stage { animation: ppRevealIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(2) { animation-delay: 0.05s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(3) { animation-delay: 0.1s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(4) { animation-delay: 0.15s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(5) { animation-delay: 0.2s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(6) { animation-delay: 0.25s; }
+    .bd-stages--armed.is-inview > .bd-stage:nth-child(n+7) { animation-delay: 0.3s; }
+}
+
+/* ── Premium pass v2 ─────────────────────────────────────────────────────────
+
+   V2.1 Tier-switch ignite: a one-shot tier-tinted glow bloom on the step that just became active (fades to
+   flat -- the sanctioned selection acknowledgment). A ::after so the step's resting active box-shadow is
+   untouched; z-index -1 blooms behind the content. */
+.bd-tierstep.is-igniting::after {
+    content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: inherit; pointer-events: none;
+    box-shadow: 0 0 20px 3px color-mix(in oklab, var(--tier-c) 55%, transparent);
+    animation: bdTierIgnite 0.6s ease-out forwards;
+}
+@keyframes bdTierIgnite { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+
+/* V2.2 Stats-modal reveal-on-open: the numbers count up (JS) and the two Horizons wipe in from the left, a
+   beat after, so the modal tells the journey instead of opening fully formed. (The dialog's will-change
+   already isolates it from the scrim's backdrop-filter, so the per-frame count-up repaint doesn't re-blur.) */
+@media (prefers-reduced-motion: no-preference) {
+    .bd-mystats.is-revealing .pp-horizon { transform-origin: left; animation: bdHzReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+}
+@keyframes bdHzReveal { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* V2.3 Contract-band loading affordance: while the contract modal is being fetched, the tapped band shimmers
+   (the sheen sweep, looping) so the tap isn't dead on a slow link. JS adds .is-loading after a 150ms grace
+   so instant loads don't flash it. */
+.bd-gcard__ctr.is-loading { cursor: progress; }
+.bd-gcard__ctr.is-loading::after { animation: bdCtrSheen 0.9s var(--pp-ease) infinite; }
+
+/* V2.4 Landing flash: a one-shot cyan glow bloom around a stage card you JUST jumped to (from a requirement
+   tile), so the eye catches where it landed. z-index lifts it over the neighbouring cards' edges. */
+/* Landing flash: glow the whole stage CARD border when you jump to it from a requirement tile (fired AFTER
+   the card is revealed + expanded -- see the JS timing). A box-shadow TRANSITION, NOT a keyframe animation,
+   deliberately: the section already carries a lingering `animation: ppRevealIn ... both` from the reveal
+   rule (fill-mode never releases the slot), so a competing keyframe would never apply. box-shadow rides a
+   separate transition, unaffected. color-mix is fine here (not inside @keyframes). Fade-out uses the base
+   0.55s; the .is-landing rule's own 0.22s is the quicker fade-IN. */
+.bd-stage { transition: box-shadow 0.55s var(--pp-ease); }
+.bd-stage.is-landing {
+    --land-ring: color-mix(in oklab, var(--pp-primary) 55%, transparent);
+    --land-halo: color-mix(in oklab, var(--pp-primary) 42%, transparent);
+    z-index: 3;
+    box-shadow: 0 0 0 2px var(--land-ring), 0 0 26px 5px var(--land-halo);
+    transition: box-shadow 0.22s var(--pp-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+    .bd-tierstep.is-igniting::after,
+    .bd-gcard__ctr.is-loading::after { animation: none; }
+    .bd-stage, .bd-stage.is-landing { transition: none; }
+}
+
+/* ── Sticky mini-header: a condensed proxy that pins when the full header scrolls under the chrome ── */
+/* Fixed below the pinned chrome (var(--sticky-top)); frosted like the navbar. visibility:hidden at rest so
+   its duplicate title/tier controls stay out of the tab order + AT tree until it's actually pinned. */
+.bd-minihead {
+    position: fixed; top: var(--sticky-top, 3.625rem); left: 0; right: 0; z-index: 30;
+    background: color-mix(in oklab, var(--pp-bg-1) 92%, transparent);
+    backdrop-filter: blur(12px);   /* standard only -- lightningcss autoprefixes; hand-writing -webkit- makes it drop the standard */
+    border-bottom: 1px solid var(--pp-border);
+    visibility: hidden; opacity: 0; transform: translateY(-100%);
+    transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease), visibility 0s linear 0.28s;
+}
+.bd-minihead.is-pinned { visibility: visible; opacity: 1; transform: none;
+    transition: opacity 0.28s var(--pp-ease), transform 0.28s var(--pp-ease); }
+.bd-minihead__inner { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; }
+
+/* Small medallion: the object only -- suppress the component's in-progress meter + count readout. */
+.bd-minihead__med { flex-shrink: 0; }
+.bd-minihead__med .pp-med { --sz: 32px; }
+.bd-minihead__med .pp-med__meter, .bd-minihead__med .pp-med__count { display: none; }
+
+.bd-minihead__id { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.bd-minihead__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.92rem; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
+.bd-minihead__prog { display: none; max-width: 260px; }
+@media (min-width: 768px) { .bd-minihead__prog { display: block; } }
+
+/* Tier chips: the tier ladder condensed to colour-forward initials; the same hx-get swap as the full ladder. */
+.bd-minihead__tiers { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.bd-minitier {
+    width: 28px; height: 28px; border-radius: var(--pp-radius-md); display: grid; place-items: center;
+    font-size: 0.72rem; font-weight: 800; text-decoration: none; border: 1.5px solid transparent;
+    color: var(--pp-text-mute); background: oklch(1 0 0 / 0.05); position: relative;
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
+}
+.bd-minitier--bronze   { --tc: #cf9160; }
+.bd-minitier--silver   { --tc: #b9c6d6; }
+.bd-minitier--gold     { --tc: #e7c25c; }
+.bd-minitier--platinum { --tc: #8fd2ea; }
+@media (hover: hover) { .bd-minitier:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.09); } }
+.bd-minitier:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* Earned tiers carry a quiet tint of their colour; the active tier is the full tier-forward chip. */
+.bd-minitier.is-earned { color: var(--tc); background: color-mix(in oklab, var(--tc) 12%, transparent); }
+.bd-minitier.is-active { color: #05101c; background: var(--tc); border-color: var(--tc);
+    box-shadow: 0 0 10px color-mix(in oklab, var(--tc) 45%, transparent); }
+
+/* Stage jumper: a "Stages" dropdown whose items reuse the page's data-stage-link jump. */
+.bd-minijump { position: relative; flex-shrink: 0; }
+.bd-minijump__btn {
+    display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border-radius: var(--pp-radius-md);
+    font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); background: oklch(1 0 0 / 0.05);
+    border: 1px solid var(--pp-border); cursor: pointer;
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .bd-minijump__btn:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.09); } }
+.bd-minijump__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.bd-minijump__btn > svg:first-child { width: 13px; height: 13px; }
+.bd-minijump__chev { width: 12px; height: 12px; transition: transform var(--pp-dur) var(--pp-ease); }
+.bd-minijump__btn[aria-expanded="true"] .bd-minijump__chev { transform: rotate(180deg); }
+@media (max-width: 767px) { .bd-minijump__lbl { display: none; } }
+
+.bd-minijump__menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 100; min-width: 230px; max-height: 62vh; overflow-y: auto; padding: 6px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45);
+}
+.bd-minijump__menu[hidden] { display: none; }
+.bd-minijump__item {
+    display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: var(--pp-radius-md);
+    text-decoration: none; color: var(--pp-text-dim); transition: background var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) { .bd-minijump__item:hover { background: oklch(1 0 0 / 0.06); color: var(--pp-text); } }
+.bd-minijump__item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.bd-minijump__num {
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+    font-size: 0.7rem; font-weight: 800; background: var(--pp-bg-3); color: var(--pp-text-mute);
+}
+.bd-minijump__num svg { width: 12px; height: 12px; }
+.bd-minijump__item.is-done .bd-minijump__num { background: color-mix(in oklab, var(--pp-success) 22%, transparent); color: var(--pp-success); }
+.bd-minijump__item.is-next .bd-minijump__num { background: color-mix(in oklab, var(--pp-primary) 22%, transparent); color: var(--pp-primary); }
+.bd-minijump__name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+    .bd-minihead { transition: opacity 0.2s linear, visibility 0s linear 0.2s; transform: none; }
+    .bd-minihead.is-pinned { transition: opacity 0.2s linear; transform: none; }
+    .bd-minitier, .bd-minijump__chev { transition: none; }
+}
+
+/* =====================================================================================================
+   BADGE DETAIL (rebuild, Phase 1) -- platform-group model. The page composes entirely from standard
+   utilities + shared primitives (card / badge / .pp-switch / .pp-med / .pp-horizon / .scard / pp-tally);
+   the only bespoke rule left is the client-side panel-swap visibility hook.
+   ===================================================================================================== */
+.bd2-panel.is-hidden { display: none; }
+/* Size the hero medallion via --sz (the .pp-med contract), like .pp-case__slot -- NOT width/height utilities,
+   which the component ignores (it would render at its 160px default and overflow). */
+.bd2-med[role="button"] { cursor: pointer; }                        /* the hero medallion is tap-to-inspect */
+/* My Stats modal: the per-badge (Legacy HD / Ultra HD) stat panels swap under their own toggle. */
+.bd2ms-switch { margin: 0.35rem 0 0.75rem; }   /* the shared .bd2-gbtn bar, tighter margin in the modal */
+/* Both panels share ONE grid cell: the container sizes to the taller panel, so switching badges never resizes
+   the modal (the shorter panel just leaves empty space below -- no reflow). */
+.bd2ms-panels { display: grid; }
+/* The panel restages the same flex-column rhythm .bd-mystats uses (its rows are nested a level deeper now,
+   so the parent's gap no longer reaches them). */
+.bd2ms-panel { grid-area: 1 / 1; align-self: start; display: flex; flex-direction: column; gap: 18px; }
+/* Hidden panel keeps its grid space (so the cell stays the max height); it's just not painted / interactive. */
+.bd2ms-panel.is-hidden { visibility: hidden; }
+.bd2-med .pp-med { --sz: 116px; }                                   /* detail-page hero size, not a list tile */
+@media (min-width: 768px) { .bd2-med .pp-med { --sz: 152px; } }
+@media (min-width: 1024px) { .bd2-med .pp-med { --sz: 180px; } }
+/* The row-2 segmented progress bar replaces the medallion's own count + meter here (the rising-colour art
+   fill stays). Scoped to badge detail so the shared component is untouched for Collection. */
+.bd2-med .pp-med__count, .bd2-med .pp-med__meter { display: none; }
+
+/* ── Platform-group switcher: the shared segmented-switcher pattern (a bordered shelf of chips) scaled up to
+   substantial per-group segments (medallion + name + platforms + metal identity). Framing the buttons as ONE
+   control makes it obvious they're pressable to swap, and the radii sit at the page's --pp-radius-lg rather
+   than a rounder one. Mirrors .pp-switch: shelf bg/border + transparent segments + tinted-flat active. ─── */
+.bd2-groupswitch {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;            /* equal segments that span the full width */
+    gap: 6px;
+    padding: 6px;
+    margin: 2px 0 16px;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent);
+}
+.bd2-gbtn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 9px 13px;
+    text-align: left;
+    color: var(--pp-text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: calc(var(--pp-radius-lg) - 2px);   /* nests inside the shelf, like .pp-switch chips */
+    cursor: pointer;
+    overflow: hidden;
+    transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+.bd2-gbtn:active { transform: translateY(1px); }                 /* tactile press, matching .pp-switch__chip */
+/* Metal tint per group backing -- same source-of-truth hexes as the medallion (.pp-med[data-tier]). */
+.bd2-gbtn[data-tier="bronze"]   { --gbtn-metal: #cf9160; }
+.bd2-gbtn[data-tier="silver"]   { --gbtn-metal: #b9c6d6; }
+.bd2-gbtn[data-tier="gold"]     { --gbtn-metal: #e7c25c; }
+.bd2-gbtn[data-tier="platinum"] { --gbtn-metal: #8fd2ea; }
+.bd2-gbtn:not(.is-active) .bd2-gbtn__med { opacity: 0.7; }        /* the active group's medallion pops */
+.bd2-gbtn:hover:not(.is-active) {                                 /* clear "this is pressable" affordance */
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--gbtn-metal) 8%, transparent);
+}
+.bd2-gbtn.is-active {                                             /* the selected segment: tinted-flat in metal */
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--gbtn-metal) 16%, transparent);
+    border-color: color-mix(in oklab, var(--gbtn-metal) 55%, var(--pp-border));
+}
+.bd2-gbtn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.bd2-gbtn__med { flex: none; }
+.bd2-gbtn__med .pp-med { --sz: 44px; }
+.bd2-gbtn__med .pp-med__count, .bd2-gbtn__med .pp-med__meter { display: none; }
+.bd2-gbtn__body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.bd2-gbtn__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.95rem; line-height: 1.12; }
+.bd2-gbtn__plats { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd2-gbtn__check {
+    flex: none; width: 18px; height: 18px; margin-left: auto;
+    color: var(--gbtn-metal);
+    opacity: 0; transform: scale(0.6);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.bd2-gbtn.is-active .bd2-gbtn__check { opacity: 1; transform: scale(1); }
+/* Per-group completion bar along the base of the segment -- your % for that platform, in the group metal. */
+.bd2-gbtn__prog { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; overflow: hidden; background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); }
+.bd2-gbtn__prog::after {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%);
+    background: var(--gbtn-metal); box-shadow: 0 0 7px -1px var(--gbtn-metal);
+    transition: width 0.55s var(--pp-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+/* Mobile: keep both side by side (fast switch) but tighter. */
+@media (max-width: 480px) {
+    .bd2-groupswitch { padding: 4px; gap: 4px; }
+    .bd2-gbtn { padding: 7px 9px; gap: 9px; }
+    .bd2-gbtn__med .pp-med { --sz: 38px; }
+    .bd2-gbtn__name { font-size: 0.82rem; }
+    .bd2-gbtn__check { width: 15px; height: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bd2-gbtn, .bd2-gbtn__check, .bd2-gbtn__prog::after { transition: none; }
+    .bd2-gbtn:active { transform: none; }
+}
+
+/* ── Rarity & Community band: series-level, both groups side by side. Clads on .bd-card (the page's matted
+   board) + the same depth pass as .bd-req, with a series-level primary left accent -- one material with the
+   rest of the page, not a flat DaisyUI box. ──────────────────────────────────────────────────────────── */
+/* .bd-card::before already draws the top-edge highlight, so this only adds the ambient depth shadow (matching
+   .bd-req) + the series-level primary accent -- no redundant inset top-light. */
+.bd2-comm { border-left: 3px solid var(--pp-primary); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.30); }
+.bd2-comm__title { font-family: var(--pp-font-display); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
+.bd2-comm__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bd2-comm__lb { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 700; color: var(--pp-primary); transition: color 0.2s ease; }
+.bd2-comm__lb:hover { color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-text)); }
+.bd2-comm__lb svg { width: 13px; height: 13px; }
+/* My Stats: the personal action, a small pill so it reads as the primary "go deeper" affordance. */
+.bd2-comm__action { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; font-size: 0.72rem; font-weight: 700; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-divider); border-radius: 999px; cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; }
+.bd2-comm__action:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-divider)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.bd2-comm__action svg { width: 13px; height: 13px; color: var(--pp-primary); }
+.bd2-comm__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.bd2-comm__group { --comm-metal: var(--pp-primary); padding: 12px 14px; background: var(--pp-bg-2); border: 1px solid var(--pp-divider); border-left: 3px solid var(--comm-metal); border-radius: var(--pp-radius-lg); }
+.bd2-comm__group[data-tier="bronze"]   { --comm-metal: #cf9160; }
+.bd2-comm__group[data-tier="silver"]   { --comm-metal: #b9c6d6; }
+.bd2-comm__group[data-tier="gold"]     { --comm-metal: #e7c25c; }
+.bd2-comm__group[data-tier="platinum"] { --comm-metal: #8fd2ea; }
+.bd2-comm__group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bd2-comm__group-name { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.9rem; color: var(--pp-text); }
+.bd2-comm__you { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--comm-metal); white-space: nowrap; }
+.bd2-comm__you b { font-family: var(--pp-font-display); }
+
+/* Rarity GRADE -- the prestige hero: a gem that glows by grade (mythic shimmers) + the class headline + the
+   pursuer-completion caption. */
+.bd2-comm__grade { margin-top: 10px; display: flex; align-items: center; gap: 11px; }
+/* Colour + glow come from the shared rarity scale (components/rarity.css) via data-rarity; the gem
+   opts into .pp-rarity-gem--lit for the drop-shadow, including mythic's pulse (a filter keyframe --
+   pp-mythic-pulse animates text-shadow, a no-op on an SVG). The gem is the sole pulsing element in the
+   cell, so a mythic cell reads as one calm beat and not two. Sizing stays local. */
+.bd2-comm__gem { flex: none; width: 34px; height: 34px; }
+.bd2-comm__gem svg { width: 100%; height: 100%; }
+.bd2-comm__gem:not([data-rarity]) { color: var(--pp-text-mute); opacity: 0.45; }
+.bd2-comm__grade-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bd2-comm__grade-sub { font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); }
+/* The headline keeps a STATIC glow -- the gem carries the pulse. */
+.bd2-comm__rar { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; color: var(--pp-text-mute); }
+.bd2-comm__rar[data-rarity] { color: var(--rar-c); text-shadow: 0 0 6px var(--rar-glow); }
+.bd2-comm__rar[data-rarity="common"] { font-weight: 700; }
+
+.bd2-comm__earnrow { margin-top: 11px; display: flex; align-items: baseline; gap: 8px; font-size: 0.74rem; color: var(--pp-text-mute); }
+.bd2-comm__earners b { color: var(--pp-text-dim); }
+.bd2-comm__bar { margin-top: 5px; }   /* the shared Horizon primitive provides the track/fill; this is spacing only */
+.bd2-comm__bar .pp-horizon__fill { transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }   /* fill-from-0 on reveal */
+.bd2-comm__standing { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-divider); display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--pp-text-dim); }
+.bd2-comm__standing svg { width: 15px; height: 15px; color: var(--pp-primary); flex-shrink: 0; }
+.bd2-comm__standing b { font-family: var(--pp-font-display); color: var(--pp-text); }
+
+/* Scroll-in reveal: JS arms .bd2-comm--anim (initial hidden state) then adds .is-revealed to stagger the group
+   cells up (staggered by --reveal-i) while the numbers count up + the bars fill. No-JS keeps the cells visible. */
+.bd2-comm--anim .bd2-comm__group { opacity: 0; transform: translateY(10px); transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.34, 1.2, 0.64, 1); transition-delay: calc(var(--reveal-i, 0) * 90ms); }   /* damped spring settle (slight overshoot), not a flat decel */
+.bd2-comm--anim.is-revealed .bd2-comm__group { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .bd2-comm__gem[data-rarity="mythic"] { animation: none; }
+    .bd2-comm__lb, .bd2-comm__action { transition: none; }
+    .bd2-comm__bar .pp-horizon__fill { transition: none; }
+    .bd2-comm--anim .bd2-comm__group { opacity: 1; transform: none; transition: none; }
+}
+
+/* ---- Content tabs: Overview | Ranks ----------------------------------------------------------------
+   The board moved off the main scroll and behind a tab, matching game detail and job detail -- badge
+   detail was the only one rendering its board inline.
+
+   TWO controls, deliberately not peers and no longer stacked. This strip comes first: it decides what you
+   are looking at. `.bd2-groupswitch` sits INSIDE the Overview panel below it, because which EDITION only
+   means something once you are reading the journey -- and because editions do not apply to the board (it
+   is per SERIES), so the tab system hides the switcher on Ranks for free. The weight difference (big
+   medallion segments vs small shared `.pp-switch` chips) still says which is chrome and which is
+   navigation; the ordering is what stops the board's own "Edition" filter sharing a screen with a control
+   that spells the same word and means something else. */
+/* The content tabs, right-aligned from md: up -- the site-wide standard every other switcher follows
+   (career, game detail, the genre/theme list, the leaderboard strips). This was the last one on the left.
+
+   Full width on a phone rather than shrink-to-content: a small strip against one edge at 375px reads as
+   marooned, and equal-width chips are what stop a segmented control wrapping mid-strip. Same
+   base-full-width / md-right shape `.lb-bar` uses. */
+.bd-viewswitch__row { display: flex; margin: 0 0 14px; }
+.bd-viewswitch { margin: 0; width: 100%; }
+.bd-viewswitch .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+@media (min-width: 768px) {
+    .bd-viewswitch__row { justify-content: flex-end; }
+    .bd-viewswitch { width: auto; }
+    .bd-viewswitch .pp-switch__chip { flex: 0 0 auto; }
+}
+.bd-view[hidden] { display: none; }
+/* The edition switcher is the Overview panel's first child, and its own `margin-top: 2px` currently
+   COLLAPSES through `.bd-view` (a bare block: no padding, border, overflow or containment) to merge with
+   the strip's 14px bottom margin. Right answer, accidental mechanism -- adding padding or `overflow` to
+   `.bd-view` later would un-collapse it and silently widen the gap. Zeroed explicitly so the spacing under
+   the tab strip has exactly one owner. */
+#bd-view-overview > .bd2-groupswitch { margin-top: 0; }

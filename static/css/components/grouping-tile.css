@@ -1,0 +1,209 @@
+/* ============================================================
+ * GROUPING CATEGORY TILE (.pp-gtile) -- a taxonomy / collection cell (genre + theme today; reusable for
+ * franchise / company later). Unlike a game card, a grouping has no single cover, so the representative
+ * member-game cover fills the tile as a backdrop under a gradient scrim, with the grouping NAME set large
+ * over the art + a game count. It reads as a "category", not a game. Neutral surface, single cyan hover-warm
+ * (colour restraint). Depth-pass card per playbook section 4.
+ * ============================================================ */
+.pp-gtile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (min-width: 640px)  { .pp-gtile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-gtile-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .pp-gtile-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+.pp-gtile {
+    position: relative; display: block; aspect-ratio: 4 / 3;
+    border-radius: 13px; overflow: hidden;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    text-decoration: none; color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+@media (hover: hover) {
+    .pp-gtile:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-primary) 42%, #000);
+    }
+    .pp-gtile:hover .pp-gtile__art { transform: scale(1.06); }
+    .pp-gtile:hover .pp-gtile__name { color: color-mix(in oklab, var(--pp-primary) 32%, #fff); }
+}
+.pp-gtile:active { transform: scale(0.985); }
+.pp-gtile:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-gtile { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    .pp-gtile:active { transform: none; }
+    .pp-gtile__art { transition: none; }
+}
+
+/* Cover backdrop (representative member-game art). object-top preserves game logos as the portrait cover
+   crops into the wider tile; the scrim sits below where the name lives. */
+.pp-gtile__art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform 0.35s ease; }
+.pp-gtile__art--icon { object-fit: contain; padding: 22px; opacity: 0.9; }   /* tier-4 generic PS icon */
+.pp-gtile__scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(4, 6, 10, 0.92) 0%, rgba(4, 6, 10, 0.55) 38%, rgba(4, 6, 10, 0.12) 68%, rgba(4, 6, 10, 0) 100%);
+}
+/* Type corner badge (Franchise / Series), top-left over the art. Franchise/Company lists only -- genres and
+   themes never render it (the tile checks `source_type`). */
+.pp-gtile__tag {
+    position: absolute; top: 8px; left: 8px; z-index: 3;
+    font-size: 8px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 999px; line-height: 1.4;
+    color: #fff; background: color-mix(in oklab, var(--pp-primary) 82%, var(--pp-bg-0));
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+
+/* Company only: the studio logo chip, top-right over the art (companies set logo_url; other groupings don't).
+   Transparent-PNG logos get a light backing so they read over dark cover art. */
+.pp-gtile__logo {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    width: 30px; height: 30px; border-radius: 7px; padding: 3px;
+    display: flex; align-items: center; justify-content: center;
+    /* Opaque backing (NOT backdrop-filter): the chip rides inside the reveal-animated .pp-gtile, and a live
+       blur recomputing under an ancestor transform janks low-end mobile GPUs (motion-patterns gotcha). */
+    background: color-mix(in oklab, var(--pp-bg-0) 92%, #000);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+.pp-gtile__logo img { width: 100%; height: 100%; object-fit: contain; }
+
+/* Company only: the country line under the name (companies set country_display). Truncates on narrow tiles. */
+.pp-gtile__country {
+    font-size: 10.5px; font-weight: 600; color: rgba(255, 255, 255, 0.72);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* No-cover placeholder: a quiet primary-tinted field + the tag glyph, so the tile still reads deliberately. */
+.pp-gtile__art--empty { display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-2)), var(--pp-bg-0)); }
+.pp-gtile__art--empty svg { width: 34%; height: 34%; color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text-mute)); opacity: 0.7; }
+
+/* Name + meta, set over the art at the bottom. */
+.pp-gtile__body { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 10px 11px; display: flex; flex-direction: column; gap: 3px; }
+.pp-gtile__name {
+    font-size: 14px; font-weight: 800; line-height: 1.15; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    transition: color 0.18s ease;
+}
+.pp-gtile__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pp-gtile__count { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.82); font-variant-numeric: tabular-nums; }
+.pp-gtile__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; color: var(--pp-primary); font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 5px; background: color-mix(in oklab, var(--pp-primary) 20%, rgba(0, 0, 0, 0.45)); }
+.pp-gtile__stat svg { width: 11px; height: 11px; }
+
+/* ---- Game lists: the cover mosaic + author line ------------------------------------------------
+ * A community list is a COLLECTION, so its tile shows several of its covers rather than one backdrop --
+ * otherwise a list tile is indistinguishable from a game tile in the same grid.
+ *
+ * The composition adapts to how many covers there actually are, because a fixed 2x2 with holes in it
+ * looks broken rather than sparse: one fills, two split down the middle, three give the first a full
+ * column beside a stacked pair, four quarter. Ships as a variant of .pp-gtile rather than its own
+ * component -- hover, focus, scrim, body and the reveal states are all already there.
+ */
+.pp-gtile__mosaic {
+    position: absolute; inset: 0;
+    display: grid; gap: 2px;
+    background: var(--pp-bg-0);          /* the gap colour: a hairline between covers, not a light seam */
+    transition: transform 0.35s ease;
+}
+.pp-gtile__mosaic.is-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.pp-gtile__mosaic.is-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.pp-gtile__mosaic.is-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.pp-gtile__mosaic.is-3 > :first-child { grid-row: span 2; }
+.pp-gtile__mosaic.is-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+/* object-top for the same reason every cover on the site uses it: PSN fallback art is wider than the
+   portrait IGDB cover, and anchoring to the top keeps the game's logo in frame when it crops. */
+.pp-gtile__tile-art { width: 100%; height: 100%; object-fit: cover; object-position: top; min-width: 0; min-height: 0; }
+.pp-gtile__tile-art--icon { object-fit: contain; padding: 8px; opacity: 0.85; background: var(--pp-bg-2); }
+
+@media (hover: hover) {
+    .pp-gtile:hover .pp-gtile__mosaic { transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-gtile__mosaic { transition: none; }
+}
+
+/* The author, between the name and the counts. Quieter than either: whose list it is matters, but not
+   more than what the list IS. */
+.pp-gtile__author {
+    font-size: 10.5px; font-weight: 600; color: rgba(255, 255, 255, 0.66);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The game-count range in the lists toolbar. One control rather than two loose number boxes with a
+   stray label between them -- it reads as a single filter, which is what it is. */
+.pp-gl-range {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 10px; height: 36px;
+    border-radius: 9px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim); font-size: 12px; font-weight: 600;
+}
+.pp-gl-range__label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; color: var(--pp-text-mute); }
+.pp-gl-range__dash { color: var(--pp-text-mute); }
+.pp-gl-range input {
+    width: 48px; background: none; border: 0; color: var(--pp-text);
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center;
+    -moz-appearance: textfield;
+}
+/* The spinners would put two more tap targets inside a 48px box; the field is typed into, not nudged. */
+.pp-gl-range input::-webkit-outer-spin-button,
+.pp-gl-range input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pp-gl-range input:focus { outline: none; }
+.pp-gl-range:focus-within { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+
+/* ---- List detail: the bits the browse tile does not cover -------------------------------------- */
+
+/* Item stack. The cards carry their own shape; this only sets the rhythm between them. */
+.pp-lrow-stack { display: flex; flex-direction: column; gap: 8px; }
+
+.pp-lprivate {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent);
+}
+.pp-lprivate svg { width: 11px; height: 11px; }
+
+/* Whose list it is. A real link with a real target, so it gets a hover state rather than being decoration
+   that happens to be clickable. */
+.pp-lauthor {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--pp-text-dim); text-decoration: none;
+    transition: color 0.18s ease;
+}
+.pp-lauthor:hover { color: var(--pp-text); }
+.pp-lauthor__av {
+    width: 26px; height: 26px; border-radius: 999px; overflow: hidden; flex-shrink: 0;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+}
+.pp-lauthor__av img { width: 100%; height: 100%; object-fit: cover; }
+.pp-lauthor__name { font-size: 13px; font-weight: 700; }
+.pp-lauthor:hover .pp-lauthor__name { color: var(--pp-primary); }
+
+/* The toolbar's left-hand label, so the sort control is not floating alone on a bar. */
+.pp-ltoolbar__title {
+    display: inline-flex; align-items: center; gap: 7px; margin-right: auto;
+    font-size: 13px; font-weight: 800; color: var(--pp-text);
+}
+.pp-ltoolbar__title svg { width: 15px; height: 15px; color: var(--pp-primary); }
+
+/* Empty state (spans the grid); reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
+.pp-gtile-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
+.pp-gtile-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }
+.pp-gtile-empty__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+.pp-gtile-empty__hint { font-size: 12.5px; margin-top: 2px; }
+
+/* Scroll-reveal: staggerReveal drives the per-tile WAAPI motion; these rules only hold hidden/shown states.
+   .pp-reveal is added by JS only when it will observe (motion-gated), so tiles never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gtile { opacity: 0; }
+    .pp-reveal .pp-gtile.is-revealed { opacity: 1; }
+    .pp-gtile-empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}

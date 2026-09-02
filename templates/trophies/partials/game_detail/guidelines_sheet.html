@@ -1,0 +1,29 @@
+{% comment %} Community Guidelines, rebuilt to the gd-modal standard. Opened OVER whatever compose surface
+is showing, from the notice's [data-gd-guidelines-open] link, so reading the rules never loses the
+in-progress quick take. The wiring belongs to `RatingFields.attach` (quick-rate.js) -- the link ships in
+the shared field partial, so every page that includes those fields must also include THIS sheet. Read-only reference; agreement is recorded implicitly on submit (see
+quick_rate_modal.html + the agree-on-submit flow in game-detail.js). Content mirrors the site-wide
+guidelines (partials/guidelines_info_modal.html), condensed. {% endcomment %}
+<dialog id="gd-guidelines-modal" class="gd-modal gd-modal--guidelines pp-dismissable" aria-labelledby="gd-guidelines-title">
+    <div class="gd-modal__head">
+        <h3 id="gd-guidelines-title">Community Guidelines</h3>
+        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
+    </div>
+    <div class="gd-modal__body gd-guide">
+        <p class="gd-guide__lead">A few ground rules keep PlatPursuit welcoming. By posting public content you agree to follow them.</p>
+        <ul class="gd-guide__list">
+            <li class="gd-guide__rule"><b>Be respectful.</b> No harassment, hate speech, personal attacks, or discriminatory language.</li>
+            <li class="gd-guide__rule"><b>Keep it family-friendly.</b> No NSFW content, explicit language, or mature themes.</li>
+            <li class="gd-guide__rule"><b>Mark spoilers.</b> Warn before plot points, endings, or major reveals. Respect others' first playthrough.</li>
+            <li class="gd-guide__rule"><b>Stay on topic.</b> Keep it about the game, its trophies, and PlayStation gaming.</li>
+            <li class="gd-guide__rule"><b>No spam or self-promotion.</b> No ads, repetitive posts, or funneling people off-site.</li>
+            <li class="gd-guide__rule"><b>Be helpful and constructive.</b> Share tips and honest impressions; keep criticism respectful.</li>
+            <li class="gd-guide__rule"><b>Follow platform rules.</b> Obey PlayStation's Terms of Service and the law; no exploits or cheat methods.</li>
+            <li class="gd-guide__rule"><b>Report, don't retaliate.</b> Flag rule-breaking content instead of engaging with it.</li>
+            <li class="gd-guide__rule"><b>Protect privacy.</b> Don't share personal information about yourself or others.</li>
+        </ul>
+        <div class="gd-qr__actions">
+            <button type="button" class="gd-btn gd-btn--primary" data-gd-modal-close>Got it</button>
+        </div>
+    </div>
+</dialog>

@@ -1,134 +1,122 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The membership welcome, sent by subscription_service._send_subscription_welcome_email.
 
-{% block extra_styles %}
-    <style>
-        /* Celebration box */
-        .welcome-box {
-            background-color: #667eea;
-            background: linear-gradient(135deg, #f6d365 0%, #fda085 50%, #667eea 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 25px 0;
-            color: #ffffff;
-            text-align: center;
-        }
+The perk list is rendered from PREMIUM_PERKS and NEVER hand-written: the old list here sold four
+perks that no longer existed (themes, premium checklists, the Challenge Hub, gated recaps) on the
+first email a paying member reads. The storefront guard test scans this template for exactly that
+regression, so keep the loop and keep it fed by the constant.
 
-        .welcome-box .welcome-icon {
-            font-size: 42px;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .welcome-box h2 {
-            margin: 0 0 10px 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
-
-        .welcome-box p {
-            margin: 0;
-            font-size: 15px;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
-
-        /* Features list */
-        .features-unlocked {
-            background-color: #f0f4ff;
-            border-radius: 8px;
-            padding: 20px 25px;
-            margin: 25px 0;
-            border-left: 4px solid #667eea;
-        }
-
-        .features-unlocked h3 {
-            margin: 0 0 12px 0;
-            font-size: 16px;
-            color: #333333;
-        }
-
-        .features-unlocked ul {
-            margin: 0;
-            padding-left: 20px;
-            color: #555555;
-        }
-
-        .features-unlocked li {
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-
-        .features-unlocked li strong {
-            color: #333333;
-        }
-
-        /* Flavor text */
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .welcome-box {
-                padding: 20px 15px;
-            }
-        }
-    </style>
-{% endblock %}
+The loop's markup is deliberately identical to subscription_cancelled.html and payment_failed.html
+so the three framings (gained / lost / at risk) cannot drift into three different shapes. Each
+perk's own colour drives its accent bar, which is the one place that bar carries real data.
+{% endcomment %}
 
 {% block title %}Welcome to PlatPursuit Premium!{% endblock %}
 
+{% block preheader %}Your {{ tier_name }} membership is live. Here is everything it unlocks.{% endblock %}
+
 {% block header_content %}
-    <h1>Welcome Aboard!</h1>
-    <p>Your {{ tier_name }} subscription is now active</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Welcome aboard</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your {{ tier_name }} membership is now active.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, thank you for backing PlatPursuit. Your support keeps an independent, ad-free trophy tracker running and paying its own bills.</p>
 
-    <div class="welcome-box">
-        <span class="welcome-icon">&#127942;</span>
-        <h2>You just leveled up!</h2>
-        <p>
-            Thank you for subscribing to PlatPursuit. Your support keeps our community
-            thriving and helps us build the best trophy hunting platform out there.
-        </p>
-    </div>
+    {% if mark %}
+    {% comment %}
+    The "Site-wide marker" perk, shown instead of described.
 
-    <p class="intro">
-        Your {{ tier_name }} subscription is live. Here's what you've unlocked:
-    </p>
+    ON A DARK GROUND ON PURPOSE, and this is not a style preference. The six ladder colours are a
+    measured ramp tuned for the site's dark surfaces: against #FFFFFF they run 2.15:1 (Backer) to
+    3.91:1 (Patron); on this panel, 4.61:1 to 8.38:1. The name renders at 20px bold, which is WCAG
+    large text, so the bar it must clear on white is 3:1 rather than 4.5:1 -- and Backer (2.15),
+    Contributor (2.31) and Cornerstone (2.82) fail even that. Half the ladder illegible is enough:
+    on white, the one personal thing in this email would be the least readable thing in it.
 
-    <div class="features-unlocked">
-        <h3>Your premium perks:</h3>
-        <ul>
-            <li><strong>Priority sync scheduling</strong> and faster profile updates</li>
-            <li><strong>Premium badges, themes,</strong> and customization options</li>
-            <li><strong>Premium checklists</strong> and advanced features</li>
-            <li><strong>Discord premium role</strong> (if verified)</li>
-            <li><strong>Challenge Hub</strong> with access to exclusive premium challenges</li>
-            <li><strong>Shareable trophy cards</strong> and monthly recaps</li>
-        </ul>
-    </div>
+    #0F1720 IS A HARD NUMBER, not "some dark". Patron clears AA on it by 0.11 (4.61 vs 4.50), so
+    lightening the ground even to #1B2430 -- a hex already in this file's own stylesheet -- drops
+    Patron to 4.00 and fails. Re-measure the whole ramp before touching this hex.
 
-    <p class="intro">
-        Everything is ready to go. Head to your profile to start exploring your new features!
-    </p>
+    STARS ARE UNICODE, not the site's SVG path (components/_mark_glyphs_inline.html). Gmail strips
+    <svg> outright and Outlook's Word engine cannot draw it either, so the real glyph would render
+    as nothing for most of the people this email is FOR. &#9733;/&#9734; render everywhere, survive
+    image blocking, cost no requests, and come through the plaintext part as stars rather than as
+    an empty gap. The outline star carries Backer's outline:True the way the SVG's stroke does.
+    (U+2605/U+2606 are deliberately NOT the emoji star U+2B50: an emoji-set character renders as a
+    colour glyph that ignores the CSS colour, and the level's hue IS the mark.)
 
-    <div class="cta-container">
-        <a href="{{ profile_url }}" class="cta-button">Explore Premium Features</a>
-    </div>
+    The run is aria-hidden because the tier line below names the mark in text. On the site the glyph
+    run carries role="img" + aria-label instead (components/name_mark.html); here the label would be
+    redundant with the very next line, and an unnamed glyph run reads as noise.
 
-    <p class="flavor-text">
-        Time to hunt in style. Welcome aboard, trophy hunter!
-    </p>
+    `mark.colour` lands inside a style attribute. Django escapes HTML, not CSS, so this is safe by
+    PROVENANCE: the only writer is the SUPPORT_TIERS literal via worn_level_dict. Never make it
+    user-settable without escaping it.
+    {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 22px;">
+        <tr>
+            <td align="center" bgcolor="#0F1720" style="padding: 20px 18px; background-color: #0F1720; border-radius: 8px;">
+                <p style="margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9FB3C8;">Your mark</p>
+                <p style="margin: 0; font-size: 20px; line-height: 1.3; font-weight: 700; color: {{ mark.colour }};">{{ username }}&nbsp;<span aria-hidden="true">{% for _ in mark.star_range %}{% if mark.outline %}&#9734;{% else %}&#9733;{% endif %}{% endfor %}</span></p>
+                {% comment %} The naming rule is the welcome page's (templates/support/welcome.html):
+                a grandfathered tier keeps the name it BOUGHT and wears the price-nearest level's
+                mark. Deriving this from the worn slug would call a `supporter` subscriber a
+                "Sponsor", which is a tier they never bought. {% endcomment %}
+                <p style="margin: 9px 0 0; font-size: 15px; line-height: 1.4; font-weight: 700; color: #F0F6FD;">{% if mark.is_legacy %}{{ mark.display_name }}{% else %}PlatPursuit {{ mark.name }}{% endif %}</p>
+                <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: #9FB3C8;">{% if mark.is_legacy %}A founding tier, wearing the {{ mark.name }} mark. It rides{% else %}It rides{% endif %} along everywhere your name appears: leaderboards, comments, your profile.</p>
+            </td>
+        </tr>
+    </table>
+    {% endif %}
+
+    <p class="pp-p">Here is what your {{ tier_name }} membership comes with:</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {% for perk in premium_perks %}
+        <tr>
+            <td style="padding: 0 0 10px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F8FC; border-radius: 8px;">
+                    <tr>
+                        <td width="4" bgcolor="{{ perk.colour }}" style="background-color: {{ perk.colour }}; border-radius: 8px 0 0 8px;">&nbsp;</td>
+                        <td style="padding: 13px 16px;">
+                            <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">{{ perk.name }}</p>
+                            <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">{{ perk.member }}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <p class="pp-p" style="margin-top: 18px;">Everything is live already. Head to your profile and take it for a spin.</p>
+
+    {% include 'emails/_cta_button.html' with url=profile_url label="View your profile" %}
+
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ profile_url }}</p>
+
+    {% if discord_url %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0 0;">
+        <tr>
+            <td bgcolor="#0F1720" style="padding: 14px 16px; background-color: #0F1720; border-radius: 8px;">
+                <p style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #F0F6FD;">Join the Discord</p>
+                <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #9FB3C8;">
+                    Your supporter role and #supporter-chat are ready when you are.
+                    <a href="{{ discord_url }}" style="color: #28EBFE; text-decoration: underline;">{{ discord_url }}</a>
+                </p>
+            </td>
+        </tr>
+    </table>
+    {% endif %}
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #627488;">Time to hunt in style. Welcome aboard.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you subscribed to PlatPursuit Premium.<br>
-    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+    You're receiving this because you subscribed to PlatPursuit Premium.
+    Manage your account settings from the link above.
 {% endblock %}

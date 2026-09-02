@@ -1,37 +1,32 @@
 {% comment %}
-Recap Slide: Rarest Trophy
-Variables: name, game, earn_rate, icon_url, trophy_type
+Recap Slide: Rarest Trophy -- a peak beat, so it takes the hero shell.
+Variables: name, game, earn_rate, icon_url, trophy_type, rarity_label, flavor_text
+
+`rarity_label` is PSN's OWN band (Ultra Rare / Very Rare / Rare / Common), NOT the site's
+`--pp-rarity-*` scale. `earn_rate` is the share of players who own the game and earned this; the site's
+rarity grades against the whole PlatPursuit community. Different populations -- grading one on the
+other's thresholds would read authoritative and be wrong. The plat card uses the same map.
+
+Warm accent because this is the "look what you pulled off" beat, and the deck's default cyan is doing
+the counting work on the slides either side of it.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <!-- Display Box -->
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-8 py-10 md:px-12 md:py-12 text-center max-w-md">
-        <p class="text-lg text-base-content/70 mb-6">Your rarest trophy</p>
+<div class="rcp rcp--hero rcp--accent-warm">
+    <p class="rcp__kicker">Your rarest trophy</p>
 
-        <!-- Trophy Icon -->
-        {% if icon_url %}
-        <div class="mb-6">
-            <img src="{{ icon_url }}" alt="{{ name }}" class="w-24 h-24 mx-auto rounded-lg shadow-lg border-2 border-accent object-cover" loading="lazy" />
-        </div>
-        {% endif %}
+    {% if icon_url %}
+    <img src="{{ icon_url }}" alt="" class="rcp-trophy__icon animate-spotlight-reveal"
+         loading="lazy" draggable="false" />
+    {% endif %}
 
-        <!-- Trophy Details Card -->
-        <div class="card bg-base-300 shadow-lg border-2 border-accent">
-            <div class="card-body py-6">
-                <h3 class="text-2xl md:text-3xl font-bold text-base-content mb-2">{{ name }}</h3>
-                <p class="text-base-content/70 mb-4">{{ game }}</p>
+    <h3 class="rcp-trophy__name">{{ name }}</h3>
+    <p class="rcp-trophy__game">{{ game }}</p>
 
-                <!-- Earn Rate Badge -->
-                <div class="flex justify-center">
-                    <div class="badge badge-accent badge-lg gap-2 py-4 px-4 whitespace-nowrap">
-                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-4 h-4' %}
-                        {{ earn_rate }}% earned this
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if flavor_text %}
-        <p class="text-sm text-base-content/50 italic mt-6">{{ flavor_text }}</p>
-        {% endif %}
+    <div class="rcp-trophy__rate">
+        <span class="rcp__figure pp-tally pp-tally--xl" data-countup="{{ earn_rate }}" data-countup-decimals="1">{{ earn_rate }}</span><span class="rcp__unit">%</span>
+        <span class="rcp__sub rcp-trophy__of">of players earned this</span>
     </div>
+
+    {% if rarity_label %}<span class="rcp__stamp">{{ rarity_label }}</span>{% endif %}
+
+    {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}
 </div>

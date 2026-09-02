@@ -1,0 +1,53 @@
+{% load static humanize custom_filters %}
+{% comment %}
+Anonymous "Platinum Outlook" (the logged-out counterpart to a member's progress readout).
+A single verdict card: PSN-GLOBAL platinum rarity as the difficulty headline (a platform-wide signal
+that does NOT depend on our userbase size) + a difficulty meter, with the est. 100% time tucked into
+the card's right. Data from _build_outlook_context (`outlook`). Degrades to absent when data is missing.
+{% endcomment %}
+{% with igdb=game.concept.igdb_match %}
+<div class="gd-outlook">
+    {% if outlook.has_platinum %}
+        <div class="gd-outlook__verdict">
+            <span class="gd-outlook__ico" aria-hidden="true"><img src="{% static 'images/plat.png' %}" alt="" loading="lazy" /></span>
+            <div class="gd-outlook__vmain">
+                <div class="gd-outlook__tier">{% if outlook.plat_rarity_label %}{{ outlook.plat_rarity_label }} {% endif %}Platinum</div>
+                {# PSN-global rate when synced; else fall back to the rarity tier, else a plain line -- never an empty card. #}
+                {% if outlook.plat_rate %}
+                    <div class="gd-outlook__rate">Earned by <b class="pp-tally">{{ outlook.plat_rate|floatformat:1 }}%</b> of players worldwide</div>
+                {% elif outlook.plat_rarity_label %}
+                    <div class="gd-outlook__rate">A <b>{{ outlook.plat_rarity_label|lower }}</b> platinum on PlayStation</div>
+                {% else %}
+                    <div class="gd-outlook__rate">This trophy set has a platinum to chase.</div>
+                {% endif %}
+                {% if outlook.difficulty_level %}
+                    <div class="gd-outlook__meter" role="img" aria-label="Difficulty: {{ outlook.plat_rarity_label }}">
+                        {% for _ in "1234" %}<span class="gd-outlook__seg{% if forloop.counter <= outlook.difficulty_level %} is-on{% endif %}"></span>{% endfor %}
+                        <span class="gd-outlook__meter-lbl">{{ outlook.plat_rarity_label }}</span>
+                    </div>
+                {% endif %}
+            </div>
+            {% if igdb.is_trusted and igdb.completion_time_display %}
+                <span class="gd-outlook__time" title="Estimated time to 100%">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{{ igdb.completion_time_display }}
+                </span>
+            {% endif %}
+        </div>
+    {% elif not outlook.has_platinum %}
+        <div class="gd-outlook__verdict gd-outlook__verdict--noplat">
+            <span class="gd-outlook__ico gd-outlook__ico--noplat" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            </span>
+            <div class="gd-outlook__vmain">
+                <div class="gd-outlook__tier">No Platinum</div>
+                <div class="gd-outlook__rate">This trophy set has no platinum trophy.</div>
+            </div>
+            {% if igdb.is_trusted and igdb.completion_time_display %}
+                <span class="gd-outlook__time" title="Estimated time to 100%">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{{ igdb.completion_time_display }}
+                </span>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endwith %}

@@ -1,0 +1,251 @@
+{% comment %}
+Contract card (vertical tile, laid out in a grid). Top: the newest member game's art + status
+badge. Then title, a divider, a two-column body (LEFT the full 5x5 job map, RIGHT the reward stack:
+split ring, total XP, state line), then the full-width reward-tier bars. The member games open in
+the shared contract modal (tier 2). Every card is the same height and fields.
+Expects `p` (a contract dict from contracts_service), `disciplines` (the 25-job roster, one entry
+per discipline with `.jobs`), and `profile` (viewer, for game-card links).
+
+ONE OPTIONAL VARIANT: pass `job` (a Job) and the card renders for a page that is ALREADY about that job --
+job detail. The 5x5 map of all 25 jobs collapses to this contract's own jobs as icon+name pills with that
+one emphasised, and its arc in the split ring is emphasised to match. Everything else is identical.
+
+A variant rather than a second template, deliberately. Only that one block differs, and a copy of the
+other ~130 lines would start drifting immediately -- the same mistake this codebase has now corrected
+three times over in one week (three hand-rolled FLIPs, a re-rolled filter chip, a re-rolled board row).
+The map branch stays the default and is what Career renders, untouched.
+{% endcomment %}
+{% load humanize job_icons %}
+<div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
+    <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
+
+    {% comment %} Cover banner: the newest member game's landscape art. `landscape_urls` = PSN bg_url
+    -> IGDB screenshots -> IGDB artworks (deduped, capped at 5); its first entry is the resting cover,
+    the rest ride in `data-gallery` for the hover carousel (lazy-loaded on first hover, JS below).
+    Falls back to the top-cropped portrait cover, then a contained placeholder, only when no landscape
+    image exists at all. {% endcomment %}
+    <div class="rp-tile__art">
+        {% if p.cover_game %}
+            {% with gallery=p.cover_game.concept.landscape_urls %}
+            {% if gallery %}<img src="{{ gallery.0 }}" alt="" loading="lazy" class="rp-tile__cover object-cover"{% if gallery|length > 1 %} data-gallery="{{ gallery|slice:'1:'|join:'|' }}"{% endif %}>
+            {% elif p.cover_game.has_cover_art %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="rp-tile__cover object-cover object-top">
+            {% else %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="rp-tile__cover object-contain p-3">{% endif %}
+            {% endwith %}
+        {% endif %}
+        <span class="rp-tile__art-fade" aria-hidden="true"></span>
+        {% comment %} Recency marker: sits OPPOSITE the status badge so the two never collide -- a
+        contract can be both new and ready to claim. Same window as the Latest chip (one cutoff in
+        contracts_service), so the marker and the filter can never disagree. {% endcomment %}
+        {% if p.is_new %}<span class="rp-tile__new" title="Added in the last {{ new_window_days }} days">New</span>{% endif %}
+        {% if p.is_history %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Banked</span>
+        {% elif p.status == 'claimable' %}<span class="rp-badge badge badge-sm badge-primary font-bold rp-tile__badge">Ready to Claim</span>
+        {% elif p.status == 'accepted' %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Claimed</span>
+        {% elif p.status == 'pursuing' %}<span class="rp-badge badge badge-sm badge-ghost text-primary rp-tile__badge">In Progress</span>
+        {% else %}<span class="rp-badge badge badge-sm badge-ghost rp-tile__badge">Not Started</span>{% endif %}
+    </div>
+
+    {# Content #}
+    <div class="flex-1 flex flex-col gap-2 p-3">
+        {% comment %} Title: clamp to 2 lines AND reserve 2 lines' height (min-h-[2.5em] = leading-tight x2)
+        so a short title occupies the same vertical space as a long one, keeping cards equal height. {% endcomment %}
+        <span class="font-bold text-sm md:text-base leading-tight line-clamp-2 min-h-[2.5em] pr-1" title="{{ p.name }}">{{ p.name }}</span>
+
+        {% comment %} Platform strip: all 6 pills shown every card, the ones this contract's games
+        span are lit (family-tinted) and the rest dimmed -- same lit/dim language as the job map, and
+        the reason the game name no longer carries a "(PS3)" suffix. {% endcomment %}
+        <div class="rp-plats" role="group" aria-label="Platforms this contract spans">
+            {% for cell in p.platform_cells %}<span class="rp-platcell{% if cell.lit %} is-lit{% endif %}">{{ cell.label }}</span>{% endfor %}
+        </div>
+
+        <span class="rp-div" aria-hidden="true"></span>
+
+        {% comment %}
+        Body (two columns, identical structure on every card so heights match no matter the status
+        or job count). LEFT = the whole 5x5 job map: all 25 jobs, one row per discipline in
+        display_order. The jobs THIS contract levels are lit in their family color; the rest are
+        dimmed context (brighten on hover to identify them). Icons come from the page's <use> sprite
+        (job_icon_use), defined once, not re-inlined per cell. RIGHT = the reward stack: split ring,
+        total XP, and a state-driven line (Claim / % / Not started). Per-tier progress lives in the
+        full-width tier bars below the body. The full job pills (icon + name + XP each) live in the
+        tier-2 modal (_contract_modal.html).
+        {% endcomment %}
+        <div class="rp-body">
+            {% if job %}
+            {% comment %} JOB-SCOPED: only the jobs this contract actually levels, named rather than
+            iconified-and-guessed-at. The 25-cell map answers "what does this contract touch?", which is a
+            question a reader browsing every contract has and a reader standing on one job does not -- they
+            already know the answer for the cell that matters and cannot use the other twenty-four.
+
+            The one you are standing on is marked, because the figure that decides whether a contract is
+            worth your time is not its total but its SHARE: a six-way split pays this job a sixth. {% endcomment %}
+            {% comment %} A grid of icon-over-name tiles, whose COLUMN COUNT follows the job count --
+            `data-n` carries it and the CSS maps each case.
+
+            A fixed 3 was the first attempt and it was wrong for half the range: a contract levels 1 to 6
+            jobs (that range is why `CONTRACT_XP_TOTAL` is 6,000 -- a number chosen to split into clean
+            integer shares across exactly it), and three across leaves 4 as "3 + a lone tile" and 2 as a
+            pair with a hole beside it. Only 3 and 6 were ever clean. Adapting gives a full last row for
+            1, 2, 3, 4 and 6; 5 is the one that cannot be rectangular and takes 3 + 2.
+
+            It was a vertical list of pills before that. The grid reads as one of this site's own
+            components rather than as a generic list, and it gives each job its icon at a size worth
+            looking at -- the same glyph the reader meets on the Career radar and atop that job's page.
+
+            `data-slug` is the tie to the ring: `ringHoverLink` matches a hovered tile to the arc carrying
+            the same slug, and back the other way. `_ring_segments` tags the arcs for exactly this. {% endcomment %}
+            <div class="rp-jobtiles" data-n="{{ p.elements|length }}" role="group" aria-label="Jobs this contract levels">
+                {% for el in p.elements %}
+                <span class="rp-jobtile{% if el.slug == job.slug %} is-this{% endif %}" data-slug="{{ el.slug }}"
+                      style="--disc: var(--disc-{{ el.disc_slug }});"
+                      title="{{ el.name }} &middot; +{{ p.xp_each|intcomma }} XP{% if el.slug == job.slug %} (this job){% endif %}">
+                    {% job_icon_use el.icon 'rp-jobtile__ico' %}
+                    <span class="rp-jobtile__name">{{ el.name }}</span>
+                    {% comment %} The SHARE, and the "this job" marker, for readers who get neither. Both
+                    live in `title=` otherwise, which is not exposed on touch and is announced
+                    inconsistently -- and the share is the whole point of this variant, while `is-this` is
+                    a colour-only distinction. Career's map cell carries the same `sr-only`; the job
+                    variant dropped it. {% endcomment %}
+                    <span class="sr-only">+{{ p.xp_each|intcomma }} XP{% if el.slug == job.slug %}, this job{% endif %}</span>
+                </span>
+                {% endfor %}
+            </div>
+            {% else %}
+            {% comment %} `rjob`, not `job`: the loop variable used to be `job`, which now SHADOWS the
+            optional page-scope variable of the same name. Harmless as written -- this branch only runs
+            when `job` is falsy -- but it is the kind of thing that is true until someone moves a line. {% endcomment %}
+            <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">
+                {% for d in disciplines %}{% for rjob in d.jobs %}
+                <span class="rp-jobcell{% if rjob.slug in p.element_slugs %} is-lit{% endif %}" data-slug="{{ rjob.slug }}" style="--disc: var(--disc-{{ d.slug }});" title="{{ rjob.name }}{% if rjob.slug in p.element_slugs %} &middot; +{{ p.xp_each|intcomma }} XP{% endif %}">
+                    {% job_icon_use rjob.icon '' %}
+                    {% if rjob.slug in p.element_slugs %}<span class="sr-only">{{ rjob.name }}, +{{ p.xp_each|intcomma }} XP</span>{% endif %}
+                </span>
+                {% endfor %}{% endfor %}
+            </div>
+            {% endif %}
+
+            <span class="rp-vdiv" aria-hidden="true"></span>
+
+            <div class="rp-side">
+                <div class="rp-ring-wrap" title="{{ p.xp_total|intcomma }} XP, split evenly across {{ p.elements|length }} job{{ p.elements|length|pluralize }}">
+                    <svg class="rp-ring" viewBox="0 0 36 36" aria-hidden="true">
+{% comment %} `is-this` on job detail dims every arc but yours, so the ring stops saying "splits N
+                        ways" and starts saying "this much of it lands on you" -- which is the question the page
+                        is about. Free: `_ring_segments` already tags each arc with its job slug, expressly so the
+                        ring and the job display can cross-highlight. {% endcomment %}
+                        {% for s in p.ring_segments %}<circle class="rp-ring__seg{% if job and s.slug == job.slug %} is-this{% endif %}" data-slug="{{ s.slug }}" data-dash="{{ s.dash }}" cx="18" cy="18" r="15.915" pathLength="100" style="--disc: var(--disc-{{ s.disc_slug }});" stroke-dasharray="{{ s.dash }} 100" stroke-dashoffset="{{ s.offset }}"/>{% endfor %}
+                    </svg>
+                    {% comment %} The centre reads the SHARE on job detail and the job COUNT on Career.
+                    Same figure either way -- N jobs means a 1/N share -- but a reader on one job wants the
+                    number they will bank, not the arithmetic to get there.
+
+                    The caption is the number's UNIT in both branches. It held `job.name` on this one,
+                    which named something the number is not -- and overflowed the 58px ring on the longer
+                    jobs (Cartographer, Infiltrator, Survivalist). It was also the THIRD printing of that
+                    name in one view: the page header, the job tile beside this ring, and here. The tight
+                    spot on the card was being spent on the one fact the reader already had twice. {% endcomment %}
+                    <div class="rp-ring__xp">
+                        {% if job %}
+                        <span class="pp-tally">+{{ p.xp_each|intcomma }}</span>
+                        <span class="rp-ring__xp-cap">XP</span>
+                        {% else %}
+                        <span class="pp-tally">{{ p.elements|length }}</span>
+                        <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if p.is_history %}
+                {% comment %} History: the XP you ACTUALLY banked (ledger, incl. any multiplier) + when. {% endcomment %}
+                <div class="rp-reward-xp" title="You banked {{ p.banked_xp|intcomma }} XP from this contract">
+                    <span class="rp-reward-xp__val pp-tally">+<span data-countup="{{ p.banked_xp }}">{{ p.banked_xp|intcomma }}</span></span>
+                    <span class="rp-reward-xp__cap">XP banked{% if p.boosted %} <span class="rp-boost" title="A multiplier boosted this grant">2&times;</span>{% endif %}</span>
+                </div>
+                <div class="rp-status">
+                    <span class="rp-status__banked">{% if p.banked_at %}Banked {{ p.banked_at|naturaltime }}{% else %}Banked{% endif %}</span>
+                </div>
+                {% else %}
+                <div class="rp-reward-xp" title="Total reward: {{ p.xp_total|intcomma }} XP">
+                    <span class="rp-reward-xp__val pp-tally">+<span data-countup="{{ p.xp_total }}">{{ p.xp_total|intcomma }}</span></span>
+                    <span class="rp-reward-xp__cap">total XP</span>
+                </div>
+                <div class="rp-status">
+                    {% if p.status == 'claimable' or p.status == 'accepted' %}
+                        {% comment %} Both rendered; .rp-row--accepted reveals the right one via CSS. The label
+                        names which tier(s) an accept will bank (plat / 100% / both). {% endcomment %}
+                        <button type="button" class="btn btn-xs btn-primary rp-accept" data-slug="{{ p.slug }}" title="{% if p.claim_plat and p.claim_full %}Claim both tiers, +{{ p.xp_total|intcomma }} XP{% elif p.claim_plat %}Claim the platinum tier, +{{ p.plat_xp|intcomma }} XP{% elif p.claim_full %}Claim the 100% tier, +{{ p.bonus_xp|intcomma }} XP{% else %}Claim your reward{% endif %}">Claim{% if p.claim_plat and p.claim_full %} both{% elif p.claim_plat %} plat{% elif p.claim_full and p.has_plat %} 100%{% endif %}</button>
+                        <span class="rp-cta__done">Claimed &check;</span>
+                    {% elif p.status == 'pursuing' %}
+                        <span class="rp-status__pct">{{ p.progress }}% complete</span>
+                    {% else %}
+                        <span class="rp-status__idle">Not started</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if p.is_history %}
+        {% comment %} History: a compact banked summary (jobs + even XP-per-job split) in place of the
+        tier-progress bars, which would both read 100% here. XP is always split evenly, so one figure says it. {% endcomment %}
+        <div class="rp-contribs" title="{{ p.banked_xp|intcomma }} XP banked, split evenly across {{ p.job_count }} job{{ p.job_count|pluralize }}">
+            <span class="rp-contrib-stat"><b class="pp-tally">{{ p.job_count }}</b><span class="rp-contrib-stat__cap">job{{ p.job_count|pluralize }}</span></span>
+            <span class="rp-contrib-sep" aria-hidden="true">&middot;</span>
+            <span class="rp-contrib-stat"><b class="pp-tally">{{ p.xp_per_job|intcomma }}</b><span class="rp-contrib-stat__cap">XP per job</span></span>
+        </div>
+        {% else %}
+        {% comment %} Reward tiers: two progress bars (drawn like the circle's) for the platinum then
+        100% tiers, each with its XP beneath. The plat bar fills toward the platinum, the 100% bar
+        toward full completion. Contracts whose games have no plat show a single 100% bar. Always one
+        row so every card stays the same height. {% endcomment %}
+        <div class="rp-tiers{% if not p.has_plat %} rp-tiers--single{% endif %}"{% if p.has_plat %} title="Platinum tier +{{ p.plat_xp|intcomma }} XP, then +{{ p.bonus_xp|intcomma }} XP at 100%"{% else %} title="Full {{ p.bonus_xp|intcomma }} XP at 100%"{% endif %}>
+            {% if p.has_plat %}
+            <div class="rp-tier">
+                <div class="rp-tier__bar" data-fill="{{ p.plat_fill }}">{% include 'components/horizon.html' with progress=p.plat_fill accent='var(--pp-primary)' height='6px' %}</div>
+                <span class="rp-tier__lbl"><b>+{{ p.plat_xp|intcomma }}</b> plat</span>
+            </div>
+            <span class="rp-tiers__dot" aria-hidden="true"></span>
+            {% endif %}
+            <div class="rp-tier">
+                <div class="rp-tier__bar" data-fill="{{ p.full_fill }}">{% include 'components/horizon.html' with progress=p.full_fill accent='var(--rp-fam)' height='6px' %}</div>
+                <span class="rp-tier__lbl"><b>+{{ p.bonus_xp|intcomma }}</b> at 100%</span>
+            </div>
+        </div>
+        {% endif %}
+
+{% if job %}
+        {% comment %} JOB DETAIL: a link to the contract's GAME, for everyone.
+
+        The shared card's tier-2 control opens a modal whose opener is page-local to Career, so here the
+        button rendered and did nothing -- and its `contract_modal` URL is login + linked gated, so even
+        wired it would have 404'd the anonymous visitors this page exists for.
+
+        It briefly deep-linked to `/career/?contract=<slug>` instead. That was worse: a filter Career's
+        board controller did not know about, so the first chip click silently repopulated the board while
+        the URL still claimed the filter, the facets counted a different population than the board showed,
+        and `?scope=history` badged untouched contracts as "Banked". See `_filter_contracts`.
+
+        The GAME is the honest destination. It is exact (no slug filter to keep in sync), it is public so
+        anon readers get it too, and game detail already carries the shared contract modal -- the real card
+        for linked viewers, the anonymised preview for everyone else -- which is more of this contract than
+        a filtered board would have shown. `data-contract-url` is the same enhancement hook badge detail
+        uses; without JS the link is still a working link to the game. {% endcomment %}
+        {% if p.cover_game %}
+        <a class="rp-tier2-btn" href="{% url 'game_detail' p.cover_game.np_communication_id %}"
+           data-contract-url="{% if user.is_authenticated and user.profile.is_linked %}{% url 'contract_modal' p.slug %}{% else %}{% url 'contract_modal_preview' p.slug %}{% endif %}">
+            <span class="rp-tier2-btn__count">{{ p.game_count }}</span>
+            <span class="rp-tier2-btn__label">game{{ p.game_count|pluralize }} &middot; view the game</span>
+            <svg class="rp-tier2-btn__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+        {% endif %}
+        {% else %}
+        {% comment %} Tier 2: opens the shared contract modal (grows from the card). The server path
+        supplies data-modal-url and the modal HTML is fetched on open; the legacy in-page path renders
+        the modal into an inert template (p.games present) and reuses it without a round-trip. {% endcomment %}
+        <button type="button" class="rp-tier2-btn" aria-haspopup="dialog" data-modal-url="{% url 'contract_modal' p.slug %}">
+            <span class="rp-tier2-btn__count">{{ p.game_count }}</span>
+            <span class="rp-tier2-btn__label">game{{ p.game_count|pluralize }} &middot; view details</span>
+            <svg class="rp-tier2-btn__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        {% if p.games %}<template class="rp-modal-src">{% include 'trophies/partials/contracts/_contract_modal.html' with p=p %}</template>{% endif %}
+        {% endif %}
+    </div>
+</div>

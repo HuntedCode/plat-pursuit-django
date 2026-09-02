@@ -1,0 +1,61 @@
+{% load humanize %}{% comment %} One game of one day: its header, and the trophies earned in it.
+
+Shared by the day MODAL and the standalone day PAGE, which rendered ~28 identical lines each. They are one
+thing displayed in two frames; two copies is the drift the rebuild exists to remove.
+
+The row is NOT one big button. A first cut made it one, which forced the game link out -- an `<a>` inside a
+`<button>` is invalid -- and left the day with no route to any game's detail page, on the surface that
+exists to be crawlable. It also gave the button an accessible name of "Elden Ring 12 trophies over 2.5h 1
+3 8 Hide the trophies". The title is the LINK and the chevron is the toggle: two controls, each named for
+what it does.
+
+COLLAPSIBLE, and open by default -- the opposite of the collapsed-poster state this replaced. That one hid
+the trophies behind a click, so the click was a gate; this tidies a heavy day after you have read it.
+Everything is server-rendered either way, so collapsing costs no request and the page is complete without
+the script.
+
+Expects `s` (a session dict with `trophies_list` attached) and `profile` (for the game link).
+{% endcomment %}
+{% with sid=s.day|date:'Ymd'|stringformat:'s'|add:s.game.np_communication_id %}
+<div class="pp-act__session{% if s.has_platinum %} pp-act__session--plat{% endif %}">
+    <div class="pp-act__row">
+        <span class="pp-act__cover">
+            <img class="pp-act__art{% if not s.game.has_cover_art %} pp-act__art--placeholder{% endif %}"
+                 src="{{ s.game.display_image_url }}" alt="" loading="lazy" decoding="async">
+        </span>
+
+        <span class="pp-act__body">
+            <a class="pp-act__title" href="{% url 'game_detail_with_profile' s.game.np_communication_id profile.psn_username %}">{{ s.game.title_name }}</a>
+            <span class="pp-act__stats">
+                <span class="pp-act__n">{{ s.trophies|intcomma }}</span>
+                <span class="pp-act__n-lbl">troph{{ s.trophies|pluralize:"y,ies" }}</span>
+                {% if s.span_label %}<span class="pp-act__span" title="First to last trophy that day">over {{ s.span_label }}</span>{% endif %}
+            </span>
+            {% comment %}Same dot-and-figure tier vocabulary as the hero strip and the game card, so a
+            colour means one thing across the whole profile. Zero tiers are omitted by the service -- a
+            card should not list what did not happen.{% endcomment %}
+            <span class="pp-act__tiers">
+                {% for t in s.tiers %}
+                <span class="pp-act__tier" data-tier="{{ t.tier }}" title="{{ t.tier|title }}: {{ t.count }}"><i></i>{{ t.count }}</span>
+                {% endfor %}
+            </span>
+        </span>
+
+        {% comment %}Named for the GAME, not for the state: an accessible name that says "Hide" while the
+        thing is already hidden is the classic trap, so `aria-expanded` carries the state and the name
+        stays put.{% endcomment %}
+        <button type="button" class="pp-act__toggle" data-act-collapse
+                aria-expanded="true" aria-controls="sess-{{ sid }}"
+                aria-label="Trophies from {{ s.game.title_name }}">
+            <svg class="pp-act__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+    </div>
+
+    {% comment %}No border or padding on the panel itself: `animatePanel` collapses it to a true 0, and
+    under border-box a border would clamp the collapsed height and snap when `hidden` lands. The rule
+    lives on the inner wall instead.{% endcomment %}
+    <div class="pp-act__trophies" id="sess-{{ sid }}">
+        {% include 'trophies/partials/profile_detail/activity_trophies.html' with session_trophies=s.trophies_list %}
+    </div>
+</div>
+{% endwith %}

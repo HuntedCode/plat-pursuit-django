@@ -9,6 +9,13 @@ in share-image.js reads from window.GRADIENT_THEMES which is populated
 from this registry.
 """
 
+#: Grounds drawn for the PLAT CARD specifically (1200x630, one fixed layout). They live in this same
+#: registry so the card can share the rendering pipeline, but they must not be offered as SITE themes --
+#: every exporter that feeds a site-wide picker filters on this. Kept as a constant because it was a
+#: bare string in one exporter and simply absent from two others, which is how the card's grounds ended
+#: up selectable as Monthly Recap backgrounds and in the settings form.
+PLAT_CARD_CATEGORY = 'plat_card'
+
 # Theme definitions
 # Each theme has: name, description, accent_color, background (CSS gradient)
 # Some themes have additional properties like background_size, background_position
@@ -1553,9 +1560,13 @@ def _generate_theme_choices():
     """Generate sorted theme choices for form fields."""
     choices = [('', 'None')]
 
-    # Get all themes except default
+    # Get all themes except default. `plat_card` grounds are excluded for the same reason
+    # get_available_themes_for_grid excludes them: they are drawn for ONE artifact at 1200x630, and this
+    # feeds the site-wide `selected_theme` picker. They leaked here until 2026-08 (four of them, then
+    # seven once the lighter grounds landed), which is how the omission got noticed.
     other_themes = [(key, data['name']) for key, data in GRADIENT_THEMES.items()
-                    if key != 'default' and not data.get('requires_game_image')]
+                    if key != 'default' and not data.get('requires_game_image')
+                    and data.get('category') != PLAT_CARD_CATEGORY]
 
     # Sort alphabetically by name
     other_themes.sort(key=lambda x: x[1])
@@ -1582,6 +1593,12 @@ def get_themes_for_js():
     """
     js_themes = {}
     for key, theme in GRADIENT_THEMES.items():
+        # `plat_card` grounds never reach the global. This blob ships as window.GRADIENT_THEMES and the
+        # Monthly Recap builds its background dropdown by iterating it, so every card ground was offered
+        # as a recap background -- for a layout they were never drawn for. The card picker reads its own
+        # scoped `card_theme_js`, not this, so nothing on that side depends on them being here.
+        if theme.get('category') == PLAT_CARD_CATEGORY:
+            continue
         js_themes[key] = {
             'name': theme['name'],
             'description': theme['description'],
@@ -1627,6 +1644,13 @@ def get_available_themes_for_grid(include_game_art=False, grouped=False):
         if requires_game_image and not include_game_art:
             continue
 
+        # Plat-card grounds are a separate, additive selection over this registry (get_plat_card_themes)
+        # and are drawn for one 1200x630 layout. They must not appear in the SITE theme pickers. The
+        # grouped path can't be relied on to drop them -- it funnels unknown categories into `general`
+        # rather than skipping them -- so exclude them here, where both paths pass.
+        if data.get('category') == PLAT_CARD_CATEGORY:
+            continue
+
         theme_entry = {
             'name': data['name'],
             'description': data['description'],
@@ -1661,3 +1685,162 @@ def get_available_themes_for_grid(include_game_art=False, grouped=False):
     return [(cat_key, cat_label, cat_themes)
             for cat_key, (cat_label, cat_themes) in category_map.items()
             if cat_themes]
+
+
+# ── Plat card: the curated set ────────────────────────────────────────────────────────────────────
+#
+# The card is DESIGNED, so it does not accept all 105 site gradients -- most were drawn for a
+# different layout and would fight the one it has. The picker is EIGHT designed grounds (four dark
+# plus a lifted sibling for each) and one game-art backing.
+#
+# `ppSubstrate` is the card's own ground, duplicated here on purpose: the renderer always injects a
+# background with !important (falling back to `default`, which is drawn from the pre-rebuild palette),
+# so without a matching theme entry the card's inline ground could never actually render.
+#
+# Site themes are untouched -- this is a separate, additive selection over the same registry, and the
+# `plat_card` category is deliberately absent from THEME_CATEGORIES so these never leak into the
+# grouped site-theme grids.
+PLAT_CARD_THEME_KEYS = [
+    'ppSubstrate',
+    'ppMidnight',
+    'ppEmber',
+    'ppAurora',
+    # ── The lighter half (team ask, 2026-08) ──────────────────────────────────────────────────────
+    # One LIFTED sibling per dark ground, so the picker reads as four pairs rather than eight
+    # unrelated options: Fog lifts Substrate, Tide lifts Midnight, Clay lifts Ember, and Retro Wave
+    # covers the violet end (which is why there is no lighter Aurora -- it would have been a third
+    # purple). `retroWave` is the EXISTING site theme, reused unchanged: it was already popular, and
+    # rendered on the real card it beat the replacement drawn for it.
+    #
+    # "Lighter" here can only mean LIFTED, never a light card. Every text colour in
+    # shareables/plat_card.html is a hardcoded light hex (#f0f6fd headings, #9da5b1 / #8a939f
+    # sub-text) because the card is an inline-styled Playwright render with no tokens -- a pale
+    # ground would put near-white text on near-white. These raise the floor off #05080c and let more
+    # colour through while keeping every text region dark enough to read.
+    'ppFog',
+    'ppTide',
+    'ppClay',
+    'retroWave',
+    'ppArt',
+]
+
+#: What the card falls back to, and what a fresh picker opens on.
+PLAT_CARD_DEFAULT_THEME = 'ppSubstrate'
+
+GRADIENT_THEMES.update({
+    'ppSubstrate': {
+        'name': 'Substrate',
+        'description': 'The house ground',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppMidnight': {
+        'name': 'Midnight',
+        'description': 'Deep blue, quiet',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(130% 100% at 85% 10%, #14303d 0%, #0b1620 48%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppEmber': {
+        'name': 'Ember',
+        'description': 'Warm, low light',
+        'accent_color': '#ff9350',
+        'background': 'radial-gradient(120% 95% at 15% 100%, #33201a 0%, #1a1216 46%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppAurora': {
+        'name': 'Aurora',
+        'description': 'Violet into deep teal',
+        'accent_color': '#a191ff',
+        'background': 'radial-gradient(110% 90% at 78% 8%, #2a2044 0%, #141a2e 44%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    # ── The lighter half ──────────────────────────────────────────────────────────────────────────
+    # Their hot spots are all LEFT, and that placement is load-bearing rather than taste: the card's
+    # top-right corner holds the wordmark and the `platpursuit.com` link, and the link is drawn in the
+    # variant accent (#27ebfe platinum / #ff9350 100%). The dark grounds can put their light there
+    # (Aurora does) because nothing competes at that value; a lifted ground washes the link out. Tide
+    # was drawn top-right first and cost the cyan link its pop, which is what moved all three.
+    'ppFog': {
+        'name': 'Fog',
+        'description': 'Lifted slate',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(125% 100% at 10% 98%, #4a5563 0%, #2b333d 44%, #131920 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppTide': {
+        'name': 'Tide',
+        'description': 'Bright water',
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(125% 100% at 14% 4%, #2f7d90 0%, #1c4a5e 44%, #0d2130 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    'ppClay': {
+        'name': 'Clay',
+        'description': 'Warm stone',
+        'accent_color': '#ff9350',
+        'background': 'radial-gradient(122% 98% at 16% 2%, #8a5a4a 0%, #4e3330 46%, #241a1c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+    },
+    # The art ground. WHICH image it uses is chosen per card (see ART_OPTION_CAP): a game's
+    # landscape_urls are already ordered by quality, so the picker offers each one rather than
+    # forcing the first.
+    #
+    # Deliberately NOT the shared gameArtConceptBg: that falls back to a pre-rebuild gradient when a
+    # game has no usable art, which would drop an old-palette card into an otherwise house-palette
+    # set. This falls back to the house ground. (The shared entries are untouched -- recap and the
+    # site pickers still read them.)
+    #
+    # There is no cover-blur option. A 3:4 cover blown up to 1200x630 is mostly upscale, and it
+    # looked it.
+    'ppArt': {
+        'name': 'Game Art',
+        'description': "The game's own backdrop",
+        'accent_color': '#27ebfe',
+        'background': 'radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%)',
+        'banner_background': 'transparent',
+        'banner_border_color': '#404853',
+        'category': 'plat_card',
+        'requires_game_image': True,
+        'game_image_source': 'concept_bg_url',
+    },
+})
+
+
+def get_plat_card_themes():
+    """The card's picker: [(key, {name, description, background_css, is_game_art, game_image_source})].
+
+    Ordered as PLAT_CARD_THEME_KEYS declares -- designed grounds first, art backings last, since art
+    is the variation and the ground is the default.
+    """
+    out = []
+    for key in PLAT_CARD_THEME_KEYS:
+        data = GRADIENT_THEMES.get(key)
+        if not data:
+            continue
+        entry = {
+            'name': data['name'],
+            'description': data['description'],
+            'background_css': _clean_css(data['background']),
+            'accent_color': data.get('accent_color', ''),
+        }
+        if data.get('requires_game_image'):
+            entry['is_game_art'] = True
+            entry['game_image_source'] = data.get('game_image_source', 'game_image')
+        out.append((key, entry))
+    return out

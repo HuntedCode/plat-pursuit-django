@@ -32,6 +32,15 @@ def level_for_xp(total_xp: int) -> int:
     return total_xp // JOB_XP_PER_LEVEL + 1
 
 
+def frac_into_level(total_xp: int) -> float:
+    """Fraction (0.0..1.0) through the CURRENT level's band -- 0.0 exactly on a boundary.
+    Drives the job-bar fill in the claim ceremony (server-side so the flat-curve constant
+    never has to be mirrored in JS)."""
+    if total_xp <= 0:
+        return 0.0
+    return (total_xp % JOB_XP_PER_LEVEL) / JOB_XP_PER_LEVEL
+
+
 # --- Prestige tiers ---------------------------------------------------------
 # (min_level, key, name), ascending. Bounded, named milestone ladder; the level number
 # keeps climbing past the top tier (Legend) -- that's the cap-less endgame, so we never
@@ -47,6 +56,15 @@ JOB_TIERS = [
     (250, 'legend',      'Legend'),
 ]
 
+# key -> 0-based rank in the ladder (Initiate 0 .. Legend 7). Drives escalating celebration weight
+# (e.g. the claim ceremony's tier-bloom spark count grows toward Legend).
+_JOB_TIER_RANK = {key: i for i, (_lvl, key, _name) in enumerate(JOB_TIERS)}
+
+
+def tier_rank(key: str) -> int:
+    """The 0-based position of a job prestige tier (Initiate 0 .. Legend 7); 0 for unknown/floor."""
+    return _JOB_TIER_RANK.get(key, 0)
+
 
 def tier_for_level(level: int) -> dict:
     """The prestige tier for a job level. Returns {key, name, min_level, next_level} where
@@ -61,3 +79,145 @@ def tier_for_level(level: int) -> dict:
         else:
             break
     return {'key': chosen[1], 'name': chosen[2], 'min_level': chosen[0], 'next_level': next_level}
+
+
+# --- Pursuer rank: the account-wide standing on the SUM of element levels ---------
+# A long, military-flavored ladder (named tier + Roman-numeral division, V -> I) that the
+# single Pursuer Level climbs. There is ONE Pursuer per account, so unlike the per-element
+# tiers this ladder is deliberately deep -- a fresh thing to reach toward for the long haul.
+# NEWBIE is the divisionless floor (a brand-new account, every element at level 1); the 9
+# middle tiers each split into 5 divisions (V at entry climbing to I at the top, the gamer
+# convention); ASCENDANT is the divisionless, open-ended apex -- past it the raw Pursuer
+# Level number is the flex (same cap-less spirit as the elements' Legend). Thresholds are
+# config placeholders (tune on real adoption data); the names are locked. See xp-economy.md.
+PURSUER_DIVISIONS = 5
+_PURSUER_NUMERALS = ['V', 'IV', 'III', 'II', 'I']  # index 0 = entry (V) ... index 4 = top (I)
+
+# (min_level, key, name, has_divisions), ascending by min_level. Thresholds are anchored on
+# GAMES completed (Pursuer Level ~= 25 floor + 2 per game): Recruit @ ~5 games, Hunter @ ~45,
+# Warden @ ~140, ... Ascendant @ ~1,000 games. Fast early promotions (a division every ~3
+# games), an aspirational apex. See the games->level table in xp-economy.md.
+PURSUER_RANKS = [
+    (0,    'newbie',     'Newbie',     False),  # floor (~0 games)
+    (35,   'recruit',    'Recruit',    True),   # ~5 games
+    (65,   'seeker',     'Seeker',     True),   # ~20
+    (115,  'hunter',     'Hunter',     True),   # ~45
+    (195,  'ranger',     'Ranger',     True),   # ~85
+    (305,  'warden',     'Warden',     True),   # ~140
+    (465,  'marshal',    'Marshal',    True),   # ~220
+    (685,  'vanquisher', 'Vanquisher', True),   # ~330
+    (985,  'paragon',    'Paragon',    True),   # ~480
+    (1405, 'luminary',   'Luminary',   True),   # ~690
+    (2025, 'ascendant',  'Ascendant',  False),  # ~1,000 games (open-ended apex)
+]
+
+
+def pursuer_rank_for_level(level: int) -> dict:
+    """The account-wide Pursuer rank for a Pursuer Level (the sum of every element level).
+
+    Returns {key, name, division, division_roman, label, min_level, next_level, next_label,
+    levels_to_next}. `division` is 1-5 (1 = top of the tier, the 'I') for the divisioned
+    middle tiers, or None for Newbie / Ascendant. `next_level` is the Pursuer Level at which
+    the next division or tier begins (None at Ascendant, the open-ended top); `label` is the
+    display string ("Warden III", or just "Newbie" / "Ascendant")."""
+    idx = 0
+    for i, rank in enumerate(PURSUER_RANKS):
+        if level >= rank[0]:
+            idx = i
+        else:
+            break
+    min_level, key, name, has_div = PURSUER_RANKS[idx]
+    next_tier_floor = PURSUER_RANKS[idx + 1][0] if idx + 1 < len(PURSUER_RANKS) else None
+
+    if not has_div:
+        # Newbie (the floor) or Ascendant (the open-ended apex): a single divisionless band.
+        next_label = PURSUER_RANKS[idx + 1][2] if next_tier_floor is not None else None
+        return {
+            'key': key, 'name': name, 'division': None, 'division_roman': '', 'label': name,
+            'min_level': min_level, 'next_level': next_tier_floor, 'next_label': next_label,
+            'levels_to_next': (next_tier_floor - level) if next_tier_floor is not None else 0,
+        }
+
+    # Divisioned tier: split [min_level, next_tier_floor) into PURSUER_DIVISIONS equal bands;
+    # band 0 is entry (numeral V), band 4 is the top (numeral I).
+    step = (next_tier_floor - min_level) / PURSUER_DIVISIONS
+    band = min(PURSUER_DIVISIONS - 1, int((level - min_level) / step))
+    next_boundary = round(min_level + (band + 1) * step)
+    if band + 1 < PURSUER_DIVISIONS:
+        next_label = f'{name} {_PURSUER_NUMERALS[band + 1]}'   # next division up
+    else:
+        next_label = PURSUER_RANKS[idx + 1][2]                  # promote to the next tier
+    return {
+        'key': key, 'name': name,
+        'division': PURSUER_DIVISIONS - band,                  # 5 (V) .. 1 (I)
+        'division_roman': _PURSUER_NUMERALS[band],
+        'label': f'{name} {_PURSUER_NUMERALS[band]}',
+        'min_level': min_level, 'next_level': next_boundary, 'next_label': next_label,
+        'levels_to_next': max(0, next_boundary - level),
+    }
+
+
+# --- Milestone crossings (logged when XP is banked) -------------------------------
+
+def tiers_crossed(old_level, new_level):
+    """The JOB_TIERS newly reached when a job climbs old_level -> new_level (a jump can cross
+    several at once). Returns [(min_level, key, name), ...] ascending; the Initiate floor is never
+    'crossed'. Empty if no boundary was passed."""
+    if new_level <= old_level:
+        return []
+    return [t for t in JOB_TIERS if old_level < t[0] <= new_level]
+
+
+def ranks_crossed(old_level, new_level):
+    """The PURSUER_RANKS newly reached when the Pursuer Level climbs old -> new (V..I divisions are
+    NOT milestones). Returns [(min_level, key, name, has_div), ...] ascending; Newbie is the floor."""
+    if new_level <= old_level:
+        return []
+    return [r for r in PURSUER_RANKS if old_level < r[0] <= new_level]
+
+
+# --- Ladders (the full rung list + current position, for the Career displays) -----
+
+def job_tier_ladder(level):
+    """The 8-rung job prestige ladder for a job at `level`. Each rung: {key, name, min_level,
+    reached, current}. `fill` = % through the CURRENT tier toward the next (100 at Legend, the top)."""
+    cur = tier_for_level(level)
+    nxt = cur['next_level']
+    rungs = [
+        {'key': key, 'name': name, 'min_level': min_lvl,
+         'reached': level >= min_lvl, 'current': key == cur['key']}
+        for min_lvl, key, name in JOB_TIERS
+    ]
+    fill = 100 if not nxt else round((level - cur['min_level']) / (nxt - cur['min_level']) * 100)
+    return {
+        'rungs': rungs, 'fill': max(0, min(100, fill)),
+        'current_key': cur['key'], 'current_name': cur['name'],
+        'next_name': tier_for_level(nxt)['name'] if nxt else None,
+        'levels_to_next': (nxt - level) if nxt else 0,
+    }
+
+
+def next_rank_floor(key):
+    """The Pursuer Level at which the rank AFTER `key` begins (None if `key` is the apex). Used to
+    complete the OLD rank's bar (fill to its top) in the claim ceremony's pre-hand-off footer."""
+    for i, (_lvl, k, _n, _h) in enumerate(PURSUER_RANKS):
+        if k == key:
+            return PURSUER_RANKS[i + 1][0] if i + 1 < len(PURSUER_RANKS) else None
+    return None
+
+
+def pursuer_rank_ladder(level):
+    """The 11-rung Pursuer rank ladder for a Pursuer Level. Each rung: {key, name, min_level,
+    reached, current}. `fill` = % through the current TIER toward the next; `current` is the full
+    rank dict (label with division, next_label, levels_to_next)."""
+    cur = pursuer_rank_for_level(level)
+    rungs = [
+        {'key': key, 'name': name, 'min_level': min_lvl,
+         'reached': level >= min_lvl, 'current': key == cur['key']}
+        for min_lvl, key, name, _has_div in PURSUER_RANKS
+    ]
+    idx = next(i for i, r in enumerate(PURSUER_RANKS) if r[1] == cur['key'])
+    tier_min = PURSUER_RANKS[idx][0]
+    tier_next = PURSUER_RANKS[idx + 1][0] if idx + 1 < len(PURSUER_RANKS) else None
+    fill = 100 if tier_next is None else round((level - tier_min) / (tier_next - tier_min) * 100)
+    return {'rungs': rungs, 'fill': max(0, min(100, fill)), 'current': cur}

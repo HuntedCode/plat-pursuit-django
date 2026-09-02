@@ -1,73 +1,13 @@
 import json
 import logging
 
-from django.conf import settings
-
 logger = logging.getLogger(__name__)
 
-def ads(request):
-    enabled = settings.ADSENSE_ENABLED
-
-    no_ad_prefixes = ['/accounts/', '/staff/', '/api/', '/admin/', '/fundraiser/']
-    if any(request.path.startswith(p) for p in no_ad_prefixes):
-        enabled = False
-
-    if request.user.is_authenticated and request.user.premium_tier:
-        enabled = False
-
-    return {
-        'ADSENSE_PUB_ID': settings.ADSENSE_PUB_ID,
-        'ADSENSE_ENABLED': enabled,
-        'ADSENSE_TEST_MODE': settings.ADSENSE_TEST_MODE,
-    }
-
-def moderation(request):
-    """
-    Provide pending reports count for staff members.
-
-    Only queries the database if the user is authenticated staff to avoid
-    unnecessary overhead for regular users. Results are cached for 60 seconds
-    to prevent per-request DB queries on every page load.
-    """
-    pending_reports_count = 0
-
-    if request.user.is_authenticated and request.user.is_staff:
-        from django.core.cache import cache
-        from trophies.models import CommentReport
-
-        pending_reports_count = cache.get_or_set(
-            'mod:pending_reports_count',
-            lambda: CommentReport.objects.filter(status='pending').count(),
-            60,
-        )
-
-    return {
-        'pending_reports_count': pending_reports_count,
-        # Kept for template compatibility during the Phase 2.6 transition;
-        # GameFamilyProposal is no longer used and the count is always 0.
-        'pending_proposals_count': 0,
-    }
-
-
-def premium_theme_background(request):
-    """
-    Inject premium user's gradient theme as a fallback site-wide background.
-
-    This provides the user_theme_style variable to templates, which is used
-    when no page-specific game background (image_urls.bg_url) is set.
-    """
-    if not request.user.is_authenticated:
-        return {}
-
-    profile = getattr(request.user, 'profile', None)
-    if not profile or not profile.user_is_premium:
-        return {}
-
-    if profile.selected_theme:
-        from trophies.themes import get_theme_style
-        return {'user_theme_style': get_theme_style(profile.selected_theme)}
-
-    return {}
+def site_links(request):
+    """Site-wide external links. One source: the Discord invite used to be hardcoded in seven
+    templates (with casing drift), while the setting the emails read was never defined."""
+    from django.conf import settings
+    return {'discord_invite_url': settings.DISCORD_INVITE_URL}
 
 
 def active_fundraiser(request):
@@ -86,36 +26,8 @@ def active_fundraiser(request):
     fundraiser" to distinguish from a cache miss. The cache is shared
     across all users; the per-user gate lives at render time.
     """
-    if not _viewer_has_linked_profile(request):
-        return {}
-
-    try:
-        from django.core.cache import cache
-        from fundraiser.models import Fundraiser
-        from django.utils import timezone
-
-        def _fetch_id():
-            from django.db.models import Q
-            now = timezone.now()
-            fundraiser = (
-                Fundraiser.objects
-                .filter(banner_active=True, start_date__lte=now)
-                .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
-                .first()
-            )
-            return fundraiser.pk if fundraiser else 0
-
-        fundraiser_id = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
-        if fundraiser_id:
-            fundraiser = Fundraiser.objects.filter(pk=fundraiser_id).first()
-            if fundraiser:
-                return {'active_fundraiser': fundraiser}
-    except ImportError:
-        logger.warning("Fundraiser app not available", exc_info=True)
-    except Exception:
-        logger.warning("Failed to check active fundraiser", exc_info=True)
-
-    return {}
+    fundraiser = _active_fundraiser_or_none(request)
+    return {'active_fundraiser': fundraiser} if fundraiser else {}
 
 
 def _viewer_has_linked_profile(request):
@@ -184,95 +96,94 @@ def hub_subnav(request):
     ``hub_section=None`` so the ``hub_subnav.html`` template short-circuits
     and renders nothing.
 
-    Dynamic items: when a fundraiser is active (``banner_active=True`` and
-    within its start/end window), a Fundraiser tab is appended to the
-    Dashboard hub's items. Reuses the ``fundraiser:active_banner`` cache key
-    populated by ``active_fundraiser`` so there's no extra DB hit on the
-    hot path.
+    Dynamic behavior: the personal (My Pursuit) hub appends the viewer's Profile
+    as a dynamic item (its URL needs their username), and the personal strip is
+    auth-gated (hidden for anon). Viewing your OWN profile swaps that page's
+    Community chrome for the personal strip.
 
     See ``docs/architecture/ia-and-subnav.md`` for the design rationale and
     the URL prefix matching algorithm.
     """
     try:
-        from core.hub_subnav import (
-            RenderedSubnavItem,
-            build_rendered_items,
-            resolve_hub_subnav,
-        )
+        from core.hub_subnav import build_rendered_items, resolve_hub_subnav
 
         match = resolve_hub_subnav(request)
         if match is None:
             return {'hub_section': None}
 
         hub = match['hub']
+        active_slug = match['active_slug']
+
+        # Ownership-aware Profile chrome was removed with the Profile strip-item (2026-08): the swap
+        # existed to put your own profile under a personal strip WITH a Profile tab to highlight, and
+        # with no such tab it would have rendered a strip highlighting nothing. Every profile page now
+        # carries the same chrome whoever is looking, and the avatar menu is the single route to yours.
+
         is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
 
-        extras: tuple[RenderedSubnavItem, ...] = ()
-        if hub.key == 'dashboard' and _viewer_has_linked_profile(request):
-            extras = _fundraiser_subnav_extras()
+        # The personal ("My Pursuit") strip is a login-gated wayfinder: hide it entirely for
+        # anonymous viewers so the Home (/) reads as a hero and public members (e.g. /milestones/)
+        # don't sprout a personal strip.
+        if hub.key == 'my_pursuit' and not is_auth:
+            return {'hub_section': None}
 
-        items = build_rendered_items(hub, is_authenticated=is_auth, extras=extras)
+        # No dynamic extras: Profile is reached from the avatar menu, and the fundraiser lives in the
+        # Support hub.
+        is_member = is_auth and bool(getattr(request.user, 'premium_tier', ''))
+        items = build_rendered_items(hub, is_authenticated=is_auth, is_member=is_member,
+                                     active_slug=active_slug)
+        active_label = next((i.label for i in items if i.slug == active_slug), '')
 
         return {
             'hub_section': hub.key,
             'hub_subnav_label': hub.label,
             'hub_subnav_icon': hub.icon,
             'hub_subnav_items': items,
-            'hub_subnav_active_slug': match['active_slug'],
+            'hub_subnav_active_slug': active_slug,
+            'hub_subnav_active_label': active_label,   # current page, for the mobile collapse bar
         }
     except Exception:
         logger.debug("Failed to resolve hub_subnav for path %s", request.path, exc_info=True)
         return {'hub_section': None}
 
 
-def _fundraiser_subnav_extras():
-    """
-    Build the dynamic Fundraiser sub-nav item for the Dashboard hub, or an
-    empty tuple if no campaign is currently active.
-
-    Shares the ``fundraiser:active_banner`` cache key with
-    ``active_fundraiser`` (60s TTL, PK-only value) so this is a cache
-    GET on the hot path. Uses ``get_or_set`` so the lookup works
-    regardless of whether ``active_fundraiser`` has run yet on this
-    request; subsequent processors then hit the primed cache.
-    """
-    from django.core.cache import cache
-    from django.db.models import Q
-    from django.urls import NoReverseMatch, reverse
-    from django.utils import timezone
-
-    from core.hub_subnav import RenderedSubnavItem
-
-    def _fetch_id():
-        try:
-            from fundraiser.models import Fundraiser
-        except ImportError:
-            return 0
-        now = timezone.now()
-        fundraiser = (
-            Fundraiser.objects
-            .filter(banner_active=True, start_date__lte=now)
-            .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
-            .first()
-        )
-        return fundraiser.pk if fundraiser else 0
-
-    fundraiser_id = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
-    if not fundraiser_id:
-        return ()
-
+def _active_fundraiser_or_none(request=None):
+    """The currently-live, banner-active Fundraiser (or None), gated to viewers with a linked
+    profile (matches the site-wide banner audience). Shares the ``fundraiser:active_banner`` cache
+    key (60s, PK-only) so it's a cache GET on the hot path."""
+    if request is not None and not _viewer_has_linked_profile(request):
+        return None
     try:
-        from fundraiser.models import Fundraiser
-        fundraiser = Fundraiser.objects.filter(pk=fundraiser_id).only('slug').first()
+        from fundraiser.models import get_active_fundraiser
+        return get_active_fundraiser()
     except Exception:
-        return ()
+        logger.debug("Failed to resolve active fundraiser", exc_info=True)
+        return None
 
-    if not fundraiser:
-        return ()
 
-    try:
-        url = reverse('fundraiser', args=[fundraiser.slug])
-    except NoReverseMatch:
-        return ()
+def navsync(request):
+    """Global profile sync state for the navbar's status-aware avatar + panel.
 
-    return (RenderedSubnavItem(slug='fundraiser', label='Fundraiser', url=url, icon='heart'),)
+    The old hotbar was a per-view bar (ProfileHotbarMixin); the sync surface now
+    lives in the always-present navbar, so its context must be global. Cheap: every
+    value reads off the already-loaded ``request.user.profile`` (no new queries; the
+    queue lookup only runs mid-sync). Anon / profile-less viewers get nothing, so the
+    navbar renders the plain account avatar with no sync ring.
+    """
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated and hasattr(user, "profile")):
+        return {}
+    profile = user.profile
+    data = {
+        "profile": profile,
+        "sync_status": profile.sync_status,
+        "progress_percentage": profile.sync_percentage,
+        "seconds_to_next_sync": profile.get_seconds_to_next_sync(),
+    }
+    if profile.sync_status == "syncing":
+        try:
+            from trophies.views.sync_views import _get_queue_position
+            data["queue_position"] = _get_queue_position(profile.id)
+        except Exception:
+            logger.debug("Failed to resolve sync queue position", exc_info=True)
+    return {"navsync": data}

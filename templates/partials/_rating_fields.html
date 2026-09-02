@@ -1,0 +1,107 @@
+{% load custom_filters %}{% comment %} The rating form's FIELDS -- the five scores, the optional quick take, and the guidelines
+notice. Everything from the first keystroke to the POST landing is owned by `PlatPursuit.RatingFields`
+(static/js/quick-rate.js); this is just what it binds to.
+
+Two hosts include it: the quick-rate modal (Game Detail's Ratings tab + the plat-card share flow) and the
+Rate My Games wizard. Neither owns a copy. That duplication is what this ends -- the wizard had grown its
+own form with no quick take, no live readouts and no field-level errors, which is exactly the drift the
+shared controller was created to stop.
+
+The host supplies the <form> element (and its `data-guidelines-agreed`) plus its own actions, because a
+modal ends in Cancel/Submit and a wizard ends in Skip/Submit sitting outside the form entirely.
+
+The host must ALSO include `trophies/partials/game_detail/guidelines_sheet.html`. The notice below carries
+the only [data-gd-guidelines-open] trigger on the site, and a <dialog> cannot live in here: this renders
+inside the host's <form>, and two hosts on one page would duplicate the element id. `RatingFields.attach`
+wires whatever sheet it finds, so the include is the host's whole obligation.
+
+The input NAMES are the API contract (recommendation, difficulty, grindiness, hours_to_platinum,
+fun_ranking, overall_rating, blurb) -- do not rename. Value/label hooks are data-gd-qr-*.
+
+`recommendation` is the only REQUIRED field: the blurb is optional and the five scores all carry
+defaults, so it is the one thing a submit waits on.
+
+`user_play_hours` is optional: where playtime is a page-level fact (Game Detail) it is SSR'd here; where it
+varies per card the host passes it in through RatingFields' `playtimeHint` and this renders the muted
+default until it does. {% endcomment %}
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Difficulty <span class="gd-qr__val" data-gd-qr-val="difficulty">5</span></span>
+    <input type="range" name="difficulty" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>Easy</span><span>Brutal</span></span>
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Grindiness <span class="gd-qr__val" data-gd-qr-val="grindiness">5</span></span>
+    <input type="range" name="grindiness" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>Breezy</span><span>Grindy</span></span>
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl" data-gd-qr-hours-label>Hours to Platinum</span>
+    <input type="number" name="hours_to_platinum" min="1" max="10000" class="gd-qr__num" placeholder="e.g. 40" inputmode="numeric" />
+    {% if user_play_hours %}<span class="gd-qr__hint">Playtime: about <b>{{ user_play_hours }}</b> hour{{ user_play_hours|pluralize }}.</span>{% else %}<span class="gd-qr__hint gd-qr__hint--muted">No playtime tracked.</span>{% endif %}
+</label>
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Fun <span class="gd-qr__val" data-gd-qr-val="fun_ranking">5</span></span>
+    <input type="range" name="fun_ranking" min="1" max="10" step="1" value="5" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>Chore</span><span>A blast</span></span>
+</label>
+{% comment %} Overall is the one score with a SHAPE people already read -- everywhere else on the site it
+renders as stars, so the form shows the thing being set rather than only the number setting it. The bar
+fills as the slider moves (`setReadout` writes `--fill`), and the track takes the star colour so the
+control and its output are visibly the same measurement.
+
+`.pp-stars` is the shared primitive (components/stars.css); this is its third caller after the profile's
+taste header and the rating cards. Marked `aria-hidden`: the figure beside it already says "3.0 / 5", and
+a screen reader does not need the same value twice in two notations. {% endcomment %}
+<label class="gd-qr__field">
+    <span class="gd-qr__lbl">Overall
+        <span class="gd-qr__stars pp-stars" style="--fill: 60%;" data-gd-qr-stars aria-hidden="true"><span class="pp-stars__on"></span></span>
+        <span class="gd-qr__val" data-gd-qr-val="overall_rating">3.0</span><span class="gd-qr__of">/ 5</span>
+    </span>
+    <input type="range" name="overall_rating" min="0.5" max="5" step="0.5" value="3" class="gd-qr__range" data-gd-qr-slider />
+    <span class="gd-qr__scale"><span>0.5</span><span>5</span></span>
+</label>
+{% comment %} The recommendation sits after the scores, not before them. It is the CONCLUSION -- every
+field above describes what the platinum was like, and this says what that adds up to -- so it reads as a
+summary rather than a question asked before you have thought about the answer. (An earlier cut led with
+it on the argument that it is the fastest field to answer; ordering by "quickest first" turned out to be
+optimising the wrong thing on a form you meet in bulk.) It is still the one field that gates the save.
+
+THREE, and the middle one is why the field exists: a platinum can be a bad experience attached to a game
+worth playing, and no yes/no can say that. A fourth ("only for the trophy") was built and dropped, because
+the STARS rate the game while this rates the PLATINUM -- so a shovelware plat is "Do it" at 1.5 stars, and
+splitting it across the two controls is what makes three enough.
+
+Three across in one row rather than stacked, which is what keeps the modal whole: the options cost one
+row's height instead of three. Labels wrap inside their tile, so the middle one keeps its full phrase.
+
+`<fieldset>` rather than a `<label>` -- one control owns three inputs, so the group needs a legend and each
+radio needs its own label. {% endcomment %}
+{% comment %}Looped over the MODEL's own choices rather than written out three times, so the wording lives
+in one place and a reworded answer reaches every surface at once.
+
+The middle label is the one thing that varies by game: it names what was rough, and on a DLC pack or a
+game with no platinum "tough plat" is simply wrong. The host swaps it per game through
+`RatingFields.label({recLabel})` -- the same mechanism the hours label already uses, and for the same
+reason (this partial is rendered ONCE and then re-pointed at game after game).{% endcomment %}
+<fieldset class="gd-qr__field gd-qr__field--rec">
+    <legend class="gd-qr__lbl" data-gd-qr-rec-legend>Would you recommend the platinum?</legend>
+    <div class="gd-qr__recs">
+        {% recommendation_choices as recommendations %}
+        {% for value, label in recommendations %}
+        <label class="gd-qr__rec" data-rec="{{ value }}">
+            <input type="radio" name="recommendation" value="{{ value }}">
+            {% include 'partials/_recommendation_icon.html' with value=value %}
+            <span class="gd-qr__rec-lbl" data-gd-qr-rec-lbl="{{ value }}">{{ label }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</fieldset>
+{% comment %} Optional public quick take. The counter shows chars remaining. {% endcomment %}
+<label class="gd-qr__field gd-qr__field--blurb">
+    <span class="gd-qr__lbl">Quick take <span class="gd-qr__opt">optional</span><span class="gd-qr__count" data-gd-qr-count>140</span></span>
+    <textarea name="blurb" maxlength="140" rows="2" class="gd-qr__area" data-gd-qr-blurb placeholder="How was the platinum? One line for fellow hunters."></textarea>
+</label>
+{% comment %} Persistent guidelines notice, right above the action: the act of posting IS the agreement
+(still recorded server-side on submit). Shown every time, never hidden after first agreement. The link
+opens the rules in a sheet OVER the host surface, so reading them never loses the in-progress take. {% endcomment %}
+<p class="gd-qr__notice">By posting a public quick take you agree to our <button type="button" class="gd-qr__guidelink" data-gd-guidelines-open>Community Guidelines</button>: keep it civil, spoiler-free, and useful.</p>

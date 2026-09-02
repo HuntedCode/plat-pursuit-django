@@ -1,0 +1,48 @@
+{% load humanize job_icons %}
+{% comment %} The wall alone -- the HTMX swap target for `/jobs/`.
+
+Bare, with no wrapper of its own: `hx-swap="innerHTML"` puts this inside `#browse-results`, so a wrapper
+here would nest a second one on every filter. Same contract as every other browse page's results partial.
+
+NO PAGINATION, and not an omission: the catalogue is 25 rows by construction (5 disciplines x 5 jobs),
+curated and seeded rather than grown. `HtmxListMixin` is on the view for the swap, not for a pager.
+{% endcomment %}
+<div class="jobs-wall" data-jobs-wall>
+    {% for job in jobs %}
+    {% comment %} The tile is deliberately COMPACT. At `lg` the wall is five across so each discipline
+    occupies exactly one row, which leaves roughly 190px per tile -- the old horizontal card (icon beside
+    a 96-character description, 320px minimum) could not survive that and was not asked to. It scans; the
+    job page briefs. {% endcomment %}
+    <a class="jobt" href="{% url 'job_detail' job.slug %}" style="--disc: var(--disc-{{ job.discipline }});">
+        <span class="jobt__top">
+            <span class="jobt__ic">{% job_icon job.icon '' %}</span>
+            <span class="jobt__id">
+                <span class="jobt__name">{{ job.name }}</span>
+                <span class="jobt__disc">{{ job.get_discipline_display }}</span>
+            </span>
+        </span>
+        {% if job.description %}<span class="jobt__desc">{{ job.description }}</span>{% endif %}
+        {% comment %} TWO figures, both annotated onto the queryset itself (one query for the wall, no
+        count per card). The hunter count that used to sit here is gone -- how many people have touched a
+        job says more about which games happen to be popular than about the job.
+
+        These two are deliberately KEPT TOGETHER despite overlapping, because they can disagree in the
+        direction that matters: a contract's XP splits evenly across every job it names, so twelve
+        six-way-split contracts is 12,000 XP while three solo contracts is 18,000. The count says how much
+        there is to DO here; the XP says what it is WORTH. Where they agree the second figure costs a
+        reader nothing; where they diverge it is the one that answers "is this worth my time". {% endcomment %}
+        <span class="jobt__feed">
+            <span class="jobt__fact"><b class="pp-tally">{{ job.contract_count|intcomma }}</b> contract{{ job.contract_count|pluralize }}</span>
+            <span class="jobt__fact"><b class="pp-tally">{{ job.xp_supply|intcomma }}</b> XP</span>
+        </span>
+    </a>
+    {% empty %}
+    <div class="jobs-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <p class="jobs-empty__title">No jobs match</p>
+        <p class="jobs-empty__sub">
+            {% if q %}Nothing here is called &ldquo;{{ q }}&rdquo;{% if selected_discipline %} in this discipline{% endif %}.{% elif selected_discipline %}No jobs in this discipline yet.{% else %}The job catalogue is still being seeded.{% endif %}
+        </p>
+    </div>
+    {% endfor %}
+</div>

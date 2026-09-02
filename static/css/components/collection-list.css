@@ -1,0 +1,32 @@
+/* ============================================================
+ * Collection page chrome: the .pp-collection wrapper, the summary-header momentum
+ * pill, and the .pp-collection__view host for the Gallery. Wired by collection.js.
+ * (The header's at-a-glance stats now use the shared .scard grid; the retired
+ * Case/List views + their tier-composition row / completion bar were removed.)
+ *
+ * Chrome is intentionally NON-sticky: the global hub sub-nav is the
+ * only pinned chrome on the site (see docs/architecture/ia-and-subnav).
+ * ============================================================ */
+
+.pp-collection {
+    --pp-list-accent: rgba(63, 205, 220, 1);   /* focus ring + active-chip cyan */
+}
+
+/* "+N this week" momentum pill (only rendered when there ARE recent earns). */
+.pp-coll-new {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+    color: color-mix(in oklab, var(--pp-primary) 78%, white);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 20%, transparent);
+}
+.pp-coll-new__spark {
+    width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--pp-primary); box-shadow: 0 0 6px var(--pp-primary);
+}
+
+/* The Gallery host -- leave room for the sticky site chrome if the wall is scrolled into view. */
+.pp-collection__view { scroll-margin-top: calc(var(--sticky-top, 0px) + 14px); }
+

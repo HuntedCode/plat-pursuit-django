@@ -36,11 +36,6 @@ class Command(BaseCommand):
             help='Flush TokenKeeper for a specific profile.'
         )
         group.add_argument(
-            '--flush-dashboard',
-            type=int,
-            help='Flush dashboard module caches for a specific profile ID.'
-        )
-        group.add_argument(
             '--flush-concept',
             type=int,
             help='Flush image/trophy/stats caches for all games under a specific concept ID.'
@@ -94,8 +89,6 @@ class Command(BaseCommand):
             self._handle_flush_complete_lock(options['flush_complete_lock'])
         elif options['flush_concept']:
             self._handle_flush_concept(options['flush_concept'])
-        elif options['flush_dashboard']:
-            self._handle_flush_dashboard(options['flush_dashboard'])
         elif options['flush_community']:
             self._handle_flush_community()
         elif options['get_bulk_threshold']:
@@ -280,23 +273,6 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Finalize phase tracker successfully flushed!"))
         except Exception as e:
             logger.exception(f"Error during complete lock flush: {e}")
-            self.stdout.write(self.style.ERROR(f"Error: {e}"))
-
-    def _handle_flush_dashboard(self, profile_id: int):
-        try:
-            from django.core.cache import cache
-            from trophies.services.dashboard_service import force_flush_dashboard_cache, DASHBOARD_MODULES
-            force_flush_dashboard_cache(profile_id)
-
-            # Also flush premium preview caches (keyed by slug, not profile)
-            preview_keys = [f'dashboard:preview:{mod["slug"]}' for mod in DASHBOARD_MODULES if mod.get('requires_premium')]
-            if preview_keys:
-                cache.delete_many(preview_keys)
-                self.stdout.write(f"  Flushed {len(preview_keys)} preview caches.")
-
-            self.stdout.write(self.style.SUCCESS(f"Dashboard caches flushed for profile {profile_id}."))
-        except Exception as e:
-            logger.exception(f"Error during dashboard flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))
 
     def _handle_flush_community(self):

@@ -1,0 +1,108 @@
+"""The Pursuer Card: the cross-surface identity signature (home hero, profile header, share).
+
+Grounds identity in what a hunter actually cares about + would screenshot: platinum count,
+their standout platinums in real cover art (toggleable Rarest / Recent), completion/rarity,
+rank as standing, and -- where a platinum's game is a curated Contract -- the jobs that
+platinum levels. The premium is craft on real content; this builder assembles the real data.
+Reuses the Career identity + the trophy snapshot; the platinum reads are bounded slices (whale-
+safe) and the contract jobs are resolved in one batched query.
+"""
+import logging
+
+from trophies.services import career_service, profile_stats_service
+
+logger = logging.getLogger(__name__)
+
+
+def _contract_elements_for_concepts(concept_ids):
+    """Map concept_id -> [element display dicts] for concepts whose game keys a LIVE Contract
+    (igdb-derived: anchored + trusted concept sharing the Contract's igdb_id). Batched."""
+    if not concept_ids:
+        return {}
+    from trophies.services.contract_service import contract_by_concept_map
+    cmap = contract_by_concept_map(concept_ids, live_only=True)
+    return {
+        cid: [{'icon': j.icon, 'disc_slug': j.discipline, 'name': j.name} for j in contract.jobs.all()]
+        for cid, contract in cmap.items()
+    }
+
+
+def _platinums(profile, limit, *, recent):
+    """A showcase slice of the profile's platinums -- ordered by recency or rarity -- each with
+    cover art and (if the game is a Contract) the elements that platinum levels."""
+    from trophies.models import EarnedTrophy
+    qs = (
+        EarnedTrophy.objects
+        .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
+        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
+        .defer('trophy__game__concept__igdb_match__raw_response')
+    )
+    if recent:
+        qs = qs.filter(earned_date_time__isnull=False).order_by('-earned_date_time')
+    else:
+        qs = qs.filter(trophy__trophy_earn_rate__isnull=False).order_by('trophy__trophy_earn_rate')
+    rows = list(qs[:limit])
+
+    concept_ids = [g.concept_id for et in rows
+                   if (g := et.trophy.game) is not None and g.concept_id is not None]
+    elements_by_concept = _contract_elements_for_concepts(concept_ids)
+
+    showcase = []
+    for et in rows:
+        game = et.trophy.game
+        concept = getattr(game, 'concept', None) if game else None
+        showcase.append({
+            'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
+            'cover_url': game.display_image_url if game else '',
+            'earn_rate': et.trophy.trophy_earn_rate,
+            'np_communication_id': game.np_communication_id if game else None,
+            'elements': elements_by_concept.get(concept.id if concept else None, []),
+        })
+    return showcase
+
+
+def build_pursuer_card(profile, *, career_ctx=None, showcase_limit=6):
+    """Assemble the Pursuer Card for `profile`.
+
+    `career_ctx` (the full Career context) may be passed in to avoid a second build when the
+    caller already has one (the Home). Returns identity + headline stats + the discipline makeup
+    (the 5 disciplines, from the ring data) + a toggleable platinum showcase ({rarest, recent}).
+    Returns None when the Career build yields no usable identity (degraded) so the surface hides
+    the card.
+    """
+    if career_ctx is None:
+        career_ctx = career_service.build_career_context(profile)
+    hero = (career_ctx or {}).get('hero') or {}
+    if not hero.get('pursuer_rank'):
+        return None
+    snap = profile_stats_service.trophy_snapshot(profile)
+    rarest = _platinums(profile, showcase_limit, recent=False)
+    # One extra recent platinum beyond what's shown: the forge's slot-in beat renders the previous
+    # top-6, then shifts them right (this +1 slides off the end) as the new platinum enters at the
+    # front. The card's shelf strip clips to `showcase_limit`, so normal renders still show 6.
+    # NOTE: showcase_limit is mirrored in pursuer-card.css (grid /6 + nth-child(7)) and
+    # pursuer-card-forge.js (the `i < 6` visible-index filter) -- keep the three in sync.
+    recent = _platinums(profile, showcase_limit + 1, recent=True)
+    # The 5 disciplines (from the DNA-ring data) + a bar relative to your strongest family,
+    # so the band reads as "what you're made of" at a glance.
+    families = hero.get('ring') or []
+    if families:
+        strongest = max((f.get('avg') or 0 for f in families), default=0) or 1
+        families = [{**f, 'bar_pct': round((f.get('avg') or 0) / strongest * 100)} for f in families]
+    return {
+        'name': hero.get('pursuer_name'),
+        'display_mark': hero.get('display_mark') or '',
+        'avatar_url': hero.get('avatar_url'),
+        'rank': hero.get('pursuer_rank'),          # {key, label, ...} -- key drives the chrome
+        'level': hero.get('pursuer_level'),
+        'active_title': hero.get('active_title'),
+        'platinums': snap.get('total_plats', 0),
+        'avg_completion': snap.get('avg_progress'),
+        'total_trophies': snap.get('total_earned', 0),
+        'families': families,                       # [{label, slug, avg, bar_pct, ...}] -- 5 disciplines
+        'rarest_pct': rarest[0]['earn_rate'] if rarest else None,
+        'showcase': {'rarest': rarest, 'recent': recent},
+        # Epoch of the last sync, so the forge can fire on the next card view after a sync that
+        # completed while the user was away/elsewhere (client compares vs the last it forged for).
+        'synced_at': int(profile.last_synced.timestamp()) if getattr(profile, 'last_synced', None) else 0,
+    }

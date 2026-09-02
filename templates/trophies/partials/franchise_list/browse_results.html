@@ -1,8 +1,16 @@
-{# Franchise browse results partial. Returned on HTMX requests. #}
-{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
-
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-2.5">
-    {% include 'trophies/partials/franchise_list/franchise_cards.html' %}
+{% comment %} Franchise/Series browse results -- grid-only, infinite scroll. Returned on HTMX filter swaps AND
+the InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard). The sentinel + loading
+live in franchise_list.html (outside #browse-results) so only the grid swaps on a filter/type change. pp-reveal
+is baked in on HTMX swaps only (matches the htmx-settle-strips-classes fix). {% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}" data-active-type="{{ current_type }}">
+    {% for franchise in object_list %}
+    {% include 'trophies/partials/tag_tile.html' with tag=franchise detail_url_name='franchise_detail' item_type='franchise' %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <p class="pp-gtile-empty__title">No franchises found</p>
+        <p class="pp-gtile-empty__hint">Nothing matches your search. Try a different term, type, or enable single-game entries.</p>
+    </div>
+    {% endfor %}
 </div>
-
-{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

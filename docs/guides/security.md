@@ -27,13 +27,26 @@ CSP is configured via `CONTENT_SECURITY_POLICY` in settings.py using the `django
 | Directive | Allowed Sources |
 |-----------|----------------|
 | `default-src` | `'self'` |
-| `script-src` | `'self'`, `'unsafe-inline'`, `cdn.jsdelivr.net`, Google AdSense domains |
-| `style-src` | `'self'`, `'unsafe-inline'`, `fonts.googleapis.com` |
-| `font-src` | `'self'`, `fonts.gstatic.com` |
-| `img-src` | `'self'`, `data:`, PSN domains (http + https), `*.s3.amazonaws.com`, Google AdSense domains |
-| `frame-src` | `'self'`, Google AdSense iframe domains |
-| `connect-src` | `'self'`, `cdn.jsdelivr.net` (source maps), Google AdSense domains |
+| `script-src` | `'self'`, `'unsafe-inline'`, `cdn.jsdelivr.net`, `static.cloudflareinsights.com` |
+| `style-src` | `'self'`, `'unsafe-inline'` |
+| `font-src` | `'self'` (fonts self-hosted since SEO Lane 3, 2026-08) |
+| `img-src` | `'self'`, `data:`, PSN domains (http + https), `*.s3.amazonaws.com`, `images.igdb.com` |
+| `frame-src` | `'self'`, YouTube embed domains |
+| `connect-src` | `'self'`, `cdn.jsdelivr.net` (source maps), `cloudflareinsights.com` |
 | `frame-ancestors` | `'none'` |
+
+**Removing AdSense tightened this policy (2026-08).** Roughly 20 Google ad origins came out across four
+directives (googlesyndication, doubleclick, adtrafficquality, Funding Choices, googletagservices,
+adservice, `www.gstatic`, `csi.gstatic`), along with **`'wasm-unsafe-eval'`** — AdSense creatives were the
+app's only WebAssembly consumer — and the `http://fonts.gstatic.com` twin, which existed because AdSense
+creatives loaded Google Sans over plain http.
+
+Two entries were deliberately **kept** at the time because they sat beside ad origins without being
+ones: `https://fonts.gstatic.com` on `font-src` (then our webfont stack) and `images.igdb.com` on
+`img-src` (our cover art; only its `connect-src` copy was AdSense's scanner). The fonts entry has
+since been removed on purpose: SEO Lane 3 (2026-08) self-hosted the fonts into `static/fonts/`, so
+`font-src` is `'self'` alone and `test_csp_fonts_are_self_only` pins that. `images.igdb.com` remains
+pinned by `tests/engine/test_ads_removed.py`.
 
 **Note:** `'unsafe-inline'` is required for scripts (template `<script>` blocks) and styles (Tailwind). A future improvement would be nonce-based script loading to remove `'unsafe-inline'` from `script-src`.
 
@@ -94,7 +107,7 @@ Admin action logs use `user_id` instead of email addresses to avoid PII in log s
 
 ## Gotchas and Pitfalls
 
-- **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. Google AdSense requires multiple Google domains across script-src, img-src, frame-src, and connect-src.
+- **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. A blocked resource fails *silently* apart from a console entry: the Cloudflare analytics beacon was CSP-blocked once and the dashboard read zero traffic while the site was being hammered.
 - **Rate limit key.** All `django-ratelimit` decorators use `key='user'` which requires authentication. For unauthenticated endpoints, use `key='ip'` instead. Allauth's `ACCOUNT_RATE_LIMITS` uses its own format (`'<count>/<period>[/<scope>]'` where scope is `ip` or `key`).
 - **CORS localhost leak.** Before this hardening, localhost origins were unconditionally added to production CORS. Always gate development-only origins behind `if DEBUG`.
 - **`throttle_classes = []` disables DRF throttling.** If you see this on a view, it's intentionally removing DRF's built-in throttling. Make sure `django-ratelimit` is used as a replacement, not that throttling is simply absent.

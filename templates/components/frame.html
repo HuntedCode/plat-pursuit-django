@@ -3,15 +3,15 @@
 {# Required keys on `frame`: tier, state, series_name, badge_name, art_layers. #}
 {# Optional: size, description, engraving_rank, engraving_total_label, earned_date, #}
 {#   stages_done, stages_total, rarity_pct, rarity_rank, rarity_class, next_tier_label, #}
-{#   progress_pct, is_pinned, is_earn_staged, current_rank, current_cycle, set_number, #}
+{#   progress_pct, is_pinned, is_earn_staged, current_rank, current_cycle, #}
 {#   maintenance_label, maintenance_stamp, extra_class, dom_id, flair_slug, allow_flip. #}
 
 {% with tier=frame.tier|default:"gold" size=frame.size|default:"default" state=frame.state|default:"earned" %}
 
 <div
-    class="pp-frame pp-frame--{{ tier }} pp-hover-a{% if size != 'default' %} pp-frame--{{ size }}{% endif %}{% if state == 'unearned' or state == 'in_progress' %} pp-frame--blueprint pp-frame--unearned pp-anim-weld{% endif %}{% if state == 'maintenance' or frame.is_maint_staged %} pp-frame--maintenance{% endif %}{% if frame.is_maint_staged %} pp-frame--maint-staged pp-maint-stripes-hidden pp-maint-plinth-extras-hidden{% endif %}{% if state == 'maintenance' and not frame.is_maint_staged %} pp-maint-banner-shown pp-maint-band-shown{% endif %}{% if frame.is_pinned %} pp-frame--pinned-accent pp-frame--pinned-accent-border{% endif %}{% if frame.allow_flip|default_if_none:True and state == 'earned' or frame.allow_flip|default_if_none:True and state == 'maintenance' or frame.is_earn_staged %} pp-frame--flippable{% endif %}{% if frame.is_earn_staged %} pp-earn-back-staged{% endif %}{% if frame.flair_slug %} pp-flair--{{ frame.flair_slug }}{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
+    class="pp-frame pp-frame--{{ tier }} pp-hover-a{% if size != 'default' %} pp-frame--{{ size }}{% endif %}{% if state == 'in_progress' %} pp-frame--blueprint pp-frame--unearned pp-anim-weld{% elif state == 'unearned' %} pp-frame--ghost pp-frame--unearned{% endif %}{% if state == 'maintenance' or frame.is_maint_staged %} pp-frame--maintenance{% endif %}{% if frame.is_maint_staged %} pp-frame--maint-staged pp-maint-stripes-hidden pp-maint-plinth-extras-hidden{% endif %}{% if state == 'maintenance' and not frame.is_maint_staged %} pp-maint-banner-shown pp-maint-band-shown{% endif %}{% if frame.is_pinned %} pp-frame--pinned-accent pp-frame--pinned-accent-border{% endif %}{% if frame.allow_flip|default_if_none:True and state == 'earned' or frame.allow_flip|default_if_none:True and state == 'maintenance' or frame.is_earn_staged %} pp-frame--flippable{% endif %}{% if frame.is_earn_staged %} pp-earn-back-staged{% endif %}{% if frame.flair_slug %} pp-flair--{{ frame.flair_slug }}{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
     {% if frame.dom_id %}id="{{ frame.dom_id }}"{% endif %}
-    {% if state == 'in_progress' and frame.progress_pct is not None %}style="--pp-build: {{ frame.progress_pct }}%"{% elif state == 'maintenance' and frame.progress_pct is not None %}style="--pp-build: {{ frame.progress_pct }}%"{% elif frame.is_maint_staged and frame.progress_pct is not None %}style="--pp-build: {{ frame.progress_pct }}%"{% elif state == 'unearned' %}style="--pp-build: 0%"{% endif %}
+    {% if state == 'in_progress' and frame.progress_pct is not None %}style="--pp-build: {{ frame.progress_pct }}%"{% elif state == 'maintenance' and frame.progress_pct is not None %}style="--pp-build: {{ frame.progress_pct }}%"{% elif frame.is_maint_staged and frame.progress_pct is not None %}style="--pp-build: {{ frame.progress_pct }}%"{% endif %}
 >
     <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
 
@@ -28,6 +28,11 @@
     {# Earn-staged in-progress cards also render the back face — hidden via pp-earn-back-staged #}
     {# until the earn moment's back-scan phase reveals it. Maintenance cards keep the flip #}
     {# affordance since the badge HAS been earned and the back stats are still real. #}
+    {# Flip affordance lives OUTSIDE .pp-frame__inner so it never rotates with the flip; it rises from behind the card's top edge on hover. The whole card is the click target (wireFlip); this is a hint only. #}
+    <span class="pp-frame__flip-hint" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+        <span class="pp-frame__flip-hint-label">Flip</span>
+    </span>
     <div class="pp-frame__inner">
         <div class="pp-frame__face pp-frame__face--front">
             {% include "components/_frame_face_front.html" with frame=frame tier=tier state=state %}
@@ -58,6 +63,30 @@
                         <div class="pp-frame__back-stat-value">{{ frame.rarity_pct }}%{% if frame.rarity_rank %} · #{{ frame.rarity_rank|intcomma }}{% endif %}</div>
                     </div>
                     {% endif %}
+                    {% if frame.earned_count %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Earned by</div>
+                        <div class="pp-frame__back-stat-value">{{ frame.earned_count|intcomma }}</div>
+                    </div>
+                    {% endif %}
+                    {% if frame.engraving_rank %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Earn rank</div>
+                        <div class="pp-frame__back-stat-value">#{{ frame.engraving_rank|intcomma }}</div>
+                    </div>
+                    {% endif %}
+                    {% if frame.current_rank %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Leaderboard</div>
+                        <div class="pp-frame__back-stat-value">#{{ frame.current_rank|intcomma }}</div>
+                    </div>
+                    {% endif %}
+                    {% if frame.series_xp %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Series Points</div>
+                        <div class="pp-frame__back-stat-value">{{ frame.series_xp|intcomma }}</div>
+                    </div>
+                    {% endif %}
                     {% if frame.next_tier_label %}
                     <div class="pp-frame__back-stat">
                         <div class="pp-frame__back-stat-label">{% if frame.next_tier_label == "Maxed" %}Status{% else %}Next tier{% endif %}</div>
@@ -66,9 +95,15 @@
                     {% endif %}
                 </div>
             </div>
+            {% if frame.funded_by %}
+            <div class="pp-frame__back-funder">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                Artwork funded by <span>{{ frame.funded_by }}</span>
+            </div>
+            {% endif %}
             <div class="pp-frame__back-footer">
                 <span>PlatPursuit</span>
-                <span class="pp-frame__back-flip-hint">click to flip</span>
+                <span class="pp-frame__back-flip-hint"></span>
             </div>
         </div>
     </div>

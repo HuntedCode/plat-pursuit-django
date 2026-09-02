@@ -123,27 +123,35 @@ Incrementally updated via signals, fully rebuilt by `update_leaderboards` cron e
 
 | Key Pattern | Type | Purpose |
 |-------------|------|---------|
-| `lb:xp:scores` | Sorted Set | XP leaderboard; member=profile_id, score=xp*10^4+badges |
-| `lb:xp:data` | Hash | XP display data; field=profile_id, value=JSON |
-| `lb:earners:{slug}:scores` | Sorted Set | Per-series earners; score=tier*10^12+(10^12-timestamp) |
-| `lb:earners:{slug}:data` | Hash | Earners display data |
-| `lb:progress:{slug}:scores` | Sorted Set | Per-series progress; score=plats*10^9+golds*10^6+silvers*10^3+bronzes |
-| `lb:progress:{slug}:data` | Hash | Progress display data |
-| `lb:progress:global:scores` | Sorted Set | Global progress leaderboard |
-| `lb:progress:global:data` | Hash | Global progress display data |
-| `lb:xp:country:{cc}:scores` | Sorted Set | Per-country XP leaderboard; same score formula as global XP |
-| `lb:xp:country:{cc}:data` | Hash | Per-country XP display data |
-| `lb:xp:country:index` | Set | Active country codes (ISO alpha-2) with leaderboard entries |
-| `lb:community_xp:{slug}` | String (int) | Community XP total per series, INCRBY delta from gamification updates |
-| `lb:meta:last_rebuild` | Hash | Rebuild timestamps per leaderboard key |
 
-**Files**: `trophies/services/redis_leaderboard_service.py`, `trophies/services/xp_service.py`, `trophies/signals.py`
+> **Deleted 2026-08:** EVERY `lb:*` key. The Redis leaderboards were replaced wholesale by Postgres
+> standing tables in badge cutover 5b.4 (see [leaderboard-system.md](../architecture/leaderboard-system.md)).
+> Nothing reads or writes them; the keys will simply expire or can be dropped by hand. The note below is
+> the earlier, partial removal that preceded it -- the four `lb:progress:*` keys moved to
+> indexed Postgres columns on `ProfileBadgeStanding` / `SeriesBadgeStanding`, joined later in the same
+> migration by `ProfileCareerStanding` (Career XP) and `ProfileEditionStanding` (the per-edition slices of
+> the two badge boards). None of the four has a Redis equivalent, and none ever will -- a store per
+> (board x country x edition) is the multiplication that design avoids. See
+> [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
+
+**Files**: none -- all three (`redis_leaderboard_service.py`, `xp_service.py`, and the gamification signals) were deleted in badge cutover 5b.4.
 
 ---
 
 ## Django Cache Keys
 
 Django auto-prefixes all keys with `{KEY_PREFIX}:1:` from settings. The patterns below show application-level names before prefixing.
+
+### Rarity
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `rarity:community_size` | 3600s | PSN-linked account count — the denominator every rarity grade divides by |
+
+Viewer-independent and slow-moving, so an hour of staleness cannot change a grade noticeably. It
+replaced a grouped per-series `COUNT` on every page that grades badges, so this is a query *saved*, not
+added. **Tests must delete this key between cases** (`conftest` does, autouse) — otherwise the first
+test to grade anything fixes the denominator for the whole session.
 
 ### Homepage (Cron-Managed)
 
@@ -156,10 +164,18 @@ Django auto-prefixes all keys with `{KEY_PREFIX}:1:` from settings. The patterns
 | `featured_badges_{YYYY-MM-DD}` | 172800s (2d) | Featured badges list; daily rotation |
 | `featured_checklists_{YYYY-MM-DD}` | 172800s (2d) | Featured checklists list; daily rotation |
 | `whats_new_{YYYY-MM-DD}_{HH}` | 7200s | What's New sidebar content; hourly rotation |
+| `site_heartbeat_{YYYY-MM-DD}_{HH}` | 7200s | Site Heartbeat stats (incl. ratings totals); hourly rotation; reader falls back one hour |
+| `landing_badge_showcase_v2` | 3600s (300s on failure) | Anon landing's medallion shelf: top-earned live SERIES-type badges with custom art, one edition per series. Lazily filled on the request path (bounded) |
+| `landing_showcase_card_v1` | 21600s | Anon landing's showcase Profile Card HTML, rendered hourly by `refresh_homepage_hourly` from `LANDING_SHOWCASE_PSN`; landing falls back to a literal fixture |
 
 **Files**: `core/views.py`, `core/management/commands/refresh_homepage_daily.py`, `core/management/commands/refresh_homepage_hourly.py`
 
-All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Date/hour keying ensures seamless rotation without stale data windows.
+All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Date/hour keying ensures seamless rotation without stale data windows. (`landing_badge_showcase_v2` is the exception: lazily filled, no cron behind it.)
+
+The `site_heartbeat_*` payload also carries every browse-header substance stat (Browse Games,
+Trophy Lists, Genres & Themes index, Badges) -- the 2026-08 consolidation; see
+[homepage-services.md](homepage-services.md). The short-lived lazy key
+`trophy_lists:header_stats` was folded into it and no longer exists.
 
 ### Cron Watermarks / Cursors
 
@@ -201,14 +217,6 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 | `banned_words:active` | 300s (5m) | Active banned word list `[{word, use_word_boundaries}]` |
 
 **Files**: `trophies/services/comment_service.py`, `trophies/services/checklist_service.py`
-
-### Profile Timeline
-
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `profile:timeline:{profile_id}` | 3600s (invalidated on sync) | Serialized timeline events; deleted by `invalidate_timeline_cache()` |
-
-**Files**: `trophies/services/timeline_service.py`
 
 ### Notifications
 
@@ -252,6 +260,7 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 |-------------|-----|---------|
 | `paypal_access_token:{PAYPAL_MODE}` | ~8h (`min(expires_in - 300, 28800)`) | PayPal OAuth access token |
 | `paypal_webhook:{transmission_id}` | 604800s (7d) | Webhook idempotency key |
+| `paypal:sub:{PAYPAL_MODE}:{subscription_id}` | 8h (60s failure marker) | Membership-page subscription snapshot (status / next billing / plan id); busted by every PayPal subscription webhook and by the user's own cancel |
 
 **Files**: `users/services/paypal_service.py`, `users/views.py`
 

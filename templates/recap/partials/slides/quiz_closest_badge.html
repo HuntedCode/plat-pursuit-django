@@ -1,50 +1,38 @@
-{% load static %}
 {% comment %}
-Recap Slide: Quiz - Which Badge Are You Closest To?
-Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_completed, correct_required, options (list of {id, name, series, icon_url})
+Recap Slide: Quiz -- which badge are you closest to
+Variables: correct_badge_id, correct_badge_name, correct_progress_pct, correct_completed,
+           correct_required, options (list of Medallion frame dicts + id/name/series)
+
+Options are Medallions in their unearned state, so the choice reads as "which of these objects" rather
+than four thumbnails. The reveal panel below is unhidden by the controller once an answer lands, so the
+progress number stays out of sight while it would be the answer.
+
+This slide only ever appears on the most recent completed month -- SeriesBadgeStanding is live state with
+no history, so an older recap would freeze today's progress and label it with that month. See
+get_badge_progress_quiz_snapshot.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-6 py-8 md:px-10 md:py-10 text-center max-w-lg"
-         data-quiz-correct="{{ correct_badge_id }}">
-        <!-- Question Icon -->
-        <div class="text-4xl mb-3">🎖️</div>
+<div class="rcp rcp--wide rcp-quiz" data-quiz-correct="{{ correct_badge_id }}">
+    <p class="rcp__kicker">Quick quiz</p>
+    <h3 class="rcp-quiz__ask">Which badge are you closest to earning?</h3>
 
-        <!-- Question -->
-        <h3 class="text-xl md:text-2xl font-bold text-primary mb-2">Badge Quiz!</h3>
-        <p class="text-base text-base-content/70 mb-6">Which badge are you closest to earning?</p>
-
-        <!-- Badge Options -->
-        <div class="grid grid-cols-2 gap-3">
+    <div class="rcp__body">
+        <div class="rcp-quiz__grid">
             {% for badge in options %}
-            <div data-quiz-option="{{ badge.id }}"
-                 class="card bg-base-200 border border-base-content/10 p-3 cursor-pointer hover:border-primary transition-all">
-                <!-- Badge Icon -->
-                <div class="flex justify-center mb-2">
-                    <img src="{% if badge.has_image %}{{ badge.icon_url }}{% else %}{% static badge.icon_url %}{% endif %}" alt="{{ badge.name }}" class="w-12 h-12 rounded object-contain" />
-                </div>
-
-                <!-- Badge Name -->
-                <p class="text-sm font-semibold text-base-content line-clamp-2 mb-1">{{ badge.name }}</p>
-
-                <!-- Series Name -->
-                {% if badge.series %}
-                <p class="text-xs text-base-content/50 line-clamp-1">{{ badge.series }}</p>
-                {% endif %}
-            </div>
+            <button type="button" class="rcp-quiz__opt rcp-quiz__opt--tile" data-quiz-option="{{ badge.id }}">
+                <span class="rcp-quiz__opt-med">
+                    {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
+                </span>
+                <span class="rcp-quiz__opt-name">{{ badge.name }}</span>
+                {% if badge.series %}<span class="rcp-quiz__opt-sub">{{ badge.series }}</span>{% endif %}
+            </button>
             {% endfor %}
         </div>
+    </div>
 
-        <!-- Feedback container (populated by JS) -->
-        <div data-quiz-feedback class="hidden"></div>
+    <div class="rcp-quiz__verdict" data-quiz-feedback hidden></div>
 
-        <!-- Answer reveal info (shown after answering) -->
-        <div data-quiz-answer-detail class="hidden mt-4 p-3 bg-base-200 rounded-lg">
-            <p class="text-sm text-base-content/70">
-                You're <span class="font-bold text-primary">{{ correct_progress_pct }}%</span> of the way there!
-            </p>
-            <p class="text-xs text-base-content/50 mt-1">
-                {{ correct_completed }}/{{ correct_required }} concepts completed
-            </p>
-        </div>
+    <div class="rcp-quiz__reveal" data-quiz-answer-detail hidden>
+        <p><strong>{{ correct_progress_pct }}%</strong> of the way there</p>
+        <p class="rcp-quiz__reveal-sub">{{ correct_completed }} of {{ correct_required }} stages cleared</p>
     </div>
 </div>

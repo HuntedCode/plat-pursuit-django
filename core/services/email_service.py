@@ -3,13 +3,20 @@ EmailService - Reusable service for sending HTML emails via SendGrid.
 
 Provides a consistent interface for sending transactional emails across the application.
 """
+import html
 import logging
+import re
+from django.urls import reverse
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
 logger = logging.getLogger(__name__)
+
+# <style>/<script> elements INCLUDING their contents: strip_tags would otherwise leave the CSS
+# and JS text sitting in the plaintext part of every email.
+_STYLE_SCRIPT_RE = re.compile(r'(?is)<(style|script)[^>]*>.*?</\1>')
 
 
 class EmailService:
@@ -27,6 +34,7 @@ class EmailService:
         log_user=None,
         log_triggered_by='system',
         log_metadata=None,
+        headers=None,
     ):
         """
         Send an HTML email using a Django template.
@@ -42,6 +50,7 @@ class EmailService:
             log_user: User instance for the EmailLog entry (nullable)
             log_triggered_by: Origin for the EmailLog entry ('system', 'webhook', 'admin_manual', 'management_command')
             log_metadata: Optional dict of extra metadata for the EmailLog entry
+            headers: Optional dict of extra email headers (e.g. List-Unsubscribe)
 
         Returns:
             int: Number of emails successfully sent (0 or 1)
@@ -68,8 +77,13 @@ class EmailService:
             # Render HTML template
             html_content = render_to_string(template_name, context)
 
-            # Generate plain text version by stripping HTML tags
-            text_content = strip_tags(html_content)
+            # Generate the plain text version. strip_tags removes TAGS, not the CONTENTS of
+            # <style>/<script>, so stripping straight from the source dumped the whole
+            # stylesheet into the text/plain part (~2KB of CSS before the first sentence,
+            # which is also what an inbox preview would have read). Drop those elements first.
+            # unescape AFTER strip_tags: entities survive the strip, so a URL carrying a
+            # query string would reach a plaintext reader as '?a=1&amp;b=2' and break on paste.
+            text_content = html.unescape(strip_tags(_STYLE_SCRIPT_RE.sub(' ', html_content)))
 
             # Create email message
             email = EmailMultiAlternatives(
@@ -77,6 +91,10 @@ class EmailService:
                 body=text_content,
                 from_email=from_email,
                 to=to_emails,
+                # Extra headers (e.g. List-Unsubscribe on the launch announcement). The
+                # SendGrid backend forwards these into the personalization, so they survive
+                # the trip; None keeps every existing caller byte-identical.
+                headers=headers or None,
             )
 
             # Attach HTML version
@@ -254,7 +272,6 @@ def send_welcome_email(profile):
     No preference gate (transactional one-time email).
     """
     from core.models import EmailLog
-    from users.services.email_preference_service import EmailPreferenceService
 
     user = profile.user
     if not user or not user.email:
@@ -265,15 +282,13 @@ def send_welcome_email(profile):
         return
 
     try:
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
-        preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-
         context = {
             'username': profile.display_psn_username or profile.psn_username,
-            'profile_url': f"{settings.SITE_URL}/profiles/{profile.psn_username}/",
+            # reverse(), not a hardcoded path: this link goes out in EMAIL and outlives any redirect we
+            # keep. The section moved twice in 2026-08 and a literal here followed neither.
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[profile.psn_username])}",
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         EmailService.send_html_email(

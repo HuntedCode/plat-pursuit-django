@@ -1,0 +1,56 @@
+{% load custom_filters humanize %}{% comment %} The day tiles alone.
+
+Its own partial because infinite scroll appends THESE: the scroller fetches `?page=N` with an XHR header
+and gets tiles with no grid, no sentinel and no page chrome around them. The full view includes this same
+file for the first page, so an appended tile and a first-page tile cannot drift apart.
+
+The tile is the shared `.pp-gtile` grouping tile -- built for "a tile representing a COLLECTION of games",
+which is exactly what a day is -- using its own name/count slots rather than parallel ones, so it inherits
+the hover and reveal treatment every other grouping tile has.
+{% endcomment %}
+{% for d in activity_days %}
+{% comment %}A month break, spanning the whole row. Whether a day opens a month is decided by the SERVICE,
+not by comparing against the previous item here: a month runs across a page boundary, and an appended page
+cannot see what is already on screen -- so a template-side comparison repeats the header every time a page
+break lands mid-month.
+
+A header and its tile are wrapped TOGETHER in one `.pp-act__cell`, which is what the scroller appends.
+That wrapper exists for one reason: the scroller appends only elements matching its `cardSelector` and
+drops everything else, so a bare header was silently discarded from every appended page -- page 1 kept its
+months (server-rendered) and nothing after it had any. `display: contents` keeps both children as direct
+grid items, so the wrapper costs nothing in layout while making a day one appendable thing.
+{% endcomment %}
+<div class="pp-act__cell">
+    {% if d.month_start %}<h3 class="pp-act__month">{{ d.day|date:"F" }}<span class="pp-act__month-yr">{{ d.day|date:"Y" }}</span></h3>{% endif %}
+    <a class="pp-gtile pp-act__tile{% if d.platinums %} pp-act__tile--plat{% endif %}" href="{% url 'profile_day' psn_username=profile.psn_username day=d.day|date:'Y-m-d' %}"
+   hx-get="{% url 'profile_day' psn_username=profile.psn_username day=d.day|date:'Y-m-d' %}"
+   hx-target="#act-day-modal" hx-swap="innerHTML"
+   aria-haspopup="dialog" data-act-day
+   aria-label="{{ d.day|date:'D, M j, Y' }}: {{ d.trophies }} trophies across {{ d.games }} game{{ d.games|pluralize }}">
+    {% comment %}The day's covers, composed. `is-N` picks the mosaic arrangement, so the tile is whole
+    whether the hunter played one game or five.{% endcomment %}
+    <span class="pp-gtile__mosaic is-{{ d.covers|length }}" aria-hidden="true">
+        {% for game in d.covers %}
+        <img class="pp-gtile__tile-art{% if not game.has_cover_art %} pp-gtile__tile-art--icon{% endif %}"
+             src="{{ game.display_image_url }}" alt="" loading="lazy" decoding="async">
+        {% endfor %}
+    </span>
+    {% comment %}A platinum is the loudest thing that can happen on a day, and the count line said so in
+    9px grey. The seal is the same corner-star treatment the franchise cards use for "this has a platinum",
+    with the tile taking a platinum edge so it reads before you get to any text.{% endcomment %}
+    {% if d.platinums %}
+    <span class="pp-act__seal" title="{{ d.platinums }} platinum{{ d.platinums|pluralize }} earned this day">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        {% if d.platinums > 1 %}<b>{{ d.platinums }}</b>{% endif %}
+    </span>
+    {% endif %}
+    <span class="pp-gtile__scrim"></span>
+    <span class="pp-gtile__body">
+        <span class="pp-gtile__name">{{ d.day|date:"D, M j" }}</span>
+        <span class="pp-gtile__count">
+            {{ d.trophies|intcomma }} troph{{ d.trophies|pluralize:"y,ies" }} &middot; {{ d.games }} game{{ d.games|pluralize }}
+        </span>
+    </span>
+    </a>
+</div>
+{% endfor %}

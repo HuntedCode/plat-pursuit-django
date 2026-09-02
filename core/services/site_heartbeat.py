@@ -13,6 +13,7 @@ nested lookups (e.g. heartbeat.always.trophies_total.value).
 import logging
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -20,6 +21,27 @@ from core.services.stats import compute_community_stats
 from trophies.models import EarnedTrophy, ProfileGame
 
 logger = logging.getLogger(__name__)
+
+
+def get_cached_heartbeat():
+    """Read the current hour's heartbeat from cache, falling back to the previous hour (the
+    cron refreshes it hourly). Returns None if neither bucket is warm yet."""
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    data = cache.get(key)
+    if data is None:
+        prev = now - timedelta(hours=1)
+        data = cache.get(f"site_heartbeat_{prev.date().isoformat()}_{prev.hour:02d}")
+    return data
+
+
+def heartbeat_values(*keys):
+    """Browse-header read helper: {key: value-or-None} for the given stat keys, searched across
+    the cached heartbeat's `always` + `expanded` sections. Cold cache (cron hasn't run) yields
+    all-None, which consuming templates gate on -- a pure cache.get, safe on any request path."""
+    hb = get_cached_heartbeat() or {}
+    merged = {**(hb.get('always') or {}), **(hb.get('expanded') or {})}
+    return {k: (merged.get(k) or {}).get('value') for k in keys}
 
 
 def _humanize_compact(n):
@@ -115,6 +137,156 @@ def compute_site_heartbeat() -> dict:
     badge_earnable_xp = _community_value('badge_earnable_xp', 'total')
     badge_xp_total = _community_value('badge_xp', 'total')
 
+    # Catalogue coverage: distinct games that are part of a live badge series / a live contract. Surfaced on
+    # Browse Games' header as discovery hooks. Catalogue-wide aggregates -> hourly cron, never the request path.
+    try:
+        from trophies.models import Game, BadgeSeries
+        # A series is live when it has at least one live GROUP badge -- liveness moved from the badge row
+        # to the per-edition GroupBadge in the 2026-08 cutover.
+        _live_series = (
+            BadgeSeries.objects.filter(group_badges__is_live=True)
+            .distinct().values_list('series_slug', flat=True)
+        )
+        games_in_badges = Game.objects.filter(concept__stages__series_slug__in=_live_series).distinct().count()
+    except Exception:
+        logger.exception("games_in_badges query failed")
+        games_in_badges = None
+        is_partial = True
+    try:
+        from trophies.models import Contract, Game, IGDBMatch
+        # Contract membership is igdb-derived: a game counts if its concept is anchored + trusted and
+        # shares a raw igdb_id with a live Contract.
+        _live_contract_igdb = Contract.objects.filter(
+            is_live=True, igdb_id__isnull=False).values_list('igdb_id', flat=True)
+        games_in_contracts = (
+            Game.objects.filter(
+                concept__anchor_migration_completed_at__isnull=False,
+                concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                concept__igdb_match__igdb_id__in=_live_contract_igdb,
+            ).distinct().count()
+        )
+    except Exception:
+        logger.exception("games_in_contracts query failed")
+        games_in_contracts = None
+        is_partial = True
+
+    # Trophy-list catalogue: the Trophy Lists browse header's scards. LIST-scoped (np-floored --
+    # every row the page can render as a card), moved here from a lazy request-path
+    # cache.get_or_set in 2026-08: the with-a-platinum EXISTS semi-join over the Trophy table is
+    # exactly the read that belongs on the cron. `regional` requires is_regional AND a region,
+    # matching what every render site shows as regional (check_and_mark_regional can set the
+    # flag before region detection lands).
+    try:
+        from django.db.models import Exists, OuterRef
+
+        from trophies.models import Game, Trophy
+        _lists_base = Game.objects.filter(
+            np_communication_id__isnull=False).exclude(np_communication_id='')
+        lists_total = _lists_base.count()
+        lists_regional = _lists_base.filter(is_regional=True).exclude(region=[]).count()
+        lists_with_plat = _lists_base.filter(Exists(
+            Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum'))).count()
+        lists_new_this_week = _lists_base.filter(
+            created_at__gte=now - timedelta(days=7)).count()
+    except Exception:
+        logger.exception("trophy-list catalogue stats query failed")
+        lists_total = lists_regional = lists_with_plat = lists_new_this_week = None
+        is_partial = True
+
+    # Genres & Themes index header: how many of each actually carry games (two DISTINCT
+    # existence counts over 4-table joins -- moved here from a hot per-request compute in
+    # 2026-08, they ran on every request AND every filter swap of /genres/), plus the coverage
+    # pair that filled the grid out to the four-stat family standard.
+    try:
+        from django.db.models import Q as _Q
+
+        from trophies.models import ConceptGenre, ConceptTheme, Game, Genre, Theme
+        genres_with_games = (
+            Genre.objects.filter(genre_concepts__concept__games__isnull=False)
+            .distinct().count()
+        )
+        themes_with_games = (
+            Theme.objects.filter(theme_concepts__concept__games__isnull=False)
+            .distinct().count()
+        )
+        # Two IN-subqueries rather than OR'd joins: the join form fans out to
+        # games x genres x themes intermediate rows before the DISTINCT.
+        games_tagged = (
+            Game.objects.filter(
+                _Q(concept_id__in=ConceptGenre.objects.values('concept_id'))
+                | _Q(concept_id__in=ConceptTheme.objects.values('concept_id')))
+            .count()
+        )
+        tags_applied = ConceptGenre.objects.count() + ConceptTheme.objects.count()
+    except Exception:
+        logger.exception("genre/theme index stats query failed")
+        genres_with_games = themes_with_games = games_tagged = tags_applied = None
+        is_partial = True
+
+    # Jobs browse header: the catalog scale + the live contract pool + the XP hunters have
+    # banked across every job (a whole-table Sum -> cron). games_in_contracts above completes
+    # its four-stat grid.
+    try:
+        from trophies.models import Contract, Job, ProfileJobXP
+        # The FULL board, fallback included: the /jobs/ wall renders every job (Freelancer
+        # among them) and its own tally counts 25 -- a 24 here contradicted the page it
+        # headlines (the audit's catch).
+        jobs_total = Job.objects.count()
+        contracts_live = Contract.objects.filter(is_live=True).count()
+        job_xp_banked = ProfileJobXP.objects.aggregate(total=Sum('total_xp'))['total'] or 0
+    except Exception:
+        logger.exception("jobs browse stats query failed")
+        jobs_total = contracts_live = job_xp_banked = None
+        is_partial = True
+
+    # Franchise + company browse headers: how much of the catalogue each curation layer
+    # reaches. Games counts are Game rows whose concept carries a (visible) link -- one row
+    # per Game, no distinct multiplication.
+    try:
+        from django.db.models import Exists as _Exists, OuterRef as _OuterRef
+
+        from trophies.models import (
+            Company, ConceptCompany, ConceptFranchise, Franchise, Game,
+        )
+        franchises_total = Franchise.objects.filter(source_type='franchise').count()
+        series_total = Franchise.objects.filter(source_type='collection').count()
+        # TROPHY-LIST counts, np-floored, and labeled so: the detail pages' "games" vocabulary
+        # means distinct IGDB ids, while these count Game rows -- calling them games would read
+        # above the sum of the cards below the header (the audit's vocabulary catch).
+        franchise_games = Game.objects.filter(
+            np_communication_id__isnull=False).exclude(np_communication_id='').filter(
+            concept_id__in=ConceptFranchise.objects.filter(
+                is_excluded=False).values('concept_id')).count()
+        # Distinct CONCEPTS, not links: a spin-off typed into two collections is one spin-off.
+        franchise_spinoffs = ConceptFranchise.objects.filter(
+            is_excluded=False, is_spinoff=True).values('concept_id').distinct().count()
+        companies_total = Company.objects.count()
+        companies_developers = Company.objects.filter(_Exists(ConceptCompany.objects.filter(
+            company=_OuterRef('pk'), is_developer=True))).count()
+        companies_publishers = Company.objects.filter(_Exists(ConceptCompany.objects.filter(
+            company=_OuterRef('pk'), is_publisher=True))).count()
+        company_games = Game.objects.filter(
+            np_communication_id__isnull=False).exclude(np_communication_id='').filter(
+            concept_id__in=ConceptCompany.objects.values('concept_id')).count()
+    except Exception:
+        logger.exception("franchise/company browse stats query failed")
+        franchises_total = series_total = franchise_games = franchise_spinoffs = None
+        companies_total = companies_developers = companies_publishers = company_games = None
+        is_partial = True
+
+    # Community ratings -- the landing's Ratings section reads these. The distinct over the full
+    # ratings table is exactly the kind of read that belongs here (hourly cron) and never on a
+    # request path.
+    try:
+        from trophies.models import UserConceptRating
+        ratings_total = UserConceptRating.objects.count()
+        rated_games = UserConceptRating.objects.values('concept').distinct().count()
+    except Exception:
+        logger.exception("ratings stats query failed")
+        ratings_total = None
+        rated_games = None
+        is_partial = True
+
     # Flavor line: pre-formatted in service so template stays dumb
     flavor_numbers = (
         f"{_humanize_compact(badge_xp_total)} XP earned · "
@@ -182,6 +354,117 @@ def compute_site_heartbeat() -> dict:
                 'value': hours_hunted,
                 'label': 'Hours hunted',
                 'sublabel': 'real PSN playtime',
+            },
+            'games_in_badges': {
+                'value': games_in_badges,
+                'label': 'Games in badge series',
+                'sublabel': 'catalogue',
+            },
+            'games_in_contracts': {
+                'value': games_in_contracts,
+                'label': 'Games in contracts',
+                'sublabel': 'catalogue',
+            },
+            'lists_total': {
+                'value': lists_total,
+                'label': 'Trophy lists',
+                'sublabel': 'in the catalogue',
+                'delta': lists_new_this_week,   # lists added in the last 7 days
+            },
+            'lists_regional': {
+                'value': lists_regional,
+                'label': 'Regional lists',
+                'sublabel': 'territory-specific',
+            },
+            'lists_with_plat': {
+                'value': lists_with_plat,
+                'label': 'Lists with a platinum',
+                'sublabel': 'ship the prize',
+            },
+            'genres_with_games': {
+                'value': genres_with_games,
+                'label': 'Genres with games',
+                'sublabel': 'catalogue',
+            },
+            'themes_with_games': {
+                'value': themes_with_games,
+                'label': 'Themes with games',
+                'sublabel': 'catalogue',
+            },
+            'games_tagged': {
+                'value': games_tagged,
+                'label': 'Games tagged',
+                'sublabel': 'genre or theme',
+            },
+            'tags_applied': {
+                'value': tags_applied,
+                'label': 'Tags applied',
+                'sublabel': 'genre + theme links',
+            },
+            'jobs_total': {
+                'value': jobs_total,
+                'label': 'Jobs',
+                'sublabel': 'on the board',
+            },
+            'contracts_live': {
+                'value': contracts_live,
+                'label': 'Live contracts',
+                'sublabel': 'open now',
+            },
+            'job_xp_banked': {
+                'value': job_xp_banked,
+                'label': 'Job XP banked',
+                'sublabel': 'all-time',
+            },
+            'franchises_total': {
+                'value': franchises_total,
+                'label': 'Franchises',
+                'sublabel': 'tracked',
+            },
+            'series_total': {
+                'value': series_total,
+                'label': 'Series',
+                'sublabel': 'tracked',
+            },
+            'franchise_games': {
+                'value': franchise_games,
+                'label': 'Trophy lists',
+                'sublabel': 'in a franchise or series',
+            },
+            'franchise_spinoffs': {
+                'value': franchise_spinoffs,
+                'label': 'Spin-offs',
+                'sublabel': 'tracked separately',
+            },
+            'companies_total': {
+                'value': companies_total,
+                'label': 'Companies',
+                'sublabel': 'tracked',
+            },
+            'companies_developers': {
+                'value': companies_developers,
+                'label': 'Developers',
+                'sublabel': 'credited',
+            },
+            'companies_publishers': {
+                'value': companies_publishers,
+                'label': 'Publishers',
+                'sublabel': 'credited',
+            },
+            'company_games': {
+                'value': company_games,
+                'label': 'Trophy lists',
+                'sublabel': 'with a known company',
+            },
+            'ratings_total': {
+                'value': ratings_total,
+                'label': 'Ratings',
+                'sublabel': 'from finishers only',
+            },
+            'rated_games': {
+                'value': rated_games,
+                'label': 'Games rated',
+                'sublabel': 'by people who finished them',
             },
         },
         'flavor': {

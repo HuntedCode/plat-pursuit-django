@@ -1,34 +1,44 @@
 # users/views.py
 import json
-from datetime import datetime
+import pytz
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 
 from allauth.account.views import ConfirmEmailView
 from django.conf import settings
 from django.core import signing
+from django.core.cache import cache
+from django.db import transaction
+from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.contrib import messages
-from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
-from django.http import HttpResponse
+from django.contrib.auth.views import redirect_to_login
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
-from djstripe.models import Price, Customer, Subscription
+from django.views.decorators.http import require_GET, require_POST
+from djstripe.models import Price, Subscription
 from djstripe.models import Event as DJStripeEvent
 import stripe
 import logging
-from users.forms import UserSettingsForm, CustomPasswordChangeForm, EmailPreferencesForm
+from users.constants import (ACTIVE_PREMIUM_TIERS, LADDER_SLUGS,
+                             LEGACY_TIER_LEVEL_MAP, PAYPAL_LADDER_PLANS,
+                             PREMIUM_PERKS, SUPPORT_TIERS,
+                             SUPPORT_TIERS_ARE_PLACEHOLDERS)
+from users.forms import CustomPasswordChangeForm, EmailPreferencesForm
 from users.services.email_preference_service import EmailPreferenceService
 from users.services.subscription_service import SubscriptionService
+from users.services.timezone_service import set_user_timezone
 from users.models import CustomUser
-from trophies.forms import PremiumSettingsForm, ProfileSettingsForm
-from trophies.models import Concept, ProfileGame
-from trophies.utils import update_profile_trophy_counts
+from trophies.forms import ProfileSettingsForm
+from trophies.services.profile_stats_service import update_profile_trophy_counts
 
 logger = logging.getLogger('users.views')
 
@@ -46,167 +56,729 @@ class CustomConfirmEmailView(ConfirmEmailView):
         return response
     
 class SettingsView(LoginRequiredMixin, View):
+    """The account settings page (rebuilt 2026-08, ground-up).
+
+    Four POST actions, one per section: `regional` (timezone through the ONE timezone writer,
+    plus the clock format), `library` (the two hide toggles + denorm recompute), `change_password`
+    (throttled, and invalid submits re-render with field errors instead of redirecting them away),
+    `unlink_profile`. Email management is allauth's (`account_email`); membership lives on
+    /support/membership/ and this page only points there.
+    """
     template_name = 'users/settings.html'
-    login_url = '/login/'
 
-    def get(self, request):
-        user_form = UserSettingsForm(instance=request.user)
-        password_form = CustomPasswordChangeForm(user=request.user)
-        profile = request.user.profile if hasattr(request.user, 'profile') else None
-        premium_form = PremiumSettingsForm(instance=profile) if profile else None
-        profile_form = ProfileSettingsForm(instance=profile) if profile else None
+    # The password action is the one credential-sensitive POST on the page, and it bypasses
+    # allauth's rate limits (deliberately: the page keeps its own form for field-level errors).
+    # A small cache throttle covers it: failures within the window count, success resets.
+    # Each FAILURE restarts the TTL (five failures spread over an hour still trip it), and a
+    # blocked attempt returns before the set, so hammering cannot extend the lockout past
+    # 15 minutes from the fifth failure. The cache is django_redis with IGNORE_EXCEPTIONS,
+    # so on a Redis outage the throttle fails OPEN -- acceptable for a logged-in-only form.
+    PW_THROTTLE_MAX = 5
+    PW_THROTTLE_WINDOW = 15 * 60
 
-        # Build available themes for the template
-        # Exclude game art themes since settings page has no game context
-        from trophies.themes import get_available_themes_for_grid, get_theme, get_theme_css
-        available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
+    def get(self, request, password_form=None):
+        return render(request, self.template_name, self._context(request, password_form))
 
-        # Resolve selected theme info directly so template doesn't need to search
-        selected_theme_name = ''
-        selected_theme_css = ''
-        if profile and profile.selected_theme:
-            selected_theme_data = get_theme(profile.selected_theme)
-            if selected_theme_data:
-                selected_theme_name = selected_theme_data['name']
-                selected_theme_css = get_theme_css(profile.selected_theme)
-
-        # Serialize current background for the JS picker
-        initial_bg_data = 'null'
-        if profile and profile.selected_background:
-            bg = profile.selected_background
-            initial_bg_data = json.dumps({
-                'concept_id': bg.id,
-                'title_name': bg.unified_title or '',
-                'icon_url': bg.cover_url or '',
-            })
-
-        context = {
-            'user_form': user_form,
-            'password_form': password_form,
-            'premium_form': premium_form,
-            'profile_form': profile_form,
+    def _context(self, request, password_form=None):
+        from users.services.marks import worn_level_dict
+        from trophies.models import UserConceptRating
+        profile = getattr(request.user, 'profile', None)
+        level = worn_level_dict(request.user.premium_tier) if request.user.premium_tier else None
+        # Deletion is cancel-first: any live payment relationship blocks it and the dialog
+        # gives way to a "manage membership" pointer. Grace is allowed through with a forfeit
+        # warning: the member already cancelled, and deleting simply ends the paid tail early.
+        membership = SubscriptionService.membership_status(request.user)
+        deletion_blocked = self._deletion_blocked(request.user, membership)
+        # Gates the blurb warning + the download link in the delete dialog: someone who never
+        # wrote a quick take gets a shorter dialog with nothing to export.
+        has_blurbs = bool(profile) and UserConceptRating.objects.filter(
+            profile=profile).exclude(blurb='').exists()
+        return {
             'profile': profile,
-            'available_themes': available_themes,
-            'selected_theme_name': selected_theme_name,
-            'selected_theme_css': selected_theme_css,
-            'initial_background_json': initial_bg_data,
-            'breadcrumb': [
-                {'text': 'Home', 'url': '/'},
-                {'text': 'Settings'},
-            ],
+            'password_form': password_form or CustomPasswordChangeForm(user=request.user),
+            'timezones': pytz.common_timezones,
+            'level': level,
+            # premium_tier is null/blank for non-members and worn_level_dict returns None for
+            # unmapped tiers, so the level alone answers membership. Gating on the profile's
+            # user_is_premium denorm was the audit-caught bug: a member with no linked PSN
+            # profile (or a denorm lagging a fresh purchase) read as "not a member".
+            'is_member': bool(level),
+            'deletion_blocked': deletion_blocked,
+            'deletion_grace_until': membership.grace_until if membership.state == 'grace' else None,
+            'has_blurbs': has_blurbs,
         }
-        return render(request, self.template_name, context)
-    
+
+    @staticmethod
+    def _deletion_blocked(user, membership):
+        """Cancel-first, belt and braces. `membership_status` is the headline truth, but it
+        deliberately reads 'none' for states a deletion must still respect: a Stripe sub
+        sitting in `unpaid`/`incomplete`, or a PayPal id with no scheduled end that a webhook
+        hiccup left behind. Deleting the user row in any of those states orphans a LIVE
+        billing relationship -- the processor keeps charging and the webhooks dead-end on
+        CustomUser.DoesNotExist with no site-side cancel path left.
+
+        Residual window, now CLOSED downstream: a checkout approved seconds ago whose
+        activation webhook has not landed is invisible to every site-side signal (both
+        processors write our identifiers only from the webhook) -- but the activation
+        webhooks now SELF-HEAL that case, cancelling at the processor when they resolve to
+        no user (see _self_heal_orphaned_stripe_sub and the PayPal ACTIVATED branch; both
+        behind PAYMENT_SELF_HEAL_ENABLED, backstopped by the weekly audit's orphan sweep).
+        """
+        if membership.state in ('active', 'past_due'):
+            return True
+        has_sub, _ = SubscriptionService.has_active_subscription(user)
+        if has_sub:
+            return True
+        # A PayPal subscription id with no cancellation scheduled is a live relationship,
+        # whatever membership_status thinks (grace carries paypal_cancel_at and passes).
+        if user.paypal_subscription_id and not user.paypal_cancel_at:
+            return True
+        # Any non-terminal Stripe subscription in the local mirror (unpaid, incomplete,
+        # paused...) blocks too; canceled/incomplete_expired are terminal and don't.
+        # `stripe_data__status`, NOT `status`: dj-stripe 2.10's lean models keep the payload
+        # in the stripe_data JSON (every filter in subscription_service reads it this way,
+        # and a bare `status` lookup is a FieldError at query-build time). The explicit
+        # isnull arm is load-bearing: a payload with NO status key yields SQL NULL, which a
+        # bare exclude() silently DROPS (NULL never matches either side of NOT IN) -- and a
+        # status-less row is exactly what a half-synced mirror looks like, so it must block.
+        if user.stripe_customer_id:
+            return Subscription.objects.filter(
+                customer_id=user.stripe_customer_id,
+            ).filter(
+                ~Q(stripe_data__status__in=('canceled', 'incomplete_expired'))
+                | Q(stripe_data__status__isnull=True)
+            ).exists()
+        return False
+
     def post(self, request):
         action = request.POST.get('action')
-
-        if action == 'update_user':
-            user_form = UserSettingsForm(request.POST, instance=request.user)
-            if user_form.is_valid():
-                user_form.save()
-                messages.success(request, 'User settings updated successfully!')
-            else:
-                messages.error(request, 'Error updating user settings.')
+        handler = {
+            'regional': self._save_regional,
+            'library': self._save_library,
+            'change_password': self._change_password,
+            'unlink_profile': self._unlink_profile,
+            'delete_account': self._delete_account,
+        }.get(action)
+        if handler is None:
             return redirect('settings')
-        
-        elif action == 'change_password':
-            password_form = CustomPasswordChangeForm(user=request.user, data=request.POST)
-            if password_form.is_valid():
-                user = password_form.save()
-                update_session_auth_hash(request, user)
-                messages.success(request, 'Password changed successfully.')
-            else:
-                messages.error(request, 'Error changing password. Check fields.')
-            return redirect('settings')
+        return handler(request)
 
-        elif action == 'unlink_profile':
-            profile = request.user.profile if hasattr(request.user, 'profile') else None
-            if profile:
-                profile.unlink_user()
-                messages.success(request, 'PSN profile unlinked successfully!')
-            else:
-                messages.error(request, 'No profile to unlink.')
+    def _save_regional(self, request):
+        tz_name = (request.POST.get('user_timezone') or '').strip()
+        if tz_name not in pytz.common_timezones_set:
+            messages.error(request, 'Pick a timezone from the list.')
             return redirect('settings')
-        
-        elif action == 'update_premium':
-            if not hasattr(request.user, 'profile') or not request.user.profile.user_is_premium:
-                messages.error(request, 'This feature is for premium users only!')
-                return redirect('settings')
-            profile = request.user.profile
-            premium_form = PremiumSettingsForm(request.POST, instance=profile)
-            if premium_form.is_valid():
-                premium_form.save()
-
-                # Handle selected_background from the JS picker (hidden input)
-                bg_id = request.POST.get('selected_background', '').strip()
-                if bg_id:
-                    try:
-                        concept = Concept.objects.get(id=int(bg_id), bg_url__isnull=False)
-                        # Validate the user has earned this background
-                        has_access = ProfileGame.objects.filter(
-                            profile=profile, game__concept=concept,
-                        ).filter(Q(has_plat=True) | Q(progress=100)).exists()
-                        if has_access:
-                            profile.selected_background = concept
-                        else:
-                            profile.selected_background = None
-                    except (ValueError, Concept.DoesNotExist):
-                        profile.selected_background = None
-                else:
-                    profile.selected_background = None
-                # Changing the game here invalidates any exact image picked on
-                # the profile banner, which would otherwise still override it.
-                profile.banner_image_url = None
-                profile.save(update_fields=['selected_background', 'banner_image_url'])
-
-                messages.success(request, 'Premium settings updated successfully!')
-            else:
-                messages.error(request, 'Error updating premium settings.')
-            return redirect('settings')
-        
-        elif action == 'update_profile':
-            if not hasattr(request.user, 'profile'):
-                messages.error(request, 'Link a PSN account to change this setting!')
-                return redirect('settings')
-            profile_form = ProfileSettingsForm(request.POST, instance=request.user.profile)
-            if profile_form.is_valid():
-                profile_form.save()
-                request.user.profile.refresh_from_db()
-                update_profile_trophy_counts(request.user.profile)
-                messages.success(request, 'Profile settings updated successfully!')
-            else:
-                messages.error(request, 'Error updating profile settings.')
-            return redirect('settings')
-
-        
+        # The one writer: stamps timezone_confirmed_at and un-finalizes recaps on change
+        # (the old settings page skipped both, leaving recaps rendered in the old zone).
+        changed, recaps_reset = set_user_timezone(request.user, tz_name)
+        use_24 = request.POST.get('use_24hr_clock') == 'on'
+        if use_24 != request.user.use_24hr_clock:
+            request.user.use_24hr_clock = use_24
+            request.user.save(update_fields=['use_24hr_clock'])
+        note = ' Your monthly recaps will regenerate in the new timezone.' if recaps_reset else ''
+        messages.success(request, f'Regional settings saved.{note}')
         return redirect('settings')
-    
+
+    def _save_library(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if profile is None:
+            messages.error(request, 'Link a PSN account to change library settings.')
+            return redirect('settings')
+        form = ProfileSettingsForm(request.POST, instance=profile)
+        if form.is_valid():
+            form.save()
+            # The hide toggles feed the filter-respecting trophy-count denorms.
+            profile.refresh_from_db()
+            update_profile_trophy_counts(profile)
+            messages.success(request, 'Library settings saved.')
+        else:
+            messages.error(request, 'Could not save library settings.')
+        return redirect('settings')
+
+    def _change_password(self, request):
+        throttle_key = f'settings:pwattempts:{request.user.pk}'
+        attempts = cache.get(throttle_key, 0)
+        if attempts >= self.PW_THROTTLE_MAX:
+            messages.error(request, 'Too many password attempts. Try again in a few minutes.')
+            return redirect('settings')
+        form = CustomPasswordChangeForm(user=request.user, data=request.POST)
+        if form.is_valid():
+            cache.delete(throttle_key)
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, 'Password changed.')
+            return redirect('settings')
+        cache.set(throttle_key, attempts + 1, self.PW_THROTTLE_WINDOW)
+        # Re-render (no redirect) so the bound form's field errors reach the template --
+        # the old page redirected and reduced every failure to one generic banner.
+        return self.get(request, password_form=form)
+
+    def _unlink_profile(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if profile:
+            profile.unlink_user()
+            messages.success(request, 'PSN profile unlinked.')
+        else:
+            messages.error(request, 'No profile to unlink.')
+        return redirect('settings')
+
+    def _delete_account(self, request):
+        """Destroy the ACCOUNT, keep the public pursuit (the deletion semantics locked in the
+        2026-08 settings review, Steam comparison and all):
+
+        - The PSN profile survives as an unlinked public hunter (`unlink_user()` -- the same
+          battle-tested bookkeeping as the unlink action: premium denorm, mark, counts).
+        - Numeric ratings survive with it (statistical signal on a public identity; removing
+          them would quietly erode community averages for zero privacy gain).
+        - Blurbs are CLEARED, not hidden -- prose is the one field with the person's voice in
+          it, and a hidden state would be retention without a purpose plus a leak-back path.
+          Pending reports on those blurbs are dismissed as moot.
+        - The user row and everything personal cascade away (allauth emails, tenure periods).
+
+        Guards: cancel-first membership check re-verified server-side (the template hides the
+        form when blocked, but templates are not access control), password re-entry behind the
+        same throttle shape as the password action, CSRF via the normal form path.
+        """
+        from core.models import EmailLog
+        from trophies.models import BlurbReport, UserConceptRating
+
+        # Staff first, before anything destructive: moderation history PROTECTs its moderator
+        # FK ("never delete moderator history"), so a staff self-delete would 500 mid-flow.
+        # Staff offboarding is a by-hand process anyway.
+        if request.user.is_staff or request.user.is_superuser:
+            messages.error(
+                request,
+                'Staff accounts are removed by hand. Send us a message and we will sort it.',
+            )
+            return redirect('settings')
+
+        membership = SubscriptionService.membership_status(request.user)
+        if self._deletion_blocked(request.user, membership):
+            messages.error(
+                request,
+                'Your membership is still active. Cancel it first, and deletion opens the '
+                'moment it ends. Paid time is always honoured.',
+            )
+            return redirect('settings')
+
+        throttle_key = f'settings:delattempts:{request.user.pk}'
+        attempts = cache.get(throttle_key, 0)
+        if attempts >= self.PW_THROTTLE_MAX:
+            messages.error(request, 'Too many attempts. Try again in a few minutes.')
+            return redirect('settings')
+        if not request.user.check_password(request.POST.get('password') or ''):
+            cache.set(throttle_key, attempts + 1, self.PW_THROTTLE_WINDOW)
+            messages.error(request, 'That password is not right. Nothing has been deleted.')
+            return redirect('settings')
+        cache.delete(throttle_key)
+
+        user = request.user
+        profile = getattr(user, 'profile', None)
+        # One transaction for every irreversible step: a failure anywhere rolls the whole
+        # thing back rather than leaving a half-destroyed, logged-out account. The logout is
+        # inside on purpose -- the session flush is a DB write and belongs to the same fate.
+        with transaction.atomic():
+            if profile is not None:
+                # Dismissed with the same bookkeeping the admin's own dismiss action writes
+                # (a dismissed row with no reviewed_at reads as corruption in the queue).
+                # reviewed_by stays NULL legitimately: this is a system action. Reports the
+                # user FILED against others stay pending on the surviving profile.
+                BlurbReport.objects.filter(
+                    rating__profile=profile, status='pending',
+                ).update(status='dismissed', reviewed_at=timezone.now(),
+                         admin_notes='Author deleted their account.')
+                # blurb_hidden resets with the clear: the flag is a judgment on prose that no
+                # longer exists, and the write path never resets it -- left set, a returning
+                # hunter's NEW quick take on the same game would be invisible.
+                UserConceptRating.objects.filter(profile=profile).exclude(blurb='').update(
+                    blurb='', blurb_hidden=False)
+                profile.unlink_user()
+            # The address is the personal data in an email log; the log's system value
+            # (what sent, when, delivery status) survives the scrub.
+            EmailLog.objects.filter(user=user).update(recipient_email='')
+
+            logger.info("Account deletion: user %s (profile %s)", user.pk,
+                        profile.pk if profile else None)
+            # Log out BEFORE the delete so the session stops referencing a row that is
+            # about to go; the goodbye page renders anonymously.
+            logout(request)
+            user.delete()
+        return redirect('account_deleted')
+
+
 @login_required
-def subscribe(request):
-    is_live = settings.STRIPE_MODE == 'live'
+@require_GET
+def export_quick_takes(request):
+    """The deletion dialog's "take your words with you" download: every rating that carries a
+    quick take, with its scores for context, as a PLAIN TEXT file -- these are PlayStation
+    gamers, and a .txt opens on anything (a phone included) with no computer knowledge asked.
+    Offered before deletion so the permanent blurb erase is a choice made with a copy in hand;
+    harmless to hit at any other time. Blurb-carrying rows only -- that matches the link's
+    framing AND the deletion semantics (score-only ratings survive on the profile, so there is
+    nothing to save), and it keeps the iteration bounded by hand-written prose rather than
+    library size (whale-safe).
+    """
+    from trophies.models import UserConceptRating
+    from trophies.services.rating_service import concepts_defining_a_platinum
 
-    # Double-subscribe guard: check ALL providers
-    has_active, active_provider = SubscriptionService.has_active_subscription(request.user)
-    if has_active:
-        messages.info(request, 'You already have an active subscription. Manage it here.')
-        return redirect('subscription_management')
+    profile = getattr(request.user, 'profile', None)
+    if profile is None:
+        return redirect('settings')
 
-    try:
-        prices = SubscriptionService.get_prices_from_stripe(is_live)
-    except Price.DoesNotExist as e:
-        messages.error(request, "Pricing not available in current mode. Contact support.")
-        logger.error(f"Price fetch error: {e} in mode {settings.STRIPE_MODE}")
-        return redirect('home')
+    rows = list(
+        UserConceptRating.objects.filter(profile=profile)
+        .exclude(blurb='')
+        .select_related('concept', 'concept_trophy_group')
+        .order_by('-updated_at')
+    )
+    # The house has_platinum rule (api/rating_views.py): a DLC-group rating never speaks of a
+    # platinum, a base-game rating does when the concept defines one. One batched lookup.
+    plat_concepts = concepts_defining_a_platinum(
+        {r.concept_id for r in rows if r.concept_trophy_group_id is None})
+    # The export date in the USER'S zone (the page's other half is a dedicated timezone
+    # writer; a UTC date here would read as tomorrow to an evening exporter). Day formatted
+    # by hand because strftime's unpadded day is platform-dependent (%-d vs %#d).
+    exported = timezone.now().astimezone(pytz.timezone(request.user.user_timezone or 'UTC'))
+    lines = [
+        'Your PlatPursuit quick takes',
+        f'PSN: {profile.display_psn_username or profile.psn_username}',
+        f'Exported {exported.strftime("%B")} {exported.day}, {exported.year}',
+        '',
+    ]
+    for r in rows:
+        title = r.concept.unified_title
+        if r.concept_trophy_group:
+            title = f'{title} ({r.concept_trophy_group.display_name})'
+        lines.append('-' * 40)
+        lines.append(title)
+        lines.append(
+            f'  Difficulty {r.difficulty}/10 | Grind {r.grindiness}/10 | '
+            f'Fun {r.fun_ranking}/10 | Overall {r.overall_rating}/5 | '
+            f'About {r.hours_to_platinum} hours'
+        )
+        if r.recommendation:
+            # The rating's own wording: a DLC set never says "tough plat", and a base game
+            # only does when the concept defines a platinum -- the same branch every other
+            # renderer honours (get_recommendation_display always says "platinum", wrongly).
+            has_plat = r.concept_trophy_group_id is None and r.concept_id in plat_concepts
+            lines.append(f'  Recommendation: {r.recommendation_label(has_plat) or r.recommendation}')
+        lines.append(f'  "{r.blurb}"')
+        lines.append('')
+    # CRLF on purpose: a .txt attachment that "opens on anything" includes old Notepad.
+    response = HttpResponse('\r\n'.join(lines), content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="platpursuit-quick-takes.txt"'
+    return response
 
-    valid_tiers = list(prices.keys())
+class SupportStorefrontView(TemplateView):
+    """`/support/` -- the Support hub landing AND the membership storefront, deliberately one page.
 
-    if request.method == 'POST':
+    It lives here rather than in `core.views` because the checkout POST lives here: the form carries
+    no `action`, so it self-POSTs to whatever URL rendered it. Serving the form from `/support/`
+    while the handler stayed at `/users/subscribe/` would mean a redirect on a POST -- which browsers
+    turn into a GET with the body dropped, silently breaking checkout. The handler goes where the
+    form is rendered. `/users/subscribe/` is now a 302 in (302, not 301: nothing should POST there
+    any more, but a cached permanent redirect on a payment URL is unrecoverable if that assumption
+    ever breaks).
+
+    PUBLIC, and it stays rendered for members. Both are changes from the old `subscribe` view:
+
+    - Anonymous visitors see the entire pitch. A support page you must log in to read cannot do the
+      one job it has. The buy controls become a sign-in link that returns here.
+    - Active members are no longer bounced to `subscription_management`. This page is also the hub
+      landing (and soon holds the roadmap and fundraiser), so redirecting members off it makes those
+      unreachable for exactly the people who paid for them. They get a thank-you state instead.
+    """
+    template_name = 'support/support_hub.html'
+
+
+    def _today(self):
+        """The serve band's live figures: hunters, trophies, platinums, hours.
+
+        Read off the hourly site heartbeat rather than queried here -- these are three of the most
+        expensive counts on the site and this is a public page anyone can hammer. `get_cached_heartbeat`
+        already falls back to the previous hour's bucket.
+
+        Returns None when BOTH buckets are cold, and the template omits the sentence entirely rather
+        than printing zeroes at a first-time reader. Same gate `badge_how_it_works` uses on its
+        catalogue strip, and it matters more here: "tracking 0 trophies for 0 hunters" on the page
+        asking you to fund the thing is worse than saying nothing at all.
+        """
+        from core.services.site_heartbeat import get_cached_heartbeat
+
+        beat = get_cached_heartbeat() or {}
+        # `hours_hunted` and `platinums_total` live in the expanded block, the other two in `always`,
+        # so both are merged before the lookup rather than the caller knowing which is where.
+        cells = {**(beat.get('always') or {}), **(beat.get('expanded') or {})}
+        figures = {
+            key: (cells.get(source) or {}).get('value')
+            for key, source in (
+                ('hunters', 'profiles_total'),
+                ('trophies', 'trophies_total'),
+                ('platinums', 'platinums_total'),
+                ('hours', 'hours_hunted'),
+            )
+        }
+        return figures if all(figures.values()) else None
+
+    def _prices(self):
+        """Tier -> djstripe Price, or {} when pricing is unavailable. Memoized per request: a cold
+        GET consulted this three times (context, `_support`, and POST validation each fetch three
+        `Price.objects.get()`s), which is six redundant queries on a public page.
+
+        `get_prices_from_stripe` does `Price.objects.get()` per tier and lets `DoesNotExist` fly. The
+        old view answered that by redirecting the WHOLE page to home, so one missing price took down
+        the pitch, the fundraiser and everything else with it. Now the page renders and only the
+        pricing block degrades. That also makes this page testable for the first time -- there are no
+        djstripe Price rows in the test DB, so previously it always redirected.
+        """
+        if not hasattr(self, '_prices_memo'):
+            try:
+                self._prices_memo = SubscriptionService.get_prices_from_stripe(
+                    settings.STRIPE_MODE == 'live'
+                )
+            except Price.DoesNotExist:
+                logger.exception("Storefront pricing unavailable in mode %s", settings.STRIPE_MODE)
+                self._prices_memo = {}
+        return self._prices_memo
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        prices = self._prices()
+
+        # The LADDER is design data, not billing data: it comes from the constant so the page can be
+        # built and iterated before the twelve Stripe prices and twelve PayPal plans exist. Each row
+        # carries both intervals; the template's switch picks which face to show, so swapping tabs is
+        # a CSS state change rather than a round trip.
+        is_live = settings.STRIPE_MODE == 'live'
+
+        # PLACEHOLDERS CAN NEVER REACH PRODUCTION. The flag is honoured in test mode only, so the
+        # worst a stale `SUPPORT_TIERS_ARE_PLACEHOLDERS = True` can do on a live deploy is show the
+        # unavailable state -- never a row of dead buy buttons on a page taking money. This is a
+        # runtime guard rather than a checklist item on purpose: checklists get skipped.
+        placeholders = SUPPORT_TIERS_ARE_PLACEHOLDERS and not is_live
+
+        ladder = [
+            dict(tier,
+                 # A real range for the star partial to loop. Django templates cannot count, and the
+                 # `|rjust` trick that can is a puzzle to read.
+                 star_range=range(tier['stars']))
+            for tier in SUPPORT_TIERS
+            # Live and un-flagged: only offer a level somebody can actually buy -- BOTH intervals
+            # must be configured, or the cycle switch would sell a face with nothing behind it.
+            if placeholders or (
+                SubscriptionService.resolve_ladder_price_id(tier['slug'], 'monthly', is_live)
+                and SubscriptionService.resolve_ladder_price_id(tier['slug'], 'yearly', is_live)
+            )
+        ]
+        context['tiers'] = ladder
+        context['tiers_are_placeholders'] = placeholders
+        # Preselect the second rung. Defaulting to the top reads as grabby; defaulting to the bottom
+        # anchors low and quietly costs the difference. The middle is the honest ask.
+        context['default_tier'] = ladder[1]['slug'] if len(ladder) > 1 else (ladder[0]['slug'] if ladder else None)
+        context['pricing_available'] = bool(ladder)
+        context['is_live'] = is_live
+
+        # The LADDER map, not the legacy PAYPAL_PLANS: this button sells ladder levels, so its
+        # availability must track the plans it would actually charge against. (With the legacy map
+        # the button showed in live mode on the strength of grandfathered plan ids alone.)
+        paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
+        context['paypal_available'] = (
+            bool(getattr(settings, 'PAYPAL_CLIENT_ID', None))
+            and any(v for plans in PAYPAL_LADDER_PLANS.get(paypal_mode, {}).values()
+                    for v in plans.values())
+        )
+
+        # `has_active_subscription` reads `user.stripe_customer_id`, which AnonymousUser has not got.
+        context['viewer_is_member'] = (
+            SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
+        )
+        # BETA-ONLY testing escape hatch: ?preview=store shows a member the purchase box instead
+        # of the thank-you card, so store states are checkable without a second account. Display
+        # only -- the POST's double-subscribe guard is untouched, so a member still cannot
+        # actually double-buy. Inert everywhere IS_BETA is unset (i.e. production).
+        context['beta_store_preview'] = settings.IS_BETA and user.is_authenticated and user.is_staff
+        context['store_preview'] = (
+            settings.IS_BETA and self.request.GET.get('preview') == 'store'
+        )
+
+        from users.constants import ROADMAP_FEATURES, ROADMAP_TIERS
+        # The band teaser: each certainty tier with its first few feature names -- derived from
+        # the SAME constant as the page's sections, so a new tier cannot silently miss the band.
+        context['roadmap_teaser'] = [
+            {'key': key, 'name': name,
+             'feats': [{'key': f['key'], 'name': f['name']}
+                       for f in ROADMAP_FEATURES if f['tier'] == key][:3]}
+            for key, name, _sub in ROADMAP_TIERS
+        ]
+        context['premium_perks'] = PREMIUM_PERKS
+        context['today'] = self._today()
+        context['viewer_name'] = self._viewer_name()
+        # The worn title, shown before the supporter line exactly as a leaderboard row shows it.
+        # `displayed_title` is a METHOD and was an N+1 on the hunters wall, but this is ONE profile
+        # on a page that renders one row, so a single query is the right cost here.
+        profile = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
+        context['viewer_title'] = profile.displayed_title() if profile else None
+        # Their real avatar, for the same reason as their real name: the preview's promise is "this
+        # is how YOU will appear", and a stand-in silhouette beside a real name half-keeps it.
+        context['viewer_avatar'] = profile.avatar_url if profile else None
+        context.update(self._support())
+        # The header's artwork. `badge_subject_art` returns the commissioned SUBJECT drawings -- one
+        # per series, avatar submissions skipped, bounded scan -- which is the part an artist actually
+        # drew and the one thing on this page nobody else could show.
+        #
+        # It is here rather than decorative because visual-identity.md calls the badge artwork the
+        # moat: "if the chrome ever fights the art, the chrome loses". A Support page with no art on
+        # it was the only surface on the site in that state, and it read exactly as flat as that
+        # sounds. Empty on a fresh catalogue, and the row is omitted rather than faked.
+        from trophies.views.badge_views import badge_subject_art
+        context['badge_art'] = badge_subject_art(limit=5)
+        return context
+
+    def _viewer_name(self):
+        """The name to show in the level preview.
+
+        Their OWN name wearing the mark they are about to pick is far more persuasive than a stand-in,
+        and it costs nothing: it is a string already on the request, not a lookup. Falls back through
+        the display name, the PSN name, then the username, and finally to a stand-in for anonymous
+        visitors -- who still need to see what the preview is showing them.
+        """
+        user = self.request.user
+        if not user.is_authenticated:
+            return 'YourName'
+        profile = getattr(user, 'profile', None)
+        if profile is not None:
+            name = profile.display_psn_username or profile.psn_username
+            if name:
+                return name
+        return user.username or 'YourName'
+
+    SUPPORT_CACHE_KEY = 'support:stats'
+    SUPPORT_TTL = 300
+    LAUNCH = (2026, 1)
+
+    def _support(self):
+        """How the site is paid for: supporters, monthly support, months running, ads served.
+
+        COUNTS THE LEGACY TIERS TOO, and has to. Every real supporter today holds `premium_monthly`,
+        `premium_yearly` or `supporter`; nobody holds a ladder slug and nobody will until the twelve
+        SKUs exist and people move. A band that counted only the new ladder would read zero on a live
+        site, which is worse than not having one.
+
+        The money is a MONTHLY EQUIVALENT so one figure means one thing: a yearly pledge is divided
+        by twelve rather than counted whole. Legacy prices come from Stripe (the only place they
+        live); ladder prices come from the constant.
+
+        Returns `supporter_monthly = None` rather than 0 when Stripe prices are unavailable. Zero
+        would be a claim -- "nobody is paying" -- where None is the truth: "we cannot say right now",
+        and the template drops that one cell instead of publishing a wrong number.
+        """
+        data = cache.get(self.SUPPORT_CACHE_KEY)
+        if data is not None:
+            return self._hydrate(data)
+
+        ladder = {t['slug']: t['monthly'] for t in SUPPORT_TIERS}
+        # DB-aggregated group-by, never a Python tally over rows.
+        counts = dict(
+            CustomUser.objects
+            .filter(premium_tier__in=list(ACTIVE_PREMIUM_TIERS) + list(ladder))
+            .values_list('premium_tier')
+            .annotate(n=Count('id'))
+        )
+
+        prices = self._prices()
+        monthly, priced_all = 0, True
+        for slug, n in counts.items():
+            if slug in ladder:
+                monthly += ladder[slug] * n
+                continue
+            price = prices.get(slug)
+            if price is None:
+                priced_all = False
+                continue
+            stripe_data = price.stripe_data or {}
+            amount = (stripe_data.get('unit_amount') or 0) / 100
+            if ((stripe_data.get('recurring') or {}).get('interval')) == 'year':
+                amount /= 12
+            monthly += amount * n
+
+        now = timezone.now()
+        data = {
+            'supporter_count': sum(counts.values()),
+            'supporter_monthly': round(monthly) if priced_all else None,
+            'months_running': (now.year - self.LAUNCH[0]) * 12 + (now.month - self.LAUNCH[1]),
+            'wall': self._wall(),
+        }
+        cache.set(self.SUPPORT_CACHE_KEY, data, self.SUPPORT_TTL)
+        return self._hydrate(data)
+
+    @staticmethod
+    def _hydrate(data):
+        """Rebuild the rich tier dicts on the wall AFTER every cache read.
+
+        The cached payload must hold JSON primitives only. It once carried the full tier dict
+        including `star_range=range(...)` -- and production's Redis cache serializes with
+        `JSONSerializer`, which cannot encode a `range`. Every request then raised on `cache.set`,
+        so the payment landing 500'd permanently the moment the wall had anyone on it. Nothing
+        pre-production could see it: the test cache is LocMem (pickle swallows ranges) and dev has
+        no supporters, so the payload never contained one. `test_the_cached_support_payload_is_json_
+        serializable` now locks the boundary.
+        """
+        by_slug = {t['slug']: dict(t, star_range=range(t['stars'])) for t in SUPPORT_TIERS}
+        return dict(data, wall=[
+            dict(person, tier=by_slug.get(person['tier_slug'])) for person in data['wall']
+        ])
+
+    @staticmethod
+    def _worn_level(premium_tier):
+        """Delegates to the marks service -- the wall, the display_mark denorm and every marked
+        surface must resolve a worn level identically, so there is exactly one resolver."""
+        from users.services.marks import worn_supporter_level
+        return worn_supporter_level(premium_tier)
+
+    WALL_CAP = 200
+
+    def _wall(self):
+        """The credits: who is keeping the site running, by name. Returns JSON PRIMITIVES ONLY
+        (name / avatar / tier_slug) -- this goes straight into the cache, and the serializability
+        boundary is documented on `_hydrate`, which rebuilds the rich tier dicts on the way out.
+
+        CONSENT IS THE WHOLE DESIGN HERE. A PSN name is already public everywhere on this site; the
+        fact that somebody PAYS is not, and publishing it is new information about a person. So the
+        credits only ever show profiles with `show_on_supporter_wall` set, which defaults True to
+        auto-opt-in the people who were already supporting when this shipped, and which anyone can
+        turn off from subscription management.
+
+        WHO IS ELIGIBLE: everyone supporting, ladder level or legacy tier. See the note on
+        SUPPORT_TIERS for why the bottom rungs are included.
+
+        ORDERED AND CAPPED IN THE DATABASE, rank first. The cap used to slice the first 200 by
+        alphabet BEFORE the Python rank sort, so past 200 supporters a Cornerstone named "zed" was
+        cut while a Backer named "aaa" stayed -- quietly breaking "credits run highest level first".
+        The Case/When puts the top level at 0 and everything pre-ladder after the ladder, so the cap
+        can never cut a higher level in favour of a lower one.
+        """
+        from trophies.models import Profile
+
+        ladder_slugs = [t['slug'] for t in SUPPORT_TIERS]
+        eligible = ladder_slugs + list(ACTIVE_PREMIUM_TIERS)
+        # Rank by the level a supporter WEARS: legacy tiers sort alongside their mapped level
+        # (grandfathered presentation, see LEGACY_TIER_LEVEL_MAP) instead of trailing the ladder.
+        # Built from a MERGED DICT so a legacy key colliding with a ladder slug is structurally
+        # impossible (a duplicate When would be silently dead); the dict makes last-write-wins
+        # explicit and keys unique by construction.
+        rank_by_slug = {slug: i for i, slug in enumerate(reversed(ladder_slugs))}
+        worn_by_tier = {**{slug: slug for slug in ladder_slugs}, **LEGACY_TIER_LEVEL_MAP}
+        rank_order = Case(
+            *[When(user__premium_tier=tier, then=Value(rank_by_slug[worn]))
+              for tier, worn in worn_by_tier.items() if worn in rank_by_slug],
+            # Structurally unreachable today -- the map-coverage test forbids an eligible tier
+            # missing from worn_by_tier -- kept as the backstop that makes that test's failure
+            # mode graceful rather than a query error.
+            default=Value(len(ladder_slugs)),
+            output_field=IntegerField(),
+        )
+
+        rows = (
+            Profile.objects
+            .filter(show_on_supporter_wall=True, user__premium_tier__in=eligible)
+            .select_related('user')
+            .only('display_psn_username', 'psn_username', 'avatar_url', 'display_mark',
+                  'user__premium_tier')
+            # `Lower()` because a raw sort puts every lowercase name after every uppercase one,
+            # which reads as two lists stapled together rather than one alphabetical run.
+            .order_by(rank_order, Lower('psn_username'))[:self.WALL_CAP]
+        )
+
+        from users.constants import SERVICE_MARKS
+        return [
+            {
+                'name': r.display_psn_username or r.psn_username,
+                'avatar': r.avatar_url,
+                # The WORN slug, so a legacy tier hydrates into its mapped level's colour and
+                # stars (grandfathered presentation). The None/'Supporter' fallback is a
+                # structural backstop the map-coverage test keeps unreachable.
+                'tier_slug': self._worn_level(r.user.premium_tier),
+                # The service override: a paying staff member's NAME wears the service colour
+                # and (2026-08-23, his call) the mark slot draws the service GLYPH rather than
+                # the paid level's stars -- a backer star beside the word "Staff" read as the
+                # wrong icon. The sub-line names the role. Read from the denorm: precedence is
+                # baked in users/services/marks.py and nowhere else.
+                'service_colour': (SERVICE_MARKS[r.display_mark]['colour']
+                                   if r.display_mark in SERVICE_MARKS else None),
+                'service_label': (SERVICE_MARKS[r.display_mark]['label']
+                                  if r.display_mark in SERVICE_MARKS else None),
+                # Which service GLYPH the mark slot draws (2026-08-23, his call reversing the
+                # stars-stay-paid rule): a staff or mod entry wears its wrench/shield on the wall,
+                # not the paid level's stars -- the backer star beside "Staff" read as a bug.
+                'service_key': r.display_mark if r.display_mark in SERVICE_MARKS else None,
+            }
+            for r in rows
+        ]
+
+    def post(self, request, *args, **kwargs):
+        """Start a checkout.
+
+        The payload: `tier` from the amount RADIOS, `provider` from whichever SUBMIT BUTTON was
+        pressed (each button carries its own name/value), CSRF from the form -- which exists and
+        wraps the whole box. An earlier version of this docstring described that form while the
+        template did not have one; `test_the_checkout_is_a_real_form` now keeps the two honest.
+        """
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+
+        # Double-subscribe guard across ALL providers. Was a page-level redirect; now it only blocks
+        # the purchase, since the page itself is legitimate for a member to be reading.
+        if SubscriptionService.has_active_subscription(request.user)[0]:
+            messages.info(request, 'You already have an active subscription. Manage it here.')
+            return redirect('subscription_management')
+
         tier = request.POST.get('tier')
         provider = request.POST.get('provider', 'stripe')
+        # The cycle radio, finally read. It always rode along in the payload; the server priced
+        # everything as monthly regardless, which would have billed a Yearly pick monthly.
+        cycle = request.POST.get('sup-cycle', 'monthly')
 
-        if tier not in valid_tiers:
+        # An unknown provider used to FALL THROUGH to Stripe (only `paypal` was branched on), which
+        # would quietly charge somebody through a processor they did not pick. Reject instead.
+        if provider not in ('stripe', 'paypal'):
+            messages.error(request, "Unknown payment provider.")
+            return redirect('support_hub')
+
+        if cycle not in ('monthly', 'yearly'):
+            messages.error(request, "Unknown billing cycle.")
+            return redirect('support_hub')
+
+        # LADDER-ONLY. Grandfathering means the three legacy tiers stay renewable through webhooks
+        # but are no longer purchasable: this validation deliberately stopped admitting them.
+        if tier not in LADDER_SLUGS:
             messages.error(request, "Invalid tier selected.")
-            return redirect('subscribe')
+            return redirect('support_hub')
+
+        # Availability. THE SAME live-mode override as get_context_data: the placeholder flag is
+        # honoured in test mode only, so a stale True on a live deploy shows the unavailable state
+        # on GET -- and must equally refuse the POST, or the guard would render dead buttons while
+        # accepting direct posts against unconfigured tiers. And the check is per-PROVIDER: a
+        # PayPal purchase admitted because a *Stripe* price existed would send somebody to a
+        # processor with nothing configured behind it (or worse, with a different mode's plans --
+        # STRIPE_MODE and PAYPAL_MODE are independent settings).
+        placeholders = SUPPORT_TIERS_ARE_PLACEHOLDERS and settings.STRIPE_MODE != 'live'
+        if not placeholders:
+            if provider == 'paypal':
+                paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
+                configured = (PAYPAL_LADDER_PLANS.get(paypal_mode, {}).get(tier) or {}).get(cycle)
+            else:
+                configured = SubscriptionService.resolve_ladder_price_id(
+                    tier, cycle, settings.STRIPE_MODE == 'live')
+            if not configured:
+                messages.error(request, "That option is not available right now.")
+                return redirect('support_hub')
+
+        # Built with reverse() rather than the string literals these used to be, so the pair cannot
+        # drift apart from the URL conf. `{CHECKOUT_SESSION_ID}` is a Stripe-side placeholder Stripe
+        # substitutes on redirect -- it must reach them un-interpolated.
+        success_url = request.build_absolute_uri(reverse('subscribe_success'))
+        cancel_url = request.build_absolute_uri(reverse('support_hub'))
 
         if provider == 'paypal':
             from users.services.paypal_service import PayPalService
@@ -214,75 +786,238 @@ def subscribe(request):
                 approval_url = PayPalService.create_subscription(
                     user=request.user,
                     tier=tier,
-                    return_url=request.build_absolute_uri('/users/subscribe/success/?provider=paypal'),
-                    cancel_url=request.build_absolute_uri('/users/subscribe/'),
+                    return_url=f'{success_url}?provider=paypal',
+                    cancel_url=cancel_url,
+                    interval=cycle,
                 )
                 return redirect(approval_url)
             except Exception:
                 logger.exception("PayPal subscription creation failed")
                 messages.error(request, "Error creating PayPal subscription. Please try again.")
-                return redirect('subscribe')
-        else:
-            # Stripe checkout
-            try:
-                session_url = SubscriptionService.create_checkout_session(
-                    user=request.user,
-                    tier=tier,
-                    success_url=request.build_absolute_uri('/users/subscribe/success/') + "?session_id={CHECKOUT_SESSION_ID}",
-                    cancel_url=request.build_absolute_uri('/users/subscribe/'),
-                )
-                return redirect(session_url, code=303)
-            except stripe.error.StripeError as e:
-                messages.error(request, f"Error creating checkout: {str(e)}")
-                return redirect('subscribe')
+                return redirect('support_hub')
 
-    context = {'prices': {k: (v.stripe_data or {}).get('unit_amount', 0) / 100 for k, v in prices.items()}}
-    context['is_live'] = is_live
-    paypal_mode = 'live' if getattr(settings, 'PAYPAL_MODE', '') == 'live' else 'sandbox'
-    from users.constants import PAYPAL_PLANS
-    context['paypal_available'] = (
-        bool(getattr(settings, 'PAYPAL_CLIENT_ID', None))
-        and any(PAYPAL_PLANS.get(paypal_mode, {}).values())
-    )
+        try:
+            session_url = SubscriptionService.create_checkout_session(
+                user=request.user,
+                tier=tier,
+                success_url=success_url + "?session_id={CHECKOUT_SESSION_ID}",
+                cancel_url=cancel_url,
+                interval=cycle,
+            )
+            # 303, not 302: this answers a POST, and 303 is the status that unambiguously tells
+            # the client to GET the new location. It was WRITTEN as `redirect(session_url, code=303)`
+            # -- but `django.shortcuts.redirect` has no `code` parameter, so that kwarg was swallowed
+            # into `resolve_url(**kwargs)`, ignored there because the target is already an absolute
+            # URL, and every checkout has quietly been a 302. Harmless in practice (browsers downgrade
+            # a 302 POST to GET anyway) but it never did what it said.
+            return HttpResponseRedirect(session_url, status=303)
+        except stripe.error.StripeError as e:
+            messages.error(request, f"Error creating checkout: {str(e)}")
+            return redirect('support_hub')
+        except Exception:
+            # ValueError (tier unconfigured) and Price.DoesNotExist (id not yet synced into
+            # djstripe) both live on this path; neither deserves a 500 on a page taking money.
+            logger.exception("Stripe checkout creation failed")
+            messages.error(request, "Could not start checkout. Please try again.")
+            return redirect('support_hub')
 
-    # Hand-picked themes for the "Try it!" preview swatches
-    import re
-    from trophies.themes import GRADIENT_THEMES
-    clean = lambda css: re.sub(r'\s+', ' ', css).strip()
-    context['preview_themes'] = [
-        {'name': 'Machine Hunter', 'css': clean(GRADIENT_THEMES['machineHunter']['background'])},
-        {'name': 'Cosmic Nebula', 'css': clean(GRADIENT_THEMES['cosmicNebula']['background'])},
-        {'name': 'PlayStation Blue', 'css': clean(GRADIENT_THEMES['playstationBlue']['background'])},
-    ]
+class SupportRoadmapView(TemplateView):
+    """`/support/roadmap/` -- the forward list in the platinum-roadmap frame.
 
-    context['breadcrumb'] = [
-        {'text': 'Home', 'url': '/'},
-        {'text': 'Premium'},
-    ]
+    Upcoming features as compact icon cards in three certainty tiers (ROADMAP_TIERS: in the
+    works / up next / the wishlist), nothing backward-looking -- the header's lede sentence
+    carries the whole history. Pure constants, zero queries for anonymous visitors.
 
-    return render(request, 'users/subscribe.html', context)
+    Content rules, test-enforced: no dates, months, quarters, counts or percentages anywhere in
+    the forward content. TIER is the only promise, and the wishlist's own subline says so.
+    """
+    template_name = 'support/roadmap.html'
+
+    def get_context_data(self, **kwargs):
+        from users.constants import ROADMAP_FEATURES, ROADMAP_TIERS
+
+        context = super().get_context_data(**kwargs)
+        # Features grouped per tier HERE rather than filtered in the template: the reveal stagger
+        # indexes forloop.counter0, and an outer-loop index made the wishlist's first card wait
+        # ~560ms after scrolling into view (the audit's catch) -- per-tier lists restart it at 0.
+        context['tiers'] = [
+            {'key': key, 'name': name, 'sub': sub,
+             'feats': [f for f in ROADMAP_FEATURES if f['tier'] == key]}
+            for key, name, sub in ROADMAP_TIERS
+        ]
+        user = self.request.user
+        context['viewer_is_member'] = (
+            SubscriptionService.has_active_subscription(user)[0] if user.is_authenticated else False
+        )
+        return context
+
+
+#: Staff/DEBUG preview states for the welcome page (?preview=<key>): fabricated display data,
+#: no provider calls, the membership page's preview rule.
+WELCOME_PREVIEW_STATES = ('active', 'settling', 'settling-blind')
+
+
+def _welcome_context(request, state, level, interval=None):
+    """The welcome page's render context. Display-only by construction: everything here is a
+    constant, a resolver output, or the viewer's own profile fields."""
+    from users.constants import PREMIUM_PERKS
+
+    profile = getattr(request.user, 'profile', None)
+    return {
+        'state': state,
+        'level': level,
+        'interval': interval,
+        'viewer_name': ((profile.display_psn_username or profile.psn_username)
+                        if profile else request.user.email.split('@')[0]),
+        'viewer_avatar': profile.avatar_url if profile else '',
+        'premium_perks': PREMIUM_PERKS,
+        # discord_invite_url arrives via the global site_links context processor.
+    }
+
 
 @login_required
 def subscribe_success(request):
+    """The membership WELCOME page, rendered at the frozen success URL.
+
+    /users/subscribe/success/ is baked into every processor session ever created, so the
+    ceremony renders IN PLACE -- no new route, no redirect. The webhook race is the design
+    center: on arrival the user's premium fields are usually not yet written, so the page
+    renders OPTIMISTICALLY from what the processor can tell us about the purchase (Stripe
+    session metadata / PayPal subscription details, both ownership-guarded), and the real
+    state catches up via webhook. A refresh is always safe; a bare or stale hit lands on the
+    storefront, never a broken page.
+    """
+    from users.services.marks import worn_level_dict
+
+    user = request.user
+
+    # Staff/DEBUG state preview, the membership page's pattern: fabricated, never the data layer.
+    preview = request.GET.get('preview')
+    if preview in WELCOME_PREVIEW_STATES and (settings.DEBUG or user.is_staff):
+        level = worn_level_dict('patron') if preview != 'settling-blind' else None
+        ctx = _welcome_context(request, 'active' if preview == 'active' else 'settling',
+                               level, interval='monthly')
+        ctx['preview_active'] = preview
+        ctx['preview_states'] = WELCOME_PREVIEW_STATES
+        return render(request, 'support/welcome.html', ctx)
+
+    def already_active():
+        profile = getattr(user, 'profile', None)
+        return bool(user.premium_tier and profile and profile.user_is_premium)
+
+    def active_interval():
+        # "billed monthly" on the active hero, via the one billing reader.
+        billing = SubscriptionService.describe_billing(
+            user, SubscriptionService.membership_status(user))
+        return {'month': 'monthly', 'year': 'yearly'}.get(billing.get('cycle'))
+
     provider = request.GET.get('provider', 'stripe')
+    session_id = request.GET.get('session_id')
+
+    # ACTIVATED with no purchase params: a refresh, a bookmark, a webhook-landed revisit --
+    # render from the denorm. A hit that CARRIES purchase params must process them first: a
+    # grace-period re-subscriber is still premium at their OLD tier, and the audit's find was
+    # this shortcut congratulating them on the tier they just left.
+    if already_active() and not session_id and provider != 'paypal':
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'active', worn_level_dict(user.premium_tier),
+                                       active_interval()))
 
     if provider == 'paypal':
-        # PayPal redirects here after user approves. Activation happens via webhook.
-        messages.success(request, "PayPal subscription initiated! Your premium features will activate shortly.")
-    else:
-        # Stripe checkout session verification
-        session_id = request.GET.get('session_id')
-        if session_id:
-            try:
-                session = stripe.checkout.Session.retrieve(session_id)
-                if session.payment_status == 'paid':
-                    messages.success(request, "Subscription activated! Enjoy premium features.")
-                else:
-                    messages.warning(request, "Your payment is still being processed. Premium features will activate shortly.")
-            except stripe.error.StripeError as e:
-                messages.error(request, f"Error verifying subscription: {str(e)}")
+        # PayPal appends ?subscription_id to the return URL; activation stays webhook-owned,
+        # this read is display-only THROUGH THE SNAPSHOT CACHE (an uncached 30s provider call
+        # driven by a query param is the exact thing the snapshot exists to prevent).
+        # Ownership guard: custom_id was set to the buyer's user id at creation -- a foreign
+        # subscription id must never leak a tier.
+        import re as _re
+        from users.constants import PAYPAL_LADDER_PLANS
+        from users.services.paypal_service import PayPalService
+        subscription_id = request.GET.get('subscription_id')
+        # The id feeds the SHARED snapshot cache: only PayPal's own shape gets anywhere near it
+        # (any logged-in user could otherwise pin cache entries / drive a provider fetch per
+        # guessed id).
+        if subscription_id and not _re.fullmatch(r'I-[A-Z0-9]{4,30}', subscription_id):
+            subscription_id = None
+        level = None
+        interval = None
+        if subscription_id:
+            snapshot = PayPalService.get_cached_subscription_snapshot(subscription_id)
+            if snapshot and snapshot.get('custom_id') == str(user.id):
+                tier = PayPalService.get_tier_from_plan_id(snapshot.get('plan_id'))
+                if tier:
+                    level = worn_level_dict(tier)
+                    mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
+                    for intervals in PAYPAL_LADDER_PLANS.get(mode, {}).values():
+                        for iv, pid in intervals.items():
+                            if pid == snapshot.get('plan_id'):
+                                interval = iv
+                                break
+                        if interval:
+                            break
+        if level is not None and already_active() and worn_level_dict(user.premium_tier) == level:
+            # The webhook already landed for this same purchase.
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active', level, interval or active_interval()))
+        if level is None and already_active():
+            # The webhook landed but the plan couldn't be verified (no id, snapshot miss, or an
+            # unmapped plan -- which is EVERY plan until the live id paste at cutover): the
+            # member's real tier beats a blind settling hero.
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active', worn_level_dict(user.premium_tier),
+                                           active_interval()))
+        # Blind settling when anything above fell through: name + generic member line.
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'settling', level, interval))
 
-    return redirect('home')
+    if session_id:
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+        except stripe.error.StripeError:
+            logger.exception("Welcome page could not retrieve checkout session")
+            messages.info(request, "We couldn't verify that checkout just now. If you completed a purchase, it will activate shortly.")
+            return redirect('support_hub')
+
+        # Ownership guard, unconditional: session ids are user-controlled query params, and a
+        # legitimate Stripe buyer ALWAYS has a customer id by now (create_checkout_session
+        # saves it before the redirect) -- so a mismatch OR a missing local id is a foreign
+        # session, never a real arrival.
+        if session.customer != user.stripe_customer_id:
+            return redirect('support_hub')
+
+        tier = (session.metadata or {}).get('tier')
+        interval = (session.metadata or {}).get('interval')
+        level = worn_level_dict(tier) if tier else None
+        if level is None:
+            # Unknown/legacy-stale session: nothing to celebrate confidently.
+            messages.info(request, "Your membership is activating. It will be ready in a minute or two.")
+            return redirect('support_hub')
+
+        # The webhook already landed for THIS purchase (raw tier match -- worn slugs collapse
+        # legacy onto ladder, which re-opened the old-tier bug for a grace premium_yearly
+        # member buying Backer): the full active hero.
+        if already_active() and user.premium_tier == tier:
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active',
+                                           worn_level_dict(user.premium_tier), interval))
+
+        # DEBUG inline activation (the fundraiser's model: webhooks can't reach localhost).
+        # No event_type on purpose -- activation EVENTS are what ANNOUNCE (welcome email,
+        # Discord embed); note the Discord role assignment still runs inline, which is wanted
+        # in dev for testing the role flow.
+        if settings.DEBUG and session.payment_status == 'paid':
+            SubscriptionService.activate_subscription(user, tier, 'stripe')
+            return render(request, 'support/welcome.html',
+                          _welcome_context(request, 'active',
+                                           worn_level_dict(user.premium_tier), interval))
+
+        # 'paid' or an async payment method still processing: both are SETTLING -- the page
+        # celebrates from the PURCHASED tier while the webhook does the writing (this is also
+        # the grace re-subscriber's path: the new tier, not the one they left).
+        return render(request, 'support/welcome.html',
+                      _welcome_context(request, 'settling', level, interval))
+
+    # Bare/stale hit with nothing to show: the storefront, never a broken page.
+    return redirect('support_hub')
 
 @csrf_exempt
 @require_POST
@@ -302,7 +1037,13 @@ def stripe_webhook(request):
         logger.error(f"Webhook signature verification failed: {e}")
         return HttpResponse(status=400)
     
-    dj_event = DJStripeEvent.process(event)
+    # Replay guard. Stripe delivers at-least-once; djstripe's Event table is the durable record
+    # of what we have already processed. Without this, a redelivered subscription event re-fired
+    # the welcome email and notification (send_html_email has no dedupe of its own).
+    if DJStripeEvent.objects.filter(id=event.id).exists():
+        logger.info(f"Stripe webhook duplicate skipped: {event.id}")
+        return HttpResponse(status=200)
+    DJStripeEvent.process(event)
 
     # Route one-time donation payments before subscription handling
     if event.type == 'checkout.session.completed':
@@ -318,8 +1059,13 @@ def stripe_webhook(request):
                 logger.exception("Error processing fundraiser donation webhook")
             return HttpResponse(status=200)
 
-    # Delegate all subscription-related events to SubscriptionService
-    SubscriptionService.handle_webhook_event(event.type, event.data.object)
+    # Delegate all subscription-related events to SubscriptionService. Logged, not raised: with
+    # the replay guard above, a retry would be skipped anyway (the Event row already exists), so a
+    # 500 here buys nothing but noise -- same at-most-once semantics as the PayPal handler below.
+    try:
+        SubscriptionService.handle_webhook_event(event.type, event.data.object)
+    except Exception:
+        logger.exception(f"Error processing Stripe webhook event {event.type}")
 
     return HttpResponse(status=200)
 
@@ -345,10 +1091,11 @@ def paypal_webhook(request):
     transmission_id = request.META.get('HTTP_PAYPAL_TRANSMISSION_ID', '')
     if transmission_id:
         cache_key = f'paypal_webhook:{transmission_id}'
-        if cache.get(cache_key):
+        # cache.add is an atomic set-if-absent, so two concurrent redeliveries cannot both pass
+        # the way the old get-then-set pair could. 7 day TTL.
+        if not cache.add(cache_key, True, timeout=60 * 60 * 24 * 7):
             logger.info(f"PayPal webhook duplicate skipped: {transmission_id}")
             return HttpResponse(status=200)
-        cache.set(cache_key, True, timeout=60 * 60 * 24 * 7)  # 7 day TTL
 
     event_type = event_data.get('event_type', '')
     resource = event_data.get('resource', {})
@@ -379,6 +1126,32 @@ def paypal_webhook(request):
 
 @login_required
 @require_POST
+def stripe_billing_portal(request):
+    """Mint a Stripe billing-portal session and redirect into it.
+
+    A POST action, not a per-GET mint: the old management page created a portal session on every
+    page load -- a wasted Stripe API call per view and slower TTFB, and a link a prefetcher could
+    follow. Failure lands back on the page with a message, never a dead button.
+    """
+    user = request.user
+    if not user.stripe_customer_id:
+        messages.error(request, "No billing account found.")
+        return redirect('subscription_management')
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=user.stripe_customer_id,
+            return_url=request.build_absolute_uri(reverse('subscription_management')),
+        )
+    except stripe.error.StripeError:
+        logger.exception("Failed to create Stripe billing portal session")
+        messages.error(request, "Couldn't open the billing portal just now. Please try again.")
+        return redirect('subscription_management')
+    logger.info(f"Billing portal session minted for {user.email}")
+    return redirect(portal_session.url)
+
+
+@login_required
+@require_POST
 def paypal_cancel_subscription(request):
     """Cancel the user's active PayPal subscription."""
     from users.services.paypal_service import PayPalService
@@ -390,6 +1163,9 @@ def paypal_cancel_subscription(request):
 
     success = PayPalService.cancel_subscription(user.paypal_subscription_id)
     if success:
+        # The membership page reads a cached PayPal snapshot; without this bust the member
+        # reloads into a stale "Active" for up to 8 hours.
+        PayPalService.bust_subscription_snapshot(user.paypal_subscription_id)
         messages.success(request, "Your subscription has been cancelled. You will retain access until the end of your current billing period.")
     else:
         messages.error(request, "Error cancelling subscription. Please try through PayPal directly.")
@@ -398,106 +1174,165 @@ def paypal_cancel_subscription(request):
 
 
 class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
-    template_name = 'users/subscription_management.html'
+    template_name = 'support/membership.html'
+
+    def post(self, request, *args, **kwargs):
+        """The supporter wall opt-out.
+
+        It lives here rather than in general settings because it is only meaningful while you are
+        supporting, and this is the page you are already on when you think about that.
+
+        A plain form post, not an API call: it is one boolean that changes a public listing, and the
+        page reload is a useful confirmation that it took. `show_on_supporter_wall` defaults True, so
+        this is how somebody who was auto-opted-in takes themselves off.
+        """
+        profile = getattr(request.user, 'profile', None)
+        if profile is not None and 'wall_visibility' in request.POST:
+            profile.show_on_supporter_wall = request.POST.get('on_the_wall') == 'yes'
+            profile.save(update_fields=['show_on_supporter_wall'])
+            # The wall is cached on the Support page; a change nobody can see for five minutes reads
+            # as the toggle not working.
+            cache.delete(SupportStorefrontView.SUPPORT_CACHE_KEY)
+            messages.success(
+                request,
+                'You are on the supporter wall.' if profile.show_on_supporter_wall
+                else 'You have been taken off the supporter wall.'
+            )
+        return redirect('subscription_management')
+
+    #: The dev/staff state preview (?preview=<key>): every state this page can be in, fabricated
+    #: from constants so it can be eyeballed without conjuring subscriptions. Display-only by the
+    #: preview rule -- no provider or data layer runs for a preview, ever -- and the rendered
+    #: page's live controls (portal, cancel, wall toggle) are disabled while previewing, so a
+    #: staff member who is ALSO a real subscriber cannot mutate their own account from inside a
+    #: fabricated state.
+    PREVIEW_STATES = ('active', 'cancelling', 'grace', 'past-due', 'paypal', 'paypal-grace',
+                      'legacy', 'none')
+
+    def _preview_context(self, state):
+        """Fabricated context for one preview state. Real name/avatar (the storefront preview's
+        promise: 'this is what YOU look like'), everything else hand-built."""
+        from users.constants import SUPPORT_TIERS
+        from users.services.subscription_service import MembershipStatus
+
+        now = timezone.now()
+        soon = now + timedelta(days=20)
+        patron = next(t for t in SUPPORT_TIERS if t['slug'] == 'patron')
+        backer = next(t for t in SUPPORT_TIERS if t['slug'] == 'backer')
+        level = dict(patron, star_range=range(patron['stars']), is_legacy=False,
+                     display_name=patron['name'])
+        legacy_level = dict(backer, star_range=range(backer['stars']), is_legacy=True,
+                            display_name='Premium Yearly')
+        tenure = {'member_since': now - timedelta(days=400), 'current_started': now - timedelta(days=100),
+                  'total_days': 400, 'total_months': 13}
+        sandbox_paypal = 'https://www.sandbox.paypal.com/myaccount/autopay/'
+
+        base = {'level': level, 'tenure': tenure,
+                'billing': {'amount': 15, 'cycle': 'month'}, 'next_billing': soon}
+        states = {
+            'active': dict(base, membership=MembershipStatus('active', 'stripe'),
+                           can_open_portal=True),
+            'cancelling': dict(base, membership=MembershipStatus('active', 'stripe', cancels_at=soon),
+                               cancels_at=soon, next_billing=None, can_open_portal=True),
+            'grace': dict(base, membership=MembershipStatus('grace', 'stripe', grace_until=soon),
+                          cancels_at=soon, next_billing=None, can_open_portal=True),
+            'past-due': dict(base, membership=MembershipStatus('past_due', 'stripe'),
+                             next_billing=None, can_open_portal=True),
+            'paypal': dict(base, membership=MembershipStatus('active', 'paypal'),
+                           paypal_manage_url=sandbox_paypal),
+            'paypal-grace': dict(base, membership=MembershipStatus('grace', 'paypal', grace_until=soon),
+                                 cancels_at=soon, next_billing=None, paypal_manage_url=sandbox_paypal),
+            'legacy': dict(base, membership=MembershipStatus('active', 'stripe'),
+                           level=legacy_level, billing={'amount': None, 'cycle': 'year'},
+                           can_open_portal=True),
+            'none': {'membership': MembershipStatus('none'), 'level': None},
+        }
+        return states[state]
 
     def get_context_data(self, **kwargs):
-        is_live = settings.STRIPE_MODE == 'live'
+        """The membership page's read: state, worn level, billing, tenure -- all display-only.
+
+        `membership_status` (not `has_active_subscription`) so a cancelled-but-paid Stripe member
+        sees their GRACE state instead of "no active membership". Everything degrades to omission:
+        an unknown billing amount is not shown, never guessed.
+        """
+        from users.constants import LEGACY_TIER_LEVEL_MAP, SUPPORT_TIERS
+        from users.services.marks import worn_supporter_level
 
         context = super().get_context_data(**kwargs)
         user = self.request.user
+        profile = getattr(user, 'profile', None)
 
-        has_active, provider = SubscriptionService.has_active_subscription(user)
-        context['subscription_provider'] = provider
-        context['is_live'] = is_live
+        context['is_live'] = settings.STRIPE_MODE == 'live'
+        # Same source of truth as the storefront. These two pages had hand-written perk lists that
+        # had already drifted apart from each other AND from what the site actually does.
+        context['premium_perks'] = PREMIUM_PERKS
+        context['on_the_wall'] = profile.show_on_supporter_wall if profile else False
+        context['has_profile'] = profile is not None
+        context['viewer_name'] = (profile.display_psn_username or profile.psn_username) if profile else user.email.split('@')[0]
+        context['viewer_avatar'] = profile.avatar_url if profile else ''
 
-        if provider == 'stripe':
-            sub = Subscription.objects.filter(
-                customer__id=user.stripe_customer_id, stripe_data__status='active'
-            ).first()
+        preview = self.request.GET.get('preview')
+        if preview in self.PREVIEW_STATES and (settings.DEBUG or user.is_staff):
+            context.update(self._preview_context(preview))
+            context['preview_active'] = preview
+            context['preview_states'] = self.PREVIEW_STATES
+            return context
 
-            # Fallback: check for past_due subscription so users can still
-            # access billing portal to fix their payment method
-            if not sub:
-                sub = Subscription.objects.filter(
-                    customer__id=user.stripe_customer_id, stripe_data__status='past_due'
-                ).first()
-                if sub:
-                    context['payment_past_due'] = True
+        membership = SubscriptionService.membership_status(user)
+        context['membership'] = membership
 
-            if sub:
-                stripe_data = sub.stripe_data or {}
-                context['tier'] = user.get_premium_tier()
-                context['premium_tier_slug'] = user.premium_tier
-                context['status'] = str(stripe_data.get('status', 'unknown')).capitalize()
-                period_end_ts = stripe_data.get('current_period_end')
-                if period_end_ts:
-                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=timezone.utc)
-                else:
-                    context['next_billing'] = 'N/A'
+        # The worn LEVEL, via the one shared shape (the welcome page renders the identical
+        # dict; see users/services/marks.worn_level_dict for the legacy-name rule).
+        from users.services.marks import worn_level_dict
+        level = None
+        if membership.state != 'none' and user.premium_tier:
+            level = worn_level_dict(user.premium_tier)
+        context['level'] = level
 
-                try:
-                    return_url = self.request.build_absolute_uri(
-                        reverse('subscription_management')
-                    )
-                    portal_session = stripe.billing_portal.Session.create(
-                        customer=user.stripe_customer_id,
-                        return_url=return_url,
-                    )
-                    context['portal_url'] = portal_session.url
-                except stripe.error.StripeError:
-                    logger.exception("Failed to create Stripe billing portal session")
-                    context['portal_url'] = None
-            else:
-                context['tier'] = 'None'
-                context['status'] = 'No Subscription'
+        if membership.state != 'none':
+            context['billing'] = SubscriptionService.describe_billing(user, membership)
+            context['tenure'] = SubscriptionService.premium_tenure(user)
+            context['cancels_at'] = membership.cancels_at or membership.grace_until
 
-        elif provider == 'paypal':
-            from users.services.paypal_service import PayPalService
-            context['tier'] = user.get_premium_tier()
-            context['premium_tier_slug'] = user.premium_tier
+            if membership.provider == 'stripe':
+                context['can_open_portal'] = bool(user.stripe_customer_id)
+                data = (membership.stripe_sub.stripe_data or {}) if membership.stripe_sub else {}
+                period_end_ts = data.get('current_period_end')
+                # dt_timezone.utc, NOT timezone.utc (django.utils alias removed in Django 5.0).
+                if period_end_ts and membership.state == 'active' and not membership.cancels_at:
+                    context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)
 
-            try:
-                sub_details = PayPalService.get_subscription_details(user.paypal_subscription_id)
-                paypal_status = sub_details.get('status', 'UNKNOWN')
-                context['status'] = paypal_status.capitalize()
-
-                billing_info = sub_details.get('billing_info', {})
-                next_billing = billing_info.get('next_billing_time')
-                if next_billing:
-                    try:
-                        context['next_billing'] = datetime.fromisoformat(
-                            next_billing.replace('Z', '+00:00')
-                        )
-                    except (ValueError, AttributeError):
-                        context['next_billing'] = next_billing
-                else:
-                    context['next_billing'] = 'N/A'
-            except Exception:
-                logger.exception("Error fetching PayPal subscription details")
-                context['status'] = 'Active'
-                context['next_billing'] = 'N/A'
-
-            context['paypal_cancel_at'] = user.paypal_cancel_at
-            context['paypal_manage_url'] = (
-                'https://www.paypal.com/myaccount/autopay/'
-                if settings.PAYPAL_MODE == 'live'
-                else 'https://www.sandbox.paypal.com/myaccount/autopay/'
-            )
-        else:
-            context['tier'] = 'None'
-            context['status'] = 'No Subscription'
-
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': '/'},
-            {'text': 'Settings', 'url': reverse('settings')},
-            {'text': 'My Premium'},
-        ]
+            elif membership.provider == 'paypal':
+                from users.services.paypal_service import PayPalService
+                context['paypal_manage_url'] = (
+                    'https://www.paypal.com/myaccount/autopay/'
+                    if settings.PAYPAL_MODE == 'live'
+                    else 'https://www.sandbox.paypal.com/myaccount/autopay/'
+                )
+                if membership.state == 'active':
+                    snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
+                    next_billing = (snapshot or {}).get('next_billing_time')
+                    if next_billing:
+                        try:
+                            context['next_billing'] = datetime.fromisoformat(
+                                next_billing.replace('Z', '+00:00')
+                            )
+                        except (ValueError, AttributeError):
+                            pass
 
         return context
 
 
 class EmailPreferencesRedirectView(LoginRequiredMixin, View):
-    """
+    """PARKED (2026-08, unrouted): the email-preferences page went dark with the non-vital
+    emails -- every remaining email is transactional, so there is nothing to opt out of. Its
+    URLs now 302 to Settings. Kept (with EmailPreferencesView, the form and the service) as
+    the starting point for the email-system rebuild. NOTE for that rebuild: the redirect
+    below reverses `email_preferences`, which currently resolves to the token-DROPPING
+    RedirectView in users/urls.py -- re-route the real view before re-routing this one, or
+    it mints a token and immediately eats it.
+
     Redirect logged-in users to the token-based email preferences page.
     Generates a fresh preference token and redirects to EmailPreferencesView.
     """

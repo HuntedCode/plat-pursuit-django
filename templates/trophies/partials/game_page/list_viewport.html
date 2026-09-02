@@ -1,0 +1,16 @@
+{% comment %}
+The list viewport: everything for ONE selected trophy list. This is the whole htmx swap payload
+(target #gp-viewport) AND the server-rendered default -- one template, both paths. Context comes
+from GamePageView._build_viewport_context (vp_* keys are the shared grid's contract params).
+{% endcomment %}
+{% include 'trophies/partials/game_page/identity_chip.html' %}
+
+{% if trophies_syncing %}
+    <div class="gd-empty">
+        <span class="gd-lb__spinner" aria-hidden="true"></span>
+        <p class="gd-empty__title">Trophies are still syncing for this list</p>
+        <p class="gd-empty__hint">Check back shortly &mdash; the first hunter to sync it fills this in.</p>
+    </div>
+{% else %}
+    {% include 'trophies/partials/trophy_grid/grid.html' with trophies=vp_trophies groups=vp_groups earned=vp_earned group_pct=vp_group_pct group_totals=vp_group_totals profile=vp_profile show_group_nav=vp_show_group_nav id_prefix='gp-' %}
+{% endif %}

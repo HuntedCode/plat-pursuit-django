@@ -9,13 +9,23 @@ nothing to redirect to and fell through the bot-redirect rules that protect
 Two things were unbounded on that page. The Rarest Trophies showcase sorted the
 profile's ENTIRE earned set on a joined column; it was removed outright (migration 0275)
 rather than gated, because its cost came from "rank everything I own" and not from who
-was looking. The timeline is still gated: it is cached per profile, so a crawler
-enumerating distinct profiles has a 0% hit rate by construction.
+was looking. The timeline was gated instead: cheap per call, but cached per profile, so
+a crawler enumerating distinct profiles had a 0% hit rate by construction.
 
-What these tests pin is the thing that actually regressed in production: the gate is
-checked BEFORE the work is invoked, not around its output. A version that renders the
-data and then hides it in the template passes a "context is empty" assertion and still
-takes the site down, so the gate tests assert on the CALL, not the value.
+**Both providers are gone from this page as of 2026-08.** The timeline was deleted
+outright -- it had rendered nowhere since the header rebuild dropped its include, while
+still being built and discarded on every authenticated render of every tab. The
+showcases are hidden pending a rebuild of profile customization (see
+`test_showcases_hidden.py`, which owns their half of these assertions now). So the page
+is strictly cheaper than the version that survived the outage, and the gate that was
+added for the timeline has nothing left to gate.
+
+What survives here is the part that is still load-bearing: the deleted provider must
+stay deleted, the header stats must stay ungated, and neither retired provider may
+quietly come back without a deliberate decision. The style is unchanged and is the point
+of the file -- assertions are on the CALL, not on the context value. A version that
+renders the data and then hides it in the template passes a "context is empty" check and
+still takes the site down.
 """
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -28,26 +38,20 @@ pytestmark = pytest.mark.django_db
 
 
 def _build_context(profile, user, monkeypatch):
-    """Run ProfileDetailView.get_context_data as `user`, recording the two expensive calls.
+    """Run ProfileDetailView.get_context_data as `user`, recording any expensive call that runs.
 
-    Returns (context, calls) where `calls` is a list of the provider names that ran.
-    Goes through the view rather than the test client so the assertion is about the
-    data layer alone and cannot pass by accident on a template that hides its output.
+    Returns (context, calls). Goes through the view rather than the test client so the
+    assertions are about the data layer alone and cannot pass by accident on a template
+    that hides its output.
+
+    The showcase system was DELETED in 2026-08 (profile customization removed rather than parked), so
+    there is no provider left to monkeypatch -- `test_profile_banner_retired` owns the assertion that it
+    stayed gone. What remains here is the timeline provider, which is the other unbounded thing this file
+    was written for.
     """
     calls = []
 
-    from trophies.services.showcase_service import ProfileShowcaseService
 
-    monkeypatch.setattr(
-        ProfileShowcaseService,
-        'get_rendered_showcases',
-        staticmethod(lambda p: calls.append('showcases') or []),
-    )
-    monkeypatch.setattr(
-        ProfileDetailView,
-        '_build_timeline',
-        lambda self, p: calls.append('timeline') or [],
-    )
 
     request = RequestFactory().get(f'/community/profiles/{profile.psn_username}/')
     request.user = user
@@ -61,71 +65,87 @@ def _build_context(profile, user, monkeypatch):
     return view.get_context_data(object=profile), calls
 
 
-def test_anonymous_render_still_runs_showcases(monkeypatch):
-    """Showcases are NOT auth-gated: a shared profile link is mostly opened logged-out,
-    which is the audience the customization exists for. Every remaining provider is
-    bounded by config or a small owned table, so this stays cheap at any account size."""
+@pytest.mark.parametrize('anonymous', [True, False])
+def test_neither_retired_provider_runs_for_any_viewer(monkeypatch, anonymous):
+    """The showcase band is hidden and the timeline is deleted, so the two providers this file was
+    written to gate now cost nothing for anybody.
+
+    Parametrized over both viewers deliberately. The showcase provider was never auth-gated -- it ran
+    for anonymous visitors on purpose, because a shared profile link is mostly opened logged-out -- so
+    checking only the anonymous case would prove nothing about it."""
     profile = ProfileFactory(psn_history_public=True)
+    viewer = AnonymousUser() if anonymous else UserFactory()
 
-    _, calls = _build_context(profile, AnonymousUser(), monkeypatch)
+    context, calls = _build_context(profile, viewer, monkeypatch)
 
-    assert 'showcases' in calls
-
-
-def test_rarest_trophies_showcase_type_is_gone():
-    """The unbounded provider must stay deleted, not merely unregistered. It ranked the
-    profile's whole earned set on a joined column; re-adding it re-adds the outage."""
-    from trophies.models import ProfileShowcase
-    from trophies.services import showcase_service
-
-    assert not hasattr(ProfileShowcase, 'SHOWCASE_RAREST')
-    assert 'rarest_trophies' not in dict(ProfileShowcase.SHOWCASE_TYPES)
-    assert 'rarest_trophies' not in showcase_service.SHOWCASE_REGISTRY
-    assert not hasattr(showcase_service, 'provide_rarest_trophies')
+    assert calls == [], f'a retired provider still runs: {calls}'
+    # Only the showcase key is worth asserting: it is monkeypatched above, so an empty value means the
+    # provider was skipped. `timeline_events` is never SET by the view any more, so a `.get()` on it
+    # returns None whatever the code does -- coverage-shaped, but unable to fail. What actually pins
+    # the timeline's removal is `test_the_timeline_is_gone_not_merely_unrendered` below.
 
 
-def test_anonymous_render_does_not_build_timeline(monkeypatch):
-    """The timeline is cached per profile, so a crawler enumerating profiles never hits
-    that cache. Gating is the only thing that protects it."""
-    profile = ProfileFactory(psn_history_public=True)
+def test_the_timeline_is_gone_not_merely_unrendered():
+    """It had already been unrendered for a while -- the header rebuild dropped its include and nobody
+    noticed, so the view went on building it and throwing it away on every authenticated render of
+    every tab, including HTMX swaps. Deleting the template alone would recreate exactly that state."""
+    from pathlib import Path
 
-    context, calls = _build_context(profile, AnonymousUser(), monkeypatch)
+    root = Path(__file__).resolve().parents[2]
 
-    assert 'timeline' not in calls
-    assert not context.get('timeline_events')
+    assert not (root / 'trophies' / 'services' / 'timeline_service.py').exists()
+    assert not (root / 'templates' / 'trophies' / 'partials' / 'profile_detail'
+                / 'profile_timeline.html').exists()
+    assert not hasattr(ProfileDetailView, '_build_timeline'), (
+        'the view can build a timeline again'
+    )
 
-
-def test_authenticated_render_runs_both(monkeypatch):
-    """The timeline gate keys on the VIEWER, not the profile: a logged-in visitor still
-    gets the full page. Without this, the fix would delete the feature for everyone."""
-    profile = ProfileFactory(psn_history_public=True)
-    viewer = UserFactory()
-
-    _, calls = _build_context(profile, viewer, monkeypatch)
-
-    assert 'showcases' in calls
-    assert 'timeline' in calls
+    # And the sync pipeline no longer invalidates a cache that no longer exists.
+    keeper = (root / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
+    assert 'invalidate_timeline_cache' not in keeper
 
 
-def test_private_history_still_skips_timeline_when_authenticated(monkeypatch):
-    """psn_history_public=False must keep winning for logged-in viewers. The anon gate is
-    an ADDITIONAL condition on the timeline, not a replacement for the privacy one."""
-    profile = ProfileFactory(psn_history_public=False)
-    viewer = UserFactory()
+def test_the_game_detail_timeline_was_not_caught_in_the_crossfire():
+    """`game_views._build_timeline_events` and its `timeline_events` context key are a DIFFERENT
+    feature -- the game-detail My Stats journey (Started -> First -> 25/50/75% -> Platinum) -- that
+    happens to share the name. Two surfaces, one variable name, and only one of them was retired."""
+    from trophies.views.game_views import GameDetailView
 
-    _, calls = _build_context(profile, viewer, monkeypatch)
-
-    assert 'showcases' in calls      # showcases are not privacy-gated
-    assert 'timeline' not in calls   # ...the timeline is
+    assert hasattr(GameDetailView, '_build_timeline_events')
 
 
-def test_anonymous_render_keeps_header_stats(monkeypatch):
-    """The four Platinum Highlight cards are deliberately NOT gated: they render a "None"
-    empty state, so hiding them would misreport the profile to logged-out visitors."""
+def test_the_header_stats_are_free_and_ungated(monkeypatch):
+    """Five denormalized columns off the Profile row. They cost nothing, so there is nothing to gate --
+    and gating them WOULD misreport the profile to logged-out visitors, since a figure that is hidden
+    rather than absent reads as a zero."""
     profile = ProfileFactory(psn_history_public=True)
 
     context, _ = _build_context(profile, AnonymousUser(), monkeypatch)
 
     header = context['header_stats']
-    for key in ('recent_platinum', 'rarest_platinum', 'fastest_platinum', 'milestone_platinum'):
+    for key in ('total_games', 'total_earned_trophies', 'total_unearned_trophies',
+                'total_completions', 'average_completion'):
         assert key in header, f'{key} must stay in the anonymous header'
+
+
+def test_the_notable_platinums_stopped_being_computed_for_nobody():
+    """The hero retired its four Platinum Highlight tiles, and for weeks after that `_build_header_stats`
+    went on building all four anyway -- three queries per profile render, one of them an OFFSET over the
+    profile's entire earned-platinum set (`milestone_earned[milestone_number - 1]`), plus the
+    select_related chain feeding them. Nothing rendered any of it.
+
+    Exactly the timeline's failure mode, found the same way: a provider outliving its surface is
+    invisible precisely BECAUSE nothing renders it, so only a reader going looking will ever notice.
+    This is what stops it growing back."""
+    import inspect
+
+    src = inspect.getsource(ProfileDetailView._build_header_stats)
+
+    for key in ('recent_platinum', 'rarest_platinum', 'fastest_platinum', 'milestone_platinum'):
+        assert key not in src, f'{key} is being computed again with nothing rendering it'
+
+    # And the requery whose only job was prefetching the FKs behind them.
+    ctx_src = inspect.getsource(ProfileDetailView.get_context_data)
+    assert 'rarest_plat__trophy__game' not in ctx_src, (
+        'the profile is being re-fetched to prefetch platinum FKs nothing reads'
+    )

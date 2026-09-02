@@ -1,0 +1,28 @@
+{% load humanize %}{% comment %} The disciplines ring: the Pursuer Level framed by a donut whose arcs are
+each discipline's SHARE of that level.
+
+Shared by Career's hero and the Home lobby's Career CTA. The arc geometry is precomputed server-side in
+`career_service._build_hero` (`dash` / `offset` are ready-made stroke-dash segments), so this renders the
+SAME data at whatever size the host asks for -- the lobby's smaller ring is a scale, not a second
+implementation, which is what keeps the two surfaces from drifting.
+
+    ring    the `hero.ring` list ({slug, dash, offset, ...})
+    level   the Pursuer Level for the centre
+    compact optional; adds .lab-dna--sm for the lobby's reduced size
+{% endcomment %}
+<div class="lab-dna{% if compact %} lab-dna--sm{% endif %}">
+    <svg class="lab-dna__ring" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="lab-dna__track" cx="60" cy="60" r="42"></circle>
+        <g transform="rotate(-90 60 60)">
+            <g class="lab-dna__arcs">
+                {% for f in ring %}<circle class="lab-dna__arc" data-disc="{{ f.slug }}" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}
+            </g>
+        </g>
+    </svg>
+    <div class="lab-dna__center">
+        {% with digits=level|stringformat:"d"|length %}
+        <span class="lab-dna__level pp-tally lab-dna__level--d{{ digits }}" data-countup="{{ level }}">{{ level|intcomma }}</span>
+        {% endwith %}
+        <span class="lab-dna__cap">Level</span>
+    </div>
+</div>

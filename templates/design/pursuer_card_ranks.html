@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Pursuer Card -- Rank Chrome{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold text-base-content mb-1">Pursuer Card &middot; Rank Chrome</h1>
+    <p class="text-sm text-base-content/60 mb-8">
+        Every rank tier, top to bottom, with mock data. The chrome escalates:
+        matte (Newbie/Recruit) &rarr; subtle lift (Seeker/Hunter) &rarr; violet material
+        (Ranger/Warden/Marshal) &rarr; cyan material (Vanquisher/Paragon) &rarr; radiant
+        cyan glass (Luminary/Ascendant).
+    </p>
+    {% for card in rank_cards %}
+    <div class="mb-8">
+        <div class="text-[11px] uppercase tracking-[0.18em] text-base-content/45 font-semibold mb-2">
+            {{ card.rank.label }} &middot; level {{ card.level }}
+        </div>
+        {% include 'partials/components/_pursuer_card.html' %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% comment %}The card's own behaviour, loaded HERE rather than in base.html. Both files rode the global
+bundle from when the Pursuer Card was going to be a site-wide identity element; the card was dropped from
+the lobby and the script tags were never taken back out, so every page on the site shipped them for markup
+only this workshop renders. They no-op without a card, so this was weight rather than breakage.{% endcomment %}
+{% block js_scripts %}
+    <script src="{% static 'js/pursuer-card.js' %}"></script>
+    <script src="{% static 'js/pursuer-card-forge.js' %}"></script>
+{% endblock %}

@@ -1,16 +1,21 @@
-{# Games browse results partial. Returned on HTMX requests. #}
 {% load humanize %}
-
-{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
-
-{% if view_type == 'list' %}
-    <div id="items-grid" class="space-y-1.5 md:space-y-2">
-        {% include 'trophies/partials/game_list/game_list_items.html' %}
-    </div>
-{% else %}
-    <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
-        {% include 'trophies/partials/game_list/game_cards.html' %}
-    </div>
-{% endif %}
-
-{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
+{% comment %} Games browse results partial (grid-only, infinite scroll). Returned on HTMX filter swaps AND on
+the InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard) -- the scroller
+extracts the .pp-gcard nodes from this and appends them. The sentinel + loading live in game_list.html
+(outside #browse-results) so only the grid swaps on a filter change. {% endcomment %}
+{% comment %} data-result-count carries the total for this filter -- read off this (the main swap target's
+grid) at htmx:afterSwap to tick the header count old->new. Reading it here (fresh main-swap content) is
+reliable, unlike an OOB text swap on the header, whose timing raced the count-up animation. {% endcomment %}
+{% comment %} pp-reveal is baked in on HTMX swaps ONLY: the grid shares id="items-grid" across swaps, so htmx's
+settle phase restores the element's class to this server value AFTER our afterSwap handler adds pp-reveal --
+stripping it, which left infinite-scroll-appended cards unhidden (they showed in final position, then the
+reveal animation flashed them). Baking it makes settle preserve it. NOT emitted on the full SSR page (JS adds
+it there, so JS-off / reduced-motion keeps cards visible; the hide rule is motion-gated anyway). {% endcomment %}
+<div id="items-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+    {% include 'trophies/partials/game_list/game_cards.html' %}
+</div>
+{% comment %} Refresh the active-filter chips (which live in the toolbar, outside #browse-results) on each
+filter swap via OOB so they stay in sync with panel edits. HTMX-only: this partial is ALSO included inline in
+the full page (inside #browse-results), so emitting the OOB copy there would render a second, visible
+#gbrowse-active-filters. Inert on the InfiniteScroller's plain-fetch ?page loads anyway. {% endcomment %}
+{% if request.htmx %}{% include 'partials/browse/active_filters.html' with oob=True %}{% endif %}

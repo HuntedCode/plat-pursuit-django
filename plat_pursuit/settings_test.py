@@ -40,6 +40,24 @@ DATABASES = {
 # Deterministic, non-secret key so tests never depend on a real .env value.
 SECRET_KEY = "test-secret-key-not-for-production"  # noqa: S105
 
+# Same principle, and it is LOAD-BEARING for CI: the workflow's own contract is "no secrets
+# needed -- CI uses settings_test, which requires no real API keys". Both of these are plain
+# `os.getenv(...)` in settings.py, so a developer with a populated .env sees them set and CI
+# sees None. Six tests had quietly come to depend on that difference and passed locally while
+# failing in CI:
+#
+#   BOT_API_KEY      -- the /recheck-badges tests mint a Token with this as its key. None ->
+#                       the bot authenticates as nobody -> 403 instead of 200/400.
+#   PAYPAL_CLIENT_ID -- the storefront's PayPal button is gated on it (the sandbox ladder plan
+#                       ids beside it are hardcoded, so this is the only env half). Absent ->
+#                       one provider button instead of two, and the form-enclosure guard reads
+#                       it as a button outside the form.
+#
+# Values are deliberately obvious non-secrets: anything that looks like a real credential
+# invites someone to treat it as one.
+BOT_API_KEY = "test-bot-api-key-not-for-production"  # noqa: S105
+PAYPAL_CLIENT_ID = "test-paypal-client-id-not-for-production"
+
 DEBUG = False
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 

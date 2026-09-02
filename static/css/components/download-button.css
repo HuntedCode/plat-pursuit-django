@@ -1,0 +1,68 @@
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════
+ * Download button: idle -> busy -> done
+ *
+ * Every share card on the site is a PNG composed by headless Chromium on the server, which is slow
+ * enough that an unannotated `disabled` reads as a dead click -- so the busy state is the load-bearing
+ * one here, not the success state. And the file lands in a folder the page cannot see, so `done` is the
+ * only confirmation the hunter gets from the page itself.
+ *
+ * Worked out on the plat card modal and extracted when the recap ceremony needed the same button. It
+ * carries the STATES only; the button's own shape, colour and hover belong to whatever surface it sits
+ * on (`.pc-btn--go`, `.rcx__btn--primary`). Two knobs make it fit either one:
+ *
+ *   --pp-dl-accent  the surface's primary colour, used to tint the busy state (default --pp-primary;
+ *                   the recap passes its per-beat accent so the button stays in the stage's key)
+ *   --pp-dl-width   the min-width, which exists so the three labels never resize the button
+ *
+ * Pairs with PlatPursuit.CardDownload (utils.js), which owns the state machine and the fetch.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Min-width'd to the longest label and centred, so moving through the three states never resizes the
+   button. Without it, "Download" -> "Processing..." -> "Saved" shuffles the whole action row twice per
+   download. */
+.pp-dl { min-width: var(--pp-dl-width, 152px); justify-content: center; }
+
+/* All three glyphs ship in the markup and CSS picks one -- swapping innerHTML mid-press would throw away
+   the button's contents and, with them, anything focus or a screen reader was holding onto. */
+.pp-dl__icons { position: relative; width: 16px; height: 16px; flex-shrink: 0; }
+.pp-dl__i { position: absolute; inset: 0; display: none; }
+.pp-dl__i--idle { display: block; }
+
+.pp-dl.is-busy .pp-dl__i--idle,
+.pp-dl.is-done .pp-dl__i--idle { display: none; }
+.pp-dl.is-busy .pp-dl__i--busy { display: block; }
+.pp-dl.is-done .pp-dl__i--done { display: block; }
+
+/* Muted, not merely `disabled` -- the greying is what tells you the button is deliberately out of play
+   rather than broken. `disabled` is still set in JS; this is its visible half.
+   Muted TOWARD the accent rather than to a flat grey: dropped all the way to --pp-bg-2 it became
+   indistinguishable from the Close button sitting next to it, so the primary action appeared to vanish
+   mid-download. The tint also gives the currentColor spinner enough contrast to read. */
+.pp-dl.is-busy,
+.pp-dl.is-busy:hover {
+    background: color-mix(in oklab, var(--pp-dl-accent, var(--pp-primary)) 13%, var(--pp-bg-2));
+    border-color: color-mix(in oklab, var(--pp-dl-accent, var(--pp-primary)) 32%, var(--pp-border));
+    color: color-mix(in oklab, var(--pp-dl-accent, var(--pp-primary)) 62%, var(--pp-text-dim));
+    box-shadow: none; cursor: progress;
+    filter: none;   /* surfaces that brighten their primary on hover must not brighten a busy button */
+}
+
+.pp-dl__i--busy {
+    border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
+    border-top-color: currentColor; border-radius: 50%;
+    animation: ppDlSpin 0.7s linear infinite;
+}
+@keyframes ppDlSpin { to { transform: rotate(360deg); } }
+
+.pp-dl.is-done,
+.pp-dl.is-done:hover {
+    background: var(--pp-success); border-color: var(--pp-success); color: var(--pp-bg-0);
+    box-shadow: 0 8px 22px -10px color-mix(in oklab, var(--pp-success) 75%, #000);
+    filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* The "Processing..." label and the muted button carry the busy state on their own, so the ring can
+       stop spinning without the state going unannounced. */
+    .pp-dl__i--busy { animation: none; }
+}

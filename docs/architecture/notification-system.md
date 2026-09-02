@@ -1,5 +1,19 @@
 # Notification System
 
+> ## 🗑️ HIDDEN pending rebuild (2026-08)
+>
+> **The surface is gone; the plumbing is not.** The inbox (`/notifications/`), the four staff pages and all ten API routes are withdrawn — pages 302 to home, API routes 404. Everything described below still *runs*: the models, the signals, the deferred queue, the scheduled-delivery service and every producer (sync, badges, reviews, roadmap notes, donations, subscriptions). Rows keep accruing behind a closed door, which is what makes this reversible.
+>
+> **Why hidden rather than deleted.** The producers are wired into `psn_api_service` (sync), `token_keeper` (the worker), `donation_service` (Stripe) and `subscription_service` — and a rebuilt notification system still needs "badge earned", "platinum earned", "sync finished", "donation received". Deleting those call sites would mean writing them again later, in the four files least worth re-opening. Hiding throws away only the part being rebuilt.
+>
+> **What was actually removed:** the navbar bell, `static/js/notifications.js` (which fetched an unread count on *every* page load for every authed user), `CelebrationManager.celebratePlatinum` and the `.pp-navicon__badge` CSS. The platinum confetti went deliberately — it fired from an inbox poll rather than from earning anything, so it went off on whatever page you opened next.
+>
+> **One deliberate exception:** the URL *names* are all preserved, because three unrelated staff pages reverse `admin_notification_center` and losing the name is a hard 500 on each. (`/api/v1/admin/notifications/user-search/` was a second exception until cutover 5b, kept only for the staff Badge Creation page's user picker. That page authored legacy tier badges and was deleted, so the endpoint went with it.)
+>
+> **Outbound delivery** is stopped by pausing the hourly `process_scheduled_notifications` Render cron — a dashboard change, on the deploy checklist. Nothing else sends: `PushNotificationService` does not exist yet and the recap email is already paused.
+>
+> Restoring the system is: five URL patterns, the API block in `api/urls.py`, and the navbar bell. Pinned by `tests/engine/test_notifications_hidden.py`.
+
 The notification system is a multi-layered architecture that delivers in-app notifications, Discord webhook embeds, and shareable platinum images to PlatPursuit users. It handles everything from real-time platinum/badge/milestone achievements to admin-scheduled bulk announcements, using a combination of Django signals, Redis-backed deferred queues, template-driven rendering, and a background daemon thread for Discord rate-limited delivery. The system is designed around the principle that sync-time data is often stale, so notifications are intentionally deferred until accurate counts are available.
 
 ## Architecture Overview
@@ -37,7 +51,7 @@ Signal fires (post_save)
 
 | File | Purpose |
 |------|---------|
-| `notifications/models.py` | Data models: Notification, NotificationTemplate, ScheduledNotification, DeviceToken, NotificationLog |
+| `notifications/models.py` | Data models: Notification, NotificationTemplate, ScheduledNotification, NotificationLog |
 | `notifications/signals.py` | Django signal handlers for EarnedTrophy, UserBadge, UserMilestone, Profile events |
 | `notifications/apps.py` | AppConfig that imports signals on `ready()` |
 | `notifications/validators.py` | SectionValidator for structured notification sections |
@@ -110,17 +124,6 @@ Admin-created notifications with future delivery. Processed by the hourly cron c
 
 Status lifecycle: `pending` -> `processing` -> `sent` (or `failed`). Can be `cancelled` while still `pending`.
 
-### DeviceToken
-
-Push notification device tokens for mobile.
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `user` | FK(CustomUser) | CASCADE |
-| `token` | CharField(512) | Unique. Expo push token or raw FCM/APNs token |
-| `platform` | CharField | ios / android |
-| `last_used` | DateTimeField | auto_now |
-
 ### NotificationLog
 
 Audit trail for bulk sends (both immediate and scheduled).
@@ -133,12 +136,10 @@ Captures a snapshot of what was sent: notification_type, title, message, detail,
 |------|---------|----------------|-------|
 | `platinum_earned` | EarnedTrophy post_save (platinum, earned=True flip) | `notify_platinum_earned` signal | 2-day threshold, shovelware filter, deferred during sync |
 | `badge_awarded` | UserBadge post_save (created=True) | `notify_badge_awarded` signal | Always deferred for series consolidation |
-| `milestone_achieved` | Called from milestone_service.py | `create_milestone_notification()` function | Not a signal; called directly for batch consolidation. Context includes `title_name` for milestones with title rewards. |
 | `monthly_recap` | Monthly recap generation | Created externally | Monthly recap availability |
 | `subscription_created` | Subscription activation | Created externally | Welcome notification |
 | `subscription_updated` | Subscription change | Created externally | Plan change notification |
 | `discord_verified` | Profile post_save (is_discord_verified flip) | `notify_discord_linked` signal | Only on False->True transition |
-| `challenge_completed` | Challenge completion | Created externally | A-Z or Calendar challenge |
 | `review_reply` | Review reply received | `ReviewService.create_reply()` | Notifies review author when someone replies |
 | `review_milestone` | Helpful vote threshold hit | `ReviewService._check_helpful_milestones()` | Per-review: fires at 5/10/25/50 helpful votes |
 | `admin_announcement` | Staff admin panel | ScheduledNotificationService | Bulk targeted delivery |
@@ -180,7 +181,6 @@ During a PSN sync, trophy counts and badge progress are stale until the sync pip
 2. **Queue to Redis**: Uses `RPUSH` to atomically append badge context to the list at `pending_badges:{profile_id}` with a 1-hour TTL.
 3. **Sync completes**: `_job_sync_complete()` in `token_keeper.py` calls `DeferredNotificationService.create_badge_notifications(profile_id)`.
 4. **Consolidation**: The service atomically fetches all items and deletes the key (Redis pipeline). Badges are grouped by `series_slug`. For each series, only the highest tier badge produces a notification. Badges without a series slug get individual notifications.
-5. **Also called by admin commands**: `refresh_badge_series` calls `create_badge_notifications()` at the end to process any queued badges.
 
 ### Scheduled Notification Flow
 
@@ -217,14 +217,9 @@ Platinum share images are no longer rendered inside the notification inbox. The 
 |--------|------------|-----------|
 | **Sync Pipeline** (`token_keeper.py`) | Calls `DeferredNotificationService` at game-sync and full-sync completion | Sync -> Notifications |
 | **Signal Suppression** (`sync_utils.py`) | `sync_signal_suppressor()` disables EarnedTrophy pre_save signal during sync batches | Sync -> Signals |
-| **Badge Service** (`check_profile_badges`) | Awards badges, triggering `post_save` on `UserBadge` | Badges -> Signals |
-| **Milestone Service** (`milestone_service.py`) | Calls `create_milestone_notification()` directly (not via signal) for consolidation | Milestones -> Notifications |
 | **Subscription System** (`users/views.py`) | Creates subscription/payment notifications and Discord webhooks | Subscriptions -> Notifications |
-| **Challenge System** | Creates `challenge_completed` notifications on completion | Challenges -> Notifications |
 | **Admin Panel** | Staff create/schedule/send notifications via ScheduledNotificationService | Admin -> Notifications |
 | **Discord** | Separate webhook system for platinums, badges, roles, subscriptions | Notifications -> Discord |
-| **XP/Gamification** (`xp_service.py`) | Badge notifications fetch fresh XP via `calculate_series_xp()` and `calculate_total_xp()` | Gamification -> Signals |
-| **Admin Commands** (`refresh_badge_series`) | Calls `create_badge_notifications()` at end to flush queued badge notifications | Commands -> Deferred |
 
 ## Gotchas and Pitfalls
 
@@ -234,7 +229,10 @@ The `sync_signal_suppressor()` context manager in `sync_utils.py` uses thread-lo
 
 ### 2. Badge Notifications Are Always Deferred
 
-Unlike platinums (which are only deferred during sync), badge notifications are **always** queued to Redis and never created inline. This is because badges benefit from series consolidation even outside sync (e.g., `refresh_badge_series` can award multiple tiers at once). If you add a code path that awards badges, make sure `create_badge_notifications()` is called afterward to flush the queue.
+> **Badge notifications were removed in the 2026-08 cutover.** `notify_badge_awarded` was a `post_save` on
+> the legacy `UserBadge`, which nothing writes any more. The grouping-badge subsystem announces to DISCORD
+> only, once per run, from `badge_adapters.announce_badges_earned`. There is no on-site or email badge
+> notification today; wiring one is part of the notification-inbox rebuild.
 
 ### 3. The 2-Day Threshold Prevents Initial Sync Spam
 
@@ -266,11 +264,14 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 
 ### 10. Milestone Notifications Bypass Signals
 
-`create_milestone_notification()` is a plain function, not a signal handler. It is called directly from `milestone_service.py` to allow batch consolidation (only the highest tier per criteria type gets a notification). If you refactor milestone processing, ensure this function is still called at the right consolidation point.
+**Milestone / challenge notifications retired (2026-08).** `create_milestone_notification()` and the `milestone_achieved` / `challenge_completed` types went with the legacy milestone engine and the Challenge system. The `milestones` app is deliberately quiet -- it sends no notification on a tier crossing. The type choices remain in `notifications/models.py` so historical rows still render.
 
-### 11. Milestone Title Rewards in Detail View
+### 11. Historical Milestone Notifications Still Render
 
-When a milestone has an associated `title` FK (to the `Title` model), `_build_milestone_context()` includes `title_name` and `title_text` in the context dict. These flow into `notification.metadata` and are rendered by `renderMilestoneDetail()` in `notification-inbox.js` as a styled callout card. The title info appears only in the expanded detail view, not in the preview `message` text. Milestones without a title reward have empty strings for both fields.
+No new milestone notifications are created (see #10), but rows created before the retirement remain in the
+inbox. Their `metadata` already carries `title_name` / `title_text`, and `renderMilestoneDetail()` in
+`notification-inbox.js` is deliberately kept so those historical entries still render their styled callout
+card. Don't delete that renderer while old rows exist.
 
 ## Management Commands
 

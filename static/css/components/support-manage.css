@@ -1,0 +1,446 @@
+/* ==========================================================================================
+   MEMBERSHIP (/support/membership/) -- the manage side of the Support hub.
+
+   Everything level-tinted inherits ONE inline `--sup-t` set on the status card (the storefront's
+   lesson: inline custom props on siblings cannot reach a button). The perks grid, the dialog and
+   the star primitives come from support.css / supporter.css -- this file owns only the .supm-*
+   page furniture. Imported from input.css AFTER support-roadmap.css so shared class names
+   resolve in storefront -> roadmap -> membership order.
+   ========================================================================================== */
+
+/* The page column: same rhythm as the roadmap's .rm root (flex + gap), no per-card margins.
+   Width-capped and centred: this page is a single reading column of prose-weight cards, and at
+   the container's full 1536px everything clustered hard left. The roadmap can run full width
+   because its 4-up feature grids fill it; nothing here does. */
+.supm {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 60rem;
+    margin-inline: auto;
+}
+
+.supm-testmode {
+    padding: 0.5rem 0.9rem;
+    border: 1px dashed var(--pp-warning);
+    border-radius: var(--pp-radius-sm);
+    color: var(--pp-warning);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+/* The staff/dev state-preview strip (?preview=<state>). */
+.supm-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0.45rem 0.7rem;
+    border: 1px dashed color-mix(in oklab, var(--pp-secondary) 55%, transparent);
+    border-radius: var(--pp-radius-sm);
+    font-size: 0.74rem;
+}
+
+.supm-preview__label { font-weight: 800; color: var(--pp-text-mute); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.64rem; }
+
+.supm-preview__chip {
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim);
+}
+
+.supm-preview__chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-secondary) 50%, var(--pp-border)); }
+
+.supm-preview__chip.is-on {
+    color: var(--pp-secondary);
+    border-color: color-mix(in oklab, var(--pp-secondary) 55%, transparent);
+    background: color-mix(in oklab, var(--pp-secondary) 12%, transparent);
+}
+
+.supm-preview__exit { margin-left: auto; color: var(--pp-text-mute); text-decoration: underline; }
+.supm-preview__exit:hover { color: var(--pp-text); }
+
+/* ---- header type (the roadmap page's scale, shared voice across Support subpages) --------- */
+.supm__eyebrow {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.supm__h1 {
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.45rem;
+    line-height: 1.15;
+    color: var(--pp-text);
+}
+
+.supm__lede {
+    max-width: 62ch;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
+
+@media (min-width: 1024px) {
+    .supm__h1 { font-size: 1.75rem; }
+}
+
+/* ---- the status card ---------------------------------------------------------------------- */
+.supm-status {
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 26%, var(--pp-border));
+}
+
+/* The standing row: leaderboard-row geometry, one name, the level's stars beside it. */
+.supm-who {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.supm-who__av {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 55%, transparent);
+}
+
+.supm-who__av img { width: 100%; height: 100%; object-fit: cover; }
+
+.supm-who__id { min-width: 0; display: grid; gap: 2px; }
+
+.supm-who__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+
+.supm-who__name .pp-supname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.supm-who__mark { display: inline-flex; align-items: center; gap: 1px; flex: none; }
+
+.supm-who__sub {
+    font-size: 0.78rem;
+    color: var(--pp-text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- the facts ---------------------------------------------------------------------------- */
+.supm-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+    margin-top: 1.1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--pp-border);
+}
+
+@media (min-width: 768px) {
+    .supm-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1024px) {
+    .supm-facts { grid-template-columns: repeat(5, auto); justify-content: start; gap: 10px 34px; }
+}
+
+.supm-fact dt {
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+    margin-bottom: 2px;
+}
+
+.supm-fact dd {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--pp-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.supm-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 9px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.74rem;
+    font-weight: 700;
+    white-space: nowrap;   /* "Cancels Sep 21, 2027" sits a pixel from wrapping at 375px */
+}
+
+.supm-chip--ok {
+    color: var(--sup-t, var(--pp-primary));
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 45%, transparent);
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 12%, transparent);
+}
+
+.supm-chip--warn {
+    color: var(--pp-warning);
+    border-color: color-mix(in oklab, var(--pp-warning) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 12%, transparent);
+}
+
+.supm-chip--end {
+    color: var(--pp-text-dim);
+    border-color: var(--pp-border);
+    background: color-mix(in oklab, var(--pp-text-dim) 8%, transparent);
+}
+
+/* ---- insets (grace / past-due) ------------------------------------------------------------ */
+.supm-inset {
+    margin-top: 1.1rem;
+    padding: 0.9rem 1rem;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid;
+    display: grid;
+    gap: 4px;
+    justify-items: start;
+}
+
+.supm-inset--grace {
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 35%, transparent);
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 7%, transparent);
+}
+
+.supm-inset--due {
+    border-color: color-mix(in oklab, var(--pp-warning) 40%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 8%, transparent);
+}
+
+.supm-inset__lead { font-weight: 700; font-size: 0.92rem; color: var(--pp-text); }
+.supm-inset__aside { font-size: 0.78rem; }
+.supm-inset__aside a { color: var(--pp-text-dim); text-decoration: underline; }
+.supm-inset__aside a:hover { color: var(--pp-text); }
+
+.supm-inset__confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.83rem;
+    color: var(--pp-text);
+    cursor: pointer;
+    margin-top: 4px;
+}
+.supm-inset__sub { font-size: 0.83rem; line-height: 1.5; color: var(--pp-text-dim); max-width: 58ch; }
+
+.supm-inset__cta {
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 16px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 45%, transparent);
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 16%, transparent);
+    color: var(--pp-text);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: box-shadow var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.supm-inset__cta:hover {
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 70%, transparent);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--sup-t, var(--pp-primary)) 30%, transparent);
+}
+
+/* The grace CTA hosts the storefront's star emitter (support.css .sup-go__rise clips to the
+   nearest positioned ancestor) in the member's own level colour -- the invitation back previews
+   the buy button's motion. The label rides above the stars. */
+.supm-inset__cta--rise { position: relative; overflow: hidden; }
+.supm-inset__cta-lbl { position: relative; }
+
+.supm-inset--due .supm-inset__cta {
+    border-color: color-mix(in oklab, var(--pp-warning) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 14%, transparent);
+}
+
+.supm-inset--due .supm-inset__cta:hover {
+    border-color: color-mix(in oklab, var(--pp-warning) 70%, transparent);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--pp-warning) 28%, transparent);
+}
+
+/* ---- actions ------------------------------------------------------------------------------ */
+.supm-actions {
+    margin-top: 1.1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--pp-border);
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+}
+
+.supm-actions__row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.supm-actions__go {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 18px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 45%, transparent);
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 16%, transparent);
+    color: var(--pp-text);
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: box-shadow var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.supm-actions__go:hover {
+    border-color: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 70%, transparent);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--sup-t, var(--pp-primary)) 30%, transparent);
+}
+
+.supm-actions__cancel {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: transparent;
+    color: var(--pp-text-dim);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.supm-actions__cancel:hover {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--pp-warning) 50%, var(--pp-border));
+}
+
+.supm-actions__note { font-size: 0.76rem; color: var(--pp-text-mute); }
+
+/* ---- perks section (free content; tiles come from support.css) ---------------------------- */
+.supm-perks { }
+
+/* The tiles stack exactly as the storefront modal stacks them (2x2 + the wide beta tile) --
+   support.css owns the grid; nothing to override here. */
+
+.supm-perks__h {
+    font-family: var(--pp-font-display);
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: var(--pp-text);
+    margin-bottom: 0.7rem;
+}
+
+.supm-perks__fn { margin-top: 0.6rem; font-size: 0.76rem; color: var(--pp-text-mute); }
+
+.supm-perks__more { margin-top: 0.7rem; font-size: 0.82rem; }
+.supm-perks__more a { color: var(--pp-primary); }
+.supm-perks__more a:hover { text-decoration: underline; }
+
+/* ---- non-member --------------------------------------------------------------------------- */
+.supm-none { display: grid; gap: 6px; justify-items: start; }
+.supm-none__lead { font-weight: 800; font-size: 1.05rem; font-family: var(--pp-font-display); color: var(--pp-text); }
+.supm-none__sub { font-size: 0.88rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 58ch; }
+
+.supm-none__cta {
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 18px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    color: var(--pp-text);
+    font-size: 0.88rem;
+    font-weight: 700;
+    transition: box-shadow var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.supm-none__cta:hover {
+    border-color: color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent);
+}
+
+/* ---- the wall toggle ---------------------------------------------------------------------- */
+.supm-wall {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.supm-wall__h { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.98rem; color: var(--pp-text); }
+.supm-wall__sub { font-size: 0.8rem; color: var(--pp-text-dim); }
+
+.supm-wall__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--pp-text);
+    cursor: pointer;
+}
+
+/* ---- trust line + cancel dialog row ------------------------------------------------------- */
+.supm-trust {
+    font-size: 0.76rem;
+    font-style: italic;
+    color: var(--pp-text-mute);
+    padding-right: 0.25rem;
+}
+
+.supm-cancel__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 1rem;
+}
+
+.supm-cancel__keep {
+    padding: 8px 16px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    color: var(--pp-text);
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.supm-cancel__keep:hover {
+    border-color: color-mix(in oklab, var(--pp-primary) 70%, transparent);
+}
+
+.supm-cancel__go {
+    padding: 8px 16px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-error) 45%, transparent);
+    background: transparent;
+    color: var(--pp-text-dim);
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
+}
+
+.supm-cancel__go:hover {
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+}

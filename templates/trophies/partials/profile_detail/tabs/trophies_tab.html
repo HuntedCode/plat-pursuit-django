@@ -1,13 +1,64 @@
-{% load custom_filters humanize %}
-{% include 'trophies/partials/profile_detail/trophy_log_filters.html' %}
-<div class="border-t border-base-content/10 mt-2 pt-2"></div>
+{% comment %} The Trophies tab: ONE surface whose shape follows intent -- rebuilt 2026-08.
+
+A search field over a wall of DAYS. With nothing in it you browse the history; searching swaps the wall
+for the matching trophies. There is no Activity/Log switcher, because those were never two ways of
+browsing: Activity is how you read a history, and the Log was an INDEX dressed as a wall. A single trophy
+has no natural shape -- an icon, a name, a percentage -- which is why no layout for it read well. As
+search results it does not need one.
+
+The toolbar is the site's, not a bespoke one: `.pp-toolbar-card` for the surface, `.pp-bgal__search` for
+the field, `.pp-bgal__chip` for the chips. `data-browse-form` hands it to `browse-filters.js`, which
+supplies Enter-to-submit, debounced live search, Escape-to-clear, the clear button and the in-flight
+spinner -- but only for markup that opts into them, which a hand-rolled field does not.
+{% endcomment %}
+<form id="trophies-form" method="get" data-browse-form data-live-search
+      class="pp-toolbar-card pp-tsearch"
+      hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}"
+      hx-target="#tab-results" hx-swap="innerHTML" hx-push-url="true" hx-trigger="submit">
+    <input type="hidden" name="tab" value="trophies">
+
+    <div class="pp-tsearch__bar">
+        <span class="pp-bgal__search" data-search-wrap>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" name="q" value="{{ trophy_query }}" data-page-search
+                   placeholder="Search {{ profile.display_psn_username|default:profile.psn_username }}&rsquo;s trophies&hellip;"
+                   aria-label="Search this hunter&rsquo;s trophies" />
+            <span class="pp-search-spin" aria-hidden="true"></span>
+            <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+        </span>
+
+        {% comment %}Tier is the one axis of a trophy that is both obvious to ask for and free to filter --
+        a column on Trophy, not a computed grade.
+
+        CHECKBOXES, so several can be on at once: "their golds and platinums" is one question, and asking
+        it as two searches is what a filter exists to avoid. They also toggle OFF by clicking, which radios
+        cannot -- so the only thing Clear has to do is reset everything at once.
+
+        Inside the shared chip, so `:has(input:checked)` drives the active state straight off the DOM and
+        the control works with JS off; `browse-filters.js` auto-submits any checkbox change.{% endcomment %}
+        <div class="pp-tsearch__chips" role="group" aria-label="Filter by trophy type">
+            {% for value, label in trophy_tiers %}
+            <label class="pp-bgal__chip pp-tsearch__chip" data-tier="{{ value }}">
+                <input type="checkbox" name="tier" value="{{ value }}"{% if value in trophy_selected %} checked{% endif %}>
+                <i></i>{{ label }}
+            </label>
+            {% endfor %}
+            {% if is_searching %}
+            {% comment %}Clear re-renders the WHOLE tab, not just the results. The toolbar lives outside
+            `#tab-results`, so clearing through the usual target left every chip still looking active --
+            the results changed and the controls describing them did not.{% endcomment %}
+            <a class="pp-bgal__chip pp-tsearch__clear"
+               href="{% url 'profile_detail' psn_username=profile.psn_username %}?tab=trophies"
+               hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}?tab=trophies"
+               hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true">Clear</a>
+            {% endif %}
+        </div>
+    </div>
+</form>
+
 <div id="tab-results">
-    <div id="trophies-grid" class="flex flex-col gap-1.5 md:gap-2">
-        {% include 'trophies/partials/profile_detail/trophy_list_items.html' %}
-    </div>
-    <div id="trophies-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
-        <span class="loading loading-spinner loading-lg"></span>
-        <span class="sr-only">Loading more trophies...</span>
-    </div>
-    <div id="trophies-sentinel" class="h-1"></div>
+    {% include 'trophies/partials/profile_detail/tabs/trophies_results.html' %}
 </div>

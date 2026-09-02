@@ -17,7 +17,6 @@ class GameSearchForm(forms.Form):
     show_only_platinum = forms.BooleanField(required=False, label='Show only games with platinum')
     filter_shovelware = forms.BooleanField(required=False, label='Filter out shovelware')
     in_badge = forms.BooleanField(required=False, label='In a badge series')
-    badge_series = forms.ChoiceField(choices=[('', 'Any Badge')], required=False, label='Badge Series')
 
     # Community flag filters (3-state: any / show-only / hide).
     # If both show_X and hide_X are submitted for the same flag, hide wins.
@@ -48,6 +47,11 @@ class GameSearchForm(forms.Form):
     genres = forms.MultipleChoiceField(required=False, label='Genres')
     themes = forms.MultipleChoiceField(required=False, label='Themes')
     engine = forms.ChoiceField(choices=[('', 'Any Engine')], required=False, label='Game Engine')
+
+    # Contract filters (the game's home Job-Board contract): in a contract at all, and/or its contract
+    # levels one of the selected jobs (a discipline picks all its jobs client-side -> a set of job slugs).
+    in_contract = forms.BooleanField(required=False, label='In a contract')
+    contract_jobs = forms.MultipleChoiceField(required=False, label='Contract jobs')
 
     SORT_CHOICES = [
         ('alpha', 'Alphabetical'),
@@ -116,8 +120,12 @@ class GameSearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Theme, GameEngine, Badge
+        from trophies.models import Genre, Theme, GameEngine, Job
         try:
+            self.fields['contract_jobs'].choices = list(
+                Job.objects.exclude(is_fallback=True)
+                .values_list('slug', 'name').order_by('discipline', 'display_order', 'name')
+            )
             self.fields['genres'].choices = list(
                 Genre.objects.values_list('id', 'name').order_by('name')
             )
@@ -127,13 +135,6 @@ class GameSearchForm(forms.Form):
             self.fields['engine'].choices = [('', 'Any Engine')] + list(
                 GameEngine.objects.values_list('id', 'name').order_by('name')
             )
-            badge_qs = Badge.objects.filter(
-                is_live=True, tier=1, series_slug__isnull=False,
-            ).exclude(series_slug='').order_by('display_series', 'name')
-            self.fields['badge_series'].choices = [('', 'Any Badge')] + [
-                (b.series_slug, b.display_series or b.name)
-                for b in badge_qs
-            ]
         except Exception:
             pass
 
@@ -246,19 +247,17 @@ class TrophySearchForm(forms.Form):
 class ProfileSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
     country = forms.ChoiceField(choices=[('', 'All Countries')], required=False, label='Country')
+    # Discovery sorts only -- the order matches `ProfilesListView.SORTS`, and the keys MUST stay in step
+    # with it (the view resolves the raw param against that map, so a choice with no entry there silently
+    # falls back to the default order). Ranking sorts moved to /leaderboards/ or were dropped when this
+    # page stopped being a second scoreboard; see the view's docstring for which and why.
     sort = forms.ChoiceField(
         choices=[
             ('alpha', 'Alphabetical'),
+            ('recently_active', 'Recently Active'),
+            ('recently_joined', 'Recently Joined'),
             ('trophies', 'Total Trophies'),
             ('plats', 'Total Plats'),
-            ('games', 'Most Games Played'),
-            ('completes', 'Most 100% Completions'),
-            ('avg_progress', 'Highest Avg. Progress'),
-            ('recently_active', 'Recently Active'),
-            ('badges_earned', 'Most Badges Earned'),
-            ('badge_xp', 'Highest Badge XP'),
-            ('rarest_avg_plat', 'Rarest Avg Platinum'),
-            ('recently_joined', 'Recently Joined'),
         ],
         required=False,
         label='Sort By',
@@ -274,152 +273,62 @@ class ProfileSearchForm(forms.Form):
             self.fields['country'].choices = [('', 'All Countries')]
 
 class ProfileGamesForm(forms.Form):
+    """Controls for a hunter's Games tab -- a RECORD of what they played, not a browse page.
+
+    Reduced from ~30 fields and 17 sorts in 2026-08. What came off was the discovery apparatus this
+    tab had inherited wholesale from Browse Games: genre/theme pickers, community rating / difficulty
+    / fun ranges, time-to-beat ranges, shovelware filtering, and eight `show_*`/`hide_*` community
+    flags that no template ever rendered. Those answer "what should I play next," which is a question
+    about a catalogue, not about somebody's history.
+
+    Four controls remain, and `status` is the one that did the work: `game_has_plat`, `plat_earned`,
+    `is_100` and `completion_min/max` were five fields asking one question -- how far did they get --
+    which the card already answers with its five-state completion bar. The options below ARE those
+    states, so the filter and the card speak the same language.
+    """
+
+    DEFAULT_SORT = 'recent'
+
+    SORT_CHOICES = [
+        ('recent', 'Recently Played'),
+        ('oldest', 'Oldest Played'),
+        ('alpha', 'Alphabetical'),
+        ('completion', 'Highest Completion'),
+        ('completion_inv', 'Lowest Completion'),
+        ('earned', 'Most Earned'),
+    ]
+
+    STATUS_CHOICES = [
+        ('', 'All Games'),
+        ('plat', 'Platinum Earned'),
+        ('full', '100% Complete'),
+        ('chase', 'Still to Plat'),
+        ('unfinished', 'Unfinished'),
+    ]
+
     query = forms.CharField(required=False, label='Search by name')
     platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
-    game_has_plat = forms.ChoiceField(
-        choices=[
-            ('', 'Any'),
-            ('yes', 'Has Platinum'),
-            ('no', 'No Platinum'),
-        ],
-        required=False,
-        label='Has Platinum',
-    )
-    plat_earned = forms.ChoiceField(
-        choices=[
-            ('', 'Any'),
-            ('yes', 'Earned'),
-            ('no', 'Not Earned'),
-        ],
-        required=False,
-        label='Platinum Earned',
-    )
-    is_100 = forms.ChoiceField(
-        choices=[
-            ('', 'Any'),
-            ('yes', '100%'),
-            ('no', 'Not 100%'),
-        ],
-        required=False,
-        label='100% Complete',
-    )
-    sort = forms.ChoiceField(
-        choices=[
-            ('recent', 'Recently Played'),
-            ('oldest', 'Oldest Played'),
-            ('latest_trophy', 'Latest Trophy'),
-            ('alpha', 'Alphabetical'),
-            ('completion', 'Highest Completion'),
-            ('completion_inv', 'Lowest Completion'),
-            ('trophies', 'Most Trophies'),
-            ('earned', 'Most Earned'),
-            ('unearned', 'Most Unearned'),
-            ('rating', 'Highest Rated'),
-            ('rating_inv', 'Lowest Rated'),
-            ('time_to_beat', 'Shortest Time-to-Beat'),
-            ('time_to_beat_inv', 'Longest Time-to-Beat'),
-            ('plat_rarest', 'Rarest Platinum'),
-            ('plat_common', 'Most Common Platinum'),
-            ('trophy_count', 'Most Trophies (Defined)'),
-            ('trophy_count_inv', 'Fewest Trophies (Defined)'),
-        ],
-        required=False,
-        label='Sort By',
-    )
 
-    # New filter fields
-    genres = forms.MultipleChoiceField(required=False, label='Genres')
-    themes = forms.MultipleChoiceField(required=False, label='Themes')
-    completion_min = forms.IntegerField(required=False, min_value=0, max_value=100)
-    completion_max = forms.IntegerField(required=False, min_value=0, max_value=100)
-    rating_min = forms.FloatField(required=False, min_value=0, max_value=5)
-    rating_max = forms.FloatField(required=False, min_value=0, max_value=5)
-    difficulty_min = forms.IntegerField(required=False, min_value=1, max_value=10)
-    difficulty_max = forms.IntegerField(required=False, min_value=1, max_value=10)
-    fun_min = forms.IntegerField(required=False, min_value=1, max_value=10)
-    fun_max = forms.IntegerField(required=False, min_value=1, max_value=10)
-    igdb_time_min = forms.IntegerField(required=False, min_value=0, max_value=1000)
-    igdb_time_max = forms.IntegerField(required=False, min_value=0, max_value=1000)
-    show_delisted = forms.BooleanField(required=False, label='Delisted')
-    show_unobtainable = forms.BooleanField(required=False, label='Unobtainable')
-    show_online = forms.BooleanField(required=False, label='Online Trophies')
-    show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
-    hide_delisted = forms.BooleanField(required=False, label='Hide Delisted')
-    hide_unobtainable = forms.BooleanField(required=False, label='Hide Unobtainable')
-    hide_online = forms.BooleanField(required=False, label='Hide Online Trophies')
-    hide_buggy = forms.BooleanField(required=False, label='Hide Buggy Trophies')
-    filter_shovelware = forms.BooleanField(required=False, label='Hide Shovelware')
+    # CharField, NOT ChoiceField, so an unrecognised value can be coerced to the default instead of
+    # failing validation. A ChoiceField rejects anything outside `choices` in `validate()`, which runs
+    # BEFORE `clean_<field>` -- so the coercion below would never get a chance to run, the whole form
+    # would be invalid, and the view answers an invalid form with an empty game list. Eleven sorts were
+    # removed in the 2026-08 reduction, so a bookmarked `?sort=rating` would have rendered an EMPTY
+    # Games tab, silently, for exactly the people who used the tab enough to bookmark a sort.
+    # The options are rendered from SORT_CHOICES / STATUS_CHOICES via context, as the Badges and
+    # Ratings tabs already do with their own `sort_options`.
+    status = forms.CharField(required=False, label='Status')
+    sort = forms.CharField(required=False, label='Sort By')
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Theme
-        try:
-            self.fields['genres'].choices = list(
-                Genre.objects.values_list('id', 'name').order_by('name')
-            )
-            self.fields['themes'].choices = list(
-                Theme.objects.values_list('id', 'name').order_by('name')
-            )
-        except Exception:
-            pass
+    def clean_sort(self):
+        return self._coerce(self.cleaned_data.get('sort'), self.SORT_CHOICES, self.DEFAULT_SORT)
 
-class ProfileTrophiesForm(forms.Form):
-    query = forms.CharField(required=False, label='Search by name')
-    platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
-    type = forms.ChoiceField(choices=[('', 'All'), ('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
-    sort = forms.ChoiceField(
-        choices=[
-            ('recent', 'Recently Earned'),
-            ('oldest', 'Oldest Earned'),
-            ('alpha', 'Alphabetical'),
-            ('rarest_psn', 'Rarest (PSN)'),
-            ('common_psn', 'Most Common (PSN)'),
-            ('rarest_pp', 'Rarest (PP)'),
-            ('common_pp', 'Most Common (PP)'),
-            ('type', 'Trophy Type'),
-        ],
-        required=False,
-        label='Sort By',
-    )
-    rarity_min = forms.FloatField(required=False, min_value=0, max_value=100)
-    rarity_max = forms.FloatField(required=False, min_value=0, max_value=100)
+    def clean_status(self):
+        return self._coerce(self.cleaned_data.get('status'), self.STATUS_CHOICES, '')
 
-class ProfileBadgesForm(forms.Form):
-    sort = forms.ChoiceField(
-        choices=[
-            ('series', 'Series'),
-            ('name', 'Alphabetical'),
-            ('tier', 'Tier Ascending'),
-            ('tier_desc', 'Tier Descending'),
-            ('stages', 'Most Stages'),
-            ('stages_inv', 'Fewest Stages'),
-            ('xp', 'Most XP'),
-            ('xp_inv', 'Least XP'),
-            ('recent', 'Recently Earned'),
-        ],
-        required=False,
-        label='Sort By',
-    )
-    badge_type = forms.MultipleChoiceField(
-        required=False,
-        label='Badge Type',  # choices sourced from the model in __init__
-    )
-    tier = forms.MultipleChoiceField(
-        choices=[
-            ('1', 'Bronze'),
-            ('2', 'Silver'),
-            ('3', 'Gold'),
-            ('4', 'Platinum'),
-        ],
-        required=False,
-        label='Tier',
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from trophies.models import Badge
-        self.fields['badge_type'].choices = Badge.BADGE_TYPES
-
+    @staticmethod
+    def _coerce(value, choices, default):
+        return value if value in {key for key, _ in choices} else default
 
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
@@ -468,10 +377,15 @@ class TrophyCaseForm(forms.Form):
 
 
 class UserConceptRatingForm(forms.ModelForm):
+    """The ONE server-side gate on a rating. Both the API endpoint and any future writer go through it, so
+    a field added to `fields` becomes required everywhere at once."""
+
     class Meta:
         model = UserConceptRating
-        fields = ['difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'blurb']
+        fields = ['recommendation', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking',
+                  'overall_rating', 'blurb']
         widgets = {
+            'recommendation': forms.RadioSelect,
             'difficulty': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-primary'}),
             'grindiness': forms.NumberInput(attrs={'type': 'range', 'min': 1, 'max': 10, 'class': 'range range-success'}),
             'hours_to_platinum': forms.NumberInput(attrs={'type': 'number', 'min': 1, 'class': 'input'}),
@@ -480,6 +394,7 @@ class UserConceptRatingForm(forms.ModelForm):
             'blurb': forms.Textarea(attrs={'maxlength': 140, 'rows': 2, 'class': 'textarea'}),
         }
         labels = {
+            'recommendation': 'Would you recommend it?',
             'difficulty': 'Platinum Difficulty',
             'grindiness': 'Platinum Grindiness',
             'hours_to_platinum': 'Hours To Platinum',
@@ -487,6 +402,17 @@ class UserConceptRatingForm(forms.ModelForm):
             'overall_rating': 'Overall Game Rating',
             'blurb': 'Quick take (optional)',
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The model is deliberately permissive (`blank=True`) so pre-existing rows stay valid and
+        # `recommendation=''` can mean "the wizard still owes me this question". A ModelForm inherits that
+        # permissiveness, so without this line the field would be optional on every write path and the
+        # whole point -- every rating from here on carries one -- would quietly not happen.
+        self.fields['recommendation'].required = True
+        # `blank=True` also makes Django prepend an empty choice, which under RadioSelect renders as a
+        # blank fifth radio. Reassign to the model's own list so the control offers exactly four.
+        self.fields['recommendation'].choices = UserConceptRating.RECOMMENDATIONS
 
     def clean_hours_to_platinum(self):
         value = self.cleaned_data.get('hours_to_platinum')
@@ -512,47 +438,19 @@ class UserConceptRatingForm(forms.ModelForm):
 
 
 class BadgeSearchForm(forms.Form):
+    """Filter form for the Browse Badges list (grouping-badge system). Only carries the fields the rebuilt
+    toolbar renders: the name search + the badge-type chip choices. Sort + personal state are handled by the
+    view directly (series_sorts / gallery_sorts + the binary-hold `state` chips), not by this form."""
     series_slug = forms.CharField(required=False, label='Search by Series')
-    sort = forms.ChoiceField(
-        choices=[
-            ('name', 'Alphabetical'),
-            ('earned', 'Most Earned (Tier 1)'),
-            ('earned_inv', 'Least Earned (Tier 1)'),
-            ('my_tier', 'My Progress Ascending'),
-            ('my_tier_desc', 'My Progress Descending'),
-            ('stages', 'Most Stages'),
-            ('stages_inv', 'Fewest Stages'),
-            ('newest', 'Newest Added'),
-            ('oldest_added', 'Oldest Added'),
-            ('xp', 'Most XP'),
-            ('xp_inv', 'Least XP'),
-            ('closest', 'Closest to Next Tier'),
-            ('games_owned', 'Most Games Owned'),
-            ('games_owned_inv', 'Fewest Games Owned'),
-            ('recently_progressed', 'Recently Progressed'),
-        ],
-        required=False,
-        label='Sort By',
-    )
     badge_type = forms.ChoiceField(
         required=False,
         label='Badge Type',  # choices sourced from the model in __init__
     )
-    completion_status = forms.ChoiceField(
-        choices=[
-            ('', 'All'),
-            ('not_started', 'Not Started'),
-            ('in_progress', 'In Progress'),
-            ('completed', 'Completed'),
-        ],
-        required=False,
-        label='Status',
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Badge
-        self.fields['badge_type'].choices = [('', 'All Types')] + list(Badge.BADGE_TYPES)
+        from trophies.models import BadgeSeries
+        self.fields['badge_type'].choices = [('', 'All Types')] + list(BadgeSeries.BADGE_TYPES)
 
 
 class GuideSearchForm(forms.Form):
@@ -629,37 +527,6 @@ class GameDetailForm(forms.Form):
         label='DLC Filter',
     )
 
-class PremiumSettingsForm(forms.ModelForm):
-    """Premium-only settings: background and site theme."""
-    # selected_background is handled by GameBackgroundPicker JS widget + hidden input
-    selected_theme = forms.ChoiceField(
-        choices=[],  # Populated in __init__
-        label='Site Theme',
-        required=False,
-        widget=forms.Select(attrs={'class': 'select w-full', 'id': 'selected-theme-select'})
-    )
-
-    class Meta:
-        model = Profile
-        fields = ['selected_theme']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        from trophies.themes import THEME_CHOICES
-        self.fields['selected_theme'].choices = THEME_CHOICES
-
-        if self.instance and not self.instance.user_is_premium:
-            for field in self.fields:
-                self.fields[field].widget.attrs['disabled'] = 'disabled'
-                self.fields[field].help_text = 'Premium feature.'
-
-    def clean(self):
-        cleaned_data = super().clean()
-        if not self.instance.user_is_premium:
-            for field in self.fields:
-                cleaned_data[field] = self.initial.get(field)
-        return cleaned_data
 
 class ProfileSettingsForm(forms.ModelForm):
     hide_hiddens = forms.BooleanField(
@@ -679,25 +546,142 @@ class ProfileSettingsForm(forms.ModelForm):
 
 # Admin Forms
 
-class BadgeCreationForm(forms.Form):
-    name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    series_slug = forms.SlugField(max_length=100, required=False, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    badge_type = forms.ChoiceField(required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
-    submitted_by = forms.CharField(max_length=100, required=False, label="Submitted By (PSN Username)", widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'PSN username of submitter'}))
+
+class BadgeSeriesCreationForm(forms.Form):
+    """Staff tool: author a whole badge series and its editions in one submit.
+
+    Replaces the pre-2026-08 form that created four legacy tier `Badge` rows. The shape of the job
+    changed with the model: a series is now one `BadgeSeries` plus one `GroupBadge` per platform edition,
+    so this form's real work is the `editions` multi-select.
+
+    Django admin can do all of this, which is why the old page was deleted in cutover 5b -- but "possible
+    in admin" turned out not to mean "usable": authoring one series there is a seven-page-load click-path
+    with three raw-ID popup lookups. This is one form.
+
+    Stages are deliberately NOT here. They are the bulk of authoring, they need the concept autocomplete
+    and the bundle-overlap validation `StageAdminForm` already implements, and duplicating that badly
+    would be worse than the extra trip to admin.
+    """
+
+    name = forms.CharField(
+        max_length=255, required=True, label='Series Name',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full',
+                                      'placeholder': 'Soulsborne'}),
+    )
+    series_slug = forms.SlugField(
+        max_length=100, required=False, label='Series Slug',
+        help_text='Left blank, this is generated from the name. Stages join to a series by this string, '
+                  'so it is the one field worth getting right first.',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full',
+                                      'placeholder': 'soulsborne'}),
+    )
+    badge_type = forms.ChoiceField(
+        required=True, label='Badge Type',  # choices sourced from the model in __init__
+        widget=forms.Select(attrs={'class': 'select select-bordered w-full'}),
+    )
+    completion_policy = forms.ChoiceField(
+        required=True, label='Completion Policy',  # choices sourced from the model in __init__
+        widget=forms.Select(attrs={'class': 'select select-bordered w-full'}),
+    )
+    min_required = forms.IntegerField(
+        required=False, min_value=0, initial=0, label='Stages Required',
+        help_text='Megamix only: how many gating stages earn the badge.',
+        widget=forms.NumberInput(attrs={'class': 'input input-bordered w-full'}),
+    )
+    description = forms.CharField(
+        required=False, label='Description',
+        widget=forms.Textarea(attrs={'class': 'textarea textarea-bordered w-full', 'rows': 3}),
+    )
+    display_series = forms.CharField(
+        max_length=100, required=False, label='Display Series',
+        help_text='Overrides the name where the series is labelled on a medallion.',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full'}),
+    )
+    submitted_by = forms.CharField(
+        max_length=100, required=False, label='Submitted By (PSN Username)',
+        widget=forms.TextInput(attrs={'class': 'input input-bordered w-full'}),
+    )
+    editions = forms.ModelMultipleChoiceField(
+        queryset=None,  # set in __init__ so the form picks up group changes without a reload
+        required=True, label='Editions',
+        widget=forms.CheckboxSelectMultiple,
+        help_text='One GroupBadge per checked edition. A series with no editions is unearnable.',
+    )
+    start_live = forms.BooleanField(
+        required=False, initial=False, label='Release immediately',
+        help_text='Off by default: a badge is normally authored, given stages, then released.',
+        widget=forms.CheckboxInput(attrs={'class': 'toggle toggle-primary'}),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Source the type options from the model so the create form stays in sync as badge
-        # types are added/removed (Badge is imported locally to avoid a circular import).
-        from trophies.models import Badge
-        self.fields['badge_type'].choices = Badge.BADGE_TYPES
+        from trophies.models import BadgeSeries, PlatformGroup
 
-    def get_badge_data(self):
-        if self.is_valid():
-            return {
-                'name': self.cleaned_data['name'],
-                'series_slug': self.cleaned_data['series_slug'],
-                'badge_type': self.cleaned_data['badge_type'],
-                'submitted_by_username': self.cleaned_data.get('submitted_by', ''),
-            }
-        return {}
+        self.fields['badge_type'].choices = list(BadgeSeries.BADGE_TYPES)
+        self.fields['completion_policy'].choices = list(BadgeSeries.COMPLETION_POLICIES)
+
+        active = PlatformGroup.objects.filter(is_active=True).order_by('sort_order', 'name')
+        self.fields['editions'].queryset = active
+        # Pre-check everything: the common case is a series that ships in every edition it can, and an
+        # unchecked box is a badge nobody can earn.
+        self.fields['editions'].initial = list(active.values_list('pk', flat=True))
+
+    def clean_series_slug(self):
+        """Canonicalize the slug, fill it from the name if blank, and reject one already taken.
+
+        ALWAYS re-slugifies, even a hand-entered value. Two reasons, both of which produce a slug that
+        looks right and silently fails to match:
+
+        - `SlugField`'s validator is `^[-a-zA-Z0-9_]+$`, so UPPERCASE passes. `Elden-Ring` and
+          `elden-ring` would be two distinct series, and the uniqueness check below is case-sensitive so
+          it would not even notice.
+        - The page's JS mirrors this into the box as you type, and no client-side slugify matches
+          Django's exactly (it NFKD-normalizes, so `Pokemon` survives an accented source; a naive regex
+          drops the character entirely). Whatever arrives, this is the value that gets stored.
+
+        That matters more than tidiness: `Stage.series_slug` joins to `BadgeSeries.series_slug` by STRING,
+        and stages are authored separately. A slug that differs by one character from what the author
+        typed on the stages orphans them silently -- which is the very thing the orphan-slug panel on
+        this page exists to surface.
+        """
+        from django.utils.text import slugify
+        from trophies.models import BadgeSeries
+
+        raw = (self.cleaned_data.get('series_slug') or '').strip()
+        if not raw:
+            # `name` is declared before this field, so it has already been cleaned.
+            raw = self.cleaned_data.get('name', '')
+        slug = slugify(raw)[:100]
+        if not slug:
+            raise forms.ValidationError('Could not derive a slug from that name; enter one directly.')
+        if BadgeSeries.objects.filter(series_slug=slug).exists():
+            raise forms.ValidationError(f'A series already uses the slug "{slug}".')
+        return slug
+
+    def clean_submitted_by(self):
+        """Resolve the PSN username to a Profile. A typo here silently drops the credit otherwise."""
+        from trophies.models import Profile
+
+        username = (self.cleaned_data.get('submitted_by') or '').strip()
+        if not username:
+            return None
+        profile = Profile.objects.filter(psn_username__iexact=username).first()
+        if not profile:
+            raise forms.ValidationError(f'No profile found for "{username}".')
+        return profile
+
+    def clean(self):
+        """The `min_count` / `min_required` pairing, which the model does not enforce.
+
+        A megamix series with `min_required=0` is earned by clearing zero stages -- it would be granted to
+        everyone on the next evaluation. Worth catching at the one place a human types it.
+        """
+        cleaned = super().clean()
+        policy = cleaned.get('completion_policy')
+        minimum = cleaned.get('min_required') or 0
+
+        if policy == 'min_count' and minimum < 1:
+            self.add_error('min_required', 'A megamix series needs at least one required stage.')
+        elif policy != 'min_count':
+            cleaned['min_required'] = 0     # meaningless outside megamix; do not store a stray number
+        return cleaned

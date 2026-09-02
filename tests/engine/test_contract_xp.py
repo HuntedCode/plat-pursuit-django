@@ -69,6 +69,59 @@ def test_reached_makes_claimable_but_grants_no_xp():
     assert not ProfileJobXP.objects.filter(profile=profile).exists()  # no XP until accepted
 
 
+def test_claimable_summary_totals_and_peeks_pending_rewards():
+    profile = ProfileFactory()
+    # Two fully-completed contracts (platinum + 100% both reached) -> each pays the full T.
+    for slug in ('summary-a', 'summary-b'):
+        contract = _contract(slug, ['gunslinger'])
+        _c, game, plat = _platinum_member(contract)
+        _earn_platinum(profile, game, plat)
+        contract_service.mark_contract_reached(profile, contract)
+
+    summary = contract_service.claimable_summary(profile)
+
+    assert summary['count'] == 2
+    assert summary['total_xp'] == 2 * CONTRACT_XP_TOTAL       # each contract pays the full T
+    assert summary['more'] == 0
+    assert {item['name'] for item in summary['items']} == {'summary-a', 'summary-b'}
+    assert all(item['xp'] == CONTRACT_XP_TOTAL for item in summary['items'])
+
+
+def test_claimable_summary_peek_caps_and_counts_remainder():
+    profile = ProfileFactory()
+    for i in range(5):
+        contract = _contract(f'peek-{i}', ['gunslinger'])
+        _c, game, plat = _platinum_member(contract)
+        _earn_platinum(profile, game, plat)
+        contract_service.mark_contract_reached(profile, contract)
+
+    summary = contract_service.claimable_summary(profile, peek=3)
+
+    assert summary['count'] == 5
+    assert len(summary['items']) == 3            # peek is capped
+    assert summary['more'] == 2                  # the remainder is counted
+    assert summary['total_xp'] == 5 * CONTRACT_XP_TOTAL
+
+
+def test_claimable_summary_sorts_items_highest_xp_first():
+    profile = ProfileFactory()
+    # Distinct per-contract XP via xp_total_override (a fully-completed contract pays its whole T),
+    # so the highest-first sort has real work to do -- equal-XP contracts wouldn't exercise it.
+    for slug, total in (('sort-lo', 100), ('sort-hi', 900), ('sort-mid', 500)):
+        contract = Contract.objects.create(name=slug, slug=slug, is_live=True,
+                                           igdb_id=next(_igdb_seq), xp_total_override=total)
+        contract.jobs.set(Job.objects.filter(slug='gunslinger'))
+        _c, game, plat = _platinum_member(contract)
+        _earn_platinum(profile, game, plat)
+        contract_service.mark_contract_reached(profile, contract)
+
+    summary = contract_service.claimable_summary(profile)
+
+    assert [item['xp'] for item in summary['items']] == [900, 500, 100]
+    assert [item['name'] for item in summary['items']] == ['sort-hi', 'sort-mid', 'sort-lo']
+    assert summary['total_xp'] == 1500
+
+
 def test_one_accept_banks_platinum_and_full_to_exactly_T():
     profile = ProfileFactory()
     contract = _contract('c-plat', ['gunslinger', 'slayer'])
@@ -295,13 +348,57 @@ def test_leveling_curve_is_flat_and_capless():
 
 def test_tier_for_level():
     assert leveling.tier_for_level(1)['key'] == 'initiate'
+    assert leveling.tier_for_level(1)['next_level'] == 10    # the floor reports its next threshold
     assert leveling.tier_for_level(9)['key'] == 'initiate'
     assert leveling.tier_for_level(10)['key'] == 'apprentice'
     assert leveling.tier_for_level(10)['next_level'] == 25   # reports the next threshold
+    between = leveling.tier_for_level(26)                    # between adept(25) and expert(50)
+    assert between['key'] == 'adept' and between['next_level'] == 50
     assert leveling.tier_for_level(99)['name'] == 'Master'
     top = leveling.tier_for_level(250)                       # Legend is the open-ended top
     assert top['key'] == 'legend' and top['next_level'] is None
     assert leveling.tier_for_level(9999)['key'] == 'legend'  # number keeps climbing past it
+
+
+def test_pursuer_rank_for_level():
+    pr = leveling.pursuer_rank_for_level
+    # Newbie: the divisionless floor -- a fresh account (Pursuer Level ~25) sits here.
+    fresh = pr(25)
+    assert fresh['key'] == 'newbie' and fresh['division'] is None and fresh['label'] == 'Newbie'
+    assert fresh['next_label'] == 'Recruit' and fresh['levels_to_next'] == 10   # 35 - 25
+    # Recruit [35, 65): divisions enter at V and climb to I (gamer convention, I = top of tier).
+    assert pr(35)['label'] == 'Recruit V' and pr(35)['division'] == 5
+    assert pr(50)['label'] == 'Recruit III'
+    assert pr(59)['label'] == 'Recruit I' and pr(59)['division'] == 1
+    assert pr(59)['next_label'] == 'Seeker'            # the top division promotes to the next tier
+    assert pr(65)['label'] == 'Seeker V'               # crossing the floor is a promotion
+    # Last divisioned tier promotes to the divisionless apex (not "<name> <numeral>").
+    luminary_top = pr(2024)
+    assert luminary_top['label'] == 'Luminary I' and luminary_top['next_label'] == 'Ascendant'
+    assert luminary_top['levels_to_next'] == 1         # 2025 - 2024
+    # Ascendant: the open-ended, divisionless apex -- no next, the number just flexes on.
+    top = pr(2025)
+    assert top['key'] == 'ascendant' and top['division'] is None and top['label'] == 'Ascendant'
+    assert top['next_level'] is None and top['levels_to_next'] == 0
+    assert pr(99999)['key'] == 'ascendant'             # climbs forever past the top
+
+
+def test_contract_grant_unique_together_blocks_duplicate():
+    """The DB constraint is the second line of defense behind the accepted-timestamp guard:
+    a duplicate (earned_contract, job, tier) contract grant must raise IntegrityError."""
+    from django.db import IntegrityError
+    profile = ProfileFactory()
+    contract = _contract('c-uniq', ['gunslinger'])
+    _concept, game, plat = _platinum_member(contract)
+    _earn_platinum(profile, game, plat)
+    contract_service.mark_contract_reached(profile, contract)
+    ec = EarnedContract.objects.get(profile=profile, contract=contract)
+    job = Job.objects.get(slug='gunslinger')
+
+    ContractXPGrant.objects.create(profile=profile, job=job, amount=100, tier='platinum', earned_contract=ec, base_t=6000)
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():  # isolate the failure so the outer test transaction survives
+            ContractXPGrant.objects.create(profile=profile, job=job, amount=100, tier='platinum', earned_contract=ec, base_t=6000)
 
 
 def test_grant_job_xp_is_source_agnostic():

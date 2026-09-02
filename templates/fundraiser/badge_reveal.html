@@ -13,8 +13,6 @@
         <div class="flex gap-2 flex-wrap">
             <a href="{% url 'fundraiser_admin' %}" class="btn btn-ghost btn-sm">Fundraiser</a>
             <a href="{% url 'subscription_admin' %}" class="btn btn-ghost btn-sm">Subscriptions</a>
-            <a href="{% url 'admin_notification_center' %}" class="btn btn-ghost btn-sm">Notifications</a>
-            <a href="{% url 'comment_moderation' %}" class="btn btn-ghost btn-sm">Moderation</a>
         </div>
         {% endif %}
     </div>
@@ -121,11 +119,11 @@
                             </thead>
                             <tbody id="pool-table-body">
                                 {% for badge in pool_badges %}
-                                <tr class="pool-row transition-opacity duration-200" data-badge-id="{{ badge.badge_id }}">
+                                <tr class="pool-row transition-opacity duration-200" data-series-id="{{ badge.series_id }}">
                                     <td>
                                         <input type="checkbox"
                                                class="checkbox checkbox-sm checkbox-secondary pool-checkbox"
-                                               data-badge-id="{{ badge.badge_id }}"
+                                               data-series-id="{{ badge.series_id }}"
                                                checked />
                                     </td>
                                     <td>

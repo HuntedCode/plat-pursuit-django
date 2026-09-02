@@ -1,0 +1,25 @@
+{% comment %} Game list browse results -- grid only. Returned on HTMX filter swaps AND on the
+InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard). The scroll sentinel
+and spinner live in browse_lists.html, OUTSIDE this partial, so a filter change swaps only the grid and
+does not tear out the thing watching for the next page.
+
+`pp-reveal` is baked in on HTMX swaps only: htmx's settle step restores server attributes on id'd swapped
+elements, so a class added by JS in afterSwap is wiped again and the cards unhide with a flash.
+{% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+    {% for game_list in object_list %}
+    {% include 'trophies/partials/lists/list_tile.html' with game_list=game_list %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        {% if query %}
+        <p class="pp-gtile-empty__title">No lists match &ldquo;{{ query }}&rdquo;</p>
+        <p class="pp-gtile-empty__hint">Try a different term, or widen the game-count range.</p>
+        {% else %}
+        <p class="pp-gtile-empty__title">No public lists yet</p>
+        <p class="pp-gtile-empty__hint">Lists are how hunters share a backlog, a ranking, or a run. Be the first to publish one.</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

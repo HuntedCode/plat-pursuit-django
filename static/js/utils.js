@@ -25,6 +25,11 @@ const ToastManager = {
         if (!container) {
             return;
         }
+        // A modal toast host is a top-layer popover: show it (above the modal, anchored to the viewport) so
+        // toasts rest at the screen's bottom-end instead of being trapped in the dialog's containing block.
+        if (container.matches?.('[popover]') && !container.matches(':popover-open')) {
+            try { container.showPopover(); } catch (e) { /* not connected / unsupported */ }
+        }
 
         // Create toast element
         const toast = document.createElement('div');
@@ -78,7 +83,13 @@ const ToastManager = {
             toast.style.opacity = '0';
             toast.style.transform = 'translateX(100%)';
             toast.style.transition = 'all 0.3s ease-in-out';
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => {
+                toast.remove();
+                // Tidy the top-layer popover once its last toast clears, so it stops shadowing the modal.
+                if (container.matches?.('[popover]') && container.matches(':popover-open') && !container.children.length) {
+                    try { container.hidePopover(); } catch (e) { /* already hidden */ }
+                }
+            }, 300);
         }, autoRemoveDuration);
     },
 
@@ -541,14 +552,45 @@ const UnsavedChangesManager = {
  */
 const HTMLUtils = {
     /**
-     * Escape HTML special characters to prevent XSS
+     * Escape for a TEXT context (between tags). NOT safe for attribute values -- see escapeAttr.
+     *
+     * This round-trips through textContent/innerHTML, which runs the HTML fragment-serialization
+     * algorithm. That escapes & < > and U+00A0 and DELIBERATELY LEAVES QUOTES ALONE, because a text
+     * node has no need of them. Correct here, wrong one character later inside quotes.
+     *
      * @param {string} text - Raw text to escape
-     * @returns {string} HTML-safe string
+     * @returns {string} Safe to interpolate between tags
      */
     escape(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    /**
+     * Escape for an ATTRIBUTE value (inside quotes in an HTML string you are about to inject).
+     *
+     * Use this whenever the interpolation sits inside quotes -- `title="${...}"`, `data-x="${...}"`,
+     * `src="${...}"`. `escape()` does not encode " or ', so a value containing a quote closes the
+     * attribute early and the rest is parsed as markup: one `onerror=` later and it is stored XSS.
+     *
+     * Prefer building nodes and assigning `.textContent` / `.setAttribute()` over string-concatenating
+     * HTML at all; this exists for the places that already do the latter.
+     *
+     * NOTE for URL attributes (href/src): this makes the value safe to SIT in the attribute, but does
+     * not make the URL itself safe. A `javascript:` href still executes on click. Validate the scheme
+     * separately when the URL is user-controlled.
+     *
+     * @param {string} text - Raw value to escape
+     * @returns {string} Safe to interpolate inside a quoted attribute
+     */
+    escapeAttr(text) {
+        return String(text ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 };
 
@@ -563,6 +605,273 @@ function debounce(fn, delay = 300) {
     return function(...args) {
         clearTimeout(timeout);
         timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+/**
+ * Count a number to a target with easeOutCubic. Reads the target from the element's `data-countup`
+ * attribute (falling back to its current text), honours `data-countup-decimals` for fixed-decimal
+ * values, and prefers-reduced-motion (jumps straight to the target). Starts from 0 by default, or
+ * from `opts.from` -- pass the previous value to tick a live-updating counter up OR down to its new
+ * value (e.g. a filtered result count) instead of resetting to 0. This is the canonical shared
+ * count-up; career.html + home-motion.js still hand-roll their own -- new callers should use this.
+ * @param {HTMLElement} el
+ * @param {number} [dur=750] duration in ms
+ * @param {{from?: number}} [opts] start value (default 0); pass the old value for old->new ticking
+ */
+function countUp(el, dur = 750, opts = {}) {
+    if (!el) return;
+    const dec = parseInt(el.dataset.countupDecimals || '0', 10);
+    const raw = el.dataset.countup != null ? el.dataset.countup : (el.textContent || '').replace(/,/g, '');
+    const target = parseFloat(raw);
+    if (isNaN(target)) return;
+    const from = (opts.from != null && !isNaN(opts.from)) ? opts.from : 0;
+    // A prefix/suffix has to be part of the FORMATTER, not markup around it: every write below sets
+    // `textContent`, which replaces the element's entire contents -- so a "$" typed into the template
+    // beside the number survives until the first frame and then vanishes. That looked like the
+    // currency symbol never rendering at all.
+    const pre = el.dataset.countupPrefix || '';
+    const suf = el.dataset.countupSuffix || '';
+    const fmt = (v) => pre + (dec ? v.toFixed(dec) : Math.round(v).toLocaleString()) + suf;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || target === from) { el.textContent = fmt(target); return; }
+    el.textContent = fmt(from);
+    let start = null;
+    function step(ts) {
+        if (start === null) start = ts;
+        const p = Math.min(1, (ts - start) / dur);
+        el.textContent = fmt(from + (target - from) * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step);
+        else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(step);
+}
+
+/**
+ * Animate a collapsible panel open/closed (height + opacity), toggling its `hidden` attribute. The
+ * animation primitive under `filterPanel` below; call it directly only for a panel that is not a browse
+ * filter drawer (the career / collection ones). The panel MUST have `overflow: hidden` and a
+ * `height`/`opacity` CSS transition, and it MUST be able to collapse to a true 0 -- put any
+ * padding/border/gap on an INNER wrapper, since with box-sizing:border-box padding+border would clamp
+ * the collapsed height and snap away when `hidden` lands. Callers own the toggle's aria/is-open state.
+ * @param {HTMLElement} panel
+ * @param {boolean} open
+ * @param {boolean} [animate=true] pass false (or under reduced-motion) to toggle instantly
+ */
+function animatePanel(panel, open, animate) {
+    if (!panel) return;
+    if (panel._panelAnim) { panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null; }
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (animate === false || reduce) {
+        panel.style.height = ''; panel.style.opacity = '';
+        panel.style.overflow = open ? 'visible' : '';   // open -> let inner popovers/dropdowns escape the panel
+        if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+        return;
+    }
+    panel.style.overflow = '';   // clip during the height tween (reverts to the CSS overflow:hidden)
+    if (open) {
+        // Collapse before revealing so removing `hidden` doesn't paint a full-height panel for a frame;
+        // scrollHeight measures the true target while collapsed (overflow-hidden).
+        panel.style.height = '0px'; panel.style.opacity = '0';
+        panel.removeAttribute('hidden');
+        var target = panel.scrollHeight;
+        void panel.offsetHeight;
+        panel.style.height = target + 'px'; panel.style.opacity = '1';
+        panel._panelAnim = function (ev) {
+            if (ev.target !== panel || ev.propertyName !== 'height') { return; }
+            panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null;
+            panel.style.height = ''; panel.style.opacity = '';   // release to auto so content reflows
+            panel.style.overflow = 'visible';                    // fully open -> popovers may overflow the panel
+        };
+    } else {
+        panel.style.height = panel.scrollHeight + 'px'; panel.style.opacity = '1';
+        void panel.offsetHeight;
+        panel.style.height = '0px'; panel.style.opacity = '0';
+        panel._panelAnim = function (ev) {
+            if (ev.target !== panel || ev.propertyName !== 'height') { return; }
+            panel.removeEventListener('transitionend', panel._panelAnim); panel._panelAnim = null;
+            panel.setAttribute('hidden', ''); panel.style.height = ''; panel.style.opacity = '';
+        };
+    }
+    panel.addEventListener('transitionend', panel._panelAnim);
+}
+
+/**
+ * filterPanel -- the browse toolbar's advanced-filter drawer, in one place.
+ *
+ * Every browse surface had grown its own copy of the same ~80 lines: toggle the panel, keep the toggle's
+ * aria/is-open in step, count the active filters onto a badge, pop that badge when it changes, dim the
+ * results while the swap is in flight, open the drawer on load if something is already filtering, and
+ * keep the edge-fades on the scrolling chip lists honest. Six copies (game list, badge list, company
+ * list, recently added, tag detail, and the profile's Games tab) is five too many -- and they had already
+ * drifted, each with a different SKIP set and only some of them wiring the fades at all.
+ *
+ * `animatePanel` above stays the animation primitive; this owns everything around it.
+ *
+ *   PlatPursuit.filterPanel({
+ *       form, toggle, panel,      // required -- element or selector
+ *       countEl,                  // optional badge for the active-filter count
+ *       skip: {sort: 1, ...},     // params that do NOT count as a filter (display/sort/search state)
+ *       count,                    // optional () => number, replacing the FormData counter entirely
+ *       chipsHost,                // optional selector: gets `is-filters-open` while the drawer is open
+ *       dimTarget,                // defaults to '#browse-results'; gets `is-swapping` on a filter change
+ *       openOnLoad,               // defaults to "a filter is already active"
+ *   })  ->  { refresh, setOpen, destroy }
+ *
+ * Returns a handle so a page that re-inits after an HTMX swap can tear the old one down first.
+ */
+function filterPanel(opts) {
+    var o = opts || {};
+    function pick(v) { return typeof v === 'string' ? document.querySelector(v) : v; }
+
+    var form = pick(o.form);
+    var toggle = pick(o.toggle);
+    var panel = pick(o.panel);
+    if (!form || !toggle || !panel) { return null; }
+
+    var countEl = pick(o.countEl) || null;
+    var skip = o.skip || {};
+    var chipsHost = o.chipsHost ? (panel.closest(o.chipsHost) || document.querySelector(o.chipsHost)) : null;
+    var dimSel = o.dimTarget === undefined ? '#browse-results' : o.dimTarget;
+    var prevN = null;
+    var listeners = [];
+    // The pending chips-reveal. Held so it can be CANCELLED: the old inline copy hung this on a
+    // `transitionend` that every setPanel() call cleared, so re-opening within the tween cancelled it.
+    // An uncancelled timer fires while the drawer is open again and strips the class from under it.
+    var chipsTimer = null;
+
+    function on(target, type, fn, listenOpts) {
+        target.addEventListener(type, fn, listenOpts);
+        listeners.push([target, type, fn]);
+    }
+
+    // Counts SET values, minus the ones that are display state rather than filtering (sort, view, the
+    // search box, pagination) and minus any scope selector the page pre-fills -- Browse Games always
+    // carries a platform default from its saved-defaults redirect, and counting that would show a
+    // permanent "2" and auto-open the drawer on every landing. A range parked at its own min/max is not
+    // a filter either.
+    function defaultCount() {
+        var n = 0;
+        new FormData(form).forEach(function (value, key) {
+            if (skip[key] || !value) { return; }
+            if (key === 'letter' && value === '') { return; }
+            var input = form.querySelector('[name="' + key + '"]');
+            if (input && input.type === 'range') {
+                if (input.dataset.dualRangeLo !== undefined && input.value === input.min) { return; }
+                if (input.dataset.dualRangeHi !== undefined && input.value === input.max) { return; }
+            }
+            n += 1;
+        });
+        return n;
+    }
+    var activeCount = typeof o.count === 'function' ? o.count : defaultCount;
+
+    function refresh() {
+        if (!countEl) { return; }
+        var n = activeCount();
+        countEl.textContent = n;
+        countEl.hidden = (n === 0);
+        // Pop on CHANGE, never on the first paint -- otherwise every landing with a saved filter opens
+        // with an animation acknowledging something the visitor did not just do.
+        if (n > 0 && prevN !== null && n !== prevN) {
+            countEl.classList.remove('is-pop'); void countEl.offsetWidth; countEl.classList.add('is-pop');
+        }
+        prevN = n;
+    }
+
+    // Scroll-aware edge fades on the long chip lists. A fade only appears on an edge with content hidden
+    // past it, so a list that fits is never clipped. Measured lazily: these containers are 0-size while
+    // the panel is collapsed, which is why the open path re-runs it.
+    function setFade(node, axis) {
+        if (axis === 'y') {
+            node.style.setProperty('--fade-t', node.scrollTop > 1 ? '16px' : '0px');
+            node.style.setProperty('--fade-b', (node.scrollTop + node.clientHeight < node.scrollHeight - 1) ? '16px' : '0px');
+        } else {
+            node.style.setProperty('--fade-l', node.scrollLeft > 1 ? '20px' : '0px');
+            node.style.setProperty('--fade-r', (node.scrollLeft + node.clientWidth < node.scrollWidth - 1) ? '20px' : '0px');
+        }
+    }
+    function fadeGroups() {
+        return [
+            [panel.querySelectorAll('.pp-gbrowse__fchips--scroll'), 'y'],
+            [panel.querySelectorAll('.pp-gbrowse__fchips--letters'), 'x'],
+        ];
+    }
+    function refreshFades() {
+        fadeGroups().forEach(function (pair) {
+            pair[0].forEach(function (node) { setFade(node, pair[1]); });
+        });
+    }
+    fadeGroups().forEach(function (pair) {
+        pair[0].forEach(function (node) {
+            if (node._fadeWired) { return; }
+            node._fadeWired = true;
+            node.addEventListener('scroll', function () { setFade(node, pair[1]); }, { passive: true });
+        });
+    });
+
+    function setOpen(open, animate) {
+        // An ANIMATED call that asks for the state it is already in is a no-op. Without this, a "reach the
+        // filters" affordance (the sticky mini-bar's Filters button) fired on an already-open drawer
+        // collapses it to 0 and re-expands over the full transition -- the panel visibly slams shut and
+        // reopens while the page is still scrolling to it. The instant form is NOT guarded: the initial
+        // `setOpen(false, false)` has to run to put `hidden` on a panel that renders open for no-JS.
+        if (animate && open === (toggle.getAttribute('aria-expanded') === 'true')) { return; }
+        if (chipsTimer) { window.clearTimeout(chipsTimer); chipsTimer = null; }
+        toggle.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        // Active-filter chips belong OUTSIDE the open drawer: adding one while the box is open shoves the
+        // whole toolbar down. Hide them the moment it opens, and bring them back only once it has
+        // finished animating CLOSED. The class goes on a stable host so the chips' own OOB swaps keep it.
+        if (open && chipsHost) { chipsHost.classList.add('is-filters-open'); }
+        if (window.PlatPursuit && PlatPursuit.animatePanel) {
+            PlatPursuit.animatePanel(panel, open, animate);
+        } else if (open) {
+            panel.removeAttribute('hidden');
+        } else {
+            panel.setAttribute('hidden', '');
+        }
+        if (open) {
+            refreshFades();   // the containers only have real dimensions once revealed
+        } else if (chipsHost) {
+            var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (animate === false || reduce) { chipsHost.classList.remove('is-filters-open'); }
+            // 340ms clears `.pp-bgal__advanced`'s own `0.32s` height transition. A shorter timer brings the
+            // chips back mid-collapse and shoves the still-open drawer down -- exactly the layout jump the
+            // class exists to prevent.
+            else { chipsTimer = window.setTimeout(function () { chipsHost.classList.remove('is-filters-open'); }, 340); }
+        }
+    }
+
+    on(toggle, 'click', function () { setOpen(toggle.getAttribute('aria-expanded') !== 'true', true); });
+    on(form, 'change', refresh);
+    on(form, 'input', refresh);
+    if (dimSel) {
+        // Settle the results the INSTANT a filter changes: this spans the hx-trigger debounce, which is
+        // most of the felt wait on a fast server, so the dim is perceptible rather than a few-ms flash.
+        // Text inputs are excluded -- they submit on their own debounce, not on `change`.
+        on(form, 'change', function (e) {
+            var t = e.target;
+            if (t && (t.type === 'text' || t.type === 'search')) { return; }
+            var results = document.querySelector(dimSel);
+            if (results) { results.classList.add('is-swapping'); }
+        });
+    }
+    on(window, 'resize', function () {
+        if (toggle.getAttribute('aria-expanded') === 'true') { refreshFades(); }
+    });
+
+    refresh();
+    setOpen(o.openOnLoad === undefined ? activeCount() > 0 : !!o.openOnLoad, false);
+
+    return {
+        refresh: refresh,
+        setOpen: setOpen,
+        destroy: function () {
+            if (chipsTimer) { window.clearTimeout(chipsTimer); chipsTimer = null; }
+            listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2]); });
+            listeners = [];
+        },
     };
 }
 
@@ -713,9 +1022,15 @@ const InfiniteScroller = {
      * @param {number} config.paginateBy - Number of items per page (used to determine if more pages exist)
      * @param {string} [config.formSelector] - CSS selector for filter form (resets page on submit)
      * @param {string} [config.scrollKey] - localStorage key for preserving scroll position
+     * @param {string} [config.url] - Results endpoint; defaults to the page's own path
+     *
+     * Reads an optional `X-Has-Next: 0` response header to stop one fetch before the end. Views that do
+     * not send it still work -- the scroller falls back to stopping on an empty page.
      * @param {string} [config.cardSelector='.card'] - CSS selector for cards in fetched HTML
      * @param {Function} [config.onTabChange] - Callback for tab change behavior
-     * @returns {Object} Controller with destroy() method
+     * @param {Function} [config.onAppend] - Called with the array of freshly-appended card nodes after each page load
+     * @returns {Object|null} Controller with a destroy() method, or NULL when the grid, sentinel or
+     *   loading element is missing -- callers keeping the handle must null-check before destroying.
      */
     create(config) {
         const grid = document.getElementById(config.gridId);
@@ -724,8 +1039,18 @@ const InfiniteScroller = {
         if (!grid || !sentinel || !loading) return null;
 
         const cardSelector = config.cardSelector || '.card';
-        let page = 2;
-        const baseUrl = window.location.pathname;
+        // Resume AFTER the pages already in the grid rather than hard-coding page 2. On a fresh load that's one
+        // page -> 2 (unchanged); but an HTMX Back/Forward history restore brings back a snapshot that already
+        // contains the previously fetch-appended pages, so starting at 2 would re-fetch + append duplicates.
+        // ceil handles a partial last page (its next page 404s and stops). The observe guard below still gates
+        // the first fetch on a full first page, so under-a-page grids never fetch regardless of this value.
+        const loadedCards = grid.querySelectorAll(cardSelector).length;
+        let page = config.paginateBy ? Math.max(2, Math.ceil(loadedCards / config.paginateBy) + 1) : 2;
+        // The page's own path by DEFAULT, which is what every caller wanted while the results partial
+        // was served by the same view (`HtmxListMixin` returns it for an XHR `?page=`). `config.url`
+        // is for a grid whose results live at a DIFFERENT address -- job detail's Contracts tab, whose
+        // page is a DetailView and whose cards come from `/jobs/<slug>/contracts/`.
+        const baseUrl = config.url || window.location.pathname;
         const queryParams = new URLSearchParams(window.location.search);
         queryParams.delete('page');
         let nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
@@ -746,6 +1071,13 @@ const InfiniteScroller = {
                     }
                     return;
                 }
+                // `X-Has-Next` STOPS ONE FETCH EARLIER. Without it the scroller only learns it is done
+                // by asking for a page that comes back empty, so every reader who reaches the bottom of
+                // any wall pays a wasted round-trip and a flash of the loading spinner for nothing. The
+                // header is optional: a view that does not send it falls back to the empty-page stop
+                // below, which is how every caller behaved before. Career's bespoke scroller has read
+                // this signal all along -- this is the shared one learning the same protocol.
+                const hasNextHeader = response.headers.get('X-Has-Next');
                 const html = await response.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
@@ -753,9 +1085,14 @@ const InfiniteScroller = {
                 if (newCards.length === 0) {
                     nextPageUrl = null;
                 } else {
-                    newCards.forEach(card => grid.appendChild(card.cloneNode(true)));
+                    const appended = [];
+                    newCards.forEach(card => { const clone = card.cloneNode(true); grid.appendChild(clone); appended.push(clone); });
+                    // Optional hook so callers can wire freshly-appended cards (e.g. a scroll-reveal observer).
+                    if (typeof config.onAppend === 'function') { try { config.onAppend(appended); } catch (e) { /* non-fatal */ } }
                     page++;
-                    nextPageUrl = `${baseUrl}?page=${page}&${queryParams.toString()}`;
+                    nextPageUrl = hasNextHeader === '0'
+                        ? null
+                        : `${baseUrl}?page=${page}&${queryParams.toString()}`;
                 }
             } catch (error) {
                 nextPageUrl = null;
@@ -765,11 +1102,17 @@ const InfiniteScroller = {
             }
         };
 
-        // Form submit resets pagination
+        // Form submit resets pagination. Both the form and the handler are kept so `destroy()` can take
+        // the listener back off -- on a page that swaps its results through HTMX the FORM often outlives
+        // the grid, so each re-created scroller would otherwise stack another listener on the same node,
+        // each closing over a detached grid and a stale nextPageUrl.
+        let boundForm = null;
+        let onFormSubmit = null;
         if (config.formSelector) {
             const form = document.querySelector(config.formSelector);
             if (form) {
-                form.addEventListener('submit', () => {
+                boundForm = form;
+                onFormSubmit = () => {
                     if (config.scrollKey) {
                         localStorage.setItem(config.scrollKey, window.scrollY);
                     }
@@ -779,7 +1122,8 @@ const InfiniteScroller = {
                     if (!config.scrollKey) {
                         grid.innerHTML = '';
                     }
-                });
+                };
+                form.addEventListener('submit', onFormSubmit);
             }
         }
 
@@ -805,61 +1149,22 @@ const InfiniteScroller = {
         return {
             destroy() {
                 observer.disconnect();
+                if (boundForm && onFormSubmit) {
+                    boundForm.removeEventListener('submit', onFormSubmit);
+                }
             }
         };
     }
 };
 
 /**
- * Zoom Scaler - Uniform sub-768px page scaling via transform: scale()
- * Adds .zoom-active to #zoom-container which activates CSS rules in input.css.
- * Handles height correction since transform: scale() doesn't change the layout box.
+ * ZoomAwareObserver - Drop-in IntersectionObserver replacement.
  *
- * Usage: PlatPursuit.ZoomScaler.init()  (call once per page in {% block js_scripts %})
- */
-const ZoomScaler = {
-    init() {
-        const container = document.getElementById('zoom-container');
-        const wrapper = document.getElementById('zoom-wrapper');
-        if (!container || !wrapper) return;
-
-        container.classList.add('zoom-active');
-
-        function fixHeight() {
-            if (window.innerWidth >= 768) {
-                container.style.height = '';
-                wrapper.style.minHeight = '';
-                return;
-            }
-            var style = getComputedStyle(wrapper);
-            var matrix = new DOMMatrixReadOnly(style.transform);
-            var scale = matrix.a;
-            if (scale > 0 && scale < 1) {
-                // Wrapper needs min-height of viewport/scale so footer reaches bottom after scaling
-                wrapper.style.minHeight = Math.ceil(window.innerHeight / scale) + 'px';
-                var scaledHeight = Math.ceil(wrapper.scrollHeight * scale);
-                container.style.height = Math.max(scaledHeight, window.innerHeight) + 'px';
-            }
-        }
-
-        fixHeight();
-        window.addEventListener('resize', fixHeight);
-
-        new MutationObserver(function() {
-            requestAnimationFrame(fixHeight);
-        }).observe(wrapper, { childList: true, subtree: true });
-
-        wrapper.addEventListener('load', fixHeight, true);
-    }
-};
-
-/**
- * ZoomAwareObserver - Drop-in IntersectionObserver replacement that works under ZoomScaler.
- *
- * When ZoomScaler is active (sub-768px), CSS transform: scale() + overflow: hidden on
- * #zoom-container breaks IntersectionObserver's clipping calculations. This utility
- * switches to a scroll-event fallback using getBoundingClientRect() (which correctly
- * accounts for CSS transforms) when zoom scaling is detected.
+ * Historically paired with the retired ZoomScaler: when a page scaled itself sub-768px via
+ * transform: scale() + overflow:hidden on #zoom-container, native IntersectionObserver clipping
+ * broke, so this fell back to a scroll-event + getBoundingClientRect() path. ZoomScaler is gone,
+ * so `_isZoomActive()` is always false and this delegates 100% to native IntersectionObserver --
+ * kept as a drop-in so its several callers don't need touching; the fallback path is now dead-but-inert.
  *
  * On desktop (no zoom), delegates 100% to native IntersectionObserver with zero overhead.
  *
@@ -1067,24 +1372,23 @@ const ReviewProgressTiers = {
 };
 
 /**
- * TrophyListRenderer: Builds condensed trophy list HTML for review hub sidebar
- * and Rate My Games wizard. Renders compact trophy cards with earned status,
- * type badges, and a summary header showing counts by type.
+ * TrophyListRenderer -- the condensed "here are the trophies, briefly" list.
+ *
+ * Built by the Rate My Games wizard's reference panel, which is what it exists for: a hunter rating a game
+ * they finished months ago needs the trophy list beside the form to jog the memory.
+ *
+ * Emits the shared `.pp-trolist` primitive (components/rate-wizard.css) rather than page classes, so any
+ * surface that wants the same list gets the same look. Earned rows carry a tier-tinted rail; the tier
+ * colours come from the site-wide --tier-* set via the row's `data-tier`.
  */
 const TrophyListRenderer = {
-    /** Tailwind classes for each trophy type (already safeguarded in the app theme). */
-    TROPHY_STYLES: {
-        platinum: { cls: 'text-trophy-platinum', label: 'platinum' },
-        gold:     { cls: 'text-trophy-gold',     label: 'gold' },
-        silver:   { cls: 'text-trophy-silver',   label: 'silver' },
-        bronze:   { cls: 'text-trophy-bronze',   label: 'bronze' },
-    },
+    TIERS: ['platinum', 'gold', 'silver', 'bronze'],
 
     /**
      * Build HTML for a condensed trophy list.
-     * @param {Array} trophies - Array of trophy objects from API
+     * @param {Array} trophies - trophy objects from /api/v1/ratings/<c>/group/<g>/trophies/
      * @param {Object} [options]
-     * @param {boolean} [options.showEarned=true] - Whether to show earned indicators
+     * @param {boolean} [options.showEarned=true] - mark the ones this hunter has
      * @returns {string} HTML string
      */
     buildList(trophies, options = {}) {
@@ -1092,41 +1396,36 @@ const TrophyListRenderer = {
         const esc = HTMLUtils.escape;
 
         if (!trophies || trophies.length === 0) {
-            return '<p class="text-sm text-base-content/50 italic py-2 pr-1">No trophy data available.</p>';
+            return '<p class="pp-trolist__empty">No trophy data for this one.</p>';
         }
 
-        // Count by type for summary header
-        const counts = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
-        trophies.forEach(t => {
-            if (counts[t.trophy_type] !== undefined) counts[t.trophy_type]++;
-        });
+        const counts = {};
+        trophies.forEach(t => { counts[t.trophy_type] = (counts[t.trophy_type] || 0) + 1; });
 
-        let html = '<div class="flex flex-wrap items-center gap-2 mb-2 text-xs">';
-        for (const [type, count] of Object.entries(counts)) {
-            if (count > 0) {
-                const style = this.TROPHY_STYLES[type];
-                html += `<span class="badge badge-xs font-bold ${style.cls}">${count} ${style.label}</span>`;
+        // Summary, in tier order rather than whatever order the trophies happen to arrive in. No grand
+        // total: the host's own panel header carries the count, and printing it twice an inch apart is
+        // noise -- a host that needs one can render it beside this.
+        let html = '<div class="pp-trolist__sum">';
+        for (const tier of this.TIERS) {
+            if (counts[tier]) {
+                html += `<span class="pp-trolist__tier" data-tier="${tier}">${counts[tier]} ${tier}</span>`;
             }
         }
-        html += `<span class="text-base-content/40 ml-auto">${trophies.length} total</span></div>`;
+        html += '</div>';
 
-        html += '<div class="space-y-1 max-h-64 lg:max-h-96 overflow-y-auto pr-1">';
+        html += '<div class="pp-trolist__rows">';
         for (const t of trophies) {
-            const style = this.TROPHY_STYLES[t.trophy_type] || {};
-            const isEarned = showEarned && t.earned;
-            const earnedClasses = isEarned ? 'bg-success/10 border-l-2 border-success' : '';
-            const earnedIcon = isEarned
-                ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>'
-                : '';
-
-            html += `<div class="flex items-center gap-2 p-1.5 rounded ${earnedClasses} hover:bg-base-200/50 transition-colors">`;
-            html += `<img src="${esc(t.trophy_icon_url || '')}" alt="" class="w-8 h-8 object-cover rounded shrink-0" loading="lazy" />`;
-            html += '<div class="flex-1 min-w-0">';
-            html += `<p class="text-xs font-semibold line-clamp-1 pr-1">${esc(t.trophy_name)}</p>`;
-            html += `<p class="text-xs text-base-content/50 line-clamp-1 italic pr-1">${esc(t.trophy_detail || '')}</p>`;
-            html += '</div>';
-            html += `<span class="badge badge-xs font-bold shrink-0 ${style.cls || ''}">${esc(t.trophy_type)}</span>`;
-            html += earnedIcon;
+            const tier = this.TIERS.includes(t.trophy_type) ? t.trophy_type : '';
+            const earned = showEarned && t.earned;
+            html += `<div class="pp-trolist__row${earned ? ' is-earned' : ''}"${tier ? ` data-tier="${tier}"` : ''}>`;
+            html += `<img class="pp-trolist__icon" src="${esc(t.trophy_icon_url || '')}" alt="" loading="lazy" />`;
+            html += '<span class="pp-trolist__txt">';
+            html += `<span class="pp-trolist__name">${esc(t.trophy_name)}</span>`;
+            html += `<span class="pp-trolist__desc">${esc(t.trophy_detail || '')}</span>`;
+            html += '</span>';
+            if (earned) {
+                html += '<svg class="pp-trolist__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+            }
             html += '</div>';
         }
         html += '</div>';
@@ -1134,327 +1433,6 @@ const TrophyListRenderer = {
         return html;
     },
 };
-
-/**
- * CoachMarks - Spotlight-style page tour with a dark overlay cutout and a
- * positioned tooltip. Used by the game detail and badge detail page guides.
- *
- * Create an instance with PlatPursuit.CoachMarks.createTour(config). The
- * returned object exposes init(autoShow), open(), close(), next(), prev(),
- * and dismiss(action). Steps are objects: { target, title, description,
- * icon (inner SVG markup), position: 'top'|'bottom' }.
- *
- * The positioning logic clamps the tooltip to the visible viewport so the
- * controls remain reachable even when the target is taller than the screen
- * (common on mobile when a section expands tall content).
- */
-const CoachMarks = (function() {
-    const CUTOUT_PADDING = 8;
-    const TOOLTIP_GAP = 12;
-    const VIEWPORT_MARGIN = 8;
-    const SETTLE_FRAMES = 3;
-
-    function viewport() {
-        const vv = window.visualViewport;
-        return {
-            width: vv ? vv.width : window.innerWidth,
-            height: vv ? vv.height : window.innerHeight,
-            offsetTop: vv ? vv.offsetTop : 0,
-        };
-    }
-
-    class CoachMarkTour {
-        constructor({ steps, elementIds, dismissUrl }) {
-            this._steps = steps;
-            this._ids = elementIds;
-            this._dismissUrl = dismissUrl;
-            this.totalSteps = steps.length;
-            this.currentStep = 0;
-            this.isOpen = false;
-            this._dismissing = false;
-            this._initialized = false;
-            this._currentTarget = null;
-            this._resizeHandler = null;
-            this._keydownHandler = null;
-            this._overlayClickHandler = null;
-            this.overlay = null;
-            this.tooltip = null;
-        }
-
-        init(autoShow = false) {
-            if (this._initialized) return;
-
-            const ids = this._ids;
-            this.overlay = document.getElementById(ids.overlay);
-            this.tooltip = document.getElementById(ids.tooltip);
-            if (!this.overlay || !this.tooltip) return;
-
-            this.titleEl = document.getElementById(ids.title);
-            this.descEl = document.getElementById(ids.desc);
-            this.svgEl = document.getElementById(ids.svg);
-            this.counterEl = document.getElementById(ids.counter);
-            this.prevBtn = document.getElementById(ids.prev);
-            this.nextBtn = document.getElementById(ids.next);
-            this.skipBtn = document.getElementById(ids.skip);
-
-            this._bindGlobalHandlers();
-            this._initialized = true;
-
-            if (autoShow) {
-                setTimeout(() => this.open(), 1000);
-            }
-        }
-
-        open() {
-            if (!this._initialized) this.init(false);
-            if (!this.overlay) return;
-
-            this.currentStep = 0;
-            this._dismissing = false;
-            this.isOpen = true;
-
-            this.overlay.classList.add('visible');
-            this.tooltip.classList.add('visible');
-
-            this._resizeHandler = () => {
-                if (this.isOpen) this._positionCurrentStep();
-            };
-            window.addEventListener('resize', this._resizeHandler);
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', this._resizeHandler);
-                window.visualViewport.addEventListener('scroll', this._resizeHandler);
-            }
-
-            this._showStep(0);
-        }
-
-        close() {
-            this.isOpen = false;
-            this.overlay.classList.remove('visible');
-            this.tooltip.classList.remove('visible');
-
-            if (this._currentTarget) {
-                this._currentTarget.classList.remove('coach-target-highlight');
-                this._currentTarget = null;
-            }
-
-            this.overlay.style.top = '';
-            this.overlay.style.left = '';
-            this.overlay.style.width = '';
-            this.overlay.style.height = '';
-            this.tooltip.classList.remove('positioned');
-
-            if (this._resizeHandler) {
-                window.removeEventListener('resize', this._resizeHandler);
-                if (window.visualViewport) {
-                    window.visualViewport.removeEventListener('resize', this._resizeHandler);
-                    window.visualViewport.removeEventListener('scroll', this._resizeHandler);
-                }
-                this._resizeHandler = null;
-            }
-        }
-
-        next() {
-            if (this.currentStep >= this.totalSteps - 1) {
-                this.dismiss('complete');
-                return;
-            }
-            this._showStep(this.currentStep + 1);
-        }
-
-        prev() {
-            if (this.currentStep <= 0) return;
-            this._showStep(this.currentStep - 1);
-        }
-
-        async dismiss(action = 'complete') {
-            if (this._dismissing) return;
-            this._dismissing = true;
-
-            const lastStep = this.currentStep + 1;
-            this.close();
-
-            try {
-                await API.post(this._dismissUrl, {
-                    action: action,
-                    last_step: lastStep,
-                });
-            } catch (err) {
-                console.warn('Coach-marks dismiss failed:', err);
-            }
-        }
-
-        // ------------------------------------------------------------------
-
-        _showStep(stepIndex) {
-            let step = this._steps[stepIndex];
-            if (!step) return;
-
-            let target = document.querySelector(step.target);
-            // Skip missing targets (e.g. quick-add not rendered for anonymous).
-            while (!target && stepIndex < this.totalSteps - 1) {
-                stepIndex++;
-                step = this._steps[stepIndex];
-                target = document.querySelector(step.target);
-            }
-            if (!target) {
-                this.dismiss('complete');
-                return;
-            }
-
-            if (this._currentTarget) {
-                this._currentTarget.classList.remove('coach-target-highlight');
-            }
-
-            this.currentStep = stepIndex;
-            this._currentTarget = target;
-
-            this._updateContent(step);
-            this._updateControls();
-
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-            // Wait for scroll to settle (position stable for SETTLE_FRAMES frames).
-            let lastTop = -1;
-            let stableFrames = 0;
-            const settle = () => {
-                const currentTop = target.getBoundingClientRect().top;
-                if (Math.abs(currentTop - lastTop) < 1) {
-                    stableFrames++;
-                } else {
-                    stableFrames = 0;
-                }
-                lastTop = currentTop;
-
-                if (stableFrames >= SETTLE_FRAMES) {
-                    this._positionCutout(target);
-                    void this.tooltip.offsetHeight;
-                    this._positionTooltip(target, step.position);
-                    target.classList.add('coach-target-highlight');
-                } else {
-                    requestAnimationFrame(settle);
-                }
-            };
-            requestAnimationFrame(settle);
-        }
-
-        _positionCurrentStep() {
-            const step = this._steps[this.currentStep];
-            if (!step) return;
-            const target = document.querySelector(step.target);
-            if (!target) return;
-            this._positionCutout(target);
-            this._positionTooltip(target, step.position);
-        }
-
-        _positionCutout(target) {
-            const rect = target.getBoundingClientRect();
-            this.overlay.style.top = (rect.top - CUTOUT_PADDING) + 'px';
-            this.overlay.style.left = (rect.left - CUTOUT_PADDING) + 'px';
-            this.overlay.style.width = (rect.width + CUTOUT_PADDING * 2) + 'px';
-            this.overlay.style.height = (rect.height + CUTOUT_PADDING * 2) + 'px';
-        }
-
-        _positionTooltip(target, preferredPosition) {
-            const rect = target.getBoundingClientRect();
-            const tooltipRect = this.tooltip.getBoundingClientRect();
-            const vp = viewport();
-
-            let top;
-            if (preferredPosition === 'top') {
-                top = rect.top - CUTOUT_PADDING - TOOLTIP_GAP - tooltipRect.height;
-                if (top < vp.offsetTop + VIEWPORT_MARGIN) {
-                    top = rect.bottom + CUTOUT_PADDING + TOOLTIP_GAP;
-                }
-            } else {
-                top = rect.bottom + CUTOUT_PADDING + TOOLTIP_GAP;
-                if (top + tooltipRect.height > vp.offsetTop + vp.height - VIEWPORT_MARGIN) {
-                    top = rect.top - CUTOUT_PADDING - TOOLTIP_GAP - tooltipRect.height;
-                }
-            }
-
-            // Final viewport clamp: guarantees the tooltip (and its buttons) sit
-            // inside the visible area even when the target is taller than the
-            // viewport (mobile sections with expanded tall content). May overlap
-            // the highlighted target, which is preferable to unreachable controls.
-            const minTop = vp.offsetTop + VIEWPORT_MARGIN;
-            const maxTop = vp.offsetTop + vp.height - tooltipRect.height - VIEWPORT_MARGIN;
-            top = Math.max(minTop, Math.min(top, maxTop));
-
-            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-            left = Math.max(VIEWPORT_MARGIN, Math.min(left, vp.width - tooltipRect.width - VIEWPORT_MARGIN));
-
-            this.tooltip.style.top = top + 'px';
-            this.tooltip.style.left = left + 'px';
-
-            if (!this.tooltip.classList.contains('positioned')) {
-                requestAnimationFrame(() => this.tooltip.classList.add('positioned'));
-            }
-        }
-
-        _updateContent(step) {
-            if (this.titleEl) this.titleEl.textContent = step.title;
-            if (this.descEl) this.descEl.textContent = step.description;
-            if (this.svgEl) this.svgEl.innerHTML = step.icon;
-        }
-
-        _updateControls() {
-            const step = this.currentStep;
-            const isLast = step === this.totalSteps - 1;
-
-            if (this.counterEl) {
-                this.counterEl.textContent = `${step + 1} / ${this.totalSteps}`;
-            }
-            if (this.prevBtn) {
-                this.prevBtn.classList.toggle('invisible', step === 0);
-            }
-            if (this.nextBtn) {
-                const label = isLast ? 'Done' : 'Next';
-                const path = isLast ? 'M5 13l4 4L19 7' : 'M9 5l7 7-7 7';
-                this.nextBtn.innerHTML = `
-                    ${label}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="${path}"/>
-                    </svg>`;
-            }
-            if (this.skipBtn) {
-                this.skipBtn.textContent = isLast ? 'Close' : 'Skip';
-            }
-        }
-
-        _bindGlobalHandlers() {
-            this._keydownHandler = (e) => {
-                if (!this.isOpen) return;
-                switch (e.key) {
-                    case 'ArrowRight':
-                        e.preventDefault();
-                        this.next();
-                        break;
-                    case 'ArrowLeft':
-                        e.preventDefault();
-                        this.prev();
-                        break;
-                    case 'Escape':
-                        e.preventDefault();
-                        this.dismiss('skip');
-                        break;
-                }
-            };
-            document.addEventListener('keydown', this._keydownHandler);
-
-            this._overlayClickHandler = () => {
-                if (this.isOpen) this.dismiss('skip');
-            };
-            this.overlay.addEventListener('click', this._overlayClickHandler);
-        }
-    }
-
-    return {
-        createTour(config) {
-            return new CoachMarkTour(config);
-        },
-    };
-})();
 
 /* ---------------------------------------------------------------------------
  * SpoilerToggle
@@ -1598,6 +1576,1106 @@ if (document.readyState === 'loading') {
     Lightbox.init();
 }
 
+/**
+ * StickyReveal - reveal/pin a condensed proxy element when its sentinel scrolls under the sticky chrome.
+ *
+ * Markup: a target [data-sticky-reveal] (fixed-positioned, hidden until pinned via the .is-pinned class)
+ * plus a sentinel [data-sticky-sentinel="#selector"] placed where pinning should begin (e.g. at the bottom
+ * of the full page header). When the sentinel scrolls above the chrome bottom (the --sticky-top offset the
+ * navbar/sub-nav publish), the target gets .is-pinned; scrolling back up removes it.
+ *
+ * init() is idempotent + re-runnable: it skips already-wired targets and drops observers whose target OR
+ * SENTINEL has left the DOM (e.g. replaced by an HTMX swap), re-wiring that target against the new one --
+ * so callers can re-init after a partial-page swap. Both halves matter: a bar kept outside the swapped
+ * region kills only its sentinel, and an entry rebuilt on the target check alone would keep observing a
+ * detached node and freeze the bar in whatever state it was last in.
+ */
+const StickyReveal = {
+    _entries: [],
+    _bound: false,
+    _chromeH() {
+        return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top'), 10) || 0;
+    },
+    // (Re)create an entry's observer with the CURRENT chrome height and adopt the correct state now. Called
+    // on init AND on refresh (resize / font swap), because main.js rewrites --sticky-top after our init --
+    // a baked-in height would pin the bar a few px early/late once the navbar height changes.
+    _observe(entry) {
+        if (entry.obs) entry.obs.disconnect();
+        const chromeH = this._chromeH();
+        const target = entry.target, sentinel = entry.sentinel;
+        entry.obs = new IntersectionObserver((es) => {
+            target.classList.toggle('is-pinned', es[0].boundingClientRect.top < chromeH);
+        }, { rootMargin: `-${chromeH}px 0px 0px 0px`, threshold: [0, 1] });
+        entry.obs.observe(sentinel);
+        // Adopt the correct state immediately, WITHOUT animating, so a target inserted while already scrolled
+        // past (e.g. re-rendered by an HTMX swap) appears in place instead of replaying the reveal slide. Only
+        // touch the class when it actually changes, so a resize/refresh doesn't flash an already-correct bar.
+        const pin = sentinel.getBoundingClientRect().top < chromeH;
+        if (pin !== target.classList.contains('is-pinned')) {
+            const prev = target.style.transition;
+            target.style.transition = 'none';
+            target.classList.toggle('is-pinned', pin);
+            void target.offsetWidth;            // flush the un-animated state
+            target.style.transition = prev;
+        }
+    },
+    init(root) {
+        root = root || document;
+        // Drop entries whose target OR SENTINEL left the DOM (e.g. a swap replaced one of them).
+        //
+        // The sentinel half was missing, and it is the half that bites when the bar is deliberately kept
+        // OUTSIDE the swapped region -- which is the right place for it, since a bar torn out mid-scroll
+        // takes its wired-once listeners with it. Then every swap replaces the sentinel, the target is
+        // still in the DOM so the entry survives, `_stickyReveal` says "already wired" so it is skipped,
+        // and the observer spends the rest of the page's life watching a detached node.
+        //
+        // It never fires again, so `.is-pinned` freezes wherever it was: a bar that was hidden never
+        // appears again, and a bar that was showing never goes away. Two different-looking symptoms, one
+        // stale observer -- which is what made it read as intermittent.
+        //
+        // Clearing the flag is what lets the loop below re-wire the target against the FRESH sentinel.
+        this._entries = this._entries.filter((e) => {
+            if (!document.contains(e.target) || !document.contains(e.sentinel)) {
+                if (e.obs) { e.obs.disconnect(); }
+                e.target._stickyReveal = false;
+                // UNPIN a surviving target. If only the sentinel went, nothing will ever tell this bar to
+                // hide again -- and if it went because the content it marked is gone (an emptied filter
+                // removing the region), a bar left pinned is chrome floating over nothing.
+                if (document.contains(e.target)) { e.target.classList.remove('is-pinned'); }
+                return false;
+            }
+            return true;
+        });
+        root.querySelectorAll('[data-sticky-reveal]').forEach((target) => {
+            if (target._stickyReveal) return;   // already wired
+            const sel = target.getAttribute('data-sticky-sentinel');
+            const sentinel = sel ? document.querySelector(sel) : target.previousElementSibling;
+            if (!sentinel) return;
+            target._stickyReveal = true;
+            const entry = { target, sentinel, obs: null };
+            this._entries.push(entry);
+            this._observe(entry);
+        });
+        // Re-measure when the chrome height can change (main.js updates --sticky-top on resize + fonts.ready).
+        if (!this._bound) {
+            this._bound = true;
+            let raf = null;
+            const refresh = () => {
+                if (raf) return;
+                raf = requestAnimationFrame(() => {
+                    raf = null;
+                    this._entries.forEach((e) => { if (document.contains(e.target)) this._observe(e); });
+                });
+            };
+            window.addEventListener('resize', refresh);
+            if (document.fonts && document.fonts.ready) { document.fonts.ready.then(refresh); }
+        }
+    }
+};
+
+/**
+ * Directional view switch (Material "shared axis"): slide the incoming panel in from the side it lives
+ * on -- forward in the tab order enters from the right, backward from the left. Applies the shared
+ * .pp-view-in-* class (components/motion.css) to `panel`, picking the direction from `order`.
+ *
+ * @param {HTMLElement} panel   the element now being shown (a toggled panel, or an HTMX-swapped root)
+ * @param {string} fromName     the view we're leaving (falsy on first paint -> treated as forward)
+ * @param {string} toName       the view we're entering
+ * @param {string[]} order      the view names in tab order, e.g. ['jobs','radar','contracts']
+ */
+function slideViewIn(panel, fromName, toName, order) {
+    if (!panel || fromName === toName) { return; }
+    // Reduced motion is also gated in CSS; short-circuit here to skip the forced reflow below.
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    var forward = !fromName || order.indexOf(toName) >= order.indexOf(fromName);
+    panel.classList.remove('pp-view-in-right', 'pp-view-in-left');
+    void panel.offsetWidth;   // restart the animation from scratch on a re-toggle
+    panel.classList.add(forward ? 'pp-view-in-right' : 'pp-view-in-left');
+}
+
+/**
+ * One-shot "ignite" glow bloom on the chip that just became active (the shared .pp-tab-ignite in
+ * components/motion.css). Restart-safe (removes + reflows before re-adding); reduced-motion = no-op.
+ * @param {HTMLElement} tab
+ */
+function igniteTab(tab) {
+    if (!tab) { return; }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    tab.classList.remove('pp-tab-ignite');
+    void tab.offsetWidth;   // restart the animation on a re-activation
+    tab.classList.add('pp-tab-ignite');
+}
+
+/**
+ * Wire a WAI-ARIA tablist: roving tabindex (only the active tab is Tab-reachable) + Arrow/Home/End
+ * keyboard nav. Markup/class-agnostic -- pass the tab elements and a select callback; the page owns what
+ * "select" does (show a panel, HTMX swap, etc). Two activation models:
+ *   - automatic (default): clicking OR arrowing to a tab activates it -- for cheap client-side switches.
+ *   - manual (`opts.manual`): arrows move focus only; the tab's own click/Enter activates -- for
+ *     expensive swaps (HTMX links) where auto-activating on every arrow keypress would fire a request.
+ *
+ * @param {NodeList|Array} tabs  the tab elements, in visual order
+ * @param {Object} opts
+ * @param {Function} [opts.onSelect]  (tabEl) -> void, called on activation (auto model only)
+ * @param {Function} [opts.isActive]  (tabEl) -> bool; default checks .is-active
+ * @param {boolean} [opts.manual]     manual activation (arrows move focus only)
+ * @param {boolean} [opts.ignite]     bloom .pp-tab-ignite on the activated tab (auto model)
+ * @returns {{ syncTabindex: Function }}  call syncTabindex() after the active tab changes elsewhere
+ */
+function wireTablist(tabs, opts) {
+    tabs = Array.prototype.slice.call(tabs || []);
+    var noop = function () {};
+    if (!tabs.length) { return { syncTabindex: noop }; }
+    opts = opts || {};
+    var onSelect = opts.onSelect || noop;
+    var isActive = opts.isActive || function (t) { return t.classList.contains('is-active'); };
+    function syncTabindex() { tabs.forEach(function (t) { t.tabIndex = isActive(t) ? 0 : -1; }); }
+    function select(tab) { if (opts.ignite) { igniteTab(tab); } onSelect(tab); }
+    var STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    tabs.forEach(function (tab) {
+        if (!opts.manual) {
+            tab.addEventListener('click', function (e) {
+                // A TAB THAT IS A LINK still switches in place. Job detail's tabs are `<a href="?tab=...">`
+                // -- deliberately, so the strip works without JS (the server honours the param) -- and this
+                // handler used to let the navigation through afterwards. The result was a tab click that
+                // switched the panel, ignited the chip, slid the view in, AND THEN reloaded the whole page
+                // and replayed every entrance animation on it. Reported as "strange flashing, almost like
+                // there are multiple animations playing per swap", which is exactly what it was.
+                //
+                // Modifier and middle clicks are left alone: those mean "open this somewhere else", and a
+                // tab whose href is a real URL should honour that rather than swallow it.
+                if (tab.tagName === 'A' && tab.getAttribute('href')
+                    && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+                    e.preventDefault();
+                }
+                select(tab);
+            });
+        }
+        tab.addEventListener('keydown', function (e) {
+            var i = tabs.indexOf(tab), next;
+            if (Object.prototype.hasOwnProperty.call(STEP, e.key)) { next = tabs[(i + STEP[e.key] + tabs.length) % tabs.length]; }
+            else if (e.key === 'Home') { next = tabs[0]; }
+            else if (e.key === 'End') { next = tabs[tabs.length - 1]; }
+            else { return; }
+            e.preventDefault();
+            next.focus();
+            if (!opts.manual) { select(next); }   // automatic activation
+        });
+    });
+    syncTabindex();
+    return { syncTabindex: syncTabindex };
+}
+
+/**
+ * Reflect the active view in the URL (`?view=`), keeping the default view's URL clean, and strip a set of
+ * view-scoped params when you leave the view that owns them (so a shared link stays clean). Shareable +
+ * reload-safe; no-op without History. Shared by the Career tabs and Collection view toggle.
+ * @param {string} view       the now-active view name
+ * @param {Object} opts
+ * @param {string} opts.default        the default view -- its URL drops the param entirely
+ * @param {string} [opts.param]        the query param to write (default 'view'); use the one the SERVER
+ *                                    reads, or the URL will disagree with the page on reload
+ * @param {string} [opts.paramView]    the view that owns `opts.params`
+ * @param {string[]} [opts.params]     params stripped unless `view === opts.paramView`
+ * @param {boolean} [opts.push=false]  PUSH a history entry instead of replacing. For a tab strip whose
+ *        controls are real links: those clicks used to be navigations, so Back returned to the previous
+ *        tab, and swallowing the navigation without pushing takes the reader off the page instead.
+ */
+function syncViewParam(view, opts) {
+    if (!window.history || !history.replaceState) { return; }
+    opts = opts || {};
+    // `param` defaults to 'view' -- the five existing callers all use that. Job detail passes 'tab',
+    // because its SERVER reads `?tab=` (old bookmarks and the board's pager links carry it) and a page
+    // that writes one param while reading another produces a URL that lies about what is on screen.
+    var key = opts.param || 'view';
+    var qp = new URLSearchParams(location.search);
+    if (view === opts.default) { qp.delete(key); } else { qp.set(key, view); }
+    if (opts.params && view !== opts.paramView) { opts.params.forEach(function (k) { qp.delete(k); }); }
+    var qs = qp.toString();
+    var url = location.pathname + (qs ? '?' + qs : '') + location.hash;
+    // REPLACE by default -- a `<button>` tab never created a history entry, so pushing one would be new
+    // behaviour for the five callers that use buttons. PUSH only where the tab is an `<a href>` whose
+    // navigation is being swallowed: there the entry already existed and stopping the navigation without
+    // replacing it is what strands the reader.
+    if (opts.push && history.pushState) { history.pushState(null, '', url); }
+    else { history.replaceState(null, '', url); }
+}
+
+
+
+
+
+
+/**
+ * cardReveal -- a contract card's figures animate INTO their served values as it scrolls into view: the
+ * reward XP counts up, the tier bars fill from zero, the ring's arcs draw around, and the job cells
+ * ignite in sequence.
+ *
+ * The final state is already rendered server-side, so this is pure enhancement: under reduced motion (or
+ * with no IntersectionObserver) every card simply stays as served. Each card reveals ONCE, via a
+ * `data-revealed` stamp, and is unobserved after.
+ *
+ * The job-cell selector is a parameter because the two callers draw their jobs differently -- Career's
+ * 25-cell map (`.rp-jobcell.is-lit`) and job detail's named tiles (`.rp-jobtile`) -- and everything else
+ * about the reveal is identical.
+ *
+ * @param {Object} opts
+ * @param {string} [opts.jobSelector='.rp-jobcell.is-lit']  cells to ignite in sequence
+ * @param {number} [opts.threshold=0.25]
+ * @returns {{ observe: function(NodeList|Array), reveal: function(HTMLElement), disconnect: function }}
+ */
+function cardReveal(opts) {
+    opts = opts || {};
+    var jobSel = opts.jobSelector || '.rp-jobcell.is-lit';
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var io = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { reveal(e.target); io.unobserve(e.target); } });
+    }, { threshold: opts.threshold != null ? opts.threshold : 0.25 }) : null;
+
+    function reveal(card) {
+        if (!card || card.dataset.revealed) { return; }
+        card.dataset.revealed = '1';
+        if (reduce) { return; }   // the served state IS the final state; nothing to restore
+        var xp = card.querySelector('.rp-reward-xp__val [data-countup]');
+        if (xp && window.PlatPursuit && PlatPursuit.countUp) { PlatPursuit.countUp(xp, 900); }
+        // The reward-tier bars fill from 0 to their data-fill%.
+        card.querySelectorAll('.rp-tier__bar').forEach(function (w) {
+            var hz = w.querySelector('.pp-horizon');
+            if (!hz) { return; }
+            hz.style.setProperty('--horizon-progress', '0%');
+            void hz.offsetWidth;
+            hz.style.setProperty('--horizon-progress', (w.dataset.fill || '0') + '%');
+        });
+        // The ring's arcs draw around from nothing. `data-dash` is the served length, so this restarts
+        // the CSS transition rather than computing anything.
+        card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {
+            if (!seg.dataset.dash) { return; }
+            seg.style.strokeDasharray = '0 100';
+            void seg.getBoundingClientRect();
+            seg.style.strokeDasharray = seg.dataset.dash + ' 100';
+        });
+        card.querySelectorAll(jobSel).forEach(function (cell, i) {
+            setTimeout(function () {
+                cell.classList.remove('rp-ignite'); void cell.offsetWidth; cell.classList.add('rp-ignite');
+            }, 120 + i * 90);
+        });
+    }
+
+    return {
+        reveal: reveal,
+        observe: function (nodes) {
+            if (!io) { return; }
+            Array.prototype.forEach.call(nodes, function (c) {
+                if (c && c.dataset && !c.dataset.revObs) { c.dataset.revObs = '1'; io.observe(c); }
+            });
+        },
+        // An IntersectionObserver holds a STRONG reference to every target until it intersects or is
+        // unobserved. A grid that replaces its cards without disconnecting therefore retains every card
+        // destroyed before it scrolled into view -- Career swaps its whole list on each filter, sort,
+        // scope change and facet click, so a reader working the toolbar accumulates hundreds of detached
+        // nodes. The old hand-rolled version had the same shape; the extraction is the moment to fix it.
+        disconnect: function () { if (io) { io.disconnect(); } },
+    };
+}
+
+/**
+ * staggerCards -- the entrance rise for a BATCH of contract cards (first paint, an appended page, a tab
+ * opening). Distinct from `cardReveal`, which animates a card's figures as it scrolls past: this is the
+ * card itself arriving.
+ *
+ * The delay is capped so a 24-card page does not take a second to finish, and the class is stripped on
+ * `animationend` so a later re-run starts clean rather than being ignored as already-applied.
+ *
+ * @param {NodeList|Array} cards
+ * @param {Object} [opts]
+ * @param {number} [opts.step=40]  per-card delay step (ms)
+ * @param {number} [opts.cap=400]  maximum delay (ms)
+ */
+function staggerCards(cards, opts) {
+    opts = opts || {};
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    var step = opts.step || 40;
+    var cap = opts.cap != null ? opts.cap : 400;
+    Array.prototype.forEach.call(cards || [], function (row, i) {
+        row.classList.remove('rp-row--enter');
+        void row.offsetWidth;
+        row.style.animationDelay = Math.min(i * step, cap) + 'ms';
+        row.classList.add('rp-row--enter');
+        row.addEventListener('animationend', function h(e) {
+            if (e.animationName !== 'rpCardIn') { return; }
+            row.classList.remove('rp-row--enter');
+            row.style.animationDelay = '';
+            row.removeEventListener('animationend', h);
+        });
+    });
+}
+
+
+/**
+ * coverCarousel -- a contract card's art cycles through its gallery while the pointer is on the card.
+ *
+ * The card ships its extra frames in `data-gallery` on the cover image (PSN bg -> IGDB screenshots ->
+ * IGDB artworks, deduped and capped); this plays them. Two stacked layers crossfade so a frame never
+ * flashes through to the background, each frame gets a slow Ken Burns drift, and a segment bar says how
+ * many there are and which one you are on.
+ *
+ * Extracted from Career when job detail became the second page rendering the card. It was NOT missing
+ * there by choice -- the markup was adopted and the behaviour was not, the same way the cover skeleton
+ * was, which is the recurring cost of a component whose CSS and data attributes are only half of it.
+ *
+ * OFF under reduced motion, and off where there is nothing to cycle (one frame). Idempotent per element
+ * via a `data-carInit` stamp, so it is safe to re-run over a grid that has just had a page appended.
+ *
+ * @param {HTMLElement|Document} [scope=document]  container to search for `.rp-tile__art`
+ * @param {Object} [opts]
+ * @param {number} [opts.beat=1500]   ms each frame holds
+ * @param {number} [opts.fade=560]    ms the crossfade takes (must match the CSS transition)
+ */
+function coverCarousel(scope, opts) {
+    opts = opts || {};
+    var BEAT = opts.beat || 1500;
+    var FADE = opts.fade || 560;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    (scope || document).querySelectorAll('.rp-tile__art').forEach(function (art) {
+        if (art.dataset.carInit) { return; }
+        art.dataset.carInit = '1';
+        var cover = art.querySelector('.rp-tile__cover');
+        if (!cover) { return; }
+        var card = art.closest('.rp-row') || art;
+        var extra = (cover.getAttribute('data-gallery') || '').split('|').filter(Boolean);
+        if (!extra.length) { return; }
+        var frames = [cover.src].concat(extra);
+        var layers = null, segs = null, active = null, timer = null, hideT = null, primed = false;
+
+        function build() {
+            layers = [document.createElement('img'), document.createElement('img')];
+            layers.forEach(function (l) {
+                l.className = 'rp-tile__img--fx'; l.alt = ''; art.insertBefore(l, cover.nextSibling);
+            });
+            var prog = document.createElement('div');
+            prog.className = 'rp-progress';
+            segs = frames.map(function () {
+                var s = document.createElement('span');
+                s.className = 'rp-progress__seg';
+                prog.appendChild(s);
+                return s;
+            });
+            art.appendChild(prog);
+        }
+        function setSeg(i) { if (segs) { segs.forEach(function (s, k) { s.classList.toggle('is-on', k === i); }); } }
+        function drift(el) { if (el) { el.classList.remove('rp-kb'); void el.offsetWidth; el.classList.add('rp-kb'); } }
+        function toFrame(i) {
+            setSeg(i);
+            // Frame 0 is the RESTING cover itself, not a layer -- returning to it means hiding both
+            // layers rather than loading the same image a third time.
+            if (i === 0) {
+                if (layers) { layers.forEach(function (l) { l.classList.remove('is-on'); }); }
+                active = null; drift(cover); return;
+            }
+            var incoming = (active === layers[0]) ? layers[1] : layers[0];
+            var outgoing = active;
+            incoming.src = frames[i];
+            incoming.style.zIndex = '2';
+            if (outgoing) { outgoing.style.zIndex = '1'; }
+            void incoming.offsetWidth;
+            incoming.classList.add('is-on');
+            active = incoming;
+            drift(incoming);
+            // The outgoing layer is hidden only AFTER the crossfade, or it vanishes under the incoming
+            // one and the transition shows the card's background for a frame.
+            clearTimeout(hideT);
+            if (outgoing) { hideT = setTimeout(function () { outgoing.classList.remove('is-on'); }, FADE); }
+        }
+
+        card.addEventListener('mouseenter', function () {
+            if (!layers) { build(); }
+            // Preloaded on FIRST hover, not at render: a wall of 24 cards would otherwise fetch every
+            // frame of every gallery for cards nobody points at.
+            if (!primed) { primed = true; extra.forEach(function (u) { var im = new Image(); im.src = u; }); }
+            var i = 1;
+            clearInterval(timer);
+            toFrame(1);
+            timer = setInterval(function () { i = (i + 1) % frames.length; toFrame(i); }, BEAT);
+        });
+        card.addEventListener('mouseleave', function () {
+            clearInterval(timer); timer = null;
+            clearTimeout(hideT);
+            if (layers) { layers.forEach(function (l) { l.classList.remove('is-on'); }); }
+            active = null;
+            setSeg(0);
+            [cover].concat(layers || []).forEach(function (el) { if (el) { el.classList.remove('rp-kb'); } });
+        });
+    });
+}
+
+
+/**
+ * ringHoverLink -- hovering a contract card's job highlights its arc in the split ring, and vice versa.
+ *
+ * The ring is N equal arcs, one per job the contract levels, and which arc is WHICH is otherwise
+ * guesswork: the segments carry a job slug expressly so the two can be tied together (see
+ * `contracts_service._ring_segments`). This is that tie, in both directions.
+ *
+ * Extracted from Career when job detail became the second caller. Career shows the jobs as a 25-cell map
+ * and job detail as named pills, so the ITEM selector is a parameter and everything else is shared --
+ * including the part that is easy to get wrong: the lookup is scoped to the hovered element's own CARD,
+ * so on a wall of 24 contracts hovering one job does not light that slug on all of them.
+ *
+ * DELEGATED from a container, so it survives cards streamed in by infinite scroll without re-binding.
+ *
+ * @param {HTMLElement} scope                     the container holding the cards
+ * @param {Object} [opts]
+ * @param {string} [opts.itemSelector='.rp-jobcell.is-lit']  the hoverable job element
+ * @param {string} [opts.cardSelector='.rp-row']             the card that bounds a lookup
+ */
+function ringHoverLink(scope, opts) {
+    if (!scope) { return; }
+    opts = opts || {};
+    var itemSel = opts.itemSelector || '.rp-jobcell.is-lit';
+    var cardSel = opts.cardSelector || '.rp-row';
+    var SEG = '.rp-ring__seg';
+
+    function setLink(card, slug, on) {
+        if (!card || !slug) { return; }
+        // CSS.escape, because a slug goes straight into a selector. Job slugs are tame today; the one
+        // that is not would be a silent `querySelector` throw inside a mouse handler.
+        var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+        var item = card.querySelector(itemSel + '[data-slug="' + sel + '"]');
+        var seg = card.querySelector(SEG + '[data-slug="' + sel + '"]');
+        if (item) { item.classList.toggle('is-linked', on); }
+        if (seg) { seg.classList.toggle('is-linked', on); }
+    }
+    function slugAt(target) {
+        if (!target || !target.closest) { return null; }
+        var el = target.closest(itemSel) || target.closest(SEG);
+        return el ? el.dataset.slug : null;
+    }
+    scope.addEventListener('mouseover', function (e) {
+        var s = slugAt(e.target);
+        if (s) { setLink(e.target.closest(cardSel), s, true); }
+    });
+    scope.addEventListener('mouseout', function (e) {
+        var s = slugAt(e.target);
+        if (s) { setLink(e.target.closest(cardSel), s, false); }
+    });
+}
+
+
+/**
+ * progressiveArt -- settle a card's cover-art SKELETON once its image has arrived.
+ *
+ * `.rp-tile__art::before` is a shimmering placeholder running `rpShimmer ... infinite`, and the ONLY
+ * thing that stops it is `.is-loaded` on the art element. That makes the skeleton a JS responsibility
+ * wearing CSS clothes: a page that renders the card without calling this shows every cover shimmering
+ * forever, and because `display: none` restarts a CSS animation, hiding and re-showing the container
+ * re-syncs every card's loop into one page-wide pulse. Which is exactly how it was found -- as "strange
+ * flashing" when switching tabs on job detail, a page that had adopted the card and not its behaviour.
+ *
+ * Extracted from Career's `initProgressiveLoad` when job detail became the second caller. Idempotent via
+ * a `data-plInit` stamp, so it is safe to re-run over a grid that has just had a page appended -- which
+ * is the normal case under infinite scroll.
+ *
+ * Marks LOADED, not merely settled, on three paths: no image at all, an image already complete from
+ * cache (`complete && naturalWidth`, because `load` will never fire again for it), and the real `load`.
+ * `error` counts too -- a broken image is a finished one, and shimmering forever over a 404 is the worst
+ * of the three outcomes.
+ *
+ * @param {HTMLElement|Document} [scope=document]  container to search for `.rp-tile__art`
+ */
+function progressiveArt(scope) {
+    (scope || document).querySelectorAll('.rp-tile__art').forEach(function (art) {
+        if (art.dataset.plInit) { return; }
+        art.dataset.plInit = '1';
+        var img = art.querySelector('.rp-tile__cover');
+        if (!img) { art.classList.add('is-loaded'); return; }
+        if (img.complete && img.naturalWidth) { art.classList.add('is-loaded'); return; }
+        var done = function () { art.classList.add('is-loaded'); };
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+    });
+}
+
+
+/**
+ * flipGrid -- the "shuffle": survivors GLIDE to their new slots when a grid re-filters or re-sorts.
+ *
+ * First / Last / Invert / Play. Extracted 2026-08 from three hand-rolled copies that had already drifted
+ * apart -- the Collection gallery (client-side `display` toggles), Browse Hunters and the jobs catalogue
+ * (both HTMX swaps) -- which is one past the point where a shared primitive is worth its own name.
+ *
+ * TWO MECHANICS, one helper, because the difference is only WHEN the mutation happens:
+ *
+ *   synchronous   `run(mutate)`            -- the same nodes survive, so they are their own identity
+ *   asynchronous  `measure()` / `play()`   -- an HTMX swap REPLACES the nodes, so identity must come
+ *                                            from `key(el)` (a URL, in practice: the one stable thing a
+ *                                            server-rendered card carries across a swap)
+ *
+ * SURVIVORS ARE MARKED, and that is the half a re-roll usually forgets: an element that was already on
+ * screen must not also fade in, or the unchanged part of the wall flickers on every filter. `.is-revealed`
+ * + `.pp-revealing` are exactly what `staggerReveal` skips, so the two engines cooperate instead of
+ * fighting -- the reveal animates arrivals, this animates the rest.
+ *
+ * WAAPI, not inline styles + transitions: a freshly swapped node has no transition to interrupt, animations
+ * cancel cleanly on a re-entrant call, and there is no cleanup timer to leave a grid stuck mid-transform if
+ * a frame is dropped. The final layout is whatever the mutation produced, so this can only ever fail to
+ * ANIMATE -- never to arrange.
+ *
+ * @param {Object} o
+ * @param {HTMLElement|function(): HTMLElement} o.container   the grid (a function, if it is re-created by swaps)
+ * @param {string} o.itemSelector                             selects the items within it
+ * @param {function(HTMLElement): (string|null)} [o.key]      stable identity across a swap; defaults to the
+ *        element itself, which is correct ONLY for the synchronous case
+ * @param {boolean} [o.enter=false]   fade+scale ARRIVALS in. Leave false where `staggerReveal` owns them
+ * @param {boolean} [o.mark=true]     mark survivors so `staggerReveal` skips them
+ * @param {number} [o.duration=420]   glide duration (ms)
+ * @param {string} [o.easing]         glide curve. EXPOSED because the extraction silently imposed one
+ *        caller's curve on the other: Browse Hunters glided at 460ms on its own decel curve and got
+ *        Collection's 420ms spring, so its survivors' glide stopped agreeing with the `staggerReveal`
+ *        fade running beside it. A shared primitive may own the mechanism; it must not quietly own the
+ *        page's motion vocabulary.
+ * @param {number} [o.enterDuration]  arrival TRANSFORM duration (defaults to `duration`)
+ * @param {number} [o.enterFade]      arrival OPACITY duration -- deliberately separate and shorter, see below
+ * @param {number} [o.enterScale=0.9] arrival start scale
+ * @returns {{ measure: function, play: function, run: function }}
+ */
+function flipGrid(o) {
+    var SPRING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    var dur = o.duration || 420;
+    var ease = o.easing || SPRING;
+    var mark = o.mark !== false;
+    var first = null;
+
+    function grid() { return typeof o.container === 'function' ? o.container() : o.container; }
+    function items() {
+        var g = grid();
+        return g ? Array.prototype.slice.call(g.querySelectorAll(o.itemSelector)) : [];
+    }
+    function keyOf(el) { return o.key ? o.key(el) : el; }
+    function reduced() {
+        return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    // Only what is VISIBLE has a position worth remembering: a `display: none` cell measures 0x0, and
+    // gliding something from the origin is worse than not animating it.
+    function shown(el) { var r = el.getBoundingClientRect(); return r.width || r.height; }
+
+    function measure() {
+        if (reduced()) { first = null; return; }
+        first = new Map();
+        items().forEach(function (el) {
+            // A NULL KEY IS NOT A KEY. Both callers' `key` functions return null for an item missing its
+            // link, and the original code guarded on both sides -- dropped in the extraction. Without it
+            // two keyless items collide on `null`: the second glides in from the first one's old slot AND
+            // is marked `is-revealed`, so `staggerReveal` skips it and it pops in with no fade.
+            var k = keyOf(el);
+            if (k != null && shown(el)) { first.set(k, el.getBoundingClientRect()); }
+        });
+    }
+
+    function play() {
+        var before = first;
+        first = null;
+        if (!before) { return false; }
+        var moved = false;
+        items().forEach(function (el) {
+            if (!el.animate || !shown(el)) { return; }
+            var k = keyOf(el);
+            var prev = k == null ? null : before.get(k);
+            if (!prev) {
+                // An ARRIVAL. Animated only where the caller has no reveal engine of its own; otherwise
+                // left alone, because two engines animating one element is how a card ends up flickering.
+                //
+                // OPACITY AND TRANSFORM ARE SEPARATE ANIMATIONS, shorter and on a decel curve for the
+                // fade. The extraction collapsed them into one spring-eased animation, which is the
+                // documented "the spring's >1 control point applied to opacity spikes it to 1 and reads
+                // as a flash" failure -- the same one `profile_list.html` and `jobs_browse.html` both
+                // carry comments about avoiding. Collection had it right and lost it in the move.
+                if (o.enter) {
+                    var scale = o.enterScale != null ? o.enterScale : 0.9;
+                    el.animate([{ transform: 'scale(' + scale + ')' }, { transform: 'none' }],
+                               { duration: o.enterDuration || dur, easing: ease });
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: o.enterFade || Math.round((o.enterDuration || dur) * 0.76),
+                                 easing: 'ease' });
+                }
+                return;
+            }
+            // A SURVIVOR -- on screen a moment ago, so it must not be revealed again whether or not it
+            // actually moved.
+            if (mark) { el.classList.add('is-revealed', 'pp-revealing'); }
+            var now = el.getBoundingClientRect();
+            var dx = prev.left - now.left, dy = prev.top - now.top;
+            if (!dx && !dy) { return; }
+            moved = true;
+            el.animate([{ transform: 'translate(' + dx + 'px, ' + dy + 'px)' }, { transform: 'none' }],
+                       { duration: dur, easing: ease });
+        });
+        return moved;
+    }
+
+    function run(mutate) {
+        measure();
+        mutate();
+        return play();
+    }
+
+    return { measure: measure, play: play, run: run };
+}
+
+
+/**
+ * Staggered grid reveal for HTMX-swapped / infinite-scroll card grids (the Badges browse pattern; the
+ * standard for any rebuilt browse grid). Hides the grid's cards, reveals those already present in ONE
+ * DOM-order batch, and returns an observer that reveals infinite-scroll-APPENDED cards as they scroll in.
+ * The page supplies the per-card animation via `reveal(el, delayMs)` (use WAAPI `el.animate` so arrivals
+ * restart reliably on freshly HTMX-swapped nodes); the engine owns the reduced-motion gate, the batch
+ * stagger, and the observer. Reveals each card ONCE (marks `.is-revealed`).
+ *
+ * NOTE: this is for grids that swap/append (WAAPI + observer). A BOUNDED, all-client grid that just wants
+ * a replay-on-show stagger is simpler as a CSS container class (see the Collection gallery's
+ * `.is-revealing` nth-child); and content-specific per-card reveals (Career's contract rows) stay bespoke.
+ * Don't force those onto this engine -- different tools for different contexts.
+ *
+ * @param {Object} o
+ * @param {HTMLElement} o.grid          the grid container
+ * @param {string} o.cardSelector       selects the cards within the grid
+ * @param {function(HTMLElement, number)} o.reveal   plays one card's arrival, given (el, delayMs)
+ * @param {number} [o.step=24]          per-card stagger step (ms)
+ * @param {number} [o.batchCap=560]     max delay for the initial in-grid batch
+ * @param {number} [o.appendCap=200]    max delay within a scroll-appended batch
+ * @param {string} [o.hideClass='pp-reveal']   class added to the grid to hide un-revealed cards
+ * @returns {{ observe: function, disconnect: function } | null}  null if motion is off / no cards / no IO
+ */
+function staggerReveal(o) {
+    if (!o || !o.grid || typeof o.reveal !== 'function' || !o.cardSelector) { return null; }
+    if (!window.IntersectionObserver) { return null; }
+    var rm = (PlatPursuit.Medallion && PlatPursuit.Medallion.prefersReducedMotion && PlatPursuit.Medallion.prefersReducedMotion())
+        || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (rm) { return null; }
+    var grid = o.grid, sel = o.cardSelector;
+    if (!grid.querySelector(sel)) { return null; }
+    var step = o.step || 24;
+    var batchCap = o.batchCap != null ? o.batchCap : 560;
+    var appendCap = o.appendCap != null ? o.appendCap : 200;
+    grid.classList.add(o.hideClass || 'pp-reveal');   // hides the cards until each is revealed
+    function play(el, delay) {
+        // Idempotent: a card reveals exactly once even if re-selected by a re-entrant batch (e.g. a filter
+        // swap that also fires a paired OOB afterSwap) or re-observed. `pp-revealing` is set synchronously so
+        // the guard holds within the same frame. The VISIBLE resting state (`.is-revealed` -> opacity 1) is
+        // flipped one frame LATER: a freshly created WAAPI animation doesn't apply its 0-opacity backwards
+        // fill until the next frame, so setting opacity:1 synchronously paints one full-opacity frame before
+        // the reveal takes hold -- the "flash to black" (the card shows, then the animation yanks it to 0 and
+        // fades up). Deferring keeps the base style hidden (pp-reveal) for that first paint; the running
+        // animation then masks the resting state, and at its end the backwards fill reverts to .is-revealed.
+        if (el.classList.contains('pp-revealing') || el.classList.contains('is-revealed')) { return; }
+        el.classList.add('pp-revealing');
+        o.reveal(el, delay);
+        if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
+        else { el.classList.add('is-revealed'); }
+    }
+    // Reveal cards already present in ONE DOM-order batch. DOM order == visual reading order for a row-major
+    // grid, independent of the (possibly transitional) column count during a view swap.
+    grid.querySelectorAll(sel + ':not(.pp-revealing):not(.is-revealed)').forEach(function (el, i) { play(el, Math.min(i * step, batchCap)); });
+    // The observer ONLY scroll-reveals infinite-scroll-appended cards (call observe() on newly-added nodes).
+    var io = new IntersectionObserver(function (entries) {
+        var shown = entries.filter(function (e) { return e.isIntersecting; }).map(function (e) { return e.target; });
+        shown.sort(function (a, b) { return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1; });
+        shown.forEach(function (el, j) { play(el, Math.min(j * step, appendCap)); io.unobserve(el); });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    return {
+        observe: function (nodes) { Array.prototype.forEach.call(nodes, function (nd) { if (nd.matches && nd.matches(sel)) { io.observe(nd); } }); },
+        disconnect: function () { io.disconnect(); }
+    };
+}
+
+/**
+ * iOS-sheet "swipe down to close" for a modal/sheet on touch: flick the dialog downward to dismiss it.
+ * The PAGE owns closing -- pass `onClose` (the same thing the close button runs); the helper only handles
+ * the drag, the follow transform, the scrim fade, and the snap-back. Drag only starts from the top of the
+ * scroll (the dialog OR any inner scroll container, e.g. the peek's capped info column), so scrolling isn't
+ * hijacked. The helper adds `.pp-dismissable` to the
+ * dialog, which surfaces the shared touch-only grabber handle (`.pp-dismissable::before`, "pull to close").
+ *
+ * @param {HTMLElement} dialog     the scrollable dialog/sheet element
+ * @param {Object} opts
+ * @param {Function} opts.onClose  called when the drag passes the threshold (do the real close here)
+ * @param {HTMLElement} [opts.scrim]     backdrop element to fade while dragging
+ * @param {number} [opts.threshold=90]   px of downward drag past which it dismisses
+ * @param {string} [opts.handle]   selector the touch must start inside for the drag to arm at all. Omit on
+ *   a sheet you READ; pass one on a sheet you OPERATE, where an accidental dismiss costs unsaved work.
+ *
+ * A drag starting on `input`/`textarea`/`select`/`[role="slider"]` never arms, on every sheet -- those own
+ * their own gestures and this preventDefault()s the movement out from under them. Links and buttons do NOT
+ * count: they have no drag gesture, and excluding them would leave a wall-of-cards sheet undraggable.
+ */
+function dismissableSheet(dialog, opts) {
+    if (!dialog) { return; }
+    opts = opts || {};
+    var onClose = opts.onClose || function () {};
+    var scrim = opts.scrim || null;
+    var threshold = opts.threshold || 90;
+    // `handle`: a selector the touch must START inside for the drag to arm at all. Without it any downward
+    // touch anywhere in the sheet drags it, which is fine for a sheet you only read and wrong for one you
+    // OPERATE -- see the control guard below.
+    var handle = opts.handle || null;
+    var startY = null, dragging = false;
+    dialog.classList.add('pp-dismissable');   // surfaces the touch-only grabber handle (.pp-dismissable::before)
+    function resetStyles() {
+        dialog.style.transition = ''; dialog.style.transform = ''; dialog.style.opacity = ''; dialog.style.animation = '';
+        if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; }
+    }
+    dialog.addEventListener('touchstart', function (e) {
+        // A second finger mid-drag is IGNORED rather than allowed to abort. Clearing `startY` here would
+        // strand the sheet at whatever translateY the drag had reached: `touchend` bails on a null startY
+        // and never reaches `resetStyles()`, so the dialog keeps its inline transform AND its
+        // `animation: none` into the next open.
+        if (startY !== null) { return; }
+        // A drag that starts on a DRAGGABLE CONTROL belongs to the control. `touchmove` below
+        // preventDefault()s any downward movement and translates the whole sheet, so a finger sliding a
+        // range input -- which never travels perfectly horizontally -- was dragging the dialog instead of
+        // the thumb, and past the threshold threw the form away. Never a dismissal gesture on any sheet,
+        // which is why this is unconditional rather than an option.
+        //
+        // Links and buttons are deliberately NOT in this list. They have no drag gesture of their own to
+        // protect (a tap and a drag are told apart by movement), and excluding them would gut the sheets
+        // whose bodies are a wall of them -- the badges grid is cards at an 8px gutter, so the only
+        // draggable pixels left would be that gutter. Those sheets show a grabber; it has to mean something.
+        if (e.target.closest && e.target.closest('input, textarea, select, [role="slider"]')) {
+            return;
+        }
+        // And where a `handle` is named, only that region drags at all.
+        if (handle && !(e.target.closest && e.target.closest(handle))) { return; }
+        // Only a drag from the very TOP of the scroll dismisses. Walk from the touched element up to the
+        // dialog: if anything along the way is scrolled (the dialog itself, or an INNER scroll container like
+        // the peek's capped info column), let it scroll instead of hijacking the gesture.
+        for (var el = e.target; el; el = el.parentNode) {
+            if (el.scrollTop > 0) { return; }
+            if (el === dialog) { break; }
+        }
+        startY = e.touches[0].clientY; dragging = false;
+    }, { passive: true });
+    dialog.addEventListener('touchmove', function (e) {
+        if (startY === null) { return; }
+        var dy = e.touches[0].clientY - startY;
+        if (dy > 0) {   // downward only -- follow the finger
+            dragging = true;
+            e.preventDefault();
+            dialog.style.animation = 'none'; dialog.style.transition = 'none';
+            dialog.style.transform = 'translateY(' + dy + 'px)';
+            if (scrim) { scrim.style.opacity = String(Math.max(0.15, 1 - dy / 450)); }
+        }
+    }, { passive: false });
+    dialog.addEventListener('touchend', function () {
+        if (startY === null) { return; }
+        var m = /translateY\(([0-9.]+)px\)/.exec(dialog.style.transform);
+        var dy = m ? parseFloat(m[1]) : 0;
+        startY = null;
+        if (dragging && dy > threshold) {   // past the threshold -> slide off + close
+            dialog.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+            dialog.style.transform = 'translateY(100vh)'; dialog.style.opacity = '0';
+            if (scrim) { scrim.style.transition = 'opacity 0.2s ease'; scrim.style.opacity = '0'; }
+            setTimeout(function () { resetStyles(); onClose(); }, 200);   // reset first so the next open is clean
+        } else if (dragging) {   // snap back
+            dialog.style.transition = 'transform 0.25s ease';
+            dialog.style.transform = 'none';
+            if (scrim) { scrim.style.transition = 'opacity 0.25s ease'; scrim.style.opacity = ''; }
+        }
+    });
+    // A gesture the browser takes away (an incoming call, a system edge-swipe) fires touchcancel and NOT
+    // touchend, so without this the sheet keeps both its inline transform and an armed `startY` -- visibly
+    // stuck, and undraggable from then on because a new touchstart sees a non-null startY.
+    dialog.addEventListener('touchcancel', function () {
+        if (startY === null) { return; }
+        startY = null; dragging = false;
+        resetStyles();
+    });
+}
+
+/**
+ * onPageReady -- run a page's wiring on first load AND on HTMX Back/Forward history restore.
+ *
+ * HTMX restores a pushed-URL page by replacing the history element's innerHTML from a snapshot; it does NOT
+ * re-fire DOMContentLoaded or htmx:afterSwap, so the restored DOM is all fresh, unwired nodes. But
+ * `document.body` itself persists, so body/document/window listeners survive -- naively re-running init would
+ * DOUBLE-bind them. `fn(first)` solves that: `first` is true on the initial load, false on each restore.
+ *   - Element wiring (query nodes, bind their listeners, init reveals/scrollers) runs EVERY time -- on a
+ *     restore those nodes are new, so the old bindings died with the old nodes (no leak).
+ *   - Guard body/document/window listeners with `if (first)` so they bind exactly once and keep working
+ *     across restores.
+ * This is the shared contract for every HTMX view-swap page (see rebuild-playbook section 7).
+ *
+ * @param {function(boolean)} fn  called as fn(true) on load, fn(false) on each history restore
+ */
+/**
+ * arriveOnScroll -- the Support family's section-arrival wiring (see motion.css .pp-arrive).
+ * The ARMING happened before paint (a page's extra_head adds html.pp-arm); this only reveals.
+ * Every path shows the content: no JS never arms; JS without IO reveals everything here;
+ * JS + IO flips .is-in per section as it enters the viewport.
+ */
+function arriveOnScroll(opts) {
+    var sections = document.querySelectorAll('.pp-arrive');
+    if (!sections.length) { return; }
+    if (!('IntersectionObserver' in window)) {
+        sections.forEach(function (s) { s.classList.add('is-in'); });
+        return;
+    }
+    // rootMargin is the depth dial: how far past the viewport's bottom edge a section must be
+    // before it arrives. The -8% default is the Support family's tuning; a long marketing
+    // scroll (the landing) passes deeper so the beat is actually SEEN mid-scroll instead of
+    // having fired just below the fold.
+    var margin = (opts && opts.rootMargin) || '0px 0px -8% 0px';
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-in');
+                io.unobserve(entry.target);
+            }
+        });
+    }, { rootMargin: margin, threshold: 0 });
+    sections.forEach(function (s) { io.observe(s); });
+}
+
+function onPageReady(fn) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { fn(true); }, { once: true });
+    } else {
+        fn(true);   // script ran after DOMContentLoaded already fired (deferred / end-of-body)
+    }
+    // body persists across a history restore, so this listener (added once) keeps firing.
+    document.body.addEventListener('htmx:historyRestore', function () { fn(false); });
+}
+
+/**
+ * CardDownload: the three-state button for a server-rendered share card.
+ *
+ * Every share card on the site is a PNG composed by headless Chromium on the server, which is slow
+ * enough that a plain click reads as a dead one -- so `busy` is the load-bearing state here, not `done`.
+ * And because the file lands in a folder the page cannot see, the save has to be confirmed from the
+ * button itself or it looks like nothing happened at all.
+ *
+ * Extracted from the plat card modal, which is where the states were worked out, once the recap needed
+ * the same thing. The recap's ceremony button was a bare `window.location.href` -- no busy state, no
+ * confirmation, and a failed render navigated the hunter off the stage into a JSON error.
+ *
+ * The blob-and-anchor dance is not ceremony either: a direct navigation to the PNG endpoint cannot
+ * report a failure (the browser has already left), cannot name the file, and on the recap would have
+ * torn down the ceremony to do it.
+ *
+ * @param {HTMLElement} button    the button; it holds the state classes and gets disabled
+ * @param {Object} opts
+ * @param {function(): string} opts.url        resolved at CLICK time -- the ground can change between
+ *                                             presses, and a URL captured at bind time downloads the
+ *                                             card the hunter was looking at a minute ago
+ * @param {function(): string} opts.filename   likewise; the name should describe what was rendered
+ * @param {string|false} [opts.toast]          success toast text, or false for none
+ * @param {function(string, Error)} [opts.onError]  given a ready-to-show message; defaults to a toast
+ * @param {function()} [opts.onStart]          before the fetch -- somewhere to clear a stale error line
+ * @param {Object} [opts.labels]               overrides for {idle, busy, done}
+ * @param {boolean} [opts.autoBind=true]       false when the press is not a plain download: the plat
+ *                                             card may open a rating prompt first and only reach the
+ *                                             save through its callback, so it calls run() itself
+ * @returns {{run: function(), setBlocked: function(boolean), state: function(): string}}
+ */
+const CardDownload = {
+    LABELS: { idle: 'Download', busy: 'Processing...', done: 'Saved' },
+    // Long enough to be read, short enough that the button is ready again before anyone reaches for it.
+    DONE_MS: 2400,
+
+    attach(button, opts) {
+        if (!button || button._ppDownload) { return button && button._ppDownload; }
+
+        const labels = Object.assign({}, this.LABELS, opts.labels || {});
+        const labelEl = button.querySelector('[data-dl-label]');
+        // The idle label belongs to the CALLER, not to us: the plat card names the variant it is about
+        // to save ("Download 100% card"), and a fixed idle string overwrote that the first time the
+        // button was used -- so a saved card silently demoted its own button to a generic "Download".
+        // Unless one is passed explicitly, idle means "whatever it said before we borrowed it", captured
+        // at press time because the caller may not know the label until its payload lands.
+        const fixedIdle = opts.labels && opts.labels.idle;
+        let idleText = labelEl ? labelEl.textContent : labels.idle;
+        const doneMs = this.DONE_MS;
+        // Two independent reasons to be disabled -- the caller's (a preview still loading, say) and a
+        // download already in flight -- so `disabled` is DERIVED from both. Setting it directly from
+        // either one is how a finished download re-enables a button its owner wanted kept shut.
+        let blocked = false, busy = false, revertTimer = null, state = 'idle';
+
+        const sync = () => { button.disabled = blocked || busy; };
+
+        const setState = (next) => {
+            clearTimeout(revertTimer);
+            state = next;
+            busy = next === 'busy';
+            button.classList.toggle('is-busy', busy);
+            button.classList.toggle('is-done', next === 'done');
+            sync();
+            if (labelEl) {
+                labelEl.textContent = next === 'idle' ? (fixedIdle || idleText) : labels[next];
+            }
+            // Release the pin with the label that needed it. Surfaces that reuse one button across
+            // cards get a different idle label each time ("...100% card" / "...platinum card"), and a
+            // pin held from the previous one would size the button to the wrong word.
+            if (next === 'idle') { button.style.minWidth = ''; }
+            // Swapping the label mid-press is a change a screen reader should hear; the button is the
+            // only progress indicator, so it has to announce like one.
+            button.setAttribute('aria-busy', busy ? 'true' : 'false');
+            if (next === 'done') { revertTimer = setTimeout(() => setState('idle'), doneMs); }
+        };
+
+        const fail = (message, err) => {
+            setState('idle');
+            if (opts.onError) { opts.onError(message, err); }
+            else if (window.PlatPursuit && window.PlatPursuit.ToastManager) {
+                window.PlatPursuit.ToastManager.show(message, 'error', 4000);
+            }
+        };
+
+        const run = () => {
+            if (busy) { return; }
+            if (labelEl && !fixedIdle && state === 'idle') { idleText = labelEl.textContent; }
+            // Pin the width before the label changes. The stylesheet's min-width sizes the button to the
+            // longest of OUR three labels, which is only the whole story when the caller uses the default
+            // idle text -- the plat card's "Download 100% card" is wider than all three, so pressing it
+            // shrank the button by 50px and shuffled the action row it sits in. Measured, not guessed,
+            // because the width depends on the font that actually loaded.
+            if (state === 'idle') { button.style.minWidth = `${Math.ceil(button.offsetWidth)}px`; }
+            setState('busy');
+            if (opts.onStart) { opts.onStart(); }
+            fetch(opts.url(), { credentials: 'same-origin' })
+                .then((res) => {
+                    if (!res.ok) { throw new Error(String(res.status)); }
+                    return res.blob();
+                })
+                .then((blob) => {
+                    const href = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = href;
+                    a.download = opts.filename();
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    // Revoking immediately races the download in Safari, which has not necessarily
+                    // read the blob by the time the click handler returns.
+                    setTimeout(() => URL.revokeObjectURL(href), 1000);
+                    setState('done');
+                    if (opts.toast !== false && window.PlatPursuit && window.PlatPursuit.ToastManager) {
+                        window.PlatPursuit.ToastManager.show(
+                            opts.toast || 'Card saved to your downloads.', 'success', 3200);
+                    }
+                })
+                .catch((err) => fail(
+                    // The renderer is rate-limited per user, and "try again" is bad advice for the one
+                    // failure where trying again is exactly what caused it.
+                    err && err.message === '403'
+                        ? 'Too many cards at once. Give it a minute.'
+                        : "Couldn't render that card. Try again in a moment.",
+                    err));
+        };
+
+        if (opts.autoBind !== false) {
+            button.addEventListener('click', () => { if (!button.disabled) { run(); } });
+        }
+
+        const handle = {
+            run,
+            setBlocked(on) { blocked = !!on; sync(); },
+            // For surfaces that reuse one button across several cards: a new card must never be greeted
+            // with the previous one's "Saved", and the pending revert timer has to be cancelled with it.
+            reset() { setState('idle'); },
+            state() { return state; },
+        };
+        button._ppDownload = handle;
+        return handle;
+    },
+};
+
+/**
+ * Takeover: put an element in front of everything and hand it the whole screen.
+ *
+ * The correctness-critical half of a full-screen surface -- scroll lock, the page-recede depth cue, focus
+ * capture and restore, a Tab trap, and Escape -- factored out because three surfaces now do it (the claim
+ * ceremony, the Lightbox, and the recap stage) and every one of them re-implemented the accessibility
+ * parts slightly differently. Presentation stays entirely with the caller; this owns none of it.
+ *
+ * The Tab trap is not optional politeness: `aria-modal` alone does NOT stop the browser walking Tab onto
+ * the page still sitting behind the scrim, so without it a keyboard user tabs straight out of the
+ * takeover into content they cannot see.
+ *
+ * @param {HTMLElement} root  the takeover element; the caller has already built and inserted it
+ * @param {Object} [opts]
+ * @param {Function} [opts.onClose]  called once, after teardown
+ * @param {boolean}  [opts.recede=true]  step the page back behind it (skipped under reduced motion)
+ * @param {number}   [opts.exitMs=240]   how long the caller's exit transition needs before removal
+ * @param {string}   [opts.focusSel]     what to focus on open; defaults to the first focusable
+ * @param {Function} [opts.onKey]        extra key handling; return true to signal "handled"
+ * @param {Function} [opts.onDismiss]    Escape calls THIS instead of closing. For surfaces where being
+ *                                       dismissed does not mean being torn down -- the recap navigates
+ *                                       away instead, and closing first would play a teardown the new
+ *                                       page immediately replaces. The caller may still call close().
+ * @returns {{close: Function}}
+ */
+function takeover(root, opts) {
+    opts = opts || {};
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var lastFocus = document.activeElement;
+    var zoom = (opts.recede === false || reduce) ? null : document.getElementById('zoom-container');
+    var prevOverflow = document.body.style.overflow;
+    var closed = false;
+
+    var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+        'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function focusable() {
+        return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), function (el) {
+            return el.offsetParent !== null;      // skip anything hidden
+        });
+    }
+
+    function onKey(e) {
+        if (opts.onKey && opts.onKey(e) === true) { return; }
+        // A dialog opened INSIDE the takeover owns Escape and the Tab order while it is up. Without this
+        // the capture-phase listener fires first and tears down the whole surface on the keypress that
+        // was meant to dismiss the dialog -- the takeover would vanish out from under an open modal.
+        if (root.querySelector('dialog[open]')) { return; }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            // Deliberately AFTER the dialog check above: a modal open inside the takeover still owns
+            // Escape, so dismissing it must not trigger the surface's own dismissal either.
+            if (opts.onDismiss) { opts.onDismiss(); } else { close(); }
+            return;
+        }
+        if (e.key !== 'Tab') { return; }
+        var items = focusable();
+        if (!items.length) { e.preventDefault(); return; }
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    function close() {
+        if (closed) { return; }                   // scrim, Escape and the caller's own control all land here
+        closed = true;
+        document.removeEventListener('keydown', onKey, true);
+        document.body.style.overflow = prevOverflow;
+        if (zoom) { zoom.classList.remove('pp-receded'); }
+        var finish = function () {
+            if (root.parentNode) { root.parentNode.removeChild(root); }
+            // Return focus to whatever opened it, or the keyboard user is dumped at the top of the page.
+            if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (err) { /* gone */ } }
+            if (opts.onClose) { opts.onClose(); }
+        };
+        if (reduce) { finish(); } else { setTimeout(finish, opts.exitMs != null ? opts.exitMs : 240); }
+    }
+
+    document.body.style.overflow = 'hidden';
+    if (zoom) { zoom.classList.add('pp-receded'); }
+    document.addEventListener('keydown', onKey, true);
+
+    var target = opts.focusSel ? root.querySelector(opts.focusSel) : focusable()[0];
+    if (target && target.focus) { target.focus(); }
+
+    return { close: close };
+}
+
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1607,13 +2685,745 @@ window.PlatPursuit.API = API;
 window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
 window.PlatPursuit.HTMLUtils = HTMLUtils;
 window.PlatPursuit.debounce = debounce;
+window.PlatPursuit.countUp = countUp;
+window.PlatPursuit.takeover = takeover;
+/**
+ * Virtualized leaderboard: a full-height spacer with only the visible rows in the DOM.
+ *
+ * Extracted from game detail's Ranks panel, where the approach was worked out, so every board can use one
+ * implementation rather than each growing its own. The surfaces this serves -- Global Boards, badge
+ * detail, job detail, game detail -- all want the same three things: the PAGE scrollbar spans the whole
+ * board, jumping to a rank is just a scroll position, and scrolling never inserts rows above the viewport
+ * (which is what made the old marker/prepend approach lurch).
+ *
+ * The list is sized to `total * rowHeight` and rows are absolutely positioned by display position, so
+ * layout never depends on what is currently mounted. Rows outside the window are evicted from the DOM but
+ * their HTML stays cached, so scrolling back is instant and re-fetches nothing.
+ *
+ * SERVER CONTRACT: `fetchRows(start, count)` resolves to HTML containing `rowSelector` elements for
+ * display positions [start, start+count). A display position IS a rank: the last board that could be read
+ * bottom-first (game detail's `invert`) dropped it, so the engine no longer carries a second numbering.
+ *
+ * @param {Object} o
+ * @param {HTMLElement} o.list            the spacer; server-rendered first-window rows live inside it
+ * @param {number} o.total                rows on the whole board (sizes the spacer)
+ * @param {string} o.rowSelector          e.g. '.lb-row'
+ * @param {function(): number} o.rowHeight   current row height in px; re-read on resize (breakpoints)
+ * @param {function(number, number, number): Promise<string>} o.fetchRows
+ * @param {number} [o.pageSize=50]        fetch granularity; must match what the server pages by
+ * @param {string} [o.rankKey='lbRank']   dataset key on a row holding its rank
+ * @param {number} [o.youRank]           the viewer's rank; that row gets `.is-you` + `aria-current`
+ * @param {function(): number} [o.chromeInset]  sticky-header height, so a jump lands below it
+ * @param {function(number, number, function)} [o.onRender]  (localTop, localBottom, posOf) per frame
+ * @returns {{jump: function(number), refresh: function(), destroy: function()}}
+ */
+function virtualBoard(o) {
+    var list = o.list;
+    var total = o.total;
+    var noop = function () {};
+    if (!list || !total) { return { jump: noop, refresh: noop, destroy: noop }; }
+
+    var PAGE = o.pageSize || 50;
+    var rankKey = o.rankKey || 'lbRank';
+    var youRank = o.youRank || 0;    // 0 = anonymous, or a viewer who is not on this board
+    var BUFFER = 8;      // rows rendered beyond the viewport each way
+    var EVICT = 30;      // keep rows within this of the window mounted
+    var H = o.rowHeight();
+
+    var dataByPos = new Map();     // display-pos (1-indexed) -> row HTML, cached
+    var rendered = new Map();      // display-pos -> element in the DOM
+    var fetchedPages = new Set();  // page indices already fetched / in flight
+    var highlightDp = 0;           // display-pos kept lit after a jump
+    var highlightAnchor = 0;       // the destination scrollTop the jump scrolls TO
+    var highlightArmed = false;    // true once the jump scroll has actually arrived
+
+    function scroller() { return document.scrollingElement || document.documentElement; }
+    function inset() { return o.chromeInset ? o.chromeInset() : 0; }
+
+    // A display position IS a rank. These stayed as functions after `invert` was removed so the call
+    // sites keep reading as "position of that rank" rather than silently trading in bare integers -- and
+    // so `onRender`'s `posOf` argument stays a stable contract for callers.
+    function rankOf(dp) { return dp; }
+    function posOf(rank) { return rank; }
+
+    function clearHighlight() {
+        if (!highlightDp) { return; }
+        var el = rendered.get(highlightDp);
+        if (el) { el.classList.remove('is-found'); }
+        highlightDp = 0;
+        highlightArmed = false;
+    }
+
+    // Light `dp` and remember where the jump is scrolling to. `armed` stays false until that scroll
+    // reaches the anchor, so the jump's own (smooth) travel is never mistaken for the user scrolling away.
+    function setHighlight(dp, anchorY) {
+        clearHighlight();
+        highlightDp = dp;
+        highlightAnchor = anchorY;
+        highlightArmed = false;
+        var el = rendered.get(dp);
+        if (el) { el.classList.add('is-found'); }
+    }
+
+    // A reveal boot that ran before us leaves `.pp-reveal` on the wall, and `.pp-reveal .row` is
+    // `opacity: 0` until a row earns `.is-revealed`. This engine mounts and unmounts rows continuously,
+    // and they never reach that observer -- so every row past the first screenful would arrive INVISIBLE.
+    // Stripped here rather than left to each page to remember, because the failure is silent: the board
+    // looks frozen, nothing errors, and on a page whose wall gets replaced by a filter swap it only
+    // reproduces on first load. (Beta caught exactly that on the Global Boards.)
+    //
+    // A virtualized row appears because you scrolled to it, which IS the reveal -- so there is nothing to
+    // reinstate, only motion to stop fighting.
+    list.classList.remove('pp-reveal');
+
+    // PROMOTE the wall, then size it -- in that order, and only from here. `--virtual` absolutely
+    // positions every row, so it is only survivable once something is reserving their space, and the
+    // thing that reserves it is the line below. The server ships a flow list precisely so that a board
+    // which never mounts still renders as a list rather than as a zero-height pile.
+    list.classList.add('lb-wall--virtual');
+    list.style.height = (total * H) + 'px';
+
+    // Seed the cache + DOM from the server-rendered first window; convert those rows to absolute.
+    Array.prototype.forEach.call(list.querySelectorAll(o.rowSelector), function (el) {
+        var dp = posOf(parseInt(el.dataset[rankKey], 10));
+        el.style.top = ((dp - 1) * H) + 'px';
+        // Cached BEFORE marking, so the stored HTML stays the server's viewer-independent version -- a
+        // remount re-applies the mark rather than baking it into the cache.
+        dataByPos.set(dp, el.outerHTML);
+        rendered.set(dp, el);
+        describe(el, dp);
+        markYou(el, dp);
+    });
+    fetchedPages.add(0);                       // the first window IS page 0
+
+    // The viewer's own row, marked CLIENT-SIDE. The server's rows are byte-identical for every reader,
+    // which is what keeps them cacheable -- so "this one is you" is applied here rather than rendered in.
+    // Applied on every mount, not once: a row is evicted and remounted freely as you scroll past it.
+    function markYou(el, dp) {
+        if (!youRank || rankOf(dp) !== youRank) { return; }
+        el.classList.add('is-you');
+        el.setAttribute('aria-current', 'true');   // announced; the tint alone is not
+    }
+
+    // Mounted IN ORDER, not appended. Rows are evicted and remounted as you scroll, so appending meant
+    // that scrolling UP put lower-numbered ranks at the end of the <ol> -- after which DOM order (which
+    // is the order a screen reader reads, and the order Tab walks the hunter links) no longer matched
+    // what was on screen. The mounted window is ~30 rows, so finding the insertion point is free.
+    function mount(dp) {
+        var tmp = document.createElement('template');
+        tmp.innerHTML = dataByPos.get(dp).trim();
+        var el = tmp.content.firstElementChild;
+        el.style.top = ((dp - 1) * H) + 'px';
+
+        var after = null, afterDp = Infinity;
+        rendered.forEach(function (other, otherDp) {
+            if (otherDp > dp && otherDp < afterDp) { afterDp = otherDp; after = other; }
+        });
+        list.insertBefore(el, after);
+
+        rendered.set(dp, el);
+        describe(el, dp);
+        markYou(el, dp);
+        if (dp === highlightDp) { el.classList.add('is-found'); }   // keep it lit across a remount
+    }
+
+    // The <ol> only ever holds the mounted window, so unaided it announces "list, 26 items" on a board of
+    // 60,000 -- and the number changes as you scroll. `aria-posinset`/`aria-setsize` state the real
+    // position and the real total, which is what the rank in the row means anyway.
+    function describe(el, dp) {
+        el.setAttribute('aria-posinset', dp);
+        el.setAttribute('aria-setsize', total);
+    }
+
+    function fetchPage(p) {
+        if (fetchedPages.has(p)) { return; }
+        fetchedPages.add(p);
+        var start = p * PAGE + 1;
+        o.fetchRows(start, PAGE)
+            .then(function (html) {
+                if (!list.isConnected) { return; }
+                var tmp = document.createElement('template');
+                tmp.innerHTML = String(html).trim();
+                Array.prototype.forEach.call(tmp.content.querySelectorAll(o.rowSelector), function (el, i) {
+                    dataByPos.set(start + i, el.outerHTML);
+                });
+                render();
+            })
+            .catch(function () { fetchedPages.delete(p); });   // allow a retry on the next scroll
+    }
+
+    function visible() {
+        var rect = list.getBoundingClientRect();               // list top relative to the viewport
+        var localTop = Math.max(0, -rect.top);
+        var localBottom = Math.min(total * H, window.innerHeight - rect.top);
+        return [
+            Math.max(1, Math.floor(localTop / H) + 1 - BUFFER),
+            Math.min(total, Math.ceil(localBottom / H) + BUFFER),
+            localTop,
+            localBottom
+        ];
+    }
+
+    function render() {
+        // A HIDDEN panel measures as zeros, so `visible()` would compute the first screenful as on-screen
+        // and keep mounting rows on every scroll frame of whatever tab the reader is actually on. Badge
+        // and job detail leave their board mounted when the tab closes (so re-opening is instant), which
+        // is what makes this reachable.
+        if (!list.offsetParent && getComputedStyle(list).position !== 'fixed') { return; }
+        // Keep the jump highlight lit through the jump's own scroll, drop it once the USER scrolls away.
+        // Movement alone cannot tell the two apart, so we ARM on arrival: while the (smooth) scroll is
+        // still travelling toward the anchor it stays lit; once scrollTop lands within a row of the anchor
+        // it has arrived, and after that a row-plus of movement is the user leaving.
+        if (highlightDp) {
+            var dist = Math.abs(scroller().scrollTop - highlightAnchor);
+            if (!highlightArmed) { if (dist <= H) { highlightArmed = true; } }
+            else if (dist > H) { clearHighlight(); }
+        }
+        var win = visible(), first = win[0], last = win[1];
+        rendered.forEach(function (el, dp) {
+            if (dp < first - EVICT || dp > last + EVICT) { el.remove(); rendered.delete(dp); }
+        });
+        for (var dp = first; dp <= last; dp++) {
+            if (rendered.has(dp)) { continue; }
+            if (dataByPos.has(dp)) { mount(dp); }
+            else { fetchPage(Math.floor((dp - 1) / PAGE)); }
+        }
+        if (o.onRender) { o.onRender(win[2], win[3], posOf); }
+    }
+
+    // Smooth-scroll the PAGE so the target row lands ~a third down below the chrome, and keep it lit on
+    // arrival. The highlight is anchored to the DESTINATION and armed by render() once the scroll gets
+    // there, so the animation's own travel cannot read as "scrolled away" and clear it before it lands.
+    // Reduced-motion users get an instant landing, armed at once.
+    function jump(rank) {
+        var dp = Math.max(1, Math.min(posOf(rank), total));
+        var sc = scroller();
+        var listTopDoc = window.scrollY + list.getBoundingClientRect().top;
+        var chrome = inset();
+        var maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+        var y = Math.min(
+            Math.max(0, listTopDoc + (dp - 1) * H - chrome - (window.innerHeight - chrome) * 0.34),
+            maxTop
+        );
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        setHighlight(dp, y);                                   // anchor to where the scroll will land
+        sc.scrollTo({ top: y, behavior: reduce ? 'instant' : 'smooth' });
+        render();                                              // the travel mounts the rest
+    }
+
+    // The row height changes across breakpoints, so re-read it, resize the spacer, and re-place the
+    // mounted rows before rendering again.
+    function relayout() {
+        H = o.rowHeight();
+        list.style.height = (total * H) + 'px';
+        rendered.forEach(function (el, dp) { el.style.top = ((dp - 1) * H) + 'px'; });
+        render();
+    }
+
+    // Both scroll and resize coalesce to one rAF (resize -> full relayout, scroll -> render).
+    var ticking = false;
+    function tick(fn) {
+        if (ticking) { return; }
+        ticking = true;
+        requestAnimationFrame(function () { ticking = false; fn(); });
+    }
+    function onScroll() { tick(render); }
+    function onResize() { tick(relayout); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+
+    render();
+
+    return {
+        jump: jump,
+        refresh: render,
+        destroy: function () {
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onResize);
+            // Back to flow, so a wall left behind by a torn-down board is a list rather than a pile.
+            list.classList.remove('lb-wall--virtual');
+            list.style.height = '';
+        }
+    };
+}
+
+
+
+/**
+ * The board's hunter typeahead: type a name, pick a hunter, land on their rank.
+ *
+ * Extracted from game detail, which had the only one. It was already parameterized by element (the
+ * toolbar field and the minibar field both drive the same board), so what it needed to become shared was
+ * its two board-specific dependencies injected: where a suggestion comes FROM, and what a pick jumps TO.
+ *
+ * The dropdown is built with `createElement` + `textContent`, never innerHTML -- a PSN Online ID is
+ * attacker-controlled text and this renders it into a listbox.
+ *
+ * @param {Object} o
+ * @param {HTMLElement} o.input      the search field
+ * @param {HTMLElement} o.drop       the listbox it fills
+ * @param {HTMLElement} o.form       submitted by Enter
+ * @param {function(string): string} o.suggestUrl   query -> URL returning `{players: [...]}`
+ * @param {function(number)} o.jump                 rank -> land on it
+ * @param {function(number): string} [o.rankUrl]    rank -> URL previewing the hunter AT that rank. Game
+ *        detail has one (`?at=`); the other boards do not, and a bare number just jumps.
+ * @param {function(): number} [o.total]            board size, so a rank past the end skips the fetch
+ * @param {string} [o.itemClass='gd-lb__sugg']      the row class, for styling and for the arrow keys
+ */
+function wireBoardSearch(o) {
+    var input = o.input, drop = o.drop, form = o.form;
+    if (!input || !drop || !form || !PlatPursuit.wireSearchField) { return; }
+    var itemClass = o.itemClass || 'gd-lb__sugg';
+    var field = PlatPursuit.wireSearchField(input, { onClear: closeDrop });
+    var items = [], active = -1, seq = 0;
+
+    function closeDrop() {
+        drop.hidden = true; drop.textContent = ''; items = []; active = -1;
+        input.setAttribute('aria-expanded', 'false');
+    }
+    function setActive(i) {
+        active = i;
+        Array.prototype.forEach.call(drop.querySelectorAll('.' + itemClass), function (el, j) {
+            el.classList.toggle('is-active', j === i);
+        });
+    }
+    function render(players) {
+        drop.textContent = '';
+        items = players || [];
+        if (!items.length) { closeDrop(); return; }
+        items.forEach(function (p) {
+            var row = document.createElement('button');
+            row.type = 'button'; row.className = itemClass; row.setAttribute('role', 'option');
+            row.dataset.rank = p.rank;
+            var av = document.createElement('span'); av.className = itemClass + '-av';
+            if (p.avatar) {
+                var img = document.createElement('img'); img.src = p.avatar; img.alt = '';
+                av.appendChild(img);
+            }
+            row.appendChild(av);
+            var name = document.createElement('span'); name.className = itemClass + '-name';
+            name.textContent = p.display;              // textContent: safe against a hostile name
+            row.appendChild(name);
+            var rank = document.createElement('span'); rank.className = itemClass + '-rank';
+            rank.textContent = '#' + Number(p.rank).toLocaleString();
+            row.appendChild(rank);
+            drop.appendChild(row);
+        });
+        drop.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        setActive(0);
+    }
+    function load(url) {
+        var mine = ++seq;
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(function (data) { if (mine === seq) { field.setBusy(false); render(data.players); } })
+            .catch(function () { if (mine === seq) { field.setBusy(false); closeDrop(); } });
+    }
+
+    var doSuggest = PlatPursuit.debounce(function (q) { load(o.suggestUrl(q)); }, 180);
+    // A bare number previews the hunter at that rank, where the board offers that. The total is read
+    // live so a rank past the end skips the fetch entirely.
+    var doRank = PlatPursuit.debounce(function (n) {
+        var total = o.total ? o.total() : 0;
+        if (n < 1 || (total && n > total)) { field.setBusy(false); closeDrop(); return; }
+        load(o.rankUrl(n));
+    }, 180);
+
+    input.addEventListener('input', function () {
+        var q = input.value.trim();
+        if (/^\d+$/.test(q) && o.rankUrl) { field.setBusy(true); doRank(parseInt(q, 10)); return; }
+        if (/^\d+$/.test(q)) { field.setBusy(false); closeDrop(); return; }   // a number, but nothing to preview
+        if (q.length < 2) { field.setBusy(false); closeDrop(); return; }
+        field.setBusy(true);
+        doSuggest(q);
+    });
+    input.addEventListener('keydown', function (e) {
+        if (drop.hidden) { return; }
+        var n = drop.querySelectorAll('.' + itemClass).length;
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(Math.min(active + 1, n - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(Math.max(active - 1, 0)); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeDrop(); }
+    });
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = input.value.trim();
+        if (/^\d+$/.test(q)) { o.jump(parseInt(q, 10)); closeDrop(); input.blur(); return; }
+        var pick = items[active >= 0 ? active : 0];
+        if (pick) { o.jump(parseInt(pick.rank, 10)); closeDrop(); input.blur(); }
+    });
+    // mousedown (not click) so it fires before the input's blur closes the dropdown.
+    drop.addEventListener('mousedown', function (e) {
+        var row = e.target.closest && e.target.closest('.' + itemClass);
+        if (!row) { return; }
+        e.preventDefault();
+        o.jump(parseInt(row.dataset.rank, 10));
+        closeDrop(); input.blur();
+    });
+    input.addEventListener('blur', function () { setTimeout(closeDrop, 120); });
+}
+
+
+/**
+ * Mount a virtualized board from its `[data-lb-board]` root, and wire its jump affordances.
+ *
+ * `virtualBoard` is the ENGINE; this is the WIRING every board was otherwise copying -- read the data
+ * attributes, build a rows URL, mount, then hook up the "you're #N" chip and the go-to-rank box. Three
+ * surfaces run boards (Global Boards, badge detail's Ranks tab, job detail's Ranks tab) and a fourth is
+ * adjacent (game detail, which has its own row component and its own toolbar). Copying ~50 lines of
+ * wiring per surface is how a board ends up fetching in a granularity its server does not page by, which
+ * fails as GAPS IN THE ROWS rather than as an error.
+ *
+ * The contract is the markup: `templates/trophies/partials/leaderboard_board.html` renders the root and
+ * `leaderboard_jumpbar.html` the affordances. A caller supplies neither a page size nor a URL -- if it
+ * did, that constant would be free to disagree with the server's. A root missing `data-lb-page-size`
+ * does NOT fall back to a guess; it declines to mount, because guessing reproduces exactly the silent
+ * row-gaps the attribute exists to prevent.
+ *
+ * Always returns a handle, never null. Even with no board to mount it wires the rank box's submit and
+ * swallows it, because that <form> has no action and an unhandled Enter is a native GET that drops the
+ * reader's filters.
+ *
+ * @param {HTMLElement} root      the `[data-lb-board]` element
+ * @param {Object} [o]
+ * @param {HTMLElement} [o.scope=root]  where the jump chip / rank box are looked for. Global Boards puts
+ *                                      them on a card ABOVE the board, so its scope is the page wrapper.
+ * @param {function(): number} [o.chromeInset]  sticky-header height, so a jump lands below it
+ * @param {function(number, number, function)} [o.onRender]  forwarded to the engine
+ * @returns {{jump: function(number), refresh: function(), destroy: function()}}  always a handle; an
+ *          inert one when there is no board (an empty state came back)
+ */
+function wireBoard(root, o) {
+    o = o || {};
+    var scope = (o && o.scope) || root;
+
+    // THE SUBMIT GUARD COMES FIRST, before any reason to bail out. The rank box is a real <form> with no
+    // action and an unnamed input, so an unhandled Enter is a native GET to the bare path -- which drops
+    // the reader's `?tab=`/`?country=`/`?edition=` and reloads the page they were reading. Wiring it only
+    // on the success path meant an empty board (or a missing one) navigated away instead of doing
+    // nothing, which is the worst of the three possible behaviours.
+    var handle = null;
+    function onSubmit(ev) {
+        var form = ev.target.closest && ev.target.closest('[data-lb-gotoform]');
+        if (!form || !scope.contains(form)) { return; }
+        ev.preventDefault();                       // unconditional: never navigate
+        if (!handle) { return; }
+        var input = form.querySelector('input');
+        var rank = parseInt((input && input.value) || '', 10);
+        if (!(rank >= 1)) { return; }
+        handle.jumpTo(Math.min(rank, handle.total));
+        if (input) { input.blur(); }               // dismiss the touch keyboard before the scroll starts
+    }
+    scope.addEventListener('submit', onSubmit);
+
+    function bail() {
+        return { jump: function () {}, refresh: function () {}, destroy: function () {
+            scope.removeEventListener('submit', onSubmit);
+        } };
+    }
+    if (!root) { return bail(); }
+    var wall = root.querySelector('[data-lb-wall]');
+    var total = parseInt(root.dataset.lbTotal, 10) || 0;
+    if (!wall || !total) { return bail(); }
+
+    // NO FALLBACK on the page size, deliberately. `|| 50` was a JS copy of a server constant, and the
+    // fallback IS the failure mode it was meant to cover: a client paging by 50 against a server paging
+    // by something else does not error, it shows gaps in the rows. Missing means misconfigured, and a
+    // board that refuses to mount is a bug somebody notices.
+    var pageSize = parseInt(root.dataset.lbPageSize, 10);
+    if (!(pageSize >= 1)) { return bail(); }
+    var XHR = { headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+    var said = scope.querySelector('[data-lb-said]');
+    var viewerRank = parseInt(root.dataset.lbViewerRank || '', 10);
+    if (!(viewerRank >= 1)) { viewerRank = 0; }
+
+    // The row height is a CSS custom property so the breakpoints own it, and it is read live rather than
+    // captured: `--lb-row-h` changes at md:, and a captured value would place every row at the old pitch
+    // after a rotate.
+    function rowHeight() {
+        return parseFloat(getComputedStyle(wall).getPropertyValue('--lb-row-h')) || 62;
+    }
+
+    var engine = PlatPursuit.virtualBoard({
+        list: wall,
+        total: total,
+        rowSelector: '.lb-row',
+        pageSize: pageSize,
+        rowHeight: rowHeight,
+        youRank: viewerRank,
+        chromeInset: o.chromeInset,
+        fetchRows: function (start, count) {
+            var qp = new URLSearchParams(root.dataset.lbParams || '');
+            qp.set('range', start);
+            qp.set('count', count);
+            return fetch(root.dataset.lbRowsUrl + '?' + qp.toString(), XHR).then(function (r) {
+                if (!r.ok) { throw new Error(r.status); }
+                return r.text();
+            });
+        },
+        onRender: function (localTop, localBottom, posOf) {
+            // Which way the reader would travel to reach their own row, so the chip says where it GOES
+            // rather than only that it exists.
+            var chip = scope.querySelector('[data-lb-jump]');
+            if (chip && viewerRank) {
+                var H = rowHeight();
+                var top = (posOf(viewerRank) - 1) * H;
+                chip.dataset.lbDir = top + H < localTop ? 'up' : (top > localBottom ? 'down' : 'here');
+            }
+            if (o.onRender) { o.onRender(localTop, localBottom, posOf); }
+        },
+    });
+
+    // A jump is a SCROLL, and a scroll is invisible to a screen reader -- there is no focus change and no
+    // DOM event a reader is told about. The removed "show more" had a live region for exactly this
+    // reason. `[data-lb-said]` is `sr-only`, so this costs the visual design nothing.
+    function announce(rank) {
+        if (said) { said.textContent = 'Jumped to rank ' + rank + ' of ' + total + '.'; }
+    }
+    function jumpTo(rank) {
+        engine.jump(rank);
+        announce(rank);
+    }
+
+    // DELEGATED from the scope, not bound to the chip and the form. On every surface here the board
+    // arrives by fetch and can be replaced (a tab re-open, a filter swap), so a listener bound to the
+    // elements themselves would die with the markup it was bound to -- silently, since the board still
+    // scrolls and only the jumping stops working.
+    function onClick(ev) {
+        var chip = ev.target.closest && ev.target.closest('[data-lb-jump]');
+        if (!chip || !scope.contains(chip) || !viewerRank) { return; }
+        ev.preventDefault();
+        jumpTo(viewerRank);
+    }
+    scope.addEventListener('click', onClick);
+
+    // THE HUNTER SEARCH, when this board's jump bar was given one. It fills `leaderboard_jumpbar.html`'s
+    // `extra_partial` slot, so a board that does not pass one simply has no field here and this is a
+    // no-op. The URL is the rows URL with `?suggest=` -- same endpoint, same slice, so a suggestion names
+    // a rank on the board being read rather than on some other version of it.
+    if (PlatPursuit.wireBoardSearch) {
+        PlatPursuit.wireBoardSearch({
+            input: scope.querySelector('[data-lb-find]'),
+            drop: scope.querySelector('[data-lb-suggest]'),
+            form: scope.querySelector('[data-lb-findform]'),
+            suggestUrl: function (q) {
+                var qp = new URLSearchParams(root.dataset.lbParams || '');
+                qp.set('suggest', q);
+                return root.dataset.lbRowsUrl + '?' + qp.toString();
+            },
+            jump: function (rank) { jumpTo(Math.min(rank, total)); },
+            total: function () { return total; },
+        });
+    }
+
+    handle = {
+        total: total,
+        jumpTo: jumpTo,
+        jump: jumpTo,
+        refresh: engine.refresh,
+        destroy: function () {
+            scope.removeEventListener('click', onClick);
+            scope.removeEventListener('submit', onSubmit);
+            engine.destroy();
+        },
+    };
+    return handle;
+}
+
+/**
+ * The board's entrance: the on-screen rows cascade in once, on first mount.
+ *
+ * NOT `staggerReveal`, and that is the whole point of it existing. That helper adds `.pp-reveal` to the
+ * container permanently and `.pp-reveal .lb-row { opacity: 0 }` holds every row invisible until an
+ * IntersectionObserver grants it `.is-revealed` -- which a virtualized wall never gets, because its rows
+ * are mounted and evicted by scroll position rather than observed. The result is a board of blank space.
+ * That exact bug shipped twice (badge detail's "show more", then the Global Boards wall), so the boards
+ * animate with the Web Animations API instead: it leaves no class behind and cannot outlive its frames.
+ *
+ * The board card's Tally ticks here too, because this is the one place all three surfaces call on every
+ * mount. It was wired on the landing alone, in a boot block that ran once -- so a tab swap replaced the
+ * card and the new figure simply appeared, and the two fetched panels never ticked at all. Deliberately
+ * NOT applied to the rows: fifty simultaneous counters is the "frantic counters" anti-pattern.
+ *
+ * @param {HTMLElement} root    the `[data-lb-board]` element
+ * @param {HTMLElement} [scope] where the board card is looked for; it sits OUTSIDE the board root, on
+ *                              the chrome card above it. Defaults to `root`.
+ */
+function boardEntrance(root, scope) {
+    var tally = (scope || root || document).querySelector('.lb-boardcard__tally [data-countup]');
+    // `countUp` jumps straight to the target under reduced motion, so it needs no guard of its own --
+    // which is why it runs before the early return below rather than after it.
+    if (tally && PlatPursuit.countUp) { PlatPursuit.countUp(tally, 850); }
+
+    if (!root || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) { return; }
+    var rows = root.querySelectorAll('.lb-row');
+    for (var i = 0; i < rows.length && i < 14; i++) {      // the visible window only -- keep it quick
+        if (!rows[i].animate) { return; }
+        rows[i].animate(
+            [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }],
+            { duration: 340, delay: i * 26, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' }
+        );
+    }
+}
+
+window.PlatPursuit.animatePanel = animatePanel;
+window.PlatPursuit.filterPanel = filterPanel;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
-window.PlatPursuit.ZoomScaler = ZoomScaler;
 window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;
 window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;
 window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
 window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
-window.PlatPursuit.CoachMarks = CoachMarks;
 window.PlatPursuit.SpoilerToggle = SpoilerToggle;
 window.PlatPursuit.Lightbox = Lightbox;
+window.PlatPursuit.StickyReveal = StickyReveal;
+window.PlatPursuit.virtualBoard = virtualBoard;
+window.PlatPursuit.wireBoard = wireBoard;
+window.PlatPursuit.wireBoardSearch = wireBoardSearch;
+window.PlatPursuit.boardEntrance = boardEntrance;
+window.PlatPursuit.slideViewIn = slideViewIn;
+window.PlatPursuit.igniteTab = igniteTab;
+window.PlatPursuit.wireTablist = wireTablist;
+window.PlatPursuit.syncViewParam = syncViewParam;
+window.PlatPursuit.staggerReveal = staggerReveal;
+window.PlatPursuit.flipGrid = flipGrid;
+window.PlatPursuit.progressiveArt = progressiveArt;
+window.PlatPursuit.ringHoverLink = ringHoverLink;
+window.PlatPursuit.coverCarousel = coverCarousel;
+window.PlatPursuit.cardReveal = cardReveal;
+window.PlatPursuit.staggerCards = staggerCards;
+window.PlatPursuit.dismissableSheet = dismissableSheet;
+window.PlatPursuit.CardDownload = CardDownload;
+window.PlatPursuit.onPageReady = onPageReady;
+window.PlatPursuit.arriveOnScroll = arriveOnScroll;
+
+/**
+ * wireGuidelinesSheet -- the Community Guidelines sheet (`#gd-guidelines-modal`), opened OVER whatever
+ * compose surface is showing from that surface's `[data-gd-guidelines-open]` link, so reading the rules
+ * never loses an in-progress quick take. Read-only; agreement is recorded on submit, not here.
+ *
+ * Called by `RatingFields.attach` (quick-rate.js), because the link lives in the shared field partial and
+ * so appears on every surface that composes those fields -- Game Detail's Ratings tab, the plat-card share
+ * modal, and the Rate My Games wizard. The page controllers used to call this themselves, and the wizard
+ * was the host that forgot. Stacking a second <dialog>.showModal() puts it on top; closing returns focus
+ * to the modal underneath.
+ *
+ * Idempotent: safe to call from several page controllers, and a no-op when the sheet isn't on the page.
+ */
+var _guidelinesDelegateBound = false;
+function wireGuidelinesSheet() {
+    // The open delegate is on DOCUMENT, which survives an htmx body swap -- so it must be bound ONCE per
+    // page load, not once per sheet element. Guarding it on the element (which is replaced by the swap)
+    // added a listener per restore, each holding a detached dialog and throwing InvalidStateError on
+    // every click. It resolves the sheet at call time for that reason.
+    if (!_guidelinesDelegateBound) {
+        _guidelinesDelegateBound = true;
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('[data-gd-guidelines-open]')) { return; }
+            var live = document.getElementById('gd-guidelines-modal');
+            if (live && live.showModal && !live.open) { live.showModal(); }
+        });
+    }
+    // Element-level wiring dies with the node, so this half IS per element.
+    var sheet = document.getElementById('gd-guidelines-modal');
+    if (!sheet || sheet.dataset.wired === '1') { return; }
+    sheet.dataset.wired = '1';
+    var close = function () { if (sheet.close && sheet.open) { sheet.close(); } };
+    sheet.querySelectorAll('[data-gd-modal-close]').forEach(function (b) { b.addEventListener('click', close); });
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) { close(); } });
+    sheet.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    if (window.PlatPursuit.dismissableSheet) { window.PlatPursuit.dismissableSheet(sheet, { onClose: close }); }
+}
+window.PlatPursuit.wireGuidelinesSheet = wireGuidelinesSheet;
+
+/**
+ * discPopovers -- the OPEN/CLOSE mechanics for a `.rp-disc` discipline-dropdown group (the shared look
+ * from elements.css, used by the Career contracts board + Browse Games). Owns ONLY the popover behavior:
+ * a `.rp-disc__trigger` click toggles its sibling `.rp-pop` (one open at a time), viewport-edge flip
+ * (`.rp-pop--left`), `aria-expanded`, and click-outside / Escape to close. SELECTION is the caller's --
+ * wire your own handlers on the `.rp-pop__item`s. Delegates one click listener on `root`.
+ * @param {HTMLElement} root  the `.rp-discs` container
+ * @returns {{closeAll: function}}  call closeAll() after your own actions (e.g. a "clear" button)
+ */
+function discPopovers(root) {
+    if (!root) { return { closeAll: function () {} }; }
+    function closeAll() {
+        root.querySelectorAll('.rp-pop').forEach(function (p) { p.hidden = true; });
+        root.querySelectorAll('.rp-disc__trigger').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
+    }
+    root.addEventListener('click', function (e) {
+        var trig = e.target.closest && e.target.closest('.rp-disc__trigger');
+        if (!trig || !root.contains(trig)) { return; }
+        var pop = trig.parentElement.querySelector('.rp-pop');
+        if (!pop) { return; }
+        var isOpen = !pop.hidden;
+        closeAll();
+        if (!isOpen) {
+            pop.classList.remove('rp-pop--left');
+            pop.hidden = false;
+            trig.setAttribute('aria-expanded', 'true');
+            // Flip to the chip's right edge if a left-anchored popover would overflow the viewport (mobile).
+            if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { pop.classList.add('rp-pop--left'); }
+        }
+    });
+    document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('.rp-disc')) { closeAll(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeAll(); } });
+    return { closeAll: closeAll };
+}
+window.PlatPursuit.discPopovers = discPopovers;
+
+/**
+ * wireSearchField -- shared search-field affordances for ANY search input (the browse-filters.js controller
+ * AND bespoke per-page controllers): a `.has-value` class toggle (drives the clear button + `/` hint), a
+ * [data-search-clear] clear button, and Escape-to-clear. Returns { setBusy } so the caller toggles
+ * `.is-searching` (the in-flight spinner) around its request. The wrapper is `input.closest('[data-search-wrap]')`
+ * (or the input's parent). Visuals come from the shared CSS keyed on [data-search-wrap] + .has-value/.is-searching.
+ * @param {HTMLInputElement} input
+ * @param {{onClear?: function}} [opts]  onClear runs after the field is emptied (clear button / Escape)
+ * @returns {{wrap: HTMLElement, setBusy: function(boolean), sync: function}}
+ */
+function wireSearchField(input, opts) {
+    opts = opts || {};
+    var wrap = (input.closest && input.closest('[data-search-wrap]')) || input.parentElement;
+    function sync() { if (wrap) { wrap.classList.toggle('has-value', !!input.value); } }
+    function clear() {
+        input.value = ''; sync(); input.focus();
+        if (opts.onClear) { opts.onClear(); }
+    }
+    sync();
+    input.addEventListener('input', sync);
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && input.value) { e.preventDefault(); clear(); }
+    });
+    var clearBtn = wrap && wrap.querySelector('[data-search-clear]');
+    if (clearBtn) { clearBtn.addEventListener('click', function (e) { e.preventDefault(); clear(); }); }
+    return {
+        wrap: wrap,
+        setBusy: function (on) { if (wrap) { wrap.classList.toggle('is-searching', !!on); } },
+        sync: sync,
+    };
+}
+window.PlatPursuit.wireSearchField = wireSearchField;
+
+// Global `/` + Cmd/Ctrl+K -> focus the page's primary search field ([data-page-search]). Bound ONCE here so
+// every page (browse or bespoke) gets the shortcut just by marking its search input. `/` is skipped while
+// typing in another field; Cmd/Ctrl+K always fires (a deliberate override, like GitHub/Linear).
+document.addEventListener('keydown', function (e) {
+    var cmdK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+    var slash = e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (!cmdK && !slash) { return; }
+    var t = e.target;
+    if (slash && t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) { return; }
+    // An open detail modal owns the keyboard: focusing a page search behind its scrim would
+    // yank focus out of the trap (audit-caught via the Career howto over ?view=contracts).
+    if (document.querySelector('.pp-detail-modal:not([hidden])')) { return; }
+    // Pick the first VISIBLE data-page-search (a page may have hidden ones, e.g. an inactive tab/view);
+    // fall back to a [data-browse-form] search input (the ~18 browse pages don't all carry data-page-search).
+    var input = null;
+    var candidates = document.querySelectorAll('[data-page-search], [data-browse-form] input[type="text"], [data-browse-form] input[type="search"]');
+    for (var i = 0; i < candidates.length; i++) {
+        if (candidates[i].offsetParent !== null) { input = candidates[i]; break; }
+    }
+    if (!input) { return; }
+    e.preventDefault(); input.focus(); if (input.select) { input.select(); }
+});

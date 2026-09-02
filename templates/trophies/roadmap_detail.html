@@ -11,7 +11,10 @@
 
 {# Draft / preview roadmaps are staff-only; if a crawler ever finds the #}
 {# URL we want it out of the index until the author publishes.          #}
-{% block robots %}{% if roadmap_preview_mode %}noindex, nofollow{% else %}index, follow{% endif %}{% endblock %}
+{% comment %} noindex while the Roadmap system is hidden site-wide (nothing links these pages
+and Lane 0 withdrew their sitemap; the closing audit caught the index,follow contradiction).
+Restore index,follow WITH the sitemap re-registration if the system returns. {% endcomment %}
+{% block robots %}{% if roadmap_preview_mode %}noindex, nofollow{% else %}noindex, follow{% endif %}{% endblock %}
 
 {# Per-roadmap OG / Twitter image — use the game cover so social shares #}
 {# show the game art instead of the generic site logo. summary_large_   #}
@@ -92,8 +95,6 @@
 
     {# ═══ Metrics Badge Strip ═══ #}
     {% include 'trophies/partials/roadmap/metrics_strip.html' %}
-
-    {% include 'partials/ad_unit.html' with ad_slot="2324440264" %}
 
     {# ═══ Main Content + Sidebar Layout ═══ #}
     <div class="lg:flex lg:gap-6 mt-3 md:mt-4">

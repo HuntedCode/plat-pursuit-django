@@ -1,0 +1,43 @@
+{% comment %} Versions & editions sections, shared by the hero's versions modal and the About panel so both
+render identical rows. Expects other_versions / family_versions / url_psn_username from the view.
+  - Other platforms: Games whose Concept shares this game's exact IGDB id (spans Concepts).
+  - In the same family: other Concepts in the GameFamily (different IGDB id) -- remasters/remakes/collections.
+{% endcomment %}
+{% if other_versions %}
+    <section class="gd-vsec">
+        <h4 class="gd-vsec__h">Other platforms</h4>
+        <p class="gd-vsec__sub">The same game on other systems or regions.</p>
+        <div class="gd-vlist">
+            {% for v in other_versions %}
+                <a class="gd-vrow" href="{% if url_psn_username %}{% url 'game_detail_with_profile' v.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' v.np_communication_id %}{% endif %}">
+                    <span class="gd-vrow__cover"><img src="{{ v.display_image_url }}" alt="" loading="lazy" decoding="async" class="w-full h-full {% if v.has_cover_art %}object-cover object-top{% else %}object-contain p-2{% endif %}" /></span>
+                    <span class="gd-vrow__body">
+                        <span class="gd-vrow__name">{{ v.title_name }}</span>
+                        <span class="gd-vrow__meta">{% for p in v.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if v.is_regional %}{% for r in v.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
+                        {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=v %}
+                    </span>
+                    <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </a>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}
+{% if family_versions %}
+    <section class="gd-vsec">
+        <h4 class="gd-vsec__h">In the same family</h4>
+        <p class="gd-vsec__sub">Remasters, remakes, and collections &mdash; each has its own trophy list.</p>
+        <div class="gd-vlist">
+            {% for fv in family_versions %}
+                <a class="gd-vrow" href="{% if url_psn_username %}{% url 'game_detail_with_profile' fv.game.np_communication_id url_psn_username %}{% else %}{% url 'game_detail' fv.game.np_communication_id %}{% endif %}">
+                    <span class="gd-vrow__cover"><img src="{{ fv.game.display_image_url }}" alt="" loading="lazy" decoding="async" class="w-full h-full {% if fv.game.has_cover_art %}object-cover object-top{% else %}object-contain p-2{% endif %}" /></span>
+                    <span class="gd-vrow__body">
+                        <span class="gd-vrow__name">{{ fv.concept.unified_title }}</span>
+                        <span class="gd-vrow__meta">{% for p in fv.game.title_platform %}<span class="gd-vrow__plat">{{ p }}</span>{% endfor %}{% if fv.game.is_regional %}{% for r in fv.game.region %}<span class="gd-vrow__plat gd-vrow__plat--region">{{ r }}</span>{% endfor %}{% endif %}</span>
+                        {% include 'trophies/partials/game_detail/_version_trophy_dots.html' with game=fv.game %}
+                    </span>
+                    <svg class="gd-vrow__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </a>
+            {% endfor %}
+        </div>
+    </section>
+{% endif %}

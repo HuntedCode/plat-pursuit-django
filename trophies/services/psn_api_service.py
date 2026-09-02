@@ -8,7 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_t
 from collections import defaultdict
 from django.db.models import Count, Max, Min, Q
 from trophies.services.psn_metadata_service import capture_title_stats_observation
-from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
+from trophies.models import Profile, Game, ProfileGame, ProfileTrophyGroup, Trophy, EarnedTrophy, Concept, TrophyGroup
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 from trophies.discord_utils.discord_notifications import notify_new_platinum
@@ -815,58 +815,3 @@ class PsnApiService:
             )
 
 
-    @classmethod
-    def create_badge_group_from_form(cls, form_data: dict):
-        name = form_data['name']
-        badge_type_name = form_data['badge_type'].capitalize()
-        if badge_type_name == 'Collection':
-            title = 'Collector'
-        elif badge_type_name == 'Megamix':
-            title = 'Mega Master'
-        elif badge_type_name == 'Developer':
-            title = 'Studio Champion'
-        elif badge_type_name == 'User':
-            title = 'Community Champion'
-        elif badge_type_name == 'Franchise':
-            title = 'Franchise Master'
-        elif badge_type_name == 'Event':
-            title = 'Event Champion'
-        else:
-            title = 'Series Master'
-
-        submitted_by = form_data.get('submitted_by')
-
-        if badge_type_name == 'Developer':
-            description = f"Earn plats from {name} games!"
-        elif badge_type_name == 'User':
-            submitter_name = submitted_by.psn_username if submitted_by else 'the community'
-            description = f"A community-curated badge submitted by: {submitter_name}"
-        else:
-            description = f"Earn plats in the {name} {badge_type_name}!"
-        create_kwargs = {
-            'name': name + ' Bronze',
-            'series_slug': form_data['series_slug'] or '',
-            'description': description,
-            'display_title': f"{name} {title}",
-            'display_series': f"{name} {badge_type_name}",
-            'tier': 1,
-            'badge_type': form_data['badge_type'],
-        }
-        if submitted_by:
-            create_kwargs['submitted_by'] = submitted_by
-
-        base_badge = Badge.objects.create(**create_kwargs)
-        base_badge.save()
-        base_badge.update_most_recent_concept()
-
-        for i, tier in enumerate(['Silver', 'Gold', 'Platinum']):
-            tier_kwargs = {
-                'name': name + f" {tier}",
-                'series_slug': form_data['series_slug'] or '',
-                'base_badge': base_badge,
-                'tier': i + 2,
-                'badge_type': form_data['badge_type'],
-            }
-            if submitted_by:
-                tier_kwargs['submitted_by'] = submitted_by
-            badge = Badge.objects.create(**tier_kwargs)

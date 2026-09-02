@@ -2,6 +2,7 @@
 {% load static %}
 
 {% block title %}Reviews{% endblock %}
+{% block robots %}noindex, follow{% endblock %}
 {% block meta_description %}{{ seo_description }}{% endblock %}
 
 {% block content %}
@@ -50,7 +51,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                     Rate My Games
                 </a>
-                <a href="{% url 'community_hub' %}" class="btn btn-ghost border border-base-300 btn-sm md:btn-md gap-2">
+                <a href="{% url 'home' %}" class="btn btn-ghost border border-base-300 btn-sm md:btn-md gap-2">
                     Back to Community
                 </a>
             </div>

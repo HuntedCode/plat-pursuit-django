@@ -1,0 +1,73 @@
+{% load humanize %}
+{% comment %}The community-stats snapshot (players / plats / 100% club / avg completion),
+shared by BOTH detail pages since the slim-down. Include contract:
+  game             required -- the four denormalized columns + defined_trophies.platinum gate
+  community_stats  optional dict (the concept Game page passes its across-every-list
+                   aggregation); absent, each |default falls through to game's own columns --
+                   which on List detail is exactly right: THIS list's community.
+  snapshot_chrome  optional boolean. TRUE (List detail) renders the strip as page-level CHROME:
+                   a .scard grid with .pp-tally faces -- the house stat-strip vocabulary
+                   (Collection / Rate My Games / Browse headers), per the design audit that found
+                   the plain band reading as a placeholder outside a panel. FALSE/absent (the
+                   Game page's Ratings tab) keeps the framed .gd-acard band that sits among the
+                   tab's sibling sections and participates in revealRatings' cascade + count-up.
+The numbers carry data-gd-countup in both variants: List detail's load-time pass and the Game
+page's revealRatings each animate their own copy.{% endcomment %}
+{% if snapshot_chrome %}
+    {% comment %}scard__sub lines auto-hide below md (the primitive's own rule). The grid is
+    2-up at base, one row at md+ -- 4 cells, or 3 when the list defines no platinum.{% endcomment %}
+    <div id="gd-snapshot" class="grid grid-cols-2 {% if game.defined_trophies.platinum %}md:grid-cols-4{% else %}md:grid-cols-3{% endif %} gap-2 md:gap-3 mt-4">
+        <div class="scard">
+            <div class="scard__label">Players</div>
+            <div class="scard__value pp-tally" data-gd-countup="{{ community_stats.played_count|default:game.played_count|default:0 }}">{{ community_stats.played_count|default:game.played_count|default:0|intcomma }}</div>
+            <div class="scard__sub">tracking this list</div>
+        </div>
+        {% if game.defined_trophies.platinum %}
+        <div class="scard">
+            <div class="scard__label">Platinums</div>
+            <div class="scard__value pp-tally" data-gd-countup="{{ community_stats.plats_earned_count|default:game.plats_earned_count|default:0 }}">{{ community_stats.plats_earned_count|default:game.plats_earned_count|default:0|intcomma }}</div>
+            <div class="scard__sub">earned here</div>
+        </div>
+        {% endif %}
+        <div class="scard">
+            <div class="scard__label">100% Club</div>
+            <div class="scard__value pp-tally" data-gd-countup="{{ community_stats.full_completion_count|default:game.full_completion_count|default:0 }}">{{ community_stats.full_completion_count|default:game.full_completion_count|default:0|intcomma }}</div>
+            <div class="scard__sub">finished everything</div>
+        </div>
+        <div class="scard">
+            <div class="scard__label">Avg completion</div>
+            {# count-up target is the inner number span so the % unit survives (countUp rewrites textContent). #}
+            <div class="scard__value pp-tally"><span data-gd-countup="{{ community_stats.avg_completion|default:game.avg_completion|floatformat:0 }}">{{ community_stats.avg_completion|default:game.avg_completion|floatformat:0 }}</span><span class="text-[0.7em] font-bold text-base-content/60 ml-0.5">%</span></div>
+            <div class="scard__sub">across all players</div>
+        </div>
+    </div>
+{% else %}
+    <section class="gd-acard gd-rate__snapshot">
+        {% comment %}community_stats (set by the concept Game page) aggregates the four denorms
+        across EVERY list of the game; absent, each |default falls through to this one list's own
+        columns. Without this the Game page showed one stack's numbers under a heading that had
+        just said "6 trophy lists".{% endcomment %}
+        <h3 class="gd-acard__h">Community</h3>
+        <div class="gd-rate__stats">
+        <div class="gd-rate__stat">
+            <span class="gd-rate__stat-n" data-gd-countup="{{ community_stats.played_count|default:game.played_count|default:0 }}">{{ community_stats.played_count|default:game.played_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-lbl">Players</span>
+        </div>
+        {% if game.defined_trophies.platinum %}
+        <div class="gd-rate__stat">
+            <span class="gd-rate__stat-n" data-gd-countup="{{ community_stats.plats_earned_count|default:game.plats_earned_count|default:0 }}">{{ community_stats.plats_earned_count|default:game.plats_earned_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-lbl">Platinums</span>
+        </div>
+        {% endif %}
+        <div class="gd-rate__stat">
+            <span class="gd-rate__stat-n" data-gd-countup="{{ community_stats.full_completion_count|default:game.full_completion_count|default:0 }}">{{ community_stats.full_completion_count|default:game.full_completion_count|default:0|intcomma }}</span>
+            <span class="gd-rate__stat-lbl">100% Club</span>
+        </div>
+        <div class="gd-rate__stat">
+            {# count-up target is the inner number span so the % unit survives (countUp rewrites textContent). #}
+            <span class="gd-rate__stat-n"><span data-gd-countup="{{ community_stats.avg_completion|default:game.avg_completion|floatformat:0 }}">{{ community_stats.avg_completion|default:game.avg_completion|floatformat:0 }}</span><span class="gd-rate__stat-unit">%</span></span>
+            <span class="gd-rate__stat-lbl">Avg completion</span>
+        </div>
+        </div>
+    </section>
+{% endif %}

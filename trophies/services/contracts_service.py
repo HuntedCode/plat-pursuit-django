@@ -1,0 +1,723 @@
+"""Contracts board context builder.
+
+The Contracts board (Career's Contracts tab) lists live Contracts to pursue. Following the
+badge-stage model, each contract foregrounds its GAMES (the member Concepts) -- cover + title +
+the viewer's per-game completion -- as the main draw; the jobs it levels and the fixed-T XP
+reward are the supporting "what you get for it".
+
+Read-only + whale-safe. Status is derived from EXISTING `EarnedContract` rows (created by the
+sync's `mark_contract_reached`, never on this render path) plus a single bounded `ProfileGame`
+progress aggregate. The member-concept set is the curated live-Contract pool (bounded), never
+the user's whole library, so there is no whale-OOM risk.
+"""
+from datetime import timedelta
+
+from django.core.paginator import Paginator
+from django.db.models import (
+    Avg, BooleanField, Case, CharField, Count, DateTimeField, Exists, F, IntegerField, Max, OuterRef,
+    Q, Subquery, Sum, Value, When,
+)
+from django.db.models.functions import Coalesce
+from django.utils import timezone
+
+from trophies.models import (
+    Contract, ContractXPGrant, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP, Trophy,
+)
+from trophies.services import job_render
+from trophies.services.job_render import DISCIPLINE_LABELS
+
+
+def _member_gate(prefix='concept__'):
+    """The membership GATE (no igdb_id match): an ANCHORED + trusted-matched concept, reached via
+    `prefix` (e.g. 'game__concept__' or 'concept__'). Pair with a concrete `..igdb_id` /
+    `..igdb_id__in` filter, or use _member_at_igdb for the OuterRef-correlated Exists/Subquery form."""
+    return {
+        f'{prefix}anchor_migration_completed_at__isnull': False,
+        f'{prefix}igdb_match__status__in': IGDBMatch.TRUSTED_STATUSES,
+    }
+
+
+def _member_at_igdb(prefix):
+    """Filter kwargs matching a member of the contract at OuterRef('igdb_id'): the gate (above)
+    PLUS the raw igdb_id equalling the outer Contract's igdb_id. Replaces the old membership joins."""
+    return {**_member_gate(prefix), f'{prefix}igdb_match__igdb_id': OuterRef('igdb_id')}
+from trophies.util_modules.constants import (
+    ALL_PLATFORMS, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
+    NEW_CONTRACT_WINDOW_DAYS,
+)
+
+CONTRACTS_PER_PAGE = 24
+
+# Chip labels for the smart empty-state suggestion ("drop <label> to see N").
+STATUS_LABELS = {
+    'available': 'Not Started',
+    'pursuing': 'In Progress',
+    'claimable': 'Ready to Claim',
+    'accepted': 'Claimed',
+}
+
+
+def _ring_segments(elements):
+    """Per-job arcs for the SVG split-ring: N equal, family-colored segments (the even XP split)
+    with a small gap between them. Each is a stroke-dash arc on a `pathLength=100` circle, so `dash`
+    is a direct percentage of the circumference and `offset` positions it. Tagged with the job slug
+    so the ring and the job grid can cross-highlight. Replaces the old conic-gradient, which was a
+    single unsegmented element that couldn't be drawn or hovered arc-by-arc."""
+    n = len(elements)
+    if not n:
+        return []
+    gap = 4.0 if n > 1 else 0.0
+    seg = 100.0 / n
+    out = []
+    for i, el in enumerate(elements):
+        out.append({
+            'slug': el['slug'],
+            'disc_slug': el['disc_slug'],
+            'dash': round(seg - gap, 3),                     # visible arc length (0-100 scale)
+            'offset': round(-(i * seg + gap / 2.0), 3),      # dashoffset positions the arc
+        })
+    return out
+
+
+def _family_styles(elements):
+    """(family_gradient, family_color) CSS for a Project's element families. The accent
+    bar runs a top-to-bottom gradient across the distinct families (solid if one); the
+    dominant (first) family drives the hover/glow. Built only from the controlled family
+    slug enum (combat/exploration/mind/heart/finesse), never user input, so they are safe
+    to inline in a style attribute."""
+    fams = []
+    for el in elements:
+        if el['disc_slug'] not in fams:
+            fams.append(el['disc_slug'])
+    if not fams:
+        return 'var(--pp-border)', 'var(--pp-border)'
+    color = f"var(--disc-{fams[0]})"
+    if len(fams) == 1:
+        return color, color
+    stops = ', '.join(f"var(--disc-{f})" for f in fams)
+    return f"linear-gradient(180deg, {stops})", color
+
+
+# ---------------------------------------------------------------------------
+# Server-side board: annotate/filter/sort/paginate in the DB so the (eventually
+# huge) catalog is never materialized. Status + a "relevant to you" score are
+# derived in SQL; the current all-in-Python path above is used only until the
+# frontend switches to the paginated endpoints.
+# ---------------------------------------------------------------------------
+
+def discipline_levels(profile):
+    """{discipline_slug: avg job level} for the viewer -- feeds the relevance sort. Cheap grouped
+    aggregate (<=5 rows). Untouched disciplines are absent -> default 0 (weakest -> most relevant)."""
+    if profile is None:
+        return {}
+    return {
+        r['job__discipline']: r['avg']
+        for r in ProfileJobXP.objects.filter(profile=profile)
+        .values('job__discipline').annotate(avg=Avg('level'))
+    }
+
+
+def job_roster():
+    """The 25-job roster grouped by discipline (slug/icon/name only, no per-user data) for the
+    card's 5x5 job map. User-independent, so a page-render doesn't need the full career context."""
+    by_disc = {}
+    for job in Job.objects.all().order_by('display_order'):
+        by_disc.setdefault(job.discipline, []).append(job)
+    return [
+        {'slug': slug, 'label': label,
+         'jobs': [{'slug': j.slug, 'icon': j.icon, 'name': j.name} for j in by_disc.get(slug, [])]}
+        for slug, label in DISCIPLINE_LABELS.items()
+    ]
+
+
+def _disc_rankings(disc_levels):
+    """(relevance, strength) weight maps by discipline. `relevance` weights your WEAKEST disciplines
+    highest (the 'relevant to you' sort -- grow your breadth); `strength` weights your STRONGEST
+    highest (the 'keep pushing' sort -- double down on what you're good at). `disc_levels` is
+    {slug: avg_level}; unranked disciplines default to 0 (weakest)."""
+    slugs = list(DISCIPLINE_LABELS)
+    ranked = sorted(slugs, key=lambda s: (disc_levels or {}).get(s, 0))     # weakest -> strongest
+    relevance = {s: len(ranked) - i for i, s in enumerate(ranked)}          # weakest -> highest weight
+    strength = {s: i + 1 for i, s in enumerate(ranked)}                     # strongest -> highest weight
+    return relevance, strength
+
+
+def annotated_contracts(profile, disc_levels=None, with_ranking=True):
+    """Live Contracts annotated IN SQL with the viewer's per-contract status/progress and a
+    relevance score -- so the board filters/sorts/paginates in the database, never by iterating
+    the catalog. Read-only (reads existing EarnedContract rows + a ProfileGame aggregate).
+    `with_ranking=False` skips the relevance/strength discipline subqueries for callers that only
+    count/aggregate (claimable_count/summary) and never sort -- shaves two correlated subqueries."""
+    weights, strengths = _disc_rankings(disc_levels)
+    if profile is not None:
+        member_pg = ProfileGame.objects.filter(
+            profile=profile,
+            **_member_at_igdb('game__concept__'),
+        )
+        ec = EarnedContract.objects.filter(profile=profile, contract=OuterRef('pk'))
+        max_progress = Coalesce(Subquery(member_pg.order_by('-progress').values('progress')[:1]), 0)
+        any_plat = Exists(member_pg.filter(has_plat=True))
+        plat_reached = Subquery(ec.values('platinum_reached_at')[:1])
+        plat_accepted = Subquery(ec.values('platinum_accepted_at')[:1])
+        full_reached = Subquery(ec.values('full_reached_at')[:1])
+        full_accepted = Subquery(ec.values('full_accepted_at')[:1])
+        # The FROZEN platinum flag from EarnedContract (set at first reach) -- the same signal the accept
+        # engine uses to decide the tier split (contract_service._has_platinum, which unions the satisfier
+        # bundles). Gate the History split on THIS, not member-only `defines_plat`: an episodic/bundle
+        # contract has no igdb-derived members (defines_plat always False) yet can carry a real platinum tier.
+        ec_has_platinum = Subquery(ec.values('has_platinum')[:1])
+    else:
+        max_progress, any_plat = Value(0), Value(False)
+        none_dt = Value(None, output_field=DateTimeField())
+        plat_reached = plat_accepted = full_reached = full_accepted = none_dt
+        ec_has_platinum = Value(None, output_field=BooleanField())
+
+    def _disc_score(weight_map):   # per-contract max discipline weight across its jobs (0 if jobless)
+        return Coalesce(Subquery(
+            Job.objects.filter(contracts=OuterRef('pk')).annotate(
+                w=Case(*[When(discipline=s, then=Value(w)) for s, w in weight_map.items()],
+                       default=Value(0), output_field=IntegerField())
+            ).order_by('-w').values('w')[:1]
+        ), 0)
+
+    job_count = Coalesce(Subquery(
+        Job.objects.filter(contracts=OuterRef('pk')).values('contracts')
+        .annotate(c=Count('pk')).values('c')[:1]
+    ), 0)
+
+    return (
+        Contract.objects.filter(is_live=True)
+        .annotate(
+            has_jobs=Exists(Job.objects.filter(contracts=OuterRef('pk'))),   # jobless -> awards nothing
+            # Do the member games DEFINE a platinum? (mirrors contract_service._has_platinum) -- drives
+            # the card's tier split; games with no plat pay the full T at 100% instead.
+            defines_plat=Exists(Trophy.objects.filter(
+                trophy_type='platinum', **_member_at_igdb('game__concept__'))),
+            max_progress=max_progress, any_plat=any_plat,
+            plat_reached=plat_reached, plat_accepted=plat_accepted,
+            full_reached=full_reached, full_accepted=full_accepted, ec_has_platinum=ec_has_platinum,
+            relevance=_disc_score(weights) if with_ranking else Value(0),   # weakest-discipline weight ("relevant to you")
+            strength=_disc_score(strengths) if with_ranking else Value(0),  # strongest-discipline weight ("keep pushing")
+            job_count=job_count,                 # number of jobs the contract levels
+            xp_eff=Coalesce('xp_total_override', Value(CONTRACT_XP_TOTAL)),
+        )
+        .filter(has_jobs=True)
+        .annotate(status=Case(
+            When(Q(plat_reached__isnull=False, plat_accepted__isnull=True)
+                 | Q(full_reached__isnull=False, full_accepted__isnull=True), then=Value('claimable')),
+            When(Q(plat_accepted__isnull=False) | Q(full_accepted__isnull=False), then=Value('accepted')),
+            When(Q(max_progress__gte=100) | Q(any_plat=True), then=Value('pursuing')),
+            When(max_progress__gt=0, then=Value('pursuing')),
+            default=Value('available'), output_field=CharField(),
+        ))
+        .annotate(
+            status_order=Case(
+                When(status='claimable', then=Value(0)),
+                When(status='pursuing', then=Value(1)),
+                When(status='available', then=Value(2)),
+                default=Value(3), output_field=IntegerField()),
+            sort_progress=Case(When(status='pursuing', then=F('max_progress')),
+                               default=Value(0), output_field=IntegerField()),
+            # Fully banked = every tier this contract offers the user has been accepted (the History
+            # gate). The 100% tier must be banked, and the platinum tier too when this user's contract
+            # HAS a platinum (frozen `ec_has_platinum`, bundle-aware -- not member-only `defines_plat`).
+            # Distinct from status='accepted', which fires on EITHER tier -- a plat-banked contract with
+            # 100% still to earn is NOT fully banked, so it stays on the Board (has XP remaining).
+            fully_banked=Case(
+                When(Q(full_accepted__isnull=False)
+                     & (Q(ec_has_platinum=False) | Q(plat_accepted__isnull=False)), then=Value(True)),
+                default=Value(False), output_field=BooleanField()),
+        )
+    )
+
+
+# Relevance order: claimable -> pursuing (closest-to-done) -> available (relevant-to-you) -> claimed.
+_ORDER = ('status_order', '-sort_progress', '-relevance', '-xp_eff', '-created_at', 'name')
+# "Keep pushing" mirrors relevance but orders the available pool by your STRONGEST disciplines.
+_PUSHING = ('status_order', '-sort_progress', '-strength', '-created_at', 'name')
+_SORTS = {
+    'relevance': _ORDER,
+    'pushing': _PUSHING,
+    'jobs': ('-job_count', '-created_at', 'name'),
+    'fewest': ('job_count', '-created_at', 'name'),
+    'progress': ('-max_progress', 'status_order', 'name'),
+    'newest': ('-created_at', 'name'),
+    'name': ('name',),
+}
+
+
+def _platform_exists(platforms):
+    """A contract with any member game on one of `platforms`, as an EXISTS subquery rather than an
+    M2M join through memberships->concept->games. The join multiplied contract rows (one per member
+    game x platform), which forced a DISTINCT and made the planner seq-scan the whole game table
+    re-evaluating the JSONB filter (~170ms on the default board). EXISTS evaluates once per contract
+    and hits the title_platform GIN index via `?|` (has_any_keys)."""
+    return Exists(Game.objects.filter(
+        title_platform__has_any_keys=list(platforms),
+        **_member_at_igdb('concept__'),
+    ))
+
+
+def new_contract_cutoff():
+    """Contracts that first went live at/after this instant are NEW. One definition, read by the
+    board filter, the card marker and the announcer."""
+    return timezone.now() - timedelta(days=NEW_CONTRACT_WINDOW_DAYS)
+
+
+def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None, scope='',
+                      new_only=False):
+    # A `contract=<slug>` exact filter lived here for one afternoon, to back a deep link from job detail's
+    # cards. It is gone, and the reason is worth keeping: it was a filter the BOARD CONTROLLER did not
+    # know about. `seedFromURL` never read it, so `buildParams` could never re-emit it -- the first chip
+    # click silently repopulated the whole board while the URL still claimed the filter, with no token or
+    # affordance to clear it. The facets and the smart-empty suggestion were computed without it too, so a
+    # one-card board rendered chips promising hundreds, and an unresolvable slug blamed the platform
+    # filter for emptying a board it had not touched. It also returned BEFORE the scope split, so
+    # `?scope=history&contract=<untouched>` rendered a green "Banked" badge on a contract nobody had
+    # started.
+    #
+    # The lesson generalises: a filter is not a queryset argument, it is a member of a controller's state
+    # machine -- URL seeding, param rebuilding, facet counting, clearing, and empty-state attribution all
+    # have to learn it. Job detail links to the contract's GAME now, which is public, exact, and already
+    # carries the shared contract modal.
+    #
+    # Board vs History split on the fully-banked gate: History = fully banked (nothing left to earn);
+    # Board = everything still actionable (available/pursuing/claimable + partially-accepted). '' = no
+    # split (used where the full catalog is wanted).
+    if scope == 'history':
+        qs = qs.filter(fully_banked=True)
+    elif scope == 'board':
+        qs = qs.filter(fully_banked=False)
+    if status and status != 'all':
+        qs = qs.filter(status=status)
+    # Jobs + disciplines are ANDed: "driver + slayer" = a contract that levels BOTH. Each chained
+    # .filter() on the jobs M2M is a separate join (AND); a single __in would be OR (any).
+    for slug in (jobs or ()):
+        qs = qs.filter(jobs__slug=slug)
+    for disc in (disciplines or ()):
+        if disc and disc != 'all':
+            qs = qs.filter(jobs__discipline=disc)
+    if new_only:
+        # went_live_at is NULL for everything published before the field existed (the launch set),
+        # so they correctly read as "not new" rather than flooding the chip on day one.
+        qs = qs.filter(went_live_at__gte=new_contract_cutoff())
+    if platforms:                             # any member game on a selected platform (EXISTS, not a join)
+        qs = qs.filter(_platform_exists(platforms))
+    if q:
+        # Member-game-title search: a member game is derived (no membership join), so match it as an
+        # annotated Exists over the igdb path rather than a relational join.
+        game_name_match = Exists(Game.objects.filter(
+            title_name__icontains=q, **_member_at_igdb('concept__')))
+        qs = qs.annotate(_game_name_match=game_name_match).filter(
+            Q(name__icontains=q)
+            | Q(_game_name_match=True)
+            | Q(jobs__name__icontains=q)
+        )
+    return qs.distinct()
+
+
+def _card_prefetch(qs):
+    # Member games are igdb-derived (no membership relation to prefetch); _member_games queries them
+    # per card. Jobs stay prefetched (the card's primary payload).
+    return qs.prefetch_related('jobs')
+
+
+def _order_member_games(games):
+    """Member games newest-first: dated (by concept release, descending) then undated trailing."""
+    dated = [g for g in games if g.concept.release_date]
+    return (sorted(dated, key=lambda g: g.concept.release_date, reverse=True)
+            + [g for g in games if not g.concept.release_date])
+
+
+def _member_games(contract):
+    """One contract's member games newest-first. Igdb-derived: the contract's member concepts
+    (anchored + trusted at its igdb_id) resolved to their games. For a PAGE of contracts use
+    _member_games_by_igdb (one query) instead of this per-contract lookup."""
+    member_ids = contract.member_concept_ids()
+    if not member_ids:
+        return []
+    games = list(
+        Game.objects.filter(concept_id__in=member_ids)
+        .select_related('concept', 'concept__igdb_match')
+        .defer('concept__igdb_match__raw_response')
+    )
+    return _order_member_games(games)
+
+
+def _member_games_by_igdb(contracts):
+    """Batch: {igdb_id: [member games newest-first]} for a whole page of contracts in ONE query,
+    so the board doesn't re-run _member_games (2 queries) per card. Null-igdb (episodic) contracts
+    contribute no key -- they have no igdb-derived members, same as the per-contract path."""
+    igdb_ids = {c.igdb_id for c in contracts if c.igdb_id is not None}
+    if not igdb_ids:
+        return {}
+    games = (
+        Game.objects.filter(
+            concept__igdb_match__igdb_id__in=igdb_ids,
+            **_member_gate(),   # anchored + trusted (concrete ids supplied above, no OuterRef)
+        )
+        .select_related('concept', 'concept__igdb_match')
+        .defer('concept__igdb_match__raw_response')
+    )
+    by_igdb = {}
+    for g in games:
+        by_igdb.setdefault(g.concept.igdb_match.igdb_id, []).append(g)
+    return {gid: _order_member_games(gl) for gid, gl in by_igdb.items()}
+
+
+# The platform pills shown on every contract card (key, display label), lit when a member game
+# sits on that platform -- mirroring the job map's lit/dim treatment. Fixed set + order; older
+# platforms (PSP/PS2/PS1) are rare on the Job Board and intentionally omitted.
+_CARD_PLATFORMS = [
+    ('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'),
+    ('PSVITA', 'PS Vita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2'),
+]
+
+
+def _platform_cells(games):
+    """The 6 platform pills for a card: each {label, lit} where lit = a member game is on it.
+    Reads the already-loaded `title_platform` column, so it's free (no extra query)."""
+    present = set()
+    for g in games:
+        present.update(g.title_platform or [])
+    return [{'label': label, 'lit': key in present} for key, label in _CARD_PLATFORMS]
+
+
+def project_card(c, member_games=None, new_cutoff=None):
+    """Card display dict for one annotated+prefetched Contract. No per-game progress -- that
+    lives in the lazily loaded modal. `member_games` may be pre-resolved by the batch board path;
+    when None (single-card callers) it falls back to the per-contract query.
+
+    `new_cutoff` is threaded from the caller so a page of cards shares ONE clock read with the
+    queryset that selected them. Reading the clock per card was 24 `now()` calls a page and, worse,
+    made the card's "the marker and the filter can never disagree" claim untrue: the filter used
+    T1 and each card a slightly later T2, so a contract sitting on the boundary could be returned
+    by `new_only=True` and render without its marker."""
+    jobs = list(c.jobs.all())
+    elements = [job_render.job_atom(j) for j in jobs]
+    n = len(jobs) or 1
+    games = _member_games(c) if member_games is None else member_games
+    first_concept = games[0].concept if games else None
+    family_gradient, family_color = _family_styles(elements)
+    status = c.status
+    progress = 100 if status in ('claimable', 'accepted') else (c.max_progress if status == 'pursuing' else 0)
+    t = c.xp_total_override or CONTRACT_XP_TOTAL
+    # Tier split for the card strip. Plat-bearing contracts pay CONTRACT_PLATINUM_FRAC of T on the
+    # platinum tier and the rest at 100%; contracts whose games have no plat pay the full T at 100%.
+    has_plat = bool(getattr(c, 'defines_plat', False))
+    plat_xp = round(t * CONTRACT_PLATINUM_FRAC) if has_plat else 0
+    bonus_xp = t - plat_xp   # the "at 100%" amount (== T when there's no plat tier)
+    # Per-tier bar fills (drawn like the circle's progress). Plat bar creeps with the member game's
+    # completion and snaps full when the platinum is earned; the 100% bar stays locked until the plat
+    # is done, then creeps to 100. No-plat contracts have a single bar creeping straight to 100%.
+    plat_reached = bool(getattr(c, 'plat_reached', None))
+    full_reached = bool(getattr(c, 'full_reached', None))
+    mp = getattr(c, 'max_progress', 0) or 0
+    if has_plat:
+        plat_fill = 100 if plat_reached else mp
+        full_fill = 100 if full_reached else (mp if plat_reached else 0)
+    else:
+        plat_fill = 0
+        full_fill = 100 if full_reached else mp
+    # Which tier(s) are claimable right now (reached but not yet accepted) -- labels the Claim button.
+    plat_accepted = bool(getattr(c, 'plat_accepted', None))
+    full_accepted = bool(getattr(c, 'full_accepted', None))
+    claim_plat = has_plat and plat_reached and not plat_accepted
+    claim_full = full_reached and not full_accepted
+    return {
+        'name': c.name or (first_concept.unified_title if first_concept else ''),
+        'slug': c.slug,
+        # Drives the card's New marker, so a hunter browsing normally SEES the recent additions
+        # instead of having to think to click the Latest chip. Same window as the chip.
+        'is_new': bool(c.went_live_at and c.went_live_at >= (new_cutoff or new_contract_cutoff())),
+        'cover_game': games[0] if games else None,
+        'game_count': len(games),
+        'elements': elements,
+        'element_slugs': [el['slug'] for el in elements],
+        'platform_cells': _platform_cells(games),
+        'ring_segments': _ring_segments(elements),
+        'family_gradient': family_gradient,
+        'family_color': family_color,
+        'xp_total': t,
+        'xp_each': t // n,
+        'has_plat': has_plat,
+        'plat_xp': plat_xp,
+        'bonus_xp': bonus_xp,
+        'plat_fill': plat_fill,
+        'full_fill': full_fill,
+        'claim_plat': claim_plat,
+        'claim_full': claim_full,
+        'status': status,
+        'progress': progress,
+    }
+
+
+# History sorts: recently-banked (the 100%-accept moment) + most-XP. `_history_order` picks the XP key
+# per-job when exactly one job filter is active (the precise "biggest contributors to job X" answer),
+# else the contract's total banked XP.
+def _history_order(sort, jobs):
+    if sort == 'xp':
+        if jobs and len(jobs) == 1:
+            return ('-banked_job', '-banked_total', 'name')
+        return ('-banked_total', 'name')
+    if sort == 'oldest':
+        return ('full_accepted', 'name')                       # earliest banked first (inverse of default)
+    if sort == 'jobs':
+        return ('-job_count', '-full_accepted', 'name')        # most jobs (job_count is always annotated)
+    if sort == 'fewest':
+        return ('job_count', '-full_accepted', 'name')
+    if sort == 'name':
+        return ('name',)
+    return ('-full_accepted', 'name')   # 'banked' (default): most recently banked first
+
+
+def _history_annotate(qs, profile, jobs):
+    """Annotate a History queryset with the viewer's banked XP per contract (DB Sum over the ledger,
+    correlated to each contract) so the 'most XP' sorts run in SQL -- never a Python loop over grants.
+    Adds `banked_job` (this-job contribution) only when a single job filter scopes the view."""
+    grants = ContractXPGrant.objects.filter(profile=profile, earned_contract__contract=OuterRef('pk'))
+    ann = {'banked_total': Coalesce(Subquery(
+        grants.values('earned_contract__contract').annotate(s=Sum('amount')).values('s')[:1]), 0)}
+    if jobs and len(jobs) == 1:
+        jg = grants.filter(job__slug=jobs[0])
+        ann['banked_job'] = Coalesce(Subquery(
+            jg.values('earned_contract__contract').annotate(s=Sum('amount')).values('s')[:1]), 0)
+    return qs.annotate(**ann)
+
+
+def _attach_banked(cards, page_contracts, profile):
+    """Merge each History card's ACTUAL banked XP into its dict: total, per-job split (desc), a boosted
+    flag (any grant multiplied), and the banked date. One grouped ledger query for the whole page
+    (bounded by page size x jobs), bucketed in Python -- whale-safe (aggregation happens in the DB)."""
+    ids = [c.id for c in page_contracts]
+    agg = {}
+    rows = (
+        ContractXPGrant.objects
+        .filter(profile=profile, earned_contract__contract_id__in=ids)
+        .values('earned_contract__contract_id', 'job__name')
+        .annotate(xp=Sum('amount'), mult=Max('multiplier'))
+    )
+    for r in rows:
+        d = agg.setdefault(r['earned_contract__contract_id'], {'total': 0, 'jobs': [], 'boosted': False})
+        d['total'] += r['xp']
+        d['jobs'].append({'name': r['job__name'], 'xp': r['xp']})
+        if r['mult'] and r['mult'] > 1:
+            d['boosted'] = True
+    for card, c in zip(cards, page_contracts):
+        d = agg.get(c.id, {'total': 0, 'jobs': [], 'boosted': False})
+        njobs = len(d['jobs'])
+        card['is_history'] = True   # the template's History branch (banked read-outs vs the Board CTA)
+        card['banked_xp'] = d['total']
+        card['job_count'] = njobs
+        card['xp_per_job'] = d['total'] // njobs if njobs else 0   # even split -> one representative figure
+        card['job_contribs'] = sorted(d['jobs'], key=lambda j: j['xp'], reverse=True)
+        card['boosted'] = d['boosted']
+        card['banked_at'] = getattr(c, 'full_accepted', None)   # the 100%-accept moment (already annotated)
+
+
+def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplines=None,
+                   jobs=None, platforms=None, sort='relevance', scope='board', with_ranking=True,
+                   new_only=False):
+    """One paginated, filtered, sorted page of card dicts + metadata. `disciplines`/`jobs` are lists
+    ANDed together (a contract must level every one). `platforms` defaults to current-gen (PS5/PS4);
+    pass an explicit list to include legacy/VR, or [] for all platforms. `scope` splits the board:
+    'board' = still-actionable contracts, 'history' = fully-banked ones (with actual banked-XP read-outs)."""
+    if platforms is None:
+        platforms = list(MODERN_PLATFORMS)
+    # `with_ranking` is threaded through because the relevance/strength weights are correlated subqueries
+    # evaluated PER ROW, and a caller sorting by name reads neither. Job detail was paying for both on
+    # every page of its Contracts tab.
+    base = annotated_contracts(profile, disc_levels, with_ranking=with_ranking)
+    if scope == 'history':
+        base = _history_annotate(base, profile, jobs)
+    qs = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs,
+                           platforms=platforms, scope=scope, new_only=new_only)
+    order = _history_order(sort, jobs) if scope == 'history' else _SORTS.get(sort, _ORDER)
+    qs = _card_prefetch(qs.order_by(*order))
+    paginator = Paginator(qs, CONTRACTS_PER_PAGE)
+    if page > paginator.num_pages:   # past the end -> empty, so infinite scroll stops (get_page clamps)
+        return {'contracts': [], 'page': page, 'has_next': False, 'total': paginator.count}
+    page_obj = paginator.get_page(page)
+    page_contracts = list(page_obj)
+    games_by_igdb = _member_games_by_igdb(page_contracts)   # one query for the whole page's members
+    cutoff = new_contract_cutoff()   # ONE clock read shared by the whole page of cards
+    cards = [project_card(c, games_by_igdb.get(c.igdb_id, []), new_cutoff=cutoff)
+             for c in page_contracts]
+    if scope == 'history':
+        _attach_banked(cards, page_contracts, profile)
+    return {
+        'contracts': cards,
+        'page': page_obj.number,
+        'has_next': page_obj.has_next(),
+        'total': paginator.count,
+    }
+
+
+def claimable_count(profile):
+    """Cheap DB count of claimable contracts (for the 'Claim all' button)."""
+    return annotated_contracts(profile, with_ranking=False).filter(status='claimable').count()
+
+
+def claimable_summary(profile):
+    """{count, total_xp} across ALL claimable contracts (the pending-rewards rail), independent of
+    the board's paging/filters, via one DB aggregate."""
+    agg = (annotated_contracts(profile, with_ranking=False).filter(status='claimable')
+           .aggregate(count=Count('id'), xp=Sum('xp_eff')))
+    return {'count': agg['count'] or 0, 'total_xp': agg['xp'] or 0}
+
+
+def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None, platforms=None,
+                 scope='board', new_only=False):
+    """Facet counts for the toolbar chips. Each dimension counts the catalog filtered by the OTHER
+    active filters (so picking PS5 doesn't zero out PS4's count, and status counts reflect your
+    current discipline/platform view). Cheap + whale-safe: the live-Contract catalog is bounded and
+    curated (never the user's library), so these are a few small aggregates. `scope` constrains every
+    facet to the active Board/History set."""
+    if platforms is None:                     # match contracts_page: absent -> current-gen, so the
+        platforms = list(MODERN_PLATFORMS)    # status counts agree with the board's default total
+    base = annotated_contracts(profile, disc_levels)
+    cutoff = new_contract_cutoff()   # ONE clock read for the whole facet set
+    # `new_only` is an "other filter" to every dimension EXCEPT the Latest chip itself. Leaving it
+    # out of the rest was the bug: Latest on, 5 contracts in the grid, and the status chips still
+    # promising "Ready to Claim 12" -- click it and the board empties. That is verbatim the failure
+    # _filter_contracts' own comment records from the removed `contract=` filter.
+    n_qs = _filter_contracts(base, q=q, disciplines=disciplines, jobs=jobs, platforms=platforms, scope=scope)
+    s_qs = n_qs.filter(went_live_at__gte=cutoff) if new_only else n_qs
+    want_new = scope != 'history'      # History hides the chip, so do not pay for its count there
+    fold_new = want_new and not new_only
+    # Status chips: ignore the status filter, respect discipline/job/platform/search + scope + Latest.
+    # One filtered aggregate (a GROUP BY would be split by the board's relevance/strength annotations).
+    status_counts = s_qs.aggregate(
+        available=Count('id', filter=Q(status='available'), distinct=True),
+        pursuing=Count('id', filter=Q(status='pursuing'), distinct=True),
+        claimable=Count('id', filter=Q(status='claimable'), distinct=True),
+        accepted=Count('id', filter=Q(status='accepted'), distinct=True),
+        all=Count('id', distinct=True),
+        # The Latest chip's own count is measured with Latest OFF (turning a filter on must not
+        # shrink its own number), so it rides this aggregate only when it IS off -- the common case,
+        # and one round-trip instead of two. It reads `n_qs`, so it reflects the current
+        # discipline/platform/search view rather than the whole catalogue.
+        **({'new': Count('id', filter=Q(went_live_at__gte=cutoff), distinct=True)} if fold_new else {}),
+    )
+    if not want_new:
+        new_count = 0
+    elif new_only:
+        new_count = n_qs.filter(went_live_at__gte=cutoff).count()   # the one case that cannot fold
+    else:
+        new_count = status_counts.pop('new')
+    # Platform chips: ignore the platform filter, respect status/discipline/job/search + scope -- so a
+    # legacy platform shows its true total even while the board is defaulted to current-gen. ONE aggregate:
+    # alias each platform's member-game EXISTS, then a count-with-FILTER per platform (was a COUNT per
+    # platform -- 6 round-trips collapsed to 1; same numbers, EXISTS doesn't multiply rows so distinct holds).
+    p_base = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs, scope=scope,
+                               new_only=new_only)
+    platform_counts = p_base.annotate(**{
+        f'_plat_{p}': _platform_exists([p]) for p in ALL_PLATFORMS   # resolve the correlated EXISTS per contract row
+    }).aggregate(**{
+        p: Count('id', filter=Q(**{f'_plat_{p}': True}), distinct=True) for p in ALL_PLATFORMS
+    })
+    # Discipline + job popovers: REFINEMENT counts. Jobs/disciplines are ANDed, so unlike the OR-based
+    # platform chips these respect the FULL current filter (including the other selected jobs/disciplines)
+    # -- each count is "how many of your current results also level this job", so it narrows as you pick.
+    # Counted from the Job side (no board annotations there, so the GROUP BY isn't split). `dj_ids` stays
+    # a subquery.
+    dj_ids = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs,
+                               platforms=platforms, scope=scope, new_only=new_only).values('id')
+    member_jobs = Job.objects.filter(contracts__in=dj_ids)
+    discipline_counts = dict(member_jobs.values('discipline')
+                             .annotate(c=Count('contracts', distinct=True)).values_list('discipline', 'c'))
+    job_counts = dict(member_jobs.values('slug')
+                      .annotate(c=Count('contracts', distinct=True)).values_list('slug', 'c'))
+    return {'status': status_counts, 'new': new_count, 'platform': platform_counts,
+            'discipline': discipline_counts, 'job': job_counts}
+
+
+def job_contract_counts(job_slug):
+    """`(total, new)` for one job's contracts: the header's "feed this job" figure and the Latest chip's.
+
+    Two plain COUNTs rather than reading `contracts_page(...)['total']`, which would build a whole page
+    of hydrated card dicts to reach one number. Both run through `_filter_contracts` with the params job
+    detail's list uses (all platforms, no board/history split), so neither figure can disagree with the
+    list it describes."""
+    base = _filter_contracts(Contract.objects.filter(is_live=True), jobs=[job_slug],
+                             platforms=[], scope='')
+    agg = base.aggregate(
+        total=Count('id', distinct=True),
+        new=Count('id', filter=Q(went_live_at__gte=new_contract_cutoff()), distinct=True),
+    )
+    return agg['total'] or 0, agg['new'] or 0
+
+
+def suggest_relaxation(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None,
+                       platforms=None, scope='board', new_only=False):
+    """When a filter combo returns nothing, find the single active filter whose removal yields the most
+    results, so the empty state can say 'drop <label> to see N'. Returns {kind, value, label, count} or
+    None. Only the removable dimensions are considered; ties break toward the biggest result set. `scope`
+    keeps the candidate counts within the active Board/History set."""
+    disciplines, jobs = list(disciplines or []), list(jobs or [])
+    if platforms is None:                     # default board = current-gen (matches contracts_page), so the
+        platforms = list(MODERN_PLATFORMS)    # other-filter candidate counts reflect the current-gen board
+    base = annotated_contracts(profile, disc_levels)
+
+    def count(**over):
+        # Every candidate count keeps the OTHER filters on, new_only included -- otherwise the empty
+        # state promises "drop platform to see 12" while Latest still filters all 12 back out.
+        f = {'q': q, 'status': status, 'disciplines': disciplines, 'jobs': jobs, 'platforms': platforms,
+             'scope': scope, 'new_only': new_only}
+        f.update(over)
+        return _filter_contracts(base, **f).count()
+
+    candidates = []
+    job_names = dict(Job.objects.filter(slug__in=jobs).values_list('slug', 'name')) if jobs else {}
+    for j in jobs:
+        candidates.append(('job', j, job_names.get(j, j), count(jobs=[x for x in jobs if x != j])))
+    for d in disciplines:
+        candidates.append(('discipline', d, DISCIPLINE_LABELS.get(d, d), count(disciplines=[x for x in disciplines if x != d])))
+    if status and status != 'all':
+        candidates.append(('status', status, STATUS_LABELS.get(status, status), count(status='')))
+    # Widen platforms to ALL: since we defaulted to current-gen above, this offers to reveal legacy/VR
+    # contracts. The client mirrors this by lighting every platform chip.
+    if set(platforms) != set(ALL_PLATFORMS):
+        candidates.append(('platform', '', 'platform filter', count(platforms=list(ALL_PLATFORMS))))
+    if q:
+        candidates.append(('q', '', 'search', count(q='')))
+    if new_only:
+        candidates.append(('new', '', 'Latest', count(new_only=False)))
+    best = max((c for c in candidates if c[3] > 0), key=lambda c: c[3], default=None)
+    return {'kind': best[0], 'value': best[1], 'label': best[2], 'count': best[3]} if best else None
+
+
+def build_contract_modal(profile, slug):
+    """Full modal dict for one Contract: jobs + member games WITH the viewer's per-game progress.
+    Powers the lazy-loaded modal endpoint. Returns None if the slug isn't a live contract."""
+    try:
+        c = _card_prefetch(Contract.objects.filter(is_live=True)).get(slug=slug)
+    except Contract.DoesNotExist:
+        return None
+    jobs = list(c.jobs.all())
+    if not jobs:
+        return None
+    elements = [job_render.job_atom(j) for j in jobs]
+    n = len(jobs)
+    games = _member_games(c)
+    pg_by_game = {}
+    if profile is not None and games:
+        pg_by_game = {pg.game_id: pg for pg in ProfileGame.objects.filter(profile=profile, game__in=games)}
+    game_entries = [{
+        'game': g, 'profile_game': pg_by_game.get(g.id), 'has_guide': bool(g.concept.guide_slug),
+    } for g in games]
+    first_concept = games[0].concept if games else None
+    family_gradient, family_color = _family_styles(elements)
+    t = c.xp_total_override or CONTRACT_XP_TOTAL
+    return {
+        'name': c.name or (first_concept.unified_title if first_concept else ''),
+        'slug': c.slug,
+        'cover_game': games[0] if games else None,
+        'games': game_entries,
+        'game_count': len(game_entries),
+        'elements': elements,
+        'family_gradient': family_gradient,
+        'family_color': family_color,
+        'xp_total': t,
+        'xp_each': t // n,
+    }

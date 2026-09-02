@@ -1,57 +1,96 @@
 """Shared helpers for browse page views (Games, Genre/Theme Detail, Flagged Games)."""
 
-from datetime import timedelta
 
 from django.db.models import (
     Q, F, Subquery, OuterRef, Value, IntegerField, FloatField, Avg, Case,
     When, Count, OrderBy, Exists,
 )
 from django.db.models.functions import Coalesce, Lower, Cast
-from django.utils import timezone
 
 from trophies.models import (
-    Badge, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
-    ConceptEngine,
+    BadgeSeries, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
+    ConceptEngine, Contract, IGDBMatch,
 )
 
 
-def get_badge_picker_context(request):
-    """Build context dict for the browse badge picker modal.
+# ---------------------------------------------------------------------------
+# Active-filter chips (GameSearchForm) — dismissable pills of the applied CONTENT
+# filters (the ones hidden in the collapsed panel), each with a remove-URL. Search
+# (query) and SCOPE (platform/sort/page/view) are excluded — the search field owns
+# query; scope isn't a "filter" chip. REGIONS graduated from scope to a chip with
+# the condensed catalogue (final-audit #7): the card lost its region chips and its
+# platform row shows the WORK's union, so an applied ?regions= had no visible
+# representation anywhere on the results.
+# ---------------------------------------------------------------------------
 
-    Returns picker_badges (list of dicts) and selected_badge_name (str).
-    """
-    badges = Badge.objects.filter(
-        is_live=True, tier=1, series_slug__isnull=False,
-    ).exclude(
-        series_slug='',
-    ).select_related('base_badge').order_by('display_series', 'name')
+# Boolean filter -> chip label.
+_CHIP_BOOL_LABELS = {
+    'show_only_platinum': 'Has platinum', 'filter_shovelware': 'No shovelware',
+    'in_badge': 'In a badge', 'in_contract': 'In a contract',
+    'show_delisted': 'Delisted', 'show_unobtainable': 'Unobtainable',
+    'show_online': 'Online trophies', 'show_buggy': 'Buggy trophies',
+    'hide_delisted': 'Not delisted', 'hide_unobtainable': 'Obtainable',
+    'hide_online': 'No online trophies', 'hide_buggy': 'No buggy trophies',
+}
+# Dual-range sliders: (min_key, max_key, default_min, default_max, label, unit).
+_CHIP_SLIDERS = [
+    ('rating_min', 'rating_max', 0, 5, 'Rating', ''),
+    ('difficulty_min', 'difficulty_max', 1, 10, 'Difficulty', ''),
+    ('fun_min', 'fun_max', 1, 10, 'Fun', ''),
+    ('igdb_time_min', 'igdb_time_max', 0, 1000, 'IGDB time', 'h'),
+    ('community_time_min', 'community_time_max', 0, 1000, 'Time-to-beat', 'h'),
+]
+_CHIP_MULTI = ('genres', 'themes', 'contract_jobs', 'regions')
 
-    picker_badges = []
-    for b in badges:
-        picker_badges.append({
-            'series_slug': b.series_slug,
-            'name': b.name,
-            'display_series': b.display_series,
-            'badge_type': b.badge_type,
-            'earned_count': b.earned_count,
-            'required_stages': b.required_stages,
-            'layers': b.get_badge_layers(),
-        })
 
-    selected_slug = request.GET.get('badge_series', '')
-    selected_name = ''
-    if selected_slug:
-        match = next(
-            (b for b in picker_badges if b['series_slug'] == selected_slug),
-            None,
-        )
-        if match:
-            selected_name = match['display_series'] or match['name']
+def get_active_filter_chips(request, form):
+    """Return {'filter_chips': [{label, remove_url}], 'filter_clear_url': str} for the applied content
+    filters. remove_url / filter_clear_url are urlencoded querystrings (page reset to 1), consumed as
+    `?{{ url }}`. Each remove drops one filter (one value for multi-selects); Clear all drops them all but
+    keeps the search query + scope. Rendered as chips + OOB-updated on filter swaps."""
+    if not form.is_valid():
+        return {'filter_chips': [], 'filter_clear_url': ''}
+    cd = form.cleaned_data
+    params = request.GET
 
-    return {
-        'picker_badges': picker_badges,
-        'selected_badge_name': selected_name,
-    }
+    def _remove_key(*keys):
+        q = params.copy()
+        for k in keys:
+            q.pop(k, None)
+        q['page'] = '1'
+        return q.urlencode()
+
+    def _remove_value(key, value):
+        q = params.copy()
+        q.setlist(key, [v for v in q.getlist(key) if v != str(value)])
+        q['page'] = '1'
+        return q.urlencode()
+
+    chips = []
+    for key, label in _CHIP_BOOL_LABELS.items():
+        if cd.get(key):
+            chips.append({'label': label, 'remove_url': _remove_key(key)})
+    if cd.get('letter'):
+        chips.append({'label': f"Starts with {cd['letter']}", 'remove_url': _remove_key('letter')})
+    if cd.get('engine'):
+        # choices are keyed by int id (values_list('id','name')) but cleaned_data is a str -> str-key the map.
+        name = {str(k): v for k, v in form.fields['engine'].choices}.get(cd['engine'], cd['engine'])
+        chips.append({'label': str(name), 'remove_url': _remove_key('engine')})
+    for key in _CHIP_MULTI:
+        if cd.get(key):
+            choices = {str(k): v for k, v in form.fields[key].choices}
+            for val in cd[key]:
+                chips.append({'label': str(choices.get(val, val)), 'remove_url': _remove_value(key, val)})
+    for kmin, kmax, dmin, dmax, label, unit in _CHIP_SLIDERS:
+        vmin, vmax = cd.get(kmin), cd.get(kmax)
+        if (vmin is not None and vmin > dmin) or (vmax is not None and vmax < dmax):
+            lo = vmin if vmin is not None else dmin
+            hi = vmax if vmax is not None else dmax
+            chips.append({'label': f"{label} {lo}-{hi}{unit}", 'remove_url': _remove_key(kmin, kmax)})
+
+    content_keys = list(_CHIP_BOOL_LABELS) + ['letter', 'engine', *_CHIP_MULTI] \
+        + [k for s in _CHIP_SLIDERS for k in (s[0], s[1])]
+    return {'filter_chips': chips, 'filter_clear_url': _remove_key(*content_keys)}
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +108,14 @@ def annotate_ascii_name(qs):
     )
 
 
-_ALPHA_SECONDARY = ['is_ascii_name', Lower('title_name')]
+# 'pk' tiebreaker: without a unique trailing key Postgres may reorder a tie block between the
+# per-page LIMIT/OFFSET queries the InfiniteScroller issues, duplicating or dropping cards at a
+# page boundary. Title ties are the norm on the un-condensed pages (sibling stacks share a
+# cleaned title_name), and the count-based sorts (-played_count, -platinums_earned_count) put
+# thousands of zero-valued rows in one tie block. First fixed on Trophy Lists (2026-08-30);
+# hoisted here when countless scroll pagination made the per-page slice the scroller's whole
+# contract (2026-08-31 audit).
+_ALPHA_SECONDARY = ['is_ascii_name', Lower('title_name'), 'pk']
 
 
 def annotate_community_ratings(qs, concept_ref_path='concept_id'):
@@ -165,28 +211,34 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     if form.cleaned_data.get('filter_shovelware'):
         qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
-    badge_series = form.cleaned_data.get('badge_series')
-    if badge_series:
-        live_slugs = Badge.objects.filter(
-            is_live=True,
-        ).values_list('series_slug', flat=True)
-        qs = qs.filter(Exists(
-            Stage.objects.filter(
-                concepts=OuterRef('concept_id'),
-                series_slug=badge_series,
-                series_slug__in=live_slugs,
-            )
-        ))
-    elif form.cleaned_data.get('in_badge'):
-        live_slugs = Badge.objects.filter(
-            is_live=True,
-        ).values_list('series_slug', flat=True)
+    if form.cleaned_data.get('in_badge'):
+        # Series that ship a live GROUP badge (grouping-badge system); a game is "in a badge" if its concept
+        # has a stage in one of those series.
+        live_slugs = BadgeSeries.objects.filter(
+            group_badges__is_live=True,
+        ).values_list('series_slug', flat=True).distinct()
         qs = qs.filter(Exists(
             Stage.objects.filter(
                 concepts=OuterRef('concept_id'),
                 series_slug__in=live_slugs,
             )
         ))
+
+    # --- Contract filters (the game's home Job-Board contract) ---
+    # Specific jobs (a discipline selects all its jobs client-side) win over the broad "in a contract"
+    # toggle. Exists() keeps it whale-safe.
+    # A game is "in a contract" if its concept is ANCHORED + trusted-matched and its raw igdb_id
+    # keys a live Contract. (Specific jobs win over the broad toggle.)
+    contract_jobs = form.cleaned_data.get('contract_jobs')
+    if contract_jobs or form.cleaned_data.get('in_contract'):
+        live_contracts = Contract.objects.filter(is_live=True).exclude(igdb_id=None)
+        if contract_jobs:
+            live_contracts = live_contracts.filter(jobs__slug__in=contract_jobs)
+        qs = qs.filter(
+            concept__anchor_migration_completed_at__isnull=False,
+            concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+            concept__igdb_match__igdb_id__in=live_contracts.values_list('igdb_id', flat=True).distinct(),
+        )
 
     # --- Community flag filters (hide wins on conflict) ---
     if form.cleaned_data.get('hide_delisted'):
@@ -417,14 +469,19 @@ def apply_game_browse_sort(qs, sort_val, annotations_applied=None):
 
     # --- Trending (recent trophy activity in last 30 days) ---
     elif sort_val == 'trending':
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        qs = qs.annotate(
-            _trending_count=Count(
-                'played_by',
-                filter=Q(played_by__most_recent_trophy_date__gte=thirty_days_ago),
-            ),
-        )
-        order = ['-_trending_count', '-played_count'] + _ALPHA_SECONDARY
+        # Reads the denorm rather than aggregating ProfileGame per game. The ORDER BY forces that
+        # aggregate over the ENTIRE filtered catalogue before pagination, which made this the most
+        # expensive sort a browse visitor could pick.
+        #
+        # `monthly_earners_count` is maintained with exactly the predicate this used
+        # (most_recent_trophy_date within 30 days), so the ordering is unchanged -- it is deliberately
+        # NOT monthly_players_count, which counts owners who merely LAUNCHED the game and would have
+        # quietly redefined what "trending" means.
+        #
+        # `-played_count` stays the secondary key, which also makes the pre-backfill window harmless:
+        # a freshly-migrated column is 0 everywhere, and the sort degrades to popularity rather than
+        # to arbitrary order.
+        order = ['-monthly_earners_count', '-played_count'] + _ALPHA_SECONDARY
 
     # --- Release date (from Concept, nulls last) ---
     elif sort_val in ('release_date', 'release_date_inv'):

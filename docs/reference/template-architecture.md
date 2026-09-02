@@ -51,17 +51,12 @@ The template system uses Django's template inheritance with a single `base.html`
 ### Key Features
 
 - **Dark theme**: localStorage persistence, loads before DOM paint to prevent flash
-- **AdSense**: Guttered by staff status, API paths, and premium subscription
 - **Background images**: Supports concept-specific backgrounds via `image_urls.bg_url` context
 - **Premium theme gradients**: CSS custom properties via `user_theme_style` context
 
 ## Responsive System
 
-Pages are being incrementally migrated from the legacy ZoomScaler (transform-scale) system to proper mobile-first responsive styles. Both approaches coexist safely since the zoom wrapper divs in `base.html` are inert without `.zoom-active`.
-
-**Migrated pages** (e.g., dashboard): Use mobile-first Tailwind classes with `md:`/`lg:` breakpoints. No `ZoomScaler.init()` call. See [Design System Reference](design-system.md) for all styling tokens and patterns.
-
-**Non-migrated pages**: Still call `PlatPursuit.ZoomScaler.init()` which adds `.zoom-active` to `#zoom-container`, activating CSS transform rules in `input.css` that scale the 768px layout down for smaller screens.
+Every page now uses mobile-first Tailwind classes with `md:`/`lg:` breakpoints. The legacy ZoomScaler (transform-scale) system was removed (no callers remained). See [Design System Reference](design-system.md) for all styling tokens and patterns. The `#zoom-container` / `#zoom-wrapper` divs in `base.html` remain only as the host for the modal/ceremony recede (`.pp-receded` -> `#page-recede`).
 
 Fixed-position elements (toasts, modals, tabbar) live **outside** the wrapper divs so they are unaffected by either system.
 
@@ -73,7 +68,6 @@ All defined in `plat_pursuit/context_processors.py`:
 
 | Processor | Provides | Purpose |
 |-----------|----------|---------|
-| `ads` | `ADSENSE_ENABLED`, `ADSENSE_PUB_ID`, `ADSENSE_TEST_MODE` | Control ad visibility |
 | `moderation` | `pending_reports_count`, `pending_proposals_count` | Staff dashboard badge counts (60s cache) |
 | `premium_theme_background` | `user_theme_style` | Premium gradient theme as CSS string |
 | `active_fundraiser` | `active_fundraiser` | Live fundraiser for site banner (60s cache) |
@@ -93,12 +87,18 @@ All defined in `plat_pursuit/context_processors.py`:
 
 | Category | Filters |
 |----------|---------|
-| Date/Time | `iso_naturaltime`, `iso_datetime`, `timedelta_hours` |
+| Date/Time | `iso_naturaltime`, `iso_datetime`, `timedelta_hours`, `compact_since` |
 | Colors | `platform_color`, `platform_color_str`, `platform_color_hex`, `region_color_hex`, `trophy_color`, `trophy_css_color`, `badge_color`, `rarity_color_hex` |
 | Trophy/Badge | `trophy_rarity_label`, `badge_tier`, `badge_tier_xp`, `psn_rarity` |
 | Data access | `dict_get`, `get_item` |
 | Formatting | `multiply`, `format_date`, `sync_status_display`, `moderator_display_name`, `tojson` |
 | Markup | `parse_spoilers` (Discord-style `||text||`), `gradient_themes_json` |
+
+**`compact_since`** reports an age in ONE unit (`3h ago`, `2d ago`, `5mo ago`) for narrow cells such as a
+stat slot, where `naturaltime`'s "2 days, 19 hours ago" is several times the width of the figure the cell
+was sized for. A year is twelve of its own 30-day months, so nothing ever prints "12mo ago"; a missing
+value returns `''` so the caller decides what an empty slot says, and a future timestamp reads `Now`
+rather than a negative age (app/database clock skew is real).
 
 **Safety**: `parse_spoilers` escapes input first, `tojson` escapes HTML-critical chars, `format_date` respects user's 24h clock preference.
 
@@ -129,7 +129,6 @@ Defined in `trophies/mixins.py`:
 | `StaffRequiredMixin` | Staff gate for page views | Unauthenticated to login, non-staff to home |
 | `StaffRequiredAPIMixin` | Staff gate for JSON APIs | Returns 401/403 JSON responses |
 | `RecapSyncGateMixin` | Gate recap until sync complete | Shows gated template if no profile or not synced |
-| `ProfileHotbarMixin` | Inject sync status into context | Adds `hotbar` dict with profile, sync progress, queue position |
 | `BackgroundContextMixin` | Page-specific background image | Builds `image_urls` dict from Concept `bg_url` |
 
 ## Template Patterns

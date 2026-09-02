@@ -1,0 +1,184 @@
+{% load humanize custom_filters %}{% comment %} One rating, as a card. The wall's whole content, and the
+template the scroller appends -- so it holds cards and nothing else.
+
+WIDE, and deliberately not a cover-forward portrait card. The first cut was one, which borrowed
+`.pp-gcard`'s shape and with it its EMPHASIS: the game as the subject, the score as an annotation. This
+tab is the other way round, so the card is turned on its side. That buys the two things the portrait
+version could not give: all four scored axes side by side rather than a chosen subset, and the quick take
+at its real length rather than clamped to three lines.
+
+The cover stays, at the size its actual job needs. It is a recognition anchor -- cover art is how anyone
+identifies a game at a glance -- not the headline.
+
+The QUICK TAKE is height-reserved, and this file first argued the opposite -- that a grid row stretches
+to its tallest member anyway, so reserving lines would only pad the short cards. That has it backwards:
+because the row is as tall as its tallest card, one long take inflates every card beside it, and the ones
+without a take become mostly blank. Reserving three lines is what removes that variance. Everything else
+is free to wrap.
+
+Each rating carries `card_game`, `community_avg` and `community_n`, attached in bulk by
+`rating_service.build_profile_ratings_page` -- never resolved per card, which would be an N+1 on a wall.
+{% endcomment %}
+{% for r in profile_ratings %}
+{% with g=r.card_game %}
+<article class="pp-rcard" data-rec="{{ r.recommendation }}">
+    {% comment %}The game's own LANDSCAPE art, bleeding to the card's edges as a full-height panel. A wide
+    card wanted a wide image: a 3:4 cover chip sat in it as a tall sliver against short content, and the
+    portrait ratio is the one thing this shape has no room for.
+
+    `Concept.landscape_url` is the shared chain -- trusted IGDB screenshots, then artworks, then PSN
+    GAMEHUB art -- reading only the `igdb_*_image_ids` columns, so it adds no query to a page that already
+    selects the match (and never touches `raw_response`).
+
+    The COVER is the fallback, not the default: plenty of concepts have no landscape art at all, and a
+    portrait cover cropped into this panel still says which game. It takes `object-position: top` where a
+    screenshot takes centre, because that is where a cover keeps its logo.{% endcomment %}
+    {% with shot=r.concept.landscape_url %}
+    <span class="pp-rcard__art">
+        {% if shot %}
+        <img class="pp-rcard__shot" src="{{ shot }}" alt="" loading="lazy" decoding="async">
+        {% elif g %}
+        <img class="pp-rcard__shot pp-rcard__shot--cover{% if not g.has_cover_art %} pp-rcard__shot--placeholder{% endif %}"
+             src="{{ g.display_image_url }}" alt="" loading="lazy" decoding="async">
+        {% elif r.concept.cover_url %}
+        {% comment %}A concept with no owned Game behind it -- possible after a concept merge re-points a
+        rating onto a survivor the hunter does not own a copy of. The concept's own cover still draws
+        (and since the slim-down retarget the title still links -- game_page_url needs no game row).{% endcomment %}
+        <img class="pp-rcard__shot pp-rcard__shot--cover" src="{{ r.concept.cover_url }}" alt="" loading="lazy" decoding="async">
+        {% endif %}
+
+        {% comment %}The verdict, stamped over the art at a size you cannot miss.
+
+        It goes HERE because the art panel is the only part of the card with room to spare -- everywhere
+        else is text, and a glyph big enough to read down a scrolling wall would have to displace some of
+        it. On the art it costs nothing and gains the most: the panel is already scrimmed, so a disc sits
+        on it cleanly whatever the screenshot underneath.
+
+        `aria-hidden` because the chip in the body says the same thing in words; a screen reader does not
+        need the verdict twice, and a glyph has no good name of its own here.{% endcomment %}
+        {% if r.recommendation %}
+        <span class="pp-rcard__stamp" aria-hidden="true" title="{{ r.recommendation_text }}">
+            {% include 'partials/_recommendation_icon.html' with value=r.recommendation %}
+        </span>
+        {% endif %}
+    </span>
+    {% endwith %}
+
+    <div class="pp-rcard__body">
+        <div class="pp-rcard__head">
+            <span class="pp-rcard__ident">
+                {% comment %}A STRETCHED link: the anchor is the title, but its ::after covers the card, so
+                the cover and the whole surface are the tap target. The card takes the focus ring via
+                `:focus-within`, because the ring belongs to the card and not to a line of text.
+                Ratings intent goes to the RATINGS host: the concept Game page's Ratings view (the
+                slim-down moved the tab off List detail). Always a link -- game_page_url routes
+                igdb or c/ off the concept's own match, so no game row is needed.{% endcomment %}
+                <a class="pp-rcard__title pp-rcard__link" href="{{ r.concept.game_page_url }}?view=ratings">{{ r.concept.unified_title }}</a>
+
+                {% comment %}Which trophy set was scored. A DLC pack is rated separately from its base
+                game, so a card with no label is the base game and one with a label is that pack -- without
+                it the same title appears twice on the wall with two different scores and no way to tell
+                why.{% endcomment %}
+                {% if r.concept_trophy_group %}
+                <span class="pp-rcard__dlc" title="This rating is for the {{ r.concept_trophy_group.display_name }} trophy set">{{ r.concept_trophy_group.display_name }}</span>
+                {% endif %}
+
+                {% comment %}Their verdict, and the card's punchline: every other figure on it describes
+                what the platinum was LIKE, this one says whether to go and do it. Absent on ratings that
+                predate the field rather than shown as a neutral fourth state -- an unanswered question is
+                not an answer, and the wizard is already asking it.
+
+                The label is `recommendation_text`, resolved in the service rather than through
+                `get_recommendation_display`: the middle option names what was rough, and "tough plat"
+                is wrong on a DLC pack or a game that never had one. The strings still live in the model;
+                only the choice of WHICH wording is made where the game is known.{% endcomment %}
+                {% if r.recommendation %}
+                <span class="pp-rcard__rec">{{ r.recommendation_text }}</span>
+                {% endif %}
+            </span>
+
+            {% comment %}The overall score, on the title's line rather than under it: it is the headline of
+            this card, and putting it anywhere else is what made the portrait version read as a game card
+            with a score attached. Stars and figure together -- a bar is read at a glance, a number is read
+            exactly.{% endcomment %}
+            <span class="pp-rcard__verdict">
+                <span class="pp-stars" style="--fill: {% widthratio r.overall_rating 5 100 %}%;"
+                      role="img" aria-label="Scored {{ r.overall_rating|floatformat:1 }} out of 5"><span class="pp-stars__on"></span></span>
+                <span class="pp-rcard__scoreline" aria-hidden="true">
+                    <b class="pp-rcard__score-n">{{ r.overall_rating|floatformat:1 }}</b><span class="pp-rcard__of">/5</span>
+                </span>
+            </span>
+        </div>
+
+        {% comment %}All four scored axes, in full. The fifth is the overall above. Each cell is
+        key / figure / verdict word, and the WORD carries the polarity -- a 9 difficulty says "Brutal" --
+        because a bare number can be read backwards where a word cannot. Same vocabulary and the same tone
+        thresholds as the game's own Ratings tab, so a score reads identically on both.{% endcomment %}
+        {% comment %}The wrapper exists ONLY to be the query container. An element is never its own
+        container, so `container-type` on the strip itself made the @container rule unmatchable --
+        it has to sit on an ancestor. It cannot go back on the body: containment there captures the
+        stretched link's ::after and shrinks the card's tap target to the body.{% endcomment %}
+        <div class="pp-rcard__statswrap">
+        <div class="pp-rcard__stats">
+            <span class="pp-rcard__stat" data-tone="{{ r.difficulty|rating_tone:'difficulty' }}">
+                <span class="pp-rcard__stat-k">Difficulty</span>
+                <b class="pp-rcard__stat-n">{{ r.difficulty }}<span class="pp-rcard__stat-of">/10</span></b>
+                <span class="pp-rcard__stat-lbl">{{ r.difficulty|rating_verdict:'difficulty' }}</span>
+            </span>
+            <span class="pp-rcard__stat" data-tone="{{ r.grindiness|rating_tone:'grindiness' }}">
+                <span class="pp-rcard__stat-k">Grind</span>
+                <b class="pp-rcard__stat-n">{{ r.grindiness }}<span class="pp-rcard__stat-of">/10</span></b>
+                <span class="pp-rcard__stat-lbl">{{ r.grindiness|rating_verdict:'grindiness' }}</span>
+            </span>
+            <span class="pp-rcard__stat" data-tone="{{ r.fun_ranking|rating_tone:'fun' }}">
+                <span class="pp-rcard__stat-k">Fun</span>
+                <b class="pp-rcard__stat-n">{{ r.fun_ranking }}<span class="pp-rcard__stat-of">/10</span></b>
+                <span class="pp-rcard__stat-lbl">{{ r.fun_ranking|rating_verdict:'fun' }}</span>
+            </span>
+            <span class="pp-rcard__stat" data-tone="{{ r.hours_to_platinum|rating_tone:'hours' }}">
+                <span class="pp-rcard__stat-k">Hours</span>
+                <b class="pp-rcard__stat-n">{{ r.hours_to_platinum|intcomma }}<span class="pp-rcard__stat-of">h</span></b>
+                <span class="pp-rcard__stat-lbl">to platinum</span>
+            </span>
+        </div>
+        </div>
+
+        {% comment %}Their words, behind the plat card's big opening quote -- the same mark, so a take
+        looks like a take on both surfaces.
+
+        RENDERED EVEN WHEN EMPTY, and its three lines reserved in CSS. An earlier note here argued the
+        opposite: that reserving lines "would only pad the short cards without making any row more even".
+        That is wrong in a grid. A row is as tall as its TALLEST card, so one long take inflates every
+        card beside it and the ones without a take end up mostly blank space -- the variance the reserve
+        removes. Three lines rather than two because the blurb is capped at 140 characters, which is about
+        three lines at this width, so almost nothing is actually cut.
+
+        `blurb_hidden` is checked here as well as in the summary's count: this queryset is not
+        `visible_blurbs()`, and a staff-hidden take must not surface on the author's own profile just
+        because the filter lives somewhere else.{% endcomment %}
+        {% with take=r.blurb %}
+        {% if take and not r.blurb_hidden %}
+        <p class="pp-rcard__take"><span class="pp-rcard__take-txt"><span class="pp-rcard__quote" aria-hidden="true">&ldquo;</span>{{ take }}</span></p>
+        {% else %}
+        {% comment %}The box is drawn either way, at the same size, so the wall keeps its rhythm -- and an
+        empty one says so rather than sitting blank, which reads as something that failed to load. Wording
+        matches the page's other empty states ("No ratings yet", "No badges yet").{% endcomment %}
+        <p class="pp-rcard__take pp-rcard__take--empty"><span class="pp-rcard__none">No thoughts yet</span></p>
+        {% endif %}
+        {% endwith %}
+
+        <div class="pp-rcard__foot">
+            {% comment %}Their score against everyone else's, and the only comparison on the card. Present
+            only when someone besides this hunter has rated the same set -- against a sample of one it is
+            the same number printed twice with a "vs" between them.{% endcomment %}
+            {% if r.community_avg %}
+            <span class="pp-rcard__vs" title="{{ r.community_n|intcomma }} hunters have rated this">
+                Community <b>{{ r.community_avg|floatformat:1 }}</b>
+            </span>
+            {% endif %}
+            <time class="pp-rcard__when" datetime="{{ r.updated_at|date:'c' }}">Rated {{ r.updated_at|date:"M Y" }}</time>
+        </div>
+    </div>
+</article>
+{% endwith %}
+{% endfor %}

@@ -1,0 +1,23 @@
+{% load custom_filters humanize %}{% comment %} One session's trophies, fetched when it is expanded.
+
+CARDS, not a list -- the rebuild stays off pure lists, and a trophy carries little enough (icon, name,
+tier, rarity, the minute it popped) that a card holds it comfortably without inventing filler to justify
+itself. The wall answers to the day card's own width, so a session with three trophies and one with thirty
+both read as a block rather than as a stub and a scroll.
+
+The game name is deliberately absent: the session above already said it, and repeating it on every row is
+part of what made the flat log hard to read.
+
+Ordered by when each trophy popped, so an expanded session reads as the run it actually was.
+{% endcomment %}
+{% if session_trophies %}
+<div class="pp-actt">
+    {% for et in session_trophies %}
+    {% include 'trophies/partials/profile_detail/_trophy_card.html' with et=et %}
+    {% endfor %}
+</div>
+{% else %}
+{% comment %}Reachable if the trophies moved between the aggregate and the expand (a re-sync mid-session),
+so it states that rather than rendering an empty box.{% endcomment %}
+<p class="pp-actt__empty">These trophies are no longer on this day.</p>
+{% endif %}

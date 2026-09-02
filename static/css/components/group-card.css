@@ -1,0 +1,161 @@
+/* ============================================================
+ * GROUPING GAME-GROUP CARD (.fgroup) -- one IGDB game entry (which may have several PSN versions:
+ * PS4 / PS5 / EU / NA) rendered as a single card with a cover, name, and a row per version. Shared by the
+ * Franchise detail and Company detail pages (both feed it via game_groups_list.html), so the version rows,
+ * trophy counts, and progress rings stay identical across both. Neutral surface + single cyan hover-warm
+ * (colour restraint, depth-pass per playbook section 4).
+ * ============================================================ */
+.fgroup-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 1280px) { .fgroup-grid { grid-template-columns: 1fr 1fr; gap: 12px; } }
+
+.fgroup {
+    display: block; padding: 11px 12px 12px;
+    border-radius: 14px;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 6px 18px -10px rgba(0, 0, 0, 0.4);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+@media (hover: hover) {
+    .fgroup:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 16%, transparent),
+                    0 14px 30px -16px color-mix(in oklab, var(--pp-primary) 32%, #000);
+    }
+}
+
+/* Header: a compact cover thumbnail + the game name. The cover is a FIXED small thumb (not a stretched
+   full-height column) so a many-version card doesn't run the portrait art down its whole side, and the
+   version rows below get the full card width. */
+.fgroup__head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.fgroup__cover {
+    position: relative; flex: none; align-self: flex-start;
+    width: 48px; aspect-ratio: 3 / 4; border-radius: 8px; overflow: hidden; background: var(--pp-bg-2);
+}
+@media (min-width: 768px) { .fgroup__cover { width: 60px; } }
+/* object-top so game logos survive the crop (CLAUDE.md image conventions). */
+.fgroup__cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.fgroup__cover--empty { display: flex; align-items: center; justify-content: center; }
+.fgroup__cover--empty svg { width: 42%; height: 42%; color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-text-mute)); opacity: 0.6; }
+/* Opaque backing (NOT backdrop-filter): the card is reveal-animated, and a live blur under an ancestor
+   transform janks low-end mobile GPUs (motion-patterns gotcha). */
+.fgroup__plat-flag {
+    position: absolute; top: 4px; right: 4px; z-index: 2;
+    width: 18px; height: 18px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--pp-bg-0) 88%, #000);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.fgroup__plat-flag svg { width: 11px; height: 11px; color: var(--color-trophy-platinum); }
+
+.fgroup__titles { min-width: 0; display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.fgroup__name { font-size: 15px; font-weight: 800; line-height: 1.2; color: var(--pp-text); }
+.fgroup__year { font-size: 11.5px; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+.fgroup__vers { display: flex; flex-direction: column; gap: 5px; }
+
+/* Version row: links to game detail. Title left, meta cluster right; wraps on narrow widths. */
+.fgroup__ver {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 7px 9px; border-radius: 9px;
+    background: color-mix(in oklab, var(--pp-text) 3%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 6%, transparent);
+    text-decoration: none; color: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+@media (hover: hover) {
+    .fgroup__ver:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 42%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-primary) 7%, transparent);
+    }
+    .fgroup__ver:hover .fgroup__ver-title { color: var(--pp-primary); }
+}
+.fgroup__ver:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.fgroup__ver-title {
+    flex: 1 1 140px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--pp-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.15s ease;
+}
+/* Meta takes its own full-width line (basis 100% forces the title onto the line above), then splits: the
+   left group (platform/region/flags) hugs the start and the right group (trophies + progress) pins to the
+   end. nowrap keeps them on one line -- the left group wraps its own badges instead of dropping the right. */
+.fgroup__meta { display: flex; align-items: center; gap: 10px; flex: 1 1 100%; justify-content: space-between; flex-wrap: nowrap; }
+.fgroup__meta-l { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; flex-wrap: wrap; min-width: 0; }
+.fgroup__meta-r { display: flex; align-items: center; gap: 8px; flex: none; }
+.fgroup__plats { display: inline-flex; gap: 3px; }
+.fgroup__plat {
+    font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.5;
+    padding: 0 5px; border-radius: 5px; border: 1px solid; color: var(--pp-text-dim);
+}
+.fgroup__troph { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fgroup__troph .b { color: var(--color-trophy-bronze); }
+.fgroup__troph .s { color: var(--color-trophy-silver); }
+.fgroup__troph .g { color: var(--color-trophy-gold); }
+.fgroup__troph .p { color: var(--color-trophy-platinum); }
+
+/* Per-viewer progress ring (authed): conic gradient with the % inset. */
+.fgroup__prog { display: inline-flex; align-items: center; gap: 6px; padding-left: 8px; border-left: 1px solid var(--pp-border); }
+.fgroup__ring { position: relative; width: 26px; height: 26px; border-radius: 999px; flex: none; }
+.fgroup__ring-in { position: absolute; inset: 3px; border-radius: 999px; background: var(--pp-bg-1); display: flex; align-items: center; justify-content: center; }
+.fgroup__ring-in span { font-size: 8px; font-weight: 900; line-height: 1; color: var(--pp-text); }
+.fgroup__prog svg { width: 15px; height: 15px; color: var(--color-trophy-platinum); }
+.fgroup__unplayed { font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); padding-left: 8px; border-left: 1px solid var(--pp-border); }
+
+.fgroup__foot { font-size: 10.5px; color: var(--pp-text-mute); margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+/* Empty state (spans the grid), reuses the shared results fade. */
+.fgroup-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 44px 16px; border: 1px dashed var(--pp-border); border-radius: 14px; }
+.fgroup-empty svg { width: 38px; height: 38px; margin: 0 auto 8px; opacity: 0.5; }
+.fgroup-empty p { font-size: 13px; }
+
+/* Scroll-reveal: staggerReveal drives the WAAPI motion; these only hold hidden/shown. .pp-reveal added by JS
+   only when it will observe (motion-gated), so cards never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .fgroup { opacity: 0; }
+    .pp-reveal .fgroup.is-revealed { opacity: 1; }
+}
+
+/* ---- Franchise/Series detail header chrome (page-specific: cover thumb + your-progress block) ---- */
+/* Mobile: a centered poster (own line, bigger so it's viewable). md+: a smaller inline thumb beside the text. */
+.fr-thumb {
+    position: relative; width: 120px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden;
+    background: var(--pp-bg-2);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 26%, transparent), 0 8px 22px -12px rgba(0, 0, 0, 0.6);
+}
+@media (min-width: 768px) { .fr-thumb { width: 96px; border-radius: 12px; } }
+.fr-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.fr-thumb__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-2)), var(--pp-bg-0)); }
+.fr-thumb__empty svg { width: 40%; height: 40%; color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-text-mute)); }
+
+.fr-prog { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--pp-border); }
+.fr-prog__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.fr-prog__label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); }
+.fr-prog__pct { font-size: 18px; font-weight: 900; color: var(--pp-primary); line-height: 1; font-variant-numeric: tabular-nums; }
+.fr-prog__pct::after { content: '%'; font-size: 12px; font-weight: 800; margin-left: 1px; }
+.fr-prog__stats { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 9px; font-size: 11.5px; color: var(--pp-text-mute); }
+.fr-prog__stats strong { color: var(--pp-text); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Lone sort control sits at the trailing edge of the toolbar bar. */
+.pp-gbrowse__bar--end { justify-content: flex-end; }
+
+/* ---- Company detail header chrome (logo thumb + community-stats strip) ---- */
+/* Mobile: a centered poster (own line, bigger so it's viewable). md+: a smaller inline thumb beside the text. */
+.co-logo { position: relative; width: 120px; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--pp-bg-2); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 26%, transparent), 0 8px 22px -12px rgba(0, 0, 0, 0.6); }
+@media (min-width: 768px) { .co-logo { width: 96px; border-radius: 12px; } }
+.co-logo__plate { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12%; background: color-mix(in oklab, #fff 90%, var(--pp-bg-2)); }
+.co-logo__plate img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.co-logo__cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.co-logo__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-2)), var(--pp-bg-0)); }
+.co-logo__empty svg { width: 40%; height: 40%; color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-text-mute)); }
+
+.co-comm { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--pp-border); }
+.co-comm__grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.co-comm__stat {
+    flex: 1 1 72px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 7px 6px; border-radius: 9px;
+    background: color-mix(in oklab, var(--pp-text) 3%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 6%, transparent);
+}
+.co-comm__v { font-size: 15px; font-weight: 900; line-height: 1.1; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.co-comm__v i { font-size: 10px; font-weight: 700; font-style: normal; color: var(--pp-text-mute); }
+.co-comm__l { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.co-comm__note { font-size: 10.5px; color: var(--pp-text-mute); margin-top: 8px; font-style: italic; }

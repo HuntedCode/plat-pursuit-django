@@ -3,24 +3,22 @@
 <!doctype html>
 <html lang="en" data-theme="plat-pursuit-dark">
   <head>
-    <script>
-      (function() {
-        const theme = localStorage.getItem('theme') || 'plat-pursuit-dark';
-        document.documentElement.setAttribute('data-theme', theme);
-      })();
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}{{ title|default:"Platinum Pursuit" }}{% endblock %} - Platinum Pursuit</title>
     <meta name="description" content="{% block meta_description %}{{ seo_description|default:'Platinum Pursuit: No trophy can hide from us. Track your trophies, earn game badges, and connect with fellow hunters.' }}{% endblock %}">
     <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
-    <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
+    {% comment %}Path-only by default (SEO Lane 0): the querystring canonical minted a new
+    self-canonical for every ?page/?sort/?utm permutation site-wide. Pages whose params are
+    load-bearing for identity override the block; ?tab= style views of one entity correctly
+    canonicalize to the entity.{% endcomment %}
+    <link rel="canonical" href="{% block canonical_url %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}">
 
     <!-- Open Graph -->
     <meta property="og:title" content="{% block og_title %}{% firstof seo_title title 'Platinum Pursuit' %}{% endblock %}">
     <meta property="og:description" content="{% block og_description %}{{ seo_description|default:'Track your PlayStation trophies, earn game badges, and connect with fellow trophy hunters.' }}{% endblock %}">
     <meta property="og:type" content="{% block og_type %}website{% endblock %}">
-    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:url" content="{% block og_url %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}">
     <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endblock %}">
     <meta property="og:site_name" content="Platinum Pursuit">
 
@@ -34,17 +32,19 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/favicon-32x32.png' %}">
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/favicon-16x16.png' %}">
     <link rel="apple-touch-icon" sizes="180x180" href="{% static 'images/apple-touch-icon.png' %}">
+    {% comment %} Fonts are self-hosted (SEO Lane 3): faces declared in output.css, files under
+    static/fonts/. Preload the two latin variable fonts nearly every page paints with; latin-ext
+    and Poppins (Stellar Circuit only) load lazily via unicode-range. crossorigin is mandatory on
+    font preloads even same-origin, or the browser fetches twice. {% endcomment %}
+    <link rel="preload" href="{% static 'fonts/bricolage-grotesque-var-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{% static 'fonts/inter-var-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/output.css' %}" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    {% if ADSENSE_ENABLED %}<link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin>{% endif %}
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     {% jsonld_organization %}
     {% if breadcrumb %}{% jsonld_breadcrumbs breadcrumb request %}{% endif %}
     <meta name="csrf-token" content="{{ csrf_token }}">
     {% block extra_head %}{% endblock %}
   </head>
-  <body class="bg-base-100 text-base-content{% if ADSENSE_ENABLED %} has-mobile-ad{% endif %}" {% if user.is_authenticated %}data-authenticated="true"{% endif %} {% if image_urls.bg_url %}style="background-image: url('{{ image_urls.bg_url }}'); background-size: cover; background-position: center; background-attachment: fixed;"{% elif user_theme_style %}style="{{ user_theme_style }}"{% endif %}>
+  <body class="bg-base-100 text-base-content" {% if user.is_authenticated %}data-authenticated="true"{% endif %}>
     {% include "components/_frame_rarity_sprite.html" %}
     <div id="zoom-container">
     <div id="zoom-wrapper" class="min-h-screen flex flex-col">
@@ -59,138 +59,32 @@
     {% include 'partials/fundraiser_banner.html' %}
     {% include 'partials/art_reveal_banner.html' %}
     {% include 'partials/anon_profile_banner.html' %}
-    {% if user.is_authenticated and not user.premium_tier %}
-        {% include 'partials/premium_upsell_banner.html' %}
-    {% endif %}
+    {% comment %} The premium upsell strip lived here and was REMOVED (2026-09). It was the only
+    banner in this block with no flag, no date window and no campaign behind it: a full-width bar on
+    every page for every non-member, forever, with a 7-day localStorage dismissal as the only relief.
+    Support already has four standing entry points (the navbar hub link, the navbar Premium pill, the
+    footer Support column, the mobile tabbar) and its own storefront at /support/, so the strip was a
+    fifth ask that ran permanently. Membership here is a dial, not a door -- a permanent nag is the
+    shape of a door. {% endcomment %}
     {% endblock global_banners %}
 
-    {% if ADSENSE_ENABLED %}
-    {# Consent Mode v2: deny by default; Funding Choices CMP updates on user consent. #}
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('consent', 'default', {
-            'ad_storage': 'denied',
-            'ad_user_data': 'denied',
-            'ad_personalization': 'denied',
-            'analytics_storage': 'denied',
-            'wait_for_update': 500
-        });
-    </script>
-    {# Funding Choices CMP. URL uses pub-XXX (no ca- prefix). AdSense dashboard must have a GDPR message configured. #}
-    <script async src="https://fundingchoicesmessages.google.com/i/{{ ADSENSE_PUB_ID|cut:'ca-' }}?ers=1"></script>
-    <script>(function(){function signalGooglefcPresent(){if(!window.frames['googlefcPresent']){if(document.body){const iframe=document.createElement('iframe');iframe.style='width:0;height:0;border:none;z-index:-1000;left:-1000px;top:-1000px;';iframe.style.display='none';iframe.name='googlefcPresent';document.body.appendChild(iframe);}else{setTimeout(signalGooglefcPresent,0);}}}signalGooglefcPresent();})();</script>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ ADSENSE_PUB_ID }}"
-        crossorigin="anonymous"></script>
-    {% endif %}
-
     {% block main_layout %}
-    <div class="flex flex-1 flex-col lg:flex-row lg:items-start">
-
-      <aside class="hidden lg:block sticky w-[160px] xl:w-[300px] order-first self-start mt-20" style="top: calc(var(--chrome-height, 5rem) + 0.5rem)">
-          {% if ADSENSE_ENABLED %}
-          <ins class="adsbygoogle"
-              style="display:block; min-height:250px;"
-              data-ad-client="{{ ADSENSE_PUB_ID }}"
-              data-ad-slot="5958570818"
-              data-ad-format="auto"
-              {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}
-              data-full-width-responsive="true"></ins>
-          <script>
-              {# Only push when the aside is actually rendered (lg: breakpoint). Prevents "No slot size for availableWidth=0" TagError on mobile. #}
-              if (window.matchMedia('(min-width: 1024px)').matches) {
-                  (adsbygoogle = window.adsbygoogle || []).push({});
-              }
-          </script>
-          {% endif %}
-      </aside>
-
-      <main id="main-content" class="container mx-auto px-4 py-2 flex-grow" role="main">
-        {% if hotbar.active %}
-          {% include 'partials/hotbar.html' %}
-        {% endif %}
-        {% block content %}{% endblock %}
+      {# The ad rails that used to flank this were removed with AdSense (2026-08). <main> inherits    #}
+      {# the wrapper's `flex-1`: it is now a direct child of #zoom-wrapper's column, so it is what     #}
+      {# grows to hold the footer down on short pages. `container mx-auto` finally governs the content #}
+      {# width unopposed -- the rails were eating 320px (lg) to 600px (xl/2xl) of it.                  #}
+      <main id="main-content" class="container mx-auto px-4 py-2 flex-1" role="main">
+        {# The hotbar was retired: sync now lives in the navbar's status-aware avatar + panel (navsync.js). #}
+        {# #page-recede is the step-back target for the modal/ceremony recede; the chrome above stays a      #}
+        {# sibling of it, so it holds still. See elements.css .pp-receded.                                   #}
+        <div id="page-recede">{% block content %}{% endblock %}</div>
       </main>
-
-      <aside class="hidden lg:block sticky w-[160px] xl:w-[300px] self-start mt-20" style="top: calc(var(--chrome-height, 5rem) + 0.5rem)">
-        {% if ADSENSE_ENABLED %}
-          <ins class="adsbygoogle"
-              style="display:block; min-height:250px;"
-              data-ad-client="{{ ADSENSE_PUB_ID }}"
-              data-ad-slot="1688153315"
-              data-ad-format="auto"
-              {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}
-              data-full-width-responsive="true"></ins>
-          <script>
-              if (window.matchMedia('(min-width: 1024px)').matches) {
-                  (adsbygoogle = window.adsbygoogle || []).push({});
-              }
-          </script>
-        {% endif %}
-      </aside>
-
-    </div>
     {% endblock %}
     {% include 'partials/footer.html' %}
     </div>
     </div>
     {% include 'partials/back_to_top.html' %}
     {% block fixed_overlays %}{% endblock %}
-    {% if ADSENSE_ENABLED %}
-    <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center items-center bg-base-300/90 lg:hidden transition-transform duration-300"
-         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0)); height:50px; contain:layout style;">
-        <ins class="adsbygoogle"
-             style="display:inline-block;width:320px;height:50px;"
-             data-ad-client="{{ ADSENSE_PUB_ID }}"
-             data-ad-slot="9347573919"
-             data-ad-format="banner"
-             {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}></ins>
-        <script>
-            // Defer the push until 'load' so the inline width:320px has been
-            // laid out by the time AdSense reads availableWidth. Pushing
-            // synchronously during parse can read availableWidth=0 and
-            // trigger TagError: "No slot size for availableWidth=0".
-            (function() {
-                function doPush() {
-                    if (window.matchMedia('(max-width: 1023.98px)').matches) {
-                        (adsbygoogle = window.adsbygoogle || []).push({});
-                    }
-                }
-                if (document.readyState === 'complete') {
-                    doPush();
-                } else {
-                    window.addEventListener('load', doPush);
-                }
-            })();
-        </script>
-        <button id="mobile-ad-close" type="button"
-                class="absolute -top-3 right-2 w-6 h-6 rounded-full bg-base-300 border border-base-content/20 flex items-center justify-center text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors shadow-md"
-                aria-label="Close ad">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-            </svg>
-        </button>
-    </div>
-    <script>
-    (function() {
-        const banner = document.getElementById('mobile-ad-banner');
-        const btn = document.getElementById('mobile-ad-close');
-        if (!banner || !btn) return;
-        if (sessionStorage.getItem('mobile-ad-dismissed')) {
-            banner.style.transform = 'translateY(200%)';
-            banner.style.pointerEvents = 'none';
-            document.body.classList.remove('has-mobile-ad');
-            return;
-        }
-        btn.addEventListener('click', function() {
-            banner.style.transform = 'translateY(200%)';
-            banner.style.pointerEvents = 'none';
-            document.body.classList.remove('has-mobile-ad');
-            sessionStorage.setItem('mobile-ad-dismissed', '1');
-        });
-    })();
-    </script>
-    {% endif %}
     {% include 'partials/mobile_tabbar.html' %}
 
     <!-- Toast Notification Container -->
@@ -198,11 +92,6 @@
 
     <!-- Unsaved Changes Modal (shared across pages) -->
     {% include 'partials/unsaved_changes_modal.html' %}
-
-    <!-- Welcome Tour Modal (authenticated + linked users only) -->
-    {% if user.is_authenticated and user.profile and user.profile.is_linked %}
-        {% include 'partials/welcome_tour_modal.html' %}
-    {% endif %}
 
     <!-- Load shared utilities first -->
     <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
@@ -215,11 +104,14 @@
     </script>
     <script src="{% static 'js/vendor/Sortable.min.js' %}"></script>
     <script src="{% static 'js/utils.js' %}"></script>
+    <script src="{% static 'js/medallion.js' %}"></script>
     <script src="{% static 'js/celebrations.js' %}"></script>
-    <script src="{% static 'js/notifications.js' %}"></script>
+    {% comment %}notifications.js was here, on every page of the site. It fetched an unread count per page
+    load for every authed visitor; it went with the notification system in 2026-08.{% endcomment %}
+    <script src="{% static 'js/navsync.js' %}"></script>
+    <script src="{% static 'js/subnav.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>
     <script src="{% static 'js/navbar-search.js' %}"></script>
-    <script src="{% static 'js/welcome-tour.js' %}"></script>
     <script src="{% static 'js/easter-eggs.js' %}"></script>
     {% block js_scripts %}{% endblock %}
   </body>

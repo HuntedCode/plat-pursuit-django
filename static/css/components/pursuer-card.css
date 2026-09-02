@@ -1,0 +1,149 @@
+/* ============================================================================
+ * PURSUER CARD -- the identity signature (home hero, profile header, share).
+ * "Trophy Case": platinum count is the hero, the rarest platinums sit under
+ * glass, rank tints the chrome (earned standing). Bespoke --pp foundation; the
+ * premium is craft on real content, not a metaphor. Frame-language notches.
+ * ========================================================================== */
+.pursuer-card {
+    position: relative;
+    padding: 16px;
+    border-radius: var(--pp-radius-lg, 12px);
+    border: 2px solid var(--pp-border);
+    /* material over drop-shadow: a faint top-edge light catch + workbench gradient */
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%),
+        linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+    /* corner-diamond gem treatment -- a cut notch at rest, escalated per rank below */
+    --pc-notch-bg: var(--pp-bg-1); --pc-notch-bd: var(--pp-border); --pc-notch-glow: transparent;
+}
+@media (min-width: 768px) { .pursuer-card { padding: 22px; } }
+
+/* Frame brand mark: diamond corner notches (drive them via --pc-notch-* so each rank band
+   can turn them from a cut notch into a glowing gem) */
+.pursuer-card::before, .pursuer-card::after,
+.pursuer-card > .pursuer-card__nbl, .pursuer-card > .pursuer-card__nbr {
+    content: ''; position: absolute; width: 7px; height: 7px; transform: rotate(45deg);
+    background: var(--pc-notch-bg); border: 1px solid var(--pc-notch-bd);
+    box-shadow: 0 0 7px var(--pc-notch-glow);
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.pursuer-card::before { top: -3px; left: -3px; }
+.pursuer-card::after  { top: -3px; right: -3px; }
+.pursuer-card__nbl { bottom: -3px; left: -3px; }
+.pursuer-card__nbr { bottom: -3px; right: -3px; }
+
+/* Rank-tinted chrome -- the card visibly upgrades as you climb. Resting ranks stay matte
+   (the accent is earned by standing); --pc-tier carries the band accent (a quiet violet at
+   mid, cyan at the apex) into the border, glow, rank label + the diamond notches. */
+.pursuer-card--seeker, .pursuer-card--hunter {
+    border-color: color-mix(in oklab, var(--pp-text) 12%, var(--pp-border));
+    /* the notches pick up a faint neutral fill -- the first hint of the gem */
+    --pc-notch-bg: color-mix(in oklab, var(--pp-text) 14%, var(--pp-bg-1));
+    --pc-notch-bd: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border));
+}
+.pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal { --pc-tier: var(--pp-secondary, rgb(168,140,232)); }
+.pursuer-card--vanquisher, .pursuer-card--paragon,
+.pursuer-card--luminary, .pursuer-card--ascendant { --pc-tier: var(--pp-primary); }
+
+/* mid + high standing: tinted material + a soft glow, and the corner diamonds become tinted gems */
+.pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal,
+.pursuer-card--vanquisher, .pursuer-card--paragon {
+    border-color: color-mix(in oklab, var(--pc-tier) 44%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pc-tier) 12%, transparent), transparent 26%),
+        linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    box-shadow: 0 16px 44px rgba(0,0,0,0.52), 0 0 32px color-mix(in oklab, var(--pc-tier) 16%, transparent);
+    --pc-notch-bg: color-mix(in oklab, var(--pc-tier) 32%, var(--pp-bg-1));
+    --pc-notch-bd: color-mix(in oklab, var(--pc-tier) 55%, var(--pp-border));
+    --pc-notch-glow: color-mix(in oklab, var(--pc-tier) 28%, transparent);
+}
+/* the apex: radiant glass -- a stronger glow, a brighter top-edge light catch, a harder border,
+   and the diamonds become bright glowing gems */
+.pursuer-card--luminary, .pursuer-card--ascendant {
+    border-color: color-mix(in oklab, var(--pc-tier) 60%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pc-tier) 18%, transparent), transparent 32%),
+        linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    box-shadow: 0 20px 56px rgba(0,0,0,0.55), 0 0 56px color-mix(in oklab, var(--pc-tier) 26%, transparent), inset 0 1px 0 color-mix(in oklab, var(--pc-tier) 38%, transparent);
+    --pc-notch-bg: color-mix(in oklab, var(--pc-tier) 58%, var(--pp-bg-1));
+    --pc-notch-bd: color-mix(in oklab, var(--pc-tier) 70%, var(--pp-border));
+    --pc-notch-glow: color-mix(in oklab, var(--pc-tier) 62%, transparent);
+}
+
+/* head: identity + the platinum hero */
+.pursuer-card__top { display: flex; align-items: center; gap: 12px; }
+.pursuer-card__avatar {
+    width: 48px; height: 48px; flex: none; border-radius: 999px; overflow: hidden;
+    background: var(--pp-bg-3, var(--pp-bg-1)); box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 50%, transparent);
+}
+@media (min-width: 768px) { .pursuer-card__avatar { width: 60px; height: 60px; } }
+.pursuer-card__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pursuer-card__avatar-fb { width: 100%; height: 100%; display: grid; place-content: center; font-family: var(--pp-font-display); font-weight: 800; font-size: 20px; color: var(--pp-text-mute); }
+.pursuer-card__id { min-width: 0; flex: 1; }
+.pursuer-card__name, .pursuer-card__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pursuer-card__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; line-height: 1.1; color: var(--pp-text); }
+@media (min-width: 768px) { .pursuer-card__name { font-size: 22px; } }
+.pursuer-card__rank { font-family: var(--pp-font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pc-tier, var(--pp-primary)); text-shadow: 0 0 12px color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 42%, transparent); }
+.pursuer-card__title { font-size: 12px; font-style: italic; color: var(--pp-text-dim); padding-right: 1px; }
+.pursuer-card__platwrap { margin-left: auto; text-align: right; }
+.pursuer-card__plat { display: block; font-size: 36px; color: var(--pp-primary); text-shadow: 0 0 24px color-mix(in oklab, var(--pp-primary) 38%, transparent); }
+@media (min-width: 768px) { .pursuer-card__plat { font-size: 46px; } }
+.pursuer-card__cap { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* stats line */
+.pursuer-card__stats { display: flex; gap: 22px; margin: 14px 2px 16px; }
+.pursuer-card__stat-n { font-size: 22px; color: var(--pp-text); }
+.pursuer-card__stat-n small { font-size: 14px; }
+.pursuer-card__stat-n.is-accent { color: var(--pp-primary); }
+
+/* disciplines: a featured full-width band of 5 family tiles (avg level + name + a bar
+   relative to your strongest family, so it reads as "what you're made of") */
+.pursuer-card__fams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 2px 16px; }
+@media (min-width: 768px) { .pursuer-card__fams { grid-template-columns: repeat(5, 1fr); } }
+.pursuer-card__fam { padding: 12px 8px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 15%, transparent), transparent 72%), var(--pp-bg-2); border: 1px solid color-mix(in oklab, var(--disc) 40%, transparent); }
+.pursuer-card__fam-n { font-size: 28px; line-height: 1; text-shadow: 0 0 14px color-mix(in oklab, var(--disc) 38%, transparent); }
+@media (min-width: 768px) { .pursuer-card__fam-n { font-size: 34px; } }
+.pursuer-card__fam-l { max-width: 100%; font-size: 9px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pursuer-card__fam-bar { width: 100%; max-width: 72px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.09); overflow: hidden; margin-top: 1px; }
+.pursuer-card__fam-bar i { display: block; height: 100%; background: var(--disc); border-radius: 999px; box-shadow: 0 0 8px color-mix(in oklab, var(--disc) 55%, transparent); }
+
+/* showcase: full width below */
+.pursuer-card__showcase { min-width: 0; }
+
+/* the shelf: platinums under glass (Rarest / Recent toggle) */
+.pursuer-card__shelfhead { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 8px; }
+.pursuer-card__shelflabel { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-dim); }
+.pursuer-card__toggle { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--pp-bg-1); border: 1px solid var(--pp-border); }
+.pursuer-card__tab { font-family: var(--body, inherit); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); padding: 3px 9px; border-radius: 6px; background: transparent; border: none; cursor: pointer; transition: color 0.15s, background 0.15s; }
+.pursuer-card__tab:hover { color: var(--pp-text-dim); }
+.pursuer-card__tab.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
+.pursuer-card__tab:active { transform: scale(0.96); }
+/* contract jobs this platinum levels (discipline-colored icon chips on the cover) */
+.pursuer-card__cover-els { position: absolute; left: 3px; bottom: 13px; display: flex; gap: 2px; }
+.pursuer-card__el { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 3px; color: var(--disc); background: color-mix(in oklab, var(--disc) 22%, rgba(0,0,0,0.72)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
+.pursuer-card__el svg { width: 10px; height: 10px; }
+/* The strip lays the covers out in a single row, each 1/6 of the shelf. At REST exactly 6 show and
+   the shelf is UNCLIPPED, so covers' hover lift + glow (and a new cover's marker) are never cut.
+   The 7th (outgoing) cover is hidden until the forge needs it; the forge then reveals it and clips
+   the shelf so the slot-in shift can slide covers off-card (nothing is hovered mid-forge, so the
+   clip is harmless there). Cover COUNT (6) is mirrored in pursuer_card_service.showcase_limit and
+   pursuer-card-forge.js's `i < 6` visible-index filter -- keep the three in sync. */
+.pursuer-card__strip { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 40px) / 6); gap: 8px; }
+.pursuer-card__strip > .pursuer-card__cover:nth-child(7) { display: none; }
+.pursuer-card--forging .pursuer-card__shelf { clip-path: inset(-8px 0 -8px 0); }
+.pursuer-card--forging .pursuer-card__strip > .pursuer-card__cover:nth-child(7) { display: block; }
+.pursuer-card__shelf:not([hidden]) { animation: pcShelfIn 0.22s ease; }  /* soft fade on the Rarest/Recent swap */
+@keyframes pcShelfIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pursuer-card__shelf:not([hidden]) { animation: none; } }
+.pursuer-card__cover {
+    position: relative; aspect-ratio: 3/4; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--pp-border); background: var(--pp-bg-3, var(--pp-bg-1));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 14px rgba(0,0,0,0.5);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.pursuer-card__cover:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 20px rgba(0,0,0,0.6), 0 0 16px color-mix(in oklab, var(--pp-primary) 22%, transparent); }
+.pursuer-card__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.pursuer-card__cover-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 5px 4px; font-size: 8px; font-weight: 700; line-height: 1.1; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+.pursuer-card__cover-pb { position: absolute; top: 4px; right: 4px; width: 11px; height: 11px; border-radius: 999px; background: radial-gradient(circle at 35% 30%, #fff, var(--pp-primary) 60%, color-mix(in oklab, var(--pp-primary) 50%, #000)); box-shadow: 0 0 7px color-mix(in oklab, var(--pp-primary) 70%, transparent); }
+.pursuer-card__cover-rare { position: absolute; top: 4px; left: 4px; font-size: 7px; font-weight: 800; color: var(--pp-primary); background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 4px; }

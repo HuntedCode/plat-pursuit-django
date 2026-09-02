@@ -1,0 +1,13 @@
+{% comment %}
+Job detail's contract cards for ONE page -- the append target for infinite scroll, and what the page
+itself renders for page 1.
+
+Cards only, no wrapper: `InfiniteScroller` appends the nodes it finds by `cardSelector` into the existing
+grid, so a container here would nest one per page. Same contract as Career's `_results.html`, minus the
+facet island (this tab has no filters to count).
+
+`job` is what switches `_contract_card.html` into its job-scoped variant -- this contract's own jobs as
+pills instead of the 25-cell map, with this one emphasised. `disciplines` is still passed because the
+card is ONE template: the map branch has to stay renderable.
+{% endcomment %}
+{% for p in contracts %}{% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=disciplines job=job %}{% endfor %}

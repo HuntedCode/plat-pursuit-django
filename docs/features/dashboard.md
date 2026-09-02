@@ -1,302 +1,44 @@
 # Dashboard System
 
-The dashboard is the personal trophy hunting command center. It is rendered at the site root (`/`) by [HomeView](home-page.md) for any logged-in user whose PSN profile has finished syncing. Users in earlier states (anonymous, no PSN linked, sync in progress) get one of three lighter shells that share the dashboard's design language but skip the heavy module pipeline. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and support for premium user-created custom tabs. Only the active tab's lazy modules load on page init for performance.
+> **STATUS: deleted 2026-08.** The modular dashboard is gone -- views, template, the 41-module registry,
+> `dashboard_service`, `dashboard.js`, the `DashboardConfig` model (migration `0304`) and the customization
+> API. This page records what it was and why it went, because pieces of its thinking survive elsewhere.
 
-`/dashboard/` is preserved as a permanent redirect to `/` so legacy bookmarks keep working. The standalone `DashboardView` class is now a thin wrapper around `build_dashboard_context()` (in `trophies/views/dashboard_views.py`) which is the single source of truth for dashboard context. `HomeView` calls the same helper directly for synced users without going through view inheritance.
+## What it was
 
-## Place in the Hub-of-Hubs IA
+The personal command center at `/` for synced users: a registry of 41 modules across 6 immutable system
+tabs plus premium user-created custom tabs, drag-reorderable, with per-module lazy loading and a
+server/client load-strategy split. `/dashboard/` redirected to `/` and `HomeView` called
+`build_dashboard_context()` directly.
 
-The dashboard is the landing page of the **Dashboard hub** (one of the four hubs in the [hub-of-hubs IA](../architecture/ia-and-subnav.md): Dashboard / Browse / Community / My Pursuit). When a user lands on `/`, the global sub-navigation strip rendered by [`templates/partials/hub_subnav.html`](../../templates/partials/hub_subnav.html) appears below the main navbar with four pill-tab items:
+## Why it was deleted
 
-| Sub-nav Item | URL | What it surfaces |
-|--------------|-----|------------------|
-| Dashboard | `/` | The cockpit you're already on (active state) |
-| My Stats | `/dashboard/stats/` | The 120+ stat data dump page |
-| My Shareables | `/dashboard/shareables/` | Share-image generation, Platinum Grid wizard |
-| Recap | `/dashboard/recap/` | Spotify-Wrapped style monthly recap |
+It was the pre-rebuild answer to "where does a hunter land", and the rebuild answered that question
+differently: `/` became a **lobby**, and the personal surfaces became real pages (Career, Collection, My
+Stats, the Pursuer Card) rather than modules on a grid. Once those pages existed, the dashboard was a
+second, worse copy of each of them, with a customization layer maintained for a page nobody needed to
+customize any more.
 
-This is the discoverability mechanism for personal-utility pages that used to live in the legacy "My Pursuit" navbar dropdown. The dropdown is gone (see [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the rationale); the sub-nav strip is now the canonical way to navigate between the dashboard cockpit and its companion utility pages. The strip is sticky on `lg:+` so it stays accessible during long scrolls, and collapses to a horizontal scroll strip on mobile.
+It was also the origin of two production incidents, both worth carrying forward:
 
-The strip is the *only* required navigation for personal-utility pages — the dashboard cockpit itself is *not* required to surface dedicated cards or modules for Stats/Shareables/Recap. Module-level shortcuts to those pages can exist as dashboard modules if they make sense (and several already do — Recap has its own module, for example), but they aren't load-bearing for discoverability.
+- **The premium-preview OOM.** Locked modules ran their real providers against the viewing user's data to
+  build a blurred placeholder. For a free-tier hunter with a 250,000-trophy library that fanned out to 10+
+  providers sequentially: 91 seconds and 153 MB per render, and 502s on `/`. The rule that came out of it
+  (a preview's data layer must skip the provider *before* invoking it) is in the project CLAUDE.md and
+  still binds.
+- **The whale aggregation class.** Several providers iterated profile-scoped querysets in Python to build
+  Counters. The DB-aggregation rule in the project CLAUDE.md is the residue.
 
-The [Tutorial System](../design/tutorial-system.md) Welcome Tour explicitly points at the sub-nav strip on the Dashboard tour step so new users notice it on first visit. The tour auto-triggers once on the first dashboard load after PSN linking + sync via a `show_welcome_tour` context flag injected in `HomeView` (true when `profile.tour_completed_at` is null). After completion or skip, the flag is set and the tour never auto-shows again. Users can replay it from the avatar dropdown.
+## What survived
 
-## Architecture Overview
-
-The dashboard uses a **Module Registry** pattern with a **Tabbed Carousel** layout. Modules are declared in `DASHBOARD_MODULES` in `dashboard_service.py`. Each module belongs to a category that maps to a default system tab. Premium users can create custom tabs and move modules between tabs.
-
-**Layout**: Single-column `flex flex-col max-w-4xl mx-auto` within each tab panel. Drag reorder via SortableJS controls vertical priority within tabs. Premium users can reorder modules, configure per-module settings, create/rename/delete custom tabs, and move modules between tabs.
-
-**Performance**: Only the active tab's lazy modules load on page init. Other tabs load on first activation. Cache keys include a settings hash so different configurations are cached independently. Mutation points (challenge create/delete, badge sync) invalidate the dashboard cache.
-
-## Tab System
-
-### System Tabs (6, immutable for all users)
-
-| Order | Icon | Tab | Slug | Default Modules |
-|-------|------|-----|------|-----------------|
-| 1 | Crown | Premium | `premium` | Premium-exclusive modules |
-| 2 | Trophy Cup | At a Glance | `at_a_glance` | Trophy Snapshot, Recent Platinums |
-| 3 | Chart | Progress | `progress` | Challenge Hub |
-| 4 | Medal | Badges | `badges` | Badge Progress |
-| 5 | Star | Highlights | `highlights` | My Reviews, Rate My Games |
-| 6 | Share | Share & Export | `share` | Profile Card, Latest Platinum, Challenge Cards, Recap Card |
-
-### Custom Tabs (Premium only, max 6)
-
-Premium users can create custom tabs with a name (max 20 chars) and icon (from 8 presets). Custom tabs appear in a second, smaller tab bar below the system tabs. Tabs can be renamed, deleted, and reordered via drag in the customize panel.
-
-### Tab Navigation
-
-- **System tab bar**: `flex-1` buttons that fill the width evenly, icon + short label on desktop, icon-only on tablet
-- **Custom tab bar**: Smaller, accent-colored, only renders if custom tabs exist
-- **Keyboard**: ArrowLeft/Right/Home/End navigate between tabs
-- **Active tab persistence**: Last active tab saved to `DashboardConfig.tab_config.active_tab`, defaults to `at_a_glance` on first visit or after reset
-- **Per-tab lazy loading**: `loadedTabs` Set tracks which tabs have been loaded
-
-## Current Modules
-
-| Slug | Name | Category | Strategy | Cache | Premium |
-|------|------|----------|----------|-------|---------|
-| `trophy_snapshot` | Trophy Snapshot | at_a_glance | Server | None | No |
-| `recent_activity` | Recent Activity | at_a_glance | Lazy | 5m | No |
-| `recent_platinums` | Recent Platinums | at_a_glance | Lazy | 5m | No |
-| `challenge_hub` | Challenge Hub | progress | Lazy | 5m | No |
-| `badge_progress` | Badge Progress | badges | Lazy | 10m | No |
-| `recent_badges` | Recent Badges | badges | Lazy | 10m | No |
-| `monthly_recap_preview` | Monthly Recap Preview | highlights | Lazy | 30m | No |
-| `quick_settings` | Quick Settings | at_a_glance | Server | None | No |
-| `badge_stats` | Badge Stats | badges | Lazy | 10m | No |
-| `badge_xp_leaderboard` | Badge XP & Leaderboard | badges | Lazy | 10m | No |
-| `country_xp_leaderboard` | Country XP Leaderboard | badges | Lazy | 10m | No |
-| `az_challenge` | A-Z Challenge | progress | Lazy | 5m | No |
-| `genre_challenge` | Genre Challenge | progress | Lazy | 5m | No |
-| `calendar_challenge` | Platinum Calendar | progress | Lazy | 5m | No |
-| `completion_milestones` | Almost There | progress | Lazy | 10m | No |
-| `milestone_tracker` | Milestone Tracker | progress | Lazy | 10m | No |
-| `my_reviews` | My Reviews | highlights | Lazy | 10m | No |
-| `rarity_showcase` | Rarity Showcase | highlights | Lazy | 10m | No |
-| `rate_my_games` | Rate My Games | highlights | Lazy | 30m | No |
-| `advanced_stats` | Advanced Stats | premium | Lazy | 30m | Yes |
-| `premium_settings` | Theme Picker | premium | Lazy | None | Yes |
-| `trophy_visualizations` | Trophy Visualizations | premium | Lazy | 30m | Yes |
-| `advanced_badge_stats` | Advanced Badge Stats | premium | Lazy | 30m | Yes |
-| `badge_series_overview` | Badge Series Overview | premium | Lazy | 30m | Yes |
-| `badge_visualizations` | Badge Visualizations | premium | Lazy | 30m | Yes |
-| `profile_card_preview` | Profile Card | share | Lazy | None | No |
-| `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |
-| `challenge_share_cards` | Challenge Cards | share | Lazy | 10m | No |
-| `recap_share_card` | Recap Card | share | Lazy | 30m | No |
-| `platinum_grid_cta` | Platinum Grid | share | Lazy | 10m | No |
-| `library_health_alerts` | Library Health | highlights | Lazy | 30m | No |
-| `my_stats_teaser` | Your Stats | at_a_glance | Lazy | 10m | No |
-| `top_developers` | Top Studios | highlights | Lazy | 30m | No |
-| `roadmap_recommendations` | Roadmaps for Your Library | progress | Lazy | 30m | No |
-| `theme_mastery` | Genre & Themes | premium | Lazy | 30m | Yes |
-| `time_to_beat_insights` | Time-to-Beat | premium | Lazy | 30m | Yes |
-| `earned_titles` | Earned Titles | highlights | Lazy | 10m | No |
-| `vr_trophy_hunter` | VR Trophy Hunter | progress | Lazy | 30m | No |
-| `profile_badge_showcase_editor` | Profile Showcase | premium | Lazy | None | Yes |
-
-See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
-
-## IGDB-powered modules
-
-Several modules surface data from the IGDB integration shipped in March 2026:
-
-- **Top Developers**: aggregates `ConceptCompany` (developer/publisher roles) joined to user's earned trophies. Sub-tab toggle between developers and publishers. Links to `/companies/<slug>/`.
-- **Genre & Themes** (premium): combined module with side-by-side genre + theme radars (via `ConceptGenre` and `ConceptTheme`). All-time only; year-aware genre data lives nowhere now since the field was removed from `trophy_visualizations`.
-- **Time-to-Beat** (premium): uses `IGDBMatch.time_to_beat_completely` to compute average plat duration, longest hunts, and currently-grinding remaining hours.
-- **Engine Radar** (in trophy_visualizations): replaced the genre radar slot. Uses `ConceptEngine` to surface what engines power the user's library (Unreal, Unity, Decima, etc.). Falls back gracefully when engine data is sparse.
-
-## Library Health Alerts
-
-Surfaces games in the user's library with auto-applied data quality flags from the GameFlag system. Severity buckets:
-
-- **Blockers** (red): `is_obtainable=False`, `is_delisted=True`
-- **Issues** (warning): `has_buggy_trophies=True`, `has_online_trophies=True`
-- **Info** (gray): `shovelware_status='manually_flagged'`
-
-Filters to games where the user has earned at least one trophy (`earned_trophies_count > 0`) so the list only shows games actually in active rotation. Links to game detail page for each flagged game and to `/games/flagged/` for the full browse list.
-
-## Profile Badge Showcase Editor
-
-Premium dedicated module for the 5-slot `ProfileBadgeShowcase`. Includes drag-reorder via `DragReorderManager` (SortableJS), persisted via the `POST /api/v1/badges/showcase/reorder/` endpoint.
-
-## Roadmaps for Your Library
-
-Roadmaps are 1:1 with `Concept` and have no per-user state (no follows/bookmarks). The module surfaces published roadmaps for concepts in the user's library where the user hasn't platinumed any game in that concept yet. This is the dashboard replacement for the legacy "My Checklists" surface that was removed when checklists were deleted.
-
-## My Stats Teaser
-
-Reuses `trophies/services/stats_service.py:get_career_overview()` (denormalized, instant). Displays 4 hero stats and a few wow callouts with a CTA to `/my-stats/`. The CTA is enabled even though `/my-stats/` is currently staff-gated; will activate for all users when the gate is removed.
-
-## Per-Module Settings Framework
-
-Premium users can configure individual modules via the customize panel. Each module declares `configurable_settings` with two types:
-- **`select`**: Button group (e.g., item count: 3/6/10)
-- **`toggle`**: On/off switch
-
-Settings are stored in `DashboardConfig.module_settings` as `{slug: {key: value}}`. `get_effective_settings()` resolves user overrides against defaults with validation. Free users see a locked gear icon as a premium teaser. Settings persist across premium downgrades but only take effect while premium.
-
-## Customize Panel
-
-The customize panel is a modal with three sections:
-
-### 1. Custom Tabs Management (Premium)
-- Create tab: name input (20 char max) + icon picker (8 presets) + create button
-- Existing tabs: drag to reorder, rename button, delete button
-- Free users see a locked teaser with upgrade prompt
-
-### 2. Module List (Grouped by Tab)
-Each tab is a collapsible section listing its modules. Each module row shows:
-- Drag handle (premium)
-- Module name + premium badge
-- Settings gear (premium, or locked teaser for free)
-- "Move to" dropdown (premium, all tabs including Premium)
-- Toggle switch (all users, free capped at 3 hidden)
-
-### 3. Footer
-- Reset to Default: clears all customizations (hidden, settings, order, custom tabs, module moves)
-- Done: closes modal, triggers page reload if structural changes were made
-
-**Structural change tracking**: A `_customizeDirty` flag tracks tab creates/renames/deletes, module moves, and tab reorder. The page reloads automatically when the modal closes if any structural changes were made.
-
-## File Map
-
-| File | Purpose |
-|------|---------|
-| `trophies/services/dashboard_service.py` | Module registry, providers, tab functions, settings framework, caching |
-| `trophies/views/dashboard_views.py` | `build_dashboard_context()` helper + thin `DashboardView` wrapper |
-| `core/views.py` | `HomeView` (smart router at `/`); calls `build_dashboard_context()` for synced users |
-| `api/dashboard_views.py` | 4 API endpoints: module data, config, reorder, preview toggle |
-| `api/user_settings_views.py` | `UpdateQuickSettingsAPIView` for dashboard Quick Settings auto-save |
-| `trophies/models.py` | `DashboardConfig` model with `tab_config` field |
-| `static/js/dashboard.js` | `DashboardManager`: tabs, lazy loading, customize, tab management, settings, drag |
-| `static/js/vendor/Sortable.min.js` | SortableJS library |
-| `static/js/utils.js` | `DragReorderManager` (SortableJS wrapper) |
-| `templates/trophies/dashboard.html` | Main page: header, tab bars, tab panels, JS init |
-| `templates/trophies/partials/dashboard/customize_panel.html` | Customize modal |
-| `templates/trophies/partials/dashboard/tab_icon.html` | Tab icon SVG partial (8 icons) |
-| `templates/trophies/partials/dashboard/*.html` | Module partial templates |
-
-## Data Model
-
-### DashboardConfig
-- `profile` (OneToOneField to Profile, primary_key=True)
-- `module_order` (JSONField, default=list): Module slug order (premium)
-- `hidden_modules` (JSONField, default=list): Hidden slugs (free: max 3)
-- `module_settings` (JSONField, default=dict): Per-module settings (premium)
-- `tab_config` (JSONField, default=dict): Tab layout configuration
-- `updated_at` (DateTimeField, auto_now)
-
-### tab_config Structure
-```json
-{
-    "active_tab": "at_a_glance",
-    "tab_order": ["premium", "at_a_glance", "custom_1", ...],
-    "custom_tabs": {
-        "custom_1234_abcd": {"name": "My Favorites", "icon": "heart"}
-    },
-    "module_tab_overrides": {
-        "badge_progress": "custom_1234_abcd"
-    }
-}
-```
-
-## API Endpoints
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/dashboard/module/<slug>/` | Staff | Rendered HTML for lazy module |
-| POST | `/api/v1/dashboard/config/` | Staff | Update hidden/settings/order/tab_config |
-| POST | `/api/v1/dashboard/reorder/` | Staff (Premium) | Save drag-drop order |
-| POST | `/api/v1/user/quick-settings/` | Staff | Quick Settings auto-save (toggles, timezone, region) |
-
-### Config Update Behavior
-- `hidden_modules`: All users (free capped at 3)
-- `module_settings`: Premium only, merged with existing
-- `module_order`: Premium only
-- `tab_config.active_tab`: All users
-- `tab_config.tab_order/custom_tabs/module_tab_overrides`: Premium only
-- Custom tab names validated: non-empty, max 20 chars
-- Custom tab icons validated against `VALID_TAB_ICONS`
-- Custom tab slugs cannot collide with `DEFAULT_TAB_ORDER`
-- Max 6 custom tabs enforced server-side
-
-## Caching
-
-Cache keys: `dashboard:mod:{slug}:{profile_id}:{settings_hash}` where `settings_hash` is an MD5 of the module's effective settings. Invalidation uses `cache.delete_pattern()` with a wildcard prefix to clear all variants for a given module and profile.
-
-**Invalidation points:**
-- `Challenge.soft_delete()` in `trophies/models.py`
-- `create_az_challenge()`, `create_calendar_challenge()`, `create_genre_challenge()` in `challenge_service.py`
-- `check_profile_badges()` in `badge_service.py` (after sync)
-- `check_all_milestones_for_user()` in `milestone_service.py` (covers milestone tracker + reviews via milestone checks)
-- `award_milestone_directly()` in `milestone_service.py`
-
-## Premium Module Previews (Free Users)
-
-Free users see blurred previews of all premium modules using real data from the showcase profile (`SHOWCASE_PROFILE_ID = 3` in `dashboard_service.py`). Each preview renders the actual module template with blur + overlay containing the module name, description, "Preview data from the PlatPursuit team" attribution, and an upgrade CTA.
-
-- `get_premium_preview_html(slug)`: renders module template with showcase profile data, caches HTML for 24 hours
-- `_get_preview_settings(slug)`: per-module overrides (trophy viz uses previous year, badge viz uses all-time)
-- Provider called directly with overrides (bypasses `get_effective_settings` validation)
-- Chart.js loaded for all users so charts render behind the blur
-- Premium modules included in `get_dashboard_tabs()` with `is_preview=True` and `load_strategy='server'`
-
-## Gotchas and Pitfalls
-
-- **Premium checks read `profile.user_is_premium` directly**: Dashboard, stats, profile, platinum-grid, and showcase views all consult the model property.
-- **No model instances in provider return data**: Cache serialization fails with Django model objects.
-- **Settings only active for premium**: Free users get defaults. Saved settings preserved across downgrades.
-- **Calendar weekday offset**: Uses `""|ljust:offset` (not `"x"|ljust:offset`) to avoid off-by-one.
-- **Badge prerequisite filtering**: Provider fetches 3x limit, pre-fetches earned badge IDs, filters in Python.
-- **Premium modules are visually tagged**: Premium modules show a "Premium" badge on their name. Premium users can move them to any tab freely.
-- **Custom tab slug generation**: Uses `Date.now() + random(4)` to prevent collision.
-- **Customize panel structural changes**: `_customizeDirty` flag triggers page reload on modal close.
-- **Tab sections in customize panel**: Settings panel div must have `data-settings-slug` attribute and closing `>`.
-- **Toast visibility in modals**: `ToastManager` detects open `<dialog>` elements and redirects toasts to `.modal-toast-container` inside them. Without this, browser top layer renders the dialog above all z-indices, hiding toasts.
-- **Drag reorder in customize panel**: Each `.tab-section-content` gets its own SortableJS instance (not the outer list). Module rows must be direct children of their section container.
-- **Reset requires confirmation**: `_resetToDefault()` shows a `confirm()` dialog before clearing all customizations.
-- **Header shows equipped title**: `profile.displayed_title` (queries `UserTitle` with `is_displayed=True`). Returns `None` if no title equipped.
-- **Dropdown uses short tab names**: `all_tab_options` uses `short_name` (e.g., "Progress") not full `name` (e.g., "Progress & Challenges").
-- **Recent Activity groups by game+day**: Trophies for the same game on the same day are grouped into a single event showing type counts (gold/silver/bronze). Platinums are always standalone events. Badges are never grouped. Grouping is timezone-aware using the user's configured timezone.
-- **Monthly Recap shows finalized recaps only**: The provider fetches the most recent finalized recap, never the current in-progress month. This avoids spoiling the full recap experience.
-- **Quick Settings auto-save**: Each toggle/select change POSTs to `/api/v1/user/quick-settings/`. Timezone changes also un-finalize the current month's recap (handled server-side). Whitelisted settings prevent arbitrary field injection.
-- **Quick Settings region selector**: Includes "Any" (empty string) plus 6 region codes (NA, EU, JP, AS, KR, CN). Stored as `default_region` on Profile.
-- **Challenge module `_find_challenge` helper**: Shared private function used by `provide_challenge_hub` and the 3 standalone challenge providers. Finds active challenge first, falls back to most recently completed.
-- **Badge Stats collection rate**: Counts unique `series_slug` with `tier=1` and `is_live=True` for the denominator. Uses Tier 1 count to avoid inflating with multi-tier series.
-- **Badge XP leaderboard neighborhood**: When user is outside top 5, shows top 3 + gap + 2 above/user/2 below. Edge case: if user rank overlaps with top 3 window, `neighborhood_start = max(3, idx - 2)` prevents duplicate entries.
-- **Challenge "most recent plat"**: Uses `slot.completed_at` timestamp (not alphabetical order) to find the true most recently completed slot.
-- **Calendar 3-month pagination**: All 12 months are rendered in HTML, JS shows/hides 3 at a time. `_initCalendarPagination` registered via `registerModuleInit('calendar_challenge', ...)`. Defaults to the page containing the current month.
-- **Milestone Tracker Python-side sort**: Completion pct requires dividing `progress_value / milestone.required_value` which crosses an FK boundary. Computed in Python since users have <50 progress records.
-- **Milestone image.url extraction**: `milestone.image` is an ImageField. Must extract `.url` string in the provider, not pass the FieldFile object (not serializable for cache).
-- **Almost There hidden game filtering**: Always excludes `user_hidden=True`. Additionally excludes `hidden_flag=True` only if `profile.hide_hiddens` is enabled.
-- **Almost There configurable threshold**: Default 90%, options 80/90/95. Stored in `module_settings` and included in cache key hash.
-- **My Reviews aggregate fallback**: Django `Sum()` returns `None` for empty querysets. Provider handles with `or 0` on all aggregate values.
-- **Cache invalidation coverage**: Milestone tracker invalidated via `check_all_milestones_for_user` hook. Reviews invalidated via same (milestone check called in create/delete). Almost There and Rarity Showcase covered by existing sync pipeline.
-- **Rate My Games ticker strip**: Auto-scrolling CSS animation with duplicated icons for seamless loop. Pauses on hover. Icons are clickable links to review_hub. Defensive slug check prevents crash on concepts without slugs.
-- **Rarity Showcase 2-column grid**: Shows trophy icon with overlapping game icon badge. Includes trophy description (`trophy_detail`). Even limit options (4/6/8). Filters `earn_rate > 0`. Uses `rarity_color_hex` filter.
-- **Share card preview pattern**: All share card modules (platinum, challenge, recap) use `_initShareCards()` in dashboard.js. Finds `.share-card-preview` containers by `data-share-html-url`, fetches HTML via API, scales to 1200x630 aspect ratio. Theme switching is client-side via `applyTheme()` (modifies DOM directly). Game art themes are excluded unless the preview has `data-supports-game-art="true"` (platinum card only). Clicking a preview opens a full-size modal (`<dialog>`). Download buttons use `data-share-png-url` with the selected theme key.
-- **Share card rating prompt**: The platinum card download button triggers a rate-before-download modal (same `#rate-before-download-modal` partial as shareables page) if the user hasn't rated the game. Rating metadata (`concept_id`, `has_rating`, `playtime`) is captured from the HTML API response and stored on the preview element's dataset. Prompted once per session per concept. Shovelware platinums are prompted too (rating shovelware is allowed; only the Rate My Games wizard hides shovelware by default).
-- **Share card identity bars**: All share card templates (platinum, A-Z, calendar, genre, recap) include a rich identity bar with avatar (glow border, Plus subscriber badge), username, card type label, and "Platinum Pursuit" branding. Avatar and `is_plus` are passed from the view layer. `data-element` attributes are preserved for Playwright theme rendering.
-- **Share tab is last**: `DEFAULT_TAB_ORDER` places share at the end (after highlights).
-- **Staff-gated during dev**: Switch mixins to `LoginRequiredMixin` for production. Remove preview toggle UI.
-
-## How to Add a New Module
-
-1. **Write the provider**: `def my_provider(profile, settings=None) -> dict` in `dashboard_service.py`
-2. **Register in DASHBOARD_MODULES**: slug, template, provider, `configurable_settings`, `default_settings`, cache TTL, category
-3. **Create the template**: `{{ data.* }}` for provider data. Card styling: `card bg-base-200/80 border-2 ...`, padding `p-5 lg:p-7`
-4. **Add cache invalidation**: `invalidate_dashboard_cache()` at data mutation points
-5. **Update the catalog**: `docs/design/dashboard-module-catalog.md`
-6. The module's `category` determines which default tab it appears in
+| Piece | Where it went |
+|---|---|
+| The design language it seeded | The Career page is the reference standard now; see [career-reference-standard.md](../design/rebuild/career-reference-standard.md) |
+| `_built_for_hunters.html` | Deleted with the gates merge (2026-08); the landing's `land-pulse` band covers the heartbeat for every pre-synced state |
+| Badge progress module | `collection_service.closest_badge`, read by Home's Collection CTA |
+| `/dashboard/` URL | Still a permanent redirect to `/`, so old bookmarks keep working |
 
 ## Related Docs
 
-- [Module Catalog](../design/dashboard-module-catalog.md): Design history, cuts, and remaining roadmap (deferred to this doc for the live module list)
-- [Data Model](../architecture/data-model.md): DashboardConfig model
-- [JS Utilities](../reference/js-utilities.md): DragReorderManager
-- [Challenge Systems](../features/challenge-systems.md): Challenge models and services
-- [Badge System](../architecture/badge-system.md): Badge, UserBadgeProgress, layered rendering
+- [home-page.md](home-page.md): what `/` is now
+- [ia-and-subnav.md](../architecture/ia-and-subnav.md): the hub IA that replaced the tab grid

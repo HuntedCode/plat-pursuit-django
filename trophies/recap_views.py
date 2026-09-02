@@ -7,20 +7,21 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 
 from core.services.tracking import track_site_event
 from trophies.services.monthly_recap_service import MonthlyRecapService
-from trophies.mixins import ProfileHotbarMixin, RecapSyncGateMixin
+from trophies.mixins import RecapSyncGateMixin
 from trophies.recap_utils import (
-    get_user_local_now, get_most_recent_completed_month, check_sync_freshness,
+    get_user_local_now, get_most_recent_completed_month, check_sync_freshness, MIN_RECAP_YEAR,
 )
 from trophies.themes import get_available_themes_for_grid
 
 
-class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
-    """
-    Recap index page - redirects to most recent completed month or shows month picker.
+class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
+    """The recap's landing page: the latest month up front, the rest of the history under it.
+
+    Not a redirect any more. See `get` for why that made the archive unreachable from its own URL.
     """
     template_name = 'recap/recap_index.html'
 
@@ -28,60 +29,54 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         gate = self._get_sync_gate_response(request)
         if gate:
             return gate
-        profile = request.user.profile
-        now_local = get_user_local_now(request)
-
-        # Default to the most recent fully completed month (always previous month)
-        target_year, target_month = get_most_recent_completed_month(now_local)
-
-        # Check sync freshness: user must have synced within the current month
-        if not check_sync_freshness(profile, now_local):
-            return render(request, 'recap/recap_index.html', {
-                'sync_gate': 'sync_stale',
-                'profile': profile,
-                'stale_month_name': calendar.month_name[target_month],
-                'stale_year': target_year,
-                'user_timezone': request.user.user_timezone or 'UTC',
-                'breadcrumb': [
-                    {'text': 'Home', 'url': reverse_lazy('home')},
-                    {'text': 'Monthly Recap'},
-                ],
-            })
-
-        # Try to get the target month's recap
-        recap = MonthlyRecapService.get_or_generate_recap(
-            profile, target_year, target_month
-        )
-
-        if recap:
-            # Redirect to the completed month recap
-            return redirect('recap_view', year=target_year, month=target_month)
-
-        # No recap for target month - try current month as fallback
-        current_recap = MonthlyRecapService.get_or_generate_recap(
-            profile, now_local.year, now_local.month
-        )
-
-        if current_recap:
-            return redirect('recap_view', year=now_local.year, month=now_local.month)
-
-        # No activity at all - show index with available months
+        # This used to REDIRECT to the most recent month whenever a recap existed, falling back to the
+        # current one -- which meant the page at this URL only ever rendered for a hunter with no trophy
+        # activity at all. The archive was unreachable from its own address, and a second month picker
+        # had to live at the bottom of the recap page to compensate.
+        #
+        # It is a landing page now: it leads with the latest month and keeps the rest of the history
+        # under it. `get_or_generate_recap` is deliberately NOT called here -- generating every month a
+        # hunter merely looked at is work nobody asked for, and opening a month still generates it.
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
 
-        # Get available months
-        available_months = MonthlyRecapService.get_available_months(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
+        # Every month this hunter earned a trophy in -- no gating. See months_with_activity.
+        archive = MonthlyRecapService.get_archive(profile)
 
-        context['available_months'] = available_months
-        context['is_premium'] = profile.user_is_premium
-        context['no_activity'] = len(available_months) == 0
-        context['user_timezone'] = self.request.user.user_timezone or 'UTC'
+        # A stale sync blocks ONE month, not the archive. It used to render the whole page as a gate:
+        # a hunter who had not synced this calendar month lost access to every recap they had ever
+        # earned, including years of finished months a sync could not possibly change. The only month
+        # genuinely at risk is the most recent completed one -- it may still be missing trophies -- so
+        # that is the only one held back, and the page says so where the month is rather than instead
+        # of the page.
+        now_local = get_user_local_now(self.request)
+        recent = get_most_recent_completed_month(now_local)
+        stale = not check_sync_freshness(profile, now_local)
+
+        context['needs_refresh'] = stale
+        context['refresh_month_name'] = calendar.month_name[recent[1]]
+        context['refresh_year'] = recent[0]
+        if stale:
+            # Mark the month itself rather than making the template re-derive "is this the held one?"
+            # in two places (the hero and its tile in the grid) and drift between them.
+            for month in [archive['latest']] + [m for y in archive['years'] for m in y['months']]:
+                if month and (month['year'], month['month']) == recent:
+                    month['locked'] = True
+
+        context['archive'] = archive
+        context['latest'] = archive['latest']
+        context['no_activity'] = archive['month_count'] == 0
+        tz_name = self.request.user.user_timezone or 'UTC'
+        context['user_timezone'] = tz_name
+        # "America/New_York" -> "New York". The header chip has room for the city but not the region on a
+        # narrow screen, and a bare clock icon there says nothing at all.
+        context['user_timezone_short'] = tz_name.rsplit('/', 1)[-1].replace('_', ' ')
+        # Drives whether the prompt opens by itself. Null means never answered -- NOT "is UTC", which the
+        # timezone field cannot distinguish from an untouched default.
+        context['timezone_confirmed'] = self.request.user.timezone_confirmed_at is not None
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -91,7 +86,7 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         return context
 
 
-class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin, TemplateView):
+class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, TemplateView):
     """
     Main recap slide presentation view.
     """
@@ -104,9 +99,13 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         profile = request.user.profile
         now_local = get_user_local_now(request)
 
-        # Validate month
-        if not 1 <= month <= 12:
-            raise Http404("Invalid month")
+        # Validate month AND year. The year floor matters as much as the month: `<int:year>` matches 0,
+        # and get_month_date_range does `datetime(year, month, 1)`, which raises for year 0 -- a 500 from
+        # a URL. The API gained a shared bounds helper for exactly this; the page needs the same floor.
+        # MIN_RECAP_YEAR is a sanity bound, not a claim about any hunter: their real floor is their own
+        # first trophy, which enforces itself (a month with no activity has no recap).
+        if not 1 <= month <= 12 or year < MIN_RECAP_YEAR:
+            raise Http404("Invalid year or month")
 
         # Block access to current month (in-progress) for all users
         # Recaps are only for completed months
@@ -114,15 +113,10 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         if is_current_month:
             raise Http404("Cannot view recap for current month (in-progress)")
 
-        # Check premium gating for past months
-        # Non-premium users can access the most recent completed month only
-        # Anything older requires premium
+        # No premium gate. A recap is a record of what this hunter did; charging to look back at your
+        # own history was the wrong thing to sell. Every completed month with activity is open.
         recent_year, recent_month = get_most_recent_completed_month(now_local)
-        is_recent = (year == recent_year and month == recent_month)  # Most recent completed month only
-
-        if not is_recent and not profile.user_is_premium:
-            # Trying to access older month without premium
-            return redirect('recap_index')
+        is_recent = (year == recent_year and month == recent_month)
 
         # Check sync freshness for the most recent completed month
         if is_recent and not check_sync_freshness(profile, now_local):
@@ -131,7 +125,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
                 'profile': profile,
                 'stale_month_name': calendar.month_name[month],
                 'stale_year': year,
-                'user_timezone': request.user.user_timezone or 'UTC',
                 'breadcrumb': [
                     {'text': 'Home', 'url': reverse_lazy('home')},
                     {'text': 'Monthly Recap'},
@@ -142,15 +135,11 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         if (year > now_local.year) or (year == now_local.year and month > now_local.month):
             raise Http404("Cannot view recap for future months")
 
-        # Mark recap as viewed (for dashboard share card gating)
-        from trophies.models import MonthlyRecap
-        updated = MonthlyRecap.objects.filter(
-            profile=profile, year=year, month=month, has_been_viewed=False
-        ).update(has_been_viewed=True)
-        if updated:
-            from trophies.services.dashboard_service import invalidate_dashboard_cache
-            invalidate_dashboard_cache(profile.id)
-
+        # NB: marking the recap viewed happens in get_context_data, AFTER the recap is generated. It used
+        # to run here, before generation -- which meant it filtered against a row that did not exist yet
+        # for any month opened for the first time, matched nothing, and left `has_been_viewed` False
+        # forever. Harmless while only last month was reachable and its row was always pre-generated by
+        # cron; wrong for every historic month now that the whole archive is openable.
         return super().get(request, *args, year=year, month=month, **kwargs)
 
     def get_context_data(self, year, month, **kwargs):
@@ -162,8 +151,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['year'] = year
         context['month'] = month
         context['month_name'] = calendar.month_name[month]
-        context['is_premium'] = profile.user_is_premium
-        context['user_timezone'] = self.request.user.user_timezone or 'UTC'
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -172,13 +159,6 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         ]
 
         # Calendar month selector
-        calendar_data = MonthlyRecapService.get_available_months_by_year(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
-        calendar_data['years_json'] = json.dumps(calendar_data['years'])
-        context['calendar_data'] = calendar_data
-
         # Get or generate the recap
         recap = MonthlyRecapService.get_or_generate_recap(profile, year, month)
 
@@ -189,6 +169,12 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
 
         # Track page view
         track_site_event('recap_page_view', f"{year}-{month:02d}", self.request)
+
+        # The card's grounds: the SAME curated eight the plat card offers, because the two cards are
+        # siblings and a hunter picking a ground should not find a different palette on each. Game-art
+        # backings are filtered out -- they need a game, and a month is not one.
+        from trophies.themes import get_plat_card_themes
+        context['card_themes'] = [(k, t) for k, t in get_plat_card_themes() if not t.get('is_game_art')]
 
         # Build slides response
         slides = MonthlyRecapService.build_slides_response(recap)
@@ -206,14 +192,23 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
 
         context['recap_json'] = json.dumps(recap_data)
 
-        # Get available months for bottom month picker (backward compatibility)
-        is_current_month = (year == now_local.year and month == now_local.month)
-        available_months = MonthlyRecapService.get_available_months(
-            profile,
-            include_premium_only=profile.user_is_premium
-        )
-        context['available_months'] = available_months
-        context['is_current_month'] = is_current_month
+        # Mark it viewed, now that the row is guaranteed to exist. The PRE-update value is what the
+        # entrance reads: on a first visit the cover should say "Begin", not "Watch it again".
+        from trophies.models import MonthlyRecap
+        first_visit = not recap.has_been_viewed
+        if first_visit:
+            MonthlyRecap.objects.filter(pk=recap.pk).update(has_been_viewed=True)
+
+        # The entrance renders from the recap ITSELF -- its headline numbers, and whether this month has
+        # been seen before -- so it can be a real cover rather than a generic "Monthly Recap" header.
+        context['recap'] = recap
+        context['profile'] = profile
+        context['first_visit'] = first_visit
+
+        # NOT available_months here: only recap_index.html renders that list, and computing it on this
+        # page meant a SECOND whale-scale aggregate over EarnedTrophy per render, feeding a context
+        # variable no template on this page reads. The calendar below is this page's month picker.
+        context['is_current_month'] = (year == now_local.year and month == now_local.month)
 
         # Add available themes for color grid modal (no game art for recaps)
         context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)

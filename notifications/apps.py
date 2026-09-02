@@ -1,7 +1,4 @@
 from django.apps import AppConfig
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class NotificationsConfig(AppConfig):
@@ -9,13 +6,15 @@ class NotificationsConfig(AppConfig):
     name = "notifications"
 
     def ready(self):
+        """Register signal handlers.
+
+        UNGUARDED ON PURPOSE, matching `trophies/apps.py`. This used to sit in a broad try/except that
+        logged and continued -- so if `notifications.signals` (or anything it imports at module level)
+        ever failed to import, EVERY notification signal silently unregistered and the site booted
+        green. `manage.py check` passed, the suite passed, and platinum notifications simply stopped
+        being created, with the only evidence one ERROR line in a startup log.
+
+        A signal module that cannot import is a deploy error. Failing to boot is the correct, loud
+        outcome; a running site that quietly does less is not.
         """
-        Register signal handlers when the app is ready.
-        This ensures signals are connected when Django starts.
-        """
-        try:
-            logger.info("[NOTIFICATIONS] NotificationsConfig.ready() called")
-            import notifications.signals  # noqa: F401
-            logger.info("[NOTIFICATIONS] Signal handlers imported successfully")
-        except Exception as e:
-            logger.error(f"[NOTIFICATIONS] Failed to import signal handlers: {e}", exc_info=True)
+        import notifications.signals  # noqa: F401

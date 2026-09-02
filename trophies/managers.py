@@ -78,6 +78,25 @@ class ProfileManager(models.Manager):
         return self.get_queryset().verified()
 
 
+# The concept-canonical ELECTION ORDER (SEO Lane 1, the "light version" -- his call: no FK, no
+# cron, no absorb() branch). One deterministic ordering names the SKU that represents a concept
+# in search: has trophy data first, then the SKU most of our hunters actually own
+# (played_count), then id for stability. Self-healing: the election is computed, never stored.
+def canonical_election_order():
+    """The ordering expressions; kept as one function so the sitemap's window and the
+    per-concept pick can never disagree about who the canonical sibling is."""
+    from django.db.models import Case, IntegerField, Value, When
+    return [
+        # NOTE: emptiness, not counts -- a malformed {'bronze': 0} blob scores as having
+    # trophies. Accepted: played_count dominates in practice, and JSON-sum ordering is not
+    # worth the SQL. Revisit only if a real mis-election shows up.
+    Case(When(defined_trophies={}, then=Value(1)), default=Value(0),
+             output_field=IntegerField()),
+        models.F('played_count').desc(),
+        models.F('id').asc(),
+    ]
+
+
 class GameQuerySet(models.QuerySet):
     """Custom queryset for Game model with filtering utilities."""
 
@@ -91,6 +110,40 @@ class GameQuerySet(models.QuerySet):
             QuerySet: Games that can still be obtained
         """
         return self.filter(is_obtainable=True)
+
+    def game_page_canonicals(self):
+        """One Game per GAME PAGE -- the Games/Trophy Lists IA identity, which is broader than
+        the retired per-concept election: deliberately-split concepts sharing a trusted igdb_id are ONE page, so
+        they elect ONE representative between them. Partition key mirrors Concept.game_page_url
+        exactly (trusted igdb id, else concept_id, else the row itself), so the sitemap can never
+        advertise two rows for one page or a page for zero rows. Same election ordering inside the
+        partition; concept-less rows partition on their own id and stand for themselves."""
+        from django.db.models import Case, CharField, Value, When, Window
+        from django.db.models.functions import Cast, Concat, RowNumber
+
+        from trophies.models import IGDBMatch
+
+        page_key = Case(
+            When(
+                concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                concept__igdb_match__igdb_id__isnull=False,
+                then=Concat(Value('igdb:'), Cast('concept__igdb_match__igdb_id', CharField())),
+            ),
+            When(concept__isnull=False,
+                 then=Concat(Value('concept:'), models.F('concept__concept_id'))),
+            default=Concat(Value('game:'), Cast('id', CharField())),
+            output_field=CharField(),
+        )
+        return (
+            self.annotate(
+                _election_rank=Window(
+                    expression=RowNumber(),
+                    partition_by=[page_key],
+                    order_by=canonical_election_order(),
+                )
+            )
+            .filter(_election_rank=1)
+        )
 
     def exclude_shovelware(self):
         """
@@ -183,6 +236,10 @@ class GameManager(models.Manager):
     def obtainable(self):
         """Proxy to queryset method."""
         return self.get_queryset().obtainable()
+
+    def game_page_canonicals(self):
+        """Proxy to GameQuerySet.game_page_canonicals -- one implementation, manager-style."""
+        return self.get_queryset().game_page_canonicals()
 
     def exclude_shovelware(self):
         """Proxy to queryset method."""
@@ -365,68 +422,6 @@ class BadgeManager(models.Manager):
         """Proxy to queryset method."""
         return self.get_queryset().with_most_recent_concept()
 
-
-class MilestoneQuerySet(models.QuerySet):
-    """Custom queryset for Milestone model."""
-
-    def by_criteria_type(self, criteria_type):
-        """
-        Filter milestones by criteria type.
-
-        Args:
-            criteria_type: Type of milestone criteria (e.g., 'plat_count', 'manual')
-
-        Returns:
-            QuerySet: Milestones of the specified criteria type
-        """
-        return self.filter(criteria_type=criteria_type)
-
-    def ordered_by_value(self):
-        """
-        Order milestones by their required value.
-
-        Returns:
-            QuerySet: Milestones ordered by required_value ascending
-        """
-        return self.order_by('required_value')
-
-    def premium_only(self):
-        """
-        Filter to premium-only milestones.
-
-        Returns:
-            QuerySet: Milestones that require premium subscription
-        """
-        return self.filter(premium_only=True)
-
-    def active(self):
-        """
-        Filter to live (non-retired) milestones.
-
-        Returns:
-            QuerySet: Milestones with is_active=True -- shown on the milestones page and
-            still awarded. Retired milestones (is_active=False) are excluded.
-        """
-        return self.filter(is_active=True)
-
-class MilestoneManager(models.Manager):
-    """Custom manager for Milestone model."""
-
-    def get_queryset(self):
-        """Return custom queryset."""
-        return MilestoneQuerySet(self.model, using=self._db)
-
-    def by_criteria_type(self, criteria_type):
-        """Proxy to queryset method."""
-        return self.get_queryset().by_criteria_type(criteria_type)
-
-    def ordered_by_value(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().ordered_by_value()
-
-    def active(self):
-        """Proxy to queryset method."""
-        return self.get_queryset().active()
 
 class CommentQuerySet(models.QuerySet):
     """Custom queryset for Comment model."""

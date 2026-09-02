@@ -19,13 +19,12 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from django.urls import reverse
 from django.utils import timezone
 
 from core.services.email_service import EmailService
 from fundraiser.models import Donation, DonationBadgeClaim, Fundraiser
-from users.services.email_preference_service import EmailPreferenceService
 
 logger = logging.getLogger(__name__)
 
@@ -289,9 +288,6 @@ class DonationService:
             f"({donation.badge_picks_earned} badge picks)"
         )
 
-        # Grant fundraiser milestone (idempotent: safe for repeat donations)
-        DonationService._grant_fundraiser_milestone(donation)
-
         # Send receipt email + in-app notification
         DonationService._send_donation_receipt_email(donation)
         DonationService._send_donation_notification(donation)
@@ -304,7 +300,40 @@ class DonationService:
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def claim_badge(donation, profile, badge_id):
+    def series_needing_artwork(include_claimed=False):
+        """Badge series that still lack artwork: live, no default art, not user-submitted.
+
+        ONE definition, because there used to be three hand-copied filter stacks (picker, tracker, claim
+        validation) that could drift -- the picker could offer something the claim path then rejected.
+
+        `include_claimed` is the one axis on which those three legitimately DIFFERED, so it is a
+        parameter rather than a silent default:
+
+        - **False (picker, claim validation):** what a donor can claim right now. Excludes series
+          somebody already holds a claim on.
+        - **True (tracker):** what still LACKS ARTWORK, claimed or not -- a claimed-but-pending series
+          has no art yet, so it belongs in the denominator. Folding the exclusion in here made the
+          total shrink every time somebody claimed, which walks the progress bar forward before any
+          artwork exists.
+
+        Two legacy filters have no successor and are deliberately gone rather than translated: `tier=1`
+        (the series IS the row now) and `series_slug` non-empty (unique and required). `is_live` moved --
+        there is none on BadgeSeries, so liveness is "has at least one live edition".
+        """
+        from trophies.models import BadgeSeries
+
+        qs = (
+            BadgeSeries.objects
+            .filter(group_badges__is_live=True)
+            .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
+            .exclude(badge_type='user')
+        )
+        if not include_claimed:
+            qs = qs.exclude(artwork_claim__isnull=False)
+        return qs.distinct()
+
+    @staticmethod
+    def claim_badge(donation, profile, series_id):
         """
         Claim a badge series for artwork commissioning.
 
@@ -314,17 +343,17 @@ class DonationService:
         Args:
             donation: Completed Donation instance
             profile: Profile of the claiming user
-            badge_id: ID of the Tier 1 badge to claim
+            series_id: ID of the BadgeSeries to claim
 
         Returns the DonationBadgeClaim instance.
         Raises ValueError on validation failure.
         """
-        from trophies.models import Badge
+        from trophies.models import BadgeSeries
 
         try:
             with transaction.atomic():
-                # Lock the badge row to prevent concurrent claims
-                badge = Badge.objects.select_for_update().get(id=badge_id, tier=1)
+                # Lock the series row to prevent concurrent claims
+                series = BadgeSeries.objects.select_for_update().get(id=series_id)
 
                 # Refresh donation inside transaction to get accurate picks count
                 donation.refresh_from_db(fields=['badge_picks_earned', 'badge_picks_used'])
@@ -332,22 +361,27 @@ class DonationService:
                 if donation.badge_picks_remaining <= 0:
                     raise ValueError("No badge picks remaining for this donation.")
 
-                if badge.badge_image:
+                if series.badge_image:
                     raise ValueError("This badge series already has custom artwork.")
 
-                if badge.badge_type == 'user':
+                if series.badge_type == 'user':
                     raise ValueError("User-submitted badges are not eligible for artwork claims.")
 
-                if hasattr(badge, 'artwork_claim'):
+                # A series with no live edition is not visible to hunters, so it is not claimable. There
+                # is no `is_live` on BadgeSeries -- liveness is per-edition on GroupBadge.
+                if not series.group_badges.filter(is_live=True).exists():
+                    raise ValueError("This badge series is not live yet.")
+
+                if hasattr(series, 'artwork_claim'):
                     raise ValueError("This badge series has already been claimed by another donor.")
 
-                series_name = badge.effective_display_series or badge.name
+                series_name = series.display_series or series.name
 
                 claim = DonationBadgeClaim.objects.create(
                     donation=donation,
                     profile=profile,
-                    badge=badge,
-                    series_slug=badge.series_slug,
+                    series=series,
+                    series_slug=series.series_slug,
                     series_name=series_name,
                 )
                 Donation.objects.filter(pk=donation.pk).update(
@@ -355,13 +389,13 @@ class DonationService:
                 )
                 donation.refresh_from_db(fields=['badge_picks_used'])
 
-        except Badge.DoesNotExist:
+        except BadgeSeries.DoesNotExist:
             raise ValueError("Badge not found.")
         except IntegrityError:
             raise ValueError("This badge series has already been claimed by another donor.")
 
         logger.info(
-            f"Badge claim created: {series_name} ({badge.series_slug}) "
+            f"Badge claim created: {series_name} ({series.series_slug}) "
             f"by {profile.psn_username} via donation {donation.id}"
         )
 
@@ -369,48 +403,41 @@ class DonationService:
         DonationService._send_badge_claim_notification(claim)
         return claim
 
-    # ──────────────────────────────────────────────
-    # Milestone / Title / Discord Role
-    # ──────────────────────────────────────────────
-
-    @staticmethod
-    def _grant_fundraiser_milestone(donation):
-        """
-        Grant the fundraiser milestone, title, and Discord role.
-
-        Delegates to the shared award_manual_milestone() service.
-        Idempotent for repeat donors.
-        """
-        from trophies.models import Milestone
-        from trophies.services.milestone_service import award_manual_milestone
-
-        profile = donation.profile
-        if not profile:
-            return
-
-        try:
-            award_manual_milestone(profile, 'Badge Artwork Patron')
-        except Milestone.DoesNotExist:
-            logger.warning("Fundraiser milestone 'Badge Artwork Patron' not found. Run populate_milestones.")
+    # NOTE: the 'Badge Artwork Patron' milestone/title grant retired with the legacy milestone
+    # engine (Lane 2 Step 3). Existing holders keep the title; new donors aren't granted one.
 
     # ──────────────────────────────────────────────
     # Email Notifications
     # ──────────────────────────────────────────────
 
     @staticmethod
-    def _build_email_base_context(user):
-        """Build shared context variables required by base_email.html."""
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(user.id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception:
-            logger.exception(f"Failed to generate preference_url for user {user.id}")
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+    def _build_email_base_context(profile=None):
+        """Shared context for the three fundraiser emails on base_email_v2.
 
+        Greets by PSN name rather than `user.first_name`: signup collects no name, so the old
+        `first_name|default:user.email` greeting addressed almost every donor by their raw email
+        address on the one email they are most likely to keep.
+
+        (This used to mint a signed email-preference token as well. None of the three templates
+        read it; the preferences page is parked, and the base band links to Settings.)
+        """
         return {
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
+            'username': (
+                (profile.display_psn_username or profile.psn_username) if profile else 'hunter'
+            ),
         }
+
+    @staticmethod
+    def _claim_series_name(claim):
+        """The series name for a claim's subject line and hero.
+
+        `series_slug` / `series_name` are denormalized at claim time so a renamed series cannot
+        rewrite the record, but `series_name` is `blank=True`: an empty one produced the subject
+        "Badge claimed: " over an email that never named the badge. Falls back to the live series,
+        then to a phrase that at least reads as a sentence.
+        """
+        return claim.series_name or (claim.series.name if claim.series_id else '') or 'your badge series'
 
     @staticmethod
     def _send_donation_receipt_email(donation):
@@ -420,12 +447,11 @@ class DonationService:
 
         try:
             context = {
-                **DonationService._build_email_base_context(donation.user),
-                'user': donation.user,
+                **DonationService._build_email_base_context(donation.profile),
                 'donation': donation,
                 'fundraiser': donation.fundraiser,
                 'badge_picks_earned': donation.badge_picks_earned,
-                'claim_url': f"{settings.SITE_URL}/fundraiser/{donation.fundraiser.slug}/",
+                'claim_url': f"{settings.SITE_URL}{reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug})}",
             }
 
             EmailService.send_html_email(
@@ -452,16 +478,22 @@ class DonationService:
         if not user or not user.email:
             return
 
+        series_name = DonationService._claim_series_name(claim)
+
         try:
             context = {
-                **DonationService._build_email_base_context(user),
-                'user': user,
-                'claim': claim,
-                'badge_url': f"{settings.SITE_URL}/badges/{claim.series_slug}/",
+                **DonationService._build_email_base_context(claim.profile),
+                'series_name': series_name,
+                'badge_url': f"{settings.SITE_URL}"
+                             f"{reverse('badge_detail', kwargs={'series_slug': claim.series_slug})}",
+                # The status pointer. `/badges/<slug>/` shows the badge and knows nothing about
+                # artwork claims; the fundraiser page is the only surface that renders a status.
+                'claim_url': f"{settings.SITE_URL}"
+                             f"{reverse('fundraiser', kwargs={'slug': claim.donation.fundraiser.slug})}",
             }
 
             EmailService.send_html_email(
-                subject=f"Badge claimed: {claim.series_name}",
+                subject=f"Badge claimed: {series_name}",
                 to_emails=user.email,
                 template_name='emails/badge_claim_confirmation.html',
                 context=context,
@@ -478,14 +510,14 @@ class DonationService:
 
     @staticmethod
     def complete_badge_claim(claim):
-        """Mark a badge-artwork claim complete: stamp completed_at, credit the donor
-        on every tier of the series (Badge.funded_by), and send the artwork-complete
-        email + in-app notification. Idempotent: returns False if already completed.
+        """Mark a badge-artwork claim complete: stamp completed_at, credit the donor on the SERIES
+        (BadgeSeries.funded_by), and send the artwork-complete email + in-app notification. Idempotent:
+        returns False if already completed.
 
-        Single source of truth shared by the staff claim-status endpoint and the
-        Badge Art Reveal release path. Email/notification fire after the DB commit.
+        Single source of truth shared by the staff claim-status endpoint and the Badge Art Reveal release
+        path. Email/notification fire after the DB commit.
         """
-        from trophies.models import Badge
+        from trophies.models import BadgeSeries
 
         if claim.status == 'completed':
             return False
@@ -493,8 +525,11 @@ class DonationService:
         with transaction.atomic():
             claim.status = 'completed'
             claim.completed_at = timezone.now()
-            # Credit the donor on all tiers of this badge series.
-            Badge.objects.filter(series_slug=claim.series_slug).update(funded_by=claim.profile)
+            # Credit the donor on the SERIES, which is what the medallion renders:
+            # GroupBadge.effective_funded_by resolves `funded_by_override or series.funded_by`.
+            # This used to write the legacy `Badge.funded_by`, a row nothing displays -- so donors paid
+            # for artwork and were credited nowhere a hunter could see.
+            BadgeSeries.objects.filter(pk=claim.series_id).update(funded_by=claim.profile)
             claim.save(update_fields=['status', 'completed_at'])
 
         DonationService.send_artwork_complete_email(claim)
@@ -508,16 +543,18 @@ class DonationService:
         if not user or not user.email:
             return
 
+        series_name = DonationService._claim_series_name(claim)
+
         try:
             context = {
-                **DonationService._build_email_base_context(user),
-                'user': user,
-                'claim': claim,
-                'badge_url': f"{settings.SITE_URL}/badges/{claim.series_slug}/",
+                **DonationService._build_email_base_context(claim.profile),
+                'series_name': series_name,
+                'badge_url': f"{settings.SITE_URL}"
+                             f"{reverse('badge_detail', kwargs={'series_slug': claim.series_slug})}",
             }
 
             EmailService.send_html_email(
-                subject=f"New artwork is live: {claim.series_name}!",
+                subject=f"New artwork is live: {series_name}!",
                 to_emails=user.email,
                 template_name='emails/artwork_complete.html',
                 context=context,
@@ -607,7 +644,7 @@ class DonationService:
                     'content': (
                         f"You earned *{picks}* badge artwork "
                         f"{'pick' if picks == 1 else 'picks'}! "
-                        f"Head to the [fundraiser page](/fundraiser/{donation.fundraiser.slug}/) "
+                        f"Head to the [fundraiser page]({reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug})}) "
                         f"to browse available badges and claim your picks."
                     ),
                     'order': 1,
@@ -634,7 +671,7 @@ class DonationService:
                     f"to {donation.fundraiser.name}!"
                 ),
                 sections=sections,
-                action_url=f'/fundraiser/{donation.fundraiser.slug}/',
+                action_url=reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug}),
                 action_text='View Fundraiser',
                 priority='normal',
                 metadata={
@@ -743,7 +780,7 @@ class DonationService:
 
             description += (
                 f"\n\nWant to help bring our badges to life? "
-                f"Donate here: {settings.SITE_URL}/fundraiser/{donation.fundraiser.slug}/"
+                f"Donate here: {settings.SITE_URL}{reverse('fundraiser', kwargs={'slug': donation.fundraiser.slug})}"
             )
 
             embed_data = {

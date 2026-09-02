@@ -6,8 +6,10 @@
  * renders. See docs/reference/frame-component.md for the full
  * data contract, public API, and integration notes.
  *
- * Bundled into output.css via @import "./components/frame.css"
- * in static/css/input.css. Namespace: .pp-frame, .pp-earn-*,
+ * Bundled into output.css via the components/frame.css import
+ * in static/css/input.css. (Worded to dodge Django's manifest
+ * post-processor: its @import regex reads comments too, and a
+ * quoted path here resolves against THIS file's directory.) Namespace: .pp-frame, .pp-earn-*,
  * .pp-spark, .pp-anim-weld, .pp-hover-a.
  *
  * Sections:
@@ -48,6 +50,10 @@
 
     --frame-aspect: 1 / 1;
     --frame-art-pad: 10px;
+    /* Default fixed frame size — the same everywhere (the frame renders at exact
+       key sizes, never container-stretched). The --compact / --mini variants set
+       their own widths. */
+    --pp-frame-w: 248px;
 }
 
 @property --pp-build {
@@ -89,12 +95,19 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    width: var(--pp-frame-w);
     background: var(--frame-bg);
     border: 1px solid var(--frame-border);
     border-radius: 6px;
     overflow: visible;
     transition: transform 280ms ease, box-shadow 280ms ease, border-color 280ms ease;
     cursor: pointer;
+    /* Keep the frame on its own compositing layer at REST. The plinth-clipwrap's
+       rounded overflow:hidden bottom leaves a sub-pixel seam that swallows the 1px
+       bottom border; the :hover transform re-rasterizes on a layer and the seam
+       vanishes (so the border only showed on hover). will-change forces that layer
+       at rest too. backface-visibility is too weak a hint here (Chrome ignores it). */
+    will-change: transform;
 }
 
 /* Corner notches: tier-aware brand mark at every corner. The
@@ -205,8 +218,8 @@
 
 /* Plinth (badge name + meta line + corner labels). The extra
  * padding-bottom reserves a "footer strip" for the absolute
- * engraving (bottom-left) and set-mark (bottom-right) so they
- * don't overlap the meta line that sits above them in flow. */
+ * engraving (bottom-left) so it doesn't overlap the meta line
+ * that sits above it in flow. */
 .pp-frame__plinth {
     position: relative;
     background: var(--frame-chrome-bg);
@@ -237,6 +250,16 @@
     flex: 1;
     min-width: 0;
 }
+/* Badge type tag — right of the name row, across from franchise/developer. */
+.pp-frame__type-tag {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.2;
+    color: rgba(255, 255, 255, 0.5);
+}
 .pp-frame__plinth-meta {
     display: flex;
     justify-content: space-between;
@@ -253,21 +276,17 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
+    font-size: 11px;            /* larger than the 9px meta — rarity is a headline stat */
     font-weight: 700;
     letter-spacing: 0.02em;
 }
-.pp-frame__rarity svg { width: 10px; height: 10px; flex-shrink: 0; }
-.pp-frame__rarity--common   { color: rgba(255, 255, 255, 0.5); font-weight: 600; }
-.pp-frame__rarity--uncommon { color: rgba(170, 220, 195, 0.9); }
-.pp-frame__rarity--rare {
-    color: rgba(245, 205, 105, 1);
-    text-shadow: 0 0 5px rgba(240, 200, 100, 0.35);
-}
-.pp-frame__rarity--mythic {
-    color: rgba(225, 245, 255, 1);
-    text-shadow: 0 0 6px rgba(180, 220, 255, 0.55);
-    animation: pp-mythic-pulse 2.6s ease-in-out infinite;
-}
+.pp-frame__rarity svg { width: 12px; height: 12px; flex-shrink: 0; }
+/* Colour comes from the shared rarity scale (components/rarity.css) via data-rarity on this element
+   or an ancestor. This used to be four hand-rolled rules. The two behaviours that were NOT just
+   colour -- common's lighter weight and mythic's pulse -- stay, rehung on the new hook. */
+.pp-frame__rarity[data-rarity] { color: var(--rar-c); text-shadow: 0 0 5px var(--rar-glow); }
+.pp-frame__rarity[data-rarity="common"] { font-weight: 600; }
+.pp-frame__rarity[data-rarity="mythic"] { animation: pp-mythic-pulse 2.6s ease-in-out infinite; }
 @keyframes pp-mythic-pulse {
     0%, 100% { opacity: 0.88; text-shadow: 0 0 4px rgba(180, 220, 255, 0.4); }
     50%      { opacity: 1;    text-shadow: 0 0 10px rgba(180, 220, 255, 0.75); }
@@ -291,12 +310,12 @@
  * Default (no class) : gallery / grid views — the primary
  *           target; fits a 4-wide desktop grid at ~290px.
  * Compact : in-progress badges + dense lists. Slim chrome with
- *           series title, rank engraving, and set-mark only.
+ *           series title and rank engraving only.
  * Mini   : inline / chip use. Chrome-only tier identity -- the
  *          border color, corner notches, and backdrop carry the
  *          tier read on their own; no text rendering at this
  *          scale. Mini was briefly tried with slim chrome (series
- *          + engraving + set-mark) but the text became unreadable
+ *          + engraving) but the text became unreadable
  *          at typical mini placements (badge-peek thumbnails in
  *          the Pursuer Card, leaderboard chips), so the chrome
  *          was retired and the variant is back to chrome-only.
@@ -321,12 +340,6 @@
     gap: 4px;
 }
 .pp-frame--compact .pp-frame__engraving-num { font-size: 8px; }
-.pp-frame--compact .pp-frame__set-mark {
-    bottom: 3px;
-    right: 7px;
-    font-size: 7.5px;
-    letter-spacing: 0.14em;
-}
 
 /* Mini: chrome-only tier identity. Tier color carried by the
  * border + corner notches + backdrop gradient. Title bar and
@@ -433,10 +446,10 @@
  * into the plinth (decorated format: "#247 of all time").
  * ============================================================ */
 /* Engraving sits absolute in the bottom-left corner of the
- * plinth, mirroring the set-mark in the bottom-right. The "of
+ * plinth. The "of
  * all time" subtitle was retired -- the # prefix on its own
- * reads as the rank, and the two-corner balance keeps the
- * plinth chrome legible without an extra row of decoration. */
+ * reads as the rank and keeps the plinth chrome legible
+ * without an extra row of decoration. */
 .pp-frame__engraving {
     position: absolute;
     bottom: 5px;
@@ -454,13 +467,14 @@
     z-index: 3;
 }
 .pp-frame__engraving-num {
-    font-size: 9.5px;
+    font-size: 12.5px;          /* bigger than the original 9.5 but still a mark, not text */
     font-weight: 800;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.78);
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.82);
+    /* Carved/etched bevel: dark top edge of the groove, light catch on the bottom. */
     text-shadow:
-        0 1px 0 rgba(0, 0, 0, 0.55),
-        0 -0.5px 0 rgba(255, 255, 255, 0.08);
+        0 -1px 1px rgba(0, 0, 0, 0.7),
+        0 1px 0 rgba(255, 255, 255, 0.14);
 }
 .pp-frame--bronze   .pp-frame__engraving-num { color: rgba(220, 150, 80, 0.9); }
 .pp-frame--silver   .pp-frame__engraving-num { color: rgba(215, 220, 225, 0.9); }
@@ -523,34 +537,6 @@
     opacity: 0.78;
 }
 
-/* Set number — engraved in the bottom-right corner of the plinth.
- * Shared across every badge of the same (series, tier) — it's
- * the print-run / edition stamp, like a manufacturer's mark on
- * a watch case-back. Etched chrome treatment matching the mint
- * engraving (deboss text-shadow), tier-tinted, ambient. Always
- * 4 digits zero-padded (e.g. 0009, 0247) so the stamp reads as
- * a fixed-format part number. */
-.pp-frame__set-mark {
-    position: absolute;
-    bottom: 5px;
-    right: 9px;
-    font-size: 8.5px;
-    font-weight: 800;
-    letter-spacing: 0.18em;
-    color: rgba(255, 255, 255, 0.38);
-    text-shadow:
-        0 1px 0 rgba(0, 0, 0, 0.6),
-        0 -0.5px 0 rgba(255, 255, 255, 0.08);
-    line-height: 1;
-    pointer-events: none;
-    font-variant-numeric: tabular-nums;
-    z-index: 3;
-}
-.pp-frame--bronze   .pp-frame__set-mark { color: rgba(220, 180, 130, 0.5); }
-.pp-frame--silver   .pp-frame__set-mark { color: rgba(225, 230, 240, 0.5); }
-.pp-frame--gold     .pp-frame__set-mark { color: rgba(245, 220, 140, 0.55); }
-.pp-frame--platinum .pp-frame__set-mark { color: rgba(220, 240, 250, 0.6); }
-
 /* Shared hover lift + tier-tinted outer shadow. Gleam sweep
  * sits on .pp-hover-a below. */
 .pp-frame:hover { transform: translateY(-4px); }
@@ -607,6 +593,63 @@
 }
 .pp-frame--unearned .pp-frame__name { color: rgba(255, 255, 255, 0.6); }
 .pp-frame--unearned:hover { transform: translateY(-2px); }
+
+/* ------------------------------------------------------------
+ * State: ghost (not yet started)
+ *
+ * Unlike the in-progress card (which FABRICATES from the bottom via
+ * the blueprint/weld), a not-yet-started badge shows a faint
+ * APPARITION of the final art -- a spectral preview of what the
+ * Pursuer could earn. No schematic grid, no padlock: the ghost
+ * itself is the "not yours yet" signal. On hover it leans toward
+ * focus, as if the badge could materialise.
+ * ------------------------------------------------------------ */
+
+/* A cool radial bloom behind the apparition so it floats in a dim chamber. */
+.pp-frame--ghost .pp-frame__art {
+    background:
+        radial-gradient(80% 65% at 50% 45%, rgba(70, 120, 165, 0.16), transparent 70%),
+        var(--frame-art-bg);
+}
+
+/* Soften the unearned dark veil into a vignette (instead of blacking the
+ * art out) so the apparition reads through it. Higher specificity than the
+ * base .pp-frame--unearned veil so this wins. */
+.pp-frame--ghost.pp-frame--unearned .pp-frame__art::after {
+    background:
+        radial-gradient(135% 105% at 50% 42%,
+            transparent 20%, rgba(8, 10, 16, 0.42) 76%, rgba(6, 8, 12, 0.68) 100%);
+    z-index: 4;
+}
+
+/* The apparition: the real art, unmasked, held faint + cool-cast and
+ * STILL (a ghost image, not a literal spectre -- no idle motion). */
+.pp-frame--ghost .pp-frame__layer {
+    opacity: 0.16;
+    filter: grayscale(0.6) brightness(1.4) contrast(0.9)
+            drop-shadow(0 0 7px rgba(150, 210, 240, 0.3));
+    transition: opacity 260ms ease, filter 260ms ease;
+}
+
+/* Hover: the apparition leans into focus -- "this could be yours."
+ * It brightens + saturates toward the real card and the aura swells. */
+.pp-frame--ghost:hover .pp-frame__layer {
+    opacity: 0.42;
+    filter: grayscale(0.2) brightness(1.15) contrast(1)
+            drop-shadow(0 0 10px rgba(175, 220, 245, 0.5));
+}
+.pp-frame--ghost:hover .pp-frame__art {
+    background:
+        radial-gradient(85% 70% at 50% 45%, rgba(90, 150, 200, 0.28), transparent 72%),
+        var(--frame-art-bg);
+}
+.pp-frame--ghost:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 8px 28px rgba(120, 180, 220, 0.2),
+        0 0 0 1px rgba(150, 200, 230, 0.45);
+    border-color: rgba(170, 210, 235, 0.6);
+}
 
 .pp-frame--blueprint { --pp-build: 0%; }
 
@@ -848,7 +891,7 @@
  * pinned-accent pulse — anything that signals "active"). The
  * card's own hover gleam is suppressed (badge isn't active).
  * ============================================================ */
-.pp-frame--maintenance .pp-frame__rarity--mythic,
+.pp-frame--maintenance .pp-frame__rarity[data-rarity="mythic"],
 .pp-frame--maintenance.pp-frame--platinum::before,
 .pp-frame--maintenance.pp-frame--platinum::after,
 .pp-frame--maintenance.pp-frame--platinum > .pp-frame__corner-bl,
@@ -1588,11 +1631,20 @@
     background: linear-gradient(105deg, transparent 30%, var(--gleam-color, rgba(255,255,255,0.2)) 50%, transparent 70%);
     transform: translateX(-100%);
     opacity: 0;
-    transition: transform 900ms ease, opacity 200ms ease;
 }
-.pp-hover-a:hover .pp-frame__gleam {
-    transform: translateX(100%);
-    opacity: 1;
+/* Hover sheen is JS-driven (frame.js wireGleam). The controller adds
+ * .pp-gleam-sweeping for one full sweep, loops it ~every 5s while the
+ * card stays hovered, resets on mouse-out, and guards against
+ * re-triggering mid-sweep. Keyframe duration MUST match GLEAM_DURATION
+ * in frame.js. */
+.pp-hover-a.pp-gleam-sweeping .pp-frame__gleam {
+    animation: pp-gleam-hover-sweep 900ms ease forwards;
+}
+@keyframes pp-gleam-hover-sweep {
+    0%   { transform: translateX(-100%); opacity: 0; }
+    12%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
 }
 .pp-hover-a.pp-frame--bronze { --gleam-color: rgba(255, 200, 150, 0.20); }
 .pp-hover-a.pp-frame--silver { --gleam-color: rgba(220, 230, 245, 0.30); }
@@ -1681,6 +1733,64 @@
 .pp-frame--silver   .pp-frame__face--back { border-top: 2px solid var(--tier-silver); }
 .pp-frame--gold     .pp-frame__face--back { border-top: 2px solid var(--tier-gold); }
 .pp-frame--platinum .pp-frame__face--back { border-top: 2px solid var(--tier-platinum); }
+
+/* Flip affordance — a little tab that rises from behind the card's TOP EDGE on
+   hover and rests on it, so it sacrifices none of the card face and isn't part
+   of the flip rotation (it lives outside .pp-frame__inner). Hidden at rest, so
+   the prestige face stays clean; surfaces only while the user is engaging (when
+   the card is already "alive" with the gleam). pointer-events:none — the whole
+   card is the click target (wireFlip). Centered: pin is top-left, clear of it.
+   Placed before .pp-frame__inner in source order so the card paints over its
+   lower portion → it reads as emerging from behind the top edge. */
+.pp-frame__flip-hint {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px 4px;
+    border-radius: 7px 7px 0 0;
+    background: linear-gradient(180deg, rgba(42, 42, 50, 0.97), rgba(24, 24, 30, 0.97));
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-bottom: none;
+    color: rgba(255, 255, 255, 0.82);
+    font-family: var(--pp-font-body);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    /* Hidden: tucked down behind the top edge. */
+    opacity: 0;
+    transform: translate(-50%, -25%);
+    transition: opacity var(--pp-dur) var(--pp-ease),
+                transform var(--pp-dur) var(--pp-ease);
+}
+.pp-frame__flip-hint svg { width: 9px; height: 9px; flex-shrink: 0; }
+/* Risen: resting on the top edge (bottom flush with the card top). Stays up the
+   whole time the card is hovered — front OR back — since the tab is a stable
+   top-edge control that doesn't rotate with the flip. */
+.pp-frame--flippable:hover .pp-frame__flip-hint {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+}
+/* Compact cards (the binder flipbook spread) can't flip -- never show the hint. */
+.pp-frame--compact .pp-frame__flip-hint { display: none; }
+@media (prefers-reduced-motion: reduce) {
+    /* Still reveals on hover, just without the rise. */
+    .pp-frame__flip-hint { transition: none; }
+}
+
+/* Back-face hint wording adapts to the input: "click" on pointer devices,
+   "tap" on touch (coarse / no-hover). Text lives in CSS so it stays in one
+   place; the span is decorative. */
+.pp-frame__back-flip-hint::after { content: "click to flip"; }
+@media (hover: none) {
+    .pp-frame__back-flip-hint::after { content: "tap to flip"; }
+}
 .pp-frame__back-header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding-bottom: 8px;
@@ -1726,6 +1836,27 @@
     font-weight: 700;
     line-height: 1.2;
 }
+/* Artwork-funder credit — a unique, charming line that ties community-funded
+   badge art into the card. Sits just above the footer. */
+.pp-frame__back-funder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.5);
+}
+.pp-frame__back-funder svg {
+    width: 9px;
+    height: 9px;
+    color: rgba(235, 130, 150, 0.85);
+    flex-shrink: 0;
+}
+.pp-frame__back-funder span { color: rgba(255, 255, 255, 0.82); font-weight: 700; }
+
 .pp-frame__back-footer {
     display: flex;
     justify-content: space-between;
@@ -2855,7 +2986,7 @@
     .pp-frame--platinum > .pp-frame__corner-bl,
     .pp-frame--platinum > .pp-frame__corner-br,
     .pp-frame--pinned-accent,
-    .pp-frame__rarity--mythic,
+    .pp-frame__rarity[data-rarity="mythic"],
     .pp-frame__engraving--first .pp-frame__engraving-num,
     .pp-frame__fab-banner {
         animation: none !important;

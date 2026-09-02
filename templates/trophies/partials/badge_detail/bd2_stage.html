@@ -1,0 +1,78 @@
+{% load static %}
+{% comment %}
+Stage-journey node (rebuild, per platform group). Reuses the bd-stage / bd-node / bd-gcard visual language;
+fed by badge_detail_service._group_journey. `s` = a stage dict (stage, obtainable_games, delisted_games,
+completion_state, is_next); `target_profile` from the page context. Always-expanded for now (no collapse JS).
+{% endcomment %}
+{% with stage=s.stage %}
+<section{% if group_key %} id="bd2-stage-{{ group_key }}-{{ stage.stage_number }}"{% endif %} class="bd-card bd-stage mt-3{% if s.completion_state == 'complete' %} bd-stage--done{% endif %}">
+    {% comment %} Journey-spine node -- done check / up-next pulse / plain to-do number (stages finish in any order). {% endcomment %}
+    <span class="bd-node bd-node--{% if s.completion_state == 'complete' %}done{% elif s.is_next %}next{% else %}todo{% endif %}" aria-hidden="true">
+        {% if s.completion_state == 'complete' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" pathLength="1"></polyline></svg>{% else %}{{ stage.stage_number }}{% endif %}
+    </span>
+
+    {% comment %} Header = the collapse toggle. Default: the "up next" stage open, the rest collapsed. The JS
+    finds the collapse body + chevron relative to this header (stage numbers aren't unique across groups). {% endcomment %}
+    <div class="bd-stage__head" data-stage-toggle role="button" aria-expanded="{% if s.is_next %}true{% else %}false{% endif %}" tabindex="0">
+        {% if stage.stage_icon %}<span class="bd-stage__ico"><img src="{{ stage.stage_icon }}" alt="" loading="lazy" /></span>{% endif %}
+        <div class="bd-stage__id">
+            <span class="bd-stage__eyebrow{% if s.is_next %} bd-stage__eyebrow--next{% endif %}">Stage {{ stage.stage_number }}{% if s.is_next %} &middot; Up next{% endif %}</span>
+            {% if stage.title %}<span class="bd-stage__title">{{ stage.title }}</span>{% endif %}
+        </div>
+        <div class="bd-stage__meta">
+            <span class="bd-stage__count">{{ s.obtainable_games|length }} game{{ s.obtainable_games|length|pluralize }}</span>
+        </div>
+        <svg class="bd-stage__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"{% if not s.is_next %} style="transform: rotate(-90deg);"{% endif %}><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </div>
+
+    <div class="bd-stage__collapse" data-stage-games style="grid-template-rows: {% if s.is_next %}1fr{% else %}0fr{% endif %};">
+    <div class="bd-stage__collapse-inner">
+        {% comment %} Delisted / unobtainable titles satisfy but don't gate -- native <details>, no JS needed. {% endcomment %}
+        {% if s.delisted_games %}
+        <details class="bd-delisted">
+            <summary class="bd-delisted__summary">
+                <span class="bd-delisted__ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg></span>
+                <span class="bd-delisted__label">{{ s.delisted_games|length }} unobtainable / delisted title{{ s.delisted_games|length|pluralize }}</span>
+                <svg class="bd-delisted__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </summary>
+            <div class="bd-delisted__list">
+                {% for e in s.delisted_games %}
+                <a href="{% if target_profile %}{% url 'game_detail_with_profile' e.game.np_communication_id target_profile.psn_username %}{% else %}{% url 'game_detail' e.game.np_communication_id %}{% endif %}" class="bd-delisted__row">
+                    <span class="bd-delisted__thumb{% if not e.pgame or not e.pgame.progress %} is-dim{% endif %}"><img src="{{ e.game.display_image_url }}" alt="" loading="lazy" /></span>
+                    <span class="bd-delisted__name">{{ e.game.title_name }}</span>
+                    {% if e.pgame and e.pgame.progress %}<span class="bd-delisted__pct">{{ e.pgame.progress }}%</span>{% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        {% comment %} Episodic bundles: a grouped set of lists that TOGETHER satisfy the stage. {% endcomment %}
+        {% for bundle in s.bundles %}
+        <div class="bd-qual{% if bundle.is_satisfied %} is-done{% endif %}">
+            <div class="bd-qual__head">
+                <span class="bd-qual__mark" aria-hidden="true">
+                    {% if bundle.is_satisfied %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8.5 5v10L12 22l-8.5-5V7z"/><path d="M12 22V12"/><path d="m3.5 7 8.5 5 8.5-5"/></svg>{% endif %}
+                </span>
+                <span class="bd-qual__label">{{ bundle.label }}</span>
+                <span class="bd-qual__status">{{ bundle.completed_members }}/{{ bundle.total_members }} complete</span>
+                <span class="bd-qual__req">Complete every list</span>
+            </div>
+            <div class="bd-qual__grid">
+                {% for member in bundle.members %}{% for e in member.games %}
+                {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract profile=target_profile %}
+                {% endfor %}{% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="bd-stage__grid">
+            {% for e in s.obtainable_games %}
+            {% include 'trophies/partials/badge_detail/badge_detail_items.html' with game=e.game pgame=e.pgame ratings=e.ratings has_guide=e.has_guide contract=e.contract profile=target_profile %}
+            {% endfor %}
+        </div>
+    </div>
+    </div>
+</section>
+{% endwith %}

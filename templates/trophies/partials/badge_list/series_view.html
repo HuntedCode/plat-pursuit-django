@@ -1,0 +1,79 @@
+{% comment %} Series view island: the per-series TILE grid + the compact toolbar SHARED with the Gallery --
+a one-row primary bar (search + sort + a Filters toggle) with the multi-select Type/Status chips in a
+collapsible advanced panel. Filters apply instantly via HTMX (#browse-results swap); InfiniteScroller
+appends tiles on scroll. Reuses the Gallery's .pp-bgal__ toolbar classes so the two views look identical. {% endcomment %}
+<div class="pp-slist" data-view="series" data-page-size="{{ series_page_size|default:30 }}">
+    <form id="filter-form" method="get" action="{% url 'badges_list' %}"
+          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-swap="innerHTML"
+          hx-indicator="#browse-results" hx-push-url="true" hx-trigger="change delay:250ms, submit, keyup changed delay:400ms from:find input[type='search']">
+        <input type="hidden" name="page" value="1" />
+        <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
+        <div class="pp-bgal__toolbar pp-toolbar-card">
+            <div class="pp-bgal__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" name="series_slug" value="{{ series_q }}" placeholder="Search a series&hellip;" aria-label="Search series" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
+                <select class="pp-gallery__select" name="sort" aria-label="Sort series">
+                    {% for value, display in series_sorts %}
+                    <option value="{{ value }}"{% if series_sort == value %} selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="pp-bgal__advbtn" id="bgal-filters-toggle" aria-expanded="false" aria-controls="bgal-advanced">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                    <span class="hidden md:inline">Filters</span>
+                    <span class="pp-bgal__advbtn__n" id="bgal-filter-count" hidden>0</span>
+                </button>
+            </div>
+
+            {% comment %} No `hidden` here: without JS the panel stays OPEN so the chips are usable (progressive
+            enhancement); the shared wireFilters() script collapses it on load. {% endcomment %}
+            <div class="pp-bgal__advanced" id="bgal-advanced">
+              <div class="pp-bgal__advanced-in">
+                <div class="pp-bgal__filters">
+                    <div class="pp-bgal__crow">
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Type</span>
+                            {% for value, display in form.badge_type.field.choices %}{% if value %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in selected_badge_types %} checked{% endif %}>{{ display }}</label>
+                            {% endif %}{% endfor %}
+                        </div>
+
+                        {% if series_authed %}
+                        {% comment %} Binary hold (matches the Gallery + the whale-safe model): Earned = holds
+                        >=1 live group badge in the series; Not earned = holds none. {% endcomment %}
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Owned</span>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="earned"{% if 'earned' in series_states %} checked{% endif %}>Earned</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in series_states %} checked{% endif %}>Not earned</label>
+                        </div>
+                        {% endif %}
+
+                        {% comment %} Rarity: keeps series that ship a group badge of the selected class. {% endcomment %}
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Rarity</span>
+                            {% for value, display in rarity_choices %}
+                            <label class="pp-bgal__chip pp-bgal__chip--rarity" data-rarity="{{ value }}"><input type="checkbox" name="rarity" value="{{ value }}"{% if value in selected_rarities %} checked{% endif %}>{{ display }}</label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="pp-bgal__clear" id="bgal-clear" hidden>Clear filters</button>
+              </div>
+            </div>
+        </div>
+    </form>
+
+    <div id="browse-results">
+        {% include 'trophies/partials/badge_list/browse_results.html' %}
+    </div>
+    <div id="bgal-sentinel" class="h-4"></div>
+    <div id="bgal-loading" class="hidden justify-center py-4">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+    </div>
+</div>

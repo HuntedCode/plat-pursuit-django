@@ -1,117 +1,71 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The badge-claim confirmation, sent by donation_service._send_badge_claim_email.
 
-{% block extra_styles %}
-    <style>
-        .claim-box {
-            background-color: #667eea;
-            background: linear-gradient(135deg, #f39c12 0%, #e67e22 50%, #667eea 100%);
-            border-radius: 12px;
-            padding: 30px;
-            margin: 25px 0;
-            color: #ffffff;
-            text-align: center;
-        }
+Twin of artwork_complete.html: same context, same shape, deliberately kept as two files (the
+kept-template list iterates by filename and EmailLog distinguishes the two types). This one says
+"we have your pick"; its twin says "it is drawn". Keep the two hero shapes in step.
 
-        .claim-box .claim-icon {
-            font-size: 42px;
-            margin-bottom: 10px;
-            display: block;
-        }
+`claim_url` points at the FUNDRAISER page, not the badge page. Only the fundraiser page renders a
+claim's status (`templates/fundraiser/fundraiser.html`, "Your claimed badges" + the public claim wall);
+`/badges/<slug>/` renders the badge and knows nothing about artwork claims. A rewrite of this email
+once sent donors to the badge page to "check the status", which is a dead end.
 
-        .claim-box h2 {
-            margin: 0 0 10px 0;
-            font-size: 22px;
-            font-weight: 700;
-        }
+`series_name` is derived in the sender rather than read straight off the claim: the denormalized
+`claim.series_name` is allowed to be blank, and an empty one produced an empty subject line AND
+an empty hero, so the email said nothing at all about which badge was claimed.
+{% endcomment %}
 
-        .claim-box p {
-            margin: 0;
-            font-size: 15px;
-            opacity: 0.95;
-            line-height: 1.6;
-        }
+{% block title %}Badge claimed: {{ series_name }}{% endblock %}
 
-        .claim-box .badge-name {
-            font-size: 24px;
-            font-weight: 700;
-            margin: 15px 0;
-            display: block;
-        }
-
-        .info-box {
-            background-color: #fff8e1;
-            border-radius: 8px;
-            padding: 20px 25px;
-            margin: 25px 0;
-            border-left: 4px solid #f39c12;
-        }
-
-        .info-box p {
-            margin: 0;
-            font-size: 14px;
-            color: #555555;
-            line-height: 1.6;
-        }
-
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .claim-box {
-                padding: 20px 15px;
-            }
-            .claim-box .badge-name {
-                font-size: 20px;
-            }
-        }
-    </style>
-{% endblock %}
-
-{% block title %}Badge Claimed: {{ claim.series_name }}{% endblock %}
+{% block preheader %}Your pick is recorded. {{ series_name }} is in the artwork queue.{% endblock %}
 
 {% block header_content %}
-    <h1>Badge Claimed!</h1>
-    <p>Your pick has been recorded</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Badge claimed</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your pick has been recorded.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ user.first_name|default:user.email }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, your pick is in and the series is spoken for.</p>
 
-    <div class="claim-box">
-        <span class="claim-icon">&#127942;</span>
-        <h2>You claimed a badge!</h2>
-        <span class="badge-name">{{ claim.series_name }}</span>
-        <p>
-            This badge series has been added to the artwork queue.
-            Our artist will create professional artwork for this badge
-            and all its tiers.
-        </p>
-    </div>
+    {% comment %} The claimed series, given the display weight the old gradient box was reaching
+    for. Gold accent: this one is a claim staked, not a thing finished. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#E7C25C" style="background-color: #E7C25C; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 16px 18px; background-color: #FDF8F1; border-radius: 0 8px 8px 0;">
+                <p style="margin: 0 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4A5768;">Claimed series</p>
+                <p style="margin: 0; font-size: 24px; line-height: 1.25; font-weight: 800; color: #10151C;">{{ series_name }}</p>
+                <p class="pp-card-c" style="margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: #4A5768;">Every tier in the series gets the new artwork, not just the one.</p>
+            </td>
+        </tr>
+    </table>
 
-    <div class="info-box">
-        <p>
-            <strong>What happens next?</strong> Our artist will work on your claimed badge series.
-            You will receive another email when the artwork is completed and live on the site.
-            You can check the status anytime on the fundraiser page.
-        </p>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td class="pp-fallback" style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
+                <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">What happens next</p>
+                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">It goes into the artwork queue. You will get one more email from us when it is drawn and live on the site, and the fundraiser page tracks where every claimed series stands in the meantime.</p>
+            </td>
+        </tr>
+    </table>
 
-    <div class="cta-container">
-        <a href="{{ badge_url }}" class="cta-button">View Badge Series</a>
-    </div>
+    {% include 'emails/_cta_button.html' with url=badge_url label="View the badge series" %}
 
-    <p class="flavor-text">
-        You are shaping the future of PlatPursuit, one badge at a time!
-    </p>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ badge_url }}</p>
+
+    {% comment %} The status pointer, and the only page that actually carries one. The badge page
+    shows the badge, not the queue. {% endcomment %}
+    {% if claim_url %}
+    <p class="pp-small" style="margin: 10px 0 0; text-align: center;">Track the queue on the fundraiser page: {{ claim_url }}</p>
+    {% endif %}
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #627488;">You are shaping the site, one badge at a time.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you claimed a badge on PlatPursuit.<br>
-    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+    You're receiving this because you claimed a badge series on PlatPursuit.
+    Manage your account settings from the link above.
 {% endblock %}

@@ -1,0 +1,142 @@
+{% load humanize custom_filters %}{% comment %} A hunter's ratings -- the one tab about TASTE rather than totals.
+
+Games, Trophies and Badges all answer "how much". This answers "and were they any good", which is the
+only thing on the profile two hunters with identical numbers would answer differently.
+
+Two layers, and the top one is the reason this is not just a list. A rating read alone has no scale: 6/10
+difficulty means one thing from someone whose average is 3 and something else entirely from someone whose
+average is 8. The summary supplies that scale before the first card, using the SAME synthesized sentence
+the game pages use -- `rating_summary` reads averages, and averages are averages whether they came from a
+hundred people rating one game or one person rating a hundred games.
+
+The toolbar is one sort, matching the Badges tab: this is a tab inside a page that already has chrome
+above it, and a full filter bar would compete with the strip it sits under.
+{% endcomment %}
+{% if rating_summary_stats.count %}
+<section class="pp-taste" aria-labelledby="taste-h">
+    <h2 class="sr-only" id="taste-h">{{ profile.display_psn_username|default:profile.psn_username }}&rsquo;s taste in platinums</h2>
+
+    <div class="pp-taste__head">
+        {% comment %}The stars carry the score and the number repeats it, because a star bar is read at a
+        glance and a figure is read exactly. `.pp-stars` is the shared block the cards use too, clipped to
+        a width percentage rather than drawn as five glyphs, so a 4.3 draws as 4.3.{% endcomment %}
+        <div class="pp-taste__score">
+            <span class="pp-stars" style="--fill: {% widthratio rating_summary_stats.avg_rating 5 100 %}%;"
+                  role="img" aria-label="Average score {{ rating_summary_stats.avg_rating|floatformat:1 }} out of 5"><span class="pp-stars__on"></span></span>
+            <span class="pp-taste__scoreline" aria-hidden="true">
+                <b class="pp-taste__score-n pp-tally">{{ rating_summary_stats.avg_rating|floatformat:1 }}</b><span class="pp-taste__of">/5</span>
+            </span>
+        </div>
+
+        {% comment %}The shared sentence, pointed at a person. It encodes difficulty, grindiness AND fun in
+        one clause list, which is why those three get no tiles of their own here -- printing the sentence
+        and then the three numbers it is made of would say the same thing twice.{% endcomment %}
+        <div class="pp-taste__say">
+            <p class="pp-taste__summary">{{ rating_summary_stats|rating_summary }}</p>
+            {% comment %}How often they send people after a platinum. Denominated in ANSWERED ratings and
+            printed with that count, because everything scored before the recommendation existed carries
+            no answer -- counting those would read as a hunter who recommends almost nothing. Absent until
+            they have answered one.{% endcomment %}
+            {% if rating_summary_stats.answered %}
+            <p class="pp-taste__rec">
+                Recommends <b>{{ rating_summary_stats.recommend_pct }}%</b> of the {{ rating_summary_stats.answered|intcomma }} they&rsquo;ve weighed in on
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="pp-taste__stats">
+        <div class="scard">
+            <div class="scard__label">Rated</div>
+            <div class="scard__value pp-tally text-primary" data-countup="{{ rating_summary_stats.count }}">{{ rating_summary_stats.count|intcomma }}</div>
+            <div class="scard__sub">game{{ rating_summary_stats.count|pluralize }} scored</div>
+        </div>
+        {% comment %}Neutral from here down: one accent per surface, spent on the count.{% endcomment %}
+        <div class="scard">
+            <div class="scard__label">Hours</div>
+            <div class="scard__value pp-tally" data-countup="{{ rating_summary_stats.hours|default:0 }}">{{ rating_summary_stats.hours|default:0|intcomma }}</div>
+            <div class="scard__sub">signed off on</div>
+        </div>
+        {% comment %}The EXTREME, not a fourth average. The sentence above already carries the difficulty,
+        grindiness and fun averages, so a cell repeating one of them would state the same fact twice in two
+        formats -- where the hardest thing they have scored is exactly what an average hides.{% endcomment %}
+        <div class="scard">
+            <div class="scard__label">Toughest</div>
+            <div class="scard__value pp-tally">{{ rating_summary_stats.toughest }}<span class="pp-taste__unit">/10</span></div>
+            <div class="scard__sub">{{ rating_summary_stats.toughest|rating_verdict:'difficulty' }} at worst</div>
+        </div>
+        <div class="scard">
+            <div class="scard__label">Quick takes</div>
+            <div class="scard__value pp-tally" data-countup="{{ rating_summary_stats.takes }}">{{ rating_summary_stats.takes|intcomma }}</div>
+            <div class="scard__sub">written</div>
+        </div>
+    </div>
+</section>
+
+{% comment %}Base games and DLC are two walls, not one. A DLC pack is rated separately from the game it
+belongs to, so a mixed wall shows the same title twice with two different scores and leaves the reader to
+work out why.
+
+The site-standard segmented switcher, LEFT-aligned because it is a second-level control inside a tab that
+already has a right-aligned strip above it. Chips carry their counts, which is also what stops the split
+confusing the summary above: that stays WHOLE (a hunter's taste does not divide at the DLC line), and the
+counts say how the wall beneath it is divided.
+
+Each chip swaps `#tab-content`, not `#tab-results` -- the switcher and the sort control live OUTSIDE the
+results, so swapping only those would leave both still describing the set you just left. Same reason the
+Trophies tab's Clear re-renders its whole tab.
+
+Hidden until there is any DLC to see: a switcher whose second chip is always empty is a control that only
+ever does nothing.{% endcomment %}
+{% if rating_summary_stats.dlc_count %}
+{% with base_url=request.path %}
+<div class="flex items-center justify-start mb-3">
+    {% comment %}Links in a NAV, not a `role="tablist"`. This partial is rendered INTO `#tab-content`, so a
+    tab here would be a descendant of the panel it claims to control -- and the page already has a real
+    tablist above (the profile's own tab bar) pointed at that same element. Two tablists controlling one
+    panel, each nested inside it, is worse for assistive tech than the plain links these actually are: each
+    chip is an href that swaps the region, which `aria-current` describes exactly and without promising the
+    Arrow-key navigation `role="tab"` would.{% endcomment %}
+    <nav class="pp-switch" aria-label="Which ratings">
+        {% for slug, label in ratings_sets %}
+        <a href="{{ base_url }}?tab=ratings&set={{ slug }}"
+           hx-get="{{ base_url }}?tab=ratings&set={{ slug }}"
+           hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true"
+           data-set="{{ slug }}"
+           {% if rating_set == slug %}aria-current="true"{% endif %}
+           class="pp-switch__chip {% if rating_set == slug %}is-active{% endif %}">
+            <span class="pp-switch__lbl">{{ label }}</span>
+            <span class="ml-1 text-[0.65rem] font-semibold opacity-60 tabular-nums">{% if slug == 'dlc' %}{{ rating_summary_stats.dlc_count|intcomma }}{% else %}{{ rating_summary_stats.base_count|intcomma }}{% endif %}</span>
+        </a>
+        {% endfor %}
+    </nav>
+</div>
+{% endwith %}
+{% endif %}
+
+{% comment %}A FORM rather than a bare select, because the scroller serializes it to keep the sort across
+appended pages -- a wall that reverts to "recently rated" on page 2 is worse than one that cannot scroll.
+The SET rides in it for the same reason: page 2 of the DLC wall must not come back as base games.
+{% endcomment %}
+<form id="ratings-form" method="get" class="flex items-center justify-between gap-3 flex-wrap mb-3"
+      hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}"
+      hx-target="#tab-results" hx-swap="innerHTML" hx-push-url="true" hx-trigger="change">
+    <input type="hidden" name="tab" value="ratings">
+    <input type="hidden" name="set" value="{{ rating_set }}">
+    <p class="text-xs text-base-content/50">
+        {% if rating_set == 'dlc' %}{{ rating_summary_stats.dlc_count|intcomma }} DLC rating{{ rating_summary_stats.dlc_count|pluralize }}{% else %}{{ rating_summary_stats.base_count|intcomma }} rating{{ rating_summary_stats.base_count|pluralize }}{% endif %}
+    </p>
+    <label class="pp-hbrowse__sel">
+        <span class="sr-only">Sort ratings</span>
+        <select class="pp-gallery__select" name="sort">
+            {% for value, label in sort_options %}
+            <option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+</form>
+{% endif %}
+
+<div id="tab-results">
+    {% include 'trophies/partials/profile_detail/tabs/ratings_results.html' %}
+</div>

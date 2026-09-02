@@ -1,0 +1,380 @@
+{% load static humanize custom_filters %}{% comment %}
+Plat card -- the share image for a game completion. Landscape only, 1200x630.
+
+TWO VARIANTS, one layout. `variant` is 'platinum' (the game defines a platinum, so finishing the
+default group means they popped it) or 'full' (no platinum defined; the list is simply finished).
+They differ in accent, mark and label -- never in structure -- so they read as siblings.
+
+WHY IT LOOKS LIKE THIS
+  - 1200x630 is the OG/Twitter/Discord embed ratio, which is where these get seen: ~450px wide in a
+    Discord preview. Sizes are chosen to survive at ~37% scale. That constraint governs the TYPE
+    SCALE, not the amount of information -- the card is zoned (identity / completion / proof /
+    attribution) so density lands as scannable rows rather than mush.
+  - The hunter is the subject, not the game: identity strip on top (avatar, name, worn title, career
+    totals), then what they did. A share is "look what I did".
+  - NO COMMUNITY STATS, deliberately. Game.plats_earned_count / played_count / full_completion_count /
+    monthly_players_count / total_earns_count are all denormed and free to read, and they were
+    considered for this card. They describe the GAME; the card is about the hunter's achievement.
+    A community rarity is actively worse than the PSN global one it would sit beside: our population
+    is people who own the game AND signed up to a trophy tracker, which selects hard for
+    completionists, so it reads systematically MORE COMMON. "2.4% globally, 11% here" tells the reader
+    the achievement is less impressive among people like them.
+  - THE CARD IS ALSO AN ADVERT. It travels to people who don't have an account, so the brand block is
+    a real mark -- logo, wordmark, and the domain -- not a whisper in the corner. It is the second
+    thing you see after the game.
+  - Game art BACKS the card, it never leads it -- and it is a THEME, not a fixture. Painting the
+    backdrop unconditionally (as this did at first) put it on top of whatever ground the theme set, so
+    every option rendered identically. The ground is now owned entirely by the theme: the designed
+    gradients, or one of the art grounds the renderer composites from `concept_bg_path`.
+    Concept.get_landscape_url() resolves to an IGDB screenshot -> artwork -> PSN bg_url -> nothing, so
+    the art is uncurated and often absent, and the card has to be complete without it.
+  - The scrim is an INNER layer for the same reason: the renderer replaces the ground with
+    `!important`, so a scrim baked into it would be blown away and text would land on raw art.
+
+INLINE STYLES, HEX ONLY
+Playwright renders via page.set_content() in an about:blank origin: no stylesheet, no custom
+properties. So the --pp-* token VALUES are ported by hand. Keep this map in sync with input.css:
+
+    --pp-bg-0        #05080c      --pp-text        #f0f6fd
+    --pp-bg-1        #181d23      --pp-text-dim    #9da5b1
+    --pp-bg-2        #232a31      --pp-text-mute   #8a939f
+    --pp-bg-3        #2f363f      --pp-border      #404853
+    --pp-primary     #27ebfe   (platinum variant accent)
+    --pp-accent      #ff9350   (100% variant accent)
+
+Tier dot colours are lifted from --color-trophy-* -- see TIER_DISPLAY in completion_card_service.
+
+TYPE: the same two-voice pairing as the site -- Bricolage Grotesque (--pp-font-display) for the
+things you read first (username, wordmark, variant label, game title, tallies), Inter
+(--pp-font-body) for labels and meta. Both are embedded by the renderer from static/fonts/; a face
+that isn't in that directory cannot render here at all, so keep the stacks to those two families.
+
+Context: see core/services/completion_card_service.get_card_data + api/shareable_views.build_card_context.
+{% endcomment %}
+<div class="share-image-content" style="position: relative; width: 1200px; height: 630px; overflow: hidden; box-sizing: border-box; font-family: 'Inter', sans-serif; background: radial-gradient(120% 90% at 12% 0%, #232a31 0%, #181d23 45%, #05080c 100%);">
+
+    {% comment %}Scrim: an INNER layer, so it survives a theme replacing the ground with `!important`.
+
+    Tuned for a DESIGNED ground, not for raw art. It was originally set for the latter (0.95 -> 0.64)
+    and crushed every gradient ground to the same near-black -- picking a different one changed
+    almost nothing. The art grounds don't need that strength from here anyway: the renderer already
+    lays its own 0.45-0.55 black over an image before this layer ever applies, so heavy values here
+    were darkening art twice and everything else once too many.{% endcomment %}
+    <div style="position: absolute; inset: 0; background: linear-gradient(100deg, rgba(5, 8, 12, 0.74) 0%, rgba(5, 8, 12, 0.52) 52%, rgba(5, 8, 12, 0.20) 100%);"></div>
+    <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(5, 8, 12, 0.66) 0%, rgba(5, 8, 12, 0) 44%);"></div>
+
+    {% comment %}The Frame: a thin inset rule that makes the image an object rather than a
+    screenshot.{% endcomment %}
+    <div style="position: absolute; inset: 16px; border: 2px solid {% if variant == 'platinum' %}rgba(39, 235, 254, 0.38){% else %}rgba(255, 147, 80, 0.38){% endif %}; border-radius: 14px; box-shadow: inset 0 0 60px rgba(5, 8, 12, 0.55);"></div>
+
+    <div style="position: relative; height: 630px; padding: 40px 46px; box-sizing: border-box; display: flex; flex-direction: column;">
+
+        {# ── 1. Identity: the hunter, and the brand ── #}
+        {% comment %}Deliberately NOT tagged data-element="platinum-banner". That hook exists so a
+        theme can tint the OLD card's identity strip, and both consumers would wreck this one: the
+        renderer injects `background` + `border-color` with !important, and the preview JS paints
+        `theme.bannerBackground` straight onto the node. The legacy `default` theme's banner is a cyan
+        tint, so the preview was stamping a tinted box behind this bar that the PNG never had -- the
+        preview and the download disagreeing again. This bar is part of the composition, not a
+        themeable surface; leave the hook off.{% endcomment %}
+        <div style="display: flex; align-items: center; gap: 17px; flex-shrink: 0; padding-bottom: 20px; box-sizing: content-box; border-bottom: 1px solid rgba(64, 72, 83, 0.55);">
+            {% if avatar_image %}
+            <img src="{{ avatar_image }}" alt="" style="width: 58px; height: 58px; border-radius: 50%; object-fit: cover; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; flex-shrink: 0;" />
+            {% else %}
+            <div style="width: 58px; height: 58px; border-radius: 50%; border: 2px solid {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; box-sizing: border-box; background: #232a31; flex-shrink: 0;"></div>
+            {% endif %}
+
+            <div style="flex: 1; min-width: 0;">
+                {% comment %} The mark system, inline (Playwright renders this with no stylesheet): name in the
+                mark's colour plus its glyph, exactly as the recap share card wears it. {% endcomment %}
+                <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 28px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
+                    {% include 'components/_mark_glyphs_inline.html' with star_px=15 svc_px=16 %}
+                </div>
+                <div style="line-height: 1.35; font-size: 15px; font-weight: 500; color: #9da5b1; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    {% comment %}Platinum count only. The non-plat completion total used to sit here as "N at 100%",
+                    which read as though it should INCLUDE the platinums -- two numbers apparently arguing with each
+                    other. A share card gets a moment's glance; a figure needing a footnote isn't worth the space.{% endcomment %}
+                    {% if display_title %}<span style="color: #f0f6fd; font-weight: 600;">{{ display_title }}</span><span style="color: #8a939f;"> &nbsp;&middot;&nbsp; </span>{% endif %}{{ total_platinums }} platinum{{ total_platinums|pluralize }}
+                </div>
+            </div>
+
+            {# The advert. A stranger sees this card before they ever see the site. #}
+            <div style="flex-shrink: 0; display: flex; align-items: center; gap: 13px;">
+                <img src="{% static 'images/logo.png' %}" alt="" style="width: 50px; height: 50px; border-radius: 9px; object-fit: cover; flex-shrink: 0;" />
+                <div style="text-align: left;">
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #f0f6fd; letter-spacing: 0.02em; line-height: 1.4;">Platinum Pursuit</div>
+                    <div style="line-height: 1.35; font-size: 15px; font-weight: 600; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.04em; margin-top: 4px;">platpursuit.com</div>
+                </div>
+            </div>
+        </div>
+
+        {# ── 2. The completion ── #}
+        <div style="flex: 1; display: flex; align-items: stretch; gap: 34px; min-height: 0; padding: 22px 0 14px;">
+
+            {% comment %}Cover, framed rather than bled: it's evidence, not the ground.
+
+            Its height comes from the ROW, not from a number. Hardcoding both dimensions is what once
+            drove it straight through the spine divider: the row's height is whatever is left after the
+            identity bar, the spine band and the card's padding, so any fixed value is a guess that
+            silently overflows the moment one of those changes. The row's padding-bottom is what keeps
+            the cover from kissing the divider.{% endcomment %}
+            <div style="height: 100%; aspect-ratio: 3 / 4; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #232a31; border: 1px solid #404853; box-sizing: border-box; box-shadow: 0 18px 40px rgba(5, 8, 12, 0.6);">
+                {% if game_image %}
+                <img src="{{ game_image }}" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
+                {% endif %}
+            </div>
+
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;">
+
+                {# What this card IS. #}
+                <div style="display: flex; align-items: center; gap: 13px;">
+                    {% if variant == 'platinum' %}
+                        {% if trophy_image %}
+                        <img src="{{ trophy_image }}" alt="" style="width: 38px; height: 38px; object-fit: cover; border-radius: 5px; flex-shrink: 0;" />
+                        {% else %}
+                        {% comment %}PSN dropped the icon. Fall back to a platinum-coloured ring, NOT the
+                        100% mark -- an amber "100" beside a cyan PLATINUM label reads as a bug.{% endcomment %}
+                        <div style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 2px solid #27ebfe; box-sizing: border-box;"></div>
+                        {% endif %}
+                    {% else %}
+                    <div style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; border: 2px solid #ff9350; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 13px; line-height: 1; font-weight: 700; color: #ff9350; letter-spacing: -0.02em;">100</div>
+                    {% endif %}
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; line-height: 1.2; font-size: 21px; font-weight: 700; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %}; letter-spacing: 0.16em; text-transform: uppercase;">{% if variant == 'platinum' %}Platinum{% else %}100% Complete{% endif %}</span>
+                    {% if ordinal %}
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; line-height: 1.2; font-size: 21px; font-weight: 600; color: #8a939f;">#{{ ordinal }}</span>
+                    {% endif %}
+
+                    {% comment %}Everything cleared, DLC included -- a bigger chase than the platinum and
+                    previously invisible on the card. It only ever ADDS: a game with outstanding DLC shows
+                    nothing here rather than a partial figure, because "51 of 71" beside a PLATINUM label
+                    reads as unfinished and nobody should be talked out of sharing by their own card.{% endcomment %}
+                    {% if all_dlc_done %}
+                    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; border: 1px solid rgba(58, 221, 158, 0.5); background: rgba(58, 221, 158, 0.1);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3add9e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
+                        <span style="font-size: 14px; line-height: 1.2; font-weight: 700; color: #3add9e; letter-spacing: 0.11em; text-transform: uppercase;">All DLC</span>
+                    </span>
+                    {% endif %}
+                </div>
+
+                {# The game: the single dominant statement. #}
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
+
+                {% if platform_label or completed_at or user_rating.overall_rating %}
+                <div style="display: flex; align-items: center; gap: 16px; margin-top: 11px;">
+                    <div style="line-height: 1.3; font-size: 17px; font-weight: 500; color: #8a939f; letter-spacing: 0.02em;">
+                        {% if platform_label %}{{ platform_label }}{% if is_regional and region %} &middot; {{ region|join:" / " }}{% endif %}{% endif %}{% if platform_label and completed_at %} &nbsp;&middot;&nbsp; {% endif %}{% if completed_at %}{{ completed_at|date:"F j, Y" }}{% endif %}
+                    </div>
+
+                    {% comment %}Their score for the GAME -- a verdict, not a stat about the completion,
+                    which is why it sits with the title rather than in the numbers row. Drawn as two
+                    stacked SVG rows with the gold one clipped to `stars_pct`, so half stars are exact.
+                    SVG rather than a ★ glyph on purpose: the renderer embeds only Bricolage/Inter/
+                    Poppins, none of which carry U+2605, so a glyph would land as tofu on a box with no
+                    fallback font installed.{% endcomment %}
+                    {% if user_rating.overall_rating %}
+                    <div style="display: flex; align-items: center; gap: 9px; margin-left: auto; flex-shrink: 0;">
+                        <div style="position: relative; width: 106px; height: 20px; flex-shrink: 0;">
+                            <div style="position: absolute; inset: 0; display: flex; gap: 2px;">
+                                {% for _ in "12345" %}<svg width="20" height="20" viewBox="0 0 24 24" fill="#2f363f"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>{% endfor %}
+                            </div>
+                            <div style="position: absolute; inset: 0; width: {{ user_rating.stars_pct }}%; overflow: hidden;">
+                                <div style="display: flex; gap: 2px; width: 106px;">
+                                    {% for _ in "12345" %}<svg width="20" height="20" viewBox="0 0 24 24" fill="#fcca21"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>{% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 21px; line-height: 1; font-weight: 700; color: #f0f6fd;">{{ user_rating.overall_rating|floatformat:"-1" }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Proof: the trophy list itself, in the hobby's own vocabulary. #}
+                {% if tier_counts %}
+                <div style="display: flex; align-items: center; gap: 22px; margin-top: 20px; padding: 13px 0; border-top: 1px solid rgba(64, 72, 83, 0.45); border-bottom: 1px solid rgba(64, 72, 83, 0.45);">
+                    {% for tier in tier_counts %}
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="width: 15px; height: 15px; border-radius: 50%; background: {{ tier.colour }}; display: inline-block; flex-shrink: 0;"></span>
+                        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 25px; font-weight: 700; color: #f0f6fd; line-height: 1;">{{ tier.count }}</span>
+                    </div>
+                    {% endfor %}
+                    <div style="margin-left: auto; line-height: 1.2; font-size: 15px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase;">{{ trophy_total }} Trophies</div>
+                </div>
+                {% endif %}
+
+                {# The numbers. #}
+                <div style="display: flex; gap: 42px; margin-top: 20px;">
+                    {% if variant == 'platinum' and trophy_earn_rate %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ trophy_earn_rate }}%</div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">{{ rarity_label|default:"Rarity" }}</div>
+                    </div>
+                    {% endif %}
+                    {% if playtime %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ playtime }}</div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Played</div>
+                    </div>
+                    {% endif %}
+                    {% comment %}Their own verdict -- data nobody else on the card has, and the reason
+                    the download flow nudges for a rating first.{% endcomment %}
+                    {% comment %}Difficulty and Fun wear the SITE's rating_tone, via the same filter the
+                    Ratings tab uses, so the two surfaces can't drift apart. Note the polarity is
+                    consumer-advice polarity -- LOW difficulty is `good`/green, HIGH is `bad`/red -- so a
+                    hard-won 9/10 reads as a warning colour here rather than as a flex. That's a
+                    deliberate call to stay consistent with the rest of the site; the alternative was a
+                    card-only intensity ramp that would have coloured the same number differently in two
+                    places.{% endcomment %}
+                    {% if user_rating.difficulty %}
+                    {% with tone=user_rating.difficulty|rating_tone:'difficulty' %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: {% if tone == 'good' %}#3add9e{% elif tone == 'warn' %}#fcca21{% elif tone == 'high' %}#ff9350{% else %}#ff5860{% endif %}; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.difficulty }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Difficulty</div>
+                    </div>
+                    {% endwith %}
+                    {% endif %}
+                    {% comment %}Grindiness completes the trio the hunter actually rated -- it was
+                    collected all along (the rate-before-download prompt asks for it) and simply never
+                    shown, which left the stats row stopping around 60% of the width with a visible
+                    void after it. Difficulty / Grind / Fun read as one verdict rather than two
+                    numbers and a gap.{% endcomment %}
+                    {% if user_rating.grindiness %}
+                    {% with tone=user_rating.grindiness|rating_tone:'grindiness' %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: {% if tone == 'good' %}#3add9e{% elif tone == 'warn' %}#fcca21{% elif tone == 'high' %}#ff9350{% else %}#ff5860{% endif %}; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.grindiness }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Grind</div>
+                    </div>
+                    {% endwith %}
+                    {% endif %}
+                    {% if user_rating.fun_ranking %}
+                    {% with tone=user_rating.fun_ranking|rating_tone:'fun' %}
+                    <div>
+                        <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; font-weight: 700; color: {% if tone == 'good' %}#3add9e{% elif tone == 'warn' %}#fcca21{% elif tone == 'high' %}#ff9350{% else %}#ff5860{% endif %}; line-height: 1; letter-spacing: -0.02em;">{{ user_rating.fun_ranking }}<span style="font-size: 20px; color: #8a939f;">/10</span></div>
+                        <div style="line-height: 1.2; font-size: 13px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 6px;">Fun</div>
+                    </div>
+                    {% endwith %}
+                    {% endif %}
+                </div>
+
+                {% comment %}The verdict -- the one thing on this card that is ADVICE rather than a
+                record. Everything above says what the platinum was; this says whether to go after it,
+                which is the question anyone reading someone else's plat card is actually asking.
+
+                Its own row rather than a fourth cell in the numbers: those are all "N/10" and this is a
+                phrase, so it would either be truncated or force every cell to the width of "Good game,
+                tough plat". A pill also reads as a conclusion drawn from the row above it, which is
+                what it is.
+
+                Colours are the card's own tone hexes -- the same green/amber/red the numbers use -- so
+                the row and the pill agree, and the glyph is the shared one every other surface draws.
+                Sized explicitly: there is no stylesheet here, and an unsized SVG renders at 300x150.
+
+                Absent on ratings written before the field existed; the Rate My Games wizard is asking for
+                those, so a card made today may gain one tomorrow.{% endcomment %}
+                {% if user_rating.recommendation %}
+                {% if user_rating.recommendation == 'worth_it' %}{% with rec_c='#3add9e' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                {% elif user_rating.recommendation == 'skip' %}{% with rec_c='#ff5860' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                {% else %}{% with rec_c='#fcca21' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                {% endif %}
+                {% endif %}
+
+                {% comment %}Their own take, in their own words -- the one thing on the card that no
+                other hunter's card can have, and the reason this space is worth filling with a
+                sentence instead of a fifth number. Optional (most ratings carry none), so the layout
+                above is sized to stand without it.{% endcomment %}
+                {% if user_rating.blurb %}
+                <div style="display: flex; align-items: flex-start; gap: 11px; margin-top: 18px; max-width: 760px;">
+                    <span style="flex-shrink: 0; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 34px; line-height: 0.8; color: {% if variant == 'platinum' %}#27ebfe{% else %}#ff9350{% endif %};">&ldquo;</span>
+                    <span style="font-size: 20px; line-height: 1.35; color: #9da5b1; font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px;">{{ user_rating.blurb }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% comment %}── 3. The spine band: what this completion FED. The two halves of the product --
+        badges are the collection, contracts are the career -- so showing one without the other tells
+        half the story of what a completion was worth.
+
+        The badge side carries the real MEDALLION (backdrop + subject art, tier-ringed) rather than a
+        name, because the medallion is the product's signature object; and the EDITION, because "Ultra
+        HD" and "Legacy HD" are different badges to a hunter. The progress bar only appears while the
+        series is unfinished -- a full bar next to a title you already hold is noise, a partial one is
+        a reason to go back. The contract side uses the real Lucide job glyphs in their discipline
+        colours (the tag emits stroke="currentColor", so colour cascades from the wrapper).
+        {% endcomment %}
+        {% if badge_lines or contract %}
+        <div style="flex-shrink: 0; display: flex; align-items: center; gap: 26px; padding-top: 15px; border-top: 1px solid rgba(64, 72, 83, 0.55); overflow: hidden;">
+
+            {% if badge_lines %}{% with line=badge_lines.0 %}
+            <div style="display: flex; align-items: center; gap: 13px; min-width: 0;">
+                {% comment %}The badge art stands on its own -- no ring, no plate, no circle mask.
+                Framing it cost more than it added: `border-radius: 50%` + `object-fit: cover` cropped
+                the points off every shield, so distinct badges all resolved into the same gold disc at
+                card size. Unmasked and CONTAINED, the silhouette survives and each badge is
+                recognisable. Bigger too, because contained art occupies less of its box than a
+                cover-cropped fill does; the edition's backing metal still reads on the label beside it.
+
+                An avatar subject is the exception and keeps a circle: a square PSN photo shown raw is
+                a photo, not a badge.{% endcomment %}
+                {% if line.medallion_cached %}
+                <div style="position: relative; width: 64px; height: 64px; flex-shrink: 0;">
+                    {% for layer in line.medallion_cached %}
+                    <img src="{{ layer }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%;{% if line.medallion_is_avatar %} object-fit: cover; border-radius: 50%;{% else %} object-fit: contain;{% endif %}" />
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div style="min-width: 0;">
+                    <div style="display: flex; align-items: baseline; gap: 9px; white-space: nowrap;">
+                        {% if line.title_held and line.title %}
+                        <span style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.title }}</span>
+                        {% else %}
+                        <span style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #f0f6fd; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</span>
+                        {% endif %}
+                        {% if line.edition %}
+                        <span style="font-size: 13px; line-height: 1.3; font-weight: 700; color: {{ line.medallion_colour|default:"#8a939f" }}; letter-spacing: 0.12em; text-transform: uppercase;">{{ line.edition }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if line.stages_total and line.stages_cleared < line.stages_total %}
+                    {% comment %}The bar FLEXES so the row ends flush with the title+edition above it --
+                    a short fixed bar left the column looking ragged. Its own max-content is tiny, so
+                    row 1 still sets the column width and the bar simply takes what's left. It fills in
+                    the badge's BACKING METAL, not the card's variant accent, matching
+                    `.bdh-progress[data-tier]` on badge detail -- this bar measures badge progress, so
+                    it belongs to the badge.{% endcomment %}
+                    <div style="display: flex; align-items: center; gap: 9px; margin-top: 6px;">
+                        <span style="position: relative; display: block; flex: 1; min-width: 60px; height: 5px; border-radius: 3px; background: #2f363f; overflow: hidden;">
+                            <span style="position: absolute; inset: 0; width: {% widthratio line.stages_cleared line.stages_total 100 %}%; background: {{ line.medallion_colour|default:"#e7c25c" }}; border-radius: 3px;"></span>
+                        </span>
+                        <span style="font-size: 14px; line-height: 1; font-weight: 600; color: #8a939f; flex-shrink: 0;">{{ line.stages_cleared }} of {{ line.stages_total }}</span>
+                    </div>
+                    {% else %}
+                    <div style="font-size: 15px; line-height: 1.3; color: #8a939f; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ line.series_name }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endwith %}{% endif %}
+
+            {% comment %}Every job, named. No XP figure: a contract's XP splits evenly across its
+            jobs, so a single total only reads correctly with all of them beside it, and at up to 6
+            jobs the names and the number don't both fit. The names are the more useful half, and
+            without the number nothing can be credited to the wrong job. Names ellipsise rather than
+            push the badge side off if a contract ever carries six long ones.{% endcomment %}
+            {% if contract.jobs %}
+            <div style="display: flex; align-items: center; gap: 15px; min-width: 0; margin-left: auto;">
+                {% for job in contract.jobs %}
+                <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
+                    {% if job.icon_paths %}
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{ job.colour }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ job.icon_paths|safe }}</svg>
+                    {% endif %}
+                    <span style="font-size: 17px; line-height: 1.3; font-weight: 600; color: #9da5b1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ job.name }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>

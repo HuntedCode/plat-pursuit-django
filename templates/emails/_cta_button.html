@@ -1,0 +1,29 @@
+{% comment %}
+The bulletproof CTA button for emails on base v2.
+
+    {% include 'emails/_cta_button.html' with url=profile_url label="View your profile" %}
+
+Outlook's Word rendering engine ignores border-radius, padding on anchors, and box-shadow, so
+a styled <a> collapses there. The VML roundrect below is what Outlook draws; every other
+client draws the table cell underneath it. This is the standard "bulletproof" pattern -- keep
+the two halves in step if the colours ever change.
+
+THE PLAINTEXT RULE: the text/plain part of every email is strip_tags(html), which discards
+every href. If the reader MUST be able to reach this URL, print it as visible text near the
+button too (see how the welcome email does it). A button alone is invisible in plaintext.
+{% endcomment %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 4px auto 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ url }}" style="height:46px;v-text-anchor:middle;width:260px;" arcsize="18%" stroke="f" fillcolor="#28EBFE">
+                <w:anchorlock/>
+                <center style="color:#05080C;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">{{ label }}</center>
+            </v:roundrect>
+            <![endif]-->
+            <!--[if !mso]><!-- -->
+            <a href="{{ url }}" style="display: inline-block; padding: 14px 30px; background-color: #28EBFE; color: #05080C; font-size: 15px; font-weight: 700; line-height: 1; text-decoration: none; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">{{ label }}</a>
+            <!--<![endif]-->
+        </td>
+    </tr>
+</table>

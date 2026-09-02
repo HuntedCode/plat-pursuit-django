@@ -51,6 +51,15 @@ We build **three layouts** per page: mobile, tablet, and desktop. Tailwind class
 - `lg:` values are the desktop experience
 - `sm:` (640px) is available but rarely needed; most layouts jump from mobile to `md:`
 
+**Phone-only refinements (`@media (max-width: 640px)`):** Component CSS (`static/css/components/*.css`)
+occasionally needs a tweak that should apply on phones **but not** tablets/desktop, where the mobile-first
+`min-width` ladder can't express it (a `min-width` rule adds complexity going up; this removes it going
+down). For those, a hand-written `@media (max-width: 640px)` block is the sanctioned escape hatch. It is
+desktop-first by nature (overrides the base rule below the phone cutoff), so keep it to genuinely
+phone-scoped polish: swipe-to-close modal chrome, the mobile peek scroll cap, collapsing toolbars, and the
+badge-detail stage ladder (slimmer gutter/node + stacked meta). Prefer the mobile-first `md:`/`lg:` ladder
+for layout; reach for `max-width: 640px` only for these phone-only overrides.
+
 ### Legacy Migration Pattern
 
 When converting a page from ZoomScaler to proper responsive:
@@ -95,6 +104,8 @@ Every content module uses this card structure:
 | Title icon | `w-5 h-5` with theme color (e.g., `text-primary`) | Consistent 20px across all sizes |
 
 ### Card Variants
+
+**Page structure = STACKED chrome + FREE content (site-wide rule, 2026-07).** The chrome is carded -- an accented page-header card, then optional stat/education/toolbar cards, each `mb-3`/`mb-4` apart. The main content (grids, lists, tab panels) is NOT wrapped in an outer card; it flows free below the chrome, like the Collection (header card -> free Gallery wall). Never one bordered box swallowing the header + sections, and never an outer card around the content grid -- both trap long / paginated (infinite-scroll) pages in an ever-growing border. Item-level cards *inside* the content (game/badge cards, tiles, the empty state) are fine; it's the outer content wrapper that must not be a card.
 
 **Content module cards** (dashboard modules, detail page sections): Full card tokens with `p-3 md:p-5 lg:p-7` padding.
 
@@ -197,6 +208,47 @@ Every rebuilt page should have a header card that establishes context and houses
 
 **Subtitle guidelines**: The subtitle should be dynamic and contextual, not generic. Change based on active filters, current sort, result count, or user state. Add personality (flavor text, playful phrasing) per the Platinum Pursuit Standard.
 
+### Tab Group / View Switcher (site-wide standard, 2026-07)
+
+**The one sanctioned tab treatment.** Any in-page tab group or view switcher -- 2-way (Series/Gallery) or multi-tab (Jobs/Radar/Contracts) -- uses the shared **`.pp-switch`** component (`static/css/components/switcher.css`): one bordered container holding transparent chips, active chip tinted, an icon per chip. Right-aligned in its own `flex items-center justify-end mt-5` row -- `mt-5` is the standard top gap above the switcher (it sits below the page-header card / whatever chrome precedes it). Used site-wide: Career, Badges (Series/Gallery). (Collection was a Case/Gallery switcher but is now a single Gallery, so it no longer carries one.) Unified 2026-07 from three near-identical class systems (`.lab-view-tab` / `.pp-collection__view-chip` / `.pp-vtoggle`, all retired).
+
+```html
+<div class="flex items-center justify-end mt-5">
+  <div class="pp-switch" role="tablist" aria-label="...">    <!-- segmented container -->
+    <button class="pp-switch__chip is-active" role="tab" aria-selected="true">
+      <svg>...</svg>Tab A                                    <!-- ~15px Lucide icon + label -->
+    </button>
+    <button class="pp-switch__chip" role="tab" aria-selected="false"><svg>...</svg>Tab B</button>
+  </div>
+</div>
+```
+
+- **Container `.pp-switch`**: `inline-flex; flex-wrap:wrap; gap:6px; padding:4px; border-radius:8px; border:1px solid var(--pp-border); background:color-mix(in oklab, var(--pp-bg-1) 60%, transparent)`.
+- **Chip `.pp-switch__chip`**: transparent at rest (`color:var(--pp-text-mute); border:1px solid transparent; border-radius:5px; padding:6px 14px`, `7px 18px` at `md:`); `text-decoration:none` (works for `<a>` chips); hover -> `color:var(--pp-text)`; `:active` presses `translateY(1px)`.
+- **Active chip `.is-active`**: `color:var(--pp-text); font-weight:700; background:color-mix(in oklab, var(--pp-primary) 16%, transparent); border-color:color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border))`. Settles FLAT -- no resting glow. The one-time activation bloom (`.pp-tab-ignite` via `PlatPursuit.igniteTab`) fades to flat.
+- **Icon**: a ~15px Lucide stroke glyph before the label. A trailing count badge (e.g. Career's claimable count) sits after the label.
+- **Mini-bar copies**: wrap each chip's label in `<span class="pp-switch__lbl">` so it collapses to icon-only on mobile (`.pp-minibar__controls .pp-switch__lbl { display:none }`).
+- **Behavior**: wire with `PlatPursuit.wireTablist(chips, {onSelect})` (roving tabindex + Arrow/Home/End; `{manual:true}` for HTMX `<a>` chips). Directional panel slide via `PlatPursuit.slideViewIn`. → [js-utilities](js-utilities.md), [motion-patterns](motion-patterns.md).
+- **A11y**: `role="tablist"` on the container, `role="tab"` + `aria-selected` on chips, `aria-controls` -> the panel; `:focus-visible` ring in `--pp-primary`.
+- **Distinct siblings (NOT `.pp-switch`)**: Career's `.jlayout__btn` (rounded-pill Dossier/Sheet toggle) is its own component.
+
+### Progression ladder (.pgl)
+
+Shared primitive for ANY tier/rank progression (`static/css/components/elements.css`). A row of rungs: reached rungs fill the accent, the current rung fills partway + widens + glows, upcoming rungs stay dim. Accent-parameterized — set `--pgl-accent` on the ladder (or per-rung `--rung-c`) so it takes on the feature's colour. Rung fill is driven by `--f` (0–100%), state by `.is-on` (reached) / `.is-current`.
+
+```html
+<div class="pgl pgl--static">           <!-- --static = resting fill only, no mount choreography -->
+  <div class="pgl__track">
+    <span class="pgl__rung is-on" style="--rung-c: #cf9160; --f: 100%;"></span>
+    <span class="pgl__rung" style="--rung-c: #b9c6d6; --f: 0%;"></span>
+  </div>
+</div>
+```
+
+- **Consumers**: Pursuer rank ladder (Career hero, `.pgl--rank`), job prestige ladder (job detail), claim ceremony rank-up (`.is-charging`), badge tier ascent rail (`.pgl--static`). Reuse it — don't re-roll a ladder.
+- **`.pgl--static`**: disables the entrance choreography (rung draw cascade, current-rung bloom, division ticks) for a resting filled rail — use inside HTMX swap islands or wherever you just want the meter.
+- **Reduced motion**: the mount animations are gated; the resting filled state is the reduced-motion fallback.
+
 ### Filter/Search Toolbar Card
 
 Compact card for search, sort, and filter controls. Collapsible drawer for secondary filters.
@@ -226,6 +278,31 @@ Compact card for search, sort, and filter controls. Collapsible drawer for secon
     </div>
 </div>
 ```
+
+> The snippet above is the **legacy DaisyUI** shape. The rebuilt house toolbar uses `.pp-bgal__*` / `.pp-gbrowse__*` (see `game_list.html`, `components/{browse-gallery,game-browse}.css`). Follow that on rebuilt pages, plus the shared premium features below.
+
+### Search toolbar — shared premium features (2026-07)
+
+Two shared helpers (in `static/js/utils.js`) give **any** search toolbar — browse or bespoke — the same premium behavior. The `.pp-search-*` visuals live in shared CSS (`components/browse-gallery.css`) keyed on `[data-search-wrap]` + `.has-value`/`.is-searching`, so they work on any positioned wrapper. **Live on: Browse Games, Badge list (Series + Gallery), Collection Gallery, Career Contracts.** (`browse-filters.js` calls the same helper internally; bespoke controllers call it directly.)
+
+**Automatic — `/` + ⌘K/Ctrl+K focus:**
+- A single global handler (utils.js) focuses the first *visible* `[data-page-search]` input (hidden inactive-tab inputs are skipped), falling back to a `[data-browse-form]` text/search input — so all ~18 `browse-filters.js` pages get it for free. On bespoke/tabbed pages, add `data-page-search` to the primary search input. `/` is skipped while typing in an input/textarea/select/contenteditable; ⌘K always fires.
+
+**Opt-in affordances — `PlatPursuit.wireSearchField(input, {onClear})`:**
+- Call it once per search input. It wires the `.has-value` toggle, the `[data-search-clear]` clear button, and Escape-to-clear (both call `onClear`), and returns `{ setBusy(bool) }` for the in-flight spinner. `onClear` should re-run/re-submit your filter.
+- Markup (inside a `[data-search-wrap]` wrapper): `<span class="pp-search-spin">`, `<button class="pp-search-clear" data-search-clear tabindex="-1">`, `<kbd class="pp-search-kbd">/`. Visibility is state-driven — only one of {hint, clear, spinner} shows at a time.
+- Call `setBusy(true/false)` around your request for the spinner (skip it for client-side/instant filters — Collection Gallery does).
+
+**Live search — auto-apply as you type (opt-in):**
+- The search re-filters on a debounced keystroke instead of requiring Enter. **Opt-in, not default** — most browse forms carry `hx-push-url`, so auto-submitting per keystroke burst spams browser history *and* multiplies queries on every list endpoint. Enter stays the universal path; turn live search on only where it's wanted.
+- **Browse forms (`browse-filters.js`)**: add `data-live-search` to the `[data-browse-form]`. The controller then debounces the input (~400ms) → submit. (Live on Browse Games; off on the heavier list endpoints.)
+- **Native-HTMX forms (form-level `hx-trigger`)**: for forms that submit via HTMX's own trigger (no `browse-filters.js`), add a keystroke trigger scoped to the search input alongside the existing `change`/`submit`: `hx-trigger="change delay:250ms, submit, keyup changed delay:400ms from:find input[type='search']"`. `from:find` scopes it to the form's own search box (not selects/checkboxes), and `changed` skips arrow/modifier keys. Badge list (Series + Gallery) uses this. The spinner reuses the page's `htmx:beforeRequest`/`afterRequest` `.is-searching` toggle gated on `document.activeElement === input` (true while typing).
+- **Bespoke controllers**: wrap the input handler in `PlatPursuit.debounce(fn, ms)` yourself — Collection Gallery (client-side, ~320ms, instant/no history cost) and Career Contracts (server fetch, ~250ms) both do this. Debounce ~250–400ms; longer for server round-trips, shorter for client-side.
+
+**Active-filter chips** (per-page, not auto — each page's filters + labels differ). Dismissable pills of the applied *panel* filters (search + platform/regions/sort are excluded), each with a remove-URL, plus a **Clear all**. Reference impl on Browse Games:
+- View builds them with `browse_helpers.get_active_filter_chips(request, form)` → `{filter_chips: [{label, remove_url}], filter_clear_url}` (urlencoded querystrings, page reset).
+- Rendered by `partials/browse/active_filters.html` (a `#gbrowse-active-filters` container) included in the toolbar **and** OOB-swapped (`with oob=True`) from the results partial so it stays in sync when filters change via the panel.
+- **Chip removal is a full nav** (plain `href`), not HTMX — so the collapsed panel's form controls reset in lockstep with the chips. The container is kept truly `:empty` when no filters are active so its margin collapses.
 
 ### Toggle-Button Checkboxes
 
@@ -563,6 +640,51 @@ When a chart (e.g., radar) stacks to full width on mobile, constrain and center 
 
 ---
 
+## Iconography
+
+**The rebuild uses [Lucide](https://lucide.dev) (MIT) as its single icon set.** Every UI glyph is a Lucide
+stroke icon, hand-inlined as an `<svg>` (never a runtime icon font/library — inline keeps it CSP-safe and
+lets `currentColor`/token colours flow). The Lucide signature to match:
+
+```html
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"> … </svg>
+```
+
+**Rules:**
+- **New glyphs**: copy the SVG inner markup from lucide.dev verbatim (names match, so a glyph can be
+  re-copied/updated later). Size with Tailwind `w-*`/`h-*`; colour via `stroke` (a token, not a hex).
+- **Shared includes** live in `templates/partials/icons/` (`check`, `percent`, `user`, `octagon-alert`
+  via `privacy_warning.html`, `globe`, etc.) — reuse these rather than re-inlining. Each takes `color` +
+  `size` params. Job icons are the Lucide sprite behind the `{% job_icon %}` templatetag.
+- **Brand-mark exceptions** (NOT Lucide, deliberately): `partials/icons/ps_logo.html` (the PlayStation
+  wordmark) and `partials/icons/pp_logo.html` (the PlatPursuit logo image). Use these for their brands;
+  Lucide has no equivalent and shouldn't.
+- **Filled rating star** is an accepted exception: the site-wide `<polygon>` star rendered `fill`ed (the
+  Lucide star geometry, filled) for community ratings — a rating convention, not drift. Everywhere else,
+  icons are stroke.
+- **Do NOT** introduce FontAwesome / Heroicons / Feather / Bootstrap glyphs. Tells: a `viewBox` other than
+  `0 0 24 24` (FontAwesome is `0 0 512 512`), or a filled UI glyph that Lucide would stroke.
+
+---
+
+## Badge type display priority
+
+Wherever the **badges a game belongs to** are listed (browse cards, game detail, the plat card's spine),
+order them by the **attribution the series carries** and **count distinct series** (one per
+`series_slug`), never tiers (a four-tier series is **one** badge, not four):
+
+> has a **collection** › else has a **franchise** › else has a **developer** › else fallback
+
+Codified as `badge_attribution_rank()` in `trophies/constants.py` — sort by it, then by name. Don't
+re-hardcode the order per surface.
+
+**This is not `badge_type`.** `collection`, `franchise` and `developer` are independent nullable FKs, and
+a `series`-type badge can carry a franchise. Ranking by the type label sorts that badge *below* one with
+no attribution at all — which is what shipped first and had to be corrected.
+
+---
+
 ## Image Styling
 
 These conventions apply site-wide and are not affected by the redesign:
@@ -611,12 +733,12 @@ These are **page-specific** decisions, not site-wide tokens:
 - **Legacy `bg-base-300/*` remnants**: Some older pages (recap slides, platinum grid, checklist editor) still use `bg-base-300/50`. These should be migrated to the theme-safe pattern when those pages are redesigned. Do not copy the old pattern into new work.
 - **Italic text clipping**: Always add `pr-1` when combining `line-clamp-*` with `italic`. The italic glyph slant gets clipped by line-clamp's overflow hidden.
 - **`sr-only` vs `hidden` for form inputs**: Toggle-button checkboxes must use `sr-only` (invisible but still submits). `hidden` applies `display: none` which prevents form submission entirely.
-- **ZoomScaler coexistence**: During the redesign, some pages still use `ZoomScaler.init()`. The zoom wrapper divs in `base.html` are inert without `.zoom-active`, so redesigned and legacy pages coexist safely.
+- **ZoomScaler removed**: The legacy sub-768px transform-scale system was removed (no callers remained); every page builds mobile-first. The `#zoom-container` / `#zoom-wrapper` divs in `base.html` remain only as the host for the modal/ceremony recede (`.pp-receded` -> `#page-recede`).
 - **Tailwind rebuild required**: After adding new responsive class variants (e.g., `md:p-5`), run `npm run build` to regenerate `output.css`. The output is minified to a single line.
 - **`md:hidden` for mobile-only elements**: This class is visible below 768px and hidden at 768px+. Useful for short date formats shown only on mobile.
 - **Touch targets**: Interactive elements should be at least 44px on all sizes. DaisyUI `btn-xs` and `toggle-sm` are smaller but acceptable for secondary controls.
 - **Hover glow vs scale**: Prefer colored shadow glow (`hover:shadow-lg hover:shadow-{color}/30`) over `hover:scale-105`. Scale causes layout shifts and feels heavy at tight grid gaps.
-- **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. On pages still using ZoomScaler, the zoom CSS overrides this. On redesigned pages, the effect is minimal since content is typically narrower than 640px on phones.
+- **Container class at 640px**: Tailwind's `.container` snaps to `max-width: 640px` at the `sm` breakpoint, which can cause a visual jump. The effect is minimal since content is typically narrower than 640px on phones.
 - **Card stacking**: Use `mb-3` between sequential cards on a page. Do not use `mt-6` or larger margins from the old `<section>` wrapper pattern.
 
 ## Related Docs

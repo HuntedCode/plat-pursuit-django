@@ -1,96 +1,62 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+3D Secure / SCA verification, sent by subscription_service._send_payment_action_required_email.
 
-{% block extra_styles %}
-    <style>
-        .info-box {
-            border-radius: 12px;
-            padding: 25px 30px;
-            margin: 25px 0;
-            text-align: center;
-            background-color: #f0f4ff;
-            border: 2px solid #667eea;
-        }
+The whole job of this email is to stop a customer reading a bank security step as a failure, so
+the reassurance ("this is your bank, not an error, and your access is still active") is the
+load-bearing copy, not decoration.
 
-        .info-icon {
-            font-size: 36px;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .info-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin: 0 0 8px 0;
-            color: #333333;
-        }
-
-        .info-message {
-            font-size: 15px;
-            color: #555555;
-            margin: 0;
-            line-height: 1.6;
-        }
-
-        .cta-button-info {
-            display: inline-block;
-            background: #667eea;
-            color: #ffffff !important;
-            text-decoration: none;
-            padding: 16px 40px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-            border: none;
-        }
-
-        @media only screen and (max-width: 600px) {
-            .info-box {
-                padding: 20px 15px;
-            }
-
-            .cta-button-info {
-                padding: 14px 30px;
-                font-size: 16px;
-            }
-        }
-    </style>
-{% endblock %}
+`invoice_url` is a Stripe-hosted page the customer MUST reach to keep their subscription, and it
+falls back to the management page when Stripe omits the hosted URL. It was previously an href
+only, which meant a plaintext reader was told to complete a verification with no way to do it.
+The fallback panel fixes that.
+{% endcomment %}
 
 {% block title %}Complete Your Payment{% endblock %}
 
+{% block preheader %}Your bank wants to verify this payment. It takes about a minute.{% endblock %}
+
 {% block header_content %}
-    <h1>Quick Verification Needed</h1>
-    <p>Your bank needs a moment of your time</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Quick verification needed</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your bank needs a moment of your time.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, your latest {{ tier_name }} payment needs one extra step before it can go through.</p>
 
-    <div class="info-box">
-        <span class="info-icon">&#128272;</span>
-        <p class="info-title">Your bank wants to verify this payment</p>
-        <p class="info-message">
-            Your latest {{ tier_name }} subscription payment requires an extra verification step
-            (commonly called 3D Secure). This is a security measure from your bank, not an error.
-        </p>
-    </div>
+    {% comment %} The status panel: informational blue, because this is a routine bank check and
+    the colour should not read as an alarm. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#28EBFE" style="background-color: #28EBFE; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 14px 16px; background-color: #F1F8FC; border-radius: 0 8px 8px 0;">
+                <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">Your bank wants to verify this payment</p>
+                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">This is a security check (often called 3D Secure) that your bank runs on some card payments. It is not an error, and nothing has gone wrong with your account.</p>
+            </td>
+        </tr>
+    </table>
 
-    <p class="intro">
-        The good news: your premium access is still fully active. You just need to complete a
-        quick authentication step to finalize the payment. It usually takes less than a minute.
-    </p>
+    <p class="pp-p">The good news: your premium access is still fully active. Completing the check usually takes less than a minute, and everything continues as normal afterwards.</p>
 
-    <div class="cta-container">
-        <a href="{{ invoice_url }}" class="cta-button-info">Complete Verification</a>
-    </div>
+    {% include 'emails/_cta_button.html' with url=invoice_url label="Complete verification" %}
 
-    <p class="intro" style="margin-top: 25px; text-align: center; font-size: 14px; color: #777777;">
-        Once verified, everything continues as normal. Happy trophy hunting!
-    </p>
+    {% comment %} The plaintext lifeline: without this, a plaintext reader is asked to complete
+    a verification and given no way to reach it. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0 0;">
+        <tr>
+            <td class="pp-fallback" style="padding: 14px 16px; background-color: #F5F8FC; border-radius: 8px;">
+                <p class="pp-fallback-t" style="margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #4A5768;">If the button does not work, paste this into your browser:</p>
+                <p class="pp-fallback-u" style="margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all;">{{ invoice_url }}</p>
+            </td>
+        </tr>
+    </table>
+
+    <p class="pp-small" style="margin: 20px 0 0; text-align: center;">Once verified, everything continues as normal. Happy hunting.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because you have an active subscription on PlatPursuit.<br>
-    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+    You're receiving this because you have an active subscription on PlatPursuit.
+    Manage your account settings from the link above.
 {% endblock %}

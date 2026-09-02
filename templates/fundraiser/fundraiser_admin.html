@@ -12,8 +12,6 @@
         <div class="flex gap-2 flex-wrap">
             <a href="{% url 'badge_reveal' %}" class="btn btn-ghost btn-sm">Badge Reveal</a>
             <a href="{% url 'subscription_admin' %}" class="btn btn-ghost btn-sm">Subscriptions</a>
-            <a href="{% url 'admin_notification_center' %}" class="btn btn-ghost btn-sm">Notifications</a>
-            <a href="{% url 'comment_moderation' %}" class="btn btn-ghost btn-sm">Moderation</a>
         </div>
     </div>
 
@@ -83,17 +81,23 @@
     </div>
 
     {# ─── Tabs ────────────────────────────────────────────────────────── #}
-    <div id="fundraiser-admin-tabs" class="tabs tabs-boxed mb-6">
-        <button class="tab tab-active" data-tab="donations">
-            Donations ({{ donations|length }})
-        </button>
-        <button class="tab" data-tab="claims">
-            Badge Claims ({{ claims|length }})
-        </button>
+    {% comment %} The one sanctioned tab treatment: the shared segmented switcher, wired with
+    PlatPursuit.wireTablist. Panels keep their ids. {% endcomment %}
+    <div class="flex items-center justify-end mb-6">
+        <div id="fundraiser-admin-tabs" class="pp-switch" role="tablist" aria-label="Admin views">
+            <button type="button" id="admin-tab-donations" class="pp-switch__chip is-active" role="tab"
+                    aria-selected="true" aria-controls="panel-donations" data-tab="donations">
+                Donations ({{ donations|length }})
+            </button>
+            <button type="button" id="admin-tab-claims" class="pp-switch__chip" role="tab"
+                    aria-selected="false" aria-controls="panel-claims" data-tab="claims">
+                Badge Claims ({{ claims|length }})
+            </button>
+        </div>
     </div>
 
     {# ─── Donations Panel ─────────────────────────────────────────────── #}
-    <div id="panel-donations" class="admin-panel">
+    <div id="panel-donations" class="admin-panel" role="tabpanel" aria-labelledby="admin-tab-donations">
         {% if donations %}
         <div class="overflow-x-auto">
             <table class="table table-zebra">
@@ -165,7 +169,7 @@
     </div>
 
     {# ─── Badge Claims Panel ──────────────────────────────────────────── #}
-    <div id="panel-claims" class="admin-panel hidden">
+    <div id="panel-claims" class="admin-panel hidden" role="tabpanel" aria-labelledby="admin-tab-claims">
         {% if claims %}
         <div class="overflow-x-auto">
             <table class="table table-zebra">
@@ -244,7 +248,7 @@
 {% block js_scripts %}
 <script src="{% static 'js/fundraiser.js' %}"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    PlatPursuit.onPageReady(function() {
         PlatPursuit.FundraiserAdmin.init();
     });
 </script>

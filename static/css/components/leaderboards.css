@@ -1,0 +1,517 @@
+/* ==========================================================================
+ * LEADERBOARDS -- Global Boards (`/leaderboards/`)
+ *
+ * A board is a RANKED LIST, and the design's whole job is to make the ordering legible at a glance. So
+ * the row leads with the rank as a Tally figure, the identity carries the weight in the middle, and the
+ * numbers sit right-aligned in a fixed column so the eye can run straight down them. Nothing about a row
+ * moves between boards except which figures fill that column.
+ *
+ * Restraint on the podium: only the top three are marked, and only through the row's leading EDGE plus a
+ * warmer rank colour. Medal icons were the obvious move and are wrong here -- an icon per row competes
+ * with the avatar beside it, and at 50 rows a page the wall stops reading as an ordering and starts
+ * reading as decoration.
+ * ========================================================================== */
+
+/* ---- The viewer's own standing (header) ------------------------------------------------------------ */
+/* Shown ONCE, in the header, rather than per row: a row identical for every viewer is what makes this
+   page cacheable. This is the compensation for that decision, and it is a better home anyway -- one
+   place to read all three of your ranks, instead of hunting your own name down a wall. */
+.lb-mine { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.lb-mine__k {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.lb-mine__rows { display: flex; flex-wrap: wrap; gap: 6px; }
+.lb-mine__row {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 5px 10px; border-radius: 999px; text-decoration: none;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.lb-mine__lbl { font-size: 11px; font-weight: 700; color: var(--pp-text-dim); }
+.lb-mine__rank { font-size: 13px; color: var(--pp-text); }
+@media (hover: hover) {
+    .lb-mine__row:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+}
+.lb-mine__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The board you are already reading is marked, so the strip doubles as "where am I" rather than only
+   "where can I go". */
+.lb-mine__row.is-active {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
+}
+.lb-mine__row.is-active .lb-mine__rank { color: var(--pp-primary); }
+/* "Not ranked yet" occupies the rank slot rather than hiding the whole chip. Muted and un-tallied, so
+   the accent stays reserved for an actual number. */
+.lb-mine__rank--none { color: var(--pp-text-mute); font-weight: 600; }
+.lb-mine__row.is-active .lb-mine__rank--none { color: var(--pp-text-mute); }
+@media (prefers-reduced-motion: reduce) { .lb-mine__row { transition: none; } }
+
+/* ---- Switcher + filters ---------------------------------------------------------------------------- */
+/* The strip's own band, above the control card. RIGHT-ALIGNED from md: up, which is the site-wide tab
+   standard -- career, game detail and the genre/theme list all wrap their switcher in
+   `flex items-center justify-end`, and this is the same call expressed in the component sheet because
+   two templates share this strip (the Global Boards and job detail) and should not each hand-roll it.
+
+   NOT right-aligned on a phone. Shrink-to-content at 375px leaves a small strip marooned against one
+   edge, and the chips lose the equal widths that stop a segmented control from wrapping mid-strip --
+   which reads as broken. So the mobile strip is full-width with equal chips, and md: releases it to the
+   right at its natural size. Same base-full-width / md-right shape the genre/theme switcher uses. */
+.lb-bar { display: flex; margin: 18px 0 14px; }
+.lb-bar .pp-switch { width: 100%; }
+.lb-bar .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+@media (min-width: 768px) {
+    .lb-bar { justify-content: flex-end; }
+    .lb-bar .pp-switch { width: auto; }
+    .lb-bar .pp-switch__chip { flex: 0 0 auto; }
+}
+/* Mobile fit pass for THIS strip. `.pp-switch__chip`'s base padding (6px 14px) is a desktop value that
+   `md:` only enlarges, so the mobile pass was never actually done. Three equal chips inside 343px leave
+   ~56px of label box once border, padding, icon and gap are taken -- and "Badge Trophies" is ~93px at
+   12px/600, so all three labels wrapped to two lines. Compacting the airiness (padding, gap, size) buys
+   ~76px and keeps the labels, which is the trade the rebuild standard asks for: shrink what is
+   expendable, never what carries the meaning. Restored at md: by the base rule. */
+@media (max-width: 767px) {
+    .lb-bar .pp-switch__chip { padding-inline: 7px; gap: 4px; font-size: 11.5px; letter-spacing: 0.01em; }
+    .lb-bar .pp-switch__chip svg { width: 13px; height: 13px; }
+}
+.lb-filters { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; }
+.lb-filters__f { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* inline-flex so the `.pp-edhint` info link sits on the baseline beside the word rather than breaking it. */
+.lb-filters__lbl {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--pp-text-mute); flex: 0 0 auto;
+}
+/* `min-width: 0` so a long country name shrinks the select instead of pushing the row wide -- a flex
+   item will not shrink below its content without it. */
+.lb-filters__f .pp-gallery__select { flex: 1 1 auto; min-width: 0; }
+.lb-filters__go {
+    padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text);
+}
+@media (min-width: 768px) {
+    .lb-filters { flex-direction: row; align-items: center; gap: 14px; }
+    .lb-filters__f { flex: 0 0 auto; }
+    /* Narrower than the 190px this carried with one filter: two selects and their labels now share the
+       row with the tab strip, and the edition names are short. */
+    .lb-filters__f .pp-gallery__select { flex: 0 0 auto; min-width: 160px; }
+}
+
+/* ---- The wall -------------------------------------------------------------------------------------- */
+/* ONE wall now. It was two -- a flow list for the fetched panels and a `--virtual` spacer for the
+   landing -- and the flow half died when badge detail and job detail were virtualized too. Its
+   `display: flex` rules were already being overridden by `--virtual` on every board that rendered, so
+   they are gone; `--lb-row-h` stays here because it is the row PITCH the engine reads, and it belongs on
+   the container whose breakpoints change it.
+
+   `--virtual` is kept as a separate class rather than folded in. It marks an opted-in behaviour with a
+   real requirement (the engine must be mounted, or the rows stack on top of each other at top: 0), and
+   a board that renders the class without the mount is a bug worth being able to see in the markup. */
+.lb-wall {
+    list-style: none; margin: 0; padding: 0;
+    /* FLOW by default, and that is the fallback rather than a leftover: the server ships the wall without
+       `--virtual` so a board that never mounts (JS off, a failed fetch, a stale utils.js) is still a
+       readable list of its first window. `virtualBoard` adds the modifier when it takes over. */
+    display: flex; flex-direction: column; gap: 6px;
+    --lb-row-h: 62px;
+}
+@media (min-width: 768px) { .lb-wall { --lb-row-h: 68px; } }
+.lb-wall--virtual { display: block; position: relative; gap: 0; }
+.lb-wall--virtual .lb-row { position: absolute; left: 0; right: 0; }
+/* `.is-found` (the jump landing) and `.is-you` (the persistent marker) are defined together further
+   down, so the way they stack on the same row is visible in one place. */
+
+/* FIXED HEIGHT, because the wall virtualizes: `PlatPursuit.virtualBoard` sizes its spacer as
+   `total x --lb-row-h` and places every row absolutely, so it has to know the height up front.
+   `--lb-row-h` is the PITCH (card + the 6px that used to be the flex `gap`) -- absolutely-positioned rows
+   sit flush, so the gap has to live inside the step rather than between the items.
+
+   The band fits TWO lines, and rows without a `displayed_title` centre their single line in the same
+   band. That was a deliberate choice over dropping the title or inlining it: the two-line identity block
+   is what the row was given, and an even wall with breathing room reads as spacing rather than as a gap.
+
+   Height applies EVERYWHERE, not only under a virtual wall, so the row is the same object on badge
+   detail, job detail and the Global Boards. Only the POSITIONING is scoped below. */
+.lb-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center; gap: 10px;
+    height: calc(var(--lb-row-h) - 6px);
+    padding: 9px 10px; border-radius: var(--pp-radius-md, 10px);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    /* The house material: a top-edge light-catch, the same recipe .jobt / .scard carry
+       ("material over drop-shadow"). This was the one major rebuilt row surface with no material at all,
+       which is most of why the wall read as a table. A static inset shadow, not a transition, so it costs
+       nothing at 50 rows. */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    /* The leading edge is the podium's only structural signal; transparent keeps every row the same
+       width so the wall's left margin does not jitter between ranked and unranked rows. */
+    border-left: 3px solid transparent;
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .lb-row:hover { background: var(--pp-bg-2); border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border)); }
+}
+@media (prefers-reduced-motion: reduce) { .lb-row { transition: none; } }
+
+.lb-row__rank {
+    min-width: 2.6ch; text-align: right; font-size: 15px; color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+.lb-row__who { display: flex; align-items: center; gap: 9px; min-width: 0; text-decoration: none; }
+.lb-row__av {
+    width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; overflow: hidden;
+    display: grid; place-items: center;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text-mute);
+}
+.lb-row__av img { width: 100%; height: 100%; object-fit: cover; }
+.lb-row__av svg { width: 18px; height: 18px; }
+.lb-row__names { display: flex; flex-direction: column; min-width: 0; }
+/* Layout only. `text-overflow` lived here and did nothing: it applies to a block container's inline
+   content, never to flex ITEMS, so the username (a bare text node, i.e. an anonymous flex item at
+   min-content width, and PSN IDs have no spaces to break on) was hard-clipped with no ellipsis and shoved
+   the supporter mark out of the row. The truncation belongs on the name's own element, below. */
+.lb-row__name {
+    display: flex; align-items: center; gap: 5px; min-width: 0;
+    font-size: 13.5px; font-weight: 700; color: var(--pp-text);
+}
+.lb-row__uname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-row__flag { flex: 0 0 auto; }
+/* A star, matching Browse Hunters -- one status, one glyph, wherever you meet it. It was a bare `&#9670;`
+   diamond here and a Lucide star there, and the diamond is not a Lucide glyph at all (design-system:
+   every UI glyph is an inlined Lucide stroke icon, brand marks and the rating star excepted). */
+/* The title line is a flex PAIR when a mark title joins it: the earned half ellipsizes, the
+   short fixed mark title never truncates mid-brand (at 375px the old single-box ellipsis ate
+   "PlatPursuit Cornerstone" down to "PlatPur..."). */
+.lb-row__title { display: flex; align-items: baseline; min-width: 0; }
+.lb-row__title > .pp-marktitle, .lb-row__title > .pp-marktitle__dot { flex: none; }
+.lb-row__title-earned { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* .lb-row__prem retired 2026-08-22: the flat amber supporter star predates the ladder; rows now
+   render the mark system (components/name_mark.html) inside .lb-row__uname. */
+/* A row whose profile could not be hydrated. It keeps its slot so the numbering stays honest, and reads
+   as absent rather than as a hunter with a blank name. */
+.lb-row__who--gone { color: var(--pp-text-mute); font-style: italic; }
+.lb-row__title {
+    font-size: 10.5px; color: var(--pp-text-mute); line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (hover: hover) { .lb-row__who:hover .lb-row__name { color: var(--pp-primary); } }
+.lb-row__who:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 6px; }
+
+/* Figures right-aligned in a fixed column so the eye runs straight down them. */
+.lb-row__figs { display: flex; align-items: baseline; gap: 14px; flex: 0 0 auto; }
+.lb-row__fig { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.lb-row__v { font-size: 15px; color: var(--pp-text); line-height: 1; }
+.lb-row__k {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute); line-height: 1;
+}
+.lb-row__fig--sub .lb-row__v { font-size: 12.5px; color: var(--pp-text-dim); }
+/* The denominator rides INSIDE the leading figure rather than beside it, and stays quiet: "5 / 8" should
+   read as one value, with the 5 carrying the weight. Not tabular-nums on the pair -- the slash breaks the
+   column anyway, and the Tally on the numerator already lines up. */
+.lb-row__of { font-size: 0.72em; color: var(--pp-text-mute); font-weight: 400; }
+/* The date slot. Deliberately NOT a `.pp-tally`: a timestamp is not a quantity, and giving it the Tally
+   would put three competing figures in a row that is meant to be scanned down one column. */
+.lb-row__when { font-size: 12px; color: var(--pp-text-dim); white-space: nowrap; }
+
+/* Podium: the leading edge warms, and the rank figure takes the metal. Nothing else changes -- no size
+   jump, no icon, no background wash, so the wall stays a list rather than a leaderboard-shaped poster.
+
+   The MEDALLION metals (--pp-metal-*), not the trophy-chip metals. This read `var(--color-trophy-silver,
+   #c0c6cf)` and so on: the fallbacks were the right colours and never applied, because those tokens DO
+   exist and are the deliberately-dark chip set. Silver (#5f5f5f) and bronze (#8d4d2a) both sit below
+   --pp-text-mute, so ranks 2 and 3 rendered DIMMER than rank 47 and the tinted edge was invisible, while
+   "platinum" resolved to the cyan primary. The effect described in this comment was not happening at all. */
+.lb-row--podium .lb-row__rank { color: var(--metal, var(--pp-text)); font-weight: 800; }
+.lb-row--podium { border-left-color: color-mix(in oklab, var(--metal, var(--pp-border)) 70%, transparent); }
+.lb-row--p1 { --metal: var(--pp-metal-platinum); }
+.lb-row--p2 { --metal: var(--pp-metal-silver); }
+.lb-row--p3 { --metal: var(--pp-metal-bronze); }
+/* One reserved beat, for first place only: the leader's figure carries the Tally's glow in its own metal.
+   Restraint is the point -- a glow on every podium row would be three competing highlights in the first
+   three rows of a fifty-row wall. */
+.lb-row--p1 .lb-row__rank {
+    text-shadow: 0 0 10px color-mix(in oklab, var(--pp-metal-platinum) 45%, transparent);
+}
+
+@media (min-width: 768px) {
+    .lb-row { gap: 14px; padding: 11px 14px; }
+    .lb-row__rank { min-width: 3ch; font-size: 17px; }
+    .lb-row__av { width: 40px; height: 40px; }
+    .lb-row__name { font-size: 14.5px; }
+    .lb-row__title { font-size: 11.5px; }
+    .lb-row__v { font-size: 17px; }
+    .lb-row__figs { gap: 22px; }
+}
+
+/* Phone: the secondary figure goes. It is the supporting number, the row is 3 columns in ~343px, and
+   keeping both squeezes the name -- which is the thing a reader actually scans for. It returns at md:,
+   where there is room for it to earn its place. */
+@media (max-width: 767px) {
+    .lb-row__fig--sub { display: none; }
+    /* The date goes with it, and for the same reason: at 343px the row is already name-versus-figure, and
+       a third column takes width from the name, which is the thing a reader scans for. The DENOMINATOR
+       stays -- it is inside the leading figure, costs ~22px, and without it the top of the board is
+       indistinguishable from the middle, which is the whole point of the merge. */
+    .lb-row__fig--when { display: none; }
+}
+
+/* ---- Empty state ----------------------------------------------------------------------------------- */
+.lb-empty {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 44px 20px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px dashed var(--pp-border);
+}
+.lb-empty svg { width: 34px; height: 34px; color: var(--pp-text-mute); opacity: 0.7; }
+
+.lb-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
+.lb-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }
+
+/* ---- Ranks section (badge detail) ------------------------------------------------------------------ */
+/* The series board, living on the badge it ranks rather than on a page of its own. Rows reuse `.lb-row`
+   above -- a leaderboard row is a leaderboard row, and a second treatment for the same object is the
+   drift this rebuild exists to remove. Only the section chrome is local. */
+.bd2-ranks { margin: 26px 0 8px; }
+.bd2-ranks__h {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1.15rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em;
+}
+.bd2-ranks__h svg { width: 18px; height: 18px; color: var(--pp-primary); flex: 0 0 auto; }
+.bd2-ranks__body { margin-top: 14px; }
+@media (min-width: 768px) { .bd2-ranks__h { font-size: 1.35rem; } }
+
+
+/* Loading + failure. The spinner is a real state, not a placeholder: this section is fetched, so it can
+   genuinely be pending -- and it can genuinely fail, which must SAY so rather than spin forever. */
+.bd2-ranks__loading {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 34px 0; font-size: 13px; color: var(--pp-text-mute);
+}
+.bd2-ranks__spinner {
+    width: 15px; height: 15px; border-radius: 50%; flex: 0 0 auto;
+    border: 2px solid var(--pp-border); border-top-color: var(--pp-primary);
+    animation: ppRanksSpin 0.8s linear infinite;
+}
+@keyframes ppRanksSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bd2-ranks__spinner { animation-duration: 2.4s; } }
+.bd2-ranks__err { padding: 26px 0; text-align: center; font-size: 13px; color: var(--pp-text-mute); }
+
+
+/* ---- Pager ----------------------------------------------------------------------------------------- */
+
+/* ---- The virtualized board's own chrome ------------------------------------------------------------
+   Jump affordances + column headers, above a wall you cannot page through. Both exist because the wall
+   virtualizes: with no pager, "get me to row 4,000" and "get me to MY row" are the two questions a reader
+   has, and scrolling is a poor answer to either. */
+.lb-board { position: relative; }
+/* The swap dims rather than blanks: a filter change replaces this region's contents, and a flash of empty
+   reads as breakage where a dim reads as work. Pointer-events off so a second click cannot race it. */
+.lb-board.is-swapping, [data-lb-page].is-swapping { opacity: 0.55; pointer-events: none; }
+[data-lb-page] { transition: opacity var(--pp-dur) var(--pp-ease); }
+@media (prefers-reduced-motion: reduce) { [data-lb-page] { transition: none; } }
+
+.lb-jumpbar {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 8px 12px; margin-bottom: 8px;
+}
+.lb-jump {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 700;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border));
+    transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.lb-jump b { color: var(--pp-primary); }
+.lb-jump__ico { width: 13px; height: 13px; transition: transform var(--pp-dur) var(--pp-ease); }
+/* The chevron points the way the reader would travel. `here` means their row is already on screen, so it
+   flattens rather than pointing at nothing. */
+.lb-jump[data-lb-dir="up"] .lb-jump__ico { transform: rotate(180deg); }
+.lb-jump[data-lb-dir="here"] .lb-jump__ico { transform: rotate(-90deg); opacity: 0.5; }
+@media (hover: hover) {
+    .lb-jump:hover {
+        background: color-mix(in oklab, var(--pp-primary) 20%, transparent);
+        border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    }
+}
+.lb-jump:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .lb-jump, .lb-jump__ico { transition: none; } }
+
+.lb-goto { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.lb-goto__lbl {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.lb-goto input {
+    width: 5.5ch; padding: 5px 8px; border-radius: 8px; font-size: 12px;
+    color: var(--pp-text); background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    font-variant-numeric: tabular-nums;
+}
+.lb-goto input:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+/* The spinners are noise on a field this narrow, and the reader types a number then presses enter. */
+.lb-goto input::-webkit-outer-spin-button,
+.lb-goto input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.lb-goto input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ---- "This one is you" ------------------------------------------------------------------------------
+   PERSISTENT, and distinct from `.is-found` below it: `.is-you` says which row is yours whenever it is on
+   screen, `.is-found` is the transient landing flash after a jump. Both can be on the same row (you
+   jumped to yourself), so they stack rather than compete -- the tint deepens and the ring is what says
+   "just arrived".
+
+   Applied by `virtualBoard` client-side, never rendered in. The server's rows are byte-identical for
+   every reader, which is what keeps them cacheable; baking a personal marker into the HTML is the one
+   thing that would forfeit it. Game detail marks its rows server-side and pays exactly that cost. */
+.lb-row.is-you {
+    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border));
+}
+.lb-row.is-you .lb-row__uname { color: var(--pp-primary); }
+/* The podium's metal keeps the LEADING edge -- the two signals use different channels on purpose, so a
+   hunter in the top three reads as both without either being overwritten. */
+.lb-row--podium.is-you { border-left-color: color-mix(in oklab, var(--metal, var(--pp-border)) 70%, transparent); }
+/* A pill, from CSS rather than markup, because the markup is shared and viewer-independent. The row also
+   carries `aria-current="true"`, which is what actually announces it -- generated content is not
+   reliably read out, so this is reinforcement for the eye and not the only signal. */
+.lb-row.is-you .lb-row__name::after {
+    content: 'You';
+    flex: none; padding: 1px 6px; border-radius: 999px;
+    font-size: 0.56rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 18%, transparent);
+}
+/* The jump landing sits ON TOP of the persistent mark: a deeper wash plus an INSET ring (inset so a
+   fixed-height absolutely-positioned row cannot clip it). */
+.lb-row.is-found {
+    background: color-mix(in oklab, var(--pp-primary) 16%, var(--pp-bg-2));
+    box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+}
+.lb-row.is-found .lb-row__uname { color: var(--pp-primary); }
+
+/* ---- The tab chip's rank ----------------------------------------------------------------------------
+   The standing pills folded into the strip. Quiet by default and lit on the active chip: your rank on the
+   board you are READING is the one that matters, the other two are context you glance at. A dash rather
+   than an omission when you are not on a board -- "you are not on this one" is information, and a chip
+   that changes width when you happen to be ranked makes the strip jitter between tabs. */
+.lb-chiprank {
+    margin-left: 6px; font-size: 11px; font-weight: 800;
+    color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+.pp-switch__chip.is-active .lb-chiprank { color: var(--pp-primary); }
+@media (max-width: 480px) {
+    /* Three chips with names AND ranks do not fit 375px. The rank is the part that survives on the ACTIVE
+       chip only -- it is the one you came to read; the other two are a tap away. */
+    .pp-switch__chip:not(.is-active) .lb-chiprank { display: none; }
+}
+
+/* ---- The board card ---------------------------------------------------------------------------------
+   What this board is, what it ranks, and how many are on it -- directly above the wall, so the answer to
+   "what am I looking at" is adjacent to the thing being looked at. It absorbed the page header's tally
+   (which counts the BOARD, not the section) and sits with the jump bar rather than adding a band.
+
+   Deliberately quiet: no card border, no fill. The wall below it is the content and this is a label for
+   it, so it reads as a caption rather than competing with the rows for weight. */
+/* On the control card now, not bare on the page background -- see `.lb-controls`. Divided from the
+   filters above by a hairline rather than its own border, because it is a REGION of one surface. */
+.lb-boardcard {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 4px 16px; margin: 0;
+}
+/* The hairline only when something sits ABOVE it on the card. A board with nothing to filter (Career
+   before any country is ranked) would otherwise open with a rule drawn against nothing. */
+.lb-filters + .lb-boardcard { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pp-border); }
+.lb-boardcard__id { min-width: 0; }
+.lb-boardcard__name { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
+.lb-boardcard__what {
+    margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--pp-text-dim); max-width: 60ch;
+}
+.lb-boardcard__meta { flex: 0 0 auto; }
+.lb-boardcard__tally { display: flex; align-items: baseline; gap: 6px; }
+.lb-boardcard__tally .pp-tally { font-size: 1.15rem; color: var(--pp-primary); }
+.lb-boardcard__tallylbl {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+/* "Not on this board yet" -- an ANSWER, in the slot a rank would occupy, and quieter than one so that a
+   ranked hunter still sees the accent land on their own number (which the jump chip below carries). */
+.lb-boardcard__standing {
+    margin-top: 2px; font-size: 11px; color: var(--pp-text-mute);
+    letter-spacing: 0.02em; text-align: right;
+}
+@media (min-width: 768px) {
+    .lb-boardcard__name { font-size: 1.15rem; }
+    .lb-boardcard__what { font-size: 13px; }
+    .lb-boardcard__tally .pp-tally { font-size: 1.4rem; }
+}
+
+
+/* ---- The control card -------------------------------------------------------------------------------
+   Tabs, filters, board identity and the way in, on ONE compact utility surface -- replacing four bands
+   that sat bare on the page background. The site-wide rule is STACKED CHROME CARDS + FREE CONTENT, and an
+   infinite-scroll wall is the case that rule exists to protect: a card around it is a border that grows
+   forever. So the chrome is carded and the wall below is not.
+
+   The card's own margins do the separating; its children drop theirs, or the surface reads as padded
+   twice. */
+/* THE TAB STRIP IS NOT ON THIS CARD. `.pp-switch` is itself a bordered container of transparent chips
+   (the site-wide segmented-switcher standard), so a card under it is a bordered surface inside a bordered
+   surface. Every other switcher on the site -- career, game detail, badge detail, job detail, the badge
+   gallery, profile -- sits bare on the page for exactly that reason; it is already chrome, and a second
+   surface beneath it is the part that would look out of place.
+
+   The card's padding does the separating; its children drop their own margins, or the surface reads as
+   padded twice. */
+.lb-controls .lb-filters { margin: 0; }
+.lb-controls .lb-jumpbar { margin-bottom: 0; margin-top: 10px; }
+
+@media (max-width: 767px) {
+    /* MOBILE FIT. Five stacked rows before the first leaderboard row is too far, and the design system's
+       instruction is to omit expendable blocks rather than make the reader scroll past them.
+
+       The MEANING line goes: it is education you need once, not on every visit, and it is the only block
+       here a returning reader has already read. Everything else earns its row -- the tabs are navigation,
+       the filters are state, the tally is the board's size, and the jump is the only way to reach your
+       own row without scrolling. */
+    .lb-controls .lb-boardcard__what { display: none; }
+    /* Name and tally share a row once the description is gone, which is what makes the saving real
+       rather than moving the same height around. */
+    .lb-controls .lb-filters + .lb-boardcard { align-items: center; gap: 4px 10px; margin-top: 10px; padding-top: 10px; }
+    .lb-controls .lb-boardcard__name { font-size: 0.95rem; }
+    /* The jump chip and the rank box fit beside each other; the label is the part that does not. */
+    /* Visually hidden, NOT `display: none`. The label is the input's accessible NAME (there is no
+       `aria-label` any more, deliberately -- see the partial), so removing it from the box must not
+       remove it from the accessibility tree. */
+    .lb-controls .lb-goto__lbl {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+    }
+    .lb-controls .lb-jumpbar { margin-top: 8px; }
+}
+
+
+/* ---- The board minibar ------------------------------------------------------------------------------
+   `/leaderboards/` only, and deliberately: the board IS the page there, so a reader routinely ends up
+   thousands of rows past every control. Badge and job detail keep their boards in a TAB on a page that
+   already has its own identity chrome, which makes a sticky bar a page-level decision rather than a
+   board one. Game detail has its own, older, per-tab minibar.
+
+   The bar reuses `.pp-minibar` wholesale (plat cards and game detail share it); what lives here is only
+   the two board controls it carries. */
+.lb-jump--mb {
+    /* Quieter than the in-page chip: the bar is a proxy, and a control that shouts in a pinned strip
+       competes with the rows it is meant to help you read. */
+    padding: 4px 10px; font-size: 11px;
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+}
+.lb-jump--mb .lb-jump__ico { width: 11px; height: 11px; }
+/* The search shrinks to fit beside the rank chip; it is the same field, not a second one. */
+.pp-minibar__controls .gd-lb__find--mb { flex: 0 1 13rem; min-width: 7rem; }
+@media (max-width: 639px) {
+    /* On a phone the bar has room for ONE control, and "where am I" beats "find someone else": the rank
+       chip is the thing you cannot get back any other way once the board card has scrolled off. */
+    .pp-minibar__controls .gd-lb__find--mb { display: none; }
+}

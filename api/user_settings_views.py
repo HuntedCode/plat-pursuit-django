@@ -10,6 +10,9 @@ from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 
+from trophies.services.profile_stats_service import update_profile_trophy_counts
+from users.services.timezone_service import set_user_timezone
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,44 +43,15 @@ class UpdateTimezoneAPIView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST
             )
 
-        old_timezone = request.user.user_timezone or 'UTC'
-        request.user.user_timezone = timezone_value
-        request.user.save(update_fields=['user_timezone'])
-
-        recaps_reset = 0
-        calendars_recalculated = 0
-        if old_timezone != timezone_value:
-            profile = getattr(request.user, 'profile', None)
-            if profile:
-                from trophies.models import MonthlyRecap, Challenge
-                recaps_reset = MonthlyRecap.objects.filter(
-                    profile=profile,
-                    is_finalized=True,
-                ).update(is_finalized=False)
-                if recaps_reset:
-                    logger.info(
-                        "Un-finalized %d recaps for profile %s after timezone change: %s -> %s",
-                        recaps_reset, profile.id, old_timezone, timezone_value,
-                    )
-
-                # Recalculate calendar challenges for new timezone
-                from trophies.services.challenge_service import backfill_calendar_from_history
-                for cal in Challenge.objects.filter(
-                    profile=profile, challenge_type='calendar', is_deleted=False,
-                ):
-                    backfill_calendar_from_history(cal)
-                    calendars_recalculated += 1
-                if calendars_recalculated:
-                    logger.info(
-                        "Recalculated %d calendar(s) for profile %s after timezone change: %s -> %s",
-                        calendars_recalculated, profile.id, old_timezone, timezone_value,
-                    )
+        # One writer for the field + its coupled side effects (confirmation stamp, recap
+        # un-finalize) -- see users/services/timezone_service.py for the semantics.
+        changed, recaps_reset = set_user_timezone(request.user, timezone_value)
 
         return Response({
             'success': True,
             'timezone': timezone_value,
             'recaps_reset': recaps_reset,
-            'calendars_recalculated': calendars_recalculated,
+            'changed': changed,
         })
 
 
@@ -96,6 +70,8 @@ class UpdateQuickSettingsAPIView(APIView):
 
     PROFILE_BOOL_SETTINGS = {'hide_hiddens', 'hide_zeros'}
     USER_BOOL_SETTINGS = {'use_24hr_clock'}
+    # One-shot education flags a surface may mark as seen (users.CustomUser.ui_flags keys).
+    UI_FLAGS = ('career_explainer', 'launch_welcome')
 
     def post(self, request):
         setting = request.data.get('setting', '').strip()
@@ -113,6 +89,11 @@ class UpdateQuickSettingsAPIView(APIView):
                 return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
             setattr(profile, setting, value)
             profile.save(update_fields=[setting])
+            # hide_hiddens / hide_zeros feed the filter-respecting trophy-count denorms, so a
+            # toggle must recompute them -- the Settings page path always did, and this path
+            # silently didn't (stale totals until the nightly recalc).
+            profile.refresh_from_db()
+            update_profile_trophy_counts(profile)
 
         elif setting in self.USER_BOOL_SETTINGS:
             if not isinstance(value, bool):
@@ -120,25 +101,12 @@ class UpdateQuickSettingsAPIView(APIView):
             setattr(request.user, setting, value)
             request.user.save(update_fields=[setting])
 
-        # Timezone setting (reuse validation from UpdateTimezoneAPIView)
+        # Timezone setting (same validation as UpdateTimezoneAPIView, same one writer --
+        # this branch used to skip the confirmation stamp, a third divergent behaviour)
         elif setting == 'user_timezone':
             if not isinstance(value, str) or value not in pytz.common_timezones_set:
                 return Response({'error': 'Invalid timezone.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            old_tz = request.user.user_timezone or 'UTC'
-            request.user.user_timezone = value
-            request.user.save(update_fields=['user_timezone'])
-            # Un-finalize recaps and recalculate calendars if timezone changed
-            if old_tz != value:
-                profile = getattr(request.user, 'profile', None)
-                if profile:
-                    from trophies.models import MonthlyRecap, Challenge
-                    MonthlyRecap.objects.filter(profile=profile, is_finalized=True).update(is_finalized=False)
-
-                    from trophies.services.challenge_service import backfill_calendar_from_history
-                    for cal in Challenge.objects.filter(
-                        profile=profile, challenge_type='calendar', is_deleted=False,
-                    ):
-                        backfill_calendar_from_history(cal)
+            set_user_timezone(request.user, value)
 
         # Browse page default filters (save/clear per page)
         elif setting == 'browse_defaults':
@@ -158,112 +126,15 @@ class UpdateQuickSettingsAPIView(APIView):
             request.user.browse_defaults = defaults
             request.user.save(update_fields=['browse_defaults'])
 
-        # Premium theme setting
-        elif setting == 'selected_theme':
-            profile = getattr(request.user, 'profile', None)
-            if not profile:
-                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-            if not profile.user_is_premium:
-                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
-            if not isinstance(value, str):
-                return Response({'error': 'Value must be a string.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            value = value.strip()
-            if value:
-                from trophies.themes import GRADIENT_THEMES
-                theme = GRADIENT_THEMES.get(value)
-                if not theme:
-                    return Response({'error': 'Invalid theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
-                if theme.get('requires_game_image'):
-                    return Response({'error': 'Game art themes cannot be used as site theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            profile.selected_theme = value or None
-            profile.save(update_fields=['selected_theme'])
-            try:
-                from trophies.services.dashboard_service import invalidate_dashboard_cache
-                invalidate_dashboard_cache(profile.pk)
-            except Exception:
-                pass
-
-        # Premium background setting (concept_id or null to clear)
-        elif setting == 'selected_background':
-            profile = getattr(request.user, 'profile', None)
-            if not profile:
-                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-            if not profile.user_is_premium:
-                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
-            if value is None or value == '':
-                profile.selected_background = None
-                profile.banner_image_url = None
-                profile.save(update_fields=['selected_background', 'banner_image_url'])
-            else:
-                try:
-                    concept_id = int(value)
-                except (ValueError, TypeError):
-                    return Response({'error': 'Invalid concept ID.'}, status=http_status.HTTP_400_BAD_REQUEST)
-                from trophies.models import Concept
-                try:
-                    concept = Concept.objects.get(id=concept_id)
-                except Concept.DoesNotExist:
-                    return Response({'error': 'Concept not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-                if not concept.bg_url:
-                    return Response({'error': 'This game has no background art.'}, status=http_status.HTTP_400_BAD_REQUEST)
-                profile.selected_background = concept
-                # Switching the source game invalidates any exact picked image.
-                profile.banner_image_url = None
-                profile.save(update_fields=['selected_background', 'banner_image_url'])
-
-        # Premium banner image (exact picked image + its source concept, or null to clear)
-        elif setting == 'banner_image':
-            profile = getattr(request.user, 'profile', None)
-            if not profile:
-                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-            if not profile.user_is_premium:
-                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
-
-            if value is None or value == '':
-                profile.banner_image_url = None
-                profile.selected_background = None
-                profile.save(update_fields=['banner_image_url', 'selected_background'])
-                return Response({'success': True, 'setting': setting, 'value': None})
-
-            if not isinstance(value, dict):
-                return Response({'error': 'Value must be an object with concept_id and image_url.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            try:
-                concept_id = int(value.get('concept_id'))
-            except (ValueError, TypeError):
-                return Response({'error': 'Invalid concept ID.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            image_url = (value.get('image_url') or '').strip()
-            if not image_url:
-                return Response({'error': 'image_url is required.'}, status=http_status.HTTP_400_BAD_REQUEST)
-
-            from trophies.models import Concept
-            from api.calendar_challenge_share_views import _concept_landscape_images
-            concept = Concept.objects.select_related('igdb_match').filter(id=concept_id).first()
-            if concept is None:
-                return Response({'error': 'Concept not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-            # Guard against arbitrary URL injection: the image must be one this concept actually offers.
-            if image_url not in _concept_landscape_images(concept):
-                return Response({'error': 'That image is not available for this game.'}, status=http_status.HTTP_400_BAD_REQUEST)
-
-            profile.banner_image_url = image_url
-            profile.selected_background = concept
-            profile.save(update_fields=['banner_image_url', 'selected_background'])
-            return Response({'success': True, 'setting': setting, 'value': {'concept_id': concept_id, 'image_url': image_url}})
-
-        # Banner vertical position (0-100)
-        elif setting == 'banner_position':
-            profile = getattr(request.user, 'profile', None)
-            if not profile:
-                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
-            if not profile.user_is_premium:
-                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
-            try:
-                pos = int(value)
-                if not 0 <= pos <= 100:
-                    raise ValueError
-            except (ValueError, TypeError):
-                return Response({'error': 'Position must be an integer between 0 and 100.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            profile.banner_position = pos
-            profile.save(update_fields=['banner_position'])
+        # One-shot UI education flags (first-visit explainers). Write-only and sticky by
+        # design: dismissing a hint is not something a user should have to manage later.
+        elif setting == 'ui_flag':
+            if not isinstance(value, str) or value not in self.UI_FLAGS:
+                return Response({'error': 'Unknown UI flag.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            flags = request.user.ui_flags or {}
+            flags[value] = True
+            request.user.ui_flags = flags
+            request.user.save(update_fields=['ui_flags'])
 
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)

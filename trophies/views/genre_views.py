@@ -1,116 +1,157 @@
 import logging
 
 from django.db.models import (
-    Q, F, Count, Avg, Subquery, OuterRef, Prefetch, Value, IntegerField,
-    FloatField, Case, When,
+    Q, F, Count, Avg, Sum, Subquery, OuterRef, IntegerField,
 )
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.urls import reverse_lazy
-from django.views.generic import ListView, TemplateView
+from django.views.generic import ListView
 
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
-from ..models import (
-    Genre, Theme, Game, Trophy, Badge, UserConceptRating, ProfileGame,
-    ConceptGenre, ConceptTheme,
-)
+from trophies.mixins import HtmxListMixin
+from ..models import Genre, Theme, Game, ConceptGenre, ConceptTheme
 from ..forms import GameSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
 from .browse_helpers import (
-    get_badge_picker_context, annotate_ascii_name, apply_game_browse_filters,
-    apply_game_browse_sort,
+    annotate_ascii_name, apply_game_browse_filters,
+    apply_game_browse_sort, get_active_filter_chips,
 )
+from .game_views import build_game_card_context
 
 logger = logging.getLogger("psn_api")
 
 
-class GenreThemeListView(ProfileHotbarMixin, TemplateView):
-    """Combined browse page for genres and themes with a tab toggle."""
+class GenreThemeListView(HtmxListMixin, ListView):
+    """Combined browse page for genres and themes with a `?tab=` toggle.
+
+    A bounded taxonomy (~20 genres / ~40 themes with games), so there is no
+    pagination -- the whole tab renders in one grid. HTMX search/sort swap the
+    `#browse-results` partial (like Browse Games), replacing the old full-page
+    `hx-select` re-render. Each tag's category-tile cover is the materialized
+    `representative_game` FK (recompute_tag_covers), read O(1) here -- no live
+    cover subquery -- so the tiles scale regardless of catalogue size.
+    """
     template_name = 'trophies/genre_theme_list.html'
+    partial_template_name = 'trophies/partials/genre_theme_list/browse_results.html'
+    context_object_name = 'items'
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Genres & Themes'},
-        ]
+    VALID_TABS = ('genres', 'themes')
 
-        active_tab = self.request.GET.get('tab', 'genres')
+    def get_template_names(self):
+        # Two HTMX swap scopes: the Genres/Themes switcher swaps the whole #gt-view island (toolbar + grid, so
+        # the toolbar re-renders in sync); a search/sort change swaps only the inner #browse-results grid.
+        htmx = getattr(self.request, 'htmx', False)
+        if htmx and self.request.htmx.target == 'gt-view':
+            return ['trophies/partials/genre_theme_list/view.html']
+        xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if (htmx and self.request.htmx.target == 'browse-results') or xhr:
+            return [self.partial_template_name]
+        return [self.template_name]
+
+    def get_tab(self):
+        tab = self.request.GET.get('tab', 'genres')
+        return tab if tab in self.VALID_TABS else 'genres'
+
+    def _tab_config(self):
+        """Per-tab model / through-table / join wiring for the active tab."""
+        if self.get_tab() == 'themes':
+            return {
+                'model': Theme, 'through': ConceptTheme, 'tag_field': 'theme',
+                'through_path': 'concept__concept_themes__theme',
+                'item_type': 'theme', 'detail_url_name': 'theme_detail',
+            }
+        return {
+            'model': Genre, 'through': ConceptGenre, 'tag_field': 'genre',
+            'through_path': 'concept__concept_genres__genre',
+            'item_type': 'genre', 'detail_url_name': 'genre_detail',
+        }
+
+    def get_queryset(self):
+        cfg = self._tab_config()
+        Through = cfg['through']
+        tag_field = cfg['tag_field']
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
 
-        context['active_tab'] = active_tab
-
-        # Pick the through-model and concept join field for whichever tab is
-        # active. Each Subquery scoped through this row's tag → ConceptX →
-        # Concept → Game keeps the outer query shape simple (one row per tag).
-        if active_tab == 'themes':
-            ThroughModel = ConceptTheme
-            tag_field = 'theme'
-            items = Theme.objects.all()
-            context['item_type'] = 'theme'
-            context['detail_url_name'] = 'theme_detail'
-        else:
-            ThroughModel = ConceptGenre
-            tag_field = 'genre'
-            items = Genre.objects.all()
-            context['item_type'] = 'genre'
-            context['detail_url_name'] = 'genre_detail'
-
-        def _through_subquery(*aggregate_args, **aggregate_kwargs):
-            """Build a Subquery scoped to this tag row.
-
-            Each annotation needs to count/avg something across this tag's
-            ConceptGenre/ConceptTheme rows. Wrapping each one in its own
-            Subquery keeps the outer queryset shape at one row per tag, so
-            chained sort annotations don't pile joins onto each other.
-            """
-            agg_name, agg_expr = next(iter(aggregate_kwargs.items()))
+        def _through_subquery(output_field, **agg):
+            """A Subquery scoped to this tag row -- keeps the outer queryset at one
+            row per tag so chained sort annotations don't pile joins onto each other."""
+            name, expr = next(iter(agg.items()))
             return Subquery(
-                ThroughModel.objects.filter(**{tag_field: OuterRef('pk')})
-                .values(tag_field)
-                .annotate(**{agg_name: agg_expr})
-                .values(agg_name)[:1],
-                output_field=aggregate_args[0] if aggregate_args else IntegerField(),
+                Through.objects.filter(**{tag_field: OuterRef('pk')})
+                .values(tag_field).annotate(**{name: expr}).values(name)[:1],
+                output_field=output_field,
             )
 
-        items = items.annotate(
-            game_count=_through_subquery(IntegerField(), c=Count('concept__games', distinct=True)),
-        ).filter(game_count__gt=0)
+        # Representative cover + game_count/player_count/avg_rating are MATERIALIZED
+        # (recompute_tag_covers, nightly), read O(1) here. game_count and avg_rating were
+        # per-tag correlated subqueries; 'players' was the browse-backend audit's landmine --
+        # its per-tag DISTINCT-profile count scanned the whole ProfileGame table 2-3x per load
+        # (games carry 2-3 genres each). The stat_* aliases keep the tile's field contract.
+        # select_related the cover game + concept/igdb_match for display_image_url; defer the
+        # never-read raw_response blob.
+        items = cfg['model'].objects.filter(game_count__gt=0).select_related(
+            'representative_game', 'representative_game__concept', 'representative_game__concept__igdb_match',
+        ).defer('representative_game__concept__igdb_match__raw_response')
 
         if query:
             items = items.filter(name__icontains=query)
 
+        # Sort. The secondary-stat sorts alias a non-underscore field (template-accessible) so the tile
+        # can surface the stat it's sorted by. Lower('name') keeps Unicode/emoji names sorting correctly.
         if sort_val == 'games':
-            items = items.order_by('-game_count', 'name')
-        elif sort_val == 'avg_rating':
-            items = items.annotate(
-                _avg_rating=_through_subquery(
-                    FloatField(),
-                    v=Avg('concept__user_ratings__overall_rating',
-                          filter=Q(concept__user_ratings__concept_trophy_group__isnull=True)),
-                ),
-            ).order_by(F('_avg_rating').desc(nulls_last=True), 'name')
-        elif sort_val == 'players':
-            items = items.annotate(
-                _total_players=_through_subquery(
+            return items.order_by('-game_count', Lower('name'))
+        if sort_val == 'avg_rating':
+            return items.annotate(stat_rating=F('avg_rating')).order_by(
+                F('avg_rating').desc(nulls_last=True), Lower('name'))
+        if sort_val == 'players':
+            return items.annotate(stat_players=F('player_count')).order_by(
+                '-player_count', Lower('name'))
+        if sort_val == 'plats_earned':
+            return items.annotate(
+                stat_plats=_through_subquery(
                     IntegerField(),
-                    c=Count('concept__games__played_by', distinct=True),
+                    # Sums the DENORM instead of joining ProfileGame. Game.plats_earned_count is
+                    # `Count(ProfileGame, filter=has_plat)` per game (recalc_earn_rates), which is
+                    # exactly what the live version counted -- same population, same grain -- so this
+                    # is arithmetic over a column rather than an aggregate over the join.
+                    #
+                    # NOTE the neighbouring 'players' sort canNOT do this: it counts DISTINCT
+                    # PROFILES, and summing a per-game column would count a hunter once per game they
+                    # own in the tag.
+                    c=Sum('concept__games__plats_earned_count'),
                 ),
-            ).order_by(F('_total_players').desc(nulls_last=True), 'name')
-        elif sort_val == 'plats_earned':
-            items = items.annotate(
-                _total_plats=_through_subquery(
-                    IntegerField(),
-                    c=Count('concept__games__played_by',
-                            filter=Q(concept__games__played_by__has_plat=True),
-                            distinct=True),
-                ),
-            ).order_by(F('_total_plats').desc(nulls_last=True), 'name')
-        else:
-            items = items.order_by('name')
+            ).order_by(F('stat_plats').desc(nulls_last=True), Lower('name'))
+        return items.order_by(Lower('name'))
 
-        context['items'] = items
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        cfg = self._tab_config()
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Genres & Themes'},
+        ]
+        context['active_tab'] = self.get_tab()
+        context['item_type'] = cfg['item_type']
+        context['detail_url_name'] = cfg['detail_url_name']
+        context['current_sort'] = self.request.GET.get('sort', 'alpha')
+        context['current_query'] = self.request.GET.get('query', '').strip()
+        context['item_count'] = len(context['items'])
+
+        # Header stats: how many genres / themes actually carry games -- from the hourly site
+        # heartbeat (the browse-header standard). These were hot DISTINCT counts over 4-table
+        # joins on EVERY request and filter swap until 2026-08; now a pure cache read. Runs
+        # unconditionally on purpose: it is one cache GET, and gating it on `request.htmx`
+        # would zero the captions on an htmx history-restore (which renders the FULL page --
+        # the trap the Recently Added guard documents). None until the cron warms the cache;
+        # the template gates on that.
+        from core.services.site_heartbeat import heartbeat_values
+        _stats = heartbeat_values(
+            'genres_with_games', 'themes_with_games', 'games_tagged', 'tags_applied')
+        context['genre_count'] = _stats['genres_with_games']
+        context['theme_count'] = _stats['themes_with_games']
+        context['games_tagged'] = _stats['games_tagged']
+        context['tags_applied'] = _stats['tags_applied']
 
         context['seo_description'] = (
             "Browse PlayStation games by genre and theme. "
@@ -120,7 +161,7 @@ class GenreThemeListView(ProfileHotbarMixin, TemplateView):
         return context
 
 
-class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
+class TagDetailBaseView(HtmxListMixin, ListView):
     """Base view for genre and theme detail pages. Shares filter/sort logic."""
     model = Game
     partial_template_name = 'trophies/partials/tag_detail/browse_results.html'
@@ -128,6 +169,14 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
     def get_tag_filter(self):
         """Subclasses return the Q filter for their tag type."""
+        raise NotImplementedError
+
+    def get_tag(self):
+        """Subclasses return the resolved Genre/Theme instance."""
+        raise NotImplementedError
+
+    def get_tag_model(self):
+        """Subclasses return the Genre or Theme model class (for the related-tags rail lookup)."""
         raise NotImplementedError
 
     def get_filter_form(self):
@@ -148,24 +197,70 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
             qs, order = apply_game_browse_sort(qs, sort_val, annotations)
         else:
             qs = annotate_ascii_name(qs)
-            order = ['is_ascii_name', Lower('title_name')]
+            order = ['is_ascii_name', Lower('title_name'), 'pk']
 
-        qs = qs.select_related(
-            'concept', 'concept__igdb_match',
-        ).prefetch_related(
-            Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
+        # ONE CARD PER PAGE IDENTITY, same as Browse Games (IA phase 3): the election slots in
+        # AFTER every filter and BEFORE the final order_by -- a .filter() chained after the
+        # window silently narrows the election population instead of filtering elected rows
+        # (the composition rule recorded in GamesListView.get_queryset). The np floor rides
+        # along for the same reason it does there: no card may link a 404.
+        qs = (
+            qs.filter(np_communication_id__isnull=False)
+            .exclude(np_communication_id='')
+            .game_page_canonicals()
         )
+
+        # Defer the ~30 KB IGDB blob (never read by the card); the platinum_trophy prefetch is dead -- the
+        # shared card reads defined_trophies.platinum (a JSON column), not game.platinum_trophy.
+        qs = qs.select_related('concept', 'concept__igdb_match').defer('concept__igdb_match__raw_response')
         return qs.order_by(*order)
 
     def get_shared_context(self, context):
-        """Adds filter form, platform choices, and post-pagination data."""
-        # Total unfiltered game count for this tag (used in header flavor text)
-        context['total_game_count'] = Game.objects.filter(
-            self.get_tag_filter()
-        ).count()
+        """Header stats + hero cover + related-tags rail + the shared card context + filter/toolbar state."""
+        tag = self.get_tag()
+
+        # Header furniture (stats aggregate + related-tags rail): FULL PAGE ONLY. The grid
+        # partial the HTMX filter swaps and infinite-scroll XHRs render never shows either, but
+        # HtmxListMixin swaps only the template, so get_context_data still runs in full -- this
+        # gate is what keeps the swap path from paying header queries it throws away (the
+        # browse-family guard GamesListView established).
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if not getattr(self.request, 'htmx', False) and not is_xhr:
+            # Header stats: one aggregate over the tag's games, off DENORMED Game columns -> whale-safe
+            # (bounded by game count, not player rows). games/plays/plats/avg-completion for the .scard row.
+            stats = Game.objects.filter(self.get_tag_filter()).aggregate(
+                games=Count('id'),
+                owned=Sum('played_count'),   # total ownership records across the tag's games (not distinct players)
+                plats=Sum('plats_earned_count'),
+                avg_completion=Avg('avg_completion'),
+            )
+            context['total_game_count'] = stats['games'] or 0
+            context['tag_stats'] = stats
+
+            # Related-tags rail: the materialized co-occurrence slug list, loaded + reordered,
+            # bounded to RELATED_N tiles. Rendered with the shared .pp-gtile, whose game_count
+            # is the DENORM column now (2026-08-31) -- the old distinct-count annotation both
+            # cost a per-tile aggregate and CONFLICTS with the model field.
+            related_slugs = list(tag.related_tags or [])
+            if related_slugs:
+                Model = self.get_tag_model()
+                rail = list(
+                    Model.objects.filter(slug__in=related_slugs)
+                    .select_related(
+                        'representative_game', 'representative_game__concept',
+                        'representative_game__concept__igdb_match',
+                    )
+                    .defer('representative_game__concept__igdb_match__raw_response')
+                )
+                order = {s: i for i, s in enumerate(related_slugs)}
+                rail.sort(key=lambda t: order.get(t.slug, len(order)))
+                context['related_tags'] = [t for t in rail if t.game_count]
+            else:
+                context['related_tags'] = []
 
         form = self.get_filter_form()
         context['form'] = form
+        context.update(get_active_filter_chips(self.request, form))   # dismissable active-filter chips
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_regions'] = self.request.GET.getlist('regions')
         context['platform_choices'] = ALL_PLATFORMS
@@ -184,32 +279,10 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
             if k not in ('page', 'view') and any(v)
         )
 
-        # Badge picker modal data
-        context.update(get_badge_picker_context(self.request))
-
-        # Rating map for page games
-        page_games = context['object_list']
-        concept_ids = [g.concept_id for g in page_games if g.concept_id]
-        if concept_ids:
-            ratings = UserConceptRating.objects.filter(
-                concept_id__in=concept_ids,
-                concept_trophy_group__isnull=True,
-            ).values('concept_id').annotate(
-                avg_difficulty=Avg('difficulty'),
-                avg_fun=Avg('fun_ranking'),
-                avg_rating=Avg('overall_rating'),
-                rating_count=Count('id'),
-            )
-            context['rating_map'] = {r['concept_id']: r for r in ratings}
-
-        # User game map
-        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-            game_ids = [g.id for g in page_games]
-            user_games = ProfileGame.objects.filter(
-                profile=self.request.user.profile,
-                game_id__in=game_ids,
-            ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
-            context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+        # Shared, batched, whale-safe card context (progress / DLC counts / ratings / badge + contract hooks),
+        # the same helper Browse Games + Recently Added use -- lights up the pursuer band the old hand-built
+        # rating/user maps were missing.
+        context.update(build_game_card_context(context['object_list'], self.request, condensed=True))
 
         return context
 
@@ -227,6 +300,12 @@ class GenreDetailView(TagDetailBaseView):
     def get_tag_filter(self):
         return Q(concept__concept_genres__genre=self.genre)
 
+    def get_tag(self):
+        return self.genre
+
+    def get_tag_model(self):
+        return Genre
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['genre'] = self.genre
@@ -241,8 +320,8 @@ class GenreDetailView(TagDetailBaseView):
             {'text': self.genre.name},
         ]
         context['seo_description'] = (
-            f"Browse {self.genre.name} games on Platinum Pursuit. "
-            f"Find trophies, track progress, and discover new games."
+            f"PlayStation games in the {self.genre.name} genre, with trophy lists and "
+            f"community ratings from hunters who finished them. Platinum Pursuit."
         )
         context = self.get_shared_context(context)
         return context
@@ -261,6 +340,12 @@ class ThemeDetailView(TagDetailBaseView):
     def get_tag_filter(self):
         return Q(concept__concept_themes__theme=self.theme)
 
+    def get_tag(self):
+        return self.theme
+
+    def get_tag_model(self):
+        return Theme
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['theme'] = self.theme
@@ -275,7 +360,8 @@ class ThemeDetailView(TagDetailBaseView):
             {'text': self.theme.name},
         ]
         context['seo_description'] = (
-            f"Browse {self.theme.name} themed games on Platinum Pursuit."
+            f"PlayStation games with the {self.theme.name} theme, with trophy lists and "
+            f"community ratings from hunters who finished them. Platinum Pursuit."
         )
         context = self.get_shared_context(context)
         return context

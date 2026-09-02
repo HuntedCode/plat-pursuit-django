@@ -1,0 +1,154 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+{% comment %}
+EMAIL BASE v2 -- the scaffold every rebuilt PlatPursuit email extends.
+
+WHY A v2 RATHER THAN AN EDIT: the legacy base (base_email.html) is div-based with no table
+scaffold, no MSO handling, no preheader, a non-bulletproof anchor CTA, and a #667eea purple
+that appears nowhere in the site's brand. Both bases coexist while the remaining children
+migrate one rebuild at a time; docs/guides/email-setup.md carries the migration table. When
+the last child moves, the legacy base and that table row die together.
+
+THE COLOUR SCHEME DECISION (settled, do not relitigate per-child): LIGHT content body with
+DARK brand bands top and bottom.
+  - Gmail and Outlook apply their own forced transforms in dark mode, and they are worst on
+    committed-dark email: a near-black body with near-white text is exactly the scheme partial
+    inversion mangles into grey-on-grey. A light content body transforms predictably everywhere.
+  - The brand still lands: the dark header and footer bands carry the logo, wordmark and the
+    cyan accent, and small dark blocks survive inversion far better than dark body copy.
+  - A committed-dark email also reads as promotional, which is wrong for the transactional
+    genre these templates serve.
+  We declare `color-scheme: light` so clients that honour the meta leave us alone, and tune a
+  few tokens under prefers-color-scheme for Apple Mail (the one major client that honours it
+  faithfully).
+
+THE PLAINTEXT RULE (load-bearing, pinned by tests/engine/test_auth_pages.py): there are no
+.txt templates -- the text/plain part of every email is the HTML with <style>/<script>
+elements dropped and then strip_tags applied. strip_tags throws away every href, so ANY URL
+THE READER MUST BE ABLE TO REACH HAS TO APPEAR AS VISIBLE TEXT, not only as a link target.
+The CTA partial (emails/_cta_button.html) carries the same note.
+
+BRAND HEX (converted from the site's oklch tokens in static/css/input.css, which email
+clients cannot parse): primary #28EBFE, substrate #05080C, band text #F0F6FD, metals
+platinum #8FD2EA / gold #E7C25C / silver #B9C6D6 / bronze #CF9160. Plus one email-only
+token: #0E7C93, the brand cyan darkened for links on LIGHT surfaces (the cyan itself is
+unreadable on white).
+
+FONTS: system stack only. The site's self-hosted Bricolage and Inter cannot ship in email;
+no client loads webfonts reliably. The display character does not survive, and that is fine.
+
+BLOCKS (a child migrates by changing its extends line and adding a preheader):
+    title           the <title> element
+    preheader       NEW -- the inbox preview line. Write a REAL SENTENCE: it leads the
+                    plaintext part too (EmailService drops <style> before stripping tags, so
+                    the CSS no longer lands there first), and keyword stuffing reads as
+                    garbage in both places.
+    extra_styles    end of <head>, for per-email rules
+    header_content  inside the dark header band
+    content         the light content area
+    footer_note     inside the dark footer band
+{% endcomment %}
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <title>{% block title %}PlatPursuit{% endblock %}</title>
+    <!--[if mso]>
+    <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+    <![endif]-->
+    <style>
+        /* Client resets: Outlook line-height, iOS auto-linking, Gmail table gaps. */
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+        body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+
+        /* Shared type. Declared on elements (not classes) so clients that strip class
+           attributes still inherit something sane. */
+        body, td, div, p, a, li { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+
+        .pp-h1 { margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD; }
+        .pp-sub { margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8; }
+        .pp-lede { margin: 0 0 18px; font-size: 16px; line-height: 1.6; color: #1B2430; }
+        .pp-p { margin: 0 0 16px; font-size: 15px; line-height: 1.65; color: #3A4655; }
+        .pp-card-t { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C; }
+        .pp-card-c { margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768; }
+        .pp-small { font-size: 13px; line-height: 1.55; color: #627488; }
+        /* Link on a LIGHT surface: the brand cyan is unreadable on white, so this is its
+           darkened twin (4.56:1 on the #F5F8FC fallback panel, AA at body size). */
+        .pp-body-link { color: #0E7C93; text-decoration: underline; }
+        /* The plaintext-lifeline panel: every CTA whose URL a reader must be able to reach
+           by hand gets one of these under the button (see the CTA partial's note). */
+        .pp-fallback { background-color: #F5F8FC; border-radius: 8px; }
+        .pp-fallback-t { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #4A5768; }
+        .pp-fallback-u { margin: 0; font-size: 13px; line-height: 1.5; color: #0E7C93; word-break: break-all; }
+        .pp-band-link { color: #28EBFE; text-decoration: none; font-weight: 600; }
+
+        @media screen and (max-width: 620px) {
+            .pp-container { width: 100% !important; }
+            .pp-pad { padding-left: 22px !important; padding-right: 22px !important; }
+            .pp-h1 { font-size: 22px !important; }
+        }
+        /* Apple Mail honours this faithfully; Gmail and Outlook do their own thing, which is
+           precisely why the body is light to begin with. */
+        @media (prefers-color-scheme: dark) {
+            body, .pp-canvas { background-color: #05080C !important; }
+        }
+    </style>
+    {% block extra_styles %}{% endblock %}
+</head>
+<body style="margin: 0; padding: 0; background-color: #EEF2F7;">
+    {% comment %} The inbox preview line, then a run of zero-width joiners so the client does
+    not pull the first body sentence in after it. {% endcomment %}
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: #EEF2F7;">
+        {% block preheader %}{% endblock %}
+        &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
+    </div>
+
+    <table role="presentation" class="pp-canvas" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #EEF2F7;">
+        <tr>
+            <td align="center" style="padding: 24px 12px;">
+                <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+                <table role="presentation" class="pp-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width: 600px; max-width: 600px; border-radius: 12px; overflow: hidden;">
+
+                    {# ── The dark brand band ── #}
+                    <tr>
+                        <td class="pp-pad" align="center" bgcolor="#05080C" style="background-color: #05080C; padding: 28px 32px 24px;">
+                            <img src="{{ site_url }}/static/images/logo.png" width="52" height="52" alt="PlatPursuit" style="display: block; width: 52px; height: 52px; margin: 0 auto 10px;" />
+                            <div style="font-size: 19px; font-weight: 800; letter-spacing: 0.02em; color: #F0F6FD;">PlatPursuit</div>
+                            <div style="margin-top: 3px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #28EBFE;">No trophy can hide from us</div>
+                            {% block header_content %}{% endblock %}
+                        </td>
+                    </tr>
+
+                    {# ── The light content area ── #}
+                    <tr>
+                        <td class="pp-pad" bgcolor="#FFFFFF" style="background-color: #FFFFFF; padding: 30px 32px;">
+                            {% block content %}{% endblock %}
+                        </td>
+                    </tr>
+
+                    {# ── The dark footer band ── #}
+                    <tr>
+                        <td class="pp-pad" align="center" bgcolor="#05080C" style="background-color: #05080C; padding: 22px 32px 26px;">
+                            <div style="font-size: 13px; font-weight: 700; color: #F0F6FD;">PlatPursuit</div>
+                            <div style="margin-top: 8px; font-size: 13px; color: #9FB3C8;">
+                                <a href="{{ site_url }}" class="pp-band-link" style="color: #28EBFE; text-decoration: none;">Visit PlatPursuit</a>
+                                &nbsp;&bull;&nbsp;
+                                <a href="{{ site_url }}{% url 'settings' %}" class="pp-band-link" style="color: #28EBFE; text-decoration: none;">Account Settings</a>
+                            </div>
+                            <div style="margin-top: 12px; font-size: 12px; line-height: 1.5; color: #6B7C91;">
+                                {% block footer_note %}{% endblock %}
+                            </div>
+                        </td>
+                    </tr>
+
+                </table>
+                <!--[if mso]></td></tr></table><![endif]-->
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

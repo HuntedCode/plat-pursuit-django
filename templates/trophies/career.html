@@ -1,0 +1,1932 @@
+{% extends 'base.html' %}
+{% load humanize static job_icons %}{% load mark_tags %}
+{% block title %}Career{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% comment %} Sticky mini-bar: pursuer identity + the view tabs, re-surfaced when the header + tab strip
+    scroll away. The tabs are duplicates of the real .pp-switch__chip set -- the view-toggle JS captures every
+    .pp-switch__chip at init and syncs .is-active across all of them, so tapping one here switches the panel in
+    place. Sentinel sits just after the real tab strip below. {% endcomment %}
+    {% if career and hero %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#career-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <span class="pp-minibar__ava">{% if hero.avatar_url %}<img src="{{ hero.avatar_url }}" alt="" loading="lazy">{% else %}{{ hero.pursuer_name|default:'?'|first|upper }}{% endif %}</span>
+                <span class="pp-minibar__title">{{ hero.pursuer_name }}</span>
+            </span>
+            {% comment %} Plain buttons, NOT a second role=tablist -- the view-toggle JS still drives them via the shared
+               .pp-switch__chip class, and a duplicate tablist landmark (alongside the real strip below) would
+               confuse a screen reader once the bar is pinned. {% endcomment %}
+            <div class="pp-minibar__controls">
+                <button type="button" class="pp-switch__chip {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" aria-label="Jobs view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span class="pp-switch__lbl">Jobs</span></button>
+                <button type="button" class="pp-switch__chip {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" aria-label="Radar view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span class="pp-switch__lbl">Radar</span></button>
+                <button type="button" class="pp-switch__chip {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" aria-label="Contracts view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg><span class="pp-switch__lbl">Contracts</span>{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if hero %}
+    {# ── Pursuer hero: identity + the disciplines composition ring (ambient glow tinted by your strongest discipline) ── #}
+    <section class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
+        <div class="card-body p-4 md:p-6 lg:p-7 pp-head-cascade">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                {# Identity #}
+                <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                    <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
+                        {% if hero.avatar_url %}
+                            <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
+                        {% else %}
+                            <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|default:'?'|first|upper }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate min-w-0">{% name_mark name=hero.pursuer_name mark=hero.display_mark size='lg' %}</h1>
+                        {% if hero.active_title %}
+                            <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
+                        {% else %}
+                            <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
+                        {% endif %}
+                        {% comment %} Identity chip: your strongest discipline (pays off the ambient glow, which is tinted by it). {% endcomment %}
+                        {% if hero.dominant %}
+                        <p class="mt-2"><span class="hero-disc-chip" style="--disc: var(--disc-{{ hero.dominant.slug }});"><span class="hero-disc-chip__dot" aria-hidden="true"></span>Leads with {{ hero.dominant.label }}</span></p>
+                        {% else %}
+                        <p class="text-xs text-base-content/40 mt-1.5 italic">New Pursuer</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# Disciplines ring (Pursuer Level framed by discipline shares) + legend #}
+                {% if hero.ring %}
+                <div class="flex items-center gap-3 md:gap-4 shrink-0">
+                    {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level %}
+                    <ul class="lab-dna-legend">
+                        {% for f in hero.ring %}
+                        <li data-disc="{{ f.slug }}" style="--disc: var(--disc-{{ f.slug }});">
+                            <span class="lab-dna-legend__dot"></span>
+                            <span class="lab-dna-legend__name">{{ f.label }}</span>
+                            <span class="lab-dna-legend__val" data-countup="{{ f.total }}">{{ f.total }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+
+            {% comment %} Pursuer rank ladder: all 11 rungs Newbie -> Ascendant, filled to your current
+            rank (the current rung shows partial progress through the tier), each reached rung dated. {% endcomment %}
+            {% if hero.rank_ladder %}
+            <div class="pgl pgl--rank" aria-label="Pursuer rank ladder" style="--pgl-cur-c: var(--rank-{{ hero.pursuer_rank.key }});">
+                <div class="pgl__track">
+                    {% for rung in hero.rank_ladder.rungs %}
+                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}{% if rung.reached %} is-on{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};{% if rung.current %} --rung-c: var(--rank-{{ rung.key }});{% endif %}" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
+                    {% endfor %}
+                </div>
+                <div class="pgl__foot">
+                    <span class="pgl__cur">{{ hero.pursuer_rank.label }}</span>
+                    {% if hero.pursuer_rank.next_label %}<span class="pgl__next"><b class="pgl__next-n" data-cd-from="{{ hero.pursuer_rank.next_level }}" data-cd-to="{{ hero.pursuer_rank.levels_to_next }}">{{ hero.pursuer_rank.levels_to_next }}</b> to {{ hero.pursuer_rank.next_label }}</span>{% else %}<span class="pgl__next">Apex reached</span>{% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% else %}
+        <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+            <div class="card-body p-6 text-center text-base-content/60">
+                Your Career is still being prepared. Check back after your next sync.
+            </div>
+        </section>
+    {% endif %}
+
+    {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
+    {% if claimable.count %}
+    <a href="?view=contracts" data-lab-goto="contracts" data-goto-filter="claimable" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 hover:border-primary transition-colors group mb-3">
+        <div class="card-body p-3 md:p-4 flex-row items-center gap-3 md:gap-4">
+            <span class="claim-spark shrink-0 text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 md:w-9 md:h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
+            </span>
+            <div class="min-w-0 flex-1">
+                <div class="font-bold text-sm md:text-base"><span class="text-primary" data-countup="{{ claimable.count }}">{{ claimable.count }}</span> Contract{{ claimable.count|pluralize }} ready to claim</div>
+                <div class="text-xs md:text-sm text-base-content/60"><span class="pp-tally text-primary font-semibold">+<b data-countup="{{ claimable.total_xp }}">{{ claimable.total_xp|intcomma }}</b></span> XP waiting to level your jobs</div>
+            </div>
+            <span class="shrink-0 text-xs md:text-sm text-primary font-semibold inline-flex items-center gap-1">Review &amp; claim <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
+        </div>
+    </a>
+    {% endif %}
+
+    {% if career %}
+    {% comment %} First-visit "how it works" modal (auto-open server-gated via ui_flags,
+    reopenable from the edhint below). Inside the career gate ON PURPOSE: the degraded
+    no-career fallback renders no edhint, so an auto-open there would burn the one-shot
+    flag on a broken page with no way back in. {% endcomment %}
+    {% include 'trophies/partials/career/_career_explainer.html' %}
+
+    {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
+    this section. Stacked chrome per the site-wide rule; the tabs + panels below flow FREE (not carded). {% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>
+                </svg>
+                <h2 class="text-lg md:text-xl lg:text-2xl font-bold">Career</h2>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-2">
+                The {{ career.total }} jobs that make up how you play, across five disciplines.
+            </p>
+            {% comment %} Reopens the how-it-works modal: unlike badges there is no long-form
+            page, the modal IS the teaching, so it stays reachable after the first visit. {% endcomment %}
+            <div class="pp-edhint-row mb-4">
+                <button type="button" class="pp-edhint" data-career-open>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    How does my Career work?
+                </button>
+            </div>
+
+            {# Summary stats (aggregates you can't read off the grid) #}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                <div class="scard">
+                    <div class="scard__label">Tiers earned</div>
+                    <div class="scard__value pp-tally text-primary" data-countup="{{ tiers_earned }}">{{ tiers_earned }}</div>
+                    <div class="scard__sub">prestige tiers across your jobs</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Total XP</div>
+                    <div class="scard__value pp-tally" title="{{ career.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
+                    <div class="scard__sub">earned across all jobs</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Average level</div>
+                    <div class="scard__value pp-tally" data-countup="{{ career.avg_level }}" data-countup-decimals="1">{{ career.avg_level }}</div>
+                    <div class="scard__sub">across all {{ career.total }} jobs</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Highest level</div>
+                    <div class="scard__value pp-tally" data-countup="{{ career.highest_level }}">{{ career.highest_level }}</div>
+                    <div class="scard__sub">your single best job</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} Career content: the Jobs / Radar / Contracts tabs + panels flow FREE (NOT boxed in a card),
+    per the site-wide page-structure rule -- mirroring the Collection's free toggle + views. {% endcomment %}
+    {# View toggle: Jobs / Radar / Contracts (the merged Contracts board). Right-aligned segmented tabs, like the Collection's. #}
+    <div class="flex items-center justify-end mt-5 mb-4">
+        <div class="pp-switch" role="tablist" aria-label="Career view">
+            <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="pp-switch__chip {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Jobs
+            </button>
+            <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="pp-switch__chip {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Radar
+            </button>
+            <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="pp-switch__chip {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}
+            </button>
+        </div>
+    </div>
+    {# Sentinel: once the real tab strip scrolls under the chrome, StickyReveal pins the mini-bar. #}
+    <span id="career-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}
+    <div class="lab-view" id="career-panel-jobs" role="tabpanel" aria-labelledby="career-tab-jobs" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
+        <div class="jlayout" role="tablist" aria-label="Jobs layout">
+            <button type="button" class="jlayout__btn is-active" data-layout="dossier" role="tab" aria-selected="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                Dossier
+            </button>
+            <button type="button" class="jlayout__btn" data-layout="sheet" role="tab" aria-selected="false">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                Sheet
+            </button>
+        </div>
+
+        {# Dossier: each discipline a banded chapter (icon + name + active/XP stats + avg), jobs beneath #}
+        <div class="jobs-layout jdoss" data-layout="dossier">
+            {% for d in career.disciplines %}
+            <div class="jdoss__band{% if d.slug == hero.dominant_disc %} jdoss__band--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
+                <div class="jdoss__head">
+                    <span class="jdoss__ic">{% job_icon d.icon '' %}</span>
+                    <div class="jdoss__titles">
+                        <div class="jdoss__name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jdoss__top" title="Your strongest discipline">Top</span>{% endif %}</div>
+                        <div class="jdoss__stats">{{ d.played }}/5 active &middot; <span class="pp-tally">{{ d.xp_total|intcomma }}</span> XP</div>
+                    </div>
+                    <span class="jdoss__avg">avg Lv <b class="pp-tally">{{ d.avg }}</b></span>
+                </div>
+                <div class="jdoss__grid">
+                    {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {# Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) #}
+        <div class="jobs-layout jsheet" data-layout="sheet" hidden>
+            {% for d in career.disciplines %}
+            <div class="jsheet__disc{% if d.slug == hero.dominant_disc %} jsheet__disc--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
+                <div class="jsheet__head">
+                    <span class="jsheet__head-ic">{% job_icon d.icon '' %}</span>
+                    <span class="jsheet__head-name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jsheet__head-top" title="Your strongest discipline">Top</span>{% endif %}</span>
+                    <span class="jsheet__head-avg">avg Lv {{ d.avg }}</span>
+                </div>
+                {% for job in d.jobs %}{% include 'partials/jobs/_job_sheet_row.html' with card=job %}{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# Radar #}
+    <div class="lab-view" id="career-panel-radar" role="tabpanel" aria-labelledby="career-tab-radar" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
+        <div class="radar-card">
+            <div class="radar-tabs">
+                <span class="radar-tabs__slider" aria-hidden="true"></span>
+                <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
+                {% for d in career.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
+            </div>
+            <div class="radar-body">
+                <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
+                <div class="radar-detail" id="radar-detail"></div>
+            </div>
+        </div>
+    </div>
+
+    {# Contracts: the merged board -- games you can pursue + accept to level jobs #}
+    <div class="lab-view" id="career-panel-contracts" role="tabpanel" aria-labelledby="career-tab-contracts" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
+        {% comment %} Board | History scope sub-toggle (shared .pp-switch treatment) on the left; the
+        "Claim all" CTA (Board-only) on the right. Board = still-actionable contracts; History = the ones
+        you've fully banked, with your actual earned XP + per-job split. {% endcomment %}
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="pp-switch" id="rp-scope-switch" role="tablist" aria-label="Contracts scope">
+                <button type="button" class="pp-switch__chip is-active" data-contract-view="board" role="tab" aria-selected="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+                    <span class="pp-switch__lbl">Board</span>
+                </button>
+                <button type="button" class="pp-switch__chip" data-contract-view="history" role="tab" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+                    <span class="pp-switch__lbl">History</span>
+                </button>
+            </div>
+            {% if claimable_count %}
+            <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
+            {% endif %}
+        </div>
+        {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
+        popovers and the cards both reference them via <use>. {% endcomment %}
+        {% job_icon_sprite %}
+        <div class="rp-toolbar mb-3 pp-toolbar-card">
+            {% comment %} Primary bar: search + sort + the advanced-filters toggle. {% endcomment %}
+            <div class="rp-bar">
+                <div class="rp-search" data-search-wrap>
+                    <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts" data-page-search>
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </div>
+                <div class="rp-bar__end">
+                    <div class="rp-sort">
+                        <label class="rp-sort__label hidden md:inline" for="rp-sort-select">Sort</label>
+                        <div class="rp-sort__field">
+                            {% comment %} Sort options are scoped: Board sorts vs History sorts (Recently
+                            banked / Most XP). JS (syncSortOptions) hides the ones that don't apply to the
+                            active scope and falls back to the scope's default sort. {% endcomment %}
+                            <select id="rp-sort-select" class="rp-sort__select" aria-label="Sort contracts">
+                                <option value="relevance" data-scope="board">Relevant to you</option>
+                                <option value="pushing" data-scope="board">Keep pushing</option>
+                                <option value="banked" data-scope="history">Recently banked</option>
+                                <option value="oldest" data-scope="history">Oldest banked</option>
+                                <option value="progress" data-scope="board">Closest to done</option>
+                                <option value="newest" data-scope="board">Newest</option>
+                                <option value="xp" data-scope="history">Most XP</option>
+                                <option value="jobs" data-scope="board history">Most jobs</option>
+                                <option value="fewest" data-scope="board history">Fewest jobs</option>
+                                <option value="name" data-scope="board history">A to Z</option>
+                            </select>
+                            <svg class="rp-sort__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                    </div>
+                    <button type="button" id="rp-adv-toggle" class="rp-advbtn" aria-label="Filters" aria-expanded="false" aria-controls="rp-advanced">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                        <span class="hidden md:inline">Filters</span>
+                        <span id="rp-adv-count" class="rp-advbtn__badge" hidden>0</span>
+                    </button>
+                </div>
+            </div>
+            {% comment %} Status quick-filter (always visible) + the live result count. {% endcomment %}
+            <div class="rp-statusrow">
+                <div class="rp-filters" role="group" aria-label="Filter by status">
+                    <button type="button" class="rp-chip is-active" data-filter="all">All<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="available">Not Started<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="pursuing">In Progress<span class="rp-chip__n" hidden></span></button>
+                    <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim<span class="rp-chip__n" hidden></span></button>
+                    {# "Claimed" lives in the History sub-view now; the whole status row hides in History. #}
+                </div>
+                {% comment %} Latest is a TOGGLE, not a status: status chips are single-select, and
+                "recently added" composes with all of them (Latest + Ready to Claim is a real thing to
+                want). Separate group so it never steals the single-select. {% endcomment %}
+                <div class="rp-newfilter" role="group" aria-label="Filter by recency">
+                    <button type="button" class="rp-chip rp-chip--new" data-new aria-pressed="false"
+                            title="Contracts added in the last {{ new_window_days }} days">Latest<span class="rp-chip__n" hidden></span></button>
+                </div>
+                <span id="rp-count" class="rp-count" aria-live="polite">{{ contracts_total }} contract{{ contracts_total|pluralize }}</span>
+            </div>
+            {% comment %} Advanced panel: discipline -> job drill-down + platform selector. {% endcomment %}
+            <div id="rp-advanced" class="rp-advanced" hidden>
+              <div class="rp-advanced-in">
+                <div class="rp-adv__group">
+                    <span class="rp-adv__label">Discipline</span>
+                    <div class="rp-discs" role="group" aria-label="Filter by discipline or job">
+                        <button type="button" class="rp-chip is-active" data-disc="all">All</button>
+                        {% for d in contract_disciplines %}
+                        <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-disc="{{ d.slug }}" data-label="{{ d.label }}" aria-haspopup="true" aria-expanded="false"><span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count" hidden></span><svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                            <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" hidden>
+                                <button type="button" class="rp-pop__item rp-pop__item--head" data-disc="{{ d.slug }}" data-name="All {{ d.label }} jobs" aria-pressed="false"><span>All {{ d.label }} jobs</span><span class="rp-pop__n"></span></button>
+                                {% for j in d.jobs %}<button type="button" class="rp-pop__item" data-job="{{ j.slug }}" data-disc="{{ d.slug }}" data-name="{{ j.name }}" aria-pressed="false">{% job_icon_use j.icon 'rp-pop__ico' %}<span>{{ j.name }}</span><span class="rp-pop__n"></span></button>{% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% comment %} Selected jobs/disciplines as removable tokens (populated by JS; ANDed together). {% endcomment %}
+                <div class="rp-adv__group rp-adv__group--tokens" id="rp-tokens-row" hidden>
+                    <span class="rp-adv__label">Selected</span>
+                    <div class="rp-tokens" id="rp-tokens" aria-live="polite"></div>
+                    <button type="button" id="rp-tokens-clear" class="rp-tokens__clear">Clear</button>
+                </div>
+                <div class="rp-adv__group">
+                    <span class="rp-adv__label">Platform</span>
+                    <div class="rp-plats" role="group" aria-label="Filter by platform">
+                        <div class="rp-platgrp"><span class="rp-platgrp__tag">Current</span><button type="button" class="rp-chip rp-plat is-active" data-plat="PS5">PS5<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat is-active" data-plat="PS4">PS4<span class="rp-chip__n" hidden></span></button></div>
+                        <div class="rp-platgrp"><span class="rp-platgrp__tag">Legacy</span><button type="button" class="rp-chip rp-plat" data-plat="PS3">PS3<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVITA">PS Vita<span class="rp-chip__n" hidden></span></button></div>
+                        <div class="rp-platgrp"><span class="rp-platgrp__tag">VR</span><button type="button" class="rp-chip rp-plat" data-plat="PSVR">PSVR<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVR2">PSVR2<span class="rp-chip__n" hidden></span></button></div>
+                    </div>
+                </div>
+              </div>
+            </div>
+        </div>
+        {% comment %} Facet chip counts + smart-empty suggestion for the SSR page 1 (the results
+        endpoint re-emits this island on each filter swap; the JS reads it out of the fragment). {% endcomment %}
+        {{ contracts_facets|json_script:"rp-facets" }}
+        <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
+             data-results-url="{% url 'contracts_results' %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
+            {% for p in contracts %}
+            {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=contract_disciplines %}
+            {% endfor %}
+        </div>
+        {# Empty / no-match states + infinite-scroll sentinel & spinner (page 1 rendered above). #}
+        <p id="rp-empty" class="text-center text-sm text-base-content/50 py-10" {% if contracts %}hidden{% endif %}>No Contracts on the board yet. Contracts are curated games that level your jobs, check back soon.</p>
+        <div id="rp-no-match" class="text-center text-sm text-base-content/50 py-10" hidden>
+            <p id="rp-no-match__msg">No Contracts match your search or filters.</p>
+            {# Smart empty state: JS fills this with "Drop <label> to see N" when a filter combo is too tight. #}
+            <button type="button" id="rp-relax" class="rp-relax" hidden></button>
+            <button type="button" id="rp-clear-filters" class="link link-primary">Clear all filters</button>
+        </div>
+        <div id="rp-loading" class="flex justify-center py-6" hidden><span class="loading loading-spinner loading-md text-primary"></span></div>
+        <div id="rp-sentinel" aria-hidden="true"></div>
+    </div>
+
+    {# Hidden per-job detail panels + the modal shell (populated on tile tap). #}
+    <div id="element-details" hidden>
+        {% for d in career.disciplines %}{% for job in d.jobs %}<div data-slug="{{ job.slug }}">{% include 'partials/jobs/_job_detail.html' with card=job %}</div>{% endfor %}{% endfor %}
+    </div>
+    <div class="emodal" id="emodal" hidden>
+        <div class="emodal__backdrop" data-close></div>
+        <div class="emodal__dialog" role="dialog" aria-modal="true" aria-label="Job detail" tabindex="-1">
+            <button class="emodal__close" data-close aria-label="Close">&times;</button>
+            <div id="emodal-panel"></div>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}
+
+{% block js_scripts %}
+{% if career %}
+<script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
+<script src="{% static 'js/claim-ceremony.js' %}"></script>
+<script>
+// Shared: count a number up from 0 to its target (data-countup attr, or the element's text),
+// easeOutCubic. Used by the hero/stats, the dossier tiles, the sheet rows, and the modal.
+function ppCountUp(el, dur) {
+    var dec = parseInt(el.dataset.countupDecimals || '0', 10);
+    var raw = (el.dataset.countup != null ? el.dataset.countup : (el.textContent || '').replace(/,/g, ''));
+    var target = parseFloat(raw);
+    if (isNaN(target)) return;
+    function fmt(v) { return dec ? v.toFixed(dec) : Math.round(v).toLocaleString(); }
+    el.textContent = fmt(0);
+    if (target === 0) return;
+    var d = dur || 750, start = null;
+    function step(ts) {
+        if (start === null) start = ts;
+        var p = Math.min(1, (ts - start) / d);
+        el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step); else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(step);
+}
+
+// Career: discipline radar (overview + per-discipline drill-down) and tile -> detail modal.
+(function () {
+    var css = getComputedStyle(document.documentElement);
+    var chart = null;
+    var canvas = document.getElementById('disc-radar');
+    var revealRadar = function () {};   // reassigned once the chart is built (bridges the if-scope)
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (typeof Chart !== 'undefined' && canvas) {
+        var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
+        var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
+        var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
+        var RMAX = {{ career.radar_max }};
+        var detail = document.getElementById('radar-detail');
+        var basePR = 5, bigPR = 9;
+
+        var DATA = { overview: { labels: {{ career.radar_labels_json|safe }}, values: {{ career.radar_data_json|safe }} } };
+        {% for d in career.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
+        {% endfor %}
+        // Slug per radar index, for the click-to-filter jump: overview mode -> discipline slugs (== `slugs`);
+        // a per-discipline mode -> that discipline's job slugs in radar order (matches d.jobs / radar labels).
+        var JOB_SLUGS = {};
+        {% for d in career.disciplines %}JOB_SLUGS['{{ d.slug }}'] = [{% for job in d.jobs %}'{{ job.slug }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+        {% endfor %}
+        // Map a clicked radar index -> a board filter ({discipline} in overview, {job} in a discipline mode).
+        function filterForIndex(i) {
+            if (i < 0) { return null; }
+            if (currentMode === 'overview') { return slugs[i] ? { discipline: slugs[i] } : null; }
+            var js = JOB_SLUGS[currentMode];
+            return (js && js[i]) ? { job: js[i] } : null;
+        }
+        // Open the Contracts -> Board scoped to that filter: hand the filter to the contracts IIFE, switch
+        // to the Contracts tab, and bring the board into view (mirrors the claim-banner jump).
+        function jumpToBoard(filter) {
+            if (!filter) { return; }
+            document.dispatchEvent(new CustomEvent('pp:board-filter', { detail: filter }));
+            var tab = document.getElementById('career-tab-contracts');
+            if (tab) { tab.click(); }   // -> showView('contracts') via the view-toggle tablist
+            var strip = document.querySelector('.pp-switch');
+            if (strip) { strip.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }); }
+        }
+
+        // #3 Soft glow around the radar line/fill (Chart.js has no native glow). In Overview each
+        // point then re-glows in its own discipline color (the line stays the aggregate cyan).
+        var glowPlugin = { id: 'radarGlow',
+            beforeDatasetDraw: function (c, a) { c.ctx.save(); c.ctx.shadowColor = c.data.datasets[a.index].borderColor; c.ctx.shadowBlur = 8; },
+            afterDatasetDraw: function (c) { c.ctx.restore(); },
+            afterDatasetsDraw: function (c) {
+                var ds = c.data.datasets[0];
+                if (!Array.isArray(ds.pointBackgroundColor)) return;   // per-discipline mode is already one color
+                var ctx = c.ctx;
+                c.getDatasetMeta(0).data.forEach(function (pt, i) {
+                    var r = (pt.options && pt.options.radius) || basePR;
+                    ctx.save();
+                    ctx.shadowColor = ds.pointBackgroundColor[i]; ctx.shadowBlur = 12;
+                    ctx.fillStyle = ds.pointBackgroundColor[i];
+                    ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, 2 * Math.PI); ctx.fill();
+                    ctx.restore();
+                });
+            } };
+        chart = new Chart(canvas, {
+            type: 'radar',
+            data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: basePR, pointHoverRadius: bigPR }] },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                animation: reduce ? false : { duration: 550, easing: 'easeOutQuart' },   // #3 smoother morph
+                plugins: { legend: { display: false } },
+                onHover: function (e, els) {   // #2 hovering a radar point highlights its detail row (+ clickable cursor)
+                    if (e && e.native && e.native.target) { e.native.target.style.cursor = els.length ? 'pointer' : ''; }
+                    if (!detail) return;
+                    var idx = els.length ? els[0].index : -1;
+                    detail.querySelectorAll('.rd-row').forEach(function (r) { r.classList.toggle('is-active', (+r.dataset.i) === idx); });
+                },
+                onClick: function (e, els) {   // clicking a radar point jumps to the Board filtered to it
+                    if (els && els.length) { jumpToBoard(filterForIndex(els[0].index)); }
+                },
+                scales: { r: { beginAtZero: true, suggestedMax: RMAX, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false } } },
+            },
+            plugins: [glowPlugin],
+        });
+
+        var LABELS = {};
+        document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
+        var radarPainted = false;
+        var currentMode = 'overview';
+
+        function highlightPoint(i, on) {   // #2 enlarge one point without re-animating the whole chart
+            var ds = chart.data.datasets[0];
+            ds.pointRadius = ds.data.map(function (_, idx) { return (on && idx === i) ? bigPR : basePR; });
+            chart.update('none');
+        }
+
+        // #1 detail rows render empty (bar 0, Lv 0), then each fills + counts up as it staggers in.
+        var renderPanel = function (labels, values, colorOf, title) {
+            if (!detail) return;
+            var rows = labels.map(function (label, i) {
+                var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
+                var c = colorOf(i);
+                return '<li class="rd-row" data-i="' + i + '" role="button" tabindex="0" title="Filter the Board by ' + label + '" style="--rd: ' + c + ';">'
+                    + '<span class="rd-row__label">' + label + '</span>'
+                    + '<span class="pp-horizon pp-horizon__track rd-row__bar" data-fill="' + pct + '%" style="--horizon-accent: ' + c + '; --horizon-h: 8px; --horizon-progress: ' + (reduce ? pct : 0) + '%;"><span class="pp-horizon__fill"></span></span>'
+                    + '<span class="rd-row__val">Lv <b data-countup="' + values[i] + '">' + (reduce ? values[i] : 0) + '</b></span></li>';
+            }).join('');
+            detail.innerHTML = '<div class="radar-detail__title">' + title + '</div><ul class="radar-detail__list">' + rows + '</ul>';
+            if (reduce) return;
+            detail.querySelectorAll('.rd-row').forEach(function (row, i) {   // each row's content follows its stagger
+                setTimeout(function () {
+                    var bar = row.querySelector('.rd-row__bar');
+                    if (bar) bar.style.setProperty('--horizon-progress', bar.dataset.fill);
+                    var v = row.querySelector('b[data-countup]');
+                    if (v) ppCountUp(v, 550);
+                }, i * 60 + 40);
+            });
+        };
+
+        // #2 hovering a detail row highlights its radar point (delegated; rows re-render each paint).
+        if (detail) {
+            var hoveredI = -1;
+            detail.addEventListener('mouseover', function (e) {
+                var r = e.target.closest('.rd-row'); if (!r) return;
+                var i = +r.dataset.i; if (i === hoveredI) return;
+                hoveredI = i; highlightPoint(i, true);
+                detail.querySelectorAll('.rd-row').forEach(function (x) { x.classList.toggle('is-active', x === r); });
+            });
+            detail.addEventListener('mouseleave', function () {
+                hoveredI = -1; highlightPoint(-1, false);
+                detail.querySelectorAll('.rd-row').forEach(function (x) { x.classList.remove('is-active'); });
+            });
+            // Click / Enter / Space a row -> jump to the Board filtered to that discipline (overview) or job.
+            function activateRow(r) { if (r) { jumpToBoard(filterForIndex(+r.dataset.i)); } }
+            detail.addEventListener('click', function (e) { activateRow(e.target.closest('.rd-row')); });
+            detail.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { var r = e.target.closest('.rd-row'); if (r) { e.preventDefault(); activateRow(r); } }
+            });
+        }
+
+        var paint = function (mode) {
+            currentMode = mode;
+            var ds = chart.data.datasets[0];
+            if (mode === 'overview') {
+                chart.data.labels = DATA.overview.labels;
+                ds.data = DATA.overview.values;
+                ds.borderColor = cyan;
+                ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
+                ds.pointBackgroundColor = discColors;
+                ds.pointBorderColor = discColors;
+                renderPanel(DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Disciplines');
+            } else {
+                var color = css.getPropertyValue('--disc-' + mode).trim();
+                chart.data.labels = DATA[mode].labels;
+                ds.data = DATA[mode].values;
+                ds.borderColor = color;
+                ds.backgroundColor = color.replace(')', ' / 0.16)');
+                ds.pointBackgroundColor = color;
+                ds.pointBorderColor = color;
+                renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' jobs');
+            }
+            ds.pointRadius = basePR;   // clear any hover-enlarged point
+            chart.update();
+        };
+
+        // #4 Sliding tab indicator: a pill that glides to the active tab, carrying its disc color.
+        var tabsWrap = document.querySelector('.radar-tabs');
+        var slider = tabsWrap && tabsWrap.querySelector('.radar-tabs__slider');
+        function activeTab() { return tabsWrap && tabsWrap.querySelector('.radar-tab.is-active'); }
+        function moveSlider(tab) {
+            if (!slider || !tab || !tab.offsetWidth) return;
+            slider.style.setProperty('--disc', getComputedStyle(tab).getPropertyValue('--disc'));
+            slider.style.width = tab.offsetWidth + 'px';
+            slider.style.height = tab.offsetHeight + 'px';
+            slider.style.transform = 'translate(' + tab.offsetLeft + 'px,' + tab.offsetTop + 'px)';
+            slider.style.opacity = '1';
+        }
+
+        // Paint + position the slider the first time the radar tab is actually on screen (a Chart drawn
+        // while its tab is display:none animates on a 0-size canvas -> finishes invisibly -> "pops").
+        revealRadar = function () {
+            chart.resize();                                                  // canvas was 0-size while hidden
+            if (!radarPainted) { radarPainted = true; paint(currentMode); }  // first reveal: animate in
+            requestAnimationFrame(function () { moveSlider(activeTab()); });
+        };
+        var radarView = document.querySelector('.lab-view[data-view="radar"]');
+        if (radarView && !radarView.hidden) revealRadar();                   // deep-linked ?view=radar
+
+        document.querySelectorAll('.radar-tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
+                tab.classList.add('is-active');
+                moveSlider(tab);
+                paint(tab.dataset.mode);
+            });
+        });
+        window.addEventListener('resize', function () { moveSlider(activeTab()); });
+    }
+
+    // Career view toggle: Jobs (default) / Radar / Contracts. Scope the query to [data-view] so the
+    // nested Board|History sub-toggle (.pp-switch__chip[data-contract-view], inside the Contracts panel)
+    // isn't swept into this top-level tablist.
+    var viewTabs = document.querySelectorAll('.pp-switch__chip[data-view]');
+    var views = document.querySelectorAll('.lab-view');
+    var VIEW_ORDER = ['jobs', 'radar', 'contracts'];
+    function currentView() {
+        var cur = null;
+        views.forEach(function (v) { if (!v.hidden) cur = v.dataset.view; });
+        return cur;
+    }
+    var tablist;
+    function showView(name) {
+        var from = currentView();
+        var changed = from !== name;
+        var shown = null;
+        views.forEach(function (v) {
+            var on = v.dataset.view === name;
+            v.hidden = !on;
+            if (on) { shown = v; }
+        });
+        // (A) Directional cross-fade: the incoming panel slides + fades in from the side it lives on.
+        if (changed) { PlatPursuit.slideViewIn(shown, from, name, VIEW_ORDER); }
+        var activeTab = null;
+        viewTabs.forEach(function (t) {
+            var on = t.dataset.view === name;
+            t.classList.toggle('is-active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) { activeTab = t; }
+        });
+        if (tablist) { tablist.syncTabindex(); }            // (D) roving tabindex -- only the active tab is Tab-reachable
+        if (changed) { PlatPursuit.igniteTab(activeTab); }  // (B) the newly-active pill blooms its glow once
+        // Reflect the active tab in the URL (shareable + reload-safe) and SCOPE the contract filters to the
+        // Contracts tab -- strip them when leaving (a shared Jobs/Radar link stays clean); returning re-adds
+        // them from the still-set filter UI via pp:contracts-shown -> syncURL().
+        PlatPursuit.syncViewParam(name, { default: 'jobs', paramView: 'contracts', params: ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page', 'scope'] });
+        // Animate the radar in the first time it's shown (and keep it correctly sized after).
+        if (name === 'radar') revealRadar();
+        // Stagger the contract cards in on reveal (mirrors the Jobs tab's content animation).
+        if (name === 'contracts' && changed) document.dispatchEvent(new CustomEvent('pp:contracts-shown'));
+    }
+    // Click + Arrow/Home/End keyboard nav + roving tabindex, all via the shared tablist helper.
+    // Guarded like every other shared-helper call: an unguarded throw here would take the rest of this
+    // IIFE with it. Pre-existing; caught by the same audit that found four of them in the board IIFE.
+    tablist = PlatPursuit.wireTablist
+        ? PlatPursuit.wireTablist(viewTabs, { onSelect: function (t) { showView(t.dataset.view); } })
+        : null;
+    // A one-shot ignite on load so the active pill "comes alive".
+    var initTab = document.querySelector('.pp-switch__chip[data-view].is-active');
+    if (initTab) { setTimeout(function () { if (initTab.classList.contains('is-active')) { PlatPursuit.igniteTab(initTab); } }, 260); }
+
+    // Rail / deep-link jumps to a specific Career view without a reload.
+    document.querySelectorAll('[data-lab-goto]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            showView(el.dataset.labGoto);
+            var f = el.dataset.gotoFilter;   // e.g. the claim banner lands on the Claimable filter
+            if (f) { var chip = document.querySelector('.rp-chip[data-filter="' + f + '"]'); if (chip) chip.click(); }
+            // Scroll the Career view up under the sticky chrome (scroll-padding-top handles the offset)
+            // so the toolbar + the now-filtered board come into view -- 'nearest' barely moved since the
+            // banner sits right above the tabs.
+            var tabs = document.querySelector('.pp-switch');
+            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+})();
+
+// Jobs layout toggle: Dossier <-> Character sheet, remembered per browser.
+(function () {
+    var btns = document.querySelectorAll('.jlayout__btn');
+    var layouts = document.querySelectorAll('.jobs-layout');
+    if (!btns.length) return;
+    var KEY = 'pp-jobs-layout';
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var sheetRevealed = false;
+    // The character sheet assembles on its first reveal: sections cascade in, and each section's bars
+    // fill + levels tick up AS it reveals (delay matched to the CSS section stagger, not all at once).
+    function revealSheet() {
+        var sheet = document.querySelector('.jsheet');
+        if (sheetRevealed || reduce || !sheet) return;
+        sheetRevealed = true;
+        sheet.classList.add('jsheet--revealing');
+        sheet.querySelectorAll('.jsheet__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });
+        sheet.querySelectorAll('.jsheet__disc').forEach(function (sec, i) {
+            setTimeout(function () {   // matches the 0.07s-per-section CSS cascade
+                sec.querySelectorAll('.jsheet__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
+                sec.querySelectorAll('.jsheet__lv').forEach(function (l) { ppCountUp(l, 650); });
+            }, i * 70 + 40);
+        });
+    }
+    function show(name) {
+        layouts.forEach(function (l) { l.hidden = (l.dataset.layout !== name); });
+        btns.forEach(function (b) {
+            var on = b.dataset.layout === name;
+            b.classList.toggle('is-active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (name === 'sheet') revealSheet();
+        try { localStorage.setItem(KEY, name); } catch (e) {}
+    }
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    if (saved === 'sheet' || saved === 'dossier') show(saved);
+    btns.forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.layout); }); });
+})();
+
+(function () {
+    var details = document.getElementById('element-details');
+    var modal = document.getElementById('emodal');
+    var panel = document.getElementById('emodal-panel');
+    var dialog = modal ? modal.querySelector('.emodal__dialog') : null;
+    var backdrop = modal ? modal.querySelector('.emodal__backdrop') : null;
+    var zoom = document.getElementById('zoom-container');
+    if (!details || !modal || !panel || !dialog) return;
+    var flipEl = null, focusEl = null, afterFn = null, portaled = false, scrollFn = null;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    // Container-transform: the dialog grows from (and shrinks back to) the tapped tile.
+    function flip(fromRect, opening) {
+        dialog.style.animation = 'none';   // suppress the default pop first, so we measure the true final rect
+        dialog.style.transformOrigin = 'center center';
+        var dr = dialog.getBoundingClientRect();
+        var sx = Math.max(0.06, fromRect.width / dr.width);
+        var sy = Math.max(0.06, fromRect.height / dr.height);
+        var dx = (fromRect.left + fromRect.width / 2) - (dr.left + dr.width / 2);
+        var dy = (fromRect.top + fromRect.height / 2) - (dr.top + dr.height / 2);
+        var t = 'translate(' + dx + 'px,' + dy + 'px) scale(' + sx + ',' + sy + ')';
+        if (opening) {
+            dialog.style.transition = 'none';
+            dialog.style.transform = t;
+            dialog.style.opacity = '0.4';
+            dialog.getBoundingClientRect();   // reflow so the start state sticks
+            dialog.style.transition = 'transform 0.42s cubic-bezier(0.34, 1.2, 0.64, 1), opacity 0.24s ease';   // spring overshoot
+            dialog.style.transform = 'none';
+            dialog.style.opacity = '1';
+        } else {
+            dialog.style.transition = 'transform 0.26s cubic-bezier(0.4,0,1,1), opacity 0.2s ease';
+            dialog.style.transform = t;
+            dialog.style.opacity = '0';
+        }
+    }
+    // Content choreography: count the level up + fill the XP bar once the panel is injected (the
+    // glyph draw + section stagger are CSS animations that play on injection).
+    // Post-inject content choreography, per source. Job detail: count the level + fill the XP bar.
+    function animateJobContent() {
+        if (reduce) return;
+        var lvl = panel.querySelector('.edetail__level-num');
+        if (lvl) ppCountUp(lvl, 700);
+        var bar = panel.querySelector('.edetail__bar[data-fill]');
+        if (bar) {
+            bar.style.setProperty('--horizon-progress', '0%');
+            requestAnimationFrame(function () { requestAnimationFrame(function () { bar.style.setProperty('--horizon-progress', bar.dataset.fill); }); });
+        }
+    }
+    // Contract detail: once the dialog has grown, cascade the job pills in, then the game cards.
+    function animateContractContent() {
+        if (reduce) return;   // content is visible via the reduced-motion CSS override
+        var i = 0;
+        panel.querySelectorAll('.rpm-job').forEach(function (el) { el.style.animationDelay = (i++ * 55) + 'ms'; el.classList.add('rpm-in'); });
+        panel.querySelectorAll('.rpg').forEach(function (el) {
+            var delay = i++ * 45;
+            el.style.animationDelay = delay + 'ms';
+            el.classList.add('rpm-in');
+            var fill = el.querySelector('.rpg__prog-fill');   // (D) fill the bar just after the card rises in
+            if (fill && fill.dataset.fill) { fill.style.width = '0%'; setTimeout(function () { fill.style.width = fill.dataset.fill; }, delay + 260); }
+        });
+    }
+    function resetDialog() {
+        ['animation', 'transition', 'transform', 'transformOrigin', 'opacity'].forEach(function (p) { dialog.style[p] = ''; });
+        if (backdrop) { backdrop.style.transition = ''; backdrop.style.opacity = ''; }
+    }
+    function hideNow() {
+        modal.hidden = true;
+        if (scrollFn) { dialog.removeEventListener('scroll', scrollFn); scrollFn = null; }
+        panel.innerHTML = '';
+        document.body.style.overflow = '';
+        if (zoom) zoom.classList.remove('pp-receded');
+        dialog.classList.remove('emodal__dialog--wide');
+        resetDialog();
+        if (focusEl && document.contains(focusEl)) focusEl.focus();   // restore focus to the trigger
+        flipEl = focusEl = afterFn = null;
+    }
+
+    // Generic open: inject html, grow the dialog from flipTarget's rect, restore focus to focusTarget.
+    function open(html, flipTarget, focusTarget, after) {
+        if (!portaled && zoom) { document.body.appendChild(modal); portaled = true; }   // out of the scaled wrapper
+        panel.innerHTML = html;
+        modal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (zoom && !reduce) zoom.classList.add('pp-receded');   // the page pushes back
+        flipEl = flipTarget || null; focusEl = focusTarget || flipTarget || null; afterFn = after || null;
+        if (!reduce && flipEl) flip(flipEl.getBoundingClientRect(), true);   // grow from the source
+        setTimeout(function () { if (afterFn) afterFn(); }, 340);   // content waits for the dialog to grow
+        (dialog.querySelector('.emodal__close') || dialog).focus();   // move focus into the dialog
+    }
+    function openEl(slug, trigger) {
+        var src = details.querySelector('[data-slug="' + slug + '"]');
+        if (!src) return;
+        open(src.innerHTML, trigger, trigger, animateJobContent);
+    }
+    function openContract(card, btn) {
+        var tpl = card.querySelector('.rp-modal-src');
+        if (tpl) { openContractHtml(tpl.innerHTML, card, btn); return; }   // legacy in-page modal
+        var url = btn && btn.getAttribute('data-modal-url');               // server path: fetch on open
+        if (!url) return;
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.text() : null; })
+            .then(function (html) { if (html != null) openContractHtml(html, card, btn); })
+            .catch(function () {});
+    }
+    function openContractHtml(html, card, btn) {
+        dialog.classList.add('emodal__dialog--wide');   // roomier dialog for the games grid
+        open(html, card, btn, animateContractContent);   // grow from the card, focus back to the button
+        var head = panel.querySelector('.rpm__head'), bar = panel.querySelector('.rpm__bar'), headImg = panel.querySelector('.rpm__head-art img');
+        if (!head || !bar) return;
+        if (reduce) {
+            // Reduced motion: discrete swap, no scroll-linked transforms.
+            scrollFn = function () { bar.classList.toggle('is-stuck', dialog.scrollTop > head.offsetHeight - 46); };
+        } else {
+            bar.style.transition = 'none';   // (B) opacity is scroll-driven, so no lag  [REVERT B: remove this line]
+            var ticking = false;
+            scrollFn = function () {
+                if (ticking) return; ticking = true;
+                requestAnimationFrame(function () {
+                    ticking = false;
+                    var st = dialog.scrollTop, p = Math.min(1, st / Math.max(1, head.offsetHeight - 46));
+                    if (headImg) headImg.style.transform = 'translate3d(0,' + (p * 20).toFixed(1) + 'px,0)';   // (A) header parallax
+                    // (B) Continuous collapse: dissolve the full header into the compact bar as you scroll.
+                    //     TO REVERT B: delete the next three lines and the bar.style.transition line above,
+                    //     then use: bar.classList.toggle('is-stuck', st > head.offsetHeight - 46);
+                    head.style.opacity = (1 - Math.min(1, p * 1.3)).toFixed(3);
+                    bar.style.opacity = p.toFixed(3);
+                    bar.classList.toggle('is-stuck', p > 0.02);   // pointer-events once visible
+                });
+            };
+        }
+        dialog.addEventListener('scroll', scrollFn, { passive: true });
+        scrollFn();   // set the initial state
+    }
+    function closeEl() {
+        if (zoom) zoom.classList.remove('pp-receded');
+        if (!reduce && flipEl && document.contains(flipEl)) {
+            var done = false;
+            var finish = function () { if (done) return; done = true; dialog.removeEventListener('transitionend', onEnd); hideNow(); };
+            var onEnd = function (e) { if (e.target === dialog && e.propertyName === 'transform') finish(); };
+            dialog.addEventListener('transitionend', onEnd);
+            flip(flipEl.getBoundingClientRect(), false);   // shrink back to the source
+            setTimeout(finish, 400);   // safety net if transitionend doesn't fire
+        } else {
+            hideNow();
+        }
+    }
+    document.querySelectorAll('.ptile').forEach(function (t) {
+        t.addEventListener('click', function () { openEl(t.dataset.slug, t); });
+        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug, t); } });
+    });
+    var rpListEl = document.getElementById('rp-list');   // delegated: streamed-in cards work too
+    if (rpListEl) rpListEl.addEventListener('click', function (e) {
+        var b = e.target.closest('.rp-tier2-btn');
+        if (b) { var card = b.closest('.rp-row'); if (card) openContract(card, b); }
+    });
+    modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
+    document.addEventListener('keydown', function (e) {
+        if (modal.hidden) return;
+        if (e.key === 'Escape') { closeEl(); return; }
+        if (e.key === 'Tab') {   // trap Tab within the dialog
+            var f = Array.prototype.slice.call(dialog.querySelectorAll(FOCUSABLE))
+                .filter(function (el) { return el.offsetParent !== null; });
+            if (!f.length) { e.preventDefault(); dialog.focus(); return; }
+            var first = f[0], last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    });
+
+    // Drag-to-dismiss (touch): flick the dialog down to close -- the shared PlatPursuit.dismissableSheet
+    // (adds the grabber handle + owns the slide-off); onClose steps the page back forward + hides.
+    if (window.PlatPursuit && PlatPursuit.dismissableSheet) {
+        PlatPursuit.dismissableSheet(dialog, {
+            scrim: backdrop,
+            onClose: function () { if (zoom) { zoom.classList.remove('pp-receded'); } hideNow(); }
+        });
+    }
+})();
+
+// Premium: count numbers up (Career Level, discipline totals, stat cards) as they scroll into view.
+// The dossier tile levels are excluded here -- the band reveal drives those in sync with each band.
+(function () {
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-countup]'))
+        .filter(function (el) { return !el.closest('.jdoss'); });
+    if (!els.length) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function fmt(v, dec) { return dec ? v.toFixed(dec) : Math.round(v).toLocaleString(); }
+    function run(el) {
+        var target = parseFloat(el.dataset.countup);
+        if (isNaN(target)) return;
+        var dec = parseInt(el.dataset.countupDecimals || '0', 10);
+        if (reduce || target === 0) { el.textContent = fmt(target, dec); return; }
+        var dur = 900, start = null;
+        function step(ts) {
+            if (start === null) start = ts;
+            var p = Math.min(1, (ts - start) / dur);
+            var eased = 1 - Math.pow(1 - p, 3);   // easeOutCubic
+            el.textContent = fmt(target * eased, dec);
+            if (p < 1) requestAnimationFrame(step); else el.textContent = fmt(target, dec);
+        }
+        requestAnimationFrame(step);
+    }
+    if (reduce || !('IntersectionObserver' in window)) { els.forEach(run); return; }
+    els.forEach(function (el) { el.textContent = fmt(0, parseInt(el.dataset.countupDecimals || '0', 10)); });  // reset to 0 (no flash of final)
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { run(e.target); io.unobserve(e.target); } });
+    }, { threshold: 0.4 });
+    // Gated on the first-visit modal: numbers hold at 0 behind its scrim and tick on close.
+    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+        els.forEach(function (el) { io.observe(el); });
+    });
+})();
+
+// Premium: the hero rank ladder's "X to next" counts DOWN from the from-zero distance (the next
+// boundary level -- thousands, high up) to the real remaining, in sync with the bars filling on load.
+(function () {
+    var el = document.querySelector('.pgl--rank .pgl__next-n');
+    if (!el || el.dataset.cdFrom == null) return;
+    var from = parseFloat(el.dataset.cdFrom), to = parseFloat(el.dataset.cdTo);
+    if (isNaN(from) || isNaN(to)) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function run() {
+        if (reduce) { el.textContent = to.toLocaleString(); return; }
+        var dur = 1800, start = null, span = to - from;
+        function step(ts) {
+            if (start === null) start = ts;
+            var p = Math.min(1, (ts - start) / dur);
+            var eased = 1 - Math.pow(1 - p, 3);   // easeOutCubic (matches the ladder fill)
+            el.textContent = Math.round(from + span * eased).toLocaleString();
+            if (p < 1) requestAnimationFrame(step); else el.textContent = to.toLocaleString();
+        }
+        requestAnimationFrame(step);
+    }
+    if (reduce || !('IntersectionObserver' in window)) { run(); return; }
+    el.textContent = from.toLocaleString();   // start big (no flash of the final number)
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { run(); io.unobserve(e.target); } });
+    }, { threshold: 0.4 });
+    (window.ppAfterCareerHowto || function (f) { f(); })(function () { io.observe(el); });
+})();
+
+// Premium: hover a legend row (or arc) -> spotlight its discipline arc, dim the rest, pause the spin.
+(function () {
+    var ring = document.querySelector('.lab-dna');
+    var arcsGroup = ring && ring.querySelector('.lab-dna__arcs');
+    var legend = document.querySelector('.lab-dna-legend');
+    if (!ring || !arcsGroup || !legend) return;
+    var arcs = arcsGroup.querySelectorAll('.lab-dna__arc');
+    var rows = legend.querySelectorAll('[data-disc]');
+    function focusDisc(slug) {
+        arcsGroup.style.animationPlayState = 'paused';   // hold still so the highlight is readable
+        arcs.forEach(function (a) { a.style.opacity = (a.dataset.disc === slug) ? '1' : '0.16'; });
+        rows.forEach(function (r) { r.style.opacity = (r.dataset.disc === slug) ? '1' : '0.4'; });
+    }
+    function clearDisc() {
+        arcsGroup.style.animationPlayState = '';
+        arcs.forEach(function (a) { a.style.opacity = ''; });
+        rows.forEach(function (r) { r.style.opacity = ''; });
+    }
+    rows.forEach(function (r) {
+        r.addEventListener('mouseenter', function () { focusDisc(r.dataset.disc); });
+        r.addEventListener('mouseleave', clearDisc);
+    });
+    arcs.forEach(function (a) {
+        a.addEventListener('mouseenter', function () { focusDisc(a.dataset.disc); });
+        a.addEventListener('mouseleave', clearDisc);
+    });
+})();
+
+// Premium: each dossier band reveals on scroll-in (slides up); its content THEN follows -- the icons
+// draw, the bars fill, the levels count up -- so nothing animates while the band is still sliding in.
+(function () {
+    var jdoss = document.querySelector('.jdoss');
+    if (!jdoss) return;
+    var bands = Array.prototype.slice.call(jdoss.querySelectorAll('.jdoss__band'));
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !('IntersectionObserver' in window) || !bands.length) return;   // static: renders final
+    jdoss.classList.add('jdoss--js');
+    bands.forEach(function (band) {   // pre-hide the content until the band reveals
+        band.querySelectorAll('.job__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });
+        band.querySelectorAll('.job').forEach(function (t) { t.classList.add('job--predraw'); });
+        band.querySelectorAll('.job__lv-num[data-countup]').forEach(function (l) { l.textContent = '0'; });
+    });
+    function revealContent(band) {
+        band.querySelectorAll('.job__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
+        band.querySelectorAll('.job').forEach(function (t) { t.classList.remove('job--predraw'); t.classList.add('job--drawing'); });
+        band.querySelectorAll('.job__lv-num[data-countup]').forEach(function (l) { ppCountUp(l, 650); });
+    }
+    var io = new IntersectionObserver(function (entries) {
+        entries.filter(function (e) { return e.isIntersecting; }).forEach(function (e, i) {
+            io.unobserve(e.target);
+            var band = e.target;
+            setTimeout(function () {   // stagger bands that appear together (on load)
+                band.classList.add('is-revealed');
+                setTimeout(function () { revealContent(band); }, 110);   // content follows closely -- no dead beat
+            }, i * 90);
+        });
+    }, { threshold: 0.2 });
+    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+        bands.forEach(function (b) { io.observe(b); });
+    });
+})();
+
+// Premium: cursor-tracking 3D tilt on the dossier job tiles (hover-capable, motion-OK devices only).
+(function () {
+    var canHover = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!canHover || reduce) return;
+    var MAX = 6;   // max tilt degrees
+    document.querySelectorAll('.jdoss .job').forEach(function (tile) {
+        var r = null;   // base (untilted) rect, cached on enter so the tilt can't feed back on itself
+        tile.addEventListener('mouseenter', function () { r = tile.getBoundingClientRect(); });
+        tile.addEventListener('mousemove', function (e) {
+            if (!r) r = tile.getBoundingClientRect();
+            var px = (e.clientX - r.left) / r.width - 0.5;
+            var py = (e.clientY - r.top) / r.height - 0.5;
+            tile.style.transition = 'transform 0.08s ease';
+            tile.style.transform = 'perspective(600px) rotateX(' + (-py * MAX).toFixed(2) + 'deg) rotateY(' + (px * MAX).toFixed(2) + 'deg) translateY(-3px) scale(1.02)';
+        });
+        tile.addEventListener('mouseleave', function () { r = null; tile.style.transition = 'transform 0.3s ease'; tile.style.transform = ''; });
+    });
+})();
+
+// Contracts board: server-driven filter/sort + infinite scroll. Per-card behaviors (progressive
+// image load, hover carousel, reveal choreography) are re-run for every streamed-in batch via
+// initCards(); the icon<->ring link and the claim flow are delegated off #rp-list. (The tier-2 trigger
+// is NOT -- it is bound in a different IIFE above, near the modal it opens. This line said otherwise.)
+(function () {
+    var list = document.getElementById('rp-list');
+    if (!list) return;
+    var PP = window.PlatPursuit || {};
+    var API = PP.API, Toast = PP.ToastManager, debounce = PP.debounce;
+    // NO `reduce` here any more: its three readers (the carousel, the reveal, the stagger) all moved
+    // into shared helpers that gate themselves. Kept out deliberately rather than left declared-and-unread,
+    // where it would read as a guard this block still applies.
+    var hasIO = 'IntersectionObserver' in window;
+
+    // ---- Per-card behaviors (idempotent; data-*Init guards stop a re-init double-binding) ----
+    // The shared `progressiveArt` (utils.js) since job detail became the second page rendering this
+    // card. It shipped there without this call and every cover shimmered forever -- the skeleton's
+    // infinite animation only stops on `.is-loaded`, which is JS's job, so the behaviour had to travel
+    // with the markup rather than stay here.
+    function initProgressiveLoad(scope) { if (PP.progressiveArt) { PP.progressiveArt(scope); } }
+
+    // The shared `coverCarousel` (utils.js) since job detail became the second page rendering this card.
+    // Its beat and fade were local constants here; they travel with the behaviour now, and the fade still
+    // has to match the CSS transition on `.rp-tile__img--fx`.
+    function initCarousel(scope) { if (PP.coverCarousel) { PP.coverCarousel(scope, { beat: 1500, fade: 560 }); } }
+
+    // The scroll-in reveal (XP count-up, tier bars filling, ring arcs drawing, job cells igniting), on
+    // the shared `cardReveal` since job detail became the second page that wants it.
+    //
+    // RESTORED here in the same change: an earlier extraction spliced this file between two anchors and
+    // took the observer and its `revealCard` body with it, leaving `initReveal` referencing an undeclared
+    // `revealIO`. That threw on every `initCards()` -- so infinite scroll, the entrance stagger and the
+    // `pp:contracts-shown` listener, all of which run AFTER it, silently never started.
+    var cardRevealer = PP.cardReveal ? PP.cardReveal() : null;
+    function initReveal(scope) {
+        if (!cardRevealer) { return; }
+        cardRevealer.observe(scope.querySelectorAll('.rp-row'));
+    }
+
+    function initCards(scope) {
+        scope = scope || list;
+        initProgressiveLoad(scope);
+        initCarousel(scope);
+        initReveal(scope);
+    }
+
+    // The batch entrance rise (chip change / appended page / tab open), on the shared `staggerCards`.
+    function staggerCards(cards) { if (PP.staggerCards) { PP.staggerCards(cards); } }
+
+    // ---- icon <-> ring link: the shared `ringHoverLink` (utils.js), delegated so it survives
+    // streamed-in cards. Extracted here when job detail became the second caller -- same behaviour, and
+    // that page passes its own item selector because it shows the jobs as named pills, not as the map.
+    // GUARDED, like every other `PlatPursuit.*` call in this file. This one sits at IIFE top level, so
+    // an unguarded throw here takes the entire board controller below it with it -- the claim flow, every
+    // filter and chip, `seedFromURL`, `initCards`, the scroller and the landing stagger. The page would
+    // still render its server-side cards and look completely correct. `PP` is snapshotted as
+    // `window.PlatPursuit || {}`, and a stale cached `utils.js` is a documented failure mode here.
+    if (PP.ringHoverLink) { PP.ringHoverLink(list); }
+
+    // ---- Delegated: claim flow ----
+    function markAccepted(card) {
+        card.dataset.status = 'accepted';
+        card.classList.remove('rp-row--claimable'); card.classList.add('rp-row--accepted');
+        var badge = card.querySelector('.rp-badge'); if (badge) badge.textContent = 'Claimed';
+        card.classList.remove('rp-row--just-accepted'); void card.offsetWidth; card.classList.add('rp-row--just-accepted');
+        card.addEventListener('animationend', function h(e) { if (e.target !== card) return; card.classList.remove('rp-row--just-accepted'); card.removeEventListener('animationend', h); });
+    }
+    function refreshAcceptAll(count) {
+        var btn = document.getElementById('rp-accept-all');
+        if (!btn) return;
+        if (count > 0) { btn.textContent = 'Claim all (' + count + ')'; btn.disabled = false; } else { btn.remove(); }
+    }
+    // Reload after a claim but KEEP the tab the user is on. The Career tabs are client-side only, so a
+    // plain reload would land them back on the default Jobs tab. Reflect the visible panel into ?view=
+    // (the server reads it to set the active tab) and preserve the rest of the querystring (the contracts
+    // board's filters/sort). If nothing changed, force a plain reload so it still refreshes.
+    function reloadKeepingView() {
+        var vis = document.querySelector('.lab-view:not([hidden])');
+        var v = vis && vis.dataset.view;
+        var url = new URL(window.location.href);
+        if (v === 'jobs') url.searchParams.delete('view');   // jobs is the default -> clean URL (matches showView)
+        else if (v) url.searchParams.set('view', v);
+        if (url.href === window.location.href) window.location.reload();
+        else window.location.replace(url.href);   // replace (not assign): a refresh shouldn't add a history entry
+    }
+    function applyResult(res) {
+        (res.accepted || []).forEach(function (slug) {
+            var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+            var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
+            if (!card) return;
+            markAccepted(card);
+            // Drop the card if it no longer belongs in the current view: the claimable filter (it's now
+            // accepted), or the Board scope once it's fully banked (it graduates to History). We can't know
+            // "fully banked" client-side, so on the Board we remove it and let the post-ceremony reload
+            // reconcile -- a fully-banked one won't come back; a partially-banked one (100% still to earn)
+            // reappears from the server. That reload happens right after, so the flicker is imperceptible.
+            if (state.status === 'claimable' || state.scope === 'board') card.remove();
+        });
+        refreshAcceptAll(res.claimable_count || 0);
+        // The claim ceremony IS the feedback (the award flows into the jobs it leveled). Toast only
+        // as a fallback when the ceremony module or its payload isn't available.
+        // A claim levels real jobs, so the Jobs (dossier + sheet), Radar, and hero panels -- ALL built
+        // from the server's career context -- are now stale in the DOM (the tabs render once on load and
+        // just toggle). Refresh once the moment is over so every panel reflects the new levels. We reload
+        // rather than patch client-side because the radar canvas + per-discipline geometry can't be
+        // re-derived without duplicating career_service; a reload is correct across every surface at once.
+        var claim = res.claim, Ceremony = PP.ClaimCeremony;
+        if (Ceremony && claim && claim.jobs && claim.jobs.length) {
+            Ceremony.play(claim).then(reloadKeepingView);   // refresh (on the same tab) after the ceremony closes
+        } else {
+            if (Toast && res.granted) Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+            if (res.granted) setTimeout(reloadKeepingView, 1100);   // no ceremony -> still refresh, same tab
+        }
+    }
+    async function accept(payload, btn) {
+        if (!API) return;
+        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
+        try { applyResult(await API.post('/api/v1/projects/accept/', payload)); }
+        catch (err) {
+            var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
+            if (Toast) Toast.show((data && data.error) || 'Could not claim the Contract.', 'error');
+            if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
+        }
+    }
+    list.addEventListener('click', function (e) { var b = e.target.closest('.rp-accept'); if (b) { e.preventDefault(); accept({ slug: b.dataset.slug }, b); } });
+    var allBtn = document.getElementById('rp-accept-all');
+    if (allBtn) allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
+
+    // ---- Server-driven filter/sort + infinite scroll ----
+    var RESULTS_URL = list.dataset.resultsUrl;
+    var sentinel = document.getElementById('rp-sentinel');
+    var loading = document.getElementById('rp-loading');
+    var noMatch = document.getElementById('rp-no-match');
+    var empty = document.getElementById('rp-empty');
+    var searchInput = document.getElementById('rp-search');
+    var searchField = null;   // PlatPursuit.wireSearchField handle (clear/Escape/has-value + spinner setBusy)
+    var statusBar = document.querySelector('.rp-filters');
+    // Selected by its DATA hook, not its class: the status chips next to it are found by
+    // `data-filter`, so behaviour reads from data attributes here and the class stays styling.
+    // It was a class lookup with an unread `data-new` sitting beside it -- markup that looks
+    // like a hook and is not, which this codebase has been caught by before.
+    var newChip = document.querySelector('[data-new]');
+    function syncNewChip() {
+        if (!newChip) return;
+        newChip.classList.toggle('is-active', !!state.newOnly);
+        newChip.setAttribute('aria-pressed', state.newOnly ? 'true' : 'false');
+    }
+    if (newChip) newChip.addEventListener('click', function () {
+        // A toggle, not a status: it narrows whatever the status chips already selected.
+        state.newOnly = !state.newOnly;
+        syncNewChip();
+        fetchPage(1, false);
+    });
+    var sortSel = document.getElementById('rp-sort-select');
+    var countEl = document.getElementById('rp-count');
+    var advToggle = document.getElementById('rp-adv-toggle');
+    var advPanel = document.getElementById('rp-advanced');
+    var advBadge = document.getElementById('rp-adv-count');
+    var discs = document.querySelector('.rp-discs');
+    var plats = document.querySelector('.rp-plats');
+    var tokensRow = document.getElementById('rp-tokens-row');
+    var tokensBox = document.getElementById('rp-tokens');
+    var relaxBtn = document.getElementById('rp-relax');
+    var DEFAULT_PLATS = ['PS5', 'PS4'];
+    var VALID_PLATS = plats ? Array.prototype.slice.call(plats.querySelectorAll('.rp-plat')).map(function (c) { return c.dataset.plat; }) : [];
+    var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // jobs + disciplines are multi-select, ANDed server-side (e.g. "driver + slayer game"). `scope` is the
+    // Board|History sub-view (Board = actionable, History = fully-banked).
+    var state = { status: '', newOnly: false, jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null, scope: 'board' };
+    var pageNo = 1, hasNext = list.dataset.hasNext === '1', busy = false;
+
+    function buildParams(n) {
+        var p = new URLSearchParams();
+        if (state.status && state.status !== 'all') p.set('status', state.status);
+        state.jobs.forEach(function (j) { p.append('job', j); });               // ANDed server-side
+        state.disciplines.forEach(function (d) { p.append('discipline', d); });
+        if (state.q) p.set('q', state.q);
+        if (state.sort && state.sort !== scopeDefaultSort(state.scope)) p.set('sort', state.sort);   // omit the scope's default (clean URL)
+        if (state.platforms) state.platforms.forEach(function (pl) { p.append('platform', pl); });  // null -> server default (current-gen)
+        if (state.newOnly) p.set('new', '1');
+        if (state.scope === 'history') p.set('scope', 'history');   // board is the default -> omitted (clean URL)
+        p.set('page', String(n));
+        return p.toString();
+    }
+    function noFilters() { return !state.status && !state.newOnly && !state.jobs.length && !state.disciplines.length && !state.q && !state.platforms; }
+
+    // Animated tally: roll the result count to its new value (Tally primitive). Skips on reduced-motion.
+    function countText(v) { return v + ' contract' + (v === 1 ? '' : 's'); }
+    var shownCount = parseInt((countEl && countEl.textContent) || '0', 10) || 0, countRAF = null;
+    function setCount(total) {
+        if (!countEl) return;
+        if (countRAF) { cancelAnimationFrame(countRAF); countRAF = null; }   // supersede any in-flight roll
+        if (prefersReduced || total === shownCount || !window.requestAnimationFrame) {
+            countEl.textContent = countText(total); shownCount = total; return;
+        }
+        var from = shownCount, start = null, dur = 420;   // `from` = last displayed value (updated each frame below)
+        function step(ts) {
+            if (start === null) start = ts;
+            var t = Math.min(1, (ts - start) / dur), eased = 1 - Math.pow(1 - t, 3);   // easeOutCubic
+            shownCount = Math.round(from + (total - from) * eased);
+            countEl.textContent = countText(shownCount);
+            if (t < 1) { countRAF = requestAnimationFrame(step); } else { shownCount = total; countRAF = null; }
+        }
+        countRAF = requestAnimationFrame(step);
+    }
+
+    // ---- Faceted chip counts + smart-empty suggestion (read from the #rp-facets JSON island) ----
+    function readFacets(scope) {
+        var el = (scope || document).querySelector('#rp-facets');
+        if (!el) return null;
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    function setChipN(chip, n) {
+        var span = chip.querySelector('.rp-chip__n');
+        if (!span) return;
+        span.textContent = n; span.hidden = false;
+        chip.classList.toggle('rp-chip--empty', n === 0);   // dim a facet that would return nothing
+    }
+    function setPopN(item, n) {
+        var span = item.querySelector('.rp-pop__n');
+        if (!span) return;
+        span.textContent = n;   // stays in flow (empty until loaded) so its margin-left:auto keeps the check flush-right
+        item.classList.toggle('rp-pop__item--empty', n === 0);
+    }
+    function applyFacets(f) {
+        if (!f) return;
+        if (f.status && statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
+            var n = f.status[c.dataset.filter]; setChipN(c, n == null ? 0 : n);
+        });
+        if (newChip) setChipN(newChip, f.new == null ? 0 : f.new);
+        if (f.platform && plats) plats.querySelectorAll('.rp-plat').forEach(function (c) {
+            var n = f.platform[c.dataset.plat]; setChipN(c, n == null ? 0 : n);
+        });
+        if (discs) {                                          // popover job + discipline (head) counts
+            if (f.job) discs.querySelectorAll('.rp-pop__item[data-job]').forEach(function (it) {
+                var n = f.job[it.dataset.job]; setPopN(it, n == null ? 0 : n);
+            });
+            if (f.discipline) discs.querySelectorAll('.rp-pop__item--head').forEach(function (it) {
+                var n = f.discipline[it.dataset.disc]; setPopN(it, n == null ? 0 : n);
+            });
+        }
+        renderSuggest(f.suggest);
+    }
+    function renderSuggest(s) {
+        if (!relaxBtn) return;
+        if (s && s.count > 0) {
+            relaxBtn.textContent = 'Drop “' + s.label + '” to see ' + s.count + ' contract' + (s.count === 1 ? '' : 's');
+            relaxBtn.dataset.kind = s.kind; relaxBtn.dataset.value = s.value || '';
+            relaxBtn.hidden = false;
+        } else {
+            relaxBtn.hidden = true; relaxBtn.removeAttribute('data-kind'); relaxBtn.removeAttribute('data-value');
+        }
+    }
+
+    // ---- Shareable filter state in the URL (History API -- no reload, hot-swap untouched) ----
+    function syncURL() {
+        if (!window.history || !history.replaceState) return;
+        var params = new URLSearchParams(location.search);
+        // EVERY key buildParams can emit has to be listed here. A key that is written but never
+        // cleared survives being switched off (the URL keeps claiming a filter the board has
+        // dropped, and seedFromURL turns it back on next reload) and doubles up when switched on
+        // again. That is the exact "a filter the controller does not fully know about" failure
+        // _filter_contracts' own comment records.
+        ['status', 'new', 'q', 'sort', 'discipline', 'job', 'platform', 'scope'].forEach(function (k) { params.delete(k); });
+        var bp = new URLSearchParams(buildParams(1)); bp.delete('page');
+        bp.forEach(function (v, k) { params.append(k, v); });          // keep any non-board params (e.g. view=contracts)
+        var qs = params.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    }
+
+    function updateEmptyStates() {
+        var any = !!list.querySelector('.rp-row');
+        if (noMatch) noMatch.hidden = any || noFilters();
+        if (empty) empty.hidden = any ? true : !noFilters();
+    }
+    // Mirror each toggle chip's is-active state to aria-pressed (disc triggers use aria-expanded instead).
+    function syncAria() {
+        document.querySelectorAll('.rp-toolbar .rp-chip:not(.rp-disc__trigger)').forEach(function (c) {
+            c.setAttribute('aria-pressed', c.classList.contains('is-active') ? 'true' : 'false');
+        });
+    }
+    var reqSeq = 0, controller = null;
+    function fetchPage(n, append) {
+        if (!RESULTS_URL) return;
+        syncAria();
+        if (append && busy) return;                          // don't stack scroll-appends onto an in-flight load
+        if (!append) syncURL();                              // reflect the (just-committed) filters in the URL
+        if (!append && controller) controller.abort();      // a filter change supersedes any in-flight request
+        var myReq = ++reqSeq;                                // any later fetchPage supersedes this response
+        controller = ('AbortController' in window) ? new AbortController() : null;
+        busy = true; if (loading) loading.hidden = false;
+        if (!append && searchField) searchField.setBusy(true);   // search-field spinner on filter/search fetches
+        fetch(RESULTS_URL + '?' + buildParams(n), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin',
+            signal: controller ? controller.signal : undefined,
+        })
+            .then(function (r) {
+                if (!r.ok) throw 0;
+                return r.text().then(function (html) {
+                    return { html: html, hasNext: r.headers.get('X-Has-Next') === '1', total: parseInt(r.headers.get('X-Total') || '0', 10) };
+                });
+            })
+            .then(function (d) {
+                if (myReq !== reqSeq) return;                // superseded: a newer request now owns busy + the grid
+                busy = false; if (loading) loading.hidden = true;
+                if (searchField) searchField.setBusy(false);
+                hasNext = d.hasNext; setCount(d.total);
+                var tmp = document.createElement('div'); tmp.innerHTML = d.html;
+                var cards = Array.prototype.slice.call(tmp.querySelectorAll('.rp-row'));
+                // DISCONNECT before dropping the cards: the reveal observer holds a strong reference to
+                // every card that has not yet scrolled into view, so replacing the list without releasing
+                // them retains a detached node per card, per filter change, for the life of the page.
+                // `initCards` below re-observes whatever replaces them.
+                if (!append) {
+                    if (cardRevealer) { cardRevealer.disconnect(); }
+                    list.innerHTML = '';
+                    applyFacets(readFacets(tmp));   // facets ride the page-1 swap
+                }
+                cards.forEach(function (c) { list.appendChild(c); });
+                pageNo = n;
+                initCards(list);
+                staggerCards(cards);
+                updateEmptyStates();
+                observeSentinel();
+            })
+            .catch(function (e) {
+                if ((e && e.name === 'AbortError') || myReq !== reqSeq) return;   // superseded -> the newer request owns state
+                busy = false; if (loading) loading.hidden = true;
+                if (searchField) searchField.setBusy(false);
+                if (Toast) Toast.error('Could not load Contracts. Please try again.');
+            });
+    }
+    var sentIO = hasIO ? new IntersectionObserver(function (entries) {
+        if (entries[0].isIntersecting && hasNext && !busy) fetchPage(pageNo + 1, true);
+    }, { rootMargin: '400px' }) : null;
+    function observeSentinel() {
+        if (!sentIO || !sentinel) return;
+        sentIO.unobserve(sentinel);
+        if (hasNext) sentIO.observe(sentinel);
+    }
+
+    // Filters-toggle badge: count of active advanced filters (each selected job/discipline + non-default platforms).
+    function updateAdvCount() {
+        var n = state.jobs.length + state.disciplines.length;
+        if (state.platforms) n++;
+        if (advBadge) { advBadge.textContent = String(n); advBadge.hidden = n === 0; }
+    }
+
+    // Status quick-filter (single-select).
+    if (statusBar) statusBar.addEventListener('click', function (e) {
+        var chip = e.target.closest('.rp-chip'); if (!chip) return;
+        statusBar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
+        chip.classList.add('is-active');
+        state.status = chip.dataset.filter || '';
+        fetchPage(1, false);
+    });
+
+    // Sort control.
+    if (sortSel) sortSel.addEventListener('change', function () { state.sort = sortSel.value; fetchPage(1, false); });
+
+    // ---- Board | History scope sub-toggle (segmented switcher; re-fetches the grid like a filter) ----
+    var toolbar = document.querySelector('.rp-toolbar');
+    var scopeSwitch = document.getElementById('rp-scope-switch');
+    var scopeChips = scopeSwitch ? Array.prototype.slice.call(scopeSwitch.querySelectorAll('[data-contract-view]')) : [];
+    var SCOPE_DEFAULT_SORT = { board: 'relevance', history: 'banked' };
+    function scopeDefaultSort(sc) { return SCOPE_DEFAULT_SORT[sc] || 'relevance'; }
+    // Show only the sort options valid for the active scope; if the current pick isn't one of them, fall
+    // back to the scope default. `option[hidden]` is honored by modern browsers; `disabled` is belt-and-braces.
+    function syncSortOptions(sc) {
+        if (!sortSel) return;
+        Array.prototype.forEach.call(sortSel.options, function (o) {
+            var show = (o.dataset.scope || 'board').split(' ').indexOf(sc) !== -1;
+            o.hidden = !show; o.disabled = !show;
+        });
+        var cur = sortSel.querySelector('option[value="' + state.sort + '"]');
+        if (!cur || cur.hidden) { state.sort = scopeDefaultSort(sc); }
+        sortSel.value = state.sort;
+    }
+    function applyScopeUI(sc) {
+        if (toolbar) toolbar.dataset.scope = sc;   // CSS hides the status chip row in History
+        scopeChips.forEach(function (c) {
+            var on = c.dataset.contractView === sc;
+            c.classList.toggle('is-active', on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        syncSortOptions(sc);
+        if (empty) {
+            empty.textContent = (sc === 'history')
+                ? 'No completed Contracts yet. Bank a Contract on the Board and it lands here.'
+                : 'No Contracts on the board yet. Contracts are curated games that level your jobs, check back soon.';
+        }
+        var allB = document.getElementById('rp-accept-all');   // nothing to claim in History
+        if (allB) allB.style.display = (sc === 'history') ? 'none' : '';
+    }
+    function setScope(sc, userAction) {
+        sc = (sc === 'history') ? 'history' : 'board';
+        if (userAction && state.scope === sc) return;
+        state.scope = sc;
+        state.sort = scopeDefaultSort(sc);   // each scope lands on its own default sort
+        // status (available/pursuing/claimable) is a Board-only filter and its row is hidden in History,
+        // so clear it on a scope switch -- otherwise a stale status could zero out History with no visible
+        // chip to undo it. jobs/disciplines/search/platforms are scope-agnostic and carry over.
+        state.status = '';
+        state.newOnly = false;   // Latest rides the Board row, which History hides -- same reason
+        syncNewChip();
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
+        applyScopeUI(sc);
+        if (userAction) {
+            var active = scopeChips.filter(function (c) { return c.dataset.contractView === sc; })[0];
+            if (active && PlatPursuit.igniteTab) PlatPursuit.igniteTab(active);
+            fetchPage(1, false);
+        }
+    }
+    if (scopeChips.length && PlatPursuit.wireTablist) {
+        PlatPursuit.wireTablist(scopeChips, { onSelect: function (c) { setScope(c.dataset.contractView, true); } });
+    }
+
+    // Advanced panel toggle (animated height+opacity collapse via the shared helper).
+    if (advToggle && advPanel) advToggle.addEventListener('click', function () {
+        var open = advPanel.hidden;   // currently hidden -> this click opens it
+        advToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        advToggle.classList.toggle('is-open', open);
+        if (window.PlatPursuit && PlatPursuit.animatePanel) { PlatPursuit.animatePanel(advPanel, open, true); }
+        else { advPanel.hidden = !open; }
+    });
+
+    // Discipline -> job drill-down: multi-select toggles across popovers, ANDed server-side. Selected
+    // items become removable tokens; a popover stays open so several can be picked from one list.
+    // Popover open/close mechanics are the shared PlatPursuit.discPopovers helper (shared with Browse Games);
+    // this page owns only the SELECTION (jobs/disciplines -> tokens -> fetchPage).
+    var discPop = (window.PlatPursuit && PlatPursuit.discPopovers) ? PlatPursuit.discPopovers(discs) : { closeAll: function () {} };
+    // Reflect the current selection into popover items, trigger chips (active + count), the "All"
+    // chip, and the token row.
+    function refreshDiscUI() {
+        if (!discs) return;
+        discs.querySelectorAll('.rp-pop__item[data-job]').forEach(function (it) {
+            var on = state.jobs.indexOf(it.dataset.job) !== -1;
+            it.classList.toggle('is-selected', on); it.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        discs.querySelectorAll('.rp-pop__item--head').forEach(function (it) {
+            var on = state.disciplines.indexOf(it.dataset.disc) !== -1;
+            it.classList.toggle('is-selected', on); it.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        discs.querySelectorAll('.rp-disc__trigger').forEach(function (t) {
+            var pop = t.parentElement.querySelector('.rp-pop');
+            var jobsHere = pop ? pop.querySelectorAll('.rp-pop__item[data-job].is-selected').length : 0;
+            var total = jobsHere + (state.disciplines.indexOf(t.dataset.disc) !== -1 ? 1 : 0);
+            t.classList.toggle('is-active', total > 0);
+            var badge = t.querySelector('.rp-disc__count');
+            if (badge) { badge.textContent = String(total); badge.hidden = total === 0; }
+        });
+        var allChip = discs.querySelector('[data-disc="all"]');
+        if (allChip) allChip.classList.toggle('is-active', !state.jobs.length && !state.disciplines.length);
+        renderTokens();
+    }
+    function renderTokens() {
+        if (!tokensBox) return;
+        tokensBox.textContent = '';
+        var items = state.disciplines.map(function (d) {
+            var head = discs.querySelector('.rp-pop__item--head[data-disc="' + d + '"]');
+            return { attr: 'disc', slug: d, name: head ? head.dataset.name : d, disc: d };
+        }).concat(state.jobs.map(function (j) {
+            var it = discs.querySelector('.rp-pop__item[data-job="' + j + '"]');
+            return { attr: 'job', slug: j, name: it ? it.dataset.name : j, disc: it ? it.dataset.disc : '' };
+        }));
+        items.forEach(function (f) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = 'rp-token';
+            b.setAttribute('data-' + f.attr, f.slug);
+            if (f.disc) b.style.setProperty('--disc', 'var(--disc-' + f.disc + ')');   // f.disc is a controlled slug
+            b.setAttribute('aria-label', 'Remove ' + f.name);
+            var label = document.createElement('span'); label.textContent = f.name;
+            var x = document.createElement('span'); x.className = 'rp-token__x'; x.setAttribute('aria-hidden', 'true'); x.textContent = '×';
+            b.appendChild(label); b.appendChild(x); tokensBox.appendChild(b);
+        });
+        if (tokensRow) tokensRow.hidden = items.length === 0;
+    }
+    function toggleFrom(list, slug) {
+        var i = list.indexOf(slug);
+        if (i === -1) list.push(slug); else list.splice(i, 1);
+        refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
+    }
+    function clearDiscJobs() {
+        state.jobs = []; state.disciplines = [];
+        refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
+    }
+    // Selection only -- discPopovers owns the trigger open/close, click-outside, and Escape. The popover
+    // stays open on a job/head click (multi-select).
+    if (discs) discs.addEventListener('click', function (e) {
+        var head = e.target.closest('.rp-pop__item--head');
+        if (head) { toggleFrom(state.disciplines, head.dataset.disc); return; }
+        var jobItem = e.target.closest('.rp-pop__item[data-job]');
+        if (jobItem) { toggleFrom(state.jobs, jobItem.dataset.job); return; }
+        if (e.target.closest('[data-disc="all"]')) { clearDiscJobs(); discPop.closeAll(); }
+    });
+
+    // Removing a token drops that job/discipline from the AND selection.
+    if (tokensBox) tokensBox.addEventListener('click', function (e) {
+        var tok = e.target.closest('.rp-token'); if (!tok) return;
+        if (tok.dataset.job) toggleFrom(state.jobs, tok.dataset.job);
+        else if (tok.dataset.disc) toggleFrom(state.disciplines, tok.dataset.disc);
+    });
+    var tokensClear = document.getElementById('rp-tokens-clear');
+    if (tokensClear) tokensClear.addEventListener('click', clearDiscJobs);
+
+    // Platform selector (multi-select; the default current-gen set sends no param -> server default).
+    function platsEqualDefault(arr) {
+        return arr.length === DEFAULT_PLATS.length && DEFAULT_PLATS.every(function (p) { return arr.indexOf(p) !== -1; });
+    }
+    if (plats) plats.addEventListener('click', function (e) {
+        var chip = e.target.closest('.rp-plat'); if (!chip) return;
+        chip.classList.toggle('is-active');
+        var active = Array.prototype.slice.call(plats.querySelectorAll('.rp-plat.is-active')).map(function (c) { return c.dataset.plat; });
+        if (!active.length) { chip.classList.add('is-active'); return; }   // never allow an empty selection
+        state.platforms = platsEqualDefault(active) ? null : active;
+        updateAdvCount(); fetchPage(1, false);
+    });
+
+    if (searchInput) {
+        var onSearch = function () { state.q = searchInput.value.trim(); fetchPage(1, false); };
+        searchInput.addEventListener('input', debounce ? debounce(onSearch, 250) : onSearch);
+        // Shared search-field affordances (clear x / Escape-to-clear / has-value + the `/` hint). Clearing
+        // re-runs the search; the in-flight spinner is driven by setBusy() in fetchPage. (`/`+Cmd/K is global.)
+        if (window.PlatPursuit && PlatPursuit.wireSearchField) {
+            searchField = PlatPursuit.wireSearchField(searchInput, { onClear: onSearch });
+        }
+    }
+
+    // Reset the filters, staying in the current sub-view (Board/History) with its default sort.
+    function resetAll() {
+        var sc = state.scope;
+        state = { status: '', newOnly: false, jobs: [], disciplines: [], q: '', sort: scopeDefaultSort(sc), platforms: null, scope: sc };
+        syncNewChip();
+        if (searchInput) searchInput.value = '';
+        if (searchField) searchField.sync();   // clearing the field -> drop .has-value so the clear-x hides
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
+        if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', DEFAULT_PLATS.indexOf(c.dataset.plat) !== -1); });
+        applyScopeUI(sc);   // keeps the sort options + sortSel.value in sync with the scope
+        refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
+    }
+    var clearBtn = document.getElementById('rp-clear-filters');
+    if (clearBtn) clearBtn.addEventListener('click', resetAll);
+
+    // Smart empty state: drop the single filter the server says frees up the most results.
+    if (relaxBtn) relaxBtn.addEventListener('click', function () {
+        var kind = relaxBtn.dataset.kind, value = relaxBtn.dataset.value || '';
+        if (kind === 'job') { var i = state.jobs.indexOf(value); if (i !== -1) state.jobs.splice(i, 1); refreshDiscUI(); }
+        else if (kind === 'discipline') { var j = state.disciplines.indexOf(value); if (j !== -1) state.disciplines.splice(j, 1); refreshDiscUI(); }
+        else if (kind === 'status') { state.status = ''; if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.toggle('is-active', c.dataset.filter === 'all'); }); }
+        else if (kind === 'platform') { state.platforms = VALID_PLATS.slice(); if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.add('is-active'); }); }   // widen to ALL platforms (matches the server count)
+        else if (kind === 'q') { state.q = ''; if (searchInput) searchInput.value = ''; }
+        else if (kind === 'new') { state.newOnly = false; syncNewChip(); }
+        updateAdvCount(); fetchPage(1, false);
+    });
+
+    // Seed the controls from the URL so a shared/reloaded link rebuilds the exact filter state. The
+    // cards are already server-rendered for these params, so this only syncs the UI -- no fetch.
+    function seedFromURL() {
+        var p = new URLSearchParams(location.search);
+        state.scope = (p.get('scope') === 'history') ? 'history' : 'board';
+        state.status = (state.scope === 'history') ? '' : (p.get('status') || '');   // status is Board-only
+        state.q = p.get('q') || '';
+        state.sort = p.get('sort') || scopeDefaultSort(state.scope);   // scope-validated by applyScopeUI below
+        state.jobs = p.getAll('job');
+        state.disciplines = p.getAll('discipline');
+        var pl = p.getAll('platform').filter(function (x) { return VALID_PLATS.indexOf(x) !== -1; });
+        state.platforms = pl.length ? pl : null;
+        if (searchInput) searchInput.value = state.q;
+        if (searchField) searchField.sync();   // programmatic value set fires no 'input' event -> sync .has-value (clear-x)
+        // Board-only, for the same reason status is (two lines up): CSS hides the Latest chip in
+        // History, so `?scope=history&new=1` -- a hand-edited URL, a stale bookmark -- would narrow
+        // History to the last 14 days with NO visible control to undo it. setScope already clears
+        // it on a user scope switch; this is the load path, which is the one that can arrive there.
+        state.newOnly = (state.scope !== 'history') && p.get('new') === '1';
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
+            c.classList.toggle('is-active', (state.status || 'all') === c.dataset.filter);
+        });
+        syncNewChip();
+        if (plats) { var act = state.platforms || DEFAULT_PLATS; plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', act.indexOf(c.dataset.plat) !== -1); }); }
+        refreshDiscUI();
+        applyScopeUI(state.scope);   // sub-chip active + toolbar data-scope + scope-valid sort options (sets sortSel.value)
+    }
+
+    // Initial: seed from the URL + apply the SSR facet counts, then start infinite scroll. No fetch --
+    // the server already rendered page 1 for these exact params (shareable/reload-safe, no flash).
+    seedFromURL();
+    applyFacets(readFacets(document));
+    updateAdvCount();
+    syncAria();
+    updateEmptyStates();
+    initCards(list);
+    observeSentinel();
+    var panel = list.closest('.lab-view');
+    if (panel && !panel.hidden) staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));  // Contracts is the landing view
+    document.addEventListener('pp:contracts-shown', function () {
+        syncURL();   // returning to Contracts: re-add its (still-set) filters to the URL that showView scoped away
+        staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
+    });
+
+    // Radar -> Board jump: a radar point / detail bar (radar IIFE) dispatches pp:board-filter to open the
+    // BOARD scoped to a single discipline or job, REPLACING any current filters. The view switch itself is
+    // the tab click on the radar side; this just sets the board state + refetches.
+    document.addEventListener('pp:board-filter', function (e) {
+        var f = (e && e.detail) || {};
+        state.scope = 'board';
+        state.status = ''; state.q = ''; state.newOnly = false; syncNewChip();
+        state.jobs = f.job ? [f.job] : [];
+        state.disciplines = f.discipline ? [f.discipline] : [];
+        state.platforms = null;
+        state.sort = scopeDefaultSort('board');
+        if (searchInput) searchInput.value = '';
+        if (searchField) searchField.sync();
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
+        if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', DEFAULT_PLATS.indexOf(c.dataset.plat) !== -1); });
+        applyScopeUI('board');   // sub-toggle + sort options + status row
+        refreshDiscUI();         // render the disc/job token so the active filter is visible when Filters opens
+        updateAdvCount();
+        fetchPage(1, false);
+    });
+
+    // Deep-linked to a FILTERED contracts board (e.g. the job modal's "View in History" jump): the page
+    // loads at the top (hero), so the board sits below the fold and you land stranded above it. When the
+    // URL carries a board filter, scroll the tab strip into view so the board is on screen. A plain
+    // ?view=contracts (no filter) still opens at the top. Runs after DOMContentLoaded so main.js has
+    // published --sticky-top (the scroll-padding-top offset), landing the strip below the sticky chrome.
+    function scrollToFilteredBoard() {
+        var qp = new URLSearchParams(location.search);
+        if (qp.get('view') !== 'contracts') return;
+        // `new` belongs in this list more than any other key: it is the one filter that arrives
+        // from an EXTERNAL link (the Discord announcement), where the reader has no idea the board
+        // is already filtered unless we take them to it.
+        if (!(qp.get('scope') === 'history' || qp.has('job') || qp.has('discipline') || qp.has('status') || qp.has('q') || qp.has('platform') || qp.has('new'))) return;
+        var strip = document.querySelector('.pp-switch');
+        if (strip) { strip.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'start' }); }
+    }
+    if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', function () { requestAnimationFrame(scrollToFilteredBoard); });
+    } else {
+        requestAnimationFrame(scrollToFilteredBoard);
+    }
+})();
+
+// Sticky mini-bar: init on DOMContentLoaded so main.js has already published --sticky-top (chrome height).
+// The bar's tab duplicates are wired by the view-toggle above (it captured every .pp-switch__chip at init).
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+});
+</script>
+{% if ceremony_debug %}
+{% comment %} DEV-ONLY: claim-ceremony replay harness. Canned payloads (no DB, no accept) so the animation
+can be iterated on endlessly. Gated on settings.DEBUG -- never ships to prod. {% endcomment %}
+{% comment %} ONE dev panel: .ccx-dev is fixed to left/bottom 12px, so a second instance
+stacks on top and eats this one's clicks (the audit-era bug). New dev affordances for this
+page join THIS panel as extra rows. {% endcomment %}
+<div class="ccx-dev" aria-hidden="true">
+    {% if explainer_debug %}
+    <div class="ccx-dev__title">Career explainer</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-explainer-replay>Replay</button>
+    </div>
+    {% endif %}
+    <div class="ccx-dev__title">Ceremony replay</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-ccx="small">Small</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="levels">Level-ups</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="alltiers">All tiers</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="divstep">Div step</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="tier">Rank up</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="toprank">Top rank</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="all">Claim-all</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="big13">13 jobs</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="big25">All 25</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="maxfit">Max fit</button>
+    </div>
+</div>
+<script>
+(function () {
+    // The real 25-job catalog (5 disciplines x 5), [slug, name, icon] per job, for the stress payloads.
+    var ROSTER_BY_DISC = {
+        combat: [['slayer', 'Slayer', 'swords'], ['gunslinger', 'Gunslinger', 'crosshair'], ['vanguard', 'Vanguard', 'shield'], ['outlaw', 'Outlaw', 'skull'], ['warrior', 'Warrior', 'sword']],
+        exploration: [['pathfinder', 'Pathfinder', 'compass'], ['infiltrator', 'Infiltrator', 'footprints'], ['cartographer', 'Cartographer', 'map'], ['mascot', 'Mascot', 'smile'], ['survivalist', 'Survivalist', 'tent']],
+        mind: [['mastermind', 'Mastermind', 'brain'], ['tactician', 'Tactician', 'flag'], ['architect', 'Architect', 'blocks'], ['tycoon', 'Tycoon', 'coins'], ['card-shark', 'Card Shark', 'spade']],
+        heart: [['mage', 'Mage', 'wand-sparkles'], ['champion', 'Champion', 'medal'], ['librarian', 'Librarian', 'library'], ['jester', 'Jester', 'drama'], ['exorcist', 'Exorcist', 'ghost']],
+        finesse: [['gamer', 'Gamer', 'gamepad-2'], ['driver', 'Driver', 'gauge'], ['athlete', 'Athlete', 'dumbbell'], ['maestro', 'Maestro', 'music'], ['freelancer', 'Freelancer', 'briefcase']],
+    };
+    function roster() {
+        // Round-robin across disciplines so any page (slice of 5) shows a mix of family colours.
+        var discs = Object.keys(ROSTER_BY_DISC), out = [];
+        for (var i = 0; i < 5; i++) {
+            discs.forEach(function (disc) {
+                var j = ROSTER_BY_DISC[disc][i];
+                out.push({ slug: j[0], name: j[1], disc: disc, icon: j[2] });
+            });
+        }
+        return out;   // 25 jobs
+    }
+    // Resting tier name for a job level (mirrors the server's JOB_TIERS thresholds), for the subtitle.
+    var TIER_BANDS = [[250, 'Legend'], [150, 'Grandmaster'], [99, 'Master'], [75, 'Veteran'], [50, 'Expert'], [25, 'Adept'], [10, 'Apprentice'], [1, 'Initiate']];
+    function tierName(level) {
+        for (var i = 0; i < TIER_BANDS.length; i++) { if (level >= TIER_BANDS[i][0]) return TIER_BANDS[i][1]; }
+        return 'Initiate';
+    }
+    // Pursuer ranks (mirror of leveling.PURSUER_RANKS) so the harness can build a self-consistent finale.
+    var PRANKS = [[0, 'newbie', 'Newbie', false], [35, 'recruit', 'Recruit', true], [65, 'seeker', 'Seeker', true], [115, 'hunter', 'Hunter', true], [195, 'ranger', 'Ranger', true], [305, 'warden', 'Warden', true], [465, 'marshal', 'Marshal', true], [685, 'vanquisher', 'Vanquisher', true], [985, 'paragon', 'Paragon', true], [1405, 'luminary', 'Luminary', true], [2025, 'ascendant', 'Ascendant', false]];
+    var RNUM = ['V', 'IV', 'III', 'II', 'I'];
+    function rankFor(level) {
+        var idx = 0; for (var i = 0; i < PRANKS.length; i++) { if (level >= PRANKS[i][0]) idx = i; else break; }
+        var r = PRANKS[idx], nextFloor = idx + 1 < PRANKS.length ? PRANKS[idx + 1][0] : null;
+        if (!r[3]) return { key: r[1], name: r[2], division: null, label: r[2], next_label: nextFloor != null ? PRANKS[idx + 1][2] : null, next_level: nextFloor, levels_to_next: nextFloor != null ? nextFloor - level : 0 };
+        var step = (nextFloor - r[0]) / 5, band = Math.min(4, Math.floor((level - r[0]) / step)), nextBoundary = Math.round(r[0] + (band + 1) * step);
+        return { key: r[1], name: r[2], division: 5 - band, label: r[2] + ' ' + RNUM[band], next_label: band + 1 < 5 ? (r[2] + ' ' + RNUM[band + 1]) : PRANKS[idx + 1][2], next_level: nextBoundary, levels_to_next: Math.max(0, nextBoundary - level) };
+    }
+    function rankLadder(level) {
+        var cur = rankFor(level);
+        var rungs = PRANKS.map(function (r) { return { key: r[1], name: r[2], min_level: r[0], reached: level >= r[0], current: r[1] === cur.key }; });
+        var idx = 0; for (var i = 0; i < PRANKS.length; i++) { if (PRANKS[i][1] === cur.key) { idx = i; break; } }
+        var tmin = PRANKS[idx][0], tnext = idx + 1 < PRANKS.length ? PRANKS[idx + 1][0] : null;
+        var fill = tnext == null ? 100 : Math.round((level - tmin) / (tnext - tmin) * 100);
+        return { rungs: rungs, fill: Math.max(0, Math.min(100, fill)), current: cur };
+    }
+    function pursuerBlock(f, t) {
+        var fr = rankFor(f), tr = rankFor(t), ranks = [];
+        PRANKS.forEach(function (r) { if (f < r[0] && r[0] <= t) ranks.push({ key: r[1], name: r[2] }); });
+        var ladderPre = null;
+        if (fr.key !== tr.key) {
+            var frIdx = 0;
+            PRANKS.forEach(function (r, i) { if (r[1] === fr.key) frIdx = i; });   // complete the OLD rank (its top)
+            var floor = frIdx + 1 < PRANKS.length ? PRANKS[frIdx + 1][0] : null;
+            if (floor != null) { ladderPre = rankLadder(floor - 1); ladderPre.fill = 100; }
+        }
+        return { from_level: f, to_level: t, from_label: fr.label, to_label: tr.label, from_key: fr.key, to_key: tr.key, rank_up: fr.key !== tr.key, div_up: fr.key === tr.key && fr.division !== tr.division, ranks: ranks, ladder: rankLadder(t), ladder_pre: ladderPre };
+    }
+    // A big claim over the first `count` catalog jobs: varied level jumps (some no-level, some multi),
+    // a scatter of tier crossings, and a plausible headline. Exercises the paged reveal + fast cascade.
+    function bigClaim(count) {
+        var jobs = roster().slice(0, count).map(function (j, i) {
+            var from = 1 + (i * 3) % 9;
+            var gained = i % 4;                        // 0..3 levels (0 = within-level nudge only)
+            var to = from + gained;
+            var fromFrac = ((i * 17) % 55) / 100;      // 0.00..0.54
+            // Every tile's bar must visibly MOVE: a no-level tile nudges forward within its band; a
+            // level-up tile can land anywhere (it sweeps through full bands first regardless).
+            var toFrac = gained > 0 ? ((i * 29) % 70) / 100 : Math.min(0.92, fromFrac + 0.3);
+            var tiers = [];                            // real thresholds so some tiles bloom a tier
+            if (from < 10 && to >= 10) tiers.push({ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 });
+            if (from < 25 && to >= 25) tiers.push({ key: 'adept', name: 'Adept', level: 25, rank: 2 });
+            return {
+                slug: j.slug, name: j.name, disc: j.disc, icon: j.icon,
+                xp: 6000, from_level: from, to_level: to, from_frac: fromFrac, to_frac: toFrac,
+                tier: tierName(to), tiers: tiers,
+            };
+        });
+        var pb = pursuerBlock(90, 96);   // a division step -> the lighter finale after a big claim
+        return {
+            xp: count * 1500, accepted: ['multi'], first_claim: false, rank_now: pb.to_label,
+            jobs: jobs, pursuer: pb,
+        };
+    }
+    // Layout stress: two FULL pages (5 + 5) where every job crosses all seven tiers, so the recap shows
+    // the widest it ever can -- all 7 chips at double-digit counts. Confirms a full page of 5 tiles + the
+    // maxed summary + pager + rank bar + footer all fit with no scroll. Pursuer stays in-division (no
+    // hand-off), so the whole settled stack is on screen at once, controls and all.
+    var ALL_TIERS = [
+        { key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }, { key: 'adept', name: 'Adept', level: 25, rank: 2 },
+        { key: 'expert', name: 'Expert', level: 50, rank: 3 }, { key: 'veteran', name: 'Veteran', level: 75, rank: 4 },
+        { key: 'master', name: 'Master', level: 99, rank: 5 }, { key: 'grandmaster', name: 'Grandmaster', level: 150, rank: 6 },
+        { key: 'legend', name: 'Legend', level: 250, rank: 7 },
+    ];
+    function maxFit() {
+        var pb = pursuerBlock(82, 84);   // Seeker IV -> IV: no rank/division change, so no finale takeover
+        var jobs = roster().slice(0, 10).map(function (j, i) {
+            return {
+                slug: j.slug, name: j.name, disc: j.disc, icon: j.icon,
+                xp: 777000, from_level: 1, to_level: 260, from_frac: ((i * 17) % 55) / 100, to_frac: 0.3,
+                tier: 'Legend', tiers: ALL_TIERS.map(function (t) { return { key: t.key, name: t.name, level: t.level, rank: t.rank }; }),
+            };
+        });
+        return { xp: 7770000, accepted: ['maxfit'], first_claim: false, rank_now: pb.to_label, jobs: jobs, pursuer: pb };
+    }
+    var CANNED = {
+        // A within-level nudge: XP lands, bar creeps, no level. Proves it still feels like a reward.
+        small: {
+            xp: 6000, accepted: ['demo'], first_claim: false, rank_now: 'Hunter III',
+            jobs: [{ slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
+                     xp: 6000, from_level: 4, to_level: 4, from_frac: 0.1, to_frac: 0.9, tiers: [] }],
+            pursuer: { from_level: 40, to_level: 40, from_label: 'Hunter III', to_label: 'Hunter III', rank_up: false, div_up: false, ranks: [] },
+        },
+        // A couple of clean level-ups across two disciplines.
+        levels: {
+            xp: 6000, accepted: ['demo'], first_claim: false, rank_now: 'Hunter IV',
+            jobs: [
+                { slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
+                  xp: 3000, from_level: 6, to_level: 8, from_frac: 0.5, to_frac: 0.5, tiers: [] },
+                { slug: 'cartographer', name: 'Cartographer', disc: 'exploration', icon: 'compass',
+                  xp: 3000, from_level: 9, to_level: 10, from_frac: 0.2, to_frac: 0.2,
+                  tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }] },
+            ],
+            pursuer: { from_level: 60, to_level: 63, from_label: 'Seeker III', to_label: 'Seeker III', rank_up: false, div_up: false, ranks: [] },
+        },
+        // Escalation demo: one job climbs 1 -> 260, crossing EVERY tier so the spark burst grows toward Legend.
+        alltiers: {
+            xp: 777000, accepted: ['demo'], first_claim: false, rank_now: 'Ranger I',
+            jobs: [{ slug: 'slayer', name: 'Slayer', disc: 'combat', icon: 'swords',
+                     xp: 777000, from_level: 1, to_level: 260, from_frac: 0.3, to_frac: 0.3, tiers: [
+                { key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 },
+                { key: 'adept', name: 'Adept', level: 25, rank: 2 },
+                { key: 'expert', name: 'Expert', level: 50, rank: 3 },
+                { key: 'veteran', name: 'Veteran', level: 75, rank: 4 },
+                { key: 'master', name: 'Master', level: 99, rank: 5 },
+                { key: 'grandmaster', name: 'Grandmaster', level: 150, rank: 6 },
+                { key: 'legend', name: 'Legend', level: 250, rank: 7 },
+            ] }],
+            pursuer: { from_level: 25, to_level: 90, from_label: 'Newbie', to_label: 'Seeker I', rank_up: true, div_up: false, ranks: [{ key: 'recruit', name: 'Recruit' }, { key: 'seeker', name: 'Seeker' }] },
+        },
+        // A division step within a rank (Seeker V -> IV): the LIGHTER finale.
+        divstep: {
+            xp: 12000, accepted: ['demo'], first_claim: false, rank_now: 'Seeker IV',
+            jobs: [
+                { slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair', xp: 6000, from_level: 12, to_level: 14, from_frac: 0.3, to_frac: 0.3, tiers: [] },
+                { slug: 'mage', name: 'Mage', disc: 'heart', icon: 'wand-sparkles', xp: 6000, from_level: 9, to_level: 11, from_frac: 0.4, to_frac: 0.4, tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }] },
+            ],
+            pursuer: { from_level: 75, to_level: 85, from_label: 'Seeker V', to_label: 'Seeker IV', rank_up: false, div_up: true, ranks: [] },
+        },
+        // The onboarding-style burst: a big multi-tier jump + a full RANK-UP (the heavier finale).
+        tier: {
+            xp: 90000, accepted: ['demo'], first_claim: true, rank_now: 'Recruit V',
+            jobs: [{ slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
+                     xp: 90000, from_level: 1, to_level: 31, from_frac: 0, to_frac: 0,
+                     tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }, { key: 'adept', name: 'Adept', level: 25, rank: 2 }] }],
+            pursuer: { from_level: 25, to_level: 55, from_label: 'Newbie', to_label: 'Recruit V', rank_up: true, div_up: false, ranks: [{ key: 'recruit', name: 'Recruit' }] },
+        },
+        // A high-end rank-up (Paragon I -> Luminary V): tests the top of the colour spectrum + hand-off.
+        toprank: {
+            xp: 60000, accepted: ['demo'], first_claim: false, rank_now: 'x',
+            jobs: [
+                { slug: 'librarian', name: 'Librarian', disc: 'heart', icon: 'library', xp: 30000, from_level: 42, to_level: 51, from_frac: 0.3, to_frac: 0.3, tiers: [{ key: 'expert', name: 'Expert', level: 50, rank: 3 }] },
+                { slug: 'tycoon', name: 'Tycoon', disc: 'mind', icon: 'coins', xp: 30000, from_level: 47, to_level: 55, from_frac: 0.5, to_frac: 0.5, tiers: [] },
+            ],
+            pursuer: { from_level: 1390, to_level: 1420 },   // post-process rebuilds -> Paragon I -> Luminary V
+        },
+        // Stress tests: the paged reveal (5 per page auto-play, then arrows to flip back).
+        get big13() { return bigClaim(13); },   // 3 pages (5 + 5 + 3)
+        get big25() { return bigClaim(25); },   // 5 pages
+        get maxfit() { return maxFit(); },       // 2 full pages of 5 + the widest recap (all 7 tier chips)
+        // Claim-all: a handful of jobs at once (single page, no pager).
+        all: {
+            xp: 30000, accepted: ['a', 'b', 'c'], first_claim: false, rank_now: 'Hunter V',
+            jobs: [
+                { slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair', xp: 6000, from_level: 3, to_level: 5, from_frac: 0.3, to_frac: 0.3, tiers: [] },
+                { slug: 'cartographer', name: 'Cartographer', disc: 'exploration', icon: 'compass', xp: 6000, from_level: 7, to_level: 9, from_frac: 0.1, to_frac: 0.1, tiers: [] },
+                { slug: 'tactician', name: 'Tactician', disc: 'mind', icon: 'brain', xp: 6000, from_level: 2, to_level: 4, from_frac: 0.6, to_frac: 0.6, tiers: [] },
+                { slug: 'enchanter', name: 'Enchanter', disc: 'heart', icon: 'wand-sparkles', xp: 6000, from_level: 5, to_level: 6, from_frac: 0.4, to_frac: 0.4, tiers: [] },
+                { slug: 'speedster', name: 'Speedster', disc: 'finesse', icon: 'gauge', xp: 6000, from_level: 8, to_level: 10, from_frac: 0.2, to_frac: 0.2, tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }] },
+            ],
+            pursuer: { from_level: 70, to_level: 80, from_label: 'Seeker II', to_label: 'Seeker II', rank_up: false, div_up: false, ranks: [] },
+        },
+    };
+    // Normalize each STATIC payload (the getters set their own): fill resting tiers, and rebuild the
+    // pursuer block from the real rank/division math so the finale + labels are self-consistent.
+    [CANNED.small, CANNED.levels, CANNED.divstep, CANNED.tier, CANNED.all, CANNED.alltiers, CANNED.toprank].forEach(function (p) {
+        p.jobs.forEach(function (j) { if (j.tier == null) j.tier = tierName(j.to_level); });
+        p.pursuer = pursuerBlock(p.pursuer.from_level, p.pursuer.to_level);
+        p.rank_now = p.pursuer.to_label;
+    });
+    document.querySelector('.ccx-dev').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-ccx]');
+        if (!btn || !window.PlatPursuit || !PlatPursuit.ClaimCeremony) return;
+        PlatPursuit.ClaimCeremony.play(CANNED[btn.dataset.ccx]);
+    });
+})();
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -2,6 +2,12 @@
 
 PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each cron job is configured through the Render dashboard (not a config file) and executes a Django management command via `python manage.py <command>`. The TokenKeeper worker process handles real-time PSN sync jobs separately as a long-running daemon; the cron jobs described here cover everything else: profile refresh queuing, cache warming, leaderboard computation, analytics cleanup, and monthly recap delivery.
 
+> **STATUS: not registered yet.** The rebuild has not deployed to production, so the schedule below is
+> the intended state, not the running one. The full list gets reviewed and created in the Render dashboard
+> at cutover -- see the Cron / scheduling section of
+> [prod-deploy-checklist.md](../design/rebuild/prod-deploy-checklist.md). Treat every time in this doc as a
+> proposal until that review happens.
+
 ---
 
 ## Schedule Overview
@@ -10,25 +16,24 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 |------------|---------|-----------|--------------|
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
-| Top of every hour | `process_scheduled_notifications` | Hourly | None |
-| Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
+| ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
+| 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all` -> `recompute_milestones` -> `audit_badge_coverage`. The middle two are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
-| 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
-| Weekly (any quiet hour) | `djstripe_sync_models Subscription` then `audit_subscription_status --fix` | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no emails |
+| Weekly (any quiet hour) | `djstripe_sync_models Subscription` then `audit_subscription_status --fix` | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no USER emails. Also sweeps for ORPHANED subscriptions (live sub, no user -- the account-deletion race; report-only, cancel by hand) and mails the full run report to `AUDIT_REPORT_EMAIL` (operator email, topline counts in the subject; empty setting = no email, `--no-email` skips) |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
-| 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
+| 03:45 UTC daily | `recompute_tag_covers` | Daily | Since 2026-08-31 also fills `Franchise/Company.game_count+version_count` and `Genre/Theme.game_count+player_count+avg_rating` -- the columns the Franchises/Companies/Genres browse pages FILTER on, so a browse-visible entity's counts are at most a day stale and a brand-new entity appears after this run. (Its reads are link tables + games/players/ratings; it does NOT depend on `recalc_earn_rates` -- the slot order is historical) |
+| ~~05:30 UTC daily~~ | ~~`recompute_milestones`~~ | **Folded into `nightly` (step 4)** | Do NOT create a separate entry. The old 05:30 slot existed to follow `recalc_profile_counters`, but that dependency is not real: no milestone metric reads any of the four counters that job writes. |
 | 04:45 UTC daily | `evaluate_contract_candidates` | Daily | Runs AFTER `update_shovelware` (04:00 -- the shovelware override reads the flags): evaluates the media-density contract rule over new/changed trusted matches, auto-STAGES Tier A contracts (`is_live=False`, jobs auto-suggested, `--max-stage 150`/run in player-demand order) and maintains the ContractCandidate review/snooze queues in admin. Idempotent; `--dry-run` to preview |
-| 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
 | Weekly (Sunday 07:00 UTC) | `enrich_from_igdb --refresh --max-minutes 90` | Weekly | None |
-| Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
+| ~~Weekly (Monday 08:00 UTC)~~ | ~~`send_weekly_digest`~~ | **PAUSED (2026-08)** | Parked with the non-vital emails pending the email-system rebuild. `WEEKLY_DIGEST_SEND_ENABLED` defaults to False, so the command no-ops even if the job runs. |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
-| 3rd of month, 06:00 UTC | `send_monthly_recap_emails` | Monthly | `generate_monthly_recaps` must have completed first |
+| ~~3rd of month, 06:00 UTC~~ | ~~`send_monthly_recap_emails`~~ | **PAUSED (2026-08)** | Monthly recap rebuild in progress. `MONTHLY_RECAP_SEND_ENABLED` defaults to False, so the command no-ops even if the job runs. Stops the in-app notification too (dispatched from inside the email loop). |
 
 ---
 
@@ -64,24 +69,155 @@ shovelware override reads the flags it writes. Idempotent; one bad row cannot ab
 
 > **Removed: `refresh_homepage_daily`.** This command was retired when the homepage redesign collapsed onto the dashboard. There are no daily-cached "featured games / featured badges / featured checklists" sources anymore; the dashboard's Recent Platinums, Recent Badges, and Top Studios modules took their place. Disable any legacy Render Cron entry pointing at it.
 
-### update_leaderboards
+> ### FOLLOW-UP: fold the remaining nightly commands into `nightly`
+>
+> **The badge chain is folded into `nightly`; the rest of the nightly work is not, yet.** These six still
+> sit on their own Render entries, with ordering expressed as wall-clock spacing:
+>
+> | time (UTC) | command |
+> |---|---|
+> | 02:00 | `populate_title_ids` |
+> | 03:00 | `recalc_earn_rates` |
+> | 03:30 | `recalc_profile_counters` |
+> | 03:45 | `recompute_tag_covers` |
+> | 04:00 | `update_shovelware` |
+> | 05:30 | `recompute_milestones` |
+>
+> RESOLVED 2026-08: the example this block used -- `recompute_milestones` needing `recalc_profile_counters` -- was never a real dependency. `recalc_profile_counters` writes only `total_bronzes/silvers/golds/plats`, and no milestone metric reads any of them; the metrics read `total_trophies` and `total_completes`, whose only writers are `sync_complete` and the profile settings POST. No cron ordering can influence those. `recompute_milestones` is now step 4 of `nightly`, where its REAL dependencies (badge standings, ProfileJobXP) are written earlier in the same run and enforced by the step order rather than by wall-clock spacing.
 
-- **Schedule**: Every 6 hours
-- **Command**: `python manage.py update_leaderboards`
-- **What it does**: Recomputes all badge leaderboards and caches the results with a 7-hour TTL. Covers: per-series earners leaderboard, per-series progress leaderboard, total progress leaderboard, total XP leaderboard, and community series XP totals. Iterates over every live badge series.
-- **Dependencies**: Badge data should be reasonably current. No hard ordering dependency, but running after a badge series refresh gives more accurate results.
-- **Idempotency**: Fully safe to re-run. Overwrites existing cache keys.
-- **Failure impact**: Leaderboard pages show stale data until the cache expires (7h TTL). Individual series failures are caught and logged without blocking other series.
+### nightly
+
+**This is the only nightly cron entry for the badge chain** (see the follow-up above for the six that are
+still separate). It runs the badge maintenance steps in DEPENDENCY order and
+replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh`,
+`audit_badge_coverage`).
+
+- **Command**: `python manage.py nightly`
+- **Order** (dependency, not preference):
+  1. `evaluate_badges --all` -- writes the standing tables
+  2. `detect_dlc_and_refresh` -- re-evaluates series whose games gained DLC (writes the same tables)
+  3. `audit_badge_coverage` -- read-only curator email, least urgent
+
+  (There was a fourth, `recalc_board_entrants`, which counted the standings the first two write. It went
+  with the board directories in 2026-08 -- the `BadgeSeries.entrants` / `Job.entrants` columns it
+  maintained existed only so those directories could gate and sort across the catalogue, and the
+  per-entity Ranks panels each do one scoped, indexed count instead.)
+- **Why one entry**: the ordering used to be wall-clock spacing (04:00 and 04:30). Thirty minutes is a
+  guess, and `evaluate_badges --all` walks every linked profile -- when it outgrows the gap the two
+  overlap, and two processes call `recompute_standing` for the same profiles. That now takes a
+  per-profile lock, so a race serializes rather than corrupting -- but two full passes over ~300,000
+  profiles serializing is not a thing to leave scheduled.
+- **Failure behaviour**: each step is isolated, so one failure does not cancel the rest -- "the DLC sweep
+  failed" should not also cost you the coverage email. The command still exits NON-ZERO if any step
+  failed, so the run goes red rather than green-with-an-error-in-the-logs.
+- **Operator flags**: `--dry-run` lists the order, `--only '<label>'` re-runs one step after a failure
+  without repeating the expensive evaluation, `--skip '<label>'` is repeatable.
+- **The two drift nets (steps 3 and 4)**: sync only evaluates what a sync TOUCHED, so anything authored
+  after a hunter last touched the relevant game is invisible to them forever without a sweep.
+  `evaluate_badges --all` has always been that net for badges; contracts and milestones had none. A
+  Contract published for a game 10,000 hunters had already platinumed reached exactly zero of them until
+  `process_contracts --all` was added here in 2026-08.
+- **Adding nightly work**: add a step to `STEPS` in `core/management/commands/nightly.py`, NOT a new cron
+  entry. Tests assert every step names a real command, that both drift nets are present, and that the
+  order respects its two real dependencies (the DLC sweep after the evaluation whose tables it rewrites;
+  contract detection after the DLC sweep, which rewrites the `ProfileGame.progress` it reads).
+
+### evaluate_badges --all
+
+- **Schedule**: Runs as step 1 of `nightly` (04:00 UTC). **No standalone Render entry** -- a second one would run this a second time, concurrently, over every profile.
+- **Command**: `python manage.py evaluate_badges --all`
+- **What it does**: Re-evaluates every live group badge for every profile and rewrites the standings from
+  scratch (`UserGroupBadge`, `SeriesBadgeStanding`, `SeriesEditionStanding`, `ProfileBadgeStanding`,
+  `ProfileEditionStanding`).
+- **What it costs**: unchanged by the 2026-08 addition of `SeriesEditionStanding` on the CPU side (the
+  per-edition figures were already computed in the loop that writes `group_progress`), but it is more
+  rows WRITTEN -- one per started edition per engaged series, on top of the one per series. Bounded by
+  storing only STARTED editions rather than every earnable one, which is roughly half the map on a
+  two-edition series and the difference between a table that tracks engagement and one that tracks the
+  catalogue.
+- **Why it exists**: sync evaluates only the series a hunter TOUCHED, which is what keeps `sync_complete`
+  cheap. That leaves three gaps this pass closes: a badge authored after a hunter's last sync, a stage or
+  `PlatformGroup` edited by a curator, and any evaluation that failed and was swallowed by the non-fatal
+  wrapper in `_job_sync_complete`. Same shape as `recalc_earn_rates`: incremental in steady state, a
+  nightly recompute-from-scratch as the drift-correction net.
+- **Dependencies**: TokenKeeper sync caught up, so the completion signals it reads are current.
+- **Idempotency**: Fully safe to re-run — the engine is pure and the standings are a full replace.
+- **Failure impact**: newly authored badges and curator edits do not reach hunters who did not touch those
+  series; already-evaluated standings stay correct. Announcements are NOT sent by this path -- `evaluate_and_apply_batch`
+  has no `notify` parameter at all, so silence is structural rather than a default -- and a re-run cannot
+  spam Discord.
+
+> **Removed: `update_leaderboards`.** It rebuilt the LEGACY Redis badge leaderboards (per-series earners +
+> progress, total progress, total XP, community series XP) every 6 hours. Every board it fed now reads
+> indexed Postgres columns written by the badge write seam -- see
+> [leaderboard-system](../architecture/leaderboard-system.md). **DELETE the Render Cron entry when the rebuild
+> branch deploys.** Not merely disable, and not harmless: the command FILE is deleted, so the entry now
+> fails with `Unknown command: update_leaderboards` every 6 hours and will alert.
 
 ### detect_dlc_and_refresh
 
-- **Schedule**: Daily (04:30 UTC)
+- **Schedule**: Runs as step 2 of `nightly`. **No standalone Render entry.**
 - **Command**: `python manage.py detect_dlc_and_refresh`
-- **What it does**: Detects games that gained **new DLC** since the last run -- a new `TrophyGroup` on a game that already existed before the scan window (a brand-new game's groups are all created together with none predating it, so it is ignored). New DLC can drop earners below 100%, so for each affected concept the command refreshes the **whole badge series** it belongs to (re-evaluates every earner via `handle_badge` + rebuilds the series leaderboards) through the shared `badge_refresh_service` -- the same refresh as `refresh_badge_series`. It **also recomputes every owner's completion %** for the affected games: DLC grows the trophy total, leaving each owner's stored `ProfileGame.progress` (a PSN-reported, grade-weighted value) overstated until they re-sync. The recompute is a bounded DB-side `progress = round(earned_trophies_count / new_total * 100)` UPDATE per game (whale-safe; no per-row iteration). It is a count-based approximation of PSN's grade-weighted %, but **exact at the 100%->below boundary** (the visible "falsely completed" bug) since new DLC trophies are unearned by all -- only the denominator moved; PSN restores the exact value on each owner's next sync. Uses a Redis watermark (`dlc_detection:last_run`); `--since <iso>` overrides it, `--dry-run` reports affected series + games without writing or advancing the watermark.
+- **What it does**: Detects games that gained **new DLC** since the last run -- a new `TrophyGroup` on a game that already existed before the scan window (a brand-new game's groups are all created together with none predating it, so it is ignored). New DLC can drop earners below 100%, so for each affected concept the command re-evaluates the **whole badge series** it belongs to, across every live edition, via `badge_apply.evaluate_and_apply_batch` over every profile that has played a game in the series. Awards and revokes both fall out of that: DLC can newly qualify a hunter as easily as it lapses one. The batch entry point takes no `notify` parameter, so an automated sweep is silent by construction. It **also recomputes every owner's completion %** for the affected games: DLC grows the trophy total, leaving each owner's stored `ProfileGame.progress` (a PSN-reported, grade-weighted value) overstated until they re-sync. The recompute is a bounded DB-side `progress = round(earned_trophies_count / new_total * 100)` UPDATE per game (whale-safe; no per-row iteration). It is a count-based approximation of PSN's grade-weighted %, but **exact at the 100%->below boundary** (the visible "falsely completed" bug) since new DLC trophies are unearned by all -- only the denominator moved; PSN restores the exact value on each owner's next sync. Uses a Redis watermark (`dlc_detection:last_run`); `--since <iso>` overrides it, `--dry-run` reports affected series + games without writing or advancing the watermark.
 - **Dependencies**: TokenKeeper sync should be reasonably current (a game's new DLC TrophyGroup is created during sync, which is what this detects).
 - **Idempotency**: Safe to re-run. Re-refreshing a series is idempotent (it re-evaluates from current state). If the watermark is lost (Redis flush), it falls back to a 3-day lookback and re-scans -- harmless.
 - **Failure impact**: Badge series with new DLC stay un-refreshed until the next run, so a few earners may show a stale (still-earned) badge tier they've technically lapsed. Per-series failures are caught and logged without blocking the others.
-- **Branch note**: the per-earner lapse behavior comes from `handle_badge` (hard-delete on `main`, `status='maintenance'` on `rebuild`); this command is agnostic to it.
+- **Lapse behavior**: holds are binary in the current engine -- a revoke DELETES the `UserGroupBadge` row. There is no maintenance state.
+
+### process_contracts --all
+
+- **Schedule**: Runs as step 3 of `nightly`. **No standalone Render entry.**
+- **Command**: `python manage.py process_contracts --all`
+- **What it does**: Re-runs Contract reach-detection against every eligible profile's CURRENT
+  `ProfileGame` / `EarnedTrophy` state and stamps `EarnedContract.*_reached_at`, making the reward
+  claimable. Detection only: it grants NO XP, because banking a reward stays a deliberate user action.
+- **Why it must be scheduled**: `sync_complete` only detects contracts for the games that CHANGED on that
+  sync, and the fingerprint fast path touches nothing at all. So a Contract published after a hunter
+  already completed its game is never detected by any automatic path. This is that path.
+- **Ordering**: after `detect_dlc_and_refresh`, which rewrites `ProfileGame.progress` for games that
+  gained DLC. Running it first would stamp reaches the DLC sweep immediately invalidates.
+- **Whale-safety**: for each live Contract it first narrows to the profiles that actually completed a
+  member game (a couple of bounded queries), then runs detection for just those candidates. It never
+  scans the whole userbase per Contract.
+- **Ad hoc**: `--user <psn_username>` for one account, `--dry-run` to preview. Worth running by hand
+  right after publishing a Contract if you do not want to wait for the nightly.
+
+### announce_contracts
+
+- **Schedule**: Daily, after `nightly` has finished (so a wave published by a curator during the day
+  and a wave made claimable overnight both land in one post). **Silent when there is nothing new**,
+  which is most days -- publishing happens in bursts.
+- **Command**: `python manage.py announce_contracts`
+- **What it does**: Posts newly published Contracts to Discord (`DISCORD_PLATINUM_WEBHOOK_URL`),
+  grouped by JOB rather than listed flat, with a link to the board with the Latest filter applied.
+- **What counts as "new"**: `is_live=True` AND `went_live_at` stamped AND `announced_at` null. That
+  triple answers the admin-review question structurally: a staged or review-queued candidate is
+  `is_live=False`, so it has no `went_live_at` and can never reach the announcer. **Publishing is
+  the only act that makes a contract announceable**, which puts the editorial gate where it belongs.
+- **The launch set is excluded for free**: those ~1,000 badge-derived contracts went live before
+  the column existed, so they carry NULL and the first run after cutover says nothing. What keeps
+  that true afterwards is `Contract.save()` stamping only on the TRANSITION to live -- under the
+  older "live and unstamped" rule, a curator editing a launch-era contract republished it.
+- **Idempotency**: a COLUMN (`Contract.announced_at`), stamped only after a confirmed 2xx. A failed
+  post leaves the whole wave pending for the next run; a second run in the same window is silent. A
+  column rather than a Redis watermark deliberately: a lost watermark re-announces everything behind
+  it, and one that runs ahead silently swallows a wave.
+- **The wave-size guard**: refuses a wave over `MAX_WAVE` (40) without `--force`. A legitimate wave
+  is 10-30; far past that means a bulk publish (a staff sweep over hundreds of staged candidates in
+  one changelist action), and the post would be a wall. The operator's answer is `--baseline`
+  (record the backlog as already known, posting nothing) or `--limit N` to trickle. `--dry-run` and
+  `--test-webhook` are exempt: inspecting an oversized wave is how you decide between those two.
+- **The post's link widens when the wave has aged out.** `announced_at` and the 14-day Latest
+  window answer different questions and share no floor, so a long webhook outage or a `--limit`
+  trickle can produce a legitimate post about contracts already outside the window. The link only
+  filters the board to Latest when the WHOLE wave is still inside it.
+- **Embed size is enforced against the assembled string**, not approximated by the line caps: over
+  Discord's 4096 limit the POST 400s, the wave is never stamped, and the identical wave then fails
+  identically every night until someone runs `--limit` by hand.
+- **Ad hoc**: `--dry-run` prints the payload and writes nothing; `--test-webhook` posts to
+  `DISCORD_TEST_WEBHOOK_URL` and deliberately does NOT stamp, so a preview cannot consume a wave.
+- **Failure impact**: the community is not told about a wave. Nothing else depends on it: the
+  Latest chip and the New marker read `went_live_at`, not `announced_at`.
 
 ### process_art_reveals
 
@@ -92,7 +228,9 @@ shovelware override reads the flags it writes. Idempotent; one bad row cannot ab
 - **Idempotency**: Fully safe to re-run. It reconciles the released set to the current count each run (forward-only), and the event row is locked so overlapping runs can't double-release. A missed run self-heals on the next.
 - **Failure impact**: Artwork reveals lag behind the true community count until the next successful run; the banner/page show the last stored count. No data loss.
 
-### process_scheduled_notifications
+### process_scheduled_notifications — PAUSED (2026-08)
+
+> Paused on Render while the notification system is [hidden pending rebuild](../architecture/notification-system.md). This was the only outbound delivery path still live, and with the staff compose UI unrouted nothing new can be scheduled anyway — but the job would keep delivering rows already queued. The command and its schedule are otherwise unchanged; un-pausing is a dashboard toggle.
 
 - **Schedule**: Every hour
 - **Command**: `python manage.py process_scheduled_notifications`
@@ -100,15 +238,6 @@ shovelware override reads the flags it writes. Idempotent; one bad row cannot ab
 - **Dependencies**: None. Staff schedule notifications through the admin UI; this command just delivers them when they are due.
 - **Idempotency**: Safe to re-run. The `skip_locked` and status transition (`pending` to `processing` to `sent`) prevent double delivery. Already-sent notifications are ignored.
 - **Failure impact**: Scheduled announcements are delayed until the next successful run. Failed individual notifications are marked with `failed` status for admin visibility.
-
-### check_subscription_milestones
-
-- **Schedule**: Daily
-- **Command**: `python manage.py check_subscription_milestones`
-- **What it does**: Evaluates `subscription_months` milestones for every user with an active (open-ended) `SubscriptionPeriod`. Awards milestones at duration thresholds (e.g., 1 month, 3 months, 6 months, 1 year). Only queries profiles whose `SubscriptionPeriod.ended_at` is NULL, so non-subscribers are skipped entirely.
-- **Dependencies**: None. Subscription periods are maintained by webhook handlers.
-- **Idempotency**: Fully safe to re-run. The milestone service skips already-awarded milestones.
-- **Failure impact**: Users receive subscription milestones a day late. No data loss.
 
 ### populate_title_ids
 
@@ -134,7 +263,7 @@ historical pass after Phase 3's rematch run.
 
 - **Schedule**: Daily, 03:00 UTC
 - **Command**: `python manage.py recalc_earn_rates`
-- **What it does**: Recomputes `Game.played_count`, the game's denormalized community stats (`plats_earned_count`, `full_completion_count`, `avg_completion`, `monthly_players_count` — all from the same single ProfileGame `GROUP BY`, so they share one population/denominator with `played_count`), `Game.total_earns_count` (summed from the per-trophy earned counts already in memory, so it costs no extra query), and `Trophy.earned_count` / `Trophy.earn_rate` site-wide using bulk `GROUP BY` aggregates. Processes games in chunks (default 200/chunk); Trophy rows are `bulk_update`d only when a value changed, while Game rows are refreshed every run (the six Game stats are rewritten each pass). Hard caps wall time via `--max-minutes` (default 30) so the cron can't run away.
+- **What it does**: Recomputes `Game.played_count`, the game's denormalized community stats (`plats_earned_count`, `full_completion_count`, `avg_completion`, `monthly_players_count`, `monthly_earners_count` — all from the same single ProfileGame `GROUP BY`, so they share one population/denominator with `played_count`; the last two look alike but are NOT interchangeable, `monthly_players_count` counting owners who LAUNCHED the game in 30 days and `monthly_earners_count` those who EARNED A TROPHY in it, which is the signal the Browse Games Trending sort orders by), `Game.total_earns_count` (summed from the per-trophy earned counts already in memory, so it costs no extra query), and `Trophy.earned_count` / `Trophy.earn_rate` site-wide using bulk `GROUP BY` aggregates. Processes games in chunks (default 200/chunk); Trophy rows are `bulk_update`d only when a value changed, while Game rows are refreshed every run (the seven Game stats are rewritten each pass). Hard caps wall time via `--max-minutes` (default 30) so the cron can't run away.
 - **Why it exists**: These global aggregates used to be recomputed inline on every per-profile `sync_complete` job (in `psn_api_service.update_profilegame_stats`). Under concurrent sync completions that pattern fanned out into many simultaneous full-table aggregation queries, pegging DB CPU and starving the web service of capacity until containers OOM'd (May 2026 incident). Decoupling this into a single daily reconcile run was the structural fix.
 - **Dependencies**: None. Read-heavy; ideally runs in a low-traffic window.
 - **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
@@ -142,6 +271,16 @@ historical pass after Phase 3's rematch run.
 - **Resume cursor**: a run that exhausts `--max-minutes` stores the last fully-processed `Game.id` in `recalc_earn_rates:cursor` (see [redis-keys](../reference/redis-keys.md)); the next run resumes just past it and wraps around. Without this, a job that always hits its budget would restart at id 0 every night and never reach the tail of the catalogue. A completed pass clears the cursor; `--game-ids` and `--dry-run` leave it untouched.
 - **Statement timeout**: the command raises `statement_timeout` on its own connection, so it behaves identically whichever service's shell launches it — the web service deliberately runs a 15s ceiling (`DB_STATEMENT_TIMEOUT_MS`), which would kill these chunk aggregates.
 - **Gotcha — this cron is now on the render path.** The game-detail community stats row reads these six columns directly (zero queries, no cache). If this job stops running, that row silently freezes rather than erroring; if the columns were never backfilled after the migration that added them, it reads `0`. Any newly added stat on that row must be denormalized here rather than computed in the view: they used to be live per-request aggregates, and `total_earns` in particular counted EarnedTrophy across every trophy in the game, which could outlast the gunicorn worker timeout on a popular title. This is also why the resume cursor matters: an unreached game now serves `0` rather than merely stale data.
+
+### recompute_tag_covers
+
+- **Schedule**: Daily, 03:45 UTC
+- **Command**: `python manage.py recompute_tag_covers`
+- **What it does**: Materializes browse read-models across four grouping models — `Genre`, `Theme`, `Franchise`, and `Company`. (1) **`representative_game`** (all four) — the grouping's browse-tile + detail-hero cover: a CONTRACT game (curated Job-Board entry, so tiles favour recognizable titles) with a STABLE per-grouping variety shuffle (a hash of grouping+game id, so adjacent tiles differ but a tile never reshuffles between page loads), bounded to the most-recent `POOL_CAP` (50) contract members; falls back to the most-recent member with real cover art, then any most-recent member. The **franchise** cover pick additionally honors the `ConceptFranchise.is_excluded` / `is_spinoff` link flags (curated exclusions + spin-offs never provide the art); companies have no such flags. (2) **`related_tags`** (Genre/Theme only) — the detail-page rail: the top-`RELATED_N` (6) OTHER same-type tags ranked by game co-occurrence (genres/themes whose games overlap this one's the most), stored as an ordered slug list. `bulk_update`s only the rows whose picks changed. All four models are driven off a shared `CONFIGS` list (one config entry per model).
+- **Why it exists**: All were originally per-request queries whose cost grows with the catalogue / contract-catalogue size (a correlated cover subquery per tile; a co-occurrence GROUP BY over a tag's games per detail load). Materializing them off the request path makes the pages read them O(1), so they scale regardless of how large contracts or franchises get. Slow-changing derived data → a textbook denorm/read-model (same pattern as `recalc_earn_rates`' community stats).
+- **Dependencies**: None. Uses an indexed `EXISTS` on `Contract.igdb_id`; read-heavy over a bounded taxonomy (~20 genres / ~40 themes) plus the franchise/collection + company sets.
+- **Idempotency**: Fully safe to re-run — recomputes from scratch and the pick is stable (a re-run does not reshuffle). `--dry-run` reports how many covers would change without writing.
+- **Failure impact**: Tile covers get up to 24 hours stale (they shift only as new games sync into a grouping). A brand-new genre/theme/franchise with no materialized pick yet renders the neutral glyph placeholder until the next run — never an error.
 
 ### recalc_profile_counters
 
@@ -156,12 +295,22 @@ historical pass after Phase 3's rematch run.
 
 ### audit_badge_coverage
 
-- **Schedule**: Daily, 05:00 UTC
+- **Schedule**: Runs as step 5 of `nightly`. **No standalone Render entry.**
 - **Command**: `python manage.py audit_badge_coverage` (add `--always` for a daily heartbeat email even when there are no gaps)
 - **What it does**: For each tier-1 badge that tracks a franchise and/or developer, checks that every non-excluded franchise-linked concept / developed game is covered by one of the badge's series stages. Emails any gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game shipped and needs adding to the badge (or a data error). See [Management Commands](management-commands.md). Logic lives in `trophies/services/badge_coverage_service.py`.
 - **Dependencies**: None. Read-only. More accurate after IGDB enrichment (franchise/developer + concept links) is current.
 - **Idempotency**: Fully safe to re-run; pure read + email. By default sends mail only when gaps exist.
 - **Failure impact**: Staff miss a day of "new game not in its badge" alerts; no data effect. Re-running catches up.
+
+### recompute_milestones
+
+- **Schedule**: Runs as step 4 of `nightly`. **No standalone Render entry.**
+- **Command**: `python manage.py recompute_milestones`
+- **What it does**: Sweeps every community-member profile (a site account OR a verified Discord link — `milestones.services.member_q`; scouts / unregistered syncs excluded), recomputing each active milestone ladder (platinums, trophies, completions, badges, Pursuer level, playtime, tenure, premium), awarding any newly-crossed tiers and writing the materialized progress read-model. Then drift-corrects every tier's `earned_count` and refreshes the cached rarity denominator (`total_hunters`). Milestones are also recomputed per-profile at the end of each PSN sync (`token_keeper` `sync_complete`); this daily sweep is the safety-net + the **only** refresh of the rarity denominator. Logic in `milestones/services.py`; see [milestones-revamp](../design/milestones-revamp.md).
+- **Dependencies**: none from cron. Its real inputs (badge standings, ProfileJobXP) are written earlier in the same `nightly` run, and the profile counters it reads are written by `sync_complete`, which no cron ordering can influence. The old "schedule after `recalc_profile_counters`" line was never a real dependency.
+- **Discord**: Runs WITHOUT `--reconcile-discord` (roles are kept current by the per-sync + on-link reconcile). Add `--reconcile-discord` for a periodic role safety-net (heavier — one bot call per linked profile with a role delta). **After (re)configuring a milestone's Discord `discord_role_id` on an already-earned tier, or retiring a milestone, run a one-off `python manage.py recompute_milestones --reconcile-discord`** — the per-sync path only reconciles on a *newly crossed* rung, so a config change to existing holders won't propagate on its own.
+- **Idempotency**: Fully safe to re-run; already-earned rungs are never re-awarded. `--reset` (optionally `--milestone <slug>`) wipes + re-derives a ladder against changed thresholds.
+- **Failure impact**: Milestone pages show yesterday's progress + a stale/absent rarity denominator until the next run; per-sync recompute still updates any actively-syncing hunter. Re-running catches up.
 
 ### update_shovelware
 
@@ -210,7 +359,12 @@ historical pass after Phase 3's rematch run.
 - **Idempotency**: Safe to re-run. Uses `get_or_generate_recap()` which returns existing recaps if already generated. The finalize step is also idempotent (already-finalized recaps are skipped).
 - **Failure impact**: Recap emails cannot be sent (they require finalized recaps). Users cannot view their monthly recap page until recaps are generated.
 
-### send_weekly_digest
+### send_weekly_digest — PAUSED (2026-08)
+
+Parked with the rest of the non-vital emails pending the email-system rebuild (only auth,
+billing, fundraiser, and the membership welcome emails still send). `WEEKLY_DIGEST_SEND_ENABLED`
+defaults to False so the command fails safe if the cron fires; suspend the Render cron itself
+at the next deploy (see the prod deploy checklist).
 
 - **Schedule**: Monday at 08:00 UTC
 - **Command**: `python manage.py send_weekly_digest`
@@ -262,11 +416,9 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
                         process_scheduled_notifications
 
 
-    EVERY 6 HOURS ──── update_leaderboards
 
 
-    DAILY ──────────── check_subscription_milestones
-                        populate_title_ids
+    DAILY ──────────── populate_title_ids
                             |
                             v
                         update_shovelware
@@ -301,7 +453,7 @@ Key ordering rules:
 There is no centralized cron job monitoring dashboard. Use these approaches to verify job execution:
 
 - **Render dashboard**: Each cron job shows its last run time and exit status in the Render Cron Jobs panel. Check the job's log output for success/error messages.
-- **Redis cache keys**: For cache-warming jobs (`refresh_homepage_hourly`, `refresh_homepage_daily`, `update_leaderboards`), you can verify freshness by checking the cache key timestamps:
+- **Redis cache keys**: For cache-warming jobs (`refresh_homepage_hourly`), you can verify freshness by checking the cache key timestamps:
   - `python manage.py redis_admin --flush-index` lists current index cache keys (use with caution, this flushes them)
   - Leaderboard keys include a `_refresh_time` companion key (e.g., `lb_total_progress_refresh_time`) storing an ISO timestamp
 - **Database records**: For monthly recap jobs, check `MonthlyRecap.email_sent`, `email_sent_at`, `notification_sent`, `notification_sent_at` fields.
@@ -311,9 +463,9 @@ There is no centralized cron job monitoring dashboard. Use these approaches to v
 
 - **Missing site heartbeat ribbon**: If the "PlatPursuit at a Glance" ribbon disappears from every home shell, `refresh_homepage_hourly` has been failing for at least two consecutive hours (the partial silently hides when both the current and fallback buckets are empty). Check the Render cron logs.
 - **Leaderboard staleness**: Each leaderboard page shows a "Last updated" timestamp sourced from the `_refresh_time` cache key.
-- **Sync queue backlog**: If profiles are not updating, check the TokenKeeper stats via `redis_admin` or the token monitoring admin page (`/staff/token-monitoring/`).
+- **Sync queue backlog**: If profiles are not updating, check the TokenKeeper stats via `redis_admin` or the token monitoring admin page (`/monitoring/tokens/`).
 - **Missing recap emails**: On the 3rd-4th of each month, spot-check that recap emails were sent by querying `MonthlyRecap.objects.filter(email_sent=False, is_finalized=True)`.
-- **Subscription milestones**: If a subscriber reports missing a milestone, run `check_subscription_milestones --dry-run` to verify the job would catch them.
+- **Premium tenure milestones**: Now the `premium_months` ladder in the milestones app — if a subscriber reports a missing tier, run `recompute_milestones --profile <psn_username>`.
 
 ### Manual re-runs
 

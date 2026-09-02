@@ -1,8 +1,33 @@
-{# Profile browse results partial. Returned on HTMX requests. #}
-{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+{% load humanize %}{% comment %} Hunter browse results (grid only, infinite scroll).
 
-<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-2.5">
+Returned on HTMX filter/sort swaps AND on the InfiniteScroller's `?page` fetches (which arrive as XHR and
+are routed here by the HtmxListMixin guard) -- the scroller lifts the `.pp-hcard` nodes out of this and
+appends them. The sentinel + spinner live in profile_list.html, OUTSIDE #browse-results, so a filter swap
+replaces only the grid and never tears down the scroll machinery.
+
+`data-result-count` carries the total for the current filter; the header's Tally reads it off the freshly
+swapped grid in `htmx:afterSwap` and counts old -> new.
+
+`pp-reveal` is baked in on HTMX swaps ONLY. The grid keeps `id="items-grid"` across swaps, so htmx's settle
+phase restores this element's server-rendered class list AFTER our afterSwap handler runs -- adding the
+class in JS gets stripped, which leaves infinite-scroll-appended cards visible in final position and then
+flashes them through the reveal. Baking it in makes settle preserve it. It is NOT emitted on the full SSR
+page (JS adds it there), so a JS-off or reduced-motion visitor never meets a wall of invisible cards.
+{% endcomment %}
+<div id="items-grid" class="pp-hbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
     {% include 'trophies/partials/profile_list/profile_cards.html' %}
 </div>
 
-{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
+{% if not object_list %}
+<div class="pp-hbrowse__empty">
+    <span class="pp-hbrowse__empty-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </span>
+    <p class="pp-hbrowse__empty-t">No hunters match that</p>
+    <p class="pp-hbrowse__empty-s">
+        {% if request.GET.query %}Nobody here goes by &ldquo;{{ request.GET.query }}&rdquo;. Try a shorter spelling.
+        {% elif request.GET.country %}No hunters from that country have synced yet.
+        {% else %}Try widening your search.{% endif %}
+    </p>
+</div>
+{% endif %}

@@ -107,18 +107,41 @@ BADGE_TYPES = [
     BADGE_TYPE_EVENT,
 ]
 
+# Which badge a game leads with when it belongs to several (browse cards, game detail, the plat card's
+# spine). The rule is about the ATTRIBUTION A SERIES CARRIES, not its `badge_type` label:
+#
+#     has a collection  ->  else has a franchise  ->  else has a developer  ->  else fallback
+#
+# These are independent nullable FKs on BadgeSeries and are NOT implied by badge_type -- a
+# `series`-type badge can carry a franchise, and ranking by the type label puts it below a badge with
+# no attribution at all. Ordering by type was the wrong axis and shipped once; this is the fix.
+#
+# One order site-wide on purpose: a game that leads with its Collection badge on a browse card should
+# lead with the same badge on its share card, or the two surfaces disagree about what the game "is".
+BADGE_ATTRIBUTION_FALLBACK_RANK = 3
+
+
+def badge_attribution_rank(collection_id=None, franchise_id=None, developer_id=None):
+    """Sort key for choosing among the badge series a game belongs to; lower wins.
+
+    Takes ids rather than a model so it serves both `BadgeSeries` instances and the `.values()` dicts
+    the batched browse-card query builds, without either having to materialise the related objects.
+    """
+    if collection_id:
+        return 0
+    if franchise_id:
+        return 1
+    if developer_id:
+        return 2
+    return BADGE_ATTRIBUTION_FALLBACK_RANK
+
+
 # Badge types that use concept-based stage completion (all stages must be complete).
 # Franchise + Event behave like Series (series_slug-grouped, concept/stage-based).
 CONCEPT_BASED_BADGE_TYPES = [BADGE_TYPE_SERIES, BADGE_TYPE_FRANCHISE, BADGE_TYPE_COLLECTION, BADGE_TYPE_DEVELOPER, BADGE_TYPE_USER, BADGE_TYPE_EVENT]
 
 # All badge types that have stage-based evaluation (concept-based + megamix)
 EVALUATABLE_BADGE_TYPES = CONCEPT_BASED_BADGE_TYPES + [BADGE_TYPE_MEGAMIX]
-
-# Milestone Criteria Types
-MILESTONE_CRITERIA_PLAT_COUNT = 'plat_count'
-MILESTONE_CRITERIA_COMPLETION_COUNT = 'completion_count'
-MILESTONE_CRITERIA_TROPHY_COUNT = 'trophy_count'
-MILESTONE_CRITERIA_MANUAL = 'manual'
 
 # Rating Scale
 RATING_MIN = 1
@@ -195,8 +218,23 @@ RARITY_LABELS = {
     'common': 'Common',
 }
 
+# PSN platform code -> display label. Only PSVITA actually differs from its code; the rest are here so a
+# caller can map a whole list without special-casing one member.
+#
+# `PlatformGroup.platforms` stores raw PSN codes, so anything RENDERING a group's platforms (the badge
+# how-it-works page) needs this. The browse forms each inline the same pairs as their `choices`; they are
+# left alone rather than refactored here, but this is where a shared list belongs when they are.
+PLATFORM_LABELS = {
+    'PS5': 'PS5',
+    'PS4': 'PS4',
+    'PS3': 'PS3',
+    'PSVITA': 'PS Vita',
+    'PSVR': 'PSVR',
+    'PSVR2': 'PSVR2',
+}
+
+
 # Premium Tier Identifiers (matches users.constants but duplicated here for trophies app)
-PREMIUM_TIER_AD_FREE = 'ad_free'
 PREMIUM_TIER_MONTHLY = 'premium_monthly'
 PREMIUM_TIER_YEARLY = 'premium_yearly'
 PREMIUM_TIER_SUPPORTER = 'supporter'
@@ -206,6 +244,14 @@ ACTIVE_PREMIUM_TIERS = [
     PREMIUM_TIER_MONTHLY,
     PREMIUM_TIER_YEARLY,
     PREMIUM_TIER_SUPPORTER,
+    # The six ladder levels (2026-08). Kept in lockstep with users/constants.py by the cross-check
+    # in test_ads_removed.py, which is the whole reason this duplicate is safe to have.
+    'backer',
+    'contributor',
+    'patron',
+    'sponsor',
+    'benefactor',
+    'cornerstone',
 ]
 
 # Tab Identifiers for ProfileDetailView

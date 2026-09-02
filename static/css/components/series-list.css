@@ -1,0 +1,599 @@
+/* ============================================================
+ * BADGES BROWSE -- the /badges/ Series view + shared page chrome, rebuilt to the --pp-* house style so
+ * the page reads as one piece next to the Browse Gallery. Reuses the Gallery's .pp-bgal__ toolbar (bar +
+ * Filters toggle + advanced panel) verbatim; the per-series TILE (.pp-scard) shows the series' live GROUP
+ * medallions (grouping-badge system).
+ * ============================================================ */
+
+/* View toggle (Series | Gallery) is now the shared .pp-switch component (components/switcher.css). */
+
+/* ── "How badges work" -> the FORGE JOURNEY, in a first-run MODAL (badge_howto.html): it auto-opens once on a
+ * first visit and never again. This block styles the modal shell; the .pp-forge body + its choreography
+ * (shared, below) render inside the dialog.
+ *
+ * The recall-button styles that used to open this block (.pp-howto-btn in the header, .pp-minibar__howto in
+ * the mini-bar) are deleted: the modal is one-shot now and the teaching lives at `badge_how_it_works`, so
+ * nothing renders those classes. `.pp-minibar__flbl` stays -- the sibling Filters buttons still use it. ── */
+
+/* The how-to modal shell: a wide, scrollable dialog over the shared .pp-detail-modal scrim/entrance
+ * (badge-inspect.css). Wide enough that the forge journey goes horizontal on desktop. */
+.pp-howto__dialog { width: min(940px, 100%); max-height: 88vh; overflow-y: auto; text-align: left; }
+.pp-howto__body { padding: 4px 2px; }
+.pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
+.pp-howto__title-icon { width: 20px; height: 20px; flex: 0 0 auto; color: var(--pp-primary); }
+/* Two children now: "Got it" leads and the page link trails it as the escape hatch. Wraps rather than
+   letting the link squeeze the button on a narrow phone. */
+.pp-howto__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; margin-top: 18px; }
+/* Quiet by design -- most readers are finished at "Got it"; this is for the ones who are not. */
+.pp-howto__more {
+    font-size: 12.5px; font-weight: 700; color: var(--pp-primary); text-decoration: none;
+    border-bottom: 1px solid color-mix(in oklab, var(--pp-primary) 40%, transparent);
+}
+@media (hover: hover) { .pp-howto__more:hover { border-bottom-color: var(--pp-primary); } }
+.pp-howto__more:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
+
+/* ── Browse Badges header, phone layout ──
+ *
+ * The same move the hunter-profile header makes (`.pp-phero__id`): reflow into the dead space rather than
+ * stack. The lede is nested under the title, so on a phone it renders in a ~233px column beside the tally
+ * and wraps to two lines, while the corner under the tally sits empty. Spanning it across both columns
+ * puts its ~263px into the 303px available -- one line, ~16px back, nothing given up.
+ *
+ * Named areas on NAMED elements, per the warning that block already carries: a structural selector like
+ * `> :first-child` would match whichever child happened to be first and re-break the moment one is added.
+ *
+ * Phone only. From 768px the lede has room in its own column, and the DOM is untouched, so md: up remains
+ * exactly the flex row the template's utility classes describe. */
+@media (max-width: 767px) {
+    .pp-bhead {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "title tally" "sub sub";
+        align-items: start; gap: 4px 12px;
+    }
+    /* No box of its own, so the title and the lede become grid items of the header row and can be placed
+       separately without unwrapping them in the markup. */
+    .pp-bhead__id { display: contents; }
+    .pp-bhead__title { grid-area: title; min-width: 0; }
+    .pp-bhead__sub   { grid-area: sub; margin-top: 0; }
+    .pp-bhead__tally { grid-area: tally; }
+}
+
+/* ── .pp-edhint: the ⓘ that points AT the edition vocabulary, from the three places it is spoken ──
+ *
+ * "Ultra HD" / "Legacy HD" come straight off PlatformGroup.name onto the badge detail group tabs, the
+ * gallery's platform filter chips and the Collection's edition stats. Each is a spot where a reader is
+ * asked to act on a word nobody has defined -- pick a tab, tick a chip, read a split of their own total
+ * -- which is where the question actually occurs, and why the answer is anchored here rather than behind
+ * a header button on a page they may never have opened.
+ *
+ * Kept separate from .pp-howto__more above (the trailing text link in the modal + empty states): same
+ * destination, different job. This one is an icon glued to a label in dense chrome and has to survive at
+ * 11px next to a filter heading; that one is a standalone call to action with room to breathe. Merging
+ * them would mean an inline-flex whose border-bottom underlines the icon.
+ *
+ * Deliberately quiet -- text-mute until hover. It answers a question a minority of readers have, and it
+ * sits beside controls that must stay the loudest thing in their row. */
+.pp-edhint {
+    cursor: pointer;   /* also a <button> now (the Career reopen); preflight gives buttons no pointer */
+    display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em; line-height: 1;
+    color: var(--pp-text-mute); text-decoration: none;
+    transition: color var(--pp-dur) var(--pp-ease);
+}
+.pp-edhint svg { width: 13px; height: 13px; flex: 0 0 auto; }
+@media (hover: hover) { .pp-edhint:hover { color: var(--pp-primary); } }
+.pp-edhint:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: 3px; }
+@media (prefers-reduced-motion: reduce) { .pp-edhint { transition: none; } }
+
+/* The standalone form: its own line, trailing the control it explains. Right-aligned so it reads as a
+   footnote to the block above rather than as a new item in it.
+   No margin of its own -- one consumer sits mid-page and needs the spacing, the other is the last child
+   of a header card where a bottom margin is just height on a phone. Each says what it needs. */
+.pp-edhint-row { display: flex; justify-content: flex-end; }
+/* The group switcher owns a 16px bottom margin. With the hint following it, that gap belongs BETWEEN the
+   switcher and its footnote, and the footnote takes over holding the page apart below -- otherwise the
+   hint floats midway between two blocks and attaches to neither. */
+.bd2-groupswitch:has(+ .pp-edhint-row) { margin-bottom: 6px; }
+.bd2-groupswitch + .pp-edhint-row { margin-bottom: 16px; }
+.pp-howto__got {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 128px; padding: 9px 22px; border-radius: 999px;
+    font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em; color: #06140d; cursor: pointer; border: 0;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 92%, white), var(--pp-primary));
+    box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    transition: transform var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-howto__got:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent); } }
+.pp-howto__got:focus-visible { outline: 2px solid var(--pp-text); outline-offset: 2px; }
+
+/* Close (out) animation. Fade the whole modal ROOT as one group (scrim + dialog + content together) so nothing
+ * lingers or "pops" out after the rest; the dialog adds a subtle settle on top. The id selector beats the shared
+ * .pp-detail-modal entrance rule -- equal-specificity class selectors tie and lose by source order (the same
+ * gotcha the badge-detail modals solve with #id). */
+#badge-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
+/* The dialog's settle is transform MOTION, so it's reduced-motion-gated (the id also overrides badge-inspect.css's
+   reduced-motion `animation: none`, which would otherwise leak the motion back in for those users). */
+@media (prefers-reduced-motion: no-preference) {
+    #badge-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+
+/* The Career howto exits the same way (audit-caught: without these ID-scoped rules it inherited
+   badge-inspect's unscoped is-closing treatment, which dissolves the dialog chrome around
+   still-opaque text instead of fading the whole modal). */
+#career-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }
+@media (prefers-reduced-motion: no-preference) {
+    #career-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+
+/* The 1.0 launch greeting exits the same way (every pp-howto clone needs its ID here or it
+   inherits badge-inspect's unscoped close -- chrome dissolving around still-solid text). */
+#launch-welcome.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }
+@media (prefers-reduced-motion: no-preference) {
+    #launch-welcome.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
+
+@keyframes ppHowtoFadeOut { to { opacity: 0; } }
+@keyframes ppHowtoDialogOut { to { transform: translateY(8px) scale(0.985); } }
+
+/* ── The forge journey body (shared: renders inside the how-to modal) ── */
+.pp-forge__lede { font-size: 13.5px; line-height: 1.55; color: var(--pp-text-dim); max-width: 72ch; margin-bottom: 16px; }
+
+/* The flow: mobile + tablet = a vertical stack (beats + short vertical connectors); lg+ = a horizontal row
+ * (four beats + three connectors need the desktop width to breathe). */
+.pp-forge__flow { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+@media (min-width: 1024px) { .pp-forge__flow { flex-direction: row; align-items: flex-start; justify-content: center; gap: 4px; margin-bottom: 10px; } }
+.pp-forge__beat { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 7px; padding: 6px 4px; }
+@media (min-width: 1024px) { .pp-forge__beat { flex: 1 1 0; max-width: 192px; } }
+/* A fixed-height art stage so the beats' captions line up regardless of the art's size. */
+.pp-forge__art { display: grid; place-items: center; height: 88px; }
+@media (min-width: 768px) { .pp-forge__art { height: 104px; } }
+.pp-forge__cap { display: inline-flex; align-items: center; gap: 6px; font-family: var(--pp-font-display); font-weight: 800; font-size: 13.5px; color: var(--pp-text); }
+.pp-forge__n {
+    display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+    font-size: 11px; font-weight: 800; color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, transparent);
+}
+.pp-forge__desc { font-size: 11.5px; line-height: 1.4; color: var(--pp-text-mute); max-width: 26ch; }
+
+/* Beat 1 -- the themed SET: a small fan of three game covers (pure CSS, no assets). */
+.pp-forge__fan { position: relative; width: 66px; height: 74px; }
+.pp-forge__cover {
+    position: absolute; left: 50%; top: 50%; width: 44px; height: 60px; margin: -30px 0 0 -22px; border-radius: 5px;
+    background: linear-gradient(150deg, color-mix(in oklab, var(--pp-text) 12%, var(--pp-bg-2)), var(--pp-bg-2));
+    border: 1px solid var(--pp-border); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.30);
+    transform-origin: bottom center;
+}
+.pp-forge__cover:nth-child(1) { transform: rotate(-15deg) translateY(2px); }
+.pp-forge__cover:nth-child(2) { z-index: 2; background: linear-gradient(150deg, color-mix(in oklab, var(--pp-primary) 24%, var(--pp-bg-2)), var(--pp-bg-2)); }
+.pp-forge__cover:nth-child(3) { transform: rotate(15deg) translateY(2px); }
+
+/* Beat 2 -- platinum EVERY game: a cluster of platinum trophies (centre one larger). */
+.pp-forge__plats { display: inline-flex; align-items: flex-end; gap: 5px; }
+.pp-forge__plats img { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35)); }
+.pp-forge__plats img:nth-child(2) { width: 40px; height: 40px; }
+
+/* Beats 3 + 4 -- the forged medallions (the real .pp-med object, sized for the header). */
+.pp-forge__art--med .pp-med { --sz: 84px; }
+@media (min-width: 768px) { .pp-forge__art--med .pp-med { --sz: 96px; } }
+
+/* Interactive forge medallions (tap -> the source badge's quick-peek). The hover lift/shine comes from the
+   .pp-med--earned component styles; here we just make the role=button wrapper feel tappable + keyboard-clear. */
+.pp-forge-peek { cursor: pointer; border-radius: 14px; }
+.pp-forge-peek:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; }
+
+/* Connector between beats: a line that draws in + a flow chevron. Vertical run on mobile/tablet, horizontal
+ * on lg+. The final leg (--master, beat 3 -> 4) is holo-tinted, since it is the mastery transformation. */
+.pp-forge__link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 2px 0; color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); }
+.pp-forge__line { display: block; width: 2px; height: 16px; border-radius: 2px; transform-origin: top; background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 55%, transparent), color-mix(in oklab, var(--pp-primary) 18%, transparent)); }
+.pp-forge__chev { width: 15px; height: 15px; flex: 0 0 auto; transform: rotate(90deg); }
+.pp-forge__link--master { color: #c9a7ff; }
+.pp-forge__link--master .pp-forge__line { background: linear-gradient(180deg, #8fd2ea, #c9a7ff 55%, #ffd36e); }
+@media (min-width: 1024px) {
+    .pp-forge__link { flex-direction: row; align-self: flex-start; margin-top: 42px; padding: 0 2px; }   /* align to the art row */
+    .pp-forge__line { width: 26px; height: 2px; transform-origin: left; background: linear-gradient(90deg, color-mix(in oklab, var(--pp-primary) 55%, transparent), color-mix(in oklab, var(--pp-primary) 18%, transparent)); }
+    .pp-forge__link--master .pp-forge__line { background: linear-gradient(90deg, #8fd2ea, #c9a7ff 55%, #ffd36e); }
+    .pp-forge__chev { transform: none; }
+}
+
+/* Editions legend: the two real edition medallions, labelled + platform-scoped, name tinted in its metal. */
+.pp-forge__editions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 22px; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--pp-border); }
+.pp-forge__ed { --card-metal: var(--pp-text-dim); display: inline-flex; align-items: center; gap: 10px; }
+.pp-forge__ed[data-tier="gold"]     { --card-metal: #e7c25c; }
+.pp-forge__ed[data-tier="platinum"] { --card-metal: #8fd2ea; }
+.pp-forge__ed-med .pp-med { --sz: 42px; }
+.pp-forge__ed-med .pp-med__count { display: none; }
+.pp-forge__ed-text { display: flex; flex-direction: column; line-height: 1.2; }
+.pp-forge__ed-name { font-family: var(--pp-font-display); font-weight: 800; font-size: 13px; color: var(--card-metal); }
+.pp-forge__ed-scope { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+
+.pp-forge__foot { font-size: 12px; line-height: 1.55; color: var(--pp-text-dim); margin-top: 14px; }
+/* "holographic" is set in an iridescent gradient text, so the word demonstrates the payoff it names. */
+.pp-forge__holo {
+    font-weight: 800;
+    background: linear-gradient(92deg, #8fd2ea, #c9a7ff 42%, #ffd36e 74%, #8fd2ea);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* ── Forge choreography. JS arms the section (.is-armed, added pre-paint only when motion is allowed) to hold
+ * the hidden start states, then lights it on reveal (.is-lit) -> beats rise + settle staggered, connectors
+ * draw, the payoff medallion mints (real .is-minting ceremony, added by JS) + its foil sweeps once, and the
+ * legend + foot fade in last. Without JS / under reduced motion, nothing is armed, so it all shows statically.
+ * `both` fill holds each element's end state after its animation. ── */
+.pp-forge.is-armed .pp-forge__beat,
+.pp-forge.is-armed .pp-forge__link,
+.pp-forge.is-armed .pp-forge__editions,
+.pp-forge.is-armed .pp-forge__foot { opacity: 0; }
+.pp-forge.is-armed .pp-forge__line { transform: scaleY(0); }
+@media (min-width: 1024px) { .pp-forge.is-armed .pp-forge__line { transform: scaleX(0); } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-forge.is-lit .pp-forge__beat { animation: ppForgeBeat 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    .pp-forge.is-lit [data-beat="1"] { animation-delay: 0.05s; }
+    .pp-forge.is-lit [data-beat="2"] { animation-delay: 0.28s; }
+    .pp-forge.is-lit [data-beat="3"] { animation-delay: 0.51s; }
+    .pp-forge.is-lit [data-beat="4"] { animation-delay: 0.74s; }
+    /* Connectors (flow children 2, 4, 6) draw in just after their preceding beat. */
+    .pp-forge.is-lit .pp-forge__link { animation: ppForgeFade 0.4s ease both; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(2) { animation-delay: 0.20s; }   /* after beat 1 */
+    .pp-forge.is-lit .pp-forge__link:nth-child(4) { animation-delay: 0.43s; }   /* after beat 2 */
+    .pp-forge.is-lit .pp-forge__link:nth-child(6) { animation-delay: 0.66s; }   /* after beat 3 (mastery leg) */
+    .pp-forge.is-lit .pp-forge__line { animation: ppForgeDrawY 0.42s ease both; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(2) .pp-forge__line { animation-delay: 0.20s; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(4) .pp-forge__line { animation-delay: 0.43s; }
+    .pp-forge.is-lit .pp-forge__link:nth-child(6) .pp-forge__line { animation-delay: 0.66s; }
+    .pp-forge.is-lit .pp-forge__editions { animation: ppForgeFade 0.5s ease 0.98s both; }
+    .pp-forge.is-lit .pp-forge__foot { animation: ppForgeFade 0.5s ease 1.12s both; }
+    /* The mastered medallion's foil sweeps once as beat 4 lands -- the holographic payoff (diagonal wipe, no
+       color-mix in the keyframe). Only beat 4 is .pp-med--holographic, so this targets it alone. */
+    .pp-forge.is-lit .pp-forge__art--med .pp-med--holographic .pp-med__foil { animation: ppForgeFoil 1.15s ease 0.9s 1; }
+}
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+    .pp-forge.is-lit .pp-forge__line { animation-name: ppForgeDrawX; }
+}
+@keyframes ppForgeBeat { from { opacity: 0; transform: translateY(12px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes ppForgeFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ppForgeDrawX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ppForgeDrawY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ppForgeFoil { 0% { background-position: 100% 0%; opacity: 0.15; } 45% { opacity: 0.62; } 100% { background-position: 0% 100%; opacity: 0.3; } }
+
+/* Series toolbar: the Series view uses the Gallery's compact toolbar verbatim -- .pp-bgal__bar + a Filters
+ * toggle + a collapsible .pp-bgal__advanced panel (all styled in browse-gallery.css). No Series-specific
+ * toolbar CSS is needed. */
+
+/* ============================================================
+ * SERIES VIEW -- the per-series TILE grid. Each tile is one badge SERIES: its identity (affiliation name +
+ * type + total earners) over a ROW of its live GROUP medallions (one per platform group). `--pp-list-accent`
+ * (the cyan focus ring) is declared on .pp-slist here for the Series view; the Gallery view declares its own
+ * on .pp-bgal (browse-gallery.css) since it doesn't nest inside .pp-slist.
+ * ============================================================ */
+.pp-slist { --pp-list-accent: rgba(63, 205, 220, 1); display: flex; flex-direction: column; gap: 12px; }
+/* The tile grid: compact cards, denser as the viewport grows. */
+.pp-slist__rows { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 768px)  { .pp-slist__rows { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-slist__rows { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1440px) { .pp-slist__rows { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+/* Scroll-reveal: JS adds .pp-reveal to the grid to HIDE the tiles, then reveals each (.is-revealed) and plays
+   the arrival via the Web Animations API -- reliable on first load AND an HTMX view swap (a CSS-class
+   animation on freshly-swapped nodes silently won't restart). These rules only hold the hidden base + revealed
+   final states; the motion lives in the JS (shared with the Gallery cells). Gated by prefers-reduced-motion;
+   without JS the class is never added, so tiles show normally. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-scard { opacity: 0; }
+    .pp-reveal .pp-scard.is-revealed { opacity: 1; }
+}
+
+/* ── The Series card (.pp-scard): the series identity (name + type + total earners) over a ROW of its live
+ * GROUP medallions -- one per platform group (Legacy HD / Ultra HD). Each group cell is a showcase medallion
+ * with an owned seal (holo when mastered), its platform name tinted in the medallion metal (--card-metal,
+ * matching the detail-page switcher), and its LIVE rarity grade. The heading links to the badge detail page;
+ * each medallion opens the group quick-peek. Badge art stays full-colour (greyscale-unearned reads
+ * "disabled"); ownership lives in the seal, not the art. */
+.pp-scard {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer;
+    padding: 14px 12px 13px; border-radius: var(--pp-radius-lg); scroll-margin-top: 96px;
+    background: linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 20px rgba(0, 0, 0, 0.28);
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) {
+    .pp-scard:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 20%, transparent),
+                    0 12px 30px -14px color-mix(in oklab, var(--pp-primary) 40%, #000);
+    }
+}
+
+/* Open link (name + type) -> the detail page. The group medallions below are separate links. */
+.pp-scard__open { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; text-decoration: none; color: inherit; }
+.pp-scard__open:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 6px; }
+.pp-scard__name {
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 13.5px; line-height: 1.15; text-align: center;
+    color: var(--pp-text); max-width: 100%; padding: 0 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    transition: color var(--pp-dur) var(--pp-ease);
+}
+.pp-scard:hover .pp-scard__name { color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text)); }
+/* Type + community earned count, on one line ("Series . 3,412 earned"). */
+.pp-scard__type { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-scard__type .pp-tally { font-size: 10.5px; color: var(--pp-text-dim); letter-spacing: 0; }
+
+/* Group row: one cell per platform group. 1 centres; 2 sit side by side; wraps on the narrowest tiles. */
+.pp-scard__groups { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 6px 12px; width: 100%; margin-top: 2px; }
+.pp-scard__group {
+    --card-metal: var(--pp-text-dim);
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    flex: 0 1 auto; min-width: 0; padding: 4px 2px; border-radius: 10px;
+    text-decoration: none; color: inherit;
+    transition: transform 0.15s var(--pp-ease);
+}
+.pp-scard__group[data-tier="bronze"]   { --card-metal: #cf9160; }
+.pp-scard__group[data-tier="silver"]   { --card-metal: #b9c6d6; }
+.pp-scard__group[data-tier="gold"]     { --card-metal: #e7c25c; }
+.pp-scard__group[data-tier="platinum"] { --card-metal: #8fd2ea; }
+@media (hover: hover) { .pp-scard__group:hover { transform: translateY(-2px); } }
+.pp-scard__group:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; border-radius: 10px; }
+
+/* Art: ONE medallion per group (the shared .pp-med OBJECT, matching the Collection Case + Browse Gallery),
+   sized down for the tile. Showcase 'earned' look = full colour for everyone (state lives in the seal). */
+.pp-scard__med { position: relative; display: grid; place-items: center; }
+.pp-scard__med .pp-med { --sz: 52px; }
+@media (min-width: 768px) { .pp-scard__med .pp-med { --sz: 58px; } }
+/* The medallion's own count + earned-aura blur are noise here (the aura is the Gallery's scroll-lag culprit)
+   -- suppress both, matching browse-gallery.css. */
+.pp-scard__med .pp-med__count { display: none; }
+.pp-scard__med .pp-med__stage::before { display: none; }
+.pp-scard__seal {
+    position: absolute; right: -2px; bottom: 2px; z-index: 3; width: 18px; height: 18px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--pp-success); color: #06140d;
+    border: 2px solid var(--pp-bg-1); box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-success) 70%, transparent);
+}
+.pp-scard__seal svg { width: 10px; height: 10px; }
+/* Holo (mastered) seal: shift the disc to the holographic sweep so a mastered hold reads as special. */
+.pp-scard__seal--holo { background: linear-gradient(135deg, #8fd2ea, #c9a7ff 45%, #ffd36e); color: #17123a; border-color: var(--pp-bg-1); }
+
+/* Platform group, tinted in its medallion metal (matches the detail-page switcher labels). */
+.pp-scard__pg { font-size: 10px; font-weight: 800; letter-spacing: 0.02em; color: var(--card-metal); text-align: center; }
+/* Live rarity grade (coloured) or the plain earner count until the series has pursuers. */
+.pp-scard__grade { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+/* "Be the first" (no earners yet): an inviting primary-tinted italic, not the muted count grey. */
+.pp-scard__grade--cta { color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute)); font-style: italic; }
+/* Colour comes from the shared rarity scale (components/rarity.css) via data-rarity on this
+   element or an ancestor. This used to be four hand-rolled rules per surface. */
+.pp-scard__grade[data-rarity] { color: var(--rar-c); }
+
+/* Empty state (no series match the filters). Spans the whole tile grid. Its fade+rise entrance animation
+   (ppResultsEmptyIn) is shared with the Gallery's empty panel and lives in browse-gallery.css. */
+.pp-slist__empty {
+    grid-column: 1 / -1;
+    text-align: center; color: var(--pp-text-mute); padding: 48px 16px;
+    border: 1px solid var(--pp-border); border-radius: 14px;
+    background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent);
+}
+.pp-slist__empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.5; }
+.pp-slist__empty-title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+
+/* ── User badge stats: the shared .scard grid, flush inside the page header (auth only). ── */
+/* A flush divider rule over the stat cards; the cards themselves are the site-wide .scard component
+   (elements.css), so no bespoke tile styling lives here. */
+.pp-bhead__stats { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pp-border); }
+
+
+/* ==========================================================================
+ * BADGE "HOW IT WORKS" (/badges/how-it-works/)
+ *
+ * A tutorial, not a spec sheet. The first cut was four captions and a table -- accurate, and bland in a
+ * way the brief explicitly rules out: custom badge artwork is the moat, and a page teaching the badge
+ * system that shows no badges teaches around its subject. So the ARTIFACT leads here and the chrome
+ * stays out of its way ("if the chrome ever fights the art, the chrome loses").
+ *
+ * The fabrication read is canon -- badges are MADE, not just displayed -- so the journey is a forge and
+ * the step numbers are struck plates rather than list bullets. The Patek-atelier test applies: precise,
+ * quiet, single-piece. No neon, no sci-fi.
+ * ========================================================================== */
+
+/* ---- Hero: the mastered medallion, and the promise ------------------------------------------------ */
+.pp-hiw__hero {
+    display: grid; gap: 18px; align-items: center;
+    grid-template-columns: 1fr;
+    padding: 18px 0 26px; text-align: center;
+}
+.pp-hiw__hero-art { display: grid; place-items: center; }
+/* Big enough to read as the object it is. The holo treatment comes from `.pp-med--holographic`. */
+.pp-hiw__hero-art .pp-med { --sz: 150px; }
+.pp-hiw__eyebrow {
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.pp-hiw__h1 {
+    margin-top: 6px;
+    font-size: clamp(1.55rem, 6vw, 2.4rem); font-weight: 800; line-height: 1.12;
+    letter-spacing: -0.02em; color: var(--pp-text); text-wrap: balance;
+}
+.pp-hiw__lede {
+    margin-top: 10px; font-size: 0.92rem; line-height: 1.55; color: var(--pp-text-dim);
+    max-width: 52ch; margin-inline: auto;
+}
+/* The catalogue, as figures. The brief makes numbers first-class material, so they take the tally face
+   at real size rather than sitting as a caption under the prose. */
+.pp-hiw__tally { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 26px; margin-top: 18px; }
+.pp-hiw__t { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pp-hiw__t .pp-tally { font-size: 1.5rem; line-height: 1; color: var(--pp-primary); }
+.pp-hiw__t-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+@media (min-width: 768px) {
+    .pp-hiw__hero { grid-template-columns: auto minmax(0, 1fr); gap: 34px; text-align: left; padding: 26px 0 38px; }
+    .pp-hiw__hero-art .pp-med { --sz: 190px; }
+    .pp-hiw__lede { margin-inline: 0; font-size: 1rem; }
+    .pp-hiw__tally { justify-content: flex-start; }
+    .pp-hiw__t { align-items: flex-start; }
+    .pp-hiw__t .pp-tally { font-size: 1.8rem; }
+}
+
+/* ---- The forge: four beats ------------------------------------------------------------------------- */
+.pp-hiw__steps { list-style: none; margin: 0 0 30px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.pp-hiw__step {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px;
+    padding: 16px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+/* Fixed square wells so all four beats align down the page whatever sits in them -- a cover fan, three
+   platinums, or a medallion. */
+.pp-hiw__art { display: grid; place-items: center; width: 84px; height: 84px; }
+.pp-hiw__art--med .pp-med { --sz: 78px; }
+/* Phone: the art goes ABOVE the copy instead of beside it.
+ *
+ * Side by side, the body gets 343 - 32 (container) - 32 (padding) - 84 (art) - 16 (gap) = 211px, which is
+ * ~33 characters of a 0.85rem line -- narrow enough that a two-sentence beat runs to four ragged lines and
+ * reads as a squeeze rather than a card. Stacking hands it the full 311px and the art stops competing for
+ * the same axis.
+ *
+ * It costs height (~66px a card), which is the trade: this page is scrolled once, deliberately, by someone
+ * deciding whether the badge system is worth their time. Legibility is what it is for. Elsewhere on a
+ * phone we have spent height carefully; here the copy IS the product.
+ *
+ * Centred rather than left-aligned because the hero directly above it is centred at this width, and a
+ * centred 84px well over left-set text reads as a mistake. `justify-self` on the art rather than
+ * `justify-items` on the step: the latter would size the body to its max-content instead of the track.
+ */
+@media (max-width: 767px) {
+    .pp-hiw__step { grid-template-columns: minmax(0, 1fr); gap: 12px; text-align: center; }
+    .pp-hiw__art { justify-self: center; }
+    .pp-hiw__body { min-width: 0; }
+}
+@media (min-width: 768px) {
+    .pp-hiw__step { gap: 22px; padding: 20px 22px; }
+    .pp-hiw__art { width: 104px; height: 104px; }
+    .pp-hiw__art--med .pp-med { --sz: 98px; }
+}
+
+/* The step number as a struck plate: the fabrication read at the smallest scale it can carry. It sits
+   ABOVE the caption rather than beside it, so the caption keeps the full column width on a phone. */
+.pp-hiw__n {
+    display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em;
+    font-variant-numeric: tabular-nums; color: var(--pp-primary);
+    padding: 2px 7px; border-radius: 5px;
+    background: color-mix(in oklab, var(--pp-primary) 11%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
+}
+.pp-hiw__cap { margin-top: 6px; font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1.2; }
+.pp-hiw__desc { margin-top: 5px; font-size: 0.85rem; line-height: 1.5; color: var(--pp-text-dim); }
+@media (min-width: 768px) { .pp-hiw__cap { font-size: 1.12rem; } .pp-hiw__desc { font-size: 0.92rem; } }
+
+/* The two payoff beats earn a warmer edge -- claim in the primary, mastery in the holo spectrum. Border
+   and a low outer glow only: the medallion inside is the subject and must not be competed with. */
+.pp-hiw__step--claim { border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border)); }
+.pp-hiw__step--master {
+    border-color: color-mix(in oklab, #c9a7ff 34%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 18px -6px color-mix(in oklab, #8fd2ea 26%, transparent);
+}
+
+/* ---- Editions ------------------------------------------------------------------------------------- */
+.pp-hiw__sec { font-size: 1.15rem; font-weight: 800; color: var(--pp-text); text-align: center; letter-spacing: -0.01em; }
+.pp-hiw__sec-sub { margin-top: 6px; font-size: 0.85rem; line-height: 1.5; color: var(--pp-text-dim); text-align: center; max-width: 50ch; margin-inline: auto; }
+@media (min-width: 768px) { .pp-hiw__sec { font-size: 1.35rem; } .pp-hiw__sec-sub { font-size: 0.92rem; } }
+
+.pp-hiw__eds { padding: 6px 0 30px; }
+.pp-hiw__edgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 18px; }
+.pp-hiw__ed {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 18px 14px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.pp-hiw__ed-med .pp-med { --sz: 84px; }
+.pp-hiw__ed-name { font-size: 0.95rem; font-weight: 800; color: var(--pp-text); }
+.pp-hiw__ed-plats { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.pp-hiw__ed-plat {
+    font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1;
+    padding: 4px 7px; border-radius: 4px; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border);
+}
+@media (min-width: 768px) { .pp-hiw__ed-med .pp-med { --sz: 96px; } }
+
+/* ---- Close ----------------------------------------------------------------------------------------- */
+.pp-hiw__close { padding: 8px 0 34px; }
+.pp-hiw__cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 18px; }
+.pp-hiw__go {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 168px;
+    padding: 11px 24px; border-radius: 999px; text-decoration: none;
+    font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em; color: #06140d;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 92%, white), var(--pp-primary));
+    box-shadow: 0 6px 18px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+    transition: transform var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (hover: hover) { .pp-hiw__go:hover { transform: translateY(-1px); box-shadow: 0 10px 24px -8px color-mix(in oklab, var(--pp-primary) 70%, transparent); } }
+.pp-hiw__go:focus-visible { outline: 2px solid var(--pp-text); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pp-hiw__go { transition: none; } .pp-hiw__go:hover { transform: none; } }
+/* The signed-in second action is secondary by TREATMENT, not by size -- same target, quieter skin. */
+.pp-hiw__go--quiet {
+    color: var(--pp-text); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); box-shadow: none;
+}
+@media (hover: hover) { .pp-hiw__go--quiet:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: none; } }
+
+/* The tappable medallion. The quick-peek is the badge system's best feature and a tutorial that only
+   described it would undersell it, so the affordance is explicit: a labelled hint under the hero, and a
+   lift on hover so the object reads as pickable rather than printed. */
+.pp-hiw__medwrap { display: inline-grid; place-items: center; }
+.pp-hiw__medwrap.pp-forge-peek { cursor: pointer; transition: transform var(--pp-dur) var(--pp-ease); }
+@media (hover: hover) { .pp-hiw__medwrap.pp-forge-peek:hover { transform: translateY(-3px); } }
+.pp-hiw__medwrap.pp-forge-peek:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 6px; border-radius: 14px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-hiw__medwrap.pp-forge-peek { transition: none; }
+    .pp-hiw__medwrap.pp-forge-peek:hover { transform: none; }
+}
+/* The hint sits UNDER the medallion rather than over it: the art is the moat and chrome does not get to
+   cover it. It is aria-hidden because the wrapper already carries "Inspect this badge" as its label. */
+.pp-hiw__poke {
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 10px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-primary);
+    padding: 4px 10px; border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, transparent);
+}
+.pp-hiw__poke svg { width: 13px; height: 13px; }
+@media (prefers-reduced-motion: no-preference) {
+    /* A slow, quiet breath. It is a hint, not an alarm: one cycle every four seconds, opacity only. */
+    .pp-hiw__poke { animation: ppHiwPoke 4s ease-in-out infinite; }
+}
+@keyframes ppHiwPoke { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
+
+/* The artwork claim. Given its own quiet panel because it is the strongest thing on the page and a line
+   inside the lede would bury it. */
+.pp-hiw__craft {
+    padding: 22px 18px; margin-bottom: 30px; border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1); border: 1px solid color-mix(in oklab, var(--pp-secondary) 26%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.pp-hiw__craft-body {
+    margin-top: 8px; font-size: 0.88rem; line-height: 1.6; color: var(--pp-text-dim);
+    text-align: center; max-width: 58ch; margin-inline: auto;
+}
+@media (min-width: 768px) { .pp-hiw__craft { padding: 28px 26px; } .pp-hiw__craft-body { font-size: 0.95rem; } }
+
+/* The artwork strip inside the handmade claim: the pieces themselves, off the medallion. Deliberately
+   plain framing -- a thin well and a caption -- because the whole section is an argument that the art is
+   good, and chrome competing with it would undercut the argument it is making. */
+.pp-hiw__artstrip {
+    list-style: none; margin: 18px 0 0; padding: 0;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+@media (min-width: 640px) { .pp-hiw__artstrip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pp-hiw__piece { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
+.pp-hiw__piece img {
+    width: 100%; aspect-ratio: 1 / 1; object-fit: contain;
+    padding: 10px; border-radius: var(--pp-radius-md, 10px);
+    background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent);
+    border: 1px solid var(--pp-border);
+}
+.pp-hiw__piece-cap {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute);
+    text-align: center; line-height: 1.25;
+    /* One line: these are captions under art, and a two-line series name would make the row ragged. */
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

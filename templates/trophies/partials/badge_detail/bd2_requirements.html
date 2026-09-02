@@ -1,0 +1,40 @@
+{% load static humanize %}
+{% comment %}
+Per-group requirements preview: the Ask headline + a quiet progress/XP line, then a compact stage-tile grid
+(one tile per gating stage, checked when cleared). Each tile jumps to that stage in the journey below
+(data-stage-jump -> #bd2-stage-<group>-<n>). Reuses the .bd-req* visual from the old page, re-pointed at the
+new per-group data. Expects: g (GroupView), target_profile. The base bar is the default trophy group at 100%
+(the platinum for plat games), so the Ask reads "Platinum every stage".
+{% endcomment %}
+<div class="bd-req bd-req--{{ g.frame.tier }} mb-3">
+    <p class="bd-req__ask">
+        <span class="bd-req__ask-ico" aria-hidden="true"><img src="{% static 'images/plat.png' %}" alt="" loading="lazy" /></span>
+        <span class="bd-req__ask-text">Platinum every stage on <b>{{ g.platform_group.name }}</b></span>
+    </p>
+
+    <p class="bd-req__meta">
+        <span class="bd-req__plats">{{ g.platform_group.platforms|join:" &middot; " }}</span>
+        <span aria-hidden="true">&middot;</span>
+        <span class="bd-req__count">{% if target_profile %}<b class="pp-tally">{{ g.stages_cleared }}</b> of {{ g.gating_count }} stage{{ g.gating_count|pluralize }}{% else %}<b class="pp-tally">{{ g.gating_count }}</b> stage{{ g.gating_count|pluralize }}{% endif %}</span>
+        <span aria-hidden="true">&middot;</span>
+        <span class="bd-req__xp"><span class="pp-tally">{{ g.xp_on_offer|intcomma }}</span> Points on offer</span>
+    </p>
+
+    <div class="bd-req__grid">
+        {% for s in g.stages %}
+        <a href="#bd2-stage-{{ g.platform_group.key }}-{{ s.stage.stage_number }}" data-stage-jump
+           title="Stage {{ s.stage.stage_number }}: {{ s.stage.title }}"
+           class="bd-req__tile{% if s.completion_state == 'complete' %} is-done{% endif %}">
+            {% if s.stage.stage_icon %}<img src="{{ s.stage.stage_icon }}" alt="" class="bd-req__tile-ico" loading="lazy" />{% endif %}
+            <span class="bd-req__tile-meta">
+                <span class="bd-req__tile-num">Stage {{ s.stage.stage_number }}</span>
+                <span class="bd-req__tile-name">{{ s.stage.title }}</span>
+            </span>
+            {% if s.completion_state == 'complete' %}
+            <span class="bd-req__tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span class="sr-only">completed</span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</div>

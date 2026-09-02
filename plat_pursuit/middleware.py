@@ -2,7 +2,13 @@ import logging
 import re
 import time
 
-from django.http import HttpResponseRedirect, HttpResponsePermanentRedirect
+from django.contrib.auth.views import redirect_to_login
+from django.http import (
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+)
 from django.utils import timezone
 from django.conf import settings
 import pytz
@@ -121,16 +127,24 @@ _BOT_UA_RE = re.compile(
 )
 
 # Each rule maps a profile-scoped URL shape to its canonical target. The badge
-# rule intentionally covers the legacy /badges/<slug>/ and /achievements/badges/
-# /<slug>/ prefixes alongside the canonical /my-pursuit/badges/<slug>/, because
-# crawlers often still follow old backlinks to those prefixes. Short-circuiting
-# to the canonical target in one hop avoids a two-hop redirect chain through
-# the existing legacy 301s in plat_pursuit/urls.py.
+# rule intentionally covers the legacy /my-pursuit/badges/<slug>/ and
+# /achievements/badges/<slug>/ prefixes alongside the canonical /badges/<slug>/,
+# because crawlers often still follow old backlinks to those prefixes. Short-
+# circuiting to the canonical target in one hop avoids a two-hop redirect chain
+# through the existing legacy 301s in plat_pursuit/urls.py.
 _BOT_REDIRECT_RULES = (
-    (re.compile(r'^/games/([^/]+)/[^/]+/?$'), '/games/{slug}/'),
+    # The negative lookahead spares the REAL sub-page that shares the two-segment shape:
+    # /games/<np>/roadmap/ is routed (hidden). Leaderboard was spared in Lane 0 as "live
+    # content", but the closing audit found it serves a HEADLESS fragment (the HTMX panel, no
+    # head at all) and is the most expensive query on the site -- so bots now 301 to the game
+    # page, and robots.txt blocks it for the crawlers that ask first.
+    # (?!c/): /games/c/<concept_id>/ is the concept-keyed Game page fallback (Games/Trophy Lists
+    # IA), not a profile-scoped variant -- without this exclusion a crawler hitting it would 301 to
+    # the nonexistent /games/c/ and index a 404.
+    (re.compile(r'^/games/(?!c/)([^/]+)/(?!roadmap(?:/|$))[^/]+/?$'), '/games/{slug}/'),
     (
         re.compile(r'^/(?:my-pursuit/badges|badges|achievements/badges)/([^/]+)/[^/]+/?$'),
-        '/my-pursuit/badges/{slug}/',
+        '/badges/{slug}/',
     ),
 )
 
@@ -149,9 +163,14 @@ _CLOUDFLARE_GUARDED_PATH_RE = re.compile(
     r'^/(?:'
     # Profile-scoped variants: /games/<np>/<user>/, /badges/<slug>/<user>/, ...
     r'(?:games/[^/]+|(?:my-pursuit/badges|badges|achievements/badges)/[^/]+)/[^/]+'
-    # Profile pages themselves, plus sub-pages such as /trophy-case/. The list page
-    # at /community/profiles/ has no trailing segment and so stays unguarded.
-    r'|community/profiles/[^/]+(?:/[^/]+)*'
+    # Profile pages themselves, plus sub-pages such as /trophy-case/. THREE spellings, because the
+    # section moved twice in 2026-08: /community/profiles/ -> /profiles/ -> /hunters/. This guard is a
+    # PATH REGEX rather than a reverse(), so it does not follow a rename the way every internal link
+    # does -- dropping an old branch (or forgetting the new one) silently un-guards the single most
+    # scraped page type on the site. Every old path still 301s, and a scraper walking one arrives on the
+    # OLD path first, so the superseded branches stay for as long as their redirects do. The list pages
+    # have no trailing segment and so stay unguarded, by the note above.
+    r'|(?:hunters|(?:community/)?profiles)/[^/]+(?:/[^/]+)*'
     r')/?$'
 )
 
@@ -188,8 +207,10 @@ class CloudflareOriginGuardMiddleware:
     def __call__(self, request):
         # Dev-local requests never transit Cloudflare, so the CF-Ray check
         # would always fail and bounce localhost traffic to production. Skip
-        # the guard entirely when DEBUG is on.
-        if settings.DEBUG:
+        # the guard entirely when DEBUG is on. Beta is likewise not behind
+        # Cloudflare and is staff-gated already, so skip there too -- otherwise
+        # every game/badge detail page on beta would 302 to prod (platpursuit.com).
+        if settings.DEBUG or getattr(settings, 'IS_BETA', False):
             return self.get_response(request)
         if (
             _CLOUDFLARE_GUARDED_PATH_RE.match(request.path)
@@ -261,3 +282,55 @@ class TimezoneMiddleware:
             del _thread_locals.request
 
         return response
+
+# ──────────────────────────────────────────────────────────────────────
+# Beta / staging staff gate.
+#
+# The beta deployment (beta.platpursuit.com) runs the `rebuild` branch against a
+# snapshot of prod data so the TEAM can click through the redesign before release.
+# When settings.IS_BETA is True this locks the whole site to the logged-in team
+# (staff OR moderators -- the role split keeps mods off is_staff, so the door
+# checks the role too, 2026-08-23):
+#   - anonymous visitors are redirected to the login page,
+#   - logged-in non-team accounts get a 403,
+#   - the auth flow (/accounts/), static assets and a /healthz/ probe stay open
+#     so the team can actually sign in and Render's health check passes,
+#   - every served response is stamped noindex so beta never gets crawled.
+#
+# Entirely inert when IS_BETA is False, so it's a no-op on production.
+# ──────────────────────────────────────────────────────────────────────
+class BetaStaffGateMiddleware:
+    # Reachable WITHOUT being staff: the login/signup flow + logout + assets.
+    # (WhiteNoise already short-circuits /static/ before this runs; listed for safety.)
+    EXEMPT_PREFIXES = ('/accounts/', '/logout/', '/static/', '/media/')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not getattr(settings, 'IS_BETA', False):
+            return self.get_response(request)
+
+        # Answer the health probe directly so Render's check never trips the gate.
+        if request.path == '/healthz/':
+            return HttpResponse('ok')
+
+        if not self._is_allowed(request):
+            if not request.user.is_authenticated:
+                return redirect_to_login(request.get_full_path())
+            return HttpResponseForbidden(
+                'PlatPursuit team beta — your account is signed in but is not '
+                'on the team (staff or moderator), so access is restricted.'
+            )
+
+        response = self.get_response(request)
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        return response
+
+    def _is_allowed(self, request):
+        # Staff, plus moderators (2026-08-23: the mod team reviews the beta too). The role
+        # split deliberately keeps mods OFF is_staff -- Django-admin access exactly -- so the
+        # beta door checks the role, not the admin bit.
+        if request.user.is_staff or getattr(request.user, 'is_moderator', False):
+            return True
+        return request.path.startswith(self.EXEMPT_PREFIXES)

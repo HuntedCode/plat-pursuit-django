@@ -285,84 +285,158 @@ class ReviewHubService:
 
         return list(plat_concept_ids | full_completion_concept_ids)
 
+    #: What "rated" MEANS, in one place.
+    #:
+    #: It used to mean "a row exists", and that definition was spelled out separately in nine places
+    #: across the queue, this service and the dashboard provider. Adding the recommendation changed it to
+    #: "a row exists AND carries a recommendation", and nine independent copies of a definition is nine
+    #: chances for the header to report zero waiting while the queue is still serving. They all read this
+    #: now.
+    #:
+    #: Blank rather than NULL because the column is `blank=True, default=''` -- see the field's own note
+    #: for why the model stays permissive while the form does not.
+    COMPLETE = ~Q(recommendation='')
+
     @staticmethod
-    def get_unrated_platinum_count(profile):
-        """Count of ratable concepts (non-shovelware) not yet base-game rated."""
+    def complete_ratings(profile, **filters):
+        """The hunter's COMPLETE ratings, however you want them narrowed.
+
+        One entry point so callers cannot accidentally count an incomplete rating as done. Pass whatever
+        scoping the caller needs (`concept_id__in=`, `concept_trophy_group_id__in=`, ...).
+        """
         from trophies.models import UserConceptRating
 
+        return UserConceptRating.objects.filter(
+            ReviewHubService.COMPLETE, profile=profile, **filters
+        )
+
+    @staticmethod
+    def get_unrated_platinum_count(profile):
+        """Count of ratable concepts (non-shovelware) whose base-game rating is missing or incomplete."""
         ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
         if not ratable_ids:
             return 0
 
-        # Rated concept IDs (base game = null concept_trophy_group)
         rated_concept_ids = set(
-            UserConceptRating.objects
-            .filter(
-                profile=profile,
-                concept_id__in=ratable_ids,
-                concept_trophy_group__isnull=True,
-            )
-            .values_list('concept_id', flat=True)
+            ReviewHubService.complete_ratings(
+                profile, concept_id__in=ratable_ids, concept_trophy_group__isnull=True,
+            ).values_list('concept_id', flat=True)
         )
 
         return len(set(ratable_ids) - rated_concept_ids)
 
     @staticmethod
-    def get_unrated_dlc_count(profile):
-        """Count of DLC groups where user has 100% completion but no rating.
+    def get_rating_progress(profile):
+        """Everything the Rate My Games header states, in a fixed number of queries.
 
-        Considers DLC groups belonging to any ratable concept (platinumed or
-        100%-completed non-plat).
+        Returns ``{'games_total', 'games_waiting', 'dlc_total', 'dlc_waiting'}`` -- how much of the
+        hunter's library can be rated at all, and how much of it still is not. The totals are the
+        denominators the page's progress is measured in, so they count the ratable set whether or not
+        it has been rated; the "waiting" halves are the remainder.
+
+        One method rather than four helpers because the callers want all of them at once and each helper
+        re-derives the ratable set from scratch. Set-based throughout: the previous DLC count ran two
+        queries PER DLC group of every ratable concept, which for a large completed library is hundreds of
+        queries to render a header number.
+
+        `dlc_total` counts COMPLETED DLC groups -- an unfinished one is not something you can rate --
+        which is the same set the wizard queue paginates, so its meter and this header agree.
+
+        "Waiting" is SPLIT into `*_new` (never rated) and `*_need_rec` (rated before the recommendation
+        existed, so the wizard owes them one question). They are two different asks -- one is a whole
+        rating, the other is a single tap -- and lumping them would make a long-standing rater's counter
+        jump by hundreds overnight with no way to see that most of it is nearly-free.
         """
         from trophies.models import (
             ConceptTrophyGroup, EarnedTrophy, Trophy, UserConceptRating,
         )
 
-        ratable_concept_ids = ReviewHubService.get_ratable_concept_ids(profile)
-        if not ratable_concept_ids:
-            return 0
+        ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
+        progress = {'games_total': 0, 'games_waiting': 0, 'games_new': 0, 'games_need_rec': 0,
+                    'dlc_total': 0, 'dlc_waiting': 0, 'dlc_new': 0, 'dlc_need_rec': 0}
+        if not ratable_ids:
+            return progress
 
-        # DLC groups for those concepts (exclude base game)
-        dlc_groups = ConceptTrophyGroup.objects.filter(
-            concept_id__in=ratable_concept_ids,
-        ).exclude(trophy_group_id='default')
+        base = {'profile': profile, 'concept_id__in': ratable_ids, 'concept_trophy_group__isnull': True}
+        # Every row, then the complete subset. Two set-based reads rather than one pass in Python: both
+        # ride the (profile, concept) index and return ids, so neither scales with anything but the
+        # ratable set.
+        any_rated = set(UserConceptRating.objects.filter(**base).values_list('concept_id', flat=True))
+        complete = set(
+            ReviewHubService.complete_ratings(
+                profile, concept_id__in=ratable_ids, concept_trophy_group__isnull=True,
+            ).values_list('concept_id', flat=True)
+        )
+        progress['games_total'] = len(ratable_ids)
+        progress['games_waiting'] = len(set(ratable_ids) - complete)
+        progress['games_new'] = len(set(ratable_ids) - any_rated)
+        progress['games_need_rec'] = len(any_rated - complete)
 
-        # Already-rated DLC group IDs for this profile
-        rated_group_ids = set(
-            UserConceptRating.objects.filter(
+        dlc_groups = list(
+            ConceptTrophyGroup.objects
+            .filter(concept_id__in=ratable_ids)
+            .exclude(trophy_group_id='default')
+            .values_list('id', 'concept_id', 'trophy_group_id')
+        )
+        if not dlc_groups:
+            return progress
+
+        group_ids = {g[2] for g in dlc_groups}
+        concept_ids = {g[1] for g in dlc_groups}
+
+        # (game, group) -> (trophies in it, its concept). Keyed on the pair because a concept can span
+        # several games (multi-region stacks) and each carries its own copy of the group.
+        totals = {}
+        for row in Trophy.objects.filter(
+            game__concept_id__in=concept_ids,
+            trophy_group_id__in=group_ids,
+        ).values('game_id', 'game__concept_id', 'trophy_group_id').annotate(total=Count('id')):
+            totals[(row['game_id'], row['trophy_group_id'])] = (row['total'], row['game__concept_id'])
+
+        earned = {}
+        if totals:
+            for row in EarnedTrophy.objects.filter(
                 profile=profile,
-                concept_trophy_group__isnull=False,
+                trophy__game_id__in={k[0] for k in totals},
+                trophy__trophy_group_id__in=group_ids,
+                earned=True,
+            ).values('trophy__game_id', 'trophy__trophy_group_id').annotate(cnt=Count('id')):
+                earned[(row['trophy__game_id'], row['trophy__trophy_group_id'])] = row['cnt']
+
+        completed_pairs = {
+            (concept_id, group_id)
+            for (game_id, group_id), (total, concept_id) in totals.items()
+            if total > 0 and earned.get((game_id, group_id), 0) >= total
+        }
+        completed = [g for g in dlc_groups if (g[1], g[2]) in completed_pairs]
+        if not completed:
+            return progress
+
+        completed_ids = [g[0] for g in completed]
+        any_rated_ctg = set(
+            UserConceptRating.objects.filter(
+                profile=profile, concept_trophy_group_id__in=completed_ids,
             ).values_list('concept_trophy_group_id', flat=True)
         )
+        complete_ctg = set(
+            ReviewHubService.complete_ratings(
+                profile, concept_trophy_group_id__in=completed_ids,
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
+        progress['dlc_total'] = len(completed)
+        progress['dlc_waiting'] = sum(1 for g in completed if g[0] not in complete_ctg)
+        progress['dlc_new'] = sum(1 for g in completed if g[0] not in any_rated_ctg)
+        progress['dlc_need_rec'] = len(any_rated_ctg - complete_ctg)
+        return progress
 
-        unrated_count = 0
-        for ctg in dlc_groups.exclude(id__in=rated_group_ids):
-            totals = dict(
-                Trophy.objects.filter(
-                    game__concept_id=ctg.concept_id,
-                    trophy_group_id=ctg.trophy_group_id,
-                ).values('game_id').annotate(
-                    total=Count('id')
-                ).values_list('game_id', 'total')
-            )
-            if not totals:
-                continue
-            earned = dict(
-                EarnedTrophy.objects.filter(
-                    profile=profile,
-                    trophy__game_id__in=totals.keys(),
-                    trophy__trophy_group_id=ctg.trophy_group_id,
-                    earned=True,
-                ).values('trophy__game_id').annotate(
-                    cnt=Count('id')
-                ).values_list('trophy__game_id', 'cnt')
-            )
-            for game_id, total in totals.items():
-                if total > 0 and earned.get(game_id, 0) >= total:
-                    unrated_count += 1
-                    break
+    @staticmethod
+    def get_unrated_dlc_count(profile):
+        """Count of COMPLETED DLC groups the hunter has not rated yet.
 
-        return unrated_count
+        Thin wrapper over `get_rating_progress` -- it used to carry its own per-group loop, and two
+        implementations of "which DLC counts" is how the header and the queue drift apart.
+        """
+        return ReviewHubService.get_rating_progress(profile)['dlc_waiting']
 
     @staticmethod
     def get_unreviewed_platinum_count(profile):

@@ -82,6 +82,45 @@ class Fundraiser(models.Model):
         return self.banner_active and self.is_live()
 
 
+def get_active_fundraiser():
+    """The currently-live, banner-active Fundraiser (or None). Caches the PK for 60s (model
+    instances aren't JSON-serializable; a cached 0 means 'none'). Shared by the site-wide banner
+    context processor and the Support hub landing."""
+    from django.core.cache import cache
+    from django.db.models import Q
+
+    def _fetch_id():
+        now = timezone.now()
+        f = (Fundraiser.objects
+             .filter(banner_active=True, start_date__lte=now)
+             .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
+             .first())
+        return f.pk if f else 0
+
+    pk = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
+    return Fundraiser.objects.filter(pk=pk).first() if pk else None
+
+
+def get_live_fundraiser():
+    """The currently-live Fundraiser (start window open, not ended) REGARDLESS of banner_active --
+    for the Support hub landing, which is the fundraiser's home. The banner_active flag only gates
+    the site-wide banner (see get_active_fundraiser). Cached PK, 60s, on its own key."""
+    from django.core.cache import cache
+    from django.db.models import Q
+
+    def _fetch_id():
+        now = timezone.now()
+        f = (Fundraiser.objects
+             .filter(start_date__lte=now)
+             .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
+             .order_by('-created_at')
+             .first())
+        return f.pk if f else 0
+
+    pk = cache.get_or_set('fundraiser:live', _fetch_id, 60)
+    return Fundraiser.objects.filter(pk=pk).first() if pk else None
+
+
 class Donation(models.Model):
     """A one-time donation to a fundraiser campaign."""
     PROVIDER_CHOICES = [
@@ -155,8 +194,24 @@ class DonationBadgeClaim(models.Model):
     """
     A donor's claim on a specific badge series for artwork commissioning.
 
-    The badge field is a OneToOneField to enforce that each badge series
-    can only be claimed by one donor (DB-level constraint).
+    The series field is a OneToOneField to enforce that each badge series can only be claimed by one
+    donor (DB-level constraint).
+
+    Repointed off the legacy tier `Badge` in 2026-08 (migration 0006). It always MEANT "a series" -- the
+    old field's own help_text said "Tier 1 badge of the series" -- but pointing at a tier row meant the
+    completion write credited `Badge.funded_by`, while the medallion renders
+    `GroupBadge.effective_funded_by` (`funded_by_override or series.funded_by`). Donors were being
+    credited on a row nothing displays.
+
+    `series_slug` / `series_name` stay denormalized on purpose: the emails and notifications read them
+    rather than the FK, so a renamed or reorganised series cannot rewrite the historical record of what
+    somebody paid for.
+
+    `on_delete=PROTECT`, not CASCADE. The old `Badge` FK cascaded, but the risk profile changed when the
+    cutover deleted `BadgeAdmin` and left `BadgeSeriesAdmin` as the live authoring surface: the cascade
+    now hangs off a row staff routinely create, edit and delete while authoring badges, and one stray
+    delete would take the record of somebody's payment with it. PROTECT turns that into a visible error
+    that forces a human decision, which is the correct outcome for money.
     """
     STATUS_CHOICES = [
         ('claimed', 'Claimed'),
@@ -171,9 +226,9 @@ class DonationBadgeClaim(models.Model):
         'trophies.Profile', on_delete=models.SET_NULL,
         null=True, related_name='badge_claims',
     )
-    badge = models.OneToOneField(
-        'trophies.Badge', on_delete=models.CASCADE, related_name='artwork_claim',
-        help_text='Tier 1 badge of the series. OneToOne enforces one claim per badge.',
+    series = models.OneToOneField(
+        'trophies.BadgeSeries', on_delete=models.PROTECT, related_name='artwork_claim',
+        help_text='The claimed badge series. OneToOne enforces one claim per series.',
     )
     series_slug = models.CharField(max_length=100, db_index=True)
     series_name = models.CharField(

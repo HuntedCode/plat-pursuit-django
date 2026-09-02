@@ -1,8 +1,8 @@
 """
-View for the Platinum Grid share image wizard page.
+View for the Platinum Grid share image wizard page. RETIRED (2026-08), parked unrouted.
 
-Public to all logged-in users (Phase 9 of the Community Hub initiative
-ungated this view from staff-only).
+Was public to all logged-in users (Phase 9 of the Community Hub initiative ungated it from
+staff-only). My Shareables now serves plat cards only; see docs/features/share-images.md.
 """
 import json
 import logging
@@ -13,7 +13,6 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.safestring import mark_safe
 
-from trophies.mixins import ProfileHotbarMixin
 from trophies.models import EarnedTrophy, ProfileGame
 from trophies.themes import get_available_themes_for_grid
 
@@ -22,9 +21,13 @@ from django.views.generic import TemplateView
 logger = logging.getLogger(__name__)
 
 
-class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
-    """
-    Wizard page for building a shareable platinum trophy grid image.
+class PlatinumGridView(LoginRequiredMixin, TemplateView):
+    """Wizard page for building a shareable platinum trophy grid image.
+
+    RETIRED (2026-08): PARKED, not routed. My Shareables now serves plat cards only -- see
+    docs/features/share-images.md. /shareables/platinum-grid/ bounces to the shareables landing;
+    this class is kept so the surface can be revived under the new card design instead of rebuilt
+    from nothing.
 
     Three-step wizard:
     1. Configure: icon type, sort order, filters

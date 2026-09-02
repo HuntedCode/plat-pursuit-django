@@ -53,7 +53,7 @@ class BreadcrumbMixin:
         Returns:
             dict: Profiles list breadcrumb dictionary
         """
-        return {'text': 'Profiles', 'url': reverse_lazy('profiles_list')}
+        return {'text': 'Hunters', 'url': reverse_lazy('profiles_list')}
 
     def build_games_breadcrumb(self):
         """

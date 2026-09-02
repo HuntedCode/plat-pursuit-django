@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate
 
 
 # Register your models here.
@@ -38,9 +38,6 @@ class ProfileAdmin(admin.ModelAdmin):
         "is_plus",
         "total_trophies",
         "total_unearned",
-        "tour_completed_at",
-        "game_detail_tour_completed_at",
-        "badge_detail_tour_completed_at",
     )
     list_filter = (
         "is_linked",
@@ -76,11 +73,11 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "roadmap_role", "is_linked", "psn_history_public", "guidelines_agreed", "tour_completed_at", "game_detail_tour_completed_at", "badge_detail_tour_completed_at", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "roadmap_role", "is_linked", "psn_history_public", "guidelines_agreed", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
         ),
         (
             "Profile Details",
-            {"fields": ("avatar_url", "about_me", "languages_used", "is_plus", "selected_background")},
+            {"fields": ("avatar_url", "about_me", "languages_used", "is_plus")},
         ),
         (
             "Trophy Summary",
@@ -114,14 +111,14 @@ class ProfileAdmin(admin.ModelAdmin):
     def recheck_badges(self, request, queryset):
         """Run a full badge recheck for selected profiles."""
         import logging
-        from trophies.services.badge_service import initial_badge_check
+        from trophies.services.badge_apply import evaluate_and_apply
 
         logger = logging.getLogger("psn_api")
         success = 0
         failed_profiles = []
         for profile in queryset:
             try:
-                initial_badge_check(profile, discord_notify=False)
+                evaluate_and_apply(profile, notify=False)
                 success += 1
             except Exception as e:
                 logger.exception(f"Badge recheck failed for {profile.psn_username}")
@@ -1316,104 +1313,6 @@ class StageInline(admin.TabularInline):
     fields = ('stage_number', 'title', 'stage_icon', 'concepts', 'required_tiers')
     autocomplete_fields = ['concepts']
 
-@admin.register(Badge)
-class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'franchise_col', 'collection_col', 'developer_col', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
-    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'collection', 'developer', 'base_badge', 'base_badge__franchise', 'base_badge__collection', 'base_badge__developer')
-    list_filter = ['is_live', 'tier', 'badge_type', 'rarity_class']
-    list_editable = ['is_live']
-    search_fields = ['name', 'series_slug', 'description']
-    autocomplete_fields = ['franchise', 'collection', 'developer']
-    readonly_fields = ['created_at', 'earned_count', 'required_stages', 'required_value', 'rarity_pct', 'rarity_rank', 'rarity_class']
-    date_hierarchy = 'created_at'
-    fields = [
-        'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
-        'tier', 'badge_type', 'franchise', 'collection', 'developer', 'set_number',
-        'title', 'display_title', 'display_series',
-        'requires_all', 'min_required', 'requirements',
-        'most_recent_concept', 'funded_by', 'submitted_by',
-        'earned_count', 'required_stages', 'required_value',
-        'rarity_pct', 'rarity_rank', 'rarity_class',
-        'created_at',
-    ]
-    actions = ['mark_series_live', 'mark_series_not_live', 'assign_set_numbers']
-
-    def mark_series_live(self, request, queryset):
-        series_slugs = set(queryset.values_list('series_slug', flat=True))
-        updated = Badge.objects.filter(series_slug__in=series_slugs).update(is_live=True)
-        self.message_user(request, f"Marked {updated} badges across {len(series_slugs)} series as live.")
-    mark_series_live.short_description = "Mark series live (all tiers)"
-
-    def mark_series_not_live(self, request, queryset):
-        series_slugs = set(queryset.values_list('series_slug', flat=True))
-        updated = Badge.objects.filter(series_slug__in=series_slugs).update(is_live=False)
-        self.message_user(request, f"Marked {updated} badges across {len(series_slugs)} series as not live.")
-    mark_series_not_live.short_description = "Mark series not live (all tiers)"
-
-    @admin.action(description="Assign next 4 set numbers to selected badge series")
-    def assign_set_numbers(self, request, queryset):
-        """Stamp the next 4 sequential set numbers onto each selected series' tier
-        badges (Bronze-Platinum). Skips series without exactly 4 tiers, or already
-        numbered. The assignment logic + atomicity live on Badge (and are tested)."""
-        result = Badge.assign_next_set_numbers(queryset.values_list('series_slug', flat=True))
-        for slug in result['invalid_tiers']:
-            self.message_user(
-                request,
-                f"Series '{slug}' does not have exactly 4 tiers (Bronze-Platinum); skipped.",
-                level=messages.ERROR,
-            )
-        for slug in result['already_numbered']:
-            self.message_user(
-                request,
-                f"Series '{slug}' already has set numbers; skipped (clear them to renumber).",
-                level=messages.WARNING,
-            )
-        if result['assigned']:
-            self.message_user(
-                request,
-                f"Assigned set numbers to {len(result['assigned'])} series.",
-                level=messages.SUCCESS,
-            )
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == 'base_badge':
-            kwargs['queryset'] = Badge.objects.filter(tier=1)
-        elif db_field.name == 'franchise':
-            # Validation defense: a collection can never be set as a badge's
-            # franchise (the autocomplete already hides them, see FranchiseAdmin).
-            from trophies.models import Franchise
-            kwargs['queryset'] = Franchise.objects.filter(source_type='franchise')
-        elif db_field.name == 'collection':
-            # Mirror of the franchise defense: the collection FK accepts ONLY
-            # IGDB collections (the autocomplete scopes to them, see FranchiseAdmin).
-            from trophies.models import Franchise
-            kwargs['queryset'] = Franchise.objects.filter(source_type='collection')
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    @admin.display(description='Franchise', ordering='franchise')
-    def franchise_col(self, obj):
-        # Inherited from the base (tier-1) badge when not set on this tier.
-        return obj.effective_franchise
-
-    @admin.display(description='Collection', ordering='collection')
-    def collection_col(self, obj):
-        return obj.effective_collection
-
-    @admin.display(description='Developer', ordering='developer')
-    def developer_col(self, obj):
-        return obj.effective_developer
-
-    def get_search_results(self, request, queryset, search_term):
-        # A Badge Art Reveal item picks a SERIES, represented by its tier-1 (base)
-        # badge so the revealed art propagates to all four tiers. Scope that one
-        # autocomplete dropdown to tier-1 badges (validation is enforced separately
-        # by the inline's formfield queryset).
-        queryset, may_have_dupes = super().get_search_results(request, queryset, search_term)
-        if (request.GET.get('model_name') == 'artrevealitem'
-                and request.GET.get('field_name') == 'badge'):
-            queryset = queryset.filter(tier=1)
-        return queryset, may_have_dupes
-
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
     """Validates that no Concept appears in multiple bundles on the same Stage,
     that no bundle Concept is also a standalone qualifier on the parent Stage,
@@ -1664,70 +1563,6 @@ class StageAdmin(admin.ModelAdmin):
         return ' '.join(parts)
     bundle_concepts_display.short_description = 'Bundle Concepts'
 
-@admin.register(UserBadge)
-class UserBadgeAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'earned_at', 'is_displayed']
-    list_select_related = ('profile', 'badge')
-    list_filter = ['is_displayed', 'earned_at']
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name', 'badge__series_slug']
-    raw_id_fields = ('profile', 'badge')
-    date_hierarchy = 'earned_at'
-
-@admin.register(ProfileBadgeShowcase)
-class ProfileBadgeShowcaseAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'display_order', 'created_at']
-    list_select_related = ('profile', 'badge')
-    list_filter = ['display_order']
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name']
-    raw_id_fields = ('profile', 'badge')
-    date_hierarchy = 'created_at'
-
-
-@admin.register(ProfileShowcase)
-class ProfileShowcaseAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'showcase_type', 'sort_order', 'is_active', 'updated_at']
-    list_select_related = ('profile',)
-    list_filter = ['showcase_type', 'is_active']
-    search_fields = ['profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ('profile',)
-    readonly_fields = ('created_at', 'updated_at')
-    fieldsets = (
-        (None, {
-            'fields': ('profile', 'showcase_type', 'sort_order', 'is_active'),
-        }),
-        ('Configuration', {
-            'fields': ('config',),
-            'description': 'Type-specific JSON config (e.g. selected item IDs). '
-                           'Leave empty for automatic showcases.',
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',),
-        }),
-    )
-
-@admin.register(UserBadgeProgress)
-class UserBadgeProgressAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'completed_concepts', 'progress_value', 'last_checked']
-    list_select_related = ('profile', 'badge')
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name']
-    raw_id_fields = ('profile', 'badge')
-
-@admin.register(StageCompletionEvent)
-class StageCompletionEventAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'badge', 'stage', 'concept', 'completed_at', 'created_at']
-    list_select_related = ('profile', 'badge', 'stage', 'concept')
-    list_filter = ['completed_at']
-    search_fields = [
-        'profile__psn_username',
-        'profile__display_psn_username',
-        'badge__name',
-        'concept__unified_title',
-    ]
-    raw_id_fields = ('profile', 'badge', 'stage', 'concept')
-    readonly_fields = ('created_at',)
-    date_hierarchy = 'completed_at'
-    
 @admin.register(FeaturedGuide)
 class FeaturedGuideAdmin(admin.ModelAdmin):
     list_display = ['concept', 'start_date', 'end_date', 'priority']
@@ -1792,39 +1627,6 @@ class UserTitleAdmin(admin.ModelAdmin):
     raw_id_fields = ('profile', 'title')
     date_hierarchy = 'earned_at'
 
-@admin.register(Milestone)
-class MilestoneAdmin(admin.ModelAdmin):
-    list_display = ['name', 'title', 'discord_role_id', 'criteria_type', 'criteria_details', 'premium_only', 'is_active', 'required_value', 'earned_count']
-    list_filter = ['is_active', 'premium_only', 'criteria_type']
-    search_fields = ['name']
-    actions = ['retire_selected_milestones']
-
-    @admin.action(description="Retire selected milestones (hide + remove granted titles)")
-    def retire_selected_milestones(self, request, queryset):
-        from django.db import transaction
-        from trophies.services.milestone_service import retire_milestones
-        with transaction.atomic():
-            retired, removed = retire_milestones(queryset)
-        self.message_user(
-            request,
-            f"Retired {retired} milestone(s) and removed {removed} granted title(s). "
-            f"Earned records were preserved.",
-        )
-
-@admin.register(UserMilestone)
-class UserMilestoneAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'milestone', 'earned_at']
-    list_select_related = ('profile', 'milestone')
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'milestone__name']
-    raw_id_fields = ('profile', 'milestone')
-    date_hierarchy = 'earned_at'
-
-@admin.register(UserMilestoneProgress)
-class UserMilestoneProgressAdmin(admin.ModelAdmin):
-    list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
-    list_select_related = ('profile', 'milestone')
-    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'milestone__name']
-    raw_id_fields = ('profile', 'milestone')
 
 
 @admin.register(Comment)
@@ -2467,33 +2269,6 @@ class RoadmapNoteReadAdmin(admin.ModelAdmin):
 
 # ---------- Gamification Admin ----------
 
-@admin.register(ProfileGamification)
-class ProfileGamificationAdmin(admin.ModelAdmin):
-    """Admin interface for ProfileGamification stats."""
-    list_display = [
-        'profile',
-        'total_badge_xp',
-        'total_badges_earned',
-        'last_updated',
-    ]
-    list_select_related = ('profile',)
-    search_fields = ['profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ('profile',)
-    readonly_fields = ['last_updated']
-    ordering = ['-total_badge_xp']
-    actions = ['recalculate_selected']
-
-    @admin.action(description='Recalculate XP for selected profiles')
-    def recalculate_selected(self, request, queryset):
-        """Recalculate gamification stats for selected profiles."""
-        from trophies.services.xp_service import update_profile_gamification
-        count = 0
-        for gamification in queryset:
-            update_profile_gamification(gamification.profile)
-            count += 1
-        messages.success(request, f"Recalculated XP for {count} profile(s).")
-
-
 @admin.register(StatType)
 class StatTypeAdmin(admin.ModelAdmin):
     """Admin interface for gamification stat types."""
@@ -2563,7 +2338,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
     ]
     ordering = ['-year', '-month', '-updated_at']
     date_hierarchy = 'generated_at'
-    actions = ['finalize_recaps', 'regenerate_recaps', 'send_recap_emails', 'audit_badge_xp']
+    actions = ['finalize_recaps', 'regenerate_recaps', 'send_recap_emails']
 
     fieldsets = (
         ('Profile & Period', {
@@ -2655,6 +2430,19 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         from django.conf import settings
         from django.utils import timezone
         from users.services.email_preference_service import EmailPreferenceService
+
+        # Honour the same kill switch the cron command does. This is a SECOND send path, and while it is
+        # staff-only it renders the same emails/monthly_recap.html -- so leaving it open would mean "the
+        # recap email is off" was true of the cron and false of the admin. Nothing should go out carrying
+        # the design being replaced, whoever presses the button.
+        if not getattr(settings, 'MONTHLY_RECAP_SEND_ENABLED', False):
+            self.message_user(
+                request,
+                "Monthly recap sends are disabled (MONTHLY_RECAP_SEND_ENABLED is False) while the recap "
+                "is being rebuilt. No emails were sent.",
+                level=messages.WARNING,
+            )
+            return
 
         # Filter to only finalized recaps with linked users
         valid_recaps = queryset.filter(
@@ -2773,42 +2561,6 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
         else:
             messages.warning(request, " • ".join(msg_parts))
 
-    @admin.action(description='Audit badge XP calculations')
-    def audit_badge_xp(self, request, queryset):
-        """Compare stored badge XP against recalculated values."""
-        from trophies.services.monthly_recap_service import MonthlyRecapService
-
-        mismatches = []
-        for recap in queryset:
-            try:
-                recalculated = MonthlyRecapService.get_badge_stats_for_month(
-                    recap.profile, recap.year, recap.month
-                )
-
-                stored_xp = recap.badge_xp_earned
-                calculated_xp = recalculated['xp_earned']
-
-                if stored_xp != calculated_xp:
-                    mismatches.append({
-                        'recap': f"{recap.profile.psn_username} {recap.year}/{recap.month:02d}",
-                        'stored': stored_xp,
-                        'calculated': calculated_xp,
-                        'diff': calculated_xp - stored_xp
-                    })
-            except Exception as e:
-                messages.error(request, f"Error auditing {recap}: {e}")
-
-        if mismatches:
-            msg = f"Found {len(mismatches)} XP discrepancy(s):\n"
-            for m in mismatches[:10]:  # Show first 10
-                msg += f"  {m['recap']}: stored={m['stored']:,}, calculated={m['calculated']:,} (diff={m['diff']:+,})\n"
-            if len(mismatches) > 10:
-                msg += f"  ... and {len(mismatches) - 10} more\n"
-            messages.warning(request, msg)
-        else:
-            messages.success(request, f"All {queryset.count()} recap(s) have correct badge XP.")
-
-
 # ---------- Game List Admin ----------
 
 class GameListItemInline(admin.TabularInline):
@@ -2881,45 +2633,6 @@ class GameListLikeAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at']
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
-
-
-class AZChallengeSlotInline(admin.TabularInline):
-    model = AZChallengeSlot
-    extra = 0
-    fields = ['letter', 'game', 'is_completed', 'completed_at', 'assigned_at']
-    readonly_fields = ['completed_at', 'assigned_at']
-    raw_id_fields = ['game']
-    ordering = ['letter']
-
-
-@admin.register(Challenge)
-class ChallengeAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'profile', 'challenge_type', 'filled_count', 'completed_count', 'is_complete', 'is_deleted', 'created_at']
-    list_select_related = ('profile',)
-    list_filter = ['challenge_type', 'is_complete', 'is_deleted']
-    search_fields = ['name', 'profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ['profile']
-    readonly_fields = ['created_at', 'updated_at', 'completed_at', 'deleted_at', 'view_count']
-    ordering = ['-created_at']
-    date_hierarchy = 'created_at'
-    inlines = [AZChallengeSlotInline]
-
-
-@admin.register(AZChallengeSlot)
-class AZChallengeSlotAdmin(admin.ModelAdmin):
-    list_display = ['id', 'challenge', 'letter', 'game', 'is_completed', 'assigned_at']
-    list_select_related = ('challenge', 'game')
-    list_filter = ['is_completed', 'letter']
-    search_fields = [
-        'challenge__name',
-        'challenge__profile__psn_username',
-        'challenge__profile__display_psn_username',
-        'game__title_name',
-        'game__np_communication_id',
-    ]
-    raw_id_fields = ['challenge', 'game']
-    readonly_fields = ['completed_at', 'assigned_at']
-    ordering = ['challenge', 'letter']
 
 
 @admin.register(GameFamily)
@@ -3294,25 +3007,6 @@ class GameListItemAdmin(admin.ModelAdmin):
     note_preview.short_description = 'Note'
 
 
-@admin.register(DashboardConfig)
-class DashboardConfigAdmin(admin.ModelAdmin):
-    """Admin interface for dashboard configurations."""
-    list_display = ['profile', 'module_count', 'hidden_count', 'updated_at']
-    list_select_related = ('profile',)
-    search_fields = ['profile__psn_username', 'profile__display_psn_username']
-    raw_id_fields = ['profile']
-    readonly_fields = ['updated_at']
-    ordering = ['-updated_at']
-
-    def module_count(self, obj):
-        return len(obj.module_order) if obj.module_order else 0
-    module_count.short_description = 'Modules'
-
-    def hidden_count(self, obj):
-        return len(obj.hidden_modules) if obj.hidden_modules else 0
-    hidden_count.short_description = 'Hidden'
-
-
 # ---------------------------------------------------------------------------
 # IGDB Integration Admin
 # ---------------------------------------------------------------------------
@@ -3364,6 +3058,8 @@ class GenreAdmin(admin.ModelAdmin):
     list_display = ('name', 'igdb_id', 'slug', 'game_count')
     search_fields = ('name', 'slug')
     readonly_fields = ('igdb_id',)
+    # Materialized browse-tile cover FK -- raw-id widget, not a full-catalogue <select>.
+    raw_id_fields = ('representative_game',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_game_count=Count('genre_concepts'))
@@ -3379,6 +3075,8 @@ class ThemeAdmin(admin.ModelAdmin):
     list_display = ('name', 'igdb_id', 'slug', 'game_count')
     search_fields = ('name', 'slug')
     readonly_fields = ('igdb_id',)
+    # Materialized browse-tile cover FK -- raw-id widget, not a full-catalogue <select>.
+    raw_id_fields = ('representative_game',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_game_count=Count('theme_concepts'))
@@ -4935,7 +4633,13 @@ class ContractAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug', 'igdb_id')
     prepopulated_fields = {'slug': ('name',)}
     filter_horizontal = ('jobs',)
-    readonly_fields = ('created_at', 'updated_at')
+    # `went_live_at` and `announced_at` are READONLY, not merely uneditable by convention. Both are
+    # machine-stamped lifecycle columns whose whole contract is "set once, never reset", and the form
+    # is `fields = '__all__'` -- so leaving them writable meant a curator opening a change form to fix
+    # a typo would post back whatever the page rendered with, clearing the stamp and re-announcing a
+    # contract the community already heard about. Shown, because knowing when something published and
+    # when it was announced is useful; just not typed into.
+    readonly_fields = ('created_at', 'updated_at', 'went_live_at', 'announced_at')
     inlines = [ContractBundleInline]
     actions = ['suggest_jobs', 'make_live', 'make_not_live']
 
@@ -4977,14 +4681,30 @@ class ContractAdmin(admin.ModelAdmin):
             msg += f" Skipped {skipped} with no concepts."
         self.message_user(request, msg)
 
+    # `updated_at` is stamped explicitly: `auto_now` only fires on Model.save(), and a bulk
+    # `queryset.update()` bypasses it. Without this a contract drafted months ago and published from
+    # the changelist keeps its stale timestamp, so `process_contracts --incremental` skips it every
+    # night until the weekly full pass -- while publishing the same contract from the change form
+    # (which does call save) reaches hunters that night. Same action, different latency, depending on
+    # which admin screen the curator used.
     @admin.action(description="Mark selected Contracts LIVE")
     def make_live(self, request, queryset):
-        n = queryset.update(is_live=True)
+        # Stamp only the rows actually TRANSITIONING to live, and stamp them BEFORE the flip -- once
+        # `is_live=True` is written there is no way left to tell which rows were already published.
+        # Mirrors Contract.save(), which queryset.update() bypasses.
+        #
+        # `is_live=False` rather than a Coalesce over the whole selection: every contract published
+        # before this column existed is live with a NULL stamp, which is honest (their first publish
+        # predates the record). Selecting one of those in the changelist and re-running this action
+        # would otherwise stamp it today, announcing a launch-era game as new.
+        now = timezone.now()
+        queryset.filter(is_live=False, went_live_at__isnull=True).update(went_live_at=now)
+        n = queryset.update(is_live=True, updated_at=now)
         self.message_user(request, f"{n} contract(s) marked live.")
 
     @admin.action(description="Mark selected Contracts NOT live")
     def make_not_live(self, request, queryset):
-        n = queryset.update(is_live=False)
+        n = queryset.update(is_live=False, updated_at=timezone.now())
         self.message_user(request, f"{n} contract(s) marked not live.")
 
 
@@ -5115,7 +4835,7 @@ class GroupBadgeInline(admin.TabularInline):
     """Manage a series' group badges (Legacy HD / Ultra HD / ...) right on the BadgeSeries page."""
     model = GroupBadge
     extra = 0
-    fields = ['platform_group', 'is_live', 'set_number',
+    fields = ['platform_group', 'is_live',
               'badge_image_override', 'holo_badge_image_override', 'funded_by_override',
               'earned_count', 'required_stages']
     readonly_fields = ['earned_count', 'required_stages']
@@ -5156,7 +4876,7 @@ class BadgeSeriesAdmin(admin.ModelAdmin):
 
 @admin.register(GroupBadge)
 class GroupBadgeAdmin(admin.ModelAdmin):
-    list_display = ['__str__', 'is_live', 'platform_group', 'series_type', 'set_number',
+    list_display = ['__str__', 'is_live', 'platform_group', 'series_type',
                     'earned_count', 'required_stages', 'rarity_class', 'art_preview']
     list_filter = ['is_live', 'platform_group', 'series__badge_type']
     list_editable = ['is_live']
@@ -5167,7 +4887,7 @@ class GroupBadgeAdmin(admin.ModelAdmin):
                        'rarity_pct', 'rarity_rank', 'rarity_class', 'art_preview']
     actions = ['mark_live', 'mark_hidden']
     fieldsets = [
-        ('Badge', {'fields': ['series', 'platform_group', 'is_live', 'set_number']}),
+        ('Badge', {'fields': ['series', 'platform_group', 'is_live']}),
         ('Artwork overrides (blank = inherit the series default)', {
             'fields': ['badge_image_override', 'holo_badge_image_override', 'funded_by_override', 'art_preview'],
         }),

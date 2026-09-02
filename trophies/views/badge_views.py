@@ -1,56 +1,161 @@
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
 
-from trophies.constants import EVALUATABLE_BADGE_TYPES
-from trophies.services.xp_service import get_tier_xp
-from trophies.util_modules.constants import (
-    BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
-    GOLD_STAGE_XP, PLAT_STAGE_XP,
-    platform_display_rank,
-)
+from trophies.constants import EVALUATABLE_BADGE_TYPES, PLATFORM_LABELS
 
+# Personal-state chips on the group-badge list (Gallery + Series): binary hold only (per-badge in-progress is
+# engine-derived, not whale-safe across a catalog -- it lives on the badge detail page).
+_GALLERY_STATES = ('earned', 'unearned')
+GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
+SERIES_PAGE_SIZE = 30   # series rows per page (Series view infinite scroll)
+# (key, label). Order mirrors the Collection Gallery's sort dropdown. ('Set order' and the
+# set_number field were removed 2026-08-23: the new system never assigned the numbers, so the
+# sort was name-order wearing a different label.)
+GALLERY_SORTS = [
+    ('name', 'Name (A-Z)'),
+    ('rarity', 'Rarest first'),
+    ('popular', 'Most earned'),
+    ('newest', 'Newest'),
+]
+GALLERY_SORT_KEYS = {k for k, _ in GALLERY_SORTS}
+GALLERY_SORT_DEFAULT = 'name'
+# Series-view sorts (per-series tiles). No tier/XP/closest sorts -- the grouping model has no tier ladder.
+SERIES_SORTS = [
+    ('name', 'Name (A-Z)'),
+    ('popular', 'Most earned'),
+    ('rarity', 'Rarest first'),
+    ('newest', 'Newest'),
+]
+SERIES_SORT_KEYS = {k for k, _ in SERIES_SORTS}
+SERIES_SORT_DEFAULT = 'name'
 
-def _badge_xp(badge):
-    """Compute total XP value for a badge tier."""
-    return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
-
+from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
-from django.db.models import Q, F, Prefetch, Max
+from django.db.models import Q, F, Exists, OuterRef, Count, Sum
 from django.db.models.functions import Lower
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, HttpResponseNotFound, JsonResponse
 from urllib.parse import urlencode
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy, reverse
 from django.utils.text import slugify
+from django.views import View
 from django.views.generic import ListView, DetailView, TemplateView
 
-from trophies.mixins import ProfileHotbarMixin
 from ..models import (
-    Game, Profile, ProfileGame, Badge, UserBadge, UserBadgeProgress,
-    Concept, Stage, Milestone, UserMilestone, UserMilestoneProgress,
-    UserTitle, ProfileGamification,
+    Profile, Badge, UserBadge,
+    UserTitle, BadgeSeries, GroupBadge, UserGroupBadge, PlatformGroup,
+    ProfileCareerStanding, SeriesBadgeStanding,
 )
 from ..forms import BadgeSearchForm
-from trophies.services.redis_leaderboard_service import (
-    RedisPaginator, RedisPage,
-    get_xp_page, get_xp_rank, get_xp_count,
-    get_earners_page, get_earners_rank, get_earners_count,
-    get_progress_page, get_progress_rank, get_progress_count,
-    get_community_xp,
-    get_country_xp_page, get_country_xp_rank, get_country_xp_count,
-    get_active_country_codes,
+from trophies.services.badge_detail_service import get_badge_detail
+from trophies.services.badge_list_service import build_list_cards, build_series_items
+from trophies.services.badge_rarity import (
+    annotate_group_rarity, RARITY_CLASSES, RARITY_FILTER_CHOICES, RARITY_UNEARNED,
 )
-from trophies.milestone_constants import (
-    MILESTONE_CATEGORIES, CRITERIA_TYPE_DISPLAY_NAMES,
-    CALENDAR_MONTH_TYPES, ONE_OFF_TYPES,
-)
+# Leaderboards read from Lane B (indexed DB reads over the standing stores). The Redis sorted-set
+# service is no longer imported here -- see docs/design/rebuild/leaderboards-rebuild.md step 2.
+from trophies.services import badge_leaderboards as lb
+from trophies.views import board_helpers
+from trophies.views.board_helpers import suggest_json, window_params
 
 logger = logging.getLogger("psn_api")
 
 
-class BadgeListView(ProfileHotbarMixin, ListView):
+def badge_catalog_stats():
+    """The badge-COLLECTION catalog stats for the header (what the collection OFFERS, not the
+    viewer's own progress -- this is a browse page): badge series, stages to complete, total
+    earnable XP, and new-this-week. All read from the hourly-cached site heartbeat, so it's
+    zero DB cost on the request path; the grid only shows once the cron has warmed the cache
+    (the template gates on earnable_xp)."""
+    from core.services.site_heartbeat import get_cached_heartbeat
+    expanded = (get_cached_heartbeat() or {}).get('expanded') or {}
+
+    def _value(key):
+        return (expanded.get(key) or {}).get('value')
+
+    return {
+        'series': _value('badges_total'),
+        'series_new': (expanded.get('badges_total') or {}).get('delta'),
+        'stages': _value('badge_stages_total'),
+        'earnable_xp': _value('badge_earnable_xp'),
+    }
+
+
+def badge_forge_medallions():
+    """Edition medallions for the header's 'how badges work' forge journey. A teaching abstraction, so it
+    composes a REAL badge's subject art onto each edition's metal plate (Ultra HD -> platinum, Legacy HD ->
+    gold): the journey's claim/master beats + the editions legend show the genuine .pp-med OBJECT with real
+    artwork rather than a bare plate. Picks a representative live badge that HAS custom art (most-earned
+    first, bounded scan); falls back to the plain metal plate on an empty catalog (fresh install / tests)."""
+    from django.templatetags.static import static
+
+    def plate(metal):
+        n = 4 if metal == 'platinum' else 3   # 4_backdrop = platinum plate, 3_backdrop = gold plate
+        return static(f'images/badges/backdrops/{n}_backdrop.png')
+
+    subject, name, source_id, is_avatar = None, 'Platinum Pursuit', None, False
+    for cand in (GroupBadge.objects.filter(is_live=True)
+                 .select_related('series', 'series__submitted_by', 'platform_group')
+                 .order_by('-earned_count', 'id')[:12]):
+        art = cand.art_layers()
+        if art.get('has_custom_image'):      # a real subject (override / series / avatar), not default.png
+            subject, name, source_id, is_avatar = art['main'], cand.series.name, cand.id, art['is_avatar']
+            break
+
+    def frame(metal, holo=False):
+        # Subject rides on OUR metal plate (the subject is metal-agnostic -- the plate carries the edition),
+        # so the same badge shows in both editions' metals. No subject -> the plate alone (graceful).
+        return {
+            'tier': metal,
+            'state': 'earned',
+            'art_layers': [plate(metal)] + ([subject] if subject else []),
+            'is_avatar': is_avatar,          # a user-badge avatar subject -> circle-masked + shrunk
+            'is_holographic': holo,
+            'series_name': name,
+        }
+
+    return {
+        'earned': frame('platinum'),               # beat 3: the badge, claimed (solid)
+        'mastered': frame('platinum', holo=True),  # beat 4: mastered -> holographic
+        'ultra': frame('platinum'),                # editions legend: Ultra HD
+        'legacy': frame('gold'),                   # editions legend: Legacy HD
+        # The real badge behind the art -- tapping any forge medallion opens its quick-peek (like every
+        # other medallion on the page). None on an empty catalog -> the illustrations are non-interactive.
+        'source_id': source_id,
+    }
+
+
+def badge_subject_art(limit=4):
+    """Raw SUBJECT artwork for the how-it-works page's handmade claim: the drawings themselves, not the
+    composed medallion.
+
+    One per SERIES, deliberately. The plate, shape and backing are shared by every badge in an edition, so
+    four medallions from one series would look like four copies of the same object and undersell exactly
+    the thing being claimed. The subject is the part an artist drew.
+
+    Avatar subjects are skipped: a submitter's profile picture is a real custom image as far as
+    `art_layers()` is concerned, but it is not a commissioned piece and putting one here would make the
+    claim false. Bounded scan, most-earned first, so a big catalog does not turn this into a table sweep.
+    """
+    seen, out = set(), []
+    for cand in (GroupBadge.objects.filter(is_live=True)
+                 .select_related('series', 'series__submitted_by', 'platform_group')
+                 .order_by('-earned_count', 'id')[:60]):
+        if cand.series_id in seen:
+            continue
+        art = cand.art_layers()
+        if not art.get('has_custom_image') or art.get('is_avatar'):
+            continue
+        seen.add(cand.series_id)
+        out.append({'src': art['main'], 'series': cand.series.name, 'badge_id': cand.id})
+        if len(out) >= limit:
+            break
+    return out
+
+
+class BadgeListView(ListView):
     """
     Display list of all badge series with progress tracking for authenticated users.
 
@@ -62,8 +167,38 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     context_object_name = 'display_data'
     paginate_by = None
 
+    def _view_mode(self):
+        """'gallery' (the per-tier medallion wall) or 'series' (the default per-series rows)."""
+        return 'gallery' if self.request.GET.get('view') == 'gallery' else 'series'
+
+    def _profile(self):
+        user = self.request.user
+        return user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+
+    def _live_platform_groups(self):
+        """Platform groups with at least one live group badge -- the Gallery's group filter chips."""
+        return list(
+            PlatformGroup.objects.filter(group_badges__is_live=True).distinct().order_by('sort_order', 'name')
+        )
+
     def get_template_names(self):
-        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results':
+        gallery = self._view_mode() == 'gallery'
+        htmx_results = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results'
+        htmx_view = getattr(self.request, 'htmx', False) and self.request.htmx.target == 'badge-view'
+        xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if gallery:
+            # The view-toggle HTMX swap (target='badge-view') returns just the Gallery island; an
+            # InfiniteScroller page fetch (XHR) or a filter HTMX swap returns just the grid; else the full page.
+            if htmx_view:
+                return ['trophies/partials/badge_list/gallery.html']
+            if htmx_results or xhr:
+                return ['trophies/partials/badge_list/gallery_results.html']
+            return ['trophies/badge_list.html']
+        # Series: same model -- the view-toggle swap returns the Series island; a filter HTMX swap OR an
+        # InfiniteScroller page fetch returns just the rows partial; the full page otherwise.
+        if htmx_view:
+            return ['trophies/partials/badge_list/series_view.html']
+        if htmx_results or xhr:
             return ['trophies/partials/badge_list/browse_results.html']
         return super().get_template_names()
 
@@ -73,361 +208,313 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         return self._filter_form
 
     def get_queryset(self):
-        qs = super().get_queryset().live().select_related(
-            'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match', 'title',
-            'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
-            'base_badge__title',
-            'submitted_by', 'base_badge__submitted_by',
-        )
-        form = self.get_filter_form()
+        if self._view_mode() == 'gallery':
+            return self._gallery_queryset()
+        return self._series_queryset()
 
+    def _series_queryset(self):
+        """Series view: one BadgeSeries row per series that has a live group badge. Every filter (name search /
+        type / auth completion) + sort is DB-side so it paginates at catalog scale. _live_groups gates to
+        series that actually ship a live badge; _earned_total (the sum of the series' live-group earners) drives
+        the popularity + rarity sorts. Personal state is a binary hold (holds >=1 live group / holds none) --
+        whale-safe; per-badge tier progress is engine-derived and lives on the detail page."""
+        qs = BadgeSeries.objects.annotate(
+            _live_groups=Count('group_badges', filter=Q(group_badges__is_live=True)),
+            _earned_total=Sum('group_badges__earned_count', filter=Q(group_badges__is_live=True)),
+        ).filter(_live_groups__gt=0).select_related('franchise', 'collection', 'developer')
+        g = self.request.GET
+
+        form = self.get_filter_form()
         if form.is_valid():
-            series_slug = slugify(form.cleaned_data.get('series_slug'))
-            if series_slug:
-                qs = qs.filter(series_slug__icontains=series_slug)
-            badge_type = form.cleaned_data.get('badge_type')
-            if badge_type:
-                qs = qs.filter(badge_type=badge_type)
+            raw = (form.cleaned_data.get('series_slug') or '').strip()
+            if raw:
+                qs = qs.filter(Q(series_slug__icontains=slugify(raw)) | Q(name__icontains=raw))
+        types = [t for t in g.getlist('badge_type') if t]
+        if types:
+            qs = qs.filter(badge_type__in=types)
+
+        # Personal-state chips (auth only): Earned = holds >=1 live group badge in the series; Not-earned =
+        # holds none. One binary-hold EXISTS probe; both chips selected = no filter.
+        profile = self._profile()
+        states = [s for s in g.getlist('state') if s in _GALLERY_STATES] if profile else []
+        if states and not ('earned' in states and 'unearned' in states):
+            held = Exists(UserGroupBadge.objects.filter(
+                profile=profile, group_badge__series=OuterRef('pk'), group_badge__is_live=True,
+            ))
+            qs = qs.annotate(_held=held).filter(_held=('earned' in states))
+
+        # Live-rarity multi-select (OR'd): keep series that ship at least one live group badge in a selected
+        # class (or, for "Be the first", a not-yet-earned one). Reuses the SAME rarity annotation on the group
+        # badges (so it agrees with the displayed grade), wrapped in an EXISTS -- no per-series Python work.
+        raw_rarity = g.getlist('rarity')
+        rarities = [r for r in raw_rarity if r in RARITY_CLASSES]
+        want_unearned = RARITY_UNEARNED in raw_rarity
+        if rarities or want_unearned:
+            inner = GroupBadge.objects.filter(series=OuterRef('pk'), is_live=True)
+            cond = Q()
+            if rarities:
+                inner = annotate_group_rarity(inner)
+                cond |= Q(_rarity__in=rarities)
+            if want_unearned:
+                cond |= Q(earned_count=0)
+            qs = qs.filter(Exists(inner.filter(cond)))
+
+        # Every order_by ends on 'pk' -- a unique final tiebreak so infinite-scroll pages don't reorder ties.
+        name_key = Lower('name')
+        sort = g.get('sort') if g.get('sort') in SERIES_SORT_KEYS else SERIES_SORT_DEFAULT
+        if sort == 'popular':
+            qs = qs.order_by(F('_earned_total').desc(nulls_last=True), name_key, 'pk')
+        elif sort == 'rarity':
+            qs = qs.order_by(F('_earned_total').asc(nulls_last=True), name_key, 'pk')
+        elif sort == 'newest':
+            qs = qs.order_by('-created_at', name_key, 'pk')
+        else:                                                       # name (default)
+            qs = qs.order_by(name_key, 'pk')
         return qs
 
-    def _calculate_all_series_stats(self, series_slugs):
-        """
-        Calculate total games and trophy counts for multiple badge series in bulk.
-
-        Single query fetches all games across all requested series, then groups
-        in memory. Eliminates N*2 queries (count + iteration per series).
-
-        Args:
-            series_slugs: Iterable of series slug strings
-
-        Returns:
-            dict: {series_slug: (total_games, trophy_types_dict)}
-        """
-        games_with_series = Game.objects.filter(
-            concept__stages__series_slug__in=series_slugs
-        ).values_list(
-            'id', 'concept__stages__series_slug',
-            'defined_trophies',
-        ).distinct()
-
-        # Group games by series slug
-        series_games = defaultdict(dict)
-        for game_id, slug, trophies in games_with_series:
-            if game_id not in series_games[slug]:
-                series_games[slug][game_id] = trophies
-
-        result = {}
-        for slug in series_slugs:
-            games_map = series_games.get(slug, {})
-            total_games = len(games_map)
-            trophy_types = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-            for trophies in games_map.values():
-                if trophies:
-                    trophy_types['bronze'] += trophies.get('bronze', 0)
-                    trophy_types['silver'] += trophies.get('silver', 0)
-                    trophy_types['gold'] += trophies.get('gold', 0)
-                    trophy_types['platinum'] += trophies.get('platinum', 0)
-            result[slug] = (total_games, trophy_types)
-
-        return result
-
-    def _build_badge_display_data(self, grouped_badges, profile=None):
-        """
-        Build display data for badges with optional progress tracking.
-
-        Consolidates logic for both authenticated and unauthenticated states.
-
-        Args:
-            grouped_badges: Dict of {series_slug: [badge list]}
-            profile: Profile instance or None
-
-        Returns:
-            list: Display data dicts for each badge series
-        """
-        display_data = []
-
-        # Get user progress data if authenticated
-        earned_dict = {}
-        progress_dict = {}
-        if profile:
-            user_earned = UserBadge.objects.filter(profile=profile).values('badge__series_slug').annotate(max_tier=Max('badge__tier'))
-            earned_dict = {e['badge__series_slug']: e['max_tier'] for e in user_earned}
-
-            all_badges_ids = [b.id for group in grouped_badges.values() for b in group]
-            progress_qs = UserBadgeProgress.objects.filter(
-                profile=profile, badge__id__in=all_badges_ids
-            ).select_related('badge')
-            progress_dict = {p.badge_id: p for p in progress_qs}
-
-        # Bulk-fetch series stats for all series at once (1 query instead of N*2)
-        all_series_stats = self._calculate_all_series_stats(grouped_badges.keys())
-
-        # Build display data for each series
-        for slug, group in grouped_badges.items():
-            sorted_group = sorted(group, key=lambda b: b.tier)
-            if not sorted_group:
-                continue
-
-            tier1_badge = next((b for b in sorted_group if b.tier == 1), None)
-            if not tier1_badge:
-                continue
-
-            # Look up pre-computed series stats
-            total_games, trophy_types = all_series_stats.get(slug, (0, {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}))
-            tier1_earned_count = tier1_badge.earned_count
-
-            # Determine display badge and progress
-            if profile:
-                highest_tier = earned_dict.get(slug, 0)
-                display_badge = next((b for b in sorted_group if b.tier == highest_tier), None) if highest_tier > 0 else tier1_badge
-                if not display_badge:
-                    continue
-
-                is_earned = highest_tier > 0
-                next_badge = next((b for b in sorted_group if b.tier > highest_tier), None)
-                progress_badge = next_badge if next_badge else display_badge
-
-                # Calculate progress
-                progress = progress_dict.get(progress_badge.id) if progress_badge else None
-                required_stages = progress_badge.required_stages
-                if progress and progress_badge.badge_type in EVALUATABLE_BADGE_TYPES:
-                    completed_concepts = progress.completed_concepts
-                    progress_percentage = (completed_concepts / required_stages) * 100 if required_stages > 0 else 0
-                else:
-                    completed_concepts = 0
-                    progress_percentage = 0
-            else:
-                # Unauthenticated user - show tier 1
-                display_badge = tier1_badge
-                is_earned = False
-                completed_concepts = 0
-                required_stages = tier1_badge.required_stages
-                progress_percentage = 0
-
-            display_data.append({
-                'badge': display_badge,
-                'tier1_earned_count': tier1_earned_count,
-                'completed_concepts': completed_concepts,
-                'required_stages': required_stages,
-                'progress_percentage': round(progress_percentage, 1),
-                'trophy_types': trophy_types,
-                'total_games': total_games,
-                'is_earned': is_earned,
-                'user_highest_tier': earned_dict.get(slug, 0),
-            })
-
-        return display_data
-
-    def get_context_data(self, **kwargs):
-        """
-        Build context for badge list page.
-
-        Groups badges by series, calculates progress for authenticated users,
-        and handles sorting and pagination.
-
-        Returns:
-            dict: Context with paginated badge display data
-        """
-        context = super().get_context_data(**kwargs)
-        badges = context['object_list']
-
-        # Group badges by series. Visibility is controlled by the is_live flag
-        # (already filtered via .live() in the queryset).
-        grouped_badges = defaultdict(list)
-        for badge in badges:
-            grouped_badges[badge.series_slug].append(badge)
-
-        # Build display data (unified for auth/unauth users)
-        user = self.request.user
-        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
-        display_data = self._build_badge_display_data(grouped_badges, profile)
-
-        # Enrich with auth-only sort data (games owned, last progress date)
-        sort_val = self.request.GET.get('sort', 'name')
-        if profile and sort_val in ('games_owned', 'games_owned_inv', 'recently_progressed'):
-            if sort_val in ('games_owned', 'games_owned_inv'):
-                # Count how many games in each badge series the user owns
-                user_game_ids = set(
-                    ProfileGame.objects.filter(profile=profile).values_list('game_id', flat=True)
-                )
-                for d in display_data:
-                    slug = d['badge'].series_slug
-                    badge_concept_ids = set(
-                        Stage.objects.filter(series_slug=slug).values_list('concepts__id', flat=True)
-                    )
-                    badge_game_ids = set(
-                        Game.objects.filter(concept_id__in=badge_concept_ids).values_list('id', flat=True)
-                    ) if badge_concept_ids else set()
-                    d['games_owned_count'] = len(user_game_ids & badge_game_ids)
-            elif sort_val == 'recently_progressed':
-                # Last progress check date per badge
-                progress_dates = {
-                    p.badge.series_slug: p.last_checked
-                    for p in UserBadgeProgress.objects.filter(
-                        profile=profile,
-                    ).select_related('badge')
-                }
-                for d in display_data:
-                    d['last_progress_date'] = progress_dates.get(d['badge'].series_slug)
-
-        # Filter by completion status (auth-only)
-        completion_status = self.request.GET.get('completion_status', '')
-        if completion_status and profile:
-            max_tier_lookup = {}
-            for d in display_data:
-                slug = d['badge'].series_slug
-                max_possible = max(
-                    (b.tier for b in grouped_badges.get(slug, []) if b.is_live),
-                    default=0,
-                )
-                max_tier_lookup[slug] = max_possible
-
-            if completion_status == 'not_started':
-                display_data = [d for d in display_data if d['user_highest_tier'] == 0]
-            elif completion_status == 'in_progress':
-                display_data = [
-                    d for d in display_data
-                    if 0 < d['user_highest_tier'] < max_tier_lookup.get(d['badge'].series_slug, 0)
-                    or (d['user_highest_tier'] == 0 and d['progress_percentage'] > 0)
-                ]
-            elif completion_status == 'completed':
-                display_data = [
-                    d for d in display_data
-                    if d['user_highest_tier'] > 0
-                    and d['user_highest_tier'] >= max_tier_lookup.get(d['badge'].series_slug, 0)
-                ]
-
-        # Sort data
-        sort_val = self.request.GET.get('sort', 'name')
-        _title = lambda d: (d['badge'].effective_display_title or '').lower()
-        if sort_val == 'earned':
-            display_data.sort(key=lambda d: (-d['tier1_earned_count'], _title(d)))
-        elif sort_val == 'earned_inv':
-            display_data.sort(key=lambda d: (d['tier1_earned_count'], _title(d)))
-        elif sort_val == 'my_tier' and profile:
-            display_data.sort(key=lambda d: (d['user_highest_tier'], _title(d)))
-        elif sort_val == 'my_tier_desc' and profile:
-            display_data.sort(key=lambda d: (-d['user_highest_tier'], _title(d)))
-        elif sort_val == 'stages':
-            display_data.sort(key=lambda d: (-d['badge'].required_stages, _title(d)))
-        elif sort_val == 'stages_inv':
-            display_data.sort(key=lambda d: (d['badge'].required_stages, _title(d)))
-        elif sort_val == 'newest':
-            display_data.sort(key=lambda d: d['badge'].created_at or datetime.min, reverse=True)
-        elif sort_val == 'oldest_added':
-            display_data.sort(key=lambda d: d['badge'].created_at or datetime.min)
-        elif sort_val == 'xp':
-            display_data.sort(key=lambda d: (-_badge_xp(d['badge']), _title(d)))
-        elif sort_val == 'xp_inv':
-            display_data.sort(key=lambda d: (_badge_xp(d['badge']), _title(d)))
-        elif sort_val == 'closest' and profile:
-            # Closest to completing next tier: highest progress_percentage first, exclude completed
-            display_data.sort(key=lambda d: (-d['progress_percentage'], _title(d)))
-        elif sort_val == 'games_owned' and profile:
-            display_data.sort(key=lambda d: (-d.get('games_owned_count', 0), _title(d)))
-        elif sort_val == 'games_owned_inv' and profile:
-            display_data.sort(key=lambda d: (d.get('games_owned_count', 0), _title(d)))
-        elif sort_val == 'recently_progressed' and profile:
-            display_data.sort(
-                key=lambda d: d.get('last_progress_date') or datetime.min,
-                reverse=True,
-            )
-        else:
-            display_data.sort(key=lambda d: _title(d))
-
-        # Paginate
-        paginate_by = 30
-        paginator = Paginator(display_data, paginate_by)
-        page_number = self.request.GET.get('page')
-        page_obj = paginator.get_page(page_number)
-
-        context['display_data'] = page_obj
-        context['page_obj'] = page_obj
-        context['paginator'] = paginator
-        context['is_paginated'] = page_obj.has_other_pages()
-
-        # User badge stats for authenticated users
-        if profile:
-            try:
-                gamification = profile.gamification
-                series_completed = UserBadge.objects.filter(
-                    profile=profile
-                ).values('badge__series_slug').distinct().count()
-                total_series = Badge.objects.live().filter(tier=1).exclude(
-                    series_slug__isnull=True
-                ).exclude(series_slug='').count()
-
-                # Global stage completion stats (all badge series)
-                total_stages = Stage.objects.filter(stage_number__gt=0).count()
-                plat_eligible_stages = Stage.objects.filter(
-                    stage_number__gt=0,
-                    concepts__games__defined_trophies__platinum__gt=0,
-                ).distinct().count()
-                user_stages_platted = Stage.objects.filter(
-                    stage_number__gt=0,
-                    concepts__games__played_by__profile=profile,
-                    concepts__games__played_by__has_plat=True,
-                ).distinct().count()
-                user_stages_completed = Stage.objects.filter(
-                    stage_number__gt=0,
-                    concepts__games__played_by__profile=profile,
-                    concepts__games__played_by__progress=100,
-                ).distinct().count()
-
-                context['user_badge_stats'] = {
-                    'total_xp': gamification.total_badge_xp,
-                    'total_badges_earned': gamification.total_badges_earned,
-                    'stages_platted': user_stages_platted,
-                    'plat_eligible_stages': plat_eligible_stages,
-                    'stages_completed': user_stages_completed,
-                    'total_stages': total_stages,
-                    'series_completed': series_completed,
-                    'total_series': total_series,
-                    'completion_pct': round(
-                        (series_completed / total_series * 100), 1
-                    ) if total_series > 0 else 0,
-                }
-                context['series_badge_xp'] = gamification.series_badge_xp or {}
-            except ProfileGamification.DoesNotExist:
-                context['user_badge_stats'] = None
-                context['series_badge_xp'] = {}
-
-        # Breadcrumbs and form
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Badges'},
-        ]
-        context['form'] = self.get_filter_form()
-        context['selected_badge_type'] = self.request.GET.get('badge_type', '')
-
-        context['seo_description'] = (
-            "Explore all badge series on Platinum Pursuit. "
-            "Track your progress across game collections and earn every tier."
+    def _gallery_queryset(self):
+        """The Browse Gallery's per-GROUP-BADGE queryset: one row per live GroupBadge (series x platform group),
+        every filter + sort DB-side so it paginates at catalog scale. select_related covers the series +
+        platform_group FKs the batched card builder (badge_list_service) reads, so it issues no per-card FK
+        queries. Personal state is a binary hold Exists (earned / not) -- whale-safe; per-badge in-progress is
+        engine-derived and lives on the detail page."""
+        qs = GroupBadge.objects.filter(is_live=True).select_related(
+            'series', 'series__franchise', 'series__collection', 'series__developer', 'platform_group',
         )
+        g = self.request.GET
 
+        # MULTI-select chips (OR'd): platform group (Legacy HD / Ultra HD ...) + badge type (on the series).
+        groups = [k for k in g.getlist('group') if k]
+        if groups:
+            qs = qs.filter(platform_group__key__in=groups)
+        types = [t for t in g.getlist('badge_type') if t]
+        if types:
+            qs = qs.filter(series__badge_type__in=types)
+        q = (g.get('q') or '').strip()
+        if q:
+            search_q = Q(series__series_slug__icontains=slugify(q)) | Q(series__name__icontains=q)
+            qs = qs.filter(search_q)
+
+        # Personal-state multi-select (auth only): Earned / Not-earned, OR'd. One binary-hold EXISTS probe.
+        profile = self._profile()
+        states = [s for s in g.getlist('state') if s in _GALLERY_STATES] if profile else []
+        if states and not ('earned' in states and 'unearned' in states):   # both selected = no filter
+            held = Exists(UserGroupBadge.objects.filter(profile=profile, group_badge=OuterRef('pk')))
+            qs = qs.annotate(_earned=held).filter(_earned=('earned' in states))
+
+        # Live-rarity multi-select (OR'd): keep badges whose derived class is selected, plus a "Be the first"
+        # option for the not-yet-earned (earned_count == 0, exactly like the card nudge). The pursuer subquery is
+        # added ONLY when a real rarity class is picked, so "Be the first" alone stays a plain indexed filter.
+        raw_rarity = g.getlist('rarity')
+        rarities = [r for r in raw_rarity if r in RARITY_CLASSES]
+        want_unearned = RARITY_UNEARNED in raw_rarity
+        if rarities or want_unearned:
+            cond = Q()
+            if rarities:
+                qs = annotate_group_rarity(qs)
+                cond |= Q(_rarity__in=rarities)
+            if want_unearned:
+                cond |= Q(earned_count=0)
+            qs = qs.filter(cond)
+
+        # NAME is the canonical default + the tiebreaker within every other sort (so cards fall
+        # back to a stable order on ties). Every order_by ends on 'pk' -- a unique final tiebreak
+        # so infinite-scroll pages don't reorder ties (duplicated / skipped medallions).
+        name_key = Lower('series__name')
+        sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT
+        if sort == 'rarity':
+            qs = qs.order_by('earned_count', name_key, 'pk')    # fewest earners = rarest first
+        elif sort == 'popular':
+            qs = qs.order_by('-earned_count', name_key, 'pk')
+        elif sort == 'newest':
+            qs = qs.order_by('-created_at', name_key, 'pk')
+        else:                                                    # name (default)
+            qs = qs.order_by(name_key, 'pk')
+        return qs
+
+    def _gallery_context_data(self, **kwargs):
+        """Build the Browse Gallery context: paginate the per-tier queryset (self.object_list), then
+        batch-build SHOWCASE frames for the page. Whale-safe -- three bulk maps + include_live_stats=False
+        means zero per-badge queries/Redis (the frame_service prescribed batch path)."""
+        context = super().get_context_data(**kwargs)
+        paginator = Paginator(self.object_list, GALLERY_PAGE_SIZE)
+        page_obj = paginator.get_page(self.request.GET.get('page'))
+        profile = self._profile()
+
+        # InfiniteScroller walks pages 2,3,... via XHR; Paginator.get_page CLAMPS an out-of-range page to
+        # the last one, which would loop forever re-appending it. For an XHR fetch past the end, emit no
+        # cards so the scroller sees zero and stops.
+        try:
+            requested_page = int(self.request.GET.get('page') or 1)
+        except (TypeError, ValueError):
+            requested_page = 1
+        is_xhr = (
+            self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or (getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results')
+        )
+        page_badges = [] if (is_xhr and requested_page > paginator.num_pages) else list(page_obj)
+
+        # Batched, whale-safe: two bulk queries (pursuer counts + the viewer's holds) for the whole page, not
+        # per card. Live rarity + binary hold + the showcase medallion frame come back on each card dict.
+        cards = build_list_cards(page_badges, profile)
+
+        g = self.request.GET
+        context.update({
+            'view': 'gallery',
+            'gallery_cards': cards,
+            'page_obj': page_obj,
+            'paginator': paginator,
+            'is_paginated': page_obj.has_other_pages(),
+            'form': self.get_filter_form(),                 # supplies the badge_type choices for the chips
+            'gallery_authed': profile is not None,
+            'gallery_groups': self._live_platform_groups(),  # platform-group filter chips (Legacy HD / Ultra HD)
+            'gallery_groups_selected': g.getlist('group'),
+            'gallery_states': g.getlist('state'),
+            'gallery_types': g.getlist('badge_type'),
+            'rarity_choices': RARITY_FILTER_CHOICES,           # shared rarity filter chips (both views)
+            'selected_rarities': g.getlist('rarity'),
+            'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else GALLERY_SORT_DEFAULT,
+            'gallery_q': g.get('q', ''),
+            'gallery_sorts': GALLERY_SORTS,
+            'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
+            'catalog_stats': badge_catalog_stats(),  # generalized collection stats (hourly-cached)
+            'forge_meds': badge_forge_medallions(),          # sample edition medallions for the header explainer
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Badges'},
+            ],
+            'seo_description': (
+                "Browse every badge on Platinum Pursuit -- filter by platform, rarity, and type to find "
+                "your next platinum to chase."
+            ),
+        })
         return context
 
 
-class BadgeDetailView(ProfileHotbarMixin, DetailView):
-    """
-    Display detailed badge series information with progress tracking.
+    def get_context_data(self, **kwargs):
+        context = (self._gallery_context_data(**kwargs) if self._view_mode() == 'gallery'
+                   else self._series_context_data(**kwargs))
+        # Dev-only replay control for the first-run modal. It is one-shot by design, gated on a
+        # localStorage flag, so once dismissed there is no way back to it in a browser short of clearing
+        # site data by hand -- which makes iterating on the thing needlessly painful. Same shape as the
+        # Collection's `dev_mint` ceremony replay, and it never renders in prod.
+        context['dev_howto'] = settings.DEBUG
+        return context
 
-    Shows all tiers in a badge series, user's progress (if authenticated),
-    required games organized by stages, and completion statistics.
-    Dynamically displays highest earned tier or next tier to unlock.
-    """
-    model = Badge
+    def _series_context_data(self, **kwargs):
+        """Build the Series view context: paginate the per-SERIES queryset (self.object_list), then batch-build
+        the page's tiles via build_series_items. Whale-safe -- one group-badge fetch for the page plus the two
+        bulk maps (pursuer counts + the viewer's holds), independent of how many series render."""
+        context = super().get_context_data(**kwargs)
+        profile = self._profile()
+        g = self.request.GET
+
+        # Paginate the series rows. InfiniteScroller walks pages 2,3,... via XHR; get_page clamps an
+        # out-of-range page to the last (which would loop forever), so an XHR fetch past the end emits NO rows
+        # and the scroller stops.
+        paginator = Paginator(self.object_list, SERIES_PAGE_SIZE)
+        page_number = g.get('page')
+        page_obj = paginator.get_page(page_number)
+        try:
+            requested_page = int(page_number or 1)
+        except (TypeError, ValueError):
+            requested_page = 1
+        is_xhr = (
+            self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or (getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results')
+        )
+        page_series = [] if (is_xhr and requested_page > paginator.num_pages) else list(page_obj)
+        items = build_series_items(page_series, profile)
+
+        context.update({
+            'view': 'series',
+            'display_data': items,
+            'page_obj': page_obj,
+            'paginator': paginator,
+            'is_paginated': page_obj.has_other_pages(),
+            'series_page_size': SERIES_PAGE_SIZE,
+            'catalog_stats': badge_catalog_stats(),
+            'forge_meds': badge_forge_medallions(),   # sample edition medallions for the header explainer
+            'form': self.get_filter_form(),
+            'series_authed': profile is not None,
+            'series_states': [s for s in g.getlist('state') if s in _GALLERY_STATES],
+            'selected_badge_types': g.getlist('badge_type'),
+            'rarity_choices': RARITY_FILTER_CHOICES,           # shared rarity filter chips (both views)
+            'selected_rarities': g.getlist('rarity'),
+            'series_sort': g.get('sort') if g.get('sort') in SERIES_SORT_KEYS else SERIES_SORT_DEFAULT,
+            'series_sorts': SERIES_SORTS,
+            'series_q': g.get('series_slug', ''),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Badges'},
+            ],
+            'seo_description': (
+                "Explore every badge series on Platinum Pursuit -- track your progress across game "
+                "collections and platform generations."
+            ),
+        })
+        return context
+
+
+class GroupBadgeInspectView(View):
+    """Medallion "pick it up" for the NEW grouping badges (Legacy HD / Ultra HD): the badge big + its facts,
+    fetched on tap into the badge detail page's #badge-peek dialog. One view, two entry points mirroring the
+    old tier peek:
+      - group_badge_quick_peek (anon / no profile): the GENERIC full-colour showcase -- a display piece, no
+        personal state or owner engraving.
+      - group_badge_progress_peek (auth + a profile on display): that Pursuer's REAL state (earned / in
+        progress / unearned) + live earners rank + owner engraving, correct on your own page AND another's.
+    Reuses badge_detail_service so the frame + facts match the page exactly (a rare on-tap fetch, not a hot
+    path)."""
+
+    def get(self, request, group_badge_id, psn_username=None):
+        gb = (
+            GroupBadge.objects
+            .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+                            'series__funded_by', 'funded_by_override', 'platform_group')
+            .filter(id=group_badge_id, is_live=True).first()
+        )
+        if gb is None:
+            return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
+
+        profile, viewing_other = None, None
+        if psn_username:
+            if not request.user.is_authenticated:
+                return HttpResponseNotFound()   # a specific Pursuer's progress is signed-in-only
+            profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
+            if profile != getattr(request.user, 'profile', None):
+                viewing_other = profile.display_psn_username or profile.psn_username
+
+        detail = get_badge_detail(gb.series, profile)
+        gv = next((g for g in detail.groups if g.group_badge.id == gb.id), None)
+        if gv is None:
+            return HttpResponseNotFound()
+
+        showcase = profile is None
+        if showcase:
+            # Anon peek = full-colour display piece (the tier system's showcase), never the greyed unearned art.
+            gv.frame['state'] = 'earned'
+            gv.frame['owner_name'] = None
+
+        return render(request, 'components/group_badge_modal.html', {
+            'gv': gv, 'series': gb.series, 'detail': detail,
+            'viewing_other': viewing_other, 'showcase': showcase,
+        })
+
+
+class BadgeDetailView(DetailView):
+    """Badge series detail: a series' parallel platform-group badges (Legacy HD / Ultra HD), the viewer's
+    per-group state + live progress, live earners rank, per-group rarity, and series XP. Reads the NEW
+    grouping-badge models via badge_detail_service -- no tiers. See docs/design/rebuild/badge-backend-rebuild.md."""
+    model = BadgeSeries
     template_name = 'trophies/badge_detail.html'
     slug_field = 'series_slug'
     slug_url_kwarg = 'series_slug'
-    context_object_name = 'series_badges'
+    context_object_name = 'series'
 
     def dispatch(self, request, *args, **kwargs):
-        # Profile-scoped variants (/my-pursuit/badges/<slug>/<username>/ and
-        # the legacy /badges/<slug>/<username>/ prefix) require auth — see
-        # GameDetailView.dispatch for the full rationale. Anonymous visitors
-        # are redirected to the canonical badge series page with a
-        # from_profile hint that drives a sign-up banner.
+        # Profile-scoped variant (/badges/<slug>/<username>/) requires auth; anon -> canonical page with a
+        # from_profile hint that drives the sign-up banner. (Mirrors GameDetailView.dispatch.)
         psn_username = kwargs.get('psn_username')
         if psn_username and not request.user.is_authenticated:
             canonical = reverse('badge_detail', kwargs={'series_slug': kwargs['series_slug']})
@@ -438,27 +525,22 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
-        series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.by_series(series_slug).select_related(
-            'funded_by', 'base_badge__funded_by', 'submitted_by', 'base_badge__submitted_by',
-            'title', 'base_badge__title',
-            # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
-            'most_recent_concept', 'most_recent_concept__igdb_match',
+        series = get_object_or_404(
+            BadgeSeries.objects.select_related(
+                'franchise', 'collection', 'developer', 'submitted_by', 'funded_by', 'title',
+            ),
+            series_slug=self.kwargs[self.slug_url_kwarg],
         )
+        # Staff preview gate: a series with no LIVE group badge is dormant (pre-cutover) -> staff-only.
+        user = self.request.user
+        can_preview = user.is_authenticated and (user.is_staff or user.is_moderator)
+        if not can_preview and not series.group_badges.filter(is_live=True).exists():
+            raise Http404("Series not found")
+        return series
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        series_badges = context['object']
-
-        if not series_badges.exists():
-            raise Http404("Series not found")
-
-        # Staff preview gate: non-live badges are staff-only
-        first_badge = series_badges.first()
-        if first_badge and not first_badge.is_live:
-            if not self.request.user.is_staff:
-                raise Http404("Series not found")
-            context['is_staff_preview'] = True
+        series = context['series']
 
         psn_username = self.kwargs.get('psn_username')
         if psn_username:
@@ -468,1145 +550,686 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         else:
             target_profile = None
 
-        context['target_profile'] = target_profile
-
-        badge = None
-        is_earned = False
-        highest_tier_earned = 0
-        max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
-
-        # Bulk-fetch progress for all badges in this series (single query, reused below)
-        badge_progress_dict = {}
-        if target_profile:
-            badge_progress_dict = {
-                p.badge_id: p for p in
-                UserBadgeProgress.objects.filter(
-                    profile=target_profile, badge__series_slug=self.kwargs['series_slug']
-                )
-            }
-
-        if target_profile:
-            # Tiers are independent, so we need the full earned-tier SET (not just
-            # the max) to default-select the right tab below.
-            earned_tiers = set(
-                UserBadge.objects.filter(
-                    profile=target_profile, badge__series_slug=self.kwargs['series_slug']
-                ).values_list('badge__tier', flat=True)
-            )
-            highest_tier_earned = max(earned_tiers) if earned_tiers else 0
-            badge = series_badges.filter(tier=highest_tier_earned).first()
-            if badge and highest_tier_earned > 0:
-                is_earned = True
-            else:
-                badge = series_badges.order_by('tier').first()
-            context['is_maxed'] = highest_tier_earned > 0 and highest_tier_earned == max_tier
-
-            context['badge'] = badge
-
-            progress = badge_progress_dict.get(badge.id)
-            context['progress'] = progress
-            context['progress_percent'] = progress.completed_concepts / badge.required_stages * 100 if progress and badge.required_stages > 0 else 0
-        else:
-            badge = series_badges.filter(tier=1).first()
-            context['badge'] = badge
-
-        # Tier selector: determine which tier tab to show
-        tier_param = self.request.GET.get('tier')
-        try:
-            selected_tier = int(tier_param)
-            if selected_tier < 1 or selected_tier > max_tier:
-                selected_tier = None
-        except (TypeError, ValueError):
-            selected_tier = None
-
-        if selected_tier is None:
-            if target_profile:
-                # Tiers are independent: default to the lowest tier NOT yet earned
-                # (the next available win), or the highest tier if all are earned.
-                unearned = [t for t in range(1, max_tier + 1) if t not in earned_tiers]
-                selected_tier = unearned[0] if unearned else (max_tier or 1)
-            else:
-                selected_tier = 1
-        context['selected_tier'] = selected_tier
-        context['max_tier'] = max_tier
-        # Whether selected tier requires platinum (tiers 1/3) or 100% (tiers 2/4)
-        context['selected_tier_is_plat'] = selected_tier in [1, 3]
-
-        # Same Game queryset is reused for both the standalone concepts prefetch
-        # and the bundle members prefetch. raw_response is the full IGDB API blob
-        # (~30 KB per row); the badge detail page only reads cover-art fields, so
-        # loading raw_response inflates each game by ~30 KB for nothing —
-        # multiplied across all stages + concurrent requests, it was the trigger
-        # for the May 2026 web-server OOM.
-        _badge_game_qs = Game.objects.select_related('concept', 'concept__igdb_match').defer(
-            'concept__igdb_match__raw_response',
-        )
-        stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=_badge_game_qs),
-            Prefetch('concept_bundles__concepts__games', queryset=_badge_game_qs),
-            'concept_bundles__concepts',
-        ))
-        context['stage_count'] = len(stages)
-
-        # Collect all games across all stages (standalone + bundle members).
-        # Sort by newest platform (PS5 > PS4 > VRs > PS3 > Vita), then alphabetical.
-        stage_games_map = {}  # stage.id -> sorted list of standalone-concept games
-        stage_bundle_games_map = {}  # stage.id -> {bundle.id: {concept.id: [games]}}
-        all_games_set = set()
-        for stage in stages:
-            standalone_games = set()
-            for concept in stage.concepts.all():
-                standalone_games.update(concept.games.all())
-            stage_games_map[stage.id] = sorted(
-                standalone_games,
-                key=lambda g: (platform_display_rank(g.title_platform), g.title_name.lower()),
-            )
-            all_games_set.update(standalone_games)
-
-            # Bundle games (separate from standalone so they render as their own row)
-            bundle_map = {}
-            for bundle in stage.concept_bundles.all():
-                member_map = {}
-                for concept in bundle.concepts.all():
-                    games_list = list(concept.games.all())
-                    member_map[concept.id] = games_list
-                    all_games_set.update(games_list)
-                bundle_map[bundle.id] = member_map
-            stage_bundle_games_map[stage.id] = bundle_map
-
-        # Static per-concept fact: does this bundle-member concept have a real
-        # platinum trophy available? Drives the "earn the platinum" wording on
-        # plat-tier badge views for ESO-style bundles. Bundles whose members
-        # have no platinum trophies (BttF-style) fall back to the synth-plat
-        # messaging.
-        bundle_member_concept_ids = {
-            cid
-            for bundles_for_stage in stage_bundle_games_map.values()
-            for member_map in bundles_for_stage.values()
-            for cid in member_map.keys()
-        }
-        concepts_with_real_plat = set()
-        if bundle_member_concept_ids:
-            from trophies.models import Trophy
-            concepts_with_real_plat = set(
-                Trophy.objects
-                .filter(trophy_type='platinum', game__concept_id__in=bundle_member_concept_ids)
-                .values_list('game__concept_id', flat=True)
-                .distinct()
-            )
-
-        # Single bulk ProfileGame query instead of one per stage
-        profile_games = {}
-        if target_profile and all_games_set:
-            profile_games_qs = ProfileGame.objects.filter(
-                profile=target_profile, game__in=all_games_set
-            ).select_related('game')
-            profile_games = {pg.game_id: pg for pg in profile_games_qs}
-
-        from trophies.services.rating_service import RatingService
-
-        def _build_game_entry(game, community_ratings_cache):
-            if game not in community_ratings_cache:
-                community_ratings_cache[game] = RatingService.get_cached_community_averages(game.concept)
-            return {
-                'game': game,
-                'profile_game': profile_games.get(game.id),
-                'community_ratings': community_ratings_cache[game],
-                'has_guide': bool(game.concept.guide_slug),
-            }
-
-        structured_data = []
-        for stage in stages:
-            games = stage_games_map[stage.id]
-
-            community_ratings = {}
-
-            all_game_entries = [_build_game_entry(game, community_ratings) for game in games]
-
-            unobtainable = [g for g in all_game_entries if not g['game'].is_obtainable or g['game'].is_delisted]
-            unobtainable_completed = sum(
-                1 for g in unobtainable
-                if g['profile_game'] and (g['profile_game'].progress == 100 or g['profile_game'].has_plat)
-            )
-
-            # Bundle qualifiers: each renders as a single row showing aggregate
-            # progress across all member concepts. Two satisfaction paths:
-            #   - Real platinum on any member (plat-check tiers 1/3 only): models
-            #     ESO-style bundles where one member carries the platinum trophy.
-            #   - Synthesized platinum (every member at progress=100): models
-            #     BttF-style bundles where no member has a platinum trophy.
-            # Members sort by release_date (nulls last, title tiebreaker) so
-            # episodic chapters appear in natural release order.
-            bundles = []
-            bundle_games_for_stage = stage_bundle_games_map.get(stage.id, {})
-            is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
-            for bundle in stage.concept_bundles.all():
-                member_games_by_concept = bundle_games_for_stage.get(bundle.id, {})
-                sorted_members = sorted(
-                    bundle.concepts.all(),
-                    key=lambda c: (
-                        c.release_date is None,
-                        c.release_date,
-                        (c.unified_title or '').lower(),
-                    ),
-                )
-                members = []
-                any_member_platted = False
-                for concept in sorted_members:
-                    concept_games = member_games_by_concept.get(concept.id, [])
-                    member_game_entries = [_build_game_entry(g, community_ratings) for g in concept_games]
-                    is_fully_earned = any(
-                        e['profile_game'] and e['profile_game'].progress == 100
-                        for e in member_game_entries
-                    )
-                    has_platted = any(
-                        e['profile_game'] and e['profile_game'].has_plat
-                        for e in member_game_entries
-                    )
-                    if has_platted:
-                        any_member_platted = True
-                    members.append({
-                        'concept': concept,
-                        'games': member_game_entries,
-                        'is_fully_earned': is_fully_earned,
-                    })
-                completed_members = sum(1 for m in members if m['is_fully_earned'])
-                total_members = len(members)
-                all_members_100 = total_members > 0 and completed_members == total_members
-                has_real_plat = any(
-                    m['concept'].id in concepts_with_real_plat for m in members
-                )
-                # Tier-aware satisfaction: plat-check tiers accept either path,
-                # progress-check tiers only accept the synth path.
-                if is_plat_tier:
-                    is_satisfied = any_member_platted or all_members_100
-                else:
-                    is_satisfied = all_members_100
-                bundles.append({
-                    'bundle': bundle,
-                    'label': bundle.label,
-                    'members': members,
-                    'is_satisfied': is_satisfied,
-                    'all_members_100': all_members_100,
-                    'any_member_platted': any_member_platted,
-                    'has_real_plat': has_real_plat,
-                    'completed_members': completed_members,
-                    'total_members': total_members,
-                })
-
-            structured_data.append({
-                'stage': stage,
-                'games': all_game_entries,
-                'obtainable_games': [g for g in all_game_entries if g['game'].is_obtainable and not g['game'].is_delisted],
-                'unobtainable_games': unobtainable,
-                'unobtainable_completed': unobtainable_completed,
-                'bundles': bundles,
-            })
-
-        all_badges = Badge.objects.by_series(badge.series_slug)
-        all_badges_list = list(all_badges)
-        badge_completion = {b.tier: b.get_stage_completion(target_profile, b.badge_type) for b in all_badges_list}
-
-
-        # Add required_stages for each tier (useful for megamix badges)
-        badge_requirements = {b.tier: b.required_stages for b in all_badges_list}
-
-        # Tier selector context
-        context['all_tier_badges'] = sorted(all_badges_list, key=lambda b: b.tier)
-        selected_tier_badge = next((b for b in all_badges_list if b.tier == selected_tier), None)
-        context['selected_tier_badge'] = selected_tier_badge
-        context['selected_tier_completion'] = badge_completion.get(selected_tier, {})
-        context['selected_tier_requirements'] = badge_requirements.get(selected_tier, 0)
-
-        # Badge series stats (computed from existing data, no new DB queries)
-        tier_earner_counts = {b.tier: b.earned_count for b in all_badges_list}
-
-        total_games = sum(len(data['games']) for data in structured_data)
-
-        user_series_xp = 0
-        user_lb_rank = None
-        user_lb_progress_rank = None
-        user_total_playtime = None
-        user_games_played = 0
-        user_platinums = 0
-        series_slug = self.kwargs['series_slug']
-        if target_profile:
-            try:
-                xp_data = target_profile.gamification.series_badge_xp
-                user_series_xp = (xp_data or {}).get(series_slug, 0)
-            except Exception:
-                pass
-
-            earners_rank = get_earners_rank(series_slug, target_profile.id)
-            if earners_rank:
-                user_lb_rank = earners_rank
-            progress_rank = get_progress_rank(series_slug, target_profile.id)
-            if progress_rank:
-                user_lb_progress_rank = progress_rank
-
-            # User playtime stats from already-fetched profile_games
-            total_duration = timedelta()
-            for pg in profile_games.values():
-                user_games_played += 1
-                if pg.play_duration:
-                    total_duration += pg.play_duration
-                if pg.has_plat:
-                    user_platinums += 1
-            user_total_playtime = total_duration if total_duration.total_seconds() > 0 else None
-
-            # Per-stage user stats and progress
-            # For stage progress: tiers 1/3 and megamix check has_plat, tiers 2/4 check 100%
-            is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
-            for data in structured_data:
-                standalone_game_ids = {g['game'].id for g in data['games']}
-                bundle_game_ids = {
-                    e['game'].id
-                    for bundle in data['bundles']
-                    for member in bundle['members']
-                    for e in member['games']
-                }
-                # All games on the stage (standalone + bundle members) for user-facing stats
-                stage_game_ids = standalone_game_ids | bundle_game_ids
-                stage_duration = timedelta()
-                stage_played = 0
-                stage_plats = 0
-                stage_completed = 0
-                for game_id in stage_game_ids:
-                    pg = profile_games.get(game_id)
-                    if pg:
-                        stage_played += 1
-                        if pg.play_duration:
-                            stage_duration += pg.play_duration
-                        if pg.has_plat:
-                            stage_plats += 1
-                        if (is_plat_tier and pg.has_plat) or (not is_plat_tier and pg.progress == 100):
-                            stage_completed += 1
-                total_stage_games = len(stage_game_ids)
-                data['user_stage_stats'] = {
-                    'total_playtime': stage_duration if stage_duration.total_seconds() > 0 else None,
-                    'games_played': stage_played,
-                    'total_games': total_stage_games,
-                    'platinums': stage_plats,
-                }
-                data['stage_progress'] = {
-                    'completed': stage_completed,
-                    'total': total_stage_games,
-                    'percentage': round(stage_completed / total_stage_games * 100, 1) if total_stage_games else 0,
-                }
-                # Standalone path: tier-aware "any game qualifies" check
-                has_any_100 = any(
-                    profile_games.get(gid) and profile_games[gid].progress == 100
-                    for gid in standalone_game_ids
-                )
-                has_any_plat = any(
-                    profile_games.get(gid) and profile_games[gid].has_plat
-                    for gid in standalone_game_ids
-                )
-                standalone_req_met = has_any_plat if is_plat_tier else has_any_100
-                # Bundle path: any bundle whose every member is at progress=100
-                # synthesizes a platinum (counts for both plat-tier and 100%-tier).
-                bundle_req_met = any(b['is_satisfied'] for b in data['bundles'])
-                if standalone_req_met or bundle_req_met:
-                    data['stage_completion_state'] = 'complete'
-                elif stage_played > 0:
-                    data['stage_completion_state'] = 'partial'
-                else:
-                    data['stage_completion_state'] = 'incomplete'
-
-        # Aggregated stats from already-fetched profile_games (no new queries)
-        avg_progress = 0
-        total_trophies_earned = 0
-        user_trophy_breakdown = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
-        first_played = None
-        most_recent_trophy = None
-        if target_profile and profile_games:
-            total_progress = sum(pg.progress for pg in profile_games.values())
-            avg_progress = round(total_progress / len(profile_games), 1)
-            total_trophies_earned = sum(pg.earned_trophies_count for pg in profile_games.values())
-            for pg in profile_games.values():
-                et = pg.earned_trophies or {}
-                user_trophy_breakdown['bronze'] += et.get('bronze', 0)
-                user_trophy_breakdown['silver'] += et.get('silver', 0)
-                user_trophy_breakdown['gold'] += et.get('gold', 0)
-                user_trophy_breakdown['platinum'] += et.get('platinum', 0)
-                if pg.first_played_date_time:
-                    if first_played is None or pg.first_played_date_time < first_played:
-                        first_played = pg.first_played_date_time
-                if pg.most_recent_trophy_date:
-                    if most_recent_trophy is None or pg.most_recent_trophy_date > most_recent_trophy:
-                        most_recent_trophy = pg.most_recent_trophy_date
-
-        # Avg community difficulty / hours across all series games
-        total_difficulty = 0
-        total_hours = 0
-        rated_games_count = 0
-        for data in structured_data:
-            for game_entry in data['games']:
-                ratings = game_entry.get('community_ratings')
-                if ratings:
-                    total_difficulty += ratings.get('avg_difficulty', 0)
-                    total_hours += ratings.get('avg_hours', 0)
-                    rated_games_count += 1
-        series_avg_difficulty = round(total_difficulty / rated_games_count, 1) if rated_games_count else None
-        series_avg_hours = round(total_hours / rated_games_count, 1) if rated_games_count else None
-
-        # Max Tier Distribution: exclusive % showing each earner's highest tier
-        t1 = tier_earner_counts.get(1, 0)
-        t2 = tier_earner_counts.get(2, 0)
-        t3 = tier_earner_counts.get(3, 0)
-        t4 = tier_earner_counts.get(4, 0)
-        max_tier_counts = {1: max(0, t1 - t2), 2: max(0, t2 - t3), 3: max(0, t3 - t4), 4: t4}
-        max_tier_pcts = {
-            tier: round(count / t1 * 100, 1) if t1 else 0
-            for tier, count in max_tier_counts.items()
-        }
-
-        # Community total XP for this series
-        community_total_xp = get_community_xp(series_slug)
-
-        # Total series XP available (sum across all tiers, no new queries)
-        # Uses actual stage counts from structured_data instead of badge.required_stages,
-        # which stores min_required for megamix badges (not the real stage count)
-        tier_xp_map = {1: BRONZE_STAGE_XP, 2: SILVER_STAGE_XP, 3: GOLD_STAGE_XP, 4: PLAT_STAGE_XP}
-        total_series_xp_available = 0
-        for b in all_badges_list:
-            per_stage_xp = tier_xp_map.get(b.tier, 0)
-            tier_stage_count = sum(
-                1 for data in structured_data
-                if data['stage'].stage_number != 0 and data['stage'].applies_to_tier(b.tier)
-            )
-            total_series_xp_available += BADGE_TIER_XP + (tier_stage_count * per_stage_xp)
-
-        # Selected tier total XP (for tier selector display)
-        selected_tier_stage_xp = tier_xp_map.get(selected_tier, 0)
-        selected_tier_stage_count = sum(
-            1 for data in structured_data
-            if data['stage'].stage_number != 0 and data['stage'].applies_to_tier(selected_tier)
-        )
-        selected_tier_total_xp = BADGE_TIER_XP + (selected_tier_stage_count * selected_tier_stage_xp)
-        context['selected_tier_total_xp'] = selected_tier_total_xp
-        context['badge_tier_xp_bonus'] = BADGE_TIER_XP
-
-        # User's earned XP for the selected tier
-        selected_tier_user_xp = 0
-        if target_profile and selected_tier_badge:
-            sel_progress = badge_progress_dict.get(selected_tier_badge.id)
-            sel_completed = sel_progress.completed_concepts if sel_progress else 0
-            selected_tier_user_xp = sel_completed * tier_xp_map.get(selected_tier, 0)
-            if highest_tier_earned >= selected_tier:
-                selected_tier_user_xp += BADGE_TIER_XP
-        context['selected_tier_user_xp'] = selected_tier_user_xp
-
-        # Series completion for radial progress
-        series_stages_completed = 0
-        series_stages_total = 0
-        if target_profile and selected_tier in badge_completion:
-            tier_comp = badge_completion[selected_tier]
-            for stage_num, is_complete in tier_comp.items():
-                if stage_num != 0:  # Skip optional stages
-                    series_stages_total += 1
-                    if is_complete:
-                        series_stages_completed += 1
-
-        # Stage-level user stats (excluding stage 0)
-        user_stages_played = 0
-        user_stages_platinumed = 0
-        total_required_stages = 0
-        if target_profile:
-            for data in structured_data:
-                if data['stage'].stage_number == 0:
-                    continue
-                total_required_stages += 1
-                stage_stats = data.get('user_stage_stats')
-                if stage_stats:
-                    if stage_stats['games_played'] > 0:
-                        user_stages_played += 1
-                    if stage_stats['platinums'] > 0:
-                        user_stages_platinumed += 1
-        else:
-            total_required_stages = sum(1 for d in structured_data if d['stage'].stage_number != 0)
-
-        context['badge_series_stats'] = {
-            'tier_earner_counts': tier_earner_counts,
-            'total_games': total_games,
-            'user_series_xp': user_series_xp,
-            'user_lb_rank': user_lb_rank,
-            'user_lb_progress_rank': user_lb_progress_rank,
-            'total_earners_count': get_earners_count(series_slug),
-            'total_progressers_count': get_progress_count(series_slug),
-            'user_total_playtime': user_total_playtime,
-            'user_stages_played': user_stages_played,
-            'user_stages_platinumed': user_stages_platinumed,
-            'total_required_stages': total_required_stages,
-            'avg_progress': avg_progress,
-            'total_trophies_earned': total_trophies_earned,
-            'series_stages_completed': series_stages_completed,
-            'series_stages_total': series_stages_total,
-            'series_completion_pct': round(series_stages_completed / series_stages_total * 100) if series_stages_total else 0,
-            'series_avg_difficulty': series_avg_difficulty,
-            'series_avg_hours': series_avg_hours,
-            'rated_games_count': rated_games_count,
-            'user_trophy_breakdown': user_trophy_breakdown,
-            'max_tier_pcts': max_tier_pcts,
-            'total_unique_earners': t1,
-            'first_played': first_played,
-            'most_recent_trophy': most_recent_trophy,
-            'total_series_xp_available': total_series_xp_available,
-            'community_total_xp': community_total_xp,
-        }
-
-        # Build tier requirements stage list (for the tier selector panel)
-        # Uses structured_data to avoid re-querying stages
-        tier_req_stages = []
-        tier_comp = badge_completion.get(selected_tier, {})
-        for data in structured_data:
-            stage = data['stage']
-            if stage.stage_number == 0:
-                continue
-            if not stage.applies_to_tier(selected_tier):
-                continue
-            tier_req_stages.append({
-                'stage': stage,
-                'is_complete': tier_comp.get(stage.stage_number, False),
-            })
-        context['tier_req_stages'] = tier_req_stages
-
-        logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {series_slug}")
-
-        # Split stages by whether they apply to the selected tier so the template
-        # can foreground the current tier's requirements and tuck the rest into
-        # a collapsed disclosure. Bonus stages (no required_tiers) always apply.
-        applicable_stages = []
-        other_tier_stages = []
-        for data in structured_data:
-            if data['stage'].applies_to_tier(selected_tier):
-                applicable_stages.append(data)
-            else:
-                other_tier_stages.append(data)
-        context['stage_data'] = applicable_stages
-        context['other_tier_stages'] = other_tier_stages
-        context['completion'] = badge_completion
-        context['badge_requirements'] = badge_requirements
-        context['is_earned'] = is_earned
-        context['highest_tier_earned'] = highest_tier_earned
-
-        if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.cover_url}
-            context['recent_concept_name'] = badge.most_recent_concept.unified_title
-        else:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
-            context['recent_concept_name'] = ''
-
-        # Header background: single hero image for blurred backdrop. Prefer
-        # the assembled landscape image (crops naturally into a wide blurred
-        # strip), falling back to the portrait cover_url if none is available.
-        header_bg_image = ''
-        if badge.most_recent_concept:
-            header_bg_image = (
-                badge.most_recent_concept.get_landscape_url()
-                or badge.most_recent_concept.cover_url
-                or ''
-            )
-        if not header_bg_image and structured_data:
-            header_bg_image = structured_data[0]['stage'].stage_icon or ''
-        context['header_bg_image'] = header_bg_image
-
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': context['badge'].effective_display_series},
-        ]
-
-        context['seo_description'] = (
-            f"{context['badge'].effective_display_series} badge series on Platinum Pursuit. "
-            f"Track your progress across stages and compete on leaderboards."
-        )
-
-        tier1_badge = series_badges.filter(tier=1).first()
-
-        # Fundraiser CTA: show when tier1 badge has no custom artwork and no pending claim
-        show_fundraiser_cta = False
-        if tier1_badge:
-            layers = tier1_badge.get_badge_layers()
-            if not layers.get('has_custom_image'):
-                from fundraiser.models import DonationBadgeClaim
-                has_claim = DonationBadgeClaim.objects.filter(badge=tier1_badge).exists()
-                if not has_claim:
-                    show_fundraiser_cta = True
-        context['show_fundraiser_cta'] = show_fundraiser_cta
-
-        # Badge Detail Tour: auto-show once, only after Welcome Tour is done.
-        # Always keyed to the viewer's own profile, regardless of whose page is being viewed.
-        viewer = self.request.user
         viewer_profile = (
-            viewer.profile
-            if viewer.is_authenticated and hasattr(viewer, 'profile') and viewer.profile and viewer.profile.is_linked
-            else None
+            self.request.user.profile
+            if (self.request.user.is_authenticated and hasattr(self.request.user, 'profile')) else None
         )
-        if viewer_profile:
-            welcome_done = getattr(viewer_profile, 'tour_completed_at', None) is not None
-            badge_tour_done = getattr(viewer_profile, 'badge_detail_tour_completed_at', None) is not None
-            context['show_badge_detail_tour'] = welcome_done and not badge_tour_done
-        else:
-            context['show_badge_detail_tour'] = False
+        context['target_profile'] = target_profile
+        # When showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose.
+        context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
 
-        return context
+        detail = context['detail'] = get_badge_detail(series, target_profile)
 
+        # Deep-link the platform-group tab: the list page's medallions/cells link to ?group=<key> so a click
+        # lands on that edition directly. Validate against the series' live groups; default to the first.
+        group_keys = [gv.platform_group.key for gv in detail.groups]
+        requested = self.request.GET.get('group')
+        context['active_group_key'] = requested if requested in group_keys else (group_keys[0] if group_keys else None)
 
-class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
-    """
-    Display leaderboards for a specific badge series.
-
-    Shows two leaderboards:
-    1. Earners - Users who have earned the highest tier
-    2. Progress - Users making progress on the badge series
-
-    Leaderboard data is served from Redis sorted sets with near-real-time updates.
-    """
-    model = Badge
-    template_name = 'trophies/badge_leaderboards.html'
-    slug_field = 'series_slug'
-    slug_url_kwarg = 'series_slug'
-    context_object_name = 'badge'
-
-    def get_object(self, queryset=None):
-        series_slug = self.kwargs[self.slug_url_kwarg]
-        # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
-        badge = get_object_or_404(
-            Badge.objects.select_related(
-                'most_recent_concept', 'most_recent_concept__igdb_match',
-            ),
-            series_slug=series_slug, tier=1,
-        )
-        if not badge.is_live and not self.request.user.is_staff:
-            raise Http404("Series not found")
-        return badge
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        badge = self.object
-        series_slug = badge.series_slug
-        user = self.request.user
-        paginate_by = 50
-
-        earners_page_num = max(1, int(self.request.GET.get('lb_earners_page', 1) or 1))
-        progress_page_num = max(1, int(self.request.GET.get('lb_progress_page', 1) or 1))
-
-        # Earners leaderboard
-        earners_total = get_earners_count(series_slug)
-        earners_entries = get_earners_page(series_slug, earners_page_num, paginate_by)
-        earners_paginator = RedisPaginator(earners_total, paginate_by)
-        earners_page_num = min(earners_page_num, earners_paginator.num_pages)
-        context['lb_earners_page_obj'] = RedisPage(earners_entries, earners_page_num, earners_paginator)
-        context['lb_earners_paginator'] = earners_paginator
-
-        # Progress leaderboard
-        progress_total = get_progress_count(series_slug)
-        progress_entries = get_progress_page(series_slug, progress_page_num, paginate_by)
-        progress_paginator = RedisPaginator(progress_total, paginate_by)
-        progress_page_num = min(progress_page_num, progress_paginator.num_pages)
-        context['lb_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
-        context['lb_progress_paginator'] = progress_paginator
-
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
-            earners_rank = get_earners_rank(series_slug, profile.id)
-            if earners_rank:
-                context['lb_earners_user_rank'] = earners_rank
-                context['lb_earners_user_page'] = (earners_rank - 1) // paginate_by + 1
-            progress_rank = get_progress_rank(series_slug, profile.id)
-            if progress_rank:
-                context['lb_progress_user_rank'] = progress_rank
-                context['lb_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
-
-            # User stats for this series
-            highest_user_badge = UserBadge.objects.filter(
-                profile=profile, badge__series_slug=series_slug
-            ).select_related('badge').order_by('-badge__tier').first()
-            context['user_highest_tier'] = highest_user_badge.badge.tier if highest_user_badge else 0
-
-            try:
-                gamification = profile.gamification
-                context['user_series_xp'] = gamification.series_badge_xp.get(series_slug, 0)
-            except ProfileGamification.DoesNotExist:
-                context['user_series_xp'] = 0
-
-        context['badge'] = badge
-        if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.cover_url}
-        else:
-            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': 'Leaderboards', 'url': reverse_lazy('overall_badge_leaderboards')},
-            {'text': context['badge'].effective_display_series, 'url': reverse_lazy('badge_detail', kwargs={'series_slug': badge.series_slug})},
-            {'text': 'Series Leaderboards'},
+            {'text': series.name},
         ]
-
-        active_tab = self.request.GET.get('tab', 'earners')
-        if active_tab not in ('earners', 'progress'):
-            active_tab = 'earners'
-        context['active_tab'] = active_tab
-
+        context['seo_description'] = (
+            f"{series.name} badge series on Platinum Pursuit. Earn the badge on each platform, "
+            f"track your progress, and climb the leaderboards."
+        )
         return context
 
 
-class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
+
+class BadgeRanksPanelView(View):
+    """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks tab.
+
+    Lazily fetched rather than server-rendered, copying game detail's Ranks panel: the cost scales with a
+    series' popularity, and most visitors come for the badge itself. The page pays for it only when
+    someone opens the tab.
+
+    The ROWS are identical for every viewer -- "this one is you" is applied in the browser from
+    `data-lb-viewer-rank`, never rendered in, because a row that knows who is reading it cannot be shared
+    between readers.
+
+    The FRAGMENT is per-viewer, though: it carries the standing line and the jump-to-me chip, both of
+    which need `my_rank`. So it must not be given a shared cache key, and it costs one rank count per tab
+    open. Job detail's panel makes the same trade for the same reason.
+
+    This REPLACES `/leaderboards/badges/<slug>/`, which was a whole page for what is a section of the page
+    about the badge. Boards live on the thing they rank.
+
+    TWO RESPONSES, one endpoint:
+
+      no `?range=`   the full panel -- meta line, jump bar, the board shell, the first window
+      `?range=N`     bare `.lb-row`s for display positions [N, N+count), for the virtualizer
+
+    The `?offset=` "show more" this used to serve is gone with the button. Appending 25 rows at a time
+    could not reach row 3,000 of a popular series in any reasonable number of clicks, which is the same
+    dead end the prev/next pager had -- see `leaderboard_board.html`.
     """
-    Display overall badge leaderboards across all badge series.
+    #: Fetch granularity, shared with every other board -- see `board_helpers.PAGE_SIZE`.
+    PAGE_SIZE = board_helpers.PAGE_SIZE
 
-    Shows two global leaderboards:
-    1. Total XP - Users with the most badge experience points
-    2. Total Progress - Users with the most badge completion percentage
+    def get(self, request, series_slug):
+        # The SAME dormant gate BadgeDetailView.get_object applies, and it runs BEFORE the window branch
+        # below -- without it this fragment answered for an unreleased series that its own page 404s, so
+        # `/badges/<unreleased>/ranks/` confirmed the series exists and handed over its board to anyone
+        # who guessed the slug.
+        #
+        # ONE query for the public path. It was a fetch plus an `.exists()`, which is two round trips
+        # before every window a reader scrolls past; the row itself is only needed for the full panel.
+        if request.user.is_authenticated and (request.user.is_staff or request.user.is_moderator):
+            series = BadgeSeries.objects.filter(series_slug=series_slug).first()
+            if series is None:
+                raise Http404("Series not found")
+        else:
+            series = BadgeSeries.objects.filter(
+                series_slug=series_slug, group_badges__is_live=True).first()
+            if series is None:
+                raise Http404("Series not found")
 
-    Data is served from Redis sorted sets with near-real-time updates.
+        # THE SLICE, resolved once and applied to the rows, the count and the viewer's rank alike. A
+        # window that ignored a filter the first window applied would return different hunters halfway
+        # down the same board, and the rows keep numbering up -- so it reads as the board, not as a bug.
+        #
+        # EDITION FIRST, because it decides which STORE is being read, and country then scopes itself to
+        # whichever board that is. Resolved in the other order, a country valid for the series board
+        # could be applied to an edition board that has nobody from it.
+        editions = self._editions(series)
+        edition = self._edition(request, editions)
+
+        codes = (lb.series_edition_countries(series_slug, edition) if edition
+                 else lb.series_board_countries(series_slug))
+        country = self._country(request, codes)
+
+        if request.GET.get('suggest') is not None:
+            qs = (lb._series_edition_qs(series_slug, edition, country or None) if edition
+                  else lb._series_board_qs(series_slug, country or None))
+            keys = lb.SERIES_EDITION_KEYS if edition else lb.SERIES_BOARD_KEYS
+            return JsonResponse(suggest_json(
+                lb.board_suggest(qs, keys, request.GET.get('suggest', ''))))
+
+        if 'range' in request.GET:
+            start, count = window_params(request, self.PAGE_SIZE)
+            return render(request, 'trophies/partials/leaderboard_rows.html', {
+                'entries': self._window(series_slug, start - 1, count, country, edition),
+            })
+
+        profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        if edition:
+            total = lb.series_edition_count(series_slug, edition, country=country or None)
+            my_rank = (lb.series_edition_rank(series_slug, edition, profile.id, country=country or None)
+                       if profile else None)
+            meaning = (f"Everyone chasing the {editions[edition]['name']} edition, "
+                       f"by the points they have earned on it.")
+        else:
+            total = lb.series_board_count(series_slug, country=country or None)
+            my_rank = (lb.series_board_rank(series_slug, profile.id, country=country or None)
+                       if profile else None)
+            # ALL editions, and it means it now. This used to rank on the furthest-along EDITION, so
+            # "All editions" showed a board that ignored every edition but your best one -- which is what
+            # made it read as broken rather than merely odd. Points are already summed across editions
+            # before they reach the standing, so the board answers the question its label asks.
+            meaning = ('Everyone chasing this badge, by the points they have earned '
+                       'across all its editions.')
+
+        return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
+            'rows': self._window(series_slug, 0, self.PAGE_SIZE, country, edition),
+            'total': total,
+            'page_size': self.PAGE_SIZE,
+            # The endpoint the virtualizer fetches later windows from -- this same view, reversed rather
+            # than read off `request.path`, so the panel does not silently depend on having been reached
+            # by its canonical URL.
+            'rows_url': reverse('badge_ranks_panel', args=[series_slug]),
+            # Carried on every later window, so the rest of a filtered board stays filtered -- and for
+            # `edition` that is not a filter but the identity of the store being read, so dropping it
+            # would fetch the SERIES board's rows into an edition board's spacer.
+            'rows_params': urlencode(
+                {k: v for k, v in (('edition', edition), ('country', country)) if v}),
+            'countries': lb.country_options(codes),
+            'selected_country': country,
+            'editions': [{'key': k, 'name': v['name']} for k, v in editions.items()],
+            'selected_edition': edition,
+            'my_rank': my_rank,
+            'series': series,
+            # The shared board card. `board_label` is the series, because on this page the board IS the
+            # series -- and the meaning line moved here off the section subtitle, where it sat above a
+            # panel that had not loaded yet.
+            'board_label': series.name,
+            'board_meaning': meaning,
+            # "N hunters HERE" under a slice -- the figure is a claim about a population, and under a
+            # filter it is a claim about a smaller one. Edition counts: it names a different, smaller
+            # board rather than narrowing this one, which is the same thing from the reader's side.
+            'slice_applied': bool(country or edition),
+            'standing': self._standing(profile, my_rank),
+        })
+
+    @staticmethod
+    def _standing(profile, my_rank):
+        """What the board card tells a signed-in viewer about themselves.
+
+        `is_linked`, not merely "has a profile": every board population is gated on it
+        (`badge_leaderboards._linked`), so an unverified account told "not on this board yet" is being
+        promised a board it cannot enter. Ranked viewers get nothing here -- the jump chip beneath
+        already says "You're #N", and saying it twice on one card is the kind of duplication the shared
+        partial exists to stop."""
+        if not (profile and profile.is_linked) or my_rank:
+            return ''
+        return 'Not on this board yet'
+
+    @staticmethod
+    def _editions(series):
+        """The editions THIS series is offered in, as {key: {name}}, in the series' own display order.
+
+        Scoped to the series' LIVE group badges, not to `active_editions()` -- that is every edition on
+        the site, and offering one this badge was never released in is a board that could only be empty.
+        Same scoping rule the country picker follows.
+
+        A single-edition series gets an EMPTY map rather than one option: a picker with one choice plus
+        "all editions" is two ways to see the same hunters, which is a control that cannot do anything.
+        """
+        groups = list(
+            series.group_badges.filter(is_live=True)
+            .select_related('platform_group')
+            .order_by('platform_group__sort_order', 'platform_group__name')
+        )
+        if len(groups) < 2:
+            return {}
+        return {g.platform_group.key: {'name': g.platform_group.name} for g in groups}
+
+    @staticmethod
+    def _edition(request, editions):
+        """Validated against the editions this series HAS. An unknown key would otherwise resolve to no
+        group badge and silently fall back to the series board, which is a filter that appears to be
+        applied and is not."""
+        raw = (request.GET.get('edition') or '').strip()
+        return raw if raw in editions else ''
+
+    @staticmethod
+    def _country(request, codes):
+        """Validated against the countries that actually have hunters on THIS board.
+
+        An unknown code would return an empty window, which reads as a gap in the board rather than as a
+        bad parameter -- and this is a public fragment, so it takes whatever a URL hands it. Mirrors
+        `LeaderboardRowsView._country`, which makes the same call for the same reason."""
+        raw = (request.GET.get('country') or '').strip().upper()
+        return raw if raw in set(codes) else ''
+
+    @classmethod
+    def _window(cls, series_slug, offset, limit, country='', edition=''):
+        """One window of the board, hydrated. Shared by both responses above, which is the point: a rows
+        endpoint that built its own `extra` mapping would be a second definition of what this board's
+        columns MEAN, and the first thing to drift would be the labels -- so the rest of a board would
+        read a different figure from the screenful the reader arrived on."""
+        if edition:
+            return cls._edition_window(series_slug, edition, offset, limit, country)
+        rows = lb.series_board_rows(series_slug, limit=limit, offset=offset, country=country or None)
+        # `offset`, not 0: `page()` numbers rows by SLOT, so a window starting at 50 must number from 51.
+        # r = (profile_id, xp, advanced_at).
+        return lb.page(rows, offset, extra=lambda r: {
+            # POINTS, not a stage tally. Points already count what was cleared and weigh what it was
+            # worth, so a stages column beside them says the same thing less precisely -- and the stage
+            # figure was the FURTHEST-ALONG EDITION's, which made it wrong on a board that sums editions.
+            # `points` is the word the Global Boards landing uses for the same quantity.
+            'primary': r[1], 'primary_label': 'points',
+            'secondary': None, 'secondary_label': '',
+            # `advanced_at` is the hunter's most recent advance -- their completion date if they finished,
+            # the latest gating stage they cleared if they are still chasing. One column, and the label
+            # stays neutral rather than claiming which, because the row does not know.
+            'when': r[2], 'when_label': 'since',
+        })
+
+    @staticmethod
+    def _edition_window(series_slug, edition, offset, limit, country=''):
+        """One window of the EDITION board -- the same columns as the series board, scoped.
+
+        That sameness is the point. The reader picked a filter, not a different page: the rank, the
+        hunter, the points and the date all mean what they meant a moment ago, with the points now
+        counting THIS edition rather than every edition summed. r = (profile_id, xp, advanced_at), read from
+        `SeriesEditionStanding` -- so the DATE is this edition's own, not the series-wide one it used to
+        inherit (migration 0313)."""
+        rows = lb.series_edition_rows(series_slug, edition, limit=limit, offset=offset,
+                                      country=country or None)
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[1], 'primary_label': 'points',
+            'secondary': None, 'secondary_label': '',
+            'when': r[2], 'when_label': 'since',
+        })
+
+
+class OverallBadgeLeaderboardsView(TemplateView):
+    """`/leaderboards/` -- Global Boards, the hub landing.
+
+    THREE boards, one per thing worth ranking, as `.pp-switch` tabs:
+
+      Trophies     -> every game, platinums first, total as the tiebreak (Profile's own counters)
+      Badge Points -> ProfileBadgeStanding.total_xp
+      Career XP    -> the jobs economy (ProfileCareerStanding)
+
+    One board per DOMAIN: overall trophy hunting, badges, career. Badge Points and Career XP are
+    deliberately separate rather than one "XP" board -- they are two sealed economies (the badge subsystem
+    never reads or writes the jobs one), a hunter can hold very different ranks in each, and a merged total
+    would be the one figure on the site that means nothing.
+
+    Trophies replaced a "Badge Trophies" board that counted trophies in badge-covered games. That needed a
+    full-library aggregate per profile inside the badge write seam, and once that seam ran on every sync it
+    was the only expensive query in the subsystem -- for a figure that mostly measured how many
+    badge-covered games somebody had played. See badge_leaderboards.trophy_rows.
+
+    TWO filters, both of which swap what the board reads rather than post-filtering it:
+
+      Country -> a WHERE served by the (country_code, ...board order) composites, on all three boards.
+      Edition -> a different STORE (ProfileEditionStanding), on the two BADGE boards only.
+
+    Neither is a board of its own. The old design's answer was a Redis sorted set per country, and an
+    edition-per-board would multiply that again; keeping both as filters is what holds this section's
+    surface area finite. They compose, and the edition indexes carry country to serve the combination.
+
+    Edition is absent from Career XP because there is nothing to slice: the jobs economy has no platform
+    editions, and a control that renders but changes nothing is worse than one that is not there.
+
+    Every board is public, and its ROWS are identical for every viewer -- which is what would let the wall
+    be cached, and why a personal marker never goes in one. The response as a whole is NOT cacheable: the
+    header carries `my_standing`, which is per-viewer. Do not add `cache_page` on the strength of the first
+    sentence; it would serve one logged-in hunter's ranks to every subsequent visitor.
     """
     template_name = 'trophies/overall_badge_leaderboards.html'
+    paginate_by = board_helpers.PAGE_SIZE
+
+    # (key, label). Order is the tab order; Badge Trophies leads because it has the most entrants.
+    BOARDS = (
+        ('trophies', 'Trophies'),
+        ('points', 'Badge Points'),
+        ('career', 'Career XP'),
+    )
+    BOARD_KEYS = {k for k, _ in BOARDS}
+    # Only Badge Points slices by edition. An edition is a PlatformGroup, i.e. a BADGE concept; the
+    # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
+    # editions to slice. A control that renders but changes nothing is worse than one that is absent.
+    EDITION_BOARDS = frozenset({'points'})
+    # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
+    # `progress` was this board's key while it was called Progress, a name that described the store rather
+    # than what it ranks. Bookmarks carrying any of them still land where they meant to.
+    #
+    # `series` joins them: it was a DIRECTORY reachable at `?tab=series`, deliberately out of the tab
+    # strip, held open as a placeholder for `/leaderboards/badges/`. That page was built and then removed
+    # in 2026-08, and the placeholder read the RETIRED tier-era `Badge` model, which has had no writer
+    # since cutover 5b -- so it rendered a frozen catalogue beside live standing counts. It maps to the
+    # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
+    LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
+
+    #: (primary_label, secondary_label) per board. ONE definition: the column header, the first window and
+    #: every window the rows endpoint serves all read it, so the labels above a column and the labels
+    #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
+    FIGURES = {
+        'trophies': ('platinums', 'trophies'),
+        'points': ('points', 'badges'),
+        'career': ('XP', 'level'),
+    }
+
+    #: What each board actually RANKS, in one line. Beside FIGURES because they answer the same question
+    #: at different lengths, and a reader who has never met "Badge Points" learns nothing from a lit chip.
+    #: The board card is the only place on the page that says what they are looking at.
+    #: What each board RANKS, in one line, in the site's own words. Each has to do three things at once:
+    #: name the population, name the ordering, and read like somebody wrote it. A reader who has never met
+    #: "Badge Points" learns nothing from a lit chip, and this line is the only place on the page that
+    #: explains the board they are looking at.
+    MEANINGS = {
+        'trophies': 'Every hunter on the site, ranked by platinums. Total trophies settles a tie.',
+        'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
+        'career': 'Career XP banked from contracts, across all 25 jobs.',
+    }
+
+    @classmethod
+    def active_tab(cls, request):
+        raw = request.GET.get('tab', 'trophies')
+        raw = cls.LEGACY_TABS.get(raw, raw)
+        return raw if raw in cls.BOARD_KEYS else 'trophies'
+
+    def _active_tab(self):
+        return self.active_tab(self.request)
+
+    def _country(self, codes):
+        """The country slice, validated against `codes` -- countries that actually have ranked hunters.
+
+        Validated rather than trusted: an unknown code would silently return an empty board, which reads
+        as "nobody from there plays" rather than "that is not a country we rank".
+
+        Takes the codes rather than resolving them, because the picker needs the same set: this used to
+        call `active_countries()` here and `country_options()` called it again, so every request ran four
+        table-wide DISTINCT aggregates where two would do.
+        """
+        cc = (self.request.GET.get('country') or '').upper()
+        return cc if cc and cc in set(codes) else ''
+
+    def _edition(self, tab, editions):
+        """The edition slice, validated against LIVE editions and dropped on boards that have none.
+
+        Validated for the same reason country is: an unrecognised key would render an empty board, which
+        reads as "nobody plays that edition" rather than "that is not an edition". Cleared on Career so a
+        reader who picked one and then switched boards does not carry an invisible filter with them.
+        """
+        if tab not in self.EDITION_BOARDS:
+            return ''
+        key = (self.request.GET.get('edition') or '').strip()
+        return key if key in {e.key for e in editions} else ''
+
+    def _href(self, tab, country='', edition=''):
+        """A link to one board under one set of filters. The ONE place a leaderboard URL is assembled.
+
+        Note what is never carried: `page`. Landing on page 7 of a board you just opened, or of a filter
+        you just cleared, is not where anyone meant to go.
+        """
+        params = {'tab': tab}
+        if country:
+            params['country'] = country
+        if edition and tab in self.EDITION_BOARDS:
+            params['edition'] = edition
+        return f'?{urlencode(params)}'
+
+    def _board_links(self, country, edition):
+        """[{key, label, href}] for the tab strip and the standing chips.
+
+        Built here rather than assembled in the template because the rule for what each link carries is
+        PER TARGET, not per page: country follows you everywhere, edition follows you only to the other
+        badge board. A single shared querystring tail was the first attempt and it silently handed Career a
+        filter it ignores -- so the link went one place and the rank shown beside it was measured somewhere
+        else.
+        """
+        return [
+            {'key': key, 'label': label, 'href': self._href(key, country, edition)}
+            for key, label in self.BOARDS
+        ]
+
+    @staticmethod
+    def _with_ranks(links, standing):
+        """Fold the viewer's rank into each tab link, so the strip carries the standing.
+
+        They were two controls stacked: a tab strip that navigates between boards, and a pill row that
+        showed your rank on each AND linked to it. One control does both, and your standing stops being
+        a block you scroll past -- the strip is always there.
+
+        A board the viewer is not on gets `rank: None`, which the chip renders as a dash rather than
+        omitting: a missing rank on a board you could be on is information.
+        """
+        return [dict(link, rank=(standing or {}).get(link['key'])) for link in links]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        paginate_by = 50
+        tab = self._active_tab()
+        profile = getattr(user, 'profile', None) if user.is_authenticated else None
 
-        xp_page_num = max(1, int(self.request.GET.get('lb_total_xp_page', 1) or 1))
-        progress_page_num = max(1, int(self.request.GET.get('lb_total_progress_page', 1) or 1))
+        # Resolved ONCE and shared by the validator and the picker.
+        codes = lb.active_countries()
+        country = self._country(codes)
+        countries = lb.country_options(codes)
+        editions = lb.active_editions()
+        edition = self._edition(tab, editions)
 
-        # XP leaderboard
-        xp_total = get_xp_count()
-        xp_entries = get_xp_page(xp_page_num, paginate_by)
-        xp_paginator = RedisPaginator(xp_total, paginate_by)
-        xp_page_num = min(xp_page_num, xp_paginator.num_pages)
-        context['lb_total_xp_page_obj'] = RedisPage(xp_entries, xp_page_num, xp_paginator)
-        context['lb_total_xp_paginator'] = xp_paginator
+        context.update({
+            'boards': self._board_links(country, edition),
+            'active_tab': tab,
+            'selected_country': country,
+            'countries': countries,
+            'editions': editions,
+            'selected_edition': edition,
+            # The display name, so the empty state and the standing label can say "Ultra HD" rather than
+            # echo the slug back at the reader.
+            'selected_edition_name': next((e.name for e in editions if e.key == edition), ''),
+            # Same courtesy for country: the picker beside it shows "United States", so echoing "US" back
+            # in the standing label reads as a different thing.
+            'selected_country_name': next((c['name'] for c in countries if c['code'] == country), ''),
+            # Only offered where it does something. See the class docstring.
+            'edition_applies': tab in self.EDITION_BOARDS,
+            # The empty state's escape hatches, from the same builder the tab strip uses. Each clears ONE
+            # filter and keeps the other, which is the whole point of naming them separately -- assembled
+            # inline in the template they were a second, untested copy of the rule `_href` owns.
+            'clear_country_href': self._href(tab, '', edition),
+            'clear_edition_href': self._href(tab, country, ''),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Leaderboards'},
+            ],
+        })
 
-        # Progress leaderboard (global)
-        progress_total = get_progress_count(slug=None)
-        progress_entries = get_progress_page(slug=None, page=progress_page_num, page_size=paginate_by)
-        progress_paginator = RedisPaginator(progress_total, paginate_by)
-        progress_page_num = min(progress_page_num, progress_paginator.num_pages)
-        context['lb_total_progress_page_obj'] = RedisPage(progress_entries, progress_page_num, progress_paginator)
-        context['lb_total_progress_paginator'] = progress_paginator
+        # Only the ACTIVE board is built; the others cost nothing until asked for.
+        #
+        # The header tally counts THIS board, from the same `board_count` the paginator uses, so the figure
+        # at the top and the "N total" under the wall are one number read once. It previously counted the
+        # badge store unconditionally: on `?tab=career` that printed the badge population above the career
+        # wall, and under a country slice it printed the global figure above a sliced one.
+        if tab in self.BOARD_KEYS:
+            entries, total = self._build_board(tab, country, edition)
+            context['board_entries'] = entries
+            context['ranked_total'] = total
+            context['ranked_label'] = 'hunter'
+            # For the virtual wall: the client sizes its spacer and its fetch granularity from these
+            # rather than carrying constants of its own, which is how a page size silently desyncs from
+            # the server that pages by it.
+            context['page_size'] = self.paginate_by
+            context['rows_url'] = reverse('leaderboard_rows')
+            # The SLICE, carried on every later window. Without it the second screenful of a filtered
+            # board comes back unfiltered -- the rows keep counting up, so it reads as the board rather
+            # than as a bug. Built with urlencode (urllib's, imported at the top of this module) rather
+            # than by hand: a country code is safe but an edition key is arbitrary text from the model.
+            context['rows_params'] = urlencode(
+                {k: v for k, v in (('tab', tab), ('country', country), ('edition', edition)) if v})
+            primary_label, secondary_label = self.FIGURES[tab]
+            context['primary_label'] = primary_label
+            context['secondary_label'] = secondary_label
+            context['board_meaning'] = self.MEANINGS[tab]
+            context['board_label'] = dict(self.BOARDS)[tab]
+            # "N hunters HERE" rather than "N hunters" when a filter is narrowing the board -- the figure
+            # is a claim about a population, and under a slice it is a claim about a smaller one.
+            context['slice_applied'] = bool(country or edition)
 
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
-            xp_rank = get_xp_rank(profile.id)
-            if xp_rank:
-                context['lb_total_xp_user_rank'] = xp_rank
-                context['lb_total_xp_user_page'] = (xp_rank - 1) // paginate_by + 1
-
-            progress_rank = get_progress_rank(slug=None, profile_id=profile.id)
-            if progress_rank:
-                context['lb_total_progress_user_rank'] = progress_rank
-                context['lb_total_progress_user_page'] = (progress_rank - 1) // paginate_by + 1
-
-            try:
-                gamification = profile.gamification
-                context['user_total_xp'] = gamification.total_badge_xp
-                context['user_total_badges'] = gamification.total_badges_earned
-            except ProfileGamification.DoesNotExist:
-                context['user_total_xp'] = 0
-                context['user_total_badges'] = 0
-
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': 'Leaderboards'},
-        ]
-
-        active_tab = self.request.GET.get('tab', 'xp')
-        if active_tab not in ('xp', 'progress', 'series', 'country'):
-            active_tab = 'xp'
-        context['active_tab'] = active_tab
-
-        if active_tab == 'series':
-            series_badges = Badge.objects.live().filter(
-                tier=1
-            ).select_related(
-                'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match',
-                'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
-                'base_badge__title', 'title',
-            ).exclude(
-                series_slug__isnull=True
-            ).exclude(series_slug='').order_by(Lower('display_series'))
-
-            directory = []
-            for badge in series_badges:
-                badge.progress_count = get_progress_count(badge.series_slug)
-                directory.append(badge)
-            context['series_directory'] = directory
-
-        elif active_tab == 'country':
-            context.update(self._get_country_tab_context(user, paginate_by))
-
+        # The viewer's own standing, ONCE, in the header -- not per row (see the class docstring).
+        # Each rank is read under the SAME slice as the board it links to, so the number the reader sees
+        # is the one they would find by scrolling. Career takes country only: it has no editions.
+        if profile:
+            cc = country or None
+            ed = edition or None
+            standing = {
+                'trophies': lb.trophy_rank(profile.id, country=cc),
+                'points': lb.xp_rank(profile.id, country=cc, edition=ed),
+                'career': lb.career_xp_rank(profile.id, country=cc),
+            }
+            # The ACTIVE board's rank, for jump-to-my-rank. Already computed for the header strip, so
+            # the affordance costs nothing extra -- it is the same number the reader is looking at.
+            context['my_rank'] = standing.get(tab)
+            # None when the viewer is on NO board, so the template's `{% if my_standing %}` means what it
+            # reads as. A populated dict of all-Nones is still truthy, so the heading rendered with every
+            # chip suppressed underneath it -- a bare "Your standing" over empty space, which is exactly
+            # what the block's own comment says it is avoiding. That is the default state until the
+            # standings are backfilled.
+            context['my_standing'] = standing if any(v is not None for v in standing.values()) else None
+            # The tab strip carries the ranks now, so it needs them whether or not any exist.
+            context['boards'] = self._with_ranks(context['boards'], standing)
         return context
 
-    def _get_country_tab_context(self, user, paginate_by):
-        """Build context for the Country XP leaderboard tab."""
-        ctx = {}
+    def _build_board(self, tab, country, edition=''):
+        """The FIRST window of the active board, and its size: two queries (the board read + one hydrate)
+        plus the count that sizes the virtual spacer.
 
-        # Determine selected country (default to user's country, fallback to first active)
-        active_codes = get_active_country_codes()
-        selected_cc = self.request.GET.get('country', '').upper()
+        `?page=` IS NOT READ, and that is the fix rather than an omission. This offset the first window by
+        `(page - 1) * per` back when a pager rendered underneath it, and it survived the pager's deletion
+        -- which made it worse than dead. `virtualBoard` seeds its row cache from the server-rendered
+        window and marks page 0 as already fetched, so `/leaderboards/?page=2` handed it rows 51-100,
+        recorded rows 1-50 as fetched, and then could never request them: the top of the board was fifty
+        rows of permanently blank spacer. Job detail dropped the same parameter outright; the two
+        surfaces should not disagree about it.
+        """
+        cc = country or None
+        ed = edition or None
+        # The board's membership rule lives in the SERVICE, next to the rows it governs -- see
+        # `lb.board_count`. This used to be a hand-rolled copy of it here, and the copy drifted.
+        total = lb.board_count(tab, country=cc, edition=ed)
+        return self.board_window(tab, country, edition, 0, self.paginate_by), total
 
-        user_country_code = None
-        if user.is_authenticated and hasattr(user, 'profile') and user.profile.country_code:
-            user_country_code = user.profile.country_code
+    #: How each board's store, ordering and column names differ, in one place. `board_window` and
+    #: `board_suggest` both read it, so a search can never be scoped to a different population than the
+    #: rows it is offering to jump into.
+    @staticmethod
+    def _store_for(tab, country, edition):
+        cc = country or None
+        if tab == 'trophies':
+            # The Trophies board's store IS Profile, so its id column is `id` and its name columns are
+            # unprefixed -- the other two point AT a profile.
+            return lb._slice(lb.trophy_store(), cc), lb.TROPHY_KEYS, 'id', ''
+        if tab == 'career':
+            return lb._slice(lb.career_store(), cc), lb.CAREER_KEYS, 'profile_id', 'profile__'
+        return lb._slice(lb.badge_store(edition or None), cc), lb.XP_KEYS, 'profile_id', 'profile__'
 
-        if selected_cc not in active_codes:
-            selected_cc = user_country_code if user_country_code in active_codes else ''
+    @classmethod
+    def board_suggest(cls, tab, country, edition, query):
+        """Hunters on THIS board whose name starts with `query`, with their rank on it."""
+        qs, keys, id_field, prefix = cls._store_for(tab, country, edition)
+        return lb.board_suggest(qs, keys, query, id_field=id_field, name_prefix=prefix)
 
-        # Build country list for picker (single DB query for display names/flags)
-        if active_codes:
-            country_list = list(
-                Profile.objects.filter(
-                    country_code__in=active_codes
-                ).exclude(
-                    country__isnull=True
-                ).exclude(
-                    country=''
-                ).values_list('country', 'country_code', 'flag').distinct().order_by('country')
-            )
-            # Deduplicate by country_code (multiple profiles have the same data)
-            seen = set()
-            deduplicated = []
-            for country_name, cc, flag in country_list:
-                if cc not in seen:
-                    seen.add(cc)
-                    deduplicated.append({
-                        'name': country_name or cc,
-                        'code': cc,
-                        'flag': flag or '',
-                    })
-            ctx['country_list'] = deduplicated
+    @staticmethod
+    def board_window(tab, country, edition, offset, limit):
+        """ONE WINDOW of the active board, as render-ready entries.
+
+        Shared by the page (which seeds the virtualizer's first window) and by `LeaderboardRowsView`
+        (which serves every window after it). The tab branching lived inside the paginated builder, so a
+        rows endpoint would have been a second copy of the figure labels -- and those labels are the one
+        thing that must not drift between the first window and the rest of the same board.
+        """
+        cc = country or None
+        ed = edition or None
+        # The supporting figure is what gives the leading one its meaning: 9 platinums out of 140 trophies
+        # is a different hunter from 9 out of 900, and 4,200 points across 30 badges from 4,200 across 6.
+        primary_label, secondary_label = OverallBadgeLeaderboardsView.FIGURES[tab]
+
+        if tab == 'trophies':
+            rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
+        elif tab == 'points':
+            rows = lb.xp_rows(limit=limit, offset=offset, country=cc, edition=ed)
         else:
-            ctx['country_list'] = []
+            rows = lb.career_xp_rows(limit=limit, offset=offset, country=cc)
 
-        # Selected country info
-        ctx['selected_country_code'] = selected_cc
-        selected_info = next((c for c in ctx['country_list'] if c['code'] == selected_cc), None)
-        ctx['selected_country_name'] = selected_info['name'] if selected_info else ''
-        ctx['selected_country_flag'] = selected_info['flag'] if selected_info else ''
-        ctx['user_country_code'] = user_country_code
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[1], 'primary_label': primary_label,
+            'secondary': r[2], 'secondary_label': secondary_label,
+        })
 
-        if not selected_cc:
-            return ctx
+class LeaderboardRowsView(View):
+    """`/leaderboards/rows/` -- one WINDOW of the active Global Board, as bare `.lb-row` elements.
 
-        # Country XP leaderboard page
-        country_page_num = max(1, int(self.request.GET.get('lb_country_xp_page', 1) or 1))
-        country_total = get_country_xp_count(selected_cc)
-        country_entries = get_country_xp_page(selected_cc, country_page_num, paginate_by)
-        country_paginator = RedisPaginator(country_total, paginate_by)
-        country_page_num = min(country_page_num, country_paginator.num_pages)
-        ctx['lb_country_xp_page_obj'] = RedisPage(country_entries, country_page_num, country_paginator)
-        ctx['lb_country_xp_paginator'] = country_paginator
-        ctx['lb_country_xp_total'] = country_total
+    The server half of the virtualized wall. The page renders the first window inline, and every window
+    after it comes through here: the engine asks for display positions [start, start+count) and splices
+    the rows into its spacer.
 
-        # User's country rank
-        if user.is_authenticated and hasattr(user, 'profile'):
-            profile = user.profile
-            if profile.country_code == selected_cc:
-                country_rank = get_country_xp_rank(selected_cc, profile.id)
-                if country_rank:
-                    ctx['lb_country_xp_user_rank'] = country_rank
-                    ctx['lb_country_xp_user_page'] = (country_rank - 1) // paginate_by + 1
+    Reuses `OverallBadgeLeaderboardsView`'s own option parsing and `board_window`, deliberately. A rows
+    endpoint that re-derived the tab, the country slice or the figure labels would be a second definition
+    of the board, and the first thing to drift would be the labels -- so the rest of a board would be
+    reading a different number from the screenful the reader arrived on.
 
-        return ctx
-
-
-
-class MilestoneListView(ProfileHotbarMixin, ListView):
+    PUBLIC and viewer-independent: the rows are identical for everybody, which is what makes them
+    cacheable. The viewer's own rank lives in the page header, never in a row.
     """
-    Display milestones organized by category tabs with tier ladder progression.
 
-    Tabs: Overview, Trophy Hunting, Community, Collection, Challenges,
-    Getting Started, Special. Each category shows tier ladders for its
-    criteria types with earned/active/locked visual states.
+    def get(self, request):
+        view = OverallBadgeLeaderboardsView
+        tab = view.active_tab(request)
+        codes = lb.active_countries()
+        country = self._country(request, codes)
+        edition = self._edition(request, tab, view)
+
+        # THE TYPEAHEAD. Same endpoint, same slice, a different shape -- so a suggestion always names a
+        # rank on the board being read rather than on some other version of it.
+        if request.GET.get('suggest') is not None:
+            return JsonResponse(suggest_json(
+                view.board_suggest(tab, country, edition, request.GET.get('suggest', ''))))
+
+        # Clamped at BOTH ends by the shared parser -- `range` is an OFFSET straight into the board, so an
+        # unbounded value is a nine-figure OFFSET that Postgres honours by walking every skipped row.
+        start, count = window_params(request, view.paginate_by)
+
+        entries = view.board_window(tab, country, edition, start - 1, count)
+        return render(request, 'trophies/partials/leaderboard_rows.html', {'entries': entries})
+
+    @staticmethod
+    def _country(request, codes):
+        """Validated against the countries that actually have ranked hunters -- an unknown code would
+        return an empty window, which reads as a gap in the board rather than a bad parameter."""
+        raw = (request.GET.get('country') or '').strip().upper()
+        return raw if raw in set(codes) else ''
+
+    @staticmethod
+    def _edition(request, tab, view):
+        """Only the boards that HAVE editions accept one, matching the page. An edition on the Trophies or
+        Career board would be silently ignored there, and a window that ignores a filter the first window
+        applied would return different hunters."""
+        if tab not in view.EDITION_BOARDS:
+            return ''
+        raw = (request.GET.get('edition') or '').strip()
+        return raw if raw in {e.key for e in lb.active_editions()} else ''
+
+
+class BadgeHowItWorksView(TemplateView):
+    """`/badges/how-it-works/` -- the permanent, addressable home for the badge teaching.
+
+    It existed only as a first-run modal on Browse Badges, which meant the explanation for a vocabulary
+    the whole badge system speaks ("Ultra HD", "Legacy HD") had no URL: support could not link it, search
+    could not index it, and no other surface could reach it. Three surfaces render those names straight
+    off `PlatformGroup.name` without being able to say what they mean -- badge detail as the group-switch
+    TABS, the Browse Badges gallery as PLATFORM FILTER CHIPS, and the Collection as edition stat labels
+    (plus a per-card caption). Each of the three now carries a `.pp-edhint` link pointing here. The modal
+    keeps its onboarding job: it greets a first visit once and links here.
+
+    The edition table is read from `PlatformGroup`, never retyped. That model already owns the mapping
+    (`name` + `platforms`), the badge engine routes games by it, and the class docstring calls adding a
+    group "a row, not a schema change" -- so a page that hardcoded two editions would be the one place
+    that stopped being true the day a third is seeded.
     """
-    model = Milestone
-    template_name = 'trophies/milestone_list.html'
-    context_object_name = 'milestones'
-
-    def get_queryset(self):
-        # active() excludes retired milestones (is_active=False) so the page never shows them.
-        return Milestone.objects.active().select_related('title').ordered_by_value()
-
-    def _get_user_data(self, profile, milestones):
-        """Fetch earned milestones, progress, and earned dates for a profile."""
-        if not profile:
-            return set(), {}, {}
-
-        earned_qs = UserMilestone.objects.filter(
-            profile=profile, milestone__in=milestones
-        ).select_related('milestone')
-        earned_milestone_ids = set()
-        earned_dates = {}
-        for um in earned_qs:
-            earned_milestone_ids.add(um.milestone_id)
-            earned_dates[um.milestone_id] = um.earned_at
-
-        progress_qs = UserMilestoneProgress.objects.filter(
-            profile=profile, milestone__in=milestones
-        )
-        progress_dict = {p.milestone_id: p.progress_value for p in progress_qs}
-
-        return earned_milestone_ids, progress_dict, earned_dates
-
-    def _build_tier_ladder(self, type_milestones, earned_ids, progress_dict, earned_dates, profile):
-        """Build tier ladder data for a single criteria_type group."""
-        sorted_ms = sorted(type_milestones, key=lambda m: m.required_value)
-        total_tiers = len(sorted_ms)
-        tiers = []
-        found_active = False
-
-        for idx, milestone in enumerate(sorted_ms, start=1):
-            is_earned = milestone.id in earned_ids
-            progress_value = progress_dict.get(milestone.id, 0)
-            required_value = milestone.required_value
-
-            if required_value > 0:
-                progress_pct = min((progress_value / required_value) * 100, 100)
-            else:
-                progress_pct = 100 if is_earned else 0
-
-            # Determine state: earned, active (next target), locked, or preview (guest)
-            if is_earned:
-                state = 'earned'
-            elif not profile:
-                state = 'preview'
-            elif not found_active:
-                state = 'active'
-                found_active = True
-            else:
-                state = 'locked'
-
-            tiers.append({
-                'milestone': milestone,
-                'tier_number': idx,
-                'total_tiers': total_tiers,
-                'state': state,
-                'is_earned': is_earned,
-                'progress_value': progress_value,
-                'required_value': required_value,
-                'progress_percentage': round(progress_pct, 1),
-                'earned_count': milestone.earned_count,
-                'earned_at': earned_dates.get(milestone.id),
-            })
-
-        earned_count = sum(1 for t in tiers if t['is_earned'])
-        return {
-            'tiers': tiers,
-            'total_tiers': total_tiers,
-            'earned_tiers': earned_count,
-        }
-
-    def _build_category_data(self, milestones, category_config, profile,
-                             earned_ids, progress_dict, earned_dates):
-        """Build tier ladders for all criteria_types in a category."""
-        criteria_types = category_config['criteria_types']
-
-        # Group milestones by criteria_type
-        by_type = defaultdict(list)
-        for m in milestones:
-            if m.criteria_type in criteria_types:
-                by_type[m.criteria_type].append(m)
-
-        # Build ladders, preserving the order from criteria_types
-        # Separate tiered types from calendar month types
-        tiered_ladders = []
-        calendar_months = []
-        oneoff_cards = []
-
-        for ct in criteria_types:
-            if ct not in by_type:
-                continue
-            display_name = CRITERIA_TYPE_DISPLAY_NAMES.get(ct, ct)
-
-            if ct in CALENDAR_MONTH_TYPES:
-                # Calendar months go into the grid
-                ms = by_type[ct][0]  # One milestone per month
-                calendar_months.append({
-                    'milestone': ms,
-                    'criteria_type': ct,
-                    'month_abbr': ct.replace('calendar_month_', '').upper(),
-                    'is_earned': ms.id in earned_ids,
-                    'earned_at': earned_dates.get(ms.id),
-                })
-            elif ct in ONE_OFF_TYPES:
-                # One-off milestones (calendar_complete, psn_linked, etc.)
-                # Manual milestones are "Feats of Strength": show all of them,
-                # but only display earned ones (hidden until unlocked).
-                milestones_for_type = by_type[ct] if ct == 'manual' else [by_type[ct][0]]
-                for ms in milestones_for_type:
-                    if ct == 'manual' and ms.id not in earned_ids:
-                        continue
-                    progress_value = progress_dict.get(ms.id, 0)
-                    required_value = ms.required_value
-                    if required_value > 0:
-                        pct = min((progress_value / required_value) * 100, 100)
-                    else:
-                        pct = 100 if ms.id in earned_ids else 0
-                    oneoff_cards.append({
-                        'milestone': ms,
-                        'criteria_type': ct,
-                        'display_name': display_name,
-                        'is_earned': ms.id in earned_ids,
-                        'earned_at': earned_dates.get(ms.id),
-                        'progress_value': progress_value,
-                        'required_value': required_value,
-                        'progress_percentage': round(pct, 1),
-                        'earned_count': ms.earned_count,
-                    })
-            else:
-                # Tiered ladder
-                ladder = self._build_tier_ladder(
-                    by_type[ct], earned_ids, progress_dict, earned_dates, profile
-                )
-                ladder['criteria_type'] = ct
-                ladder['display_name'] = display_name
-                tiered_ladders.append(ladder)
-
-        calendar_months_earned = sum(1 for m in calendar_months if m['is_earned'])
-        return {
-            'tiered_ladders': tiered_ladders,
-            'calendar_months': calendar_months,
-            'calendar_months_earned': calendar_months_earned,
-            'oneoff_cards': oneoff_cards,
-        }
-
-    def _build_overview_data(self, milestones, profile, earned_ids, earned_dates):
-        """Build overview tab data with per-category stats."""
-        # Per-category earned/total counts
-        category_stats = []
-        for slug, config in MILESTONE_CATEGORIES.items():
-            if slug == 'overview':
-                continue
-            types = config['criteria_types']
-            cat_milestones = [m for m in milestones if m.criteria_type in types]
-            # Special/manual milestones are only visible when earned,
-            # so total should reflect only earned ones for accurate counts
-            if slug == 'special':
-                cat_milestones = [m for m in cat_milestones if m.id in earned_ids] if profile else []
-            total = len(cat_milestones)
-            earned = sum(1 for m in cat_milestones if m.id in earned_ids) if profile else 0
-            pct = round((earned / total * 100), 1) if total > 0 else 0
-
-            # Find most recently earned milestones in this category
-            recent_earned = []
-            if profile:
-                cat_earned = [
-                    (m, earned_dates[m.id])
-                    for m in cat_milestones
-                    if m.id in earned_ids and m.id in earned_dates
-                ]
-                cat_earned.sort(key=lambda x: x[1], reverse=True)
-                recent_earned = [item[0] for item in cat_earned[:2]]
-
-            # Special/manual milestones are "Feats of Strength": they exist and
-            # can be earned, but don't count toward totals or show a denominator
-            is_feats = (slug == 'special')
-
-            category_stats.append({
-                'slug': slug,
-                'name': config['name'],
-                'icon': config['icon'],
-                'total': total,
-                'earned': earned,
-                'percentage': pct,
-                'recent_earned': recent_earned,
-                'is_feats_of_strength': is_feats,
-            })
-
-        # Overall stats (exclude special/manual milestones from totals)
-        countable = [m for m in milestones if m.criteria_type != 'manual']
-        total_milestones = len(countable)
-        total_earned = sum(1 for m in countable if m.id in earned_ids) if profile else 0
-        overall_pct = round((total_earned / total_milestones * 100), 1) if total_milestones > 0 else 0
-
-        # Titles unlocked from milestones
-        titles_unlocked = 0
-        if profile:
-            titles_unlocked = UserTitle.objects.filter(
-                profile=profile, source_type='milestone'
-            ).count()
-
-        # Most recently earned milestone (derived from earned_dates, no extra query)
-        latest_milestone = None
-        if profile and earned_dates:
-            latest_id = max(earned_dates, key=earned_dates.get)
-            latest_ms = next((m for m in milestones if m.id == latest_id), None)
-            if latest_ms:
-                latest_milestone = {
-                    'milestone': latest_ms,
-                    'earned_at': earned_dates[latest_id],
-                }
-
-        return {
-            'category_stats': category_stats,
-            'total_milestones': total_milestones,
-            'total_earned': total_earned,
-            'overall_percentage': overall_pct,
-            'titles_unlocked': titles_unlocked,
-            'latest_milestone': latest_milestone,
-        }
+    template_name = 'trophies/badge_how_it_works.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        milestones = list(context['object_list'])
 
-        user = self.request.user
-        profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
+        # Ordered by the model's own Meta (sort_order, name), which is the same order the badge detail
+        # tabs use -- so the page teaches the editions in the order the reader meets them.
+        groups = PlatformGroup.objects.filter(is_active=True).only(
+            'key', 'name', 'platforms', 'exclude_delisted', 'sort_order',
+        )
+        context['editions'] = [
+            {
+                'key': g.key,
+                'name': g.name,
+                # Raw PSN codes are what the column stores; PSVITA is the only one that reads wrong.
+                'platforms': [PLATFORM_LABELS.get(p, p) for p in (g.platforms or [])],
+                'delisted_gates': g.exclude_delisted,
+            }
+            for g in groups
+        ]
 
-        # Get current category tab
-        current_cat = self.request.GET.get('cat', 'overview')
-        if current_cat not in MILESTONE_CATEGORIES:
-            current_cat = 'overview'
+        # The ARTWORK, not an illustration of it. `badge_forge_medallions()` composes a real live badge's
+        # subject onto each edition's metal plate, which is the whole point on a page teaching a system
+        # whose moat IS the custom art: "if the chrome ever fights the art, the chrome loses"
+        # (visual-identity.md). It falls back to the bare plate on an empty catalog, so a fresh install
+        # still renders. Shared verbatim with the browse page's first-run modal -- one source, so the
+        # page and the sheet cannot show different badges.
+        context['forge_meds'] = badge_forge_medallions()
 
-        # Fetch user data once
-        earned_ids, progress_dict, earned_dates = self._get_user_data(profile, milestones)
+        # Real numbers, because the brief makes them first-class material: "watching them climb is half
+        # the joy of the hobby and we should never bury it." Read from the hourly-cached site heartbeat,
+        # so this costs nothing on the request path and simply omits itself on a cold cache.
+        context['catalog_stats'] = badge_catalog_stats()
 
-        # Build tab badge counts for all categories
-        tab_data = []
-        for slug, config in MILESTONE_CATEGORIES.items():
-            if slug == 'overview':
-                tab_data.append({'slug': slug, 'name': config['name'], 'icon': config['icon']})
-                continue
-            types = config['criteria_types']
-            cat_ms = [m for m in milestones if m.criteria_type in types]
-            # Special/manual milestones are only visible when earned,
-            # so total should reflect only earned ones for accurate tab counts
-            if slug == 'special':
-                cat_ms = [m for m in cat_ms if m.id in earned_ids] if profile else []
-            total = len(cat_ms)
-            earned = sum(1 for m in cat_ms if m.id in earned_ids) if profile else 0
-            tab_data.append({
-                'slug': slug,
-                'name': config['name'],
-                'icon': config['icon'],
-                'total': total,
-                'earned': earned,
-                'is_feats_of_strength': (slug == 'special'),
-            })
-
-        context['current_cat'] = current_cat
-        context['tab_data'] = tab_data
-
-        if current_cat == 'overview':
-            context['overview_data'] = self._build_overview_data(
-                milestones, profile, earned_ids, earned_dates
-            )
-        else:
-            category_config = MILESTONE_CATEGORIES[current_cat]
-            context['category_name'] = category_config['name']
-            context['category_data'] = self._build_category_data(
-                milestones, category_config, profile,
-                earned_ids, progress_dict, earned_dates
-            )
+        # Raw subject art for the handmade claim -- the pieces themselves, off the medallion. A sentence
+        # asserting the art is hand-drawn is worth less than four pieces of it sitting there, and the
+        # medallion form would work against the point: the plate and shape are the same on every badge,
+        # so it is the SUBJECT that shows a person drew this one.
+        context['craft_art'] = badge_subject_art(limit=4)
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges', 'url': reverse_lazy('badges_list')},
-            {'text': 'Milestones'},
+            {'text': 'How badges work'},
         ]
-
+        context['seo_description'] = (
+            'How Platinum Pursuit badges work: what a badge series is, how you earn one by platinuming '
+            'every game in the set, and how platform editions are earned independently.'
+        )
         return context

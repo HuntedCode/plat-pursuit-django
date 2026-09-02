@@ -1,172 +1,19 @@
 import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, F, Case, When, Value, IntegerField, OrderBy, FloatField, Subquery, OuterRef, Avg
-from django.db.models.functions import Lower, Coalesce
-from django.http import JsonResponse, HttpResponseRedirect
+from django.db.models import Q, F, Case, When, IntegerField, OrderBy
+from django.db.models.functions import Lower
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, View
-from urllib.parse import urlencode
-from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from .browse_helpers import annotate_community_ratings
 from ..models import Trophy, EarnedTrophy, Profile, UserTrophySelection
-from ..forms import TrophySearchForm, TrophyCaseForm
-from trophies.util_modules.constants import MODERN_PLATFORMS
+from ..forms import TrophyCaseForm
 
 logger = logging.getLogger("psn_api")
 
 
-class TrophiesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
-    """
-    Display paginated list of trophies with filtering and sorting options.
-
-    Provides trophy browsing functionality with filters for:
-    - Trophy type (bronze, silver, gold, platinum)
-    - Platform
-    - Region
-    - Alphabetical letter
-
-    Useful for finding specific trophies or browsing rarest/most common achievements.
-    """
-    model = Trophy
-    template_name = 'trophies/trophy_list.html'
-    partial_template_name = 'trophies/partials/trophy_list/browse_results.html'
-    paginate_by = 30
-
-    def get_filter_form(self):
-        if not hasattr(self, '_filter_form'):
-            self._filter_form = TrophySearchForm(self.request.GET)
-        return self._filter_form
-
-    def dispatch(self, request, *args, **kwargs):
-        if not request.GET:
-            if request.user.is_authenticated:
-                defaults = (request.user.browse_defaults or {}).get('trophies', {})
-                if defaults:
-                    return HttpResponseRedirect(
-                        reverse('trophies_list') + '?' + urlencode(defaults, doseq=True)
-                    )
-            # Anonymous or no saved defaults: modern platforms only
-            return HttpResponseRedirect(
-                reverse('trophies_list') + '?' + urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
-            )
-        return super().dispatch(request, *args, **kwargs)
-
-    def get_queryset(self):
-        qs = super().get_queryset().select_related('game')
-        form = self.get_filter_form()
-
-        # Sort ASCII names before non-ASCII (English-first for majority userbase)
-        qs = qs.annotate(
-            is_ascii_name=Case(
-                When(trophy_name__regex=r'^[A-Za-z0-9]', then=Value(0)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-        )
-        order = ['is_ascii_name', Lower('trophy_name')]
-
-        if form.is_valid():
-            query = form.cleaned_data.get('query')
-            platforms = form.cleaned_data.get('platform')
-            types = form.cleaned_data.get('type')
-            regions = form.cleaned_data.get('region')
-            psn_rarity = form.cleaned_data.get('psn_rarity')
-            show_only_platinum = form.cleaned_data.get('show_only_platinum')
-            filter_shovelware = form.cleaned_data.get('filter_shovelware')
-            sort_val = form.cleaned_data.get('sort')
-
-            if query:
-                qs = qs.filter(Q(trophy_name__icontains=query))
-            if platforms:
-                platform_filter = Q()
-                for plat in platforms:
-                    platform_filter |= Q(game__title_platform__contains=plat)
-                qs = qs.filter(platform_filter)
-            if types:
-                types_filter = Q()
-                for type in types:
-                    types_filter |= Q(trophy_type=type)
-                qs = qs.filter(types_filter)
-            if regions:
-                region_filter = Q()
-                for r in regions:
-                    if r == 'global':
-                        region_filter |= Q(game__is_regional=False)
-                    else:
-                        region_filter |= Q(game__is_regional=True, game__region__contains=r)
-                qs = qs.filter(region_filter)
-            if psn_rarity:
-                psn_rarity_filter = Q()
-                for rarity in psn_rarity:
-                    psn_rarity_filter |= Q(trophy_rarity=rarity)
-                qs = qs.filter(psn_rarity_filter)
-
-            if show_only_platinum:
-                qs = qs.filter(game__trophies__trophy_type='platinum').distinct()
-            if filter_shovelware:
-                qs = qs.exclude(game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
-
-
-            if sort_val == 'earned':
-                order = ['-earned_count', 'is_ascii_name', Lower('trophy_name')]
-            elif sort_val == 'earned_inv':
-                order = ['earned_count', 'is_ascii_name', Lower('trophy_name')]
-            elif sort_val == 'rate':
-                order = ['-earn_rate', 'is_ascii_name', Lower('trophy_name')]
-            elif sort_val == 'rate_inv':
-                order = ['earn_rate', 'is_ascii_name', Lower('trophy_name')]
-            elif sort_val == 'psn_rate':
-                order = ['-trophy_earn_rate', 'is_ascii_name', Lower('trophy_name')]
-            elif sort_val == 'psn_rate_inv':
-                order = ['trophy_earn_rate', 'is_ascii_name', Lower('trophy_name')]
-
-        return qs.order_by(*order)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # Breadcrumb
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Trophies'},
-        ]
-
-        context['form'] = self.get_filter_form()
-        context['selected_platforms'] = self.request.GET.getlist('platform')
-        context['selected_types'] = self.request.GET.getlist('type')
-        context['selected_regions'] = self.request.GET.getlist('region')
-        context['selected_psn_rarity'] = self.request.GET.getlist('psn_rarity')
-        context['show_only_platinum'] = self.request.GET.get('show_only_platinum', '')
-        context['filter_shovelware'] = self.request.GET.get('filter_shovelware', '')
-
-        context['seo_description'] = (
-            "Search PlayStation trophies on Platinum Pursuit. "
-            "Filter by type, rarity, and game to find what you're looking for."
-        )
-
-        # Post-pagination: user earned data (1 query, authenticated only)
-        page_trophies = context['object_list']
-        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-            trophy_ids = [t.id for t in page_trophies]
-            earned_ids = set(
-                EarnedTrophy.objects.filter(
-                    profile=self.request.user.profile,
-                    trophy_id__in=trophy_ids,
-                    earned=True
-                ).values_list('trophy_id', flat=True)
-            )
-            context['user_earned_ids'] = earned_ids
-
-        # Auto-open filter drawer when any filters are active
-        context['has_active_filters'] = any(
-            v for k, v in self.request.GET.lists()
-            if k not in ('page', 'view') and any(v)
-        )
-
-        return context
-
-
-class TrophyCaseView(ProfileHotbarMixin, ListView):
+class TrophyCaseView(ListView):
     """
     Display user's platinum trophy collection for trophy case selection.
 
@@ -286,7 +133,7 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Profiles', 'url': reverse_lazy('profiles_list')},
+            {'text': 'Hunters', 'url': reverse_lazy('profiles_list')},
             {'text': f"{profile.display_psn_username}", 'url': reverse_lazy('profile_detail', kwargs={'psn_username': profile.psn_username})},
             {'text': 'Trophy Case'}
         ]
@@ -302,7 +149,7 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
 
         return context
 
-class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
+class ToggleSelectionView(LoginRequiredMixin, View):
     """
     AJAX endpoint to add or remove trophies from user's trophy case selection.
 

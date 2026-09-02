@@ -1,0 +1,148 @@
+/*
+ * Game Lists browse (/community/lists/) -- page motion + chrome. Filtering (search + sort + the
+ * game-count range) is HTMX-native via browse-filters.js; this owns only what the shared controller
+ * cannot: the header count-up, the staggered tile reveal, infinite scroll, the settle, and the sticky
+ * mini-bar's search/sort proxies.
+ *
+ * Same shape as franchise-list.js deliberately -- it is the thinnest of the finished browse pages and
+ * this page needs strictly less than it does (no type toggle, so no sublabel to keep in step).
+ *
+ * Wired via PlatPursuit.onPageReady(boot): element wiring re-runs on first load AND on an HTMX
+ * Back/Forward history restore; body-level listeners are guarded by `first` so they bind once
+ * (rebuild-playbook s7).
+ */
+(function () {
+    var PP = window.PlatPursuit || {};
+
+    var mbSearch = null, mbSort = null, scroller = null, revealHandle = null, handledGrid = null, countLast = null;
+
+    // Staggered tile reveal -- the same grammar the other browse grids use, on the same shared engine.
+    function initReveal() {
+        if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+        var grid = document.getElementById('items-grid');
+        if (!grid || !PP.staggerReveal) { return; }
+        var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+        var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+        revealHandle = PP.staggerReveal({
+            grid: grid, cardSelector: '.pp-gtile', step: 22,
+            reveal: function (el, delayMs) {
+                if (!el.animate) { return; }
+                el.animate([{ opacity: 0 }, { opacity: 1 }],
+                           { duration: 420, delay: delayMs, easing: fadeEase, fill: 'backwards' });
+                el.animate([{ transform: 'translateY(14px) scale(0.965)' }, { transform: 'none' }],
+                           { duration: 500, delay: delayMs, easing: springEase, fill: 'backwards' });
+            },
+        });
+    }
+
+    function initScroller() {
+        if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+        if (!PP.InfiniteScroller) { return; }
+        scroller = PP.InfiniteScroller.create({
+            gridId: 'items-grid', sentinelId: 'gl-sentinel', loadingId: 'gl-loading',
+            paginateBy: 24, cardSelector: '.pp-gtile',    // matches BrowseListsView.paginate_by
+            onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
+        });
+    }
+
+    // Header count ticks to the new total, read off the freshly-swapped grid rather than re-fetched.
+    function tickCount(grid) {
+        if (!grid) { return; }
+        var newVal = parseFloat(grid.getAttribute('data-result-count'));
+        var headEl = document.getElementById('gl-count');
+        if (headEl && PP.countUp && !isNaN(newVal)) {
+            if (countLast === null) { countLast = parseFloat(headEl.dataset.countup); }
+            headEl.dataset.countup = newVal;
+            if (!isNaN(countLast) && countLast !== newVal) { PP.countUp(headEl, 700, { from: countLast }); }
+            else { headEl.textContent = newVal.toLocaleString(); }
+            countLast = newVal;
+        }
+        var mbCount = document.querySelector('[data-minibar-count]');
+        if (mbCount && !isNaN(newVal)) { mbCount.textContent = newVal.toLocaleString(); }
+    }
+
+    // Settle the results the instant a non-text filter changes, so the grid dims rather than sitting
+    // stale until the response lands.
+    function onFormChangeDim(e) {
+        var t = e.target;
+        if (t && (t.type === 'text' || t.type === 'search')) { return; }
+        var r = document.getElementById('browse-results');
+        if (r) { r.classList.add('is-swapping'); }
+    }
+
+    // -- Mini-bar proxies (mirror the real toolbar; the toolbar survives grid swaps, so it stays the
+    //    source of truth and the mini-bar just forwards to it). --
+    function realSearch() { var f = document.getElementById('gl-form'); return f ? f.querySelector('input[name="q"]') : null; }
+    function realSort() { var f = document.getElementById('gl-form'); return f ? f.querySelector('select[name="sort"]') : null; }
+    function onMbSearchInput() {
+        var real = realSearch();
+        if (real) { real.value = mbSearch.value; real.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    function onMbSearchKeydown(e) {
+        if (e.key !== 'Enter') { return; }
+        e.preventDefault();
+        var real = realSearch();
+        if (real) { real.value = mbSearch.value; real.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }
+    }
+    function onMbSortChange() {
+        var real = realSort();
+        if (real) { real.value = mbSort.value; real.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    function wireMinibar() {
+        mbSearch = document.querySelector('[data-minibar-search]');
+        mbSort = document.querySelector('[data-minibar-sort]');
+        if (mbSearch) {
+            mbSearch.addEventListener('input', onMbSearchInput);
+            mbSearch.addEventListener('keydown', onMbSearchKeydown);
+            var rs = realSearch();
+            if (rs) { rs.addEventListener('input', function () { if (document.activeElement !== mbSearch) { mbSearch.value = rs.value; } }); }
+        }
+        if (mbSort) {
+            var real = realSort();
+            if (real) { mbSort.innerHTML = real.innerHTML; mbSort.value = real.value; real.addEventListener('change', function () { mbSort.value = real.value; }); }
+            mbSort.addEventListener('change', onMbSortChange);
+        }
+    }
+
+    // -- Body-level listeners (bound once via `first`; document.body survives a history restore). --
+    function onAfterSwap(e) {
+        var t = (e.detail && e.detail.target) || e.target;
+        if (!t || t.id !== 'browse-results') { return; }
+        var grid = t.querySelector('#items-grid');
+        // Guard against re-handling the same grid: htmx can fire afterSwap more than once for one swap,
+        // and re-running the reveal would replay the animation over already-visible tiles.
+        if (grid && grid === handledGrid) { return; }
+        handledGrid = grid;
+        t.classList.remove('is-swapping');
+        tickCount(grid);
+        initReveal();
+        initScroller();
+    }
+    function onAfterRequest(e) {
+        var elt = e.detail && e.detail.elt;
+        if (!elt || elt.id !== 'gl-form') { return; }
+        var r = document.getElementById('browse-results');
+        if (r) { r.classList.remove('is-swapping', 'pointer-events-none'); }
+    }
+
+    function boot(first) {
+        handledGrid = null;
+        if (first && PP.countUp) {
+            var headEl = document.getElementById('gl-count');
+            if (headEl) { PP.countUp(headEl, 900); }
+        }
+        var form = document.getElementById('gl-form');
+        if (form) { form.addEventListener('change', onFormChangeDim); }
+        wireMinibar();
+        initReveal();
+        initScroller();
+        if (PP.StickyReveal) { PP.StickyReveal.init(); }
+        if (first) {
+            document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+            document.body.addEventListener('htmx:afterRequest', onAfterRequest);
+        }
+    }
+
+    if (PP.onPageReady) { PP.onPageReady(boot); }
+    else { document.addEventListener('DOMContentLoaded', function () { boot(true); }); }
+})();

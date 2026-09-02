@@ -1,0 +1,233 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+   JOBS -- the public catalogue (`/jobs/`) + job detail (`/jobs/<slug>/`)
+   ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+   A FILE OF ITS OWN as of 2026-08. All of this lived in `leaderboards.css` because jobs were briefly a
+   Leaderboards surface (the `/leaderboards/jobs/` directory, removed 2026-08); the pages moved to the
+   BROWSE hub and the styles did not follow, so a browse page's wall was maintained next to the board
+   engine's rows. Job detail's board itself still uses `.lb-*` -- that IS a leaderboard, and it is the
+   shared one.
+
+   Accents come from the `--disc-*` tokens the Career page owns, so a job reads in the same colour on its
+   tile, on the Career radar, in the chip that filters it and on its own page. Every rule here takes the
+   hue from a `--disc` custom property set inline per element, defaulting to `--pp-primary` so a job with
+   an unseeded discipline degrades to the house accent rather than to nothing.
+   ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* ---- The catalogue toolbar -------------------------------------------------------------------------
+   Search + sort on one line, then the discipline chips beneath. Two rows rather than one because the
+   chips are a SIX-segment control: squeezed onto the same line they would either wrap mid-row or force
+   the search field down to a stub.
+
+   `padding: 12px 14px; margin-bottom: 14px` are the SHARED browse-toolbar metrics, copied from
+   `.pp-hbrowse__toolbar` / `.pp-gbrowse__toolbar` rather than chosen -- two browse bars on the same site
+   should not sit differently, and `.pp-toolbar-card` is surface only (background, radius, border, shadow;
+   no box metrics at all), so a page that forgets them gets controls flush against the card's border and a
+   wall butted straight up underneath. This page had exactly that until 2026-08. */
+.jobs-toolbar { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.jobs-bar { display: flex; flex-direction: column; gap: 10px; }
+.jobs-bar__sel { display: block; min-width: 0; }
+@media (min-width: 768px) {
+    .jobs-bar { flex-direction: row; align-items: center; gap: 12px; }
+    .jobs-bar .pp-bgal__search { flex: 1 1 auto; min-width: 0; }
+    .jobs-bar__sel { flex: 0 0 auto; }
+    .jobs-bar__sel .pp-gallery__select { min-width: 180px; }
+}
+/* The no-JS submit. Visible only without JS (it sits in a <noscript>), so it needs no state beyond
+   looking like a button. */
+.jobs-bar__go {
+    margin-top: 10px; padding: 8px 16px; border-radius: var(--pp-radius-lg); font-size: 13px; font-weight: 700;
+    color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); cursor: pointer;
+}
+
+/* ---- Discipline chips -------------------------------------------------------------------------------
+   The chips themselves are the SHARED browse filter primitive (`.pp-bgal__cgroup` / `.pp-bgal__clabel` /
+   `.pp-bgal__chip`, browse-gallery.css) that Browse Badges and Browse Games already use -- label wrapping
+   a visually-hidden input, active state off `:has(input:checked)`, focus ring off `:has(input:focus-visible)`,
+   press-scale. A hand-rolled `.jobs-chip` block lived here first and was the same control rebuilt.
+
+   What is page-specific is the HUE, and only the hue -- the same shape the badge gallery's `--rarity`
+   variant takes, and kept here rather than beside it so browse-gallery.css does not accrete a variant per
+   page. Each chip carries the discipline's own `--disc-*` token, so the filter is coloured in the vocabulary
+   it filters by, and that colour is the one the job then wears on its tile and on the Career radar. */
+.pp-bgal__chip--disc:has(input:checked) {
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 18%, transparent);
+}
+@media (hover: hover) {
+    .pp-bgal__chip--disc:hover { border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, var(--pp-border)); }
+}
+.jobs-chip__ic { display: inline-flex; margin-right: 6px; color: var(--disc, var(--pp-text-mute)); }
+.jobs-chip__ic svg { width: 13px; height: 13px; }
+/* The group keeps the shared wrap behaviour rather than scrolling: six chips wrapping to two lines at
+   375px is what every other filter row on the site does, and a bespoke horizontal scroller here would be
+   one page behaving differently for no reason a reader could name. */
+.jobs-chips { row-gap: 8px; }
+
+/* ---- The wall ---------------------------------------------------------------------------------------
+   FIVE COLUMNS at `lg`, and the number is load-bearing rather than aesthetic: the catalogue is 5
+   disciplines x 5 jobs, so in the default (discipline) ordering every row IS a discipline. The grouping
+   the flat `auto-fill` wall used to leave entirely to the accent colour now falls out of the layout, and
+   costs no vertical space -- five headings would have cost five.
+
+   It holds at `xl`/`2xl` instead of growing, for the same reason: more columns would break the rows the
+   count exists to produce. And it degrades honestly -- a search, a discipline chip or either of the other
+   two sorts breaks the rows up, at which point the accent carries the grouping as it always did.
+
+   `auto-fill` is deliberately NOT used here. It would give 5 columns at some widths and 4 or 6 at others,
+   which is the one thing this grid must not do. */
+.jobs-wall { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .jobs-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 768px) { .jobs-wall { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .jobs-wall { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; } }
+
+/* ---- The tile ---------------------------------------------------------------------------------------
+   COMPACT, because five columns at 1024px leaves roughly 190px. The card this replaced was a horizontal
+   `auto minmax(0,1fr)` grid with a 320px floor, an icon beside the text and 96 characters of description;
+   none of that survives the width, and it was not asked to. The tile scans, the job page briefs.
+
+   Stretched to a common height by the grid so a row of five reads as a row, with the contracts figure
+   pushed to the base by `margin-top: auto` -- otherwise a job with a short description floats its figure
+   mid-tile and the row's baseline zig-zags. */
+.jobt {
+    display: flex; flex-direction: column; gap: 8px; min-width: 0;
+    padding: 12px 13px; border-radius: var(--pp-radius-lg); text-decoration: none;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    border-top: 2px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 70%, transparent);
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease),
+                box-shadow var(--pp-dur) var(--pp-ease);
+}
+/* Hover GLOW, not scale: the house rule, and doubly right in a fixed 5-track grid where a growing tile
+   would push its neighbours. */
+@media (hover: hover) {
+    .jobt:hover {
+        background: var(--pp-bg-2);
+        border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 45%, var(--pp-border));
+        box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc, var(--pp-primary)) 22%, transparent),
+                    0 6px 18px -10px color-mix(in oklab, var(--disc, var(--pp-primary)) 60%, transparent);
+    }
+    .jobt:hover .jobt__name { color: var(--pp-text); }
+}
+.jobt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .jobt { transition: none; } }
+
+.jobt__top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.jobt__ic {
+    width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--pp-radius-lg);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
+    color: var(--disc, var(--pp-primary));
+}
+.jobt__ic svg { width: 16px; height: 16px; }
+.jobt__id { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+/* Wraps rather than truncating: at ~190px a two-word job name ("Card Shark") would otherwise ellipsise,
+   and a catalogue whose entries cannot show their own names is not a catalogue. */
+.jobt__name { font-size: 13.5px; font-weight: 800; line-height: 1.2; color: var(--pp-text); }
+.jobt__disc {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--disc, var(--pp-text-mute));
+}
+/* Two lines, clamped. The full text is on the job page; here it is a hint at what the job is FOR. */
+.jobt__desc {
+    font-size: 11px; line-height: 1.42; color: var(--pp-text-dim);
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+/* TWO figures at the base of a ~190px tile, so they WRAP rather than shrink: at five columns
+   "12 contracts" and "18,000 XP" fit side by side on most tiles and stack on the tightest, which reads
+   fine either way. A dot separator drawn only on a following sibling that shares the line -- it comes
+   from `::before` on the second fact, and a wrapped second line simply starts with it, which is why the
+   dot is quiet rather than a hard bullet. */
+.jobt__feed {
+    margin-top: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+    font-size: 10.5px; color: var(--pp-text-mute);
+}
+.jobt__fact { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.jobt__fact + .jobt__fact::before {
+    /* DRAWN, not a character. This was `content: '\00b7'` (a middle dot) and the escape did not
+       survive the tooling that wrote it -- the file ended up holding a literal NUL byte followed by
+       "b7", which rendered as a replacement glyph next to stray text. A 3px circle needs no
+       encoding, no font coverage and no escape, and reads the same everywhere. */
+    content: ''; align-self: center; width: 3px; height: 3px; border-radius: 50%;
+    margin-right: 8px; background: currentColor; opacity: 0.45;
+}
+.jobt__feed b { font-size: 12.5px; color: var(--pp-text); }
+
+/* ---- Empty state ------------------------------------------------------------------------------------
+   Its own rules rather than `.lb-empty`, which is the leaderboard module's. Same shape, and that is the
+   point: this page has no board on it, so borrowing a board class was only ever a symptom of the file
+   these styles used to live in. */
+.jobs-empty {
+    grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 40px 20px;
+}
+.jobs-empty svg { width: 34px; height: 34px; color: var(--pp-text-mute); opacity: 0.7; }
+.jobs-empty__title { margin-top: 12px; font-size: 1rem; font-weight: 800; color: var(--pp-text); }
+.jobs-empty__sub { margin-top: 5px; font-size: 0.85rem; color: var(--pp-text-dim); max-width: 42ch; }
+
+/* The Latest toggle above the Contracts grid. The CHIP itself is Career's (`.rp-chip--new`,
+   elements.css) -- the two boards show the same control, so they read from one definition; this is
+   only the row that seats it. */
+.jobd-newbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.jobd-newbar__count { font-size: 0.8rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+
+
+/* ---- Job detail (`/jobs/<slug>/`) -------------------------------------------------------------------
+   Moved here WITH the catalogue: one page's vocabulary, and it only lived in `leaderboards.css` for the
+   same historical reason. The Ranks tab's board is untouched and still uses the shared `.lb-*`. */
+/* `flex-start`, not `center`: the tally block is two figures now, and centring the icon and title
+   against it floated them down the card. WRAPS on a phone, where an icon, a title and two tallies on one
+   line leave each about 80px -- the tallies drop to their own row and keep their size rather than
+   shrinking to fit beside a title. */
+.jobd__head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.jobd__head > .pp-bhead__id { flex: 1 1 12rem; }
+.jobd__ic {
+    width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--pp-radius-lg);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
+    color: var(--disc, var(--pp-primary));
+}
+.jobd__ic svg { width: 22px; height: 22px; }
+.jobd__disc {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--disc, var(--pp-text-mute)); margin-top: 2px;
+}
+.jobd__desc { margin-top: 10px; font-size: 0.88rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 68ch; }
+
+/* Content tab panels. `hidden` alone is enough -- these are siblings in normal flow, not a positioned
+   stack -- but the rule is explicit because a `display` set anywhere else would beat the attribute. */
+.jobd-view[hidden] { display: none; }
+
+/* The `.jobd__con*` text-row list that used to live here is gone with the placeholder it styled --
+   job detail renders the shared contract card now. Roughly 25 lines describing a list no template
+   emits; left in place they read as the live styling for that tab. */
+
+/* ---- Job detail: "Your standing" ---------------------------------------------------------------------
+   The authed progress block, under the objective `.scard` row -- the shape franchise detail's "Your
+   progress" established: a labelled head with the one figure worth linking, a row of read-outs, and a
+   Horizon under them.
+
+   It was the rank alone in a bare pill, which answered "where am I" and nothing about the thing the page
+   is about. Level and banked XP are what a job MEANS to a hunter; the rank is the competitive footnote,
+   so it is the small figure at the end of the head rather than the headline. */
+.jobd__mine {
+    margin-top: 12px; padding: 10px 12px; border-radius: var(--pp-radius-lg);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 7%, var(--pp-bg-1));
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 22%, var(--pp-border));
+}
+.jobd__mine-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.jobd__mine-k {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+/* The rank LINKS to the board it came from -- the one figure here a reader might want to act on, and the
+   tab is one click away. Unranked reads as a state, not a link to nowhere. */
+.jobd__mine-rank { font-size: 15px; font-weight: 800; color: var(--disc, var(--pp-primary)); text-decoration: none; }
+@media (hover: hover) { a.jobd__mine-rank:hover { text-decoration: underline; } }
+.jobd__mine-rank--none { font-size: 11px; font-weight: 700; color: var(--pp-text-mute); }
+.jobd__mine-figs { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 9px; }
+.jobd__mine-fig { display: inline-flex; align-items: baseline; gap: 5px; font-size: 10.5px; color: var(--pp-text-mute); }
+.jobd__mine-fig b { font-size: 14px; color: var(--pp-text); }
+/* On the tightest phones the third read-out is the expendable one: level and XP banked are the state,
+   "to next level" is the projection. */
+/* 640px, the design system's ONE phone-only escape hatch. This was 400px -- a bespoke fourth
+   breakpoint that hid the figure on a 375px iPhone SE and showed it on a 414px Pro Max: two phones,
+   two layouts, from a cutoff nothing else on the site uses. */
+@media (max-width: 640px) { .jobd__mine-fig--next { display: none; } }

@@ -50,7 +50,6 @@ class TrackSiteEventView(APIView):
             'recap_share_generate',
             'recap_image_download',
             'guide_visit',
-            'az_challenge_share_download',
             'easter_egg',
         ]
 

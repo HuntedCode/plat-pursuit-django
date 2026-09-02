@@ -1,0 +1,48 @@
+{% comment %}
+Recap Slide: This month, across the years
+Variables: years (list of {year, trophies, platinums, is_current}), best_year, best_trophies,
+           anniversary, month_name,
+           year, flavor_text
+
+The beat that gets better the longer someone uses the site: a fifth March means a fifth bar. Only shown
+once there are at least two, since one bar is not a history.
+
+Bars are scaled against the best year rather than a fixed axis, so the shape reads at a glance without
+anyone reading numbers. The current year is marked rather than recoloured -- it is the subject of the
+whole deck, and it does not need to win to belong on the chart.
+
+The anniversary rides along instead of taking its own slide: a first-platinum anniversary only fires for
+one month a year, so as a standalone beat it would be absent from nearly every deck.
+{% endcomment %}
+<div class="rcp rcp--wide">
+    <p class="rcp__kicker">{{ month_name }}, year by year</p>
+    <h3 class="rcp__title pp-tally pp-tally--lg">{{ years|length }} of them so far</h3>
+
+    <div class="rcp__body">
+        <div class="rcp-years">
+            {% for row in years %}
+            <div class="rcp-years__col{% if row.is_current %} is-current{% endif %} stagger-item"
+                 style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
+                <span class="rcp-years__count">{{ row.trophies }}</span>
+                <span class="rcp-years__track">
+                    <span class="rcp-years__fill"
+                          style="height: {% widthratio row.trophies best_trophies 100 %}%;"></span>
+                </span>
+                <span class="rcp-years__year">{{ row.year }}</span>
+                <span class="rcp-years__plats"{% if row.platinums %} title="{{ row.platinums }} platinum{{ row.platinums|pluralize }}"{% endif %}>
+                    {% if row.platinums %}{{ row.platinums }}<span aria-hidden="true">&#9733;</span>{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if anniversary %}
+    <span class="rcp__stamp">
+        {{ anniversary.years_ago }} year{{ anniversary.years_ago|pluralize }} ago: your first platinum
+    </span>
+    <p class="rcp__sub">{{ anniversary.game_name }} &middot; {{ anniversary.trophy_name }}</p>
+    {% endif %}
+
+    {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}
+</div>

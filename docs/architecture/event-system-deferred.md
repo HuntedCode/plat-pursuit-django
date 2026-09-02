@@ -9,9 +9,11 @@
 > - `trophies/services/event_service.py` (EventCollector + EventService recorders + PURSUIT_FEED_TYPES / TROPHY_FEED_TYPES constants)
 > - `trophies/managers.py:EventQuerySet` and `EventManager` (the `feed_visible()` and `for_profile()` filter helpers)
 > - `trophies/admin.py:EventAdmin` registration
-> - All emitter call sites in `psn_api_service.py`, `token_keeper.py`, `signals.py`, `review_service.py`, `verification_service.py`, `milestone_service.py`, `challenge_service.py`, `api/game_list_views.py`
+> - All emitter call sites in `psn_api_service.py`, `token_keeper.py`, `signals.py`, `review_service.py`, `verification_service.py`, `api/game_list_views.py`
+>
+> **NOTE (2026-08):** the planned `milestone_service.py` / `challenge_service.py` emitters are moot -- both systems were deleted. Milestone events would now come from the `milestones` app; challenge events would be defined by whatever replaces Challenges.
 > - `trophies/views/community_views.py:CommunityFeedView` and the `/community/feed/` URL
-> - The Activity tab on profile pages (7th profile tab → back to 6 tabs)
+> - The Activity tab on profile pages (rolled back; the profile has 4 tabs today, and its Trophies tab now carries a day-by-day activity wall of its own)
 > - The `pursuit_activity` dashboard module (replaced by restoring the legacy `recent_activity` and `recent_platinums` modules from before Phase 6)
 > - The Pursuit Feed Spotlight section on the Community Hub
 > - The "Pursuit Feed" sub-nav item in the Community hub strip
@@ -107,13 +109,11 @@ The hybrid strategy is the load-bearing convention. New event sources should be 
 | Source | Strategy | Insertion point |
 |---|---|---|
 | **Sync pipeline** (platinum, rare trophy, concept_100) | Explicit `EventCollector.add_*()` from inside `psn_api_service.py:create_or_update_earned_trophy_from_trophy_data`, gated by `EventCollector.is_active()`. The sync loop in `token_keeper.py:_do_sync_trophies` opens an `event_collector(profile_id=profile.id)` context alongside the existing `sync_signal_suppressor()`. | `psn_api_service.py:458` (just before return), wrapped by `token_keeper.py:1914-1922` |
-| **Badges (sync path)** | Bulk-per-sync emission. After `check_profile_badges()` runs in `_job_sync_complete`, **one** `badge_earned` event is recorded per profile per sync, with `metadata['badges']` listing every badge awarded that sync. Avoids per-day coalescing race conditions entirely. | `token_keeper.py` after `check_profile_badges` (~line 1520) |
+| **Badges (sync path)** | Bulk-per-sync emission. After `evaluate_for_sync()` runs in `_job_sync_complete`, **one** `badge_earned` event is recorded per profile per sync, with `metadata['badges']` listing every badge awarded that sync. Avoids per-day coalescing race conditions entirely. | `token_keeper.py` after `evaluate_for_sync` |
 | **Badges (non-sync path)** | Sibling `post_save` receiver in `trophies/signals.py` next to the existing `update_gamification_on_badge_earned` receiver. Early-returns when `is_bulk_update_active()` is True so sync-time awards don't double-emit. Catches admin tools, manual rechecks, and any future non-sync badge writes. | `trophies/signals.py` (bottom of badge receivers) |
-| **Milestones** | Direct `EventService.record_milestone_hit(user_milestone)` call from inside the `if created` block in `milestone_service.check_and_award_milestone` and `award_milestone_directly`. | `milestone_service.py:86` and `:254` |
 | **Reviews** | Direct call from `ReviewService.create_review()` after the cache invalidation, before the milestone check. Inside the existing `@transaction.atomic` decorator. | `review_service.py:90` |
 | **Game lists** | Fired on the `is_public` false→true flip in `GameListUpdateView.patch()`, only when `game_list.game_count > 0` (don't surface empty lists). | `api/game_list_views.py:247-266` |
 | **Challenges (started)** | Direct call after each `Challenge.objects.create()` in the three challenge create API views. | `api/az_challenge_views.py`, `api/calendar_challenge_views.py`, `api/genre_challenge_views.py` |
-| **Challenges (progress)** | One coalesced `challenge_progress` event per `check_*_challenge_progress` call, with `metadata['slots']` listing every slot that flipped to completed during this check. Coalescing happens at the source (per check call), not per day. | `challenge_service.py:107, 448, 497, 779` |
 | **Challenges (completed)** | Direct call when `challenge.is_complete` flips True. Same insertion sites as progress. | Same as above |
 | **Profile linked** | Direct call from `verification_service.link_profile_to_user` after the milestone check. | `verification_service.py:~126` |
 | **Day Zero** | Created once via data migration, idempotent (`Event.objects.get_or_create(event_type='day_zero', ...)`). Not emitted by any code path. | `trophies/migrations/00XY_day_zero_event.py` |
@@ -163,7 +163,13 @@ Two event types are inherently high-volume and need coalescing to keep the feed 
 
 **Strategy**: bulk-per-sync emission, NOT per-day coalescing.
 
-After `check_profile_badges()` runs inside `_job_sync_complete`, the bulk-gamification context already has the list of badges awarded during this sync. The token keeper records one `badge_earned` event per profile per sync, with `metadata['badges']` listing every badge:
+After `evaluate_for_sync()` runs inside `_job_sync_complete`, its return value already carries the list of
+badges awarded during this sync (`result['awarded']`). One `badge_earned` event is recorded per profile per
+sync, with `metadata['badges']` listing every badge.
+
+> **Note (2026-08):** a badge is now identified by series AND edition, not by tier -- `tier` in the sample
+> below is the retired shape. This system is DEFERRED and unrouted, so the payload has not been rebuilt;
+> whoever ships it should emit `{'series_slug': ..., 'edition': ...}`.
 
 ```python
 {

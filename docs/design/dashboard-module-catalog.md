@@ -1,5 +1,10 @@
 # Dashboard Module Catalog
 
+> **The dashboard was DELETED in 2026-08.** `dashboard_service.py` and the module registry are gone, so
+> the grep commands and "how to build a new module" instructions below do not work. Kept for the module
+> ideas, which are the part worth carrying into whatever replaces it. See
+> [dashboard.md](../features/dashboard.md).
+
 The dashboard is the synced-state home page (`/`) for all logged-in users. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and up to 6 user-created custom tabs (premium). Each module belongs to a default category tab.
 
 **For the canonical, always-current module list, see [Dashboard System](../features/dashboard.md).** This catalog is the design/roadmap document: it tracks the original vision, what was cut, and what (if anything) remains planned. When the live registry and this doc disagree, the live registry wins and this doc should be updated.
@@ -48,7 +53,7 @@ The "Complete" count is the source of truth from `DASHBOARD_MODULES` in `trophie
 
 ## Category: Progress & Challenges
 
-All challenge modules show smart CTAs when no active challenge exists.
+(Challenge modules retired 2026-08 with the Challenge system.)
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
@@ -56,7 +61,6 @@ All challenge modules show smart CTAs when no active challenge exists.
 | 7 | A-Z Challenge Progress | Lazy (5m) | **Done** | AZChallengeSlot + icons, last plat, next target, Pick Next Game CTA |
 | 8 | Calendar Challenge Progress | Lazy (5m) | **Done** | CalendarChallengeDay, 3-month paginated view with JS arrows |
 | 9 | Genre Challenge Progress | Lazy (5m) | **Done** | GenreChallengeSlot + subgenres + last plat, next target, Pick Next Game CTA |
-| 10 | Milestone Tracker | Lazy (10m) | **Done** | UserMilestoneProgress, Python-side pct sort |
 | 11 | Almost There | Lazy (10m) | **Done** | ProfileGame (90%+ configurable threshold) |
 | 28 | Roadmaps for Your Library | Lazy (30m) | **Done** | `Roadmap` (1:1 with `Concept`). Surfaces published roadmaps for concepts in the user's library where they haven't platinumed yet. The dashboard replacement for the legacy "My Checklists" surface. |
 | 41 | VR Trophy Hunter | Lazy (30m) | **Done** | PSVR + PSVR2 progress at a glance: stats, in-progress games, "back into the headset" CTA. Powered by IGDB VR-platform detection. |
@@ -77,8 +81,8 @@ Badges are a flagship feature with dedicated real estate.
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 17 | Profile Card | Lazy (none) | **Done** | Client-side HTML preview via `/api/v1/profile-card/html/`, PNG download |
-| S1 | Latest Platinum | Lazy (10m) | **Done** | Live share card preview via `/api/v1/shareables/platinum/<id>/html/` |
+| 17 | Profile Card | Lazy (none) | **REMOVED 2026-08** | Deleted with the plat card rebuild; the Profile Card page is retired |
+| S1 | Latest Platinum | Lazy (10m) | **REMOVED 2026-08** | Was a second place to get a plat card; that now comes from `/shareables/` only |
 | S2 | Challenge Cards | Lazy (10m) | **Done** | Up to 3 challenge share card previews (A-Z, Calendar, Genre) |
 | S3 | Recap Card | Lazy (30m) | **Done** | Most recent finalized recap share card preview |
 | S4 | Platinum Grid CTA | Lazy (10m) | **Done** | Builds a shareable grid image of every platinum the user has earned |
@@ -135,7 +139,7 @@ For the rendering decisions and chart-library choices that resulted, see the liv
 
 ## Future: Pending Full Gamification Launch
 
-The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the full gamification system shipped. **The full system has not shipped.** Only the Badge XP foundation exists today (`ProfileGamification.total_badge_xp` populated by signals from badge progress and badge earns). The P.L.A.T.I.N.U.M. stats, Jobs, quests, currency, star chart, and avatar frames described in [Gamification Vision](gamification-vision.md) are all unimplemented.
+The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the full gamification system shipped. **The full system has not shipped.** Only the Badge XP foundation exists today (`ProfileGamification.total_badge_xp` populated by signals from badge progress and badge earns). The P.L.A.T.I.N.U.M. stats, Jobs, quests, currency, star chart, and avatar frames described in Gamification Vision (the gamification-vision doc was never written; see design/gamification-plan.md) are all unimplemented.
 
 What's already surfaced from the Badge XP foundation:
 
@@ -188,7 +192,6 @@ Design these against the schema in `architecture/gamification.md` (which already
 
 | # | Module | Status |
 |---|--------|--------|
-| 10 | Milestone Tracker | Done: progress is motivating |
 | 11 | Completion Milestones | Done: "almost there" games are actionable |
 | 16 | My Reviews | Done: engagement-focused (weekly vote feed) |
 | 19 | My Checklists | Cut: may revisit later |

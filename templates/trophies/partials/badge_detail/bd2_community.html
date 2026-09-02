@@ -1,0 +1,76 @@
+{% load humanize %}
+{% comment %}
+Rarity & Community band (series-level, shows ALL groups side by side -- does NOT swap with the switcher). Leads
+with rarity (the prestige signal missing elsewhere on the page): per-group rarity class + the share of the whole
+COMMUNITY that earned this group's badge (live-derived, see services/rarity), then the earners scale (a
+proportional bar per group), the viewer's series standing, and a leaderboard CTA.
+Reads `detail` (BadgeDetail) + `series`. Rarity is derived live; the "pending" branch shows only when there is
+no community to grade against (a badge nobody has earned shows an honest 0%, no class chip).
+
+NOTE: the denominator is the whole community, NOT the series' pursuers. `detail.participants` is still the
+pursuer base, but it drives series_size and the series rank's "of N" -- never this percentage.
+{% endcomment %}
+<section class="bd-card bd2-comm mb-3">
+    <div class="p-4 md:p-5 lg:p-6">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <h2 class="bd2-comm__title">Rarity &amp; Community</h2>
+            <div class="bd2-comm__actions">
+                {% if detail.target_profile %}
+                <button type="button" data-stats-open aria-haspopup="dialog" class="bd2-comm__action">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-3 3"/></svg>
+                    {% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s stats{% else %}My Stats{% endif %}
+                </button>
+                {% endif %}
+                <a href="#ranks" class="bd2-comm__lb">
+                    See the full leaderboard
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <div class="bd2-comm__grid">
+            {% for g in detail.groups %}
+            <div class="bd2-comm__group" data-tier="{{ g.frame.tier }}" style="--reveal-i: {{ forloop.counter0 }};">
+                <div class="bd2-comm__group-head">
+                    <span class="bd2-comm__group-name">{{ g.platform_group.name }}</span>
+                    {% if g.earners_rank %}<span class="bd2-comm__you">You <b>#{{ g.earners_rank|intcomma }}</b></span>{% endif %}
+                </div>
+
+                {% comment %} Rarity grade -- the prestige hero: a gem that glows by grade (mythic shimmers), the
+                class as the headline, and the community share as the caption (of every hunter on the site, how many
+                earned THIS group's badge; lower = rarer). Pending until there is a community to grade against; an
+                unearned group shows an honest 0% with a dim, ungraded gem. {% endcomment %}
+                <div class="bd2-comm__grade">
+                    <span class="bd2-comm__gem pp-rarity-gem{% if g.rarity_class %} pp-rarity-gem--lit{% endif %}"{% if g.rarity_class %} data-rarity="{{ g.rarity_class }}"{% endif %} aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="m11 3-3 6 4 13 4-13-3-6"/><path d="M2 9h20"/></svg>
+                    </span>
+                    <span class="bd2-comm__grade-txt">
+                        {% if g.rarity_pct is not None %}
+                        <span class="bd2-comm__rar"{% if g.rarity_class %} data-rarity="{{ g.rarity_class }}"{% endif %}>{% if g.rarity_class %}{{ g.rarity_class|title }}{% else %}Unearned{% endif %}</span>
+                        <span class="bd2-comm__grade-sub">earned by {{ g.rarity_pct|floatformat:"-1" }}% of hunters</span>
+                        {% else %}
+                        <span class="bd2-comm__rar">Rarity pending</span>
+                        <span class="bd2-comm__grade-sub">no hunters yet</span>
+                        {% endif %}
+                    </span>
+                </div>
+
+                {# Earners scale: the count + a bar proportional to the biggest group (a quick cross-platform read). #}
+                <div class="bd2-comm__earnrow">
+                    <span class="bd2-comm__earners"><b class="pp-tally" data-countup="{{ g.earned_count }}">{{ g.earned_count|intcomma }}</b> earner{{ g.earned_count|pluralize }}</span>
+                </div>
+                <div class="pp-horizon bd2-comm__bar" style="--horizon-h: 5px; --horizon-accent: var(--comm-metal);" role="presentation">
+                    <span class="pp-horizon__track"><span class="pp-horizon__fill" data-fill="{% widthratio g.earned_count detail.community_max_earned 100 %}%" style="--horizon-progress: {% widthratio g.earned_count detail.community_max_earned 100 %}%;"></span></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if detail.target_profile and detail.series_rank %}
+        <div class="bd2-comm__standing">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+            <span>{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} series standing: <b class="pp-tally">#{{ detail.series_rank|intcomma }}</b>{% if detail.series_size %} of {{ detail.series_size|intcomma }}{% endif %}</span>
+        </div>
+        {% endif %}
+    </div>
+</section>

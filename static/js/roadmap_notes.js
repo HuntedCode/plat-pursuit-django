@@ -653,7 +653,7 @@
             // validated/notified for matched handles. Bad handles just
             // show as a 404 link if clicked. Better to be permissive than
             // to drop the visual cue.
-            return `${prefix}<a href="/community/profiles/${encodeURIComponent(lower)}/" class="text-info hover:underline" target="_blank" rel="noopener">@${escapeHtml(handle)}</a>`;
+            return `${prefix}<a href="/hunters/${encodeURIComponent(lower)}/" class="text-info hover:underline" target="_blank" rel="noopener">@${escapeHtml(handle)}</a>`;
         });
     }
 

@@ -1,0 +1,43 @@
+{% comment %} Genre/Theme VIEW ISLAND -- the tab-swap target (#gt-view). Contains the toolbar + results, so a
+Genres/Themes switch re-renders the toolbar in sync with the grid (returned whole on htmx target=='gt-view').
+A search/sort change swaps only the inner #browse-results grid. {% endcomment %}
+<form data-browse-form data-live-search id="gtl-form"
+      hx-get="{% url 'genres_list' %}"
+      hx-target="#browse-results"
+      hx-push-url="true"
+      hx-swap="innerHTML"
+      hx-trigger="submit"
+      hx-indicator="#browse-results">
+    <div class="pp-toolbar-card pp-gbrowse__toolbar">
+        <div class="pp-gbrowse__bar">
+            <span class="pp-bgal__search" data-search-wrap>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" name="query" value="{{ current_query }}" placeholder="Search {% if active_tab == 'themes' %}themes{% else %}genres{% endif %}&hellip;" aria-label="Search by name" data-page-search />
+                <span class="pp-search-spin" aria-hidden="true"></span>
+                <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+                <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+            </span>
+
+            <label class="pp-gbrowse__sort">
+                <span class="sr-only">Sort results</span>
+                <select name="sort" class="pp-gallery__select">
+                    <option value="alpha" {% if current_sort == 'alpha' %}selected{% endif %}>Alphabetical</option>
+                    <option value="games" {% if current_sort == 'games' %}selected{% endif %}>Most Games</option>
+                    <option value="avg_rating" {% if current_sort == 'avg_rating' %}selected{% endif %}>Highest Rated</option>
+                    <option value="players" {% if current_sort == 'players' %}selected{% endif %}>Most Players</option>
+                    <option value="plats_earned" {% if current_sort == 'plats_earned' %}selected{% endif %}>Most Platinums</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    {# Non-filter state carried on the form so search/sort swaps stay in the active tab. #}
+    <input type="hidden" name="tab" value="{{ active_tab }}" />
+</form>
+
+{# Browse results (HTMX search/sort swap target). #}
+<div id="browse-results">
+    {% include 'trophies/partials/genre_theme_list/browse_results.html' %}
+</div>

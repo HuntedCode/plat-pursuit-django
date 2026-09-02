@@ -39,11 +39,28 @@ The dict shape is intentionally stable so the template can do simple nested look
 
 The `always` group renders as the four primary stat tiles. The `expanded` group is shown when the ribbon is expanded. `hours_hunted` and `trophies_24h` are computed live in the service from `ProfileGame.play_duration` and `EarnedTrophy` respectively. The other six values are sourced from `core.services.stats.compute_community_stats()` so the heartbeat doesn't double-query the same aggregates.
 
+The heartbeat is also the compute site for every **browse-header substance stat** (the 2026-08
+consolidation: hourly cron, never the request path -- every browse header carries the family
+four-scard grid). `expanded` additionally carries `games_in_badges` / `games_in_contracts`
+(Browse Games + Jobs), `lists_total` (+7-day `delta`) / `lists_regional` / `lists_with_plat`
+(Trophy Lists browse), `genres_with_games` / `themes_with_games` / `games_tagged` /
+`tags_applied` (Genres & Themes index), `jobs_total` / `contracts_live` / `job_xp_banked`
+(Jobs browse), `franchises_total` / `series_total` / `franchise_games` / `franchise_spinoffs`
+(Franchises browse), `companies_total` / `companies_developers` / `companies_publishers` /
+`company_games` (Companies browse), and the badge-catalog values the Badges browse header
+reads. Browse Hunters reuses four values the ribbon already computes (`profiles_total`,
+`trophies_total`, `platinums_total`, `trophies_24h`). Consuming views read via
+`heartbeat_values(*keys)` (searches `always` + `expanded`) or `get_cached_heartbeat()` and
+their templates hide the stat grid until the cron has warmed the cache.
+
 ## How It's Read
 
-`HomeView` (and `DashboardView` for the legacy `/dashboard/` redirect path) call `_get_site_heartbeat()` from `trophies/views/dashboard_views.py`, which reads the current hour's cache key and falls back to the previous hour if the current one is missing. The result is attached to the template context as `site_heartbeat`. The `built_for_hunters.html` partial under `templates/trophies/partials/dashboard/` renders it.
-
-All four home states (`landing.html`, `link_psn.html`, `syncing.html`, `dashboard.html`) include this partial, so the visual is consistent across the user journey. If the cache is missing for two consecutive hours (i.e. both the current and the fallback bucket are empty), the partial silently hides itself rather than showing zeros. Check `refresh_homepage_hourly` if it disappears.
+`HomeView` reads the cached heartbeat via `get_cached_heartbeat()` and attaches it to the
+template context as `site_heartbeat` for every pre-synced state. The landing's `land-pulse`
+band renders it (the old `_built_for_hunters.html` ribbon partial was deleted with the gates
+merge; `home/landing.html` is the one pre-synced template now). If the cache is missing, the
+band hides itself rather than showing zeros ({% if site_heartbeat %}). Check
+`refresh_homepage_hourly` if it disappears.
 
 ## Refresh Job
 

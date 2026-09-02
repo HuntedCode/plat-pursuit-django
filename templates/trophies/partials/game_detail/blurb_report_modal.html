@@ -1,0 +1,33 @@
+{% comment %} Report a public quick take (reactive moderation). Rebuilt to the gd-modal standard (NOT the legacy
+guidelines/report DaisyUI dialogs). game-detail.js opens it from any [data-blurb-report], stashes the rating id,
+and POSTs {reason, details} to api:rating-blurb-report. One instance per page, shared by every blurb card.
+Classes are namespaced .gd-breport* (NOT .gd-report* -- that's the hero report modal; both are on the page). {% endcomment %}
+<dialog id="gd-blurb-report-modal" class="gd-modal gd-modal--breport pp-dismissable" aria-labelledby="gd-blurb-report-title">
+    <div class="gd-modal__head">
+        <h3 id="gd-blurb-report-title">Report quick take</h3>
+        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
+    </div>
+    <form id="gd-blurb-report-form" class="gd-modal__body gd-breport">
+        <p class="gd-breport__lead">Flag this quick take for our team to review. Reports are anonymous.</p>
+        <label class="gd-breport__field">
+            <span class="gd-breport__lbl">Reason</span>
+            <select name="reason" class="gd-breport__select" data-gd-report-reason>
+                <option value="inappropriate">Inappropriate content</option>
+                <option value="spam">Spam or advertising</option>
+                <option value="harassment">Harassment</option>
+                <option value="spoiler">Unmarked spoiler</option>
+                <option value="other">Other</option>
+            </select>
+        </label>
+        <label class="gd-breport__field">
+            <span class="gd-breport__lbl">Details <span class="gd-qr__opt">optional</span></span>
+            <textarea name="details" maxlength="500" rows="3" class="gd-breport__area" data-gd-report-details placeholder="Anything our team should know?"></textarea>
+        </label>
+        <div class="gd-qr__actions">
+            <button type="button" class="gd-btn gd-btn--ghost" data-gd-modal-close>Cancel</button>
+            <button type="submit" class="gd-btn gd-btn--primary" data-gd-report-submit>Submit report</button>
+        </div>
+    </form>
+    {# Report toasts render into this popover: top layer (above the modal) + viewport-anchored bottom-end. #}
+    <div class="modal-toast-container" popover="manual"></div>
+</dialog>

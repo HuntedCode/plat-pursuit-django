@@ -4,7 +4,6 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 import pytz
-from trophies.util_modules.constants import REGIONS
 from djstripe.models import Subscription
 from users.constants import PREMIUM_TIER_CHOICES
 
@@ -51,6 +50,7 @@ class UserManager(BaseUserManager):
         """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('role', 'admin')
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
         if extra_fields.get('is_superuser') is not True:
@@ -66,8 +66,26 @@ class CustomUser(AbstractUser):
     authentication field and includes Stripe subscription integration.
     """
     email = models.EmailField(_("email address"), unique=True, blank=False, null=False)
+    # THE ROLE SPLIT (2026-08-22): 'admin' is what is_staff used to mean loosely; 'moderator' is
+    # the community team, split out so is_staff can go back to meaning exactly "Django admin
+    # access". save() keeps is_staff in lockstep (role=='admin' or superuser). Mods currently
+    # unlock ONE extra thing (unpublished badge preview) -- the wider mod toolset is a planned
+    # rebuild, so no other gate reads this yet. Both roles wear a service mark site-wide.
+    role = models.CharField(
+        max_length=10, blank=True, default='',
+        choices=[('admin', 'Admin'), ('moderator', 'Moderator')],
+        help_text="Service role. Admins keep Django-admin access (is_staff syncs to this); "
+                  "moderators get the mod mark and mod-level access only.",
+    )
     user_timezone = models.CharField(max_length=63, choices=[(tz, tz) for tz in pytz.common_timezones], default='UTC', help_text="User's preferred timezone. UTC default.")
-    default_region = models.CharField(max_length=2, choices=[(r, r) for r in REGIONS], null=True, blank=True, default=None, help_text="User's preferred default region filter for games.")
+    # The field above cannot answer "did they choose this?" -- it defaults to UTC and is non-null, so a
+    # London hunter who never touched it is indistinguishable from one who deliberately picked UTC. That
+    # is exactly the population the recap's timezone prompt exists for, hence a separate stamp: null means
+    # never confirmed, and only an explicit save sets it.
+    timezone_confirmed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user explicitly confirmed or changed their timezone. Null = never asked/answered.",
+    )
     use_24hr_clock = models.BooleanField(default=False, help_text="Use 24-hour time format (23:00) instead of 12-hour AM/PM format (11:00 PM)")
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe Customer ID for this user.")
     paypal_subscription_id = models.CharField(max_length=255, blank=True, null=True, help_text="PayPal Subscription ID for active subscription.")
@@ -76,6 +94,7 @@ class CustomUser(AbstractUser):
     premium_tier = models.CharField(max_length=50, blank=True, null=True, choices=PREMIUM_TIER_CHOICES, help_text="User's subscription tier.")
     email_preferences = models.JSONField(default=dict, blank=True, help_text="User's email notification preferences")
     browse_defaults = models.JSONField(default=dict, blank=True, help_text="Per-page saved filter defaults. Keys: 'games', 'trophies', 'profiles'.")
+    ui_flags = models.JSONField(default=dict, blank=True, help_text="One-shot UI education flags. Presence of a key means dismissed. Keys: 'career_explainer'.")
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -92,14 +111,64 @@ class CustomUser(AbstractUser):
         if self.subscription_provider == 'stripe' and self.stripe_customer_id:
             return Subscription.objects.filter(
                 customer__id=self.stripe_customer_id,
-                stripe_data__status__in=['active', 'past_due']
+                stripe_data__status__in=['active', 'trialing', 'past_due']
             ).exists()
         elif self.subscription_provider == 'paypal' and self.paypal_subscription_id:
             if self.paypal_cancel_at and self.paypal_cancel_at < timezone.now():
                 return False
-            return self.premium_tier is not None
+            # The feature-tier check, not bare truthiness: a paid-but-non-feature tier (the
+            # retired 'ad_free' was one) must not report premium here when nothing else does.
+            from users.services.subscription_service import SubscriptionService
+            return SubscriptionService.is_tier_premium(self.premium_tier) if self.premium_tier else False
         return False
     
+    @property
+    def is_moderator(self):
+        return self.role == 'moderator'
+
+    def save(self, *args, **kwargs):
+        # The lockstep enforces exactly two directions: an admin role guarantees Django-admin
+        # access, and a demotion to moderator cannot leave admin access behind by accident.
+        # A bare is_staff with NO role is left alone -- forcing it off would silently demote
+        # every user flagged directly (tests, createsuperuser flows, the admin checkbox).
+        desired = None
+        extra_fields = []
+        if self.role == 'admin' and not self.is_staff:
+            # Either the role was just granted (drive the flag on), or an admin un-ticked
+            # "staff status" on an existing Administrator -- then the CHANGED field wins and
+            # the demotion cascades to the role, so the two never sit in disagreement.
+            was_admin_with_staff = bool(self.pk) and type(self).objects.filter(
+                pk=self.pk, role='admin', is_staff=True).exists()
+            if was_admin_with_staff and not self.is_superuser:
+                self.role = ''
+                extra_fields.append('role')
+            else:
+                desired = True
+        elif self.role == 'moderator' and self.is_staff and not self.is_superuser:
+            desired = False
+        elif self.role == '' and self.is_staff and not self.is_superuser and self.pk:
+            # Clearing an ADMIN role takes the admin access it granted (one cheap lookup, only
+            # for staff-flagged users saving with no role). A user who was never role-admin
+            # keeps their directly-set flag.
+            old_role = type(self).objects.filter(pk=self.pk).values_list('role', flat=True).first()
+            if old_role == 'admin':
+                desired = False
+        if desired is not None:
+            self.is_staff = desired
+            extra_fields.append('is_staff')
+        update_fields = kwargs.get('update_fields')
+        if extra_fields and update_fields is not None:
+            kwargs['update_fields'] = list(update_fields) + [
+                f for f in extra_fields if f not in update_fields]
+        super().save(*args, **kwargs)
+        # The service mark follows the role. Imported here to avoid an import cycle at load.
+        # Skipped for narrow writes that cannot move the mark (login's last_login save was
+        # costing a Profile round-trip on every sign-in).
+        MARK_FIELDS = {'role', 'is_staff', 'is_superuser', 'premium_tier'}
+        if update_fields is None or MARK_FIELDS & set(update_fields) or extra_fields:
+            from users.services.marks import refresh_display_mark
+            refresh_display_mark(self)
+
     def get_premium_tier(self):
         """
         Get the human-readable display name for user's premium tier.
@@ -180,4 +249,3 @@ class SubscriptionPeriod(models.Model):
             return 0
         end = self.ended_at or timezone.now()
         return (end - self.started_at).days
-

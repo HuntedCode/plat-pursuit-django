@@ -1,251 +1,888 @@
 {% extends 'base.html' %}
-{% load static custom_filters %}
-{% block title %}{{ badge.effective_display_series }}{% endblock %}
-{% block og_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
-{% block twitter_image %}{% if image_urls.recent_concept_icon_url %}{{ image_urls.recent_concept_icon_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+{% load static humanize %}
+{% block title %}{{ series.name }} Badge Series{% endblock %}
+{% comment %} The /<user>/ profile variant carries an identical head; canonicalize both onto the
+base badge URL, as game_detail does for its profile variant. {% endcomment %}
+{% block canonical_url %}{{ request.scheme }}://{{ request.get_host }}{% url 'badge_detail' series_slug=series.series_slug %}{% endblock %}
+{% block og_url %}{{ request.scheme }}://{{ request.get_host }}{% url 'badge_detail' series_slug=series.series_slug %}{% endblock %}
+{% comment %}The badge's own handcrafted subject art as the social image (SEO Lane 2) -- every
+badge page shared the 128px site logo while sitting on bespoke medallion art. Subject = the
+LAST art layer (backdrop first); square art on a summary card reads perfectly.{% endcomment %}
+{% block og_image %}{% with art=detail.groups.0.frame.art_layers|last %}{% if art %}{% if 'http' in art|slice:':4' %}{{ art }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ art }}{% endif %}{% else %}{{ block.super }}{% endif %}{% endwith %}{% endblock %}
+{% block twitter_image %}{% with art=detail.groups.0.frame.art_layers|last %}{% if art %}{% if 'http' in art|slice:':4' %}{{ art }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ art }}{% endif %}{% else %}{{ block.super }}{% endif %}{% endwith %}{% endblock %}
 
+{% comment %}
+Badge series detail (rebuild, Phase 1 core). A series is N PARALLEL platform-group badges (Legacy HD /
+Ultra HD), not a tier ladder. ONE unified hero card, two rows: [medallion | identity + EARN# | EARNERS] and
+[state | segmented progress | series stat cells], echoing the beta header. The per-group parts swap with the
+.pp-switch selector. Reads `detail` (BadgeDetail). Stage journey (Phase 2) + My Stats (Phase 3) land below.
+{% endcomment %}
+
+{% comment %} Content sits directly in base.html's #main-content (container mx-auto px-4 py-2) -- like Career /
+Collection. No extra wrapper container: a nested one would double the horizontal padding and read narrower. {% endcomment %}
 {% block content %}
-{% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% firstof series.franchise.name series.collection.name series.developer.name '' as subject %}
 
-    {# Header with blurred hero background + tier accent #}
-    <div class="relative rounded-xl overflow-hidden mb-3">
-        {% if header_bg_image %}
-        <div class="absolute inset-0 overflow-hidden">
-            <img src="{{ header_bg_image }}" alt="" class="w-full h-full object-cover scale-125 opacity-40" />
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
+
+            {% comment %}Ownership banner. Outside the panels on purpose: whose progress this is does not
+            change when you switch edition tabs, so it states itself once rather than once per panel. The
+            bd2 rebuild shipped without it -- the old header had one, and the only surviving signal was a
+            meta item reading "&middot; X's progress", which is easy to miss on a page whose whole content
+            silently changes meaning.{% endcomment %}
+            {% if viewing_other_profile %}
+            <div class="pp-viewing">
+                <svg class="pp-viewing__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span>Viewing <strong>{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}</strong>'s progress</span>
+                <a href="{% url 'badge_detail' series.series_slug %}" class="pp-viewing__mine" aria-label="View your own progress for the {{ series.name }} badge">View mine &rsaquo;</a>
+            </div>
+            {% endif %}
+
+            {% comment %} The hero swaps with the edition switcher, but it is NOT that tablist's tabpanel and
+            no longer says it is. It carried `role="tabpanel" aria-labelledby="bd2-tab-<key>"` while the
+            switcher sat directly above it; once the switcher moved inside the Overview panel (2026-08),
+            that panel is `hidden` on Ranks -- and a tabpanel whose tab, tablist and label target have all
+            left the accessibility tree is announced as "Ultra HD, tab panel" belonging to nothing, with no
+            way to reach the control that would change it. Sighted readers see nothing wrong.
+
+            A plain div is the honest markup: the hero is a DISPLAY that follows the selection, above the
+            tabs and visible on both. The tab's real panel is the journey below, which lives beside the
+            tablist and vanishes with it. `id` kept -- it names the panel for the swap and for tests. {% endcomment %}
+            <div data-bd2-panels>
+                {% for g in detail.groups %}
+                <div id="bd2-panel-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
+                     data-bd2-view="{{ g.platform_group.key }}">
+
+                    {% comment %} Row 1: medallion | eyebrow + title + description + meta | EARNERS. Stacks to a
+                    centered column on phones (mirrors the old header's mobile treatment), rows out at sm:. {% endcomment %}
+                    <div class="flex flex-col sm:flex-row sm:items-start gap-4 md:gap-6">
+                        <div class="bd2-med shrink-0 mx-auto sm:mx-0" role="button" tabindex="0"
+                             aria-label="Inspect {{ series.name }} {{ g.platform_group.name }} badge">
+                            {% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}
+                        </div>
+
+                        <div class="min-w-0 flex-1 text-center sm:text-left">
+                            {% if subject %}<p class="text-[0.7rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-base-content/50">{{ subject }}</p>{% endif %}
+                            <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">{{ series.name }}</h1>
+                            {% if series.description %}<p class="text-sm text-base-content/60 italic mt-2 max-w-2xl mx-auto sm:mx-0 pr-1">{{ series.description }}</p>{% endif %}
+                            <div class="flex items-center justify-center sm:justify-start gap-x-2 gap-y-0.5 flex-wrap mt-3 text-[0.65rem] uppercase tracking-wider text-base-content/40">
+                                <span class="font-semibold text-base-content/60">{{ g.platform_group.name }}</span>
+                                <span>&middot; {{ g.platform_group.platforms|join:" &middot; " }}</span>
+                                {% if g.earners_rank %}<span>&middot; Earn <span class="text-primary font-bold">#{{ g.earners_rank }}</span></span>{% endif %}
+                            </div>
+                        </div>
+
+                        <a href="#ranks" class="shrink-0 mx-auto sm:mx-0 text-center sm:text-right group/earn">
+                            <div class="leading-none"><span class="pp-tally text-2xl md:text-3xl text-primary">{{ g.earned_count|intcomma }}</span></div>
+                            <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/40 mt-1 group-hover/earn:text-primary transition-colors">Earners &rsaquo;</div>
+                        </a>
+                    </div>
+
+                    {% comment %} Row 2: state | segmented progress | badge stat cells. Stacks vertically until lg:,
+                    where it lines up on one row (mirrors the old header's substance strip). {% endcomment %}
+                    <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-content/10 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6">
+                        <div class="shrink-0 text-sm font-semibold text-center sm:text-left">
+                            {% if g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% elif g.state == 'earned' %}<span class="text-success">&#10003; Earned{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
+                            {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
+                            {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
+                        </div>
+
+                        <div class="lg:flex-1 lg:min-w-[140px] w-full">
+                            <div class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ g.progress_pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="{{ g.stages_cleared }} of {{ g.gating_count }} stages" style="--horizon-h: 8px;">
+                                {% for on in g.segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-center lg:justify-end gap-5 md:gap-6 shrink-0 flex-wrap">
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black">{{ g.games_count }}</div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Games</div>
+                            </div>
+                            {% if g.avg_difficulty %}
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black text-warning">{{ g.avg_difficulty }}<span class="text-xs text-base-content/40">/10</span></div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Difficulty</div>
+                            </div>
+                            {% endif %}
+                            {% if g.avg_hours %}
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black text-warning">{{ g.avg_hours }}<span class="text-xs text-base-content/40">h</span></div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Avg hours</div>
+                            </div>
+                            {% endif %}
+                            <div class="text-center leading-tight">
+                                <div class="text-base md:text-lg font-black">{{ g.xp_on_offer|intcomma }}</div>
+                                <div class="text-[0.6rem] uppercase tracking-wider text-base-content/40">Points on offer</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-base-content/50 text-center py-4">No platform-group badges are live for this series yet.</p>
+                {% endfor %}
+            </div>
         </div>
-        {% endif %}
-        <div class="absolute inset-0 bg-base-200/65"></div>
-        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-current opacity-[0.1]"
-             style="color: var(--color-{{ badge.tier|badge_color }});"></div>
-        <div class="relative z-10 p-3 md:p-4">
-            {% include 'trophies/partials/badge_detail/badge_detail_header.html' %}
-        </div>
-    </div>
+    </section>
 
-    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mt-3">
-        <div class="card-body p-3 md:p-4">
-            {% include 'trophies/partials/badge_detail/badge_tier_selector.html' %}
-            {% include 'trophies/partials/badge_detail/badge_series_stats.html' %}
-        </div>
-    </div>
+    {% comment %} Rarity & Community band -- series-level, and directly under the header card.
 
-    {# Leaderboard #}
-    <div id="badge-leaderboard-section" class="mt-3">
-        {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
-    </div>
+    It describes the BADGE: how rare it is and how many hold it are true whichever edition you are
+    looking at and whichever tab you are on, so it belongs above BOTH switchers rather than inside one of
+    their views. It first sat inside the Overview tab (invisible from the board it gives context to), was
+    then moved above the content tabs but still below the medallion switcher -- which reads as though the
+    rarity belonged to the edition you happen to have selected, when the band shows every edition side by
+    side. Header, then what the badge IS, then the controls for looking at it. {% endcomment %}
+    {% include 'trophies/partials/badge_detail/bd2_community.html' %}
 
-    {# Bulk Stage Toggle #}
-    <div class="flex justify-end mt-3">
-        <button id="badge-stage-toggle-all" class="btn btn-ghost btn-xs md:btn-sm gap-1 text-base-content/50 hover:text-base-content">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            <span>Collapse All</span>
+    {% comment %} Content tabs -- Overview | Ranks. The board gets its own tab rather than sitting on the
+    main scroll, which is what game detail and job detail already do; badge detail was the odd one out.
+
+    TWO controls on this page, and they are not peers -- so they are no longer stacked. This strip comes
+    FIRST because it decides what you are looking at; `.bd2-groupswitch` lives inside the Overview panel
+    below, because which EDITION only means something once you are reading the journey. It was above this
+    strip until 2026-08.
+
+    That ordering also settles a collision. Both controls speak about editions and mean different things
+    by it: the group switcher changes which ARTWORK you are looking at, while the board has its own
+    `.lb-filters` select that changes which BOARD you are reading. Stacked above the tabs, both were on
+    screen at once on Ranks -- two controls, one word, different jobs, distinguishable only by looking
+    different. Now only one of them can ever be visible.
+
+    Real `role="tablist"` over real `role="tabpanel"`s -- in-place switching, so the markup is honest. This
+    is the mechanism game detail uses; job detail was `?tab=` links and has been brought onto it too. {% endcomment %}
+    {% comment %} RIGHT-ALIGNED from md: up, like every other switcher on the site -- career, game detail,
+    the genre/theme list and the board strips. This was the last one sitting left. Full width on a phone,
+    because shrink-to-content at 375px leaves a small strip marooned against one edge and the chips lose
+    the equal widths that keep a segmented control from wrapping mid-strip. {% endcomment %}
+    <div class="bd-viewswitch__row">
+    <div class="pp-switch bd-viewswitch" id="bd-switch" role="tablist" aria-label="Badge view">
+        <button type="button" id="bd-tab-overview" aria-controls="bd-view-overview" role="tab"
+                aria-selected="true" class="pp-switch__chip is-active" data-view="overview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="pp-switch__lbl">Overview</span>
+        </button>
+        <button type="button" id="bd-tab-ranks" aria-controls="bd-view-ranks" role="tab"
+                aria-selected="false" class="pp-switch__chip" data-view="ranks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+            <span class="pp-switch__lbl">Ranks</span>
         </button>
     </div>
+    </div>
 
-    {# Stage Sections (applicable to selected tier) #}
-    {% for data in stage_data %}
-        {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
-    {% endfor %}
+    <div class="bd-view" id="bd-view-overview" role="tabpanel" aria-labelledby="bd-tab-overview" data-view="overview">
+    {% comment %} Platform-group switcher -- a prominent, page-SPANNING control: one substantial button per
+    group carrying its mini medallion (in the group's metal), name, and platforms, tinted to match the
+    medallion so picking your platform badge is a fast, recognizable, spine-level choice. A deliberate,
+    documented exception to the site-wide segmented-switcher standard (the platform group is an identity-level
+    pick, like the old tier ladder), grounded in the Medallion primitive. Swaps the hero above + the journey
+    below.
 
-    {# Stages required only for higher tiers (collapsed by default) #}
-    {% if other_tier_stages %}
-    <div class="collapse collapse-arrow bg-base-200/40 border border-base-300 rounded-lg mt-3">
-        <input type="checkbox" />
-        <div class="collapse-title py-2 min-h-0 text-xs md:text-sm font-semibold text-base-content/60">
-            {{ other_tier_stages|length }} stage{{ other_tier_stages|length|pluralize }} required only for higher tiers
+    INSIDE the Overview panel, below the Overview | Ranks strip. It sat above that strip until 2026-08, on
+    the reasoning that it belongs to the header (it does swap the hero) and so should outrank the content
+    tabs. Reading order says otherwise: you pick WHAT you are looking at before you pick WHICH EDITION of
+    it, and a control above the tabs implies it governs both of them.
+
+    It does not. The board is per SERIES -- earning any edition counts -- so Ranks has no use for this, and
+    the board's own `.lb-filters` select already carries an "Edition" control that means something else
+    (which BOARD you are reading, not which ARTWORK). Above the strip those two sat one above the other on
+    the Ranks tab: two controls, one word, different jobs. Living in the Overview panel means the tab
+    system hides it on Ranks for free -- no JS, no `hidden` bookkeeping -- and the ambiguity is structural
+    rather than talked out of in a comment.
+
+    The hero keeps whichever edition was last picked while you are on Ranks, which is what you want: it is
+    the badge you were reading, and it is still named above the board that ranks it. {% endcomment %}
+    {% if detail.has_multiple_groups %}
+    <div class="bd2-groupswitch" role="tablist" aria-label="Platform group">
+        {% for g in detail.groups %}
+        <button type="button" id="bd2-tab-{{ g.platform_group.key }}"
+                class="bd2-gbtn{% if g.platform_group.key == active_group_key %} is-active{% endif %}" data-tier="{{ g.frame.tier }}"
+                data-bd2-group="{{ g.platform_group.key }}" role="tab"
+                aria-selected="{% if g.platform_group.key == active_group_key %}true{% else %}false{% endif %}"
+                aria-controls="bd2-journey-{{ g.platform_group.key }}">
+            <span class="bd2-gbtn__med" aria-hidden="true">{% include 'components/badge_medallion.html' with frame=g.frame no_id=True %}</span>
+            <span class="bd2-gbtn__body">
+                <span class="bd2-gbtn__name">{{ g.platform_group.name }}</span>
+                <span class="bd2-gbtn__plats">{{ g.platform_group.platforms|join:" &middot; " }}</span>
+            </span>
+            <svg class="bd2-gbtn__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            {% comment %} Per-group completion bar along the base of the segment (your % for that platform) --
+            back like the old tier switcher, but showing progress. Only for a viewer whose progress it is. {% endcomment %}
+            {% if detail.target_profile %}<span class="bd2-gbtn__prog" style="--p: {{ g.progress_pct }}%;" aria-hidden="true"></span>{% endif %}
+        </button>
+        {% endfor %}
+    </div>
+    {% comment %} The edition vocabulary, explained where it is actually spoken. This switcher asks the
+    reader to PICK between "Ultra HD" and "Legacy HD" and nothing on the page says what either means.
+
+    It sits outside the tablist, not inside it: `.bd2-groupswitch` is `role="tablist"` with `1fr` auto
+    columns, so a link in there would both become an equal-width segment and put a non-tab child in a
+    tablist. Only rendered alongside the switcher, since a single-edition series poses no question.
+    {% endcomment %}
+    <div class="pp-edhint-row">
+        <a class="pp-edhint" href="{% url 'badge_how_it_works' %}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            What are editions?
+        </a>
+    </div>
+    {% endif %}
+
+    {% comment %} Stage journey -- per group, swapped by the edition switcher directly above it. Free
+    content below the chrome (each stage is its own bd-card).
+
+    THIS is the edition tablist's tabpanel, and it had no semantics at all until 2026-08 -- the switcher's
+    `aria-controls` pointed at the hero, so it advertised half of what it swaps and the half that is not
+    really a panel. Tab, tablist and panel all live inside Overview now, so they appear and disappear
+    together and the relationship can never dangle. {% endcomment %}
+    <div data-bd2-journey>
+        {% for g in detail.groups %}
+        <div id="bd2-journey-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
+             role="tabpanel" aria-labelledby="bd2-tab-{{ g.platform_group.key }}" data-bd2-view="{{ g.platform_group.key }}">
+            {% if g.stages %}
+            {% comment %} Requirements preview: the compact stage-tile checklist (checked when cleared), each
+            tile jumping to its stage in the journey below. {% endcomment %}
+            {% include 'trophies/partials/badge_detail/bd2_requirements.html' with g=g %}
+            {% comment %} Bulk expand/collapse for this group's stage ladder (one per journey panel). {% endcomment %}
+            <div class="flex justify-end mt-2 mb-1">
+                {% comment %} No aria-label -- the toggling "Expand all" / "Collapse all" text IS the accessible
+                name, so screen readers hear the current state (a static aria-label would mask it). {% endcomment %}
+                <button type="button" class="bd-collapse-all" data-stages-toggle-all>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span data-bulk-label>Expand all</span>
+                </button>
+            </div>
+            <div class="bd-stages">
+                {% for s in g.stages %}
+                {% include 'trophies/partials/badge_detail/bd2_stage.html' with group_key=g.platform_group.key %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-base-content/50 text-center py-6">No stages are defined for this badge yet.</p>
+            {% endif %}
         </div>
-        <div class="collapse-content">
-            {% for data in other_tier_stages %}
-                {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
-            {% endfor %}
+        {% endfor %}
+    </div>
+    </div>{# /bd-view-overview #}
+
+    {% comment %} Ranks -- the series board, at SERIES level.
+
+    Deliberately not inside a `.bd2-panel`: those swap per EDITION, and the board is per series (earning
+    any edition counts, matching how progress_bp is already the max across them). Putting it in one would
+    have made the same board render twice with an edition switcher pretending to change it. That is also
+    why this TAB carries no edition control while Overview does.
+
+    Fetched on first ACTIVATION of the tab, not on scroll-in as it used to be: the cost scales with a
+    series' popularity, and on the main scroll every reader who reached the bottom paid for a board they
+    may not have come for. This REPLACES `/leaderboards/badges/<slug>/` -- a whole page for what is a
+    section of the page about the badge. {% endcomment %}
+    <div class="bd-view" id="bd-view-ranks" role="tabpanel" aria-labelledby="bd-tab-ranks" data-view="ranks" hidden>
+    <section class="bd2-ranks" id="ranks" data-ranks-src="{% url 'badge_ranks_panel' series.series_slug %}">
+        <h2 class="bd2-ranks__h">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+            Ranks
+        </h2>
+        <div class="bd2-ranks__body" data-ranks-body>
+            <div class="bd2-ranks__loading" data-ranks-loading>
+                <span class="bd2-ranks__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
+            </div>
+        </div>
+    </section>
+    </div>
+{% endblock %}
+
+{% comment %} Modals live in fixed_overlays -- OUTSIDE #page-recede (base.html) -- so the modal pull-back
+(.pp-receded scales #page-recede) never scales/displaces the fixed modals themselves. {% endcomment %}
+{% block fixed_overlays %}
+    {% comment %} Medallion inspect (pick-up / put-down): tapping a hero medallion grows a peek into this shared
+    dialog. A profile on display fetches the profile-aware peek (that Pursuer's real state); anon fetches the
+    generic showcase. The badge id (0) in data-peek-url is swapped for the tapped medallion's group-badge id. {% endcomment %}
+    <div class="pp-detail-modal" id="badge-peek"
+         data-peek-url="{% if detail.target_profile %}{% url 'group_badge_progress_peek' detail.target_profile.psn_username 0 %}{% else %}{% url 'group_badge_quick_peek' 0 %}{% endif %}" hidden>
+        <div class="pp-detail-modal__scrim" data-peek-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+            <div class="pp-detail-modal__body" data-peek-body></div>
+        </div>
+    </div>
+
+    {% comment %} My Stats: the viewer's series standing, opened by the header's My Stats button. Rendered inline
+    (already computed on the page), only when a profile is on display. {% endcomment %}
+    {% if detail.target_profile %}
+    <div class="pp-detail-modal" id="badge-stats-modal" hidden>
+        <div class="pp-detail-modal__scrim" data-stats-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} series standing" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-stats-close aria-label="Close stats">&times;</button>
+            <div class="pp-detail-modal__body">
+                {% include 'trophies/partials/badge_detail/bd2_stats_modal.html' %}
+            </div>
         </div>
     </div>
     {% endif %}
-{% endwith %}
+
+    {% comment %} Contract modal: a game card's contract band opens THAT contract in place. Linked viewers fetch
+    the real card (ContractModalView); anon / unlinked fetch the anonymized preview -- same modal, CTA footer. {% endcomment %}
+    <div class="pp-detail-modal pp-detail-modal--contract" id="badge-contract-modal" hidden>
+        <div class="pp-detail-modal__scrim" data-contract-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
+            <div class="pp-detail-modal__body" data-contract-body></div>
+            {% if user.is_authenticated and user.profile.is_linked %}
+                {% comment %} Onward hook: from one game's Contract into the whole board. {% endcomment %}
+                <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">
+                    Browse all Contracts
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                </a>
+            {% else %}
+                {# Sign-up hook: the Job Board sells itself here. #}
+                <div class="bd-ctrmodal__cta">
+                    {% if user.is_authenticated %}
+                        <p>Link your PSN to pursue this Contract, level its Jobs, and bank XP as you play.</p>
+                        <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
+                    {% else %}
+                        <p>The Job Board turns trophy hunting into a career. Pursue Contracts, level Jobs, and bank XP.</p>
+                        <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start your Job Board</a>
+                        <span class="bd-ctrmodal__alt">Already a member? <a href="{% url 'account_login' %}">Sign in</a></span>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
 {% endblock %}
 
 {% block js_scripts %}
 <script>
-{# Scroll preservation for tier tab switching #}
-document.addEventListener('DOMContentLoaded', function() {
-    const scrollKey = 'badgeDetailScrollPos';
-    const saved = sessionStorage.getItem(scrollKey);
-    if (saved !== null) {
-        sessionStorage.removeItem(scrollKey);
-        window.scrollTo(0, parseInt(saved, 10));
-    }
-    document.querySelectorAll('[data-tier-tab]').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-            sessionStorage.setItem(scrollKey, window.scrollY);
-        });
-    });
-});
+    (function () {
+        // Ranks: fetched the first time its TAB is opened. Same reasoning as game detail's Ranks panel
+        // -- the cost scales with a series' popularity and most visitors come for the badge itself -- and
+        // behind a tab, only someone who asks for the board pays for it.
+        var sec = document.querySelector('[data-ranks-src]');
+        if (!sec) { return; }
+        var body = sec.querySelector('[data-ranks-body]');
+        var handle = null;      // the live board, so a retry cannot leave two mounted
 
-{# Stage collapse/expand #}
-(function() {
-    const STORAGE_KEY = 'badge_stage_collapse_{{ badge.series_slug }}_{{ selected_tier }}';
-
-    function loadState() {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-        catch { return {}; }
-    }
-
-    function saveState(state) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-        catch(e) { /* quota exceeded or private browsing */ }
-    }
-
-    function setStageCollapsed(stageNum, collapsed) {
-        const gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-        const chevron = document.querySelector('[data-stage-chevron="' + stageNum + '"]');
-        const toggle = document.querySelector('[data-stage-toggle="' + stageNum + '"]');
-        const gameCount = document.querySelector('[data-stage-game-count="' + stageNum + '"]');
-        if (!gamesContainer) return;
-
-        if (collapsed) {
-            gamesContainer.style.gridTemplateRows = '0fr';
-            if (chevron) chevron.style.transform = 'rotate(-90deg)';
-            if (toggle) toggle.setAttribute('aria-expanded', 'false');
-            if (gameCount) gameCount.classList.remove('hidden');
-        } else {
-            gamesContainer.style.gridTemplateRows = '1fr';
-            if (chevron) chevron.style.transform = '';
-            if (toggle) toggle.setAttribute('aria-expanded', 'true');
-            if (gameCount) gameCount.classList.add('hidden');
-        }
-    }
-
-    const bulkBtn = document.getElementById('badge-stage-toggle-all');
-
-    function updateBulkButton() {
-        if (!bulkBtn) return;
-        const state = loadState();
-        const hasCollapsed = Object.keys(state).length > 0;
-        const label = bulkBtn.querySelector('span');
-        const icon = bulkBtn.querySelector('svg');
-        if (label) label.textContent = hasCollapsed ? 'Expand All' : 'Collapse All';
-        if (icon) icon.style.transform = hasCollapsed ? 'rotate(-90deg)' : '';
-    }
-
-    // Initialize: apply saved state + auto-collapse completed stages (including newly completed)
-    const savedState = loadState();
-    let stateChanged = false;
-    document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
-        const stageNum = toggle.dataset.stageToggle;
-        const isComplete = toggle.dataset.stageComplete === 'true';
-        const isBonus = toggle.dataset.stageBonus === 'true';
-        // Collapse if: explicitly saved as collapsed, OR completed/bonus but not yet tracked
-        const shouldCollapse = savedState[stageNum] || ((isComplete || isBonus) && !savedState[stageNum]);
-        if (shouldCollapse) {
-            const gamesContainer = document.querySelector('[data-stage-games="' + stageNum + '"]');
-            if (gamesContainer) {
-                gamesContainer.style.transition = 'none';
-                setStageCollapsed(stageNum, true);
-                if (!savedState[stageNum]) {
-                    savedState[stageNum] = true;
-                    stateChanged = true;
-                }
-                requestAnimationFrame(function() {
-                    requestAnimationFrame(function() {
-                        gamesContainer.style.transition = '';
-                    });
+        function load(qs) {
+            fetch(sec.dataset.ranksSrc + (qs ? '?' + qs : ''),
+                  { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.text(); })
+                .then(function (html) {
+                    if (handle) { handle.destroy(); handle = null; }
+                    body.innerHTML = html;
+                    if (!window.PlatPursuit || !PlatPursuit.wireBoard) { return; }
+                    var root = body.querySelector('[data-lb-board]');
+                    // Called even when `root` is null: `wireBoard` still wires the rank box's submit and
+                    // swallows it, so an empty board cannot navigate the page away on Enter.
+                    handle = PlatPursuit.wireBoard(root, { scope: sec, chromeInset: chromeInset });
+                    PlatPursuit.boardEntrance(root, sec);
+                })
+                .catch(function () {
+                    // Tear the board down before replacing the body. Only the SUCCESS path did, so a
+                    // failed re-fetch left a mounted engine holding window scroll/resize listeners on a
+                    // detached wall -- inert, but one pair per failure for the life of the page. Game
+                    // detail's loader already did this; the three surfaces disagreed.
+                    if (handle) { handle.destroy(); handle = null; }
+                    // A board that fails to load must say so. Silently leaving the spinner spinning reads
+                    // as "still counting" forever, which is worse than an honest failure.
+                    if (sec._bdRanksFailed) { sec._bdRanksFailed(); }   // let a re-open retry
+                    body.innerHTML = '<p class="bd2-ranks__err">The board could not be loaded. Reopen the tab to try again.</p>';
                 });
-            }
         }
-    });
-    if (stateChanged) saveState(savedState);
-    updateBulkButton();
 
-    // Stage requirement links: scroll to stage, then expand after scroll settles
-    document.querySelectorAll('[data-stage-link]').forEach(function(link) {
-        link.addEventListener('click', function(e) {
-            const stageNum = link.dataset.stageLink;
-            const state = loadState();
-            if (!state[stageNum]) return;
+        // The sticky chrome a jump must land below, measured live: the nav's height differs across
+        // breakpoints, so a hardcoded inset would be wrong on one of them.
+        function chromeInset() {
+            var nav = document.querySelector('.pp-nav') || document.querySelector('header');
+            return nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+        }
 
-            e.preventDefault();
-            const target = document.getElementById('stage-' + stageNum);
-            if (!target) return;
+        // Exposed for the view switcher below: the board loads when its TAB is opened, not when the
+        // section scrolls into view. `loaded` guards a re-open, so switching back and forth fetches once.
+        var loaded = false;
+        sec._bdLoadRanks = function () {
+            if (loaded) { return; }
+            loaded = true;
+            load();
+        };
+        // Reset by `load()`'s own catch, so switching away and back RETRIES a board that failed. Job
+        // detail already did this; leaving the two opposite would mean the same mechanism recovering on
+        // one page and not the other.
+        sec._bdRanksFailed = function () { loaded = false; };
 
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-            let scrollTimer;
-            function onScrollEnd() {
-                clearTimeout(scrollTimer);
-                scrollTimer = setTimeout(function() {
-                    window.removeEventListener('scroll', onScrollEnd);
-                    setStageCollapsed(stageNum, false);
-                    delete state[stageNum];
-                    saveState(state);
-                    updateBulkButton();
-                }, 100);
-            }
-            window.addEventListener('scroll', onScrollEnd);
-            // Fallback if already at position (no scroll events fire)
-            scrollTimer = setTimeout(function() {
-                window.removeEventListener('scroll', onScrollEnd);
-                setStageCollapsed(stageNum, false);
-                delete state[stageNum];
-                saveState(state);
-                updateBulkButton();
-            }, 600);
+        // The country filter re-fetches the PANEL in place rather than reloading the page. A reload
+        // would drop the reader back on the Overview tab (the default) having just asked a question
+        // about the board, and it throws away the engine's row cache too. Delegated from the section,
+        // because the form arrives with the fetched HTML and is replaced by every later fetch.
+        //
+        // The form stays a real `method="get"` form, which is what lets `FormData` serialize it the way
+        // a native submit would. It carries no <noscript> fallback, though, and should not: this whole
+        // panel is hidden until JS unhides its tab and fetched by JS once it is, so without JS there is
+        // no board here to filter.
+        sec.addEventListener('change', function (ev) {
+            var select = ev.target.closest && ev.target.closest('[data-filter-form] select');
+            if (!select) { return; }
+            // THE WHOLE FORM, not the field that changed. Sending one pair dropped the other filter on
+            // every change -- picking a country reset the edition and picking an edition reset the
+            // country, so the two could never be applied together. `FormData` over the form is also
+            // exactly what a native GET submit sends, so the JS path and the no-JS path now agree
+            // instead of the enhancement being the broken one.
+            var form = select.closest('[data-filter-form]');
+            load(new URLSearchParams(new FormData(form)).toString());
         });
-    });
+    })();
 
-    // Individual stage toggle
-    document.addEventListener('click', function(e) {
-        const toggle = e.target.closest('[data-stage-toggle]');
-        if (!toggle) return;
-        if (e.target.closest('a')) return;
+    // -- Content tabs: Overview | Ranks -------------------------------------------------------------
+    // The mechanism game detail uses (shared wireTablist + igniteTab + syncViewParam over real
+    // role="tabpanel" islands), so the two pages switch identically rather than each having their own.
+    (function () {
+        var strip = document.getElementById('bd-switch');
+        if (!strip || !window.PlatPursuit) { return; }
+        var tabs = Array.prototype.slice.call(strip.querySelectorAll('.pp-switch__chip[data-view]'));
+        var panels = Array.prototype.slice.call(document.querySelectorAll('.bd-view[data-view]'));
+        var tablist = null;
 
-        const stageNum = toggle.dataset.stageToggle;
-        const state = loadState();
-        const isCollapsed = !!state[stageNum];
+        // The tab order, so the panel slides IN from the side it travelled from -- the shared
+        // `slideViewIn` every other segmented switcher on the site uses. Without it a tab change is an
+        // instant swap, which reads as a jump on a page where every other switcher glides.
+        var ORDER = tabs.map(function (t) { return t.dataset.view; });
 
-        setStageCollapsed(stageNum, !isCollapsed);
-
-        if (isCollapsed) { delete state[stageNum]; }
-        else { state[stageNum] = true; }
-        saveState(state);
-        updateBulkButton();
-    });
-
-    // Keyboard support
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            const tag = e.target.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            const toggle = e.target.closest('[data-stage-toggle]');
-            if (toggle) { e.preventDefault(); toggle.click(); }
-        }
-    });
-
-    // Bulk toggle
-    if (bulkBtn) {
-        bulkBtn.addEventListener('click', function() {
-            const state = loadState();
-            const hasCollapsed = Object.keys(state).length > 0;
-            const newState = {};
-
-            document.querySelectorAll('[data-stage-toggle]').forEach(function(toggle) {
-                const stageNum = toggle.dataset.stageToggle;
-                if (hasCollapsed) {
-                    setStageCollapsed(stageNum, false);
-                } else {
-                    setStageCollapsed(stageNum, true);
-                    newState[stageNum] = true;
-                }
+        function showView(name) {
+            var changed = false, active = null, shown = null, from = null;
+            tabs.forEach(function (t) {
+                var on = t.dataset.view === name;
+                if (t.classList.contains('is-active')) { from = t.dataset.view; }
+                if (on && !t.classList.contains('is-active')) { changed = true; }
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) { active = t; }
             });
+            panels.forEach(function (p) {
+                p.hidden = p.dataset.view !== name;
+                if (p.dataset.view === name) { shown = p; }
+            });
+            if (changed && shown && PlatPursuit.slideViewIn) {
+                PlatPursuit.slideViewIn(shown, from, name, ORDER);
+            }
+            if (tablist) { tablist.syncTabindex(); }
+            if (changed && active && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(active); }
+            if (PlatPursuit.syncViewParam) { PlatPursuit.syncViewParam(name, { default: 'overview' }); }
+            // LAST, and only on Ranks: the fetch is the expensive part, so tab state (panels, chips, URL)
+            // should be fully settled before it starts -- a fault in the fetch can then never strand the
+            // switcher mid-update.
+            if (name === 'ranks') {
+                var sec = document.querySelector('[data-ranks-src]');
+                if (sec && sec._bdLoadRanks) { sec._bdLoadRanks(); }
+            }
+        }
 
-            saveState(newState);
-            updateBulkButton();
+        tablist = PlatPursuit.wireTablist(tabs, { onSelect: function (t) { showView(t.dataset.view); } });
+
+        // Deep links still land on the board. `?view=ranks` is what syncViewParam writes, so a shared tab
+        // URL reopens where the sharer was; `#ranks` is what the hero's "Earners" link, the community
+        // band's CTA and the context band all point at, from when the board was a section on this scroll.
+        var params = new URLSearchParams(location.search);
+        if (params.get('view') === 'ranks' || location.hash === '#ranks') {
+            showView('ranks');
+            // The browser already tried to scroll to `#ranks` and failed -- the panel was `hidden` at
+            // that moment -- so arriving by hash left the reader at the top of the page.
+            if (location.hash === '#ranks') {
+                var target = document.getElementById('ranks');
+                if (target && target.scrollIntoView) { target.scrollIntoView({ block: 'start' }); }
+            }
+        }
+
+        // ...and those same `#ranks` links have to keep working from INSIDE the page. The browser cannot
+        // scroll to a target in a `hidden` panel, so without this they became dead clicks the moment the
+        // board moved behind a tab -- silently, since a fragment link that goes nowhere raises nothing.
+        // Delegated, so it covers every one of them without each partial needing to know about the tabs.
+        document.addEventListener('click', function (ev) {
+            var link = ev.target.closest && ev.target.closest('a[href="#ranks"]');
+            // Modifier-clicks belong to the browser: swallowing them means Ctrl/Cmd-click on the hero's
+            // Earners figure silently does nothing instead of opening a tab.
+            if (!link || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
+            ev.preventDefault();
+            showView('ranks');
+            var sec = document.getElementById('ranks');
+            if (sec && sec.scrollIntoView) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
         });
+    })();
+</script>
+
+{{ block.super }}
+<script>
+(function () {
+    // Group selector: swaps EVERY .bd2-panel (the header hero AND the journey below) by data-bd2-view.
+    var root = document.querySelector('.bd2-groupswitch');
+    if (!root || !window.PlatPursuit) return;
+    var chips = Array.prototype.slice.call(root.querySelectorAll('.bd2-gbtn'));
+    var ORDER = chips.map(function (c) { return c.getAttribute('data-bd2-group'); });
+
+    function show(key, animate) {
+        var from = null;
+        document.querySelectorAll('.bd2-panel').forEach(function (p) {
+            var k = p.getAttribute('data-bd2-view');
+            if (!p.classList.contains('is-hidden')) from = k;
+            p.classList.toggle('is-hidden', k !== key);
+        });
+        chips.forEach(function (c) {
+            var on = c.getAttribute('data-bd2-group') === key;
+            c.classList.toggle('is-active', on);
+            c.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (animate && from && from !== key) {
+            document.querySelectorAll('.bd2-panel[data-bd2-view="' + key + '"]').forEach(function (shown) {
+                PlatPursuit.slideViewIn(shown, from, key, ORDER);
+            });
+        }
+    }
+    if (PlatPursuit.wireTablist) {
+        PlatPursuit.wireTablist(chips, { onSelect: function (c) {
+            if (PlatPursuit.igniteTab) { PlatPursuit.igniteTab(c); }
+            show(c.getAttribute('data-bd2-group'), true);
+        } });
     }
 })();
+
+(function () {
+    // ── Stage ladder: per-stage collapse + bulk expand/collapse-all + requirements-tile jump. ──
+    // Each stage's collapse body toggles grid-template-rows 1fr<->0fr; body/chevron are found relative to the
+    // stage (stage numbers repeat across groups, so no global id lookup for the toggle).
+    function bodyOf(section) { return section.querySelector('[data-stage-games]'); }
+    function isOpen(section) { var b = bodyOf(section); return !!b && b.style.gridTemplateRows !== '0fr'; }
+    function setStage(section, open) {
+        var body = bodyOf(section);
+        if (!body) { return; }
+        var chev = section.querySelector('.bd-stage__chevron');
+        var head = section.querySelector('.bd-stage__head[data-stage-toggle]');
+        body.style.gridTemplateRows = open ? '1fr' : '0fr';
+        if (chev) { chev.style.transform = open ? '' : 'rotate(-90deg)'; }
+        if (head) { head.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+    }
+    function panelOf(el) { return el.closest('[data-bd2-view]') || document; }
+    // Keep a panel's bulk button label + chevron in sync with its stages.
+    function refreshBulk(scope) {
+        var btn = scope && scope.querySelector('[data-stages-toggle-all]');
+        if (!btn) { return; }
+        var sections = scope.querySelectorAll('.bd-stage');
+        var allOpen = sections.length > 0 && Array.prototype.every.call(sections, isOpen);
+        var label = btn.querySelector('[data-bulk-label]');
+        var icon = btn.querySelector('svg');
+        if (label) { label.textContent = allOpen ? 'Collapse all' : 'Expand all'; }
+        if (icon) { icon.style.transform = allOpen ? 'rotate(180deg)' : ''; }
+    }
+
+    // Per-stage header toggle.
+    document.querySelectorAll('.bd-stage__head[data-stage-toggle]').forEach(function (head) {
+        function toggle() {
+            var section = head.closest('.bd-stage');
+            if (!section) { return; }
+            setStage(section, !isOpen(section));
+            refreshBulk(panelOf(head));
+        }
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+    });
+
+    // Bulk expand/collapse all -- one button per journey panel. Transitions are killed for the bulk change
+    // (animating every stage's grid-template-rows at once janks tall mobile), then restored after two frames.
+    document.querySelectorAll('[data-stages-toggle-all]').forEach(function (btn) {
+        var scope = panelOf(btn);
+        btn.addEventListener('click', function () {
+            var sections = scope.querySelectorAll('.bd-stage');
+            var bodies = scope.querySelectorAll('[data-stage-games]');
+            var expand = !(sections.length > 0 && Array.prototype.every.call(sections, isOpen));
+            bodies.forEach(function (b) { b.style.transition = 'none'; });
+            sections.forEach(function (s) { setStage(s, expand); });
+            requestAnimationFrame(function () { requestAnimationFrame(function () {
+                bodies.forEach(function (b) { b.style.transition = ''; });
+            }); });
+            refreshBulk(scope);
+        });
+        refreshBulk(scope);   // initial label (the "up next" stage may start open)
+    });
+
+    // Requirements-tile jump: a tile (data-stage-jump, href="#bd2-stage-<group>-<n>") scrolls to its stage in
+    // the journey (native smooth #anchor) and EXPANDS it, so you land on open content, not a collapsed head.
+    // Delegated so it survives group swaps; expanding grows the section downward, so the anchor still lands right.
+    document.addEventListener('click', function (e) {
+        var tile = e.target.closest('[data-stage-jump]');
+        if (!tile) { return; }
+        var id = (tile.getAttribute('href') || '').replace(/^#/, '');
+        var section = id && document.getElementById(id);
+        if (!section) { return; }
+        setStage(section, true);
+        refreshBulk(panelOf(section));
+    });
+})();
+
+(function () {
+    // ── Modals: medallion inspect (pick-up/put-down), My Stats, and the game contract card. Ported from the
+    // retired tier page's handlers, re-pointed at the grouping-badge peek endpoint + the .bd2-med hero host. ──
+    if (!window.PlatPursuit) { return; }
+
+    // Shared focus trap + restore. (Refactor candidate: hoist alongside the collection page's copy.)
+    function modalA11y(modal, dialogSel) {
+        var opener = null;
+        function focusables() {
+            var dlg = modal.querySelector(dialogSel);
+            if (!dlg) { return []; }
+            return Array.prototype.slice.call(dlg.querySelectorAll(
+                'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )).filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
+        }
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Tab' || modal.hidden) { return; }
+            var dlg = modal.querySelector(dialogSel);
+            var f = focusables();
+            if (!f.length) { if (dlg) { e.preventDefault(); dlg.focus(); } return; }
+            var first = f[0], last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }, true);
+        return {
+            opened: function (el) { opener = el || document.activeElement; },
+            closed: function () { if (opener && opener.focus) { try { opener.focus(); } catch (err) { /* gone */ } } opener = null; }
+        };
+    }
+
+    // The career-style "page pushes back": scale #page-recede down while a modal is open. NOT used for the peek
+    // modal (its pick-up/put-down grow reads as the depth already).
+    var zoomEl = document.getElementById('zoom-container');
+    function pageRecede(on) {
+        var pr = document.getElementById('page-recede');
+        if (on && pr) { pr.style.transformOrigin = '50% ' + (window.innerHeight / 2 - pr.getBoundingClientRect().top) + 'px'; }
+        if (zoomEl) { zoomEl.classList.toggle('pp-receded', on); }
+    }
+
+    // Choreographed modal EXIT: reverse the entrance, then hide + cleanup on animationend (timeout fallback).
+    function closeModalAnimated(modal, cleanup) {
+        pageRecede(false);
+        var dlg = modal.querySelector('.pp-detail-modal__dialog');
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function finish() {
+            modal.hidden = true; modal.classList.remove('is-closing'); document.body.style.overflow = '';
+            if (cleanup) { cleanup(); }
+        }
+        if (reduce || !dlg) { finish(); return; }
+        modal.classList.add('is-closing');
+        var done = false;
+        var onEnd = function (e) { if (e.target !== dlg) { return; } done = true; dlg.removeEventListener('animationend', onEnd); finish(); };
+        dlg.addEventListener('animationend', onEnd);
+        setTimeout(function () { if (!done) { dlg.removeEventListener('animationend', onEnd); finish(); } }, 320);
+    }
+
+    // ── Medallion inspect (pick-up / put-down) ──
+    // Tapping / keyboard-activating a hero medallion (.bd2-med role=button) grows the group-badge peek into the
+    // shared #badge-peek dialog. Delegated so it survives group swaps; the badge id is read from the tapped
+    // medallion (per group), so each group inspects its own badge.
+    var peekEl = document.getElementById('badge-peek');
+    var peek = (peekEl && PlatPursuit.Medallion && PlatPursuit.Medallion.detailModal)
+        ? PlatPursuit.Medallion.detailModal({ modal: peekEl, bodySel: '[data-peek-body]', closeSel: '[data-peek-close]' })
+        : null;
+    function openMedallionPeek(host) {
+        if (!peek || !host) { return; }
+        var med = host.querySelector('.pp-med[data-badge-id]');
+        var badgeId = med && med.getAttribute('data-badge-id');
+        if (!badgeId) { return; }
+        var tmpl = peekEl.getAttribute('data-peek-url') || '';
+        var url = tmpl.replace(/0\/$/, badgeId + '/');   // substitute the group-badge id into the peek URL
+        // Pass the CONTAINER (not the .pp-med): detailModal.open does sourceEl.querySelector('.pp-med') to find
+        // the disc and GROW from it -- the pick-up/put-down every other page uses.
+        if (url && url !== tmpl) { peek.open(url, host); }
+    }
+    document.addEventListener('click', function (e) {
+        if (!peek || !e.target.closest) { return; }
+        if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }
+        var host = e.target.closest('.bd2-med');
+        if (!host || !host.querySelector('.pp-med[data-badge-id]')) { return; }
+        e.preventDefault();
+        openMedallionPeek(host);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') { return; }
+        var host = e.target.closest && e.target.closest('.bd2-med[role="button"]');
+        if (!host) { return; }
+        e.preventDefault();
+        openMedallionPeek(host);
+    });
+
+    // ── My Stats modal ──
+    // Opener ([data-stats-open]) lives in each group panel (re-rendered on a group switch), so it's delegated;
+    // the modal itself lives in fixed_overlays and persists. Toggling [hidden] shows/hides + triggers entrance.
+    var statsModal = document.getElementById('badge-stats-modal');
+    if (statsModal) {
+        var statsA11y = modalA11y(statsModal, '.pp-detail-modal__dialog');
+        var closeStats = function () { closeModalAnimated(statsModal, function () { statsA11y.closed(); }); };
+        var statsDlg = statsModal.querySelector('.pp-detail-modal__dialog');
+        if (statsDlg && PlatPursuit.dismissableSheet) {   // swipe down to close (touch)
+            PlatPursuit.dismissableSheet(statsDlg, {
+                scrim: statsModal.querySelector('.pp-detail-modal__scrim'),
+                onClose: function () { pageRecede(false); statsModal.hidden = true; statsModal.classList.remove('is-closing'); document.body.style.overflow = ''; statsA11y.closed(); }
+            });
+        }
+
+        // In-modal per-badge toggle (Legacy HD / Ultra HD): swap the .bd2ms-panel stat blocks + sync the chip
+        // state; when `animate`, replay the shown panel's count-up so the numbers re-tell as you switch badges.
+        var msSwitch = statsModal.querySelector('.bd2ms-switch');
+        var msTablist = null;
+        function showStatsGroup(key, animate) {
+            if (!key) { return; }
+            statsModal.querySelectorAll('.bd2ms-panel').forEach(function (p) {
+                p.classList.toggle('is-hidden', p.getAttribute('data-ms-group') !== key);
+            });
+            if (msSwitch) {
+                msSwitch.querySelectorAll('.bd2-gbtn').forEach(function (x) {
+                    var on = x.getAttribute('data-ms-group') === key;
+                    x.classList.toggle('is-active', on); x.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+            }
+            if (msTablist) { msTablist.syncTabindex(); }   // keep the roving tabindex on the now-active chip
+            if (animate) {
+                var shown = statsModal.querySelector('.bd2ms-panel[data-ms-group="' + key + '"]');
+                if (shown && PlatPursuit.countUp) {
+                    shown.querySelectorAll('[data-countup]').forEach(function (n, i) {
+                        setTimeout(function () { PlatPursuit.countUp(n); }, i * 45);
+                    });
+                }
+            }
+        }
+        if (msSwitch && PlatPursuit.wireTablist) {
+            var msChips = Array.prototype.slice.call(msSwitch.querySelectorAll('.bd2-gbtn'));
+            msTablist = PlatPursuit.wireTablist(msChips, { onSelect: function (c) {
+                if (PlatPursuit.igniteTab) { PlatPursuit.igniteTab(c); }
+                showStatsGroup(c.getAttribute('data-ms-group'), true);
+            } });
+        }
+        // The group the page is currently showing (the active header switcher chip), so the modal opens to the
+        // badge you were looking at -- not always the first.
+        function activeHeaderGroup() {
+            var chip = document.querySelector('.bd2-groupswitch .bd2-gbtn.is-active');
+            return chip ? chip.getAttribute('data-bd2-group') : null;
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var opener = e.target.closest('[data-stats-open]');
+            if (opener) {
+                e.preventDefault();
+                statsA11y.opened(opener);
+                statsModal.hidden = false;
+                pageRecede(true);
+                document.body.style.overflow = 'hidden';
+                // Open to the badge the page is currently on (no count-up here -- the reveal below handles it).
+                showStatsGroup(activeHeaderGroup(), false);
+                // Reveal-on-open: the numbers count up so the modal TELLS the standing.
+                var mystats = statsModal.querySelector('.bd-mystats');
+                if (mystats) {
+                    mystats.classList.remove('is-revealing'); void mystats.offsetWidth; mystats.classList.add('is-revealing');
+                    // Count up the series hero + the VISIBLE badge panel only; hidden panels animate on toggle.
+                    mystats.querySelectorAll('[data-countup]').forEach(function (n, i) {
+                        var panel = n.closest('.bd2ms-panel');
+                        if (panel && panel.classList.contains('is-hidden')) { return; }
+                        setTimeout(function () { if (PlatPursuit.countUp) { PlatPursuit.countUp(n); } }, i * 60);
+                    });
+                }
+                var dlg = statsModal.querySelector('.pp-detail-modal__dialog');
+                if (dlg) { dlg.focus(); }
+            } else if (e.target.closest('[data-stats-close]')) {
+                closeStats();
+            }
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !statsModal.hidden) { closeStats(); } });
+    }
+
+    // ── Contract modal ──
+    // A game card's contract band opens THAT contract in place: lazily fetch the ContractModalView partial and
+    // inject it. Delegated (the bands re-render on group swaps). On a non-200 (logged-in-but-not-linked -> 404)
+    // or a network error, fall back to the band's href (the career board).
+    var contractModal = document.getElementById('badge-contract-modal');
+    if (contractModal) {
+        var contractBody = contractModal.querySelector('[data-contract-body]');
+        var contractA11y = modalA11y(contractModal, '.pp-detail-modal__dialog');
+        var closeContract = function () { closeModalAnimated(contractModal, function () { contractBody.innerHTML = ''; contractA11y.closed(); }); };
+        var contractDlg = contractModal.querySelector('.pp-detail-modal__dialog');
+        if (contractDlg && PlatPursuit.dismissableSheet) {
+            PlatPursuit.dismissableSheet(contractDlg, {
+                scrim: contractModal.querySelector('.pp-detail-modal__scrim'),
+                onClose: function () { pageRecede(false); contractModal.hidden = true; contractModal.classList.remove('is-closing'); document.body.style.overflow = ''; contractBody.innerHTML = ''; contractA11y.closed(); }
+            });
+        }
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var link = e.target.closest('[data-contract-url]');
+            if (link) {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) { return; }   // let modified clicks open normally
+                e.preventDefault();
+                contractA11y.opened(link);
+                var loadTimer = setTimeout(function () { link.classList.add('is-loading'); }, 150);   // grace before shimmer
+                function clearLoading() { clearTimeout(loadTimer); link.classList.remove('is-loading'); }
+                fetch(link.getAttribute('data-contract-url'), { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.text() : null; })
+                    .then(function (html) {
+                        if (html == null) { clearLoading(); window.location.href = link.getAttribute('href'); return; }   // not linked -> career board
+                        contractBody.innerHTML = html;
+                        // The rpm job pills + game cards ship at opacity:0 (career reveals them via .rpm-in); do the
+                        // same here, plus set each game's progress-bar width from data-fill.
+                        var i = 0;
+                        contractBody.querySelectorAll('.rpm-job, .rpg').forEach(function (el) { el.style.animationDelay = (i++ * 45) + 'ms'; el.classList.add('rpm-in'); });
+                        contractBody.querySelectorAll('.rpg__prog-fill').forEach(function (f) { if (f.dataset.fill) { f.style.width = f.dataset.fill; } });
+                        contractModal.hidden = false;
+                        pageRecede(true);
+                        document.body.style.overflow = 'hidden';
+                        clearLoading();
+                        var d = contractModal.querySelector('.pp-detail-modal__dialog'); if (d) { d.focus(); }
+                    })
+                    .catch(function () { clearLoading(); window.location.href = link.getAttribute('href'); });
+                return;
+            }
+            if (e.target.closest('[data-contract-close]')) { closeContract(); }
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !contractModal.hidden) { closeContract(); } });
+    }
+})();
+
+(function () {
+    // ── Rarity & Community band: a one-shot premium reveal when it scrolls into view -- the group cells stagger
+    // up, then (a beat later, once they've landed) the earner numbers count up and the earners bars fill from 0.
+    var band = document.querySelector('.bd2-comm');
+    if (!band || !window.PlatPursuit) { return; }
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function countUps() {
+        band.querySelectorAll('[data-countup]').forEach(function (n, i) {
+            setTimeout(function () { if (PlatPursuit.countUp) { PlatPursuit.countUp(n); } }, i * 80);
+        });
+    }
+    function fillBars() {
+        band.querySelectorAll('.bd2-comm__bar .pp-horizon__fill').forEach(function (f) {
+            var target = f.getAttribute('data-fill') || f.style.getPropertyValue('--horizon-progress') || '0%';
+            f.style.setProperty('--horizon-progress', '0%');
+            void f.offsetWidth;                                    // commit 0 as the transition start
+            f.style.setProperty('--horizon-progress', target);     // ... then fill up to the real value
+        });
+    }
+
+    // Guard BEFORE arming: reduced motion / no IntersectionObserver -> never hide the cells, just count up in
+    // place (countUp self-jumps under reduced motion; the bars keep their server value).
+    if (reduce || !('IntersectionObserver' in window)) {
+        countUps();
+        return;
+    }
+
+    band.classList.add('bd2-comm--anim');   // arm the initial hidden state only when we'll actually animate
+    var obs = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+            if (!e.isIntersecting) { return; }
+            obs.disconnect();
+            band.classList.add('is-revealed');   // cells stagger up
+            // Fire the content beat AFTER the cells have landed, so numbers/bars don't animate over a moving cell.
+            setTimeout(function () { countUps(); fillBars(); }, 400);
+        });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    obs.observe(band);
+})();
 </script>
-{% if user.is_authenticated and user.profile and user.profile.is_linked %}
-<script src="{% static 'js/badge-detail-tour.js' %}"></script>
-{% include 'trophies/partials/badge_detail/badge_detail_tour.html' %}
-{% endif %}
 {% endblock %}

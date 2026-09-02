@@ -1,0 +1,59 @@
+{% comment %} One earned trophy, as a card.
+
+Shared by the two places a profile shows individual trophies: inside an expanded session, and the Log.
+One partial rather than two, because they are the same object and drifted versions of the same card is
+what the rebuild keeps removing.
+
+What differs is only what each context already knows. A session names its game on the row above, so its
+cards carry the trophy icon alone. The Log has no such row, so its cards lead with the game's COVER with
+the trophy icon set into it -- "this trophy, from this game" in one glance, and cover art is how anyone
+actually recognises a game.
+
+Expects `et` (an EarnedTrophy with `trophy` selected). `show_game` adds the cover + game name; `show_date`
+prints a date rather than a time of day.
+{% endcomment %}
+{% with t=et.trophy %}
+<article class="pp-actt__card{% if show_game %} pp-actt__card--game{% endif %}" data-tier="{{ t.trophy_type }}">
+    {% if show_game %}
+    <span class="pp-actt__art">
+        <img class="pp-actt__cover{% if not t.game.has_cover_art %} pp-actt__cover--placeholder{% endif %}"
+             src="{{ t.game.display_image_url }}" alt="" loading="lazy" decoding="async">
+        {% comment %}The trophy icon set INTO the cover rather than beside it: two images side by side
+        compete, where one inset into the other reads as a single object.{% endcomment %}
+        <img class="pp-actt__ico pp-actt__ico--inset" src="{{ t.trophy_icon_url }}" alt="" loading="lazy" decoding="async">
+    </span>
+    {% else %}
+    <img class="pp-actt__ico" src="{{ t.trophy_icon_url }}" alt="" loading="lazy" decoding="async">
+    {% endif %}
+
+    <div class="pp-actt__body">
+        <span class="pp-actt__name" title="{{ t.trophy_name }}">{{ t.trophy_name }}</span>
+        {% if show_game %}
+        {% comment %}A STRETCHED link: the anchor is the game name, but its ::after covers the card, so the
+        cover and the whole surface are the tap target. `.pp-actt__card` takes the focus ring via
+        `:focus-within` because the ring belongs to the card, not to 11px of text.{% endcomment %}
+        <a class="pp-actt__game pp-actt__link" href="{% url 'game_detail_with_profile' t.game.np_communication_id profile.psn_username %}">{{ t.game.title_name }}</a>
+        {% comment %}Rendered even when EMPTY: its two lines are reserved in CSS so every card in the wall
+        is the same height, and a trophy with no description must not make its card shorter than the one
+        beside it.{% endcomment %}
+        <span class="pp-actt__desc">{{ t.trophy_detail }}</span>
+        {% elif t.trophy_detail %}
+        <span class="pp-actt__desc">{{ t.trophy_detail }}</span>
+        {% endif %}
+        <span class="pp-actt__meta">
+            {% comment %}The tier is named, not just tinted: the stripe and the icon ring carry the colour,
+            and colour alone is not a label.{% endcomment %}
+            <span class="pp-actt__tier">{{ t.trophy_type|title }}</span>
+            {% comment %}PSN's global earn rate -- the rarity number the rest of the site uses. Absent
+            rather than zero when PSN has not published one.{% endcomment %}
+            {% if t.trophy_earn_rate %}<span class="pp-actt__rate" title="{{ t.trophy_earn_rate|floatformat:1 }}% of PSN players earned this">{% include 'partials/icons/ps_logo.html' with size='w-3 h-3' %}{{ t.trophy_earn_rate|floatformat:1 }}%</span>{% endif %}
+            {% if et.earned_date_time %}
+            {% comment %}A DATE in the Log, which spans days; a time of day inside a session, which is one.
+            A boolean rather than a format string passed in: `date:` with an undefined variable raises
+            rather than falling back.{% endcomment %}
+            <time class="pp-actt__time" datetime="{{ et.earned_date_time|date:'c' }}">{% if show_date %}<span class="pp-actt__date-sm">{{ et.earned_date_time|date:"n/j/y" }}</span><span class="pp-actt__date-lg">{{ et.earned_date_time|date:"M j, Y" }}</span>{% else %}{{ et.earned_date_time|date:"g:i A" }}{% endif %}</time>
+            {% endif %}
+        </span>
+    </div>
+</article>
+{% endwith %}

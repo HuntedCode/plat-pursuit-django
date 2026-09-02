@@ -107,11 +107,6 @@ AWS_S3_ACCESS_KEY_ID=...
 AWS_S3_SECRET_ACCESS_KEY=...
 AWS_S3_REGION_NAME=us-west-2
 
-# === Ads (optional) ===
-ADSENSE_PUB_ID=...
-ADSENSE_ENABLED=False
-ADSENSE_TEST_MODE=False
-
 # === Mobile CORS (optional) ===
 CORS_ALLOWED_ORIGINS=http://localhost:19006
 ```
@@ -126,7 +121,7 @@ python manage.py createsuperuser
 ### 5. Seed Data (Optional)
 
 ```bash
-python manage.py populate_milestones     # Milestone definitions
+python manage.py seed_milestones         # Milestone ladders + tiers (milestones app)
 python manage.py populate_stat_types     # Gamification stat types
 ```
 
@@ -188,6 +183,8 @@ npx tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch
 | `PAYPAL_SANDBOX_CLIENT_ID` | PayPal sandbox client ID |
 | `PAYPAL_SANDBOX_CLIENT_SECRET` | PayPal sandbox secret |
 | `PAYPAL_SANDBOX_WEBHOOK_ID` | PayPal sandbox webhook ID |
+| `PP_LAUNCH_DATE` | Cutover instant, ISO 8601 (`2026-09-01T00:00:00+00:00`, or date-only for midnight UTC). UNSET locally: the 1.0 greeting stays dormant and `send_launch_announcement` refuses to run. A malformed value fails boot on every service. |
+| `LAUNCH_ANNOUNCEMENT_SEND_ENABLED` | `True` to let `send_launch_announcement --send` fire. Default False; leave unset locally. |
 
 ## Production Deployment (Render)
 

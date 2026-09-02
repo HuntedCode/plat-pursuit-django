@@ -1,0 +1,101 @@
+{% load humanize mark_tags %}
+{% comment %} One leaderboard row, shared by all three Global Boards.
+
+The boards differ only in their FIGURES, so the view supplies `primary`/`primary_label` and an optional
+`secondary` pair and this partial stays one file. Three near-identical row templates was the drift the
+rebuild removes.
+
+`entry` comes from `badge_leaderboards.page()`: identity hydrated live from Profile (never a
+denormalized copy, so a renamed hunter reads correctly immediately) plus the board's own numbers.
+{% endcomment %}
+{% comment %} `data-lb-rank` carries the CANONICAL rank. `PlatPursuit.virtualBoard` seeds its cache from
+it when it adopts the server-rendered first window, and reads it back to place rows -- so a row that
+renders without it is invisible to a virtualized wall. Harmless on the flow walls that do not virtualize.
+{% endcomment %}
+<li class="lb-row{% if entry.rank <= 3 %} lb-row--podium lb-row--p{{ entry.rank }}{% endif %}" data-lb-rank="{{ entry.rank }}">
+    {% comment %} Rank as a plain figure, not a medal: only the top three get any treatment at all, and
+    they get it through the row's own edge rather than an icon competing with the avatar.
+
+    The word "Rank" is `sr-only` text rather than an `aria-label`. ARIA prohibits `aria-label` on a bare
+    `<span>` (it maps to `role=generic`), so it was either ignored -- leaving a naked number -- or, where
+    honoured, it REPLACED the visible text with an un-comma'd value: "Rank 1234" spoken over "1,234" shown.
+    {% endcomment %}
+    <span class="lb-row__rank pp-tally"><span class="sr-only">Rank </span>{{ entry.rank|intcomma }}</span>
+
+    {% comment %} The link is gated on there being a name to link to. `page()` promises that a row whose
+    profile vanished between the board read and the hydrate still RENDERS rather than being dropped (the
+    Redis design skipped them, leaving pages of 47 rows with correct numbering and invisible holes) -- but
+    `{% url %}` cannot reverse an empty username against `<str:psn_username>`, so honouring that promise
+    unconditionally raised NoReverseMatch and took the whole page down with a 500. {% endcomment %}
+    {% if entry.psn_username %}
+    <a class="lb-row__who" href="{% url 'profile_detail' entry.psn_username %}">
+        <span class="lb-row__av">
+            {% if entry.avatar_url %}
+            <img src="{{ entry.avatar_url }}" alt="" loading="lazy" decoding="async">
+            {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            {% endif %}
+        </span>
+        <span class="lb-row__names">
+            <span class="lb-row__name">
+                {% if entry.flag %}<span class="lb-row__flag" aria-hidden="true">{{ entry.flag }}</span>{% endif %}
+                {% comment %} The name gets its OWN element. `.lb-row__name` is a flex container, and
+                `text-overflow: ellipsis` on a flex container does nothing for its items -- a bare text node
+                becomes an anonymous flex item at min-content width, and a PSN ID has no spaces to break on,
+                so a long name was hard-clipped with no ellipsis and pushed the supporter mark out of the
+                row entirely. The truncation has to live on a block-level child. {% endcomment %}
+                {% comment %} The mark system (components/name_mark.html): supporter level,
+                staff wrench or mod shield, one object wherever you meet a name. Replaced the
+                legacy amber star, which predated the ladder and knew one flat state. {% endcomment %}
+                <span class="lb-row__uname">{% name_mark name=entry.psn_username mark=entry.display_mark size='sm' index=entry.rank %}</span>
+            </span>
+            {% comment %} The worn title, when there is one. `pr-1` because it is italic inside a clamped
+            box and italic glyphs slant past their box. {% endcomment %}
+            {% if entry.displayed_title %}<span class="lb-row__title italic pr-1"><span class="lb-row__title-earned">{{ entry.displayed_title }}</span>{% mark_title entry.display_mark sep=True %}</span>{% elif entry.display_mark|mark_title_label %}<span class="lb-row__title italic pr-1">{% mark_title entry.display_mark %}</span>{% endif %}
+        </span>
+    </a>
+    {% else %}
+    {% comment %} No name to link to -- the row still holds its slot so the numbering stays honest. {% endcomment %}
+    <span class="lb-row__who lb-row__who--gone"><span class="lb-row__names"><span class="lb-row__name">Unknown hunter</span></span></span>
+    {% endif %}
+
+    <span class="lb-row__figs">
+        {% comment %} Guarded like the supporting figure below it. Every board had a leading quantity
+        until the edition board, which is EARNERS -- everyone on it cleared the same thing, so the only
+        fact that differs between rows is when. Rendering `0 stages` for all of them would be a column
+        that says nothing, in the most prominent slot the row has. {% endcomment %}
+        {% if entry.primary is not None %}
+        <span class="lb-row__fig">
+            {% comment %} NO `data-countup` here, deliberately. A page of 50 rows would mean 50 concurrent
+            rAF loops writing textContent into laid-out grid rows, fighting the staggerReveal already
+            running -- the "frantic counters" the visual identity warns against. The Tally ticks ONCE, on
+            the header figure. {% endcomment %}
+            {% comment %} `primary_of` is the DENOMINATOR, when a board has one. Without it the badge
+            series board rendered "5 stages" for a hunter who finished a 5-stage series AND for one sitting
+            on 5 of 8 -- the same string for the top of the board and the middle of it. The total was being
+            fetched on every row and discarded. {% endcomment %}
+            <span class="lb-row__v pp-tally">{{ entry.primary|default:0|intcomma }}{% if entry.primary_of %}<span class="lb-row__of"> / {{ entry.primary_of|intcomma }}</span>{% endif %}</span>
+            <span class="lb-row__k">{{ entry.primary_label }}</span>
+        </span>
+        {% endif %}
+        {% comment %} The supporting figure is what gives the leading one its meaning -- 9 platinums out
+        of 140 trophies is a different hunter from 9 out of 900. Omitted entirely when a board has no
+        second number, rather than rendering an empty cell. {% endcomment %}
+        {% if entry.secondary is not None %}
+        <span class="lb-row__fig lb-row__fig--sub">
+            <span class="lb-row__v pp-tally">{{ entry.secondary|intcomma }}</span>
+            <span class="lb-row__k">{{ entry.secondary_label }}</span>
+        </span>
+        {% endif %}
+        {% comment %} A DATE, not a figure -- its own slot because the two above go through `intcomma` and
+        a timestamp is a different kind of thing from a supporting number. On the series board it is the
+        tiebreak made visible: rows sharing a rung are ordered by who got there first, which reads as
+        arbitrary until the date is on screen. Not a Tally: it is not a quantity. {% endcomment %}
+        {% if entry.when %}
+        <span class="lb-row__fig lb-row__fig--when">
+            <span class="lb-row__v lb-row__when">{{ entry.when|date:"M Y" }}</span>
+            <span class="lb-row__k">{{ entry.when_label }}</span>
+        </span>
+        {% endif %}
+    </span>
+</li>

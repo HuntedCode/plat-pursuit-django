@@ -1,0 +1,43 @@
+/* ==========================================================================
+ * STARS (.pp-stars) -- a fractional 0-5 star bar.
+ *
+ * A dim five-star base with a gold overlay clipped to `--fill`, so 4.3 draws as 4.3 rather than rounding
+ * to a whole glyph. Size comes from `--star`; the caller sets both custom properties:
+ *
+ *   <span class="pp-stars" style="--fill: 86%;" role="img" aria-label="4.3 out of 5">
+ *       <span class="pp-stars__on"></span>
+ *   </span>
+ *
+ * Lives in its own file because it is genuinely shared -- the profile's taste header, every rating card,
+ * and the quick-rate form all draw the same figure at three different sizes. It was extracted from
+ * profile-hero.css when the third caller appeared: a primitive parked inside one page's stylesheet is one
+ * the next person copies instead of finds.
+ *
+ * KNOWN DUPLICATES, not yet folded in: `.gd-cond__stars` (the game-detail conditions card) and
+ * `.gd-blurb__stars` (a quick-take card) are the same four rules under different names. They predate this
+ * file and their markup carries its own `data-cond-stars` hooks; folding them in is a follow-up, and
+ * until then this is the file to extend rather than a fourth copy.
+ * ========================================================================== */
+/* NO letter-spacing, and this is load-bearing geometry rather than a style preference.
+ *
+ * The overlay is clipped by WIDTH, so the fill percentage is only honest if each star occupies exactly a
+ * fifth of the element. Any gap between the glyphs breaks that: the unit the fill measures becomes
+ * `glyph + gap`, and a half-fill then covers two whole units plus half of a unit -- which lands past the
+ * middle of the third GLYPH, because the half-gap it swallowed is invisible. With a 0.2em gap a 2.5 draws
+ * its third star about 60% full, and the error grows with the gap.
+ *
+ * Zero gap makes unit == glyph, so `--fill: 50%` is exactly two and a half stars, in any font, at any
+ * size. If these ever need more air, it has to come from a bigger `--star` or from spacing OUTSIDE the
+ * element -- not from letter-spacing, word-spacing, or a gap between the glyphs.
+ */
+.pp-stars {
+    position: relative; display: inline-block; flex: none;
+    font-size: var(--star, 1.3rem); line-height: 1; letter-spacing: 0;
+    color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
+}
+.pp-stars::before { content: "\2605\2605\2605\2605\2605"; }
+.pp-stars__on {
+    position: absolute; top: 0; left: 0; width: var(--fill, 0%);
+    overflow: hidden; white-space: nowrap; color: var(--pp-rating-star);
+}
+.pp-stars__on::before { content: "\2605\2605\2605\2605\2605"; }

@@ -1,0 +1,308 @@
+/* ================================================================
+ * Recap Archive -- the landing page at /recap/
+ *
+ * This page used to be a redirect. `RecapIndexView.get` bounced you into your latest month whenever a
+ * recap existed, so the only hunters who ever saw it were the ones with no trophies to show -- and a
+ * second month picker had to live at the bottom of the recap page to make history reachable at all.
+ *
+ * It leads now. The shape is a RECORD, not a picker: the latest month as an object you can pick up
+ * (`.rca-hero`), then every month you have earned in stacked under it by year, each one carrying what it
+ * actually held. A grid of bare month names is what made the old page read as a list of dates.
+ *
+ * Structure follows the site-wide stacked rule: chrome cards stack (header, hero, timezone), and the
+ * archive itself is FREE content -- no outer card wrapped around the grid.
+ * ================================================================ */
+
+/* ---- The latest month --------------------------------------------------------------------------- */
+
+/* One accent for the whole surface. Declared on BOTH roots because they are siblings, not nested: when
+   this lived only on `.rca-hero`, every `var(--rca-accent)` in a tile resolved to nothing, and a
+   `color-mix()` with an invalid argument drops the whole declaration -- so the "not watched" month label
+   silently kept the ordinary dim colour and the state it existed to signal never appeared. */
+.rca-hero,
+.rca-grid { --rca-accent: var(--pp-primary); }
+
+.rca-hero {
+    position: relative;
+    overflow: hidden;
+}
+/* Ambient bloom, anchored to the corner the eye lands on last. `radial-gradient` on a pseudo-element
+   rather than a `filter` -- this box is page-sized on mobile and filters on page-sized elements are the
+   documented mobile-GPU trap (motion-patterns Gotchas). */
+.rca-hero::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(120% 90% at 88% 8%,
+                color-mix(in oklab, var(--rca-accent) 17%, transparent), transparent 62%);
+}
+.rca-hero > * { position: relative; z-index: 1; }
+
+.rca-hero__eyebrow {
+    font-size: 0.65rem; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--rca-accent) 78%, var(--pp-text-mute));
+}
+.rca-hero__month {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 800; line-height: 0.92; letter-spacing: -0.02em;
+    font-size: clamp(2.1rem, 7vw, 3.4rem);
+}
+.rca-hero__year { color: var(--pp-text-mute); font-weight: 700; }
+
+/* "New" is the one thing on this page that earns a colour of its own: it is the difference between a
+   thing you have and a thing waiting for you. */
+.rca-new {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 0.2rem 0.5rem; border-radius: 999px;
+    color: var(--rca-accent);
+    background: color-mix(in oklab, var(--rca-accent) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rca-accent) 42%, transparent);
+}
+.rca-new__dot {
+    width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+    box-shadow: 0 0 7px currentColor;
+}
+/* Same pill, flagged to a tile's corner. The accent edge alone asked you to infer what the colour meant;
+   this says it. One pill language for both surfaces rather than a second bespoke badge. */
+.rca-new--flag {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    font-size: 0.5rem; letter-spacing: 0.12em; padding: 0.12rem 0.36rem; gap: 0.25rem;
+}
+.rca-new--flag .rca-new__dot { width: 4px; height: 4px; }
+
+/* ---- The archive -------------------------------------------------------------------------------- */
+
+/* Year rule: the number, then a hairline that carries the eye across to the count. Cheaper than a card
+   and it keeps the grid below it as free content. */
+.rca-year {
+    display: flex; align-items: baseline; gap: 0.75rem;
+    margin: 1.5rem 0 0.75rem;
+}
+.rca-year:first-child { margin-top: 0; }
+.rca-year__n { font-size: 1.15rem; color: var(--pp-text-dim); }
+.rca-year__rule {
+    flex: 1; height: 1px; min-width: 1rem;
+    background: linear-gradient(90deg, var(--pp-border), transparent);
+}
+.rca-year__count {
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--pp-text-mute); white-space: nowrap;
+}
+
+.rca-grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.rca-tile {
+    position: relative;
+    display: flex; flex-direction: column; gap: 0.15rem;
+    padding: 0.85rem 0.9rem 0.95rem;
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    text-align: left;
+    /* Glow on hover, never scale -- house rule. Colour and shadow only, so nothing reflows and nothing
+       gets promoted to its own layer for a hover that lasts 200ms. */
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.rca-tile:hover {
+    background: var(--pp-bg-2);
+    border-color: color-mix(in oklab, var(--rca-accent) 45%, var(--pp-border));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--rca-accent) 22%, transparent),
+                0 10px 26px -18px rgba(0, 0, 0, 0.9);
+}
+.rca-tile:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+/* Unwatched months carry the accent on their edge so the ones still owed to you read at a glance,
+   without a second badge competing with the number for the tile's attention. */
+.rca-tile--new {
+    border-color: color-mix(in oklab, var(--rca-accent) 38%, var(--pp-border));
+}
+.rca-tile--new::before {
+    content: '';
+    position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    box-shadow: inset 3px 0 0 -1px color-mix(in oklab, var(--rca-accent) 70%, transparent);
+}
+
+.rca-tile__month {
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--pp-text-dim);
+}
+/* Room for the flag. Only on flagged tiles, so a watched month still uses the full width. */
+.rca-tile--new .rca-tile__month { padding-right: 3.1rem; }
+.rca-tile--new .rca-tile__month { color: color-mix(in oklab, var(--rca-accent) 70%, var(--pp-text)); }
+/* Two figures of EQUAL weight. Platinums were a footnote under the trophy count, which got the emphasis
+   backwards: the trophy total says how busy the month was, the platinum count says what it was worth. */
+.rca-tile__stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+.rca-tile__n { color: var(--pp-text); display: block; }
+.rca-tile__unit {
+    display: block;
+    font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute);
+    margin-top: 0.05rem;
+}
+/* The site's platinum colour, not a new one. Trophy-type colour is fixed vocabulary everywhere else on
+   the site, and a platinum count in some other hue would be a worse inconsistency than its proximity to
+   the unwatched accent -- which is carried by an edge and a labelled pill, never by a number. */
+.rca-tile__stat--plat .rca-tile__n {
+    color: var(--color-trophy-platinum);
+    --pp-tally-glow: var(--color-trophy-platinum);
+}
+/* A month with no platinum keeps its cell, greyed. Dropping it would leave neighbouring tiles with their
+   figures on different baselines, and the zero is honest information rather than an absence. */
+.rca-tile__stat--empty .rca-tile__n { color: var(--pp-text-mute); opacity: 0.45; }
+.rca-tile__stat--empty .rca-tile__unit { opacity: 0.55; }
+
+/* ---- Timezone ------------------------------------------------------------------------------- */
+
+/* The header control. Outlined and carrying a caret, because it OPENS something now -- it used to be an
+   anchor down the page, and a control that opens a dialog has to look like a control. Still quiet enough
+   not to compete with the page title beside it. */
+.rca-tzchip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.22rem 0.5rem 0.22rem 0.45rem; border-radius: var(--pp-radius-md);
+    font-size: 0.72rem; font-weight: 700;
+    color: var(--pp-text-dim);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+.rca-tzchip:hover {
+    color: var(--pp-text);
+    background: var(--pp-bg-2);
+    border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+}
+.rca-tzchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.rca-tzchip svg { width: 0.85rem; height: 0.85rem; flex: none; }
+.rca-tzchip__caret { width: 0.7rem; height: 0.7rem; opacity: 0.6; }
+
+/* ---- First-run timezone prompt ------------------------------------------------------------------ */
+
+/* A native <dialog>, so the top layer, the backdrop and the focus trap are the browser's job rather than
+   ours -- the same reasoning as the ceremony's platinum dialog. */
+.rca-tzm {
+    width: min(30rem, calc(100vw - 2rem));
+    /* A <dialog> centres itself with the UA's `margin: auto`, which the CSS reset zeroes along with every
+       other element's -- so it rendered pinned to the top-left corner of the viewport. Restated here
+       rather than fought with positioning, because auto margins are how the top layer is meant to centre. */
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1);
+    color: var(--pp-text);
+    box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.95);
+}
+.rca-tzm::backdrop { background: rgba(0, 0, 0, 0.62); }
+
+.rca-tzm__x { position: absolute; top: 0.5rem; right: 0.5rem; margin: 0; }
+.rca-tzm__xbtn {
+    display: grid; place-items: center; width: 1.9rem; height: 1.9rem;
+    border: 0; border-radius: 50%; background: none; color: var(--pp-text-mute); cursor: pointer;
+    transition: color 0.18s ease, background-color 0.18s ease;
+}
+.rca-tzm__xbtn:hover { color: var(--pp-text); background: rgba(255, 255, 255, 0.07); }
+.rca-tzm__xbtn svg { width: 1rem; height: 1rem; }
+
+.rca-tzm__body { padding: 1.75rem 1.5rem 1.35rem; text-align: center; }
+.rca-tzm__ico {
+    display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin: 0 auto 0.85rem;
+    border-radius: 50%;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, transparent);
+}
+.rca-tzm__ico svg { width: 1.35rem; height: 1.35rem; }
+
+.rca-tzm__title {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em;
+}
+.rca-tzm__lede {
+    margin-top: 0.5rem; font-size: 0.82rem; line-height: 1.5; color: var(--pp-text-dim);
+}
+
+/* The guess. Given its own surface because it is the answer, not a field to fill in. */
+.rca-tzm__guess {
+    margin-top: 1.1rem; padding: 0.75rem 1rem; border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 26%, var(--pp-border));
+}
+.rca-tzm__guess-label {
+    display: block;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.rca-tzm__guess-zone {
+    display: block; margin-top: 0.2rem;
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 1.02rem; font-weight: 800; color: var(--pp-text);
+}
+
+.rca-tzm__pick { margin-top: 1.1rem; text-align: left; }
+.rca-tzm__pick-label {
+    display: block; margin-bottom: 0.35rem;
+    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.rca-tzm__actions {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem;
+    margin-top: 1.25rem;
+}
+.rca-tzm__note { margin-top: 0.85rem; font-size: 0.68rem; color: var(--pp-text-mute); }
+
+/* Responsive. These sat below the timezone row and were removed with it -- the archive would have stayed
+   two columns at every width, which reads as a phone layout stretched across a desktop. */
+@media (min-width: 768px) {
+    .rca-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+    .rca-year { margin: 2rem 0 1rem; }
+    .rca-year__n { font-size: 1.35rem; }
+    .rca-tile { padding: 1rem 1.1rem 1.15rem; }
+}
+@media (min-width: 1024px) {
+    .rca-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+
+/* ---- Held: waiting on a sync -------------------------------------------------------------------
+ * A stale sync used to replace the whole page with a gate, taking every finished month in the archive
+ * with it. Only the most recent completed month can actually be incomplete, so only that one is held --
+ * and it is held in PLACE rather than removed: a month that vanishes reads as data loss, and a hunter
+ * who cannot see July listed cannot tell whether July is missing or merely late.
+ *
+ * Deliberately not an alarm. This is a "come back in a minute", not an error, so it borrows the warning
+ * hue at low strength and keeps the archive's own calm.
+ */
+/* The whole card re-keys, not just its edge. `--rca-accent` is what the eyebrow, the edge and the corner
+   bloom are all derived from, so overriding the one variable moves them together -- a card bordered amber
+   while it glows in the site's teal reads as two states arguing. */
+.rca-hero--held { --rca-accent: var(--pp-warning); border-left-color: var(--pp-warning); }
+.rca-held__body {
+    font-size: 0.85rem; line-height: 1.55; color: var(--pp-text-dim); max-width: 46ch;
+}
+.rca-held__where {
+    font-size: 0.72rem; color: var(--pp-text-mute);
+}
+
+/* The tile keeps the grid's shape so the row does not reflow around it, and loses every affordance that
+   would suggest it opens: no hover glow, no pointer, no focus ring. */
+.rca-tile--held {
+    background: color-mix(in oklab, var(--pp-warning) 5%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--pp-warning) 22%, var(--pp-border));
+    cursor: default;
+}
+.rca-tile--held:hover { box-shadow: none; border-color: color-mix(in oklab, var(--pp-warning) 22%, var(--pp-border)); }
+.rca-tile--held .rca-tile__month,
+.rca-tile--held .rca-tile__n { color: var(--pp-text-dim); }
+.rca-held__flag {
+    position: absolute; top: 0.5rem; right: 0.5rem;
+    display: inline-flex; align-items: center;
+    padding: 0.12rem 0.36rem; border-radius: 999px;
+    font-size: 0.5rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, transparent);
+}

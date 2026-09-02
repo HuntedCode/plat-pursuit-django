@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% load custom_filters humanize static %}
+{% comment %} Addressable is not indexable (SEO Lane 3): the day URL exists for links, back
+buttons and no-JS visitors, but profiles x dates is an unbounded space of thin slices. The
+profile page is the search surface; days pass their links through. {% endcomment %}
+{% block robots %}noindex, follow{% endblock %}
+{% block title %}{{ profile.display_psn_username|default:profile.psn_username }} &middot; {{ day|date:"M j, Y" }}{% endblock %}
+
+{% comment %} One day of activity as its own PAGE.
+
+The modal's fallback, and the reason the day has a URL at all: the profile is public and crawled, so a
+day's content cannot live only behind a click. A crawler, a shared link and a visitor without JS all land
+here; HTMX asks the same view for the modal partial instead.
+
+The sessions are the same partial either way -- only the frame differs.
+{% endcomment %}
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-6 pp-head-cascade">
+            <p class="text-[0.7rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-base-content/50">
+                <a href="{% url 'profile_detail' psn_username=profile.psn_username %}?tab=trophies" class="hover:text-primary transition-colors">
+                    {{ profile.display_psn_username|default:profile.psn_username }}
+                </a>
+            </p>
+            <h1 class="text-2xl md:text-3xl font-bold leading-tight mt-1">{{ day|date:"l, F j, Y" }}</h1>
+            <p class="text-sm text-base-content/60 mt-2">
+                <b>{{ day_trophies|intcomma }}</b> troph{{ day_trophies|pluralize:"y,ies" }}
+                &middot; {{ sessions|length }} game{{ sessions|length|pluralize }}
+                {% if day_platinums %}&middot; {{ day_platinums }} platinum{{ day_platinums|pluralize }}{% endif %}
+            </p>
+        </div>
+    </section>
+
+    <div class="pp-actday__games">
+        {% for s in sessions %}
+        {% include 'trophies/partials/profile_detail/_activity_session.html' with s=s %}
+        {% endfor %}
+    </div>
+{% endblock %}
+
+{% block js_scripts %}
+{% comment %}Collapsing is presentational -- the trophies are already in this page's HTML -- so this only
+toggles state, and the page stays fully readable if it never loads.{% endcomment %}
+<script src="{% static 'js/activity-collapse.js' %}"></script>
+{% endblock %}

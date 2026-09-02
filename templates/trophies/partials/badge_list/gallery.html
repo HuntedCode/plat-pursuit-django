@@ -1,0 +1,103 @@
+{% comment %} Browse badge Gallery island (?view=gallery): the public catalog's per-tier medallion wall,
+the cohesive rebuilt cousin of the Collection Gallery. Showcase-first medallions + a card-corner ownership
+marker for logged-in viewers. Compact toolbar (mirrors Contracts): a one-row primary bar (search + sort +
+a Filters toggle) with the MULTI-select chip groups in a collapsible advanced panel. Filters apply INSTANTLY
+via HTMX swap of #browse-results (no Apply button); InfiniteScroller re-inits per swap + appends on scroll.
+Degrades to a plain GET (Enter) without JS. {% endcomment %}
+<div class="pp-bgal" data-view="gallery" data-page-size="{{ gallery_page_size|default:48 }}">
+    <form id="filter-form" method="get" action="{% url 'badges_list' %}"
+          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-swap="innerHTML"
+          hx-indicator="#browse-results" hx-push-url="true" hx-trigger="change delay:250ms, submit, keyup changed delay:400ms from:find input[type='search']">
+        <input type="hidden" name="view" value="gallery" />
+        <input type="hidden" name="page" value="1" />
+        {% comment %} Enables Enter-to-search (implicit submit) without a visible Apply button; filters
+        otherwise auto-apply on change. {% endcomment %}
+        <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
+        <div class="pp-bgal__toolbar pp-toolbar-card">
+            <div class="pp-bgal__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="search" name="q" value="{{ gallery_q }}" placeholder="Search name or #set number&hellip;" aria-label="Search badges by name or set number" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
+                <select class="pp-gallery__select" name="sort" aria-label="Sort badges">
+                    {% for key, label in gallery_sorts %}
+                    <option value="{{ key }}"{% if gallery_sort == key %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="pp-bgal__advbtn" id="bgal-filters-toggle" aria-expanded="false" aria-controls="bgal-advanced">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                    <span class="hidden md:inline">Filters</span>
+                    <span class="pp-bgal__advbtn__n" id="bgal-filter-count" hidden>0</span>
+                </button>
+            </div>
+
+            {% comment %} No `hidden` here: without JS the panel stays OPEN so the chips are usable (true
+            progressive enhancement); the script below collapses it on load. {% endcomment %}
+            <div class="pp-bgal__advanced" id="bgal-advanced">
+              <div class="pp-bgal__advanced-in">
+                <div class="pp-bgal__filters">
+                    {% comment %} Platform + State share a row (wraps to stacked at small widths). {% endcomment %}
+                    <div class="pp-bgal__crow">
+                        <div class="pp-bgal__cgroup">
+                            {% comment %} The chips below are edition names off PlatformGroup ("Ultra HD",
+                            "Legacy HD"), and ticking one is the first time most readers are asked to act
+                            on that word. Icon-only: the label it trails already says what the row is, and
+                            this row is a control surface where text would compete with the chips.
+                            {% endcomment %}
+                            <span class="pp-bgal__clabel">Platform
+                                <a class="pp-edhint" href="{% url 'badge_how_it_works' %}" aria-label="What do the platform editions mean?" title="What do the platform editions mean?">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                </a>
+                            </span>
+                            {% for pg in gallery_groups %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="group" value="{{ pg.key }}"{% if pg.key in gallery_groups_selected %} checked{% endif %}>{{ pg.name }}</label>
+                            {% endfor %}
+                        </div>
+
+                        {% if gallery_authed %}
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">State</span>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="earned"{% if 'earned' in gallery_states %} checked{% endif %}>Earned</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in gallery_states %} checked{% endif %}>Not earned</label>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="pp-bgal__crow">
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Set</span>
+                            {% for value, display in form.badge_type.field.choices %}{% if value %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in gallery_types %} checked{% endif %}>{{ display }}</label>
+                            {% endif %}{% endfor %}
+                        </div>
+
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Rarity</span>
+                            {% for value, display in rarity_choices %}
+                            <label class="pp-bgal__chip pp-bgal__chip--rarity" data-rarity="{{ value }}"><input type="checkbox" name="rarity" value="{{ value }}"{% if value in selected_rarities %} checked{% endif %}>{{ display }}</label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="pp-bgal__clear" id="bgal-clear" hidden>Clear filters</button>
+              </div>
+            </div>
+        </div>
+    </form>
+
+    <div id="browse-results">
+        {% include 'trophies/partials/badge_list/gallery_results.html' %}
+    </div>
+
+    {% comment %} Infinite scroll: the sentinel is observed; when it nears the viewport, InfiniteScroller
+    fetches the next ?page and appends its .pp-bgal__card nodes to #items-grid. {% endcomment %}
+    <div id="bgal-sentinel" class="h-4"></div>
+    <div id="bgal-loading" class="hidden justify-center py-4">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+    </div>
+</div>

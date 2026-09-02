@@ -23,20 +23,33 @@ def _get_site_url():
 
 
 def _render_jsonld(data):
-    """Render a Python dict as a JSON-LD script tag."""
-    json_str = json.dumps(data, ensure_ascii=False, default=str)
+    """Render a Python dict as a JSON-LD script tag.
+
+    `<`, `>` and `&` are emitted as unicode escapes (the json_script hardening): a marked-up
+    string containing `</script>` would otherwise TERMINATE the script element during HTML
+    parsing and turn everything after it into live markup. Central here so every tag -- game
+    titles, profile names, the hub ItemList -- is covered at once.
+    """
+    json_str = (
+        json.dumps(data, ensure_ascii=False, default=str)
+        .replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    )
     return mark_safe(f'<script type="application/ld+json">{json_str}</script>')
 
 
 @register.simple_tag
 def jsonld_organization():
-    """Site-wide Organization schema."""
+    """Site-wide Organization schema. sameAs links the social graph (SEO Lane 2)."""
     return _render_jsonld({
         "@context": "https://schema.org",
         "@type": "Organization",
         "name": "Platinum Pursuit",
         "url": _get_site_url(),
         "logo": f"{_get_site_url()}/static/images/logo.png",
+        "sameAs": [
+            getattr(settings, 'DISCORD_INVITE_URL', 'https://discord.gg/platpursuit'),
+            "https://x.com/platpursuit",
+        ],
     })
 
 
@@ -52,10 +65,33 @@ def jsonld_website(request):
             "@type": "SearchAction",
             "target": {
                 "@type": "EntryPoint",
-                "urlTemplate": f"{_get_site_url()}/search/?q={{search_term_string}}",
+                "urlTemplate": f"{_get_site_url()}/search/?type=game&query={{search_term_string}}",
             },
             "query-input": "required name=search_term_string",
         },
+    })
+
+
+@register.simple_tag
+def jsonld_item_list(request, items):
+    """ItemList schema for browse hubs (SEO Lane 2). `items` is a view-prepared list of
+    {'name', 'url'} dicts (relative urls fine -- absolutized here), bounded by the page size.
+    Empty -> no block."""
+    if not items:
+        return ''
+    base_url = f"{request.scheme}://{request.get_host()}"
+    return _render_jsonld({
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": i + 1,
+                "name": item['name'],
+                "url": item['url'] if item['url'].startswith('http') else f"{base_url}{item['url']}",
+            }
+            for i, item in enumerate(items)
+        ],
     })
 
 
@@ -85,7 +121,7 @@ def jsonld_breadcrumbs(breadcrumb, request):
                 item["item"] = f"{base_url}{url}"
         elif i == len(breadcrumb):
             # Last item: use the current page URL
-            item["item"] = request.build_absolute_uri()
+            item["item"] = request.build_absolute_uri(request.path)
         items.append(item)
 
     return _render_jsonld({
@@ -96,17 +132,56 @@ def jsonld_breadcrumbs(breadcrumb, request):
 
 
 @register.simple_tag
-def jsonld_game(game, concept, request):
-    """VideoGame schema for game detail pages."""
+def jsonld_game(game, concept, request, averages=None, canonical_game=None, node_url=None):
+    """VideoGame schema for game detail pages.
+
+    `averages` (SEO Lane 2): the base group's cached community-rating aggregate
+    (RatingService._compute_averages shape). Real ratings become an AggregateRating -- the
+    structured data Google renders as star snippets. Only ever emitted from genuine data:
+    no ratings, no block.
+
+    `canonical_game` (closing audit): the concept-canonical sibling the page's rel=canonical
+    points at. The VideoGame node's url must agree with it -- on a non-elected SKU or the
+    /<user>/ variant, a request-path url beside a sibling canonical reads as two conflicting
+    identity claims for a star-snippet-eligible node.
+    """
     if not game or not getattr(game, 'title_name', None):
         return ''
     base_url = f"{request.scheme}://{request.get_host()}"
+    from django.urls import reverse
+    # `node_url` (Games/Trophy Lists IA): the ABSOLUTE URL the caller emits as rel=canonical --
+    # each detail page passes ITS OWN canonical (the Game page its bare concept URL, List detail
+    # its bare list URL since the slim-down earned it a self-canonical), so the VideoGame node's
+    # `url` and the page's rel=canonical cannot drift. Only the Game page passes `averages`: the
+    # AggregateRating claim belongs to the one ratings host. Wins over the legacy canonical_game
+    # sibling (kept until every caller migrates).
+    if node_url:
+        pass
+    elif canonical_game is not None and getattr(canonical_game, 'np_communication_id', None):
+        node_url = base_url + reverse(
+            'game_detail', kwargs={'np_communication_id': canonical_game.np_communication_id})
+    else:
+        node_url = request.build_absolute_uri(request.path)
     data = {
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": game.title_name,
-        "url": request.build_absolute_uri(),
+        "url": node_url,
     }
+
+    if averages and averages.get('count') and averages.get('avg_rating') is not None:
+        from decimal import ROUND_HALF_UP, Decimal
+        # HALF_UP to one decimal -- the same rounding |floatformat:1 shows on the page. Python's
+        # round() is banker's, and a 4.25 average would mark up 4.2 under a visible 4.3, which
+        # Google's review-snippet policy treats as a mismatch.
+        shown = float(Decimal(str(averages['avg_rating'])).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+        data["aggregateRating"] = {
+            "@type": "AggregateRating",
+            "ratingValue": shown,
+            "ratingCount": averages['count'],
+            "bestRating": 5,
+            "worstRating": 0.5,
+        }
 
     # Image
     image_url = game.image_url
@@ -192,7 +267,7 @@ def jsonld_roadmap(roadmap, game, concept, request, contributors=None):
         return ''
 
     base_url = f"{request.scheme}://{request.get_host()}"
-    page_url = request.build_absolute_uri()
+    page_url = request.build_absolute_uri(request.path)
     game_title = game.title_name or ''
     group_name = ''
     try:
@@ -399,7 +474,7 @@ def jsonld_profile(profile, request):
     data = {
         "@context": "https://schema.org",
         "@type": "ProfilePage",
-        "url": request.build_absolute_uri(),
+        "url": request.build_absolute_uri(request.path),
         "mainEntity": {
             "@type": "Person",
             "name": profile.display_psn_username,

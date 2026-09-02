@@ -10,6 +10,7 @@ import logging
 import pytz
 from datetime import datetime, timedelta
 
+from django.urls import reverse
 from django.conf import settings
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -25,7 +26,7 @@ class WeeklyDigestService:
 
     Community data (site-wide stats, top platted games, review of the week)
     is fetched once per batch and shared across all recipients. Personal data
-    (trophy count, challenges, badges) is fetched per user.
+    (trophy count, badges) is fetched per user.
     """
 
     @staticmethod
@@ -84,118 +85,57 @@ class WeeklyDigestService:
             'platinum': counts['platinum'] or 0,
         }
 
-    @classmethod
-    def get_challenge_progress(cls, profile, week_start, week_end):
-        """
-        Active challenge data with weekly deltas.
-
-        Returns list of dicts: {challenge_type, name, completed_count,
-        total_items, progress_percentage, weekly_delta}
-        """
-        from trophies.models import (
-            Challenge, AZChallengeSlot, CalendarChallengeDay, GenreChallengeSlot,
-        )
-
-        challenges = Challenge.objects.filter(
-            profile=profile,
-            is_deleted=False,
-            is_complete=False,
-        ).order_by('-updated_at')
-
-        result = []
-        for challenge in challenges:
-            # Weekly delta varies by type
-            weekly_delta = 0
-            if challenge.challenge_type == 'az':
-                weekly_delta = AZChallengeSlot.objects.filter(
-                    challenge=challenge,
-                    is_completed=True,
-                    completed_at__gte=week_start,
-                    completed_at__lt=week_end,
-                ).count()
-            elif challenge.challenge_type == 'calendar':
-                weekly_delta = CalendarChallengeDay.objects.filter(
-                    challenge=challenge,
-                    is_filled=True,
-                    filled_at__gte=week_start,
-                    filled_at__lt=week_end,
-                ).count()
-            elif challenge.challenge_type == 'genre':
-                weekly_delta = GenreChallengeSlot.objects.filter(
-                    challenge=challenge,
-                    is_completed=True,
-                    completed_at__gte=week_start,
-                    completed_at__lt=week_end,
-                ).count()
-
-            result.append({
-                'challenge_type': challenge.get_challenge_type_display(),
-                'name': challenge.name,
-                'completed_count': challenge.completed_count,
-                'total_items': challenge.total_items,
-                'progress_percentage': challenge.progress_percentage,
-                'weekly_delta': weekly_delta,
-            })
-
-        return result
 
     @classmethod
     def get_badge_updates(cls, profile, week_start, week_end):
-        """
-        Badges earned this week and the closest badge to earning next.
+        """Group badges earned this week, plus the series they are closest to finishing.
+
+        Repointed off the legacy tier engine in the 2026-08 cutover. Two shape changes reach the email:
+        a badge's secondary label is now its EDITION ("Ultra HD"), because tiers no longer exist; and the
+        closest-badge bar counts STAGES, not games, because that is the unit a group badge is earned in.
 
         Returns: {badges_earned: [...], closest_badge: {...} or None}
         """
-        from trophies.models import Badge, UserBadge, UserBadgeProgress
+        from trophies.models import UserGroupBadge
+        from trophies.services.collection_service import closest_badge
 
-        # Badges earned this week
-        earned_this_week = UserBadge.objects.filter(
-            profile=profile,
-            earned_at__gte=week_start,
-            earned_at__lt=week_end,
-        ).select_related('badge')
+        # Windowed on created_at (when WE awarded it), not earned_at (the hunter's completion date, which
+        # the engine rewrites whenever a badge's iteration changes). Using earned_at meant a newly shipped
+        # series was invisible to everyone who had already played it, while a curator editing an old
+        # series' stages resurfaced long-held badges as "earned this week".
+        earned_this_week = (
+            UserGroupBadge.objects.filter(
+                profile=profile,
+                group_badge__is_live=True,
+                created_at__gte=week_start,
+                created_at__lt=week_end,
+            )
+            .select_related('group_badge__series', 'group_badge__platform_group')
+            .order_by('created_at')
+        )
+        badges_earned = [
+            {
+                'name': ugb.group_badge.series.name,
+                'edition': ugb.group_badge.platform_group.name,
+            }
+            for ugb in earned_this_week
+        ]
 
-        badges_earned = []
-        for ub in earned_this_week:
-            badge = ub.badge
-            tier_map = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-            badges_earned.append({
-                'name': badge.effective_display_series or badge.name,
-                'tier_name': tier_map.get(badge.tier, 'Bronze'),
-            })
-
-        # Closest badge to earning (tier 1, not yet earned, has progress)
-        all_earned_ids = UserBadge.objects.filter(
-            profile=profile,
-        ).values_list('badge_id', flat=True)
-
-        progress_records = UserBadgeProgress.objects.filter(
-            profile=profile,
-            badge__tier=1,
-            badge__is_live=True,
-            completed_concepts__gt=0,
-        ).exclude(
-            badge_id__in=all_earned_ids,
-        ).select_related('badge').order_by('-completed_concepts')
-
-        closest_badge = None
-        for prog in progress_records:
-            badge = prog.badge
-            required = badge.required_stages if badge.required_stages > 0 else 1
-            progress_pct = min(100, int((prog.completed_concepts / required) * 100))
-            if progress_pct >= 1:
-                closest_badge = {
-                    'name': badge.effective_display_series or badge.name,
-                    'progress_pct': progress_pct,
-                    'completed': prog.completed_concepts,
-                    'required': required,
-                }
-                break  # Only need the closest one
+        # `closest_badge` reads the materialized SeriesBadgeStanding the Collection CTA already uses, so the
+        # email and the site name the same series rather than each running their own "nearest" heuristic.
+        nearest = closest_badge(profile)
+        closest = {
+            'name': nearest['series_name'],
+            'progress_pct': nearest['pct'],
+            'completed': nearest['cleared'],
+            'required': nearest['total'],
+        } if nearest else None
 
         return {
             'badges_earned': badges_earned,
-            'closest_badge': closest_badge,
+            'closest_badge': closest,
         }
+
 
     @classmethod
     def get_community_data(cls, week_start, week_end):
@@ -338,16 +278,14 @@ class WeeklyDigestService:
         """
         Collect personal digest data for a single profile.
 
-        Returns a dict with trophy stats, challenges, and badge updates.
+        Returns a dict with trophy stats and badge updates.
         Intentionally lightweight: deep personal stats live in the monthly recap.
         """
         trophy_stats = cls.get_trophy_stats(profile, week_start, week_end)
-        challenges = cls.get_challenge_progress(profile, week_start, week_end)
         badge_updates = cls.get_badge_updates(profile, week_start, week_end)
 
         return {
             'trophy_stats': trophy_stats,
-            'challenges': challenges,
             'badge_updates': badge_updates,
         }
 
@@ -375,7 +313,6 @@ class WeeklyDigestService:
         badge_updates = digest_data['badge_updates']
         return (
             trophy_stats['total'] == 0
-            and len(digest_data['challenges']) == 0
             and len(badge_updates['badges_earned']) == 0
             and badge_updates['closest_badge'] is None
         )
@@ -441,8 +378,6 @@ class WeeklyDigestService:
             'has_activity': user_total > 0,
             'contribution_pct': contribution_pct,
             'platinums_count': trophy_stats['platinum'],
-            'challenges': digest_data['challenges'],
-            'has_challenges': len(digest_data['challenges']) > 0,
             'badges_earned': badge_updates['badges_earned'],
             'has_badges_earned': len(badge_updates['badges_earned']) > 0,
             'closest_badge': badge_updates['closest_badge'],
@@ -464,7 +399,9 @@ class WeeklyDigestService:
             # Personal
             'your_week': your_week,
             # Links
-            'profile_url': f"{settings.SITE_URL}/profiles/{profile.psn_username}/",
+            # reverse(), not a hardcoded path: this link goes out in EMAIL and outlives any redirect we
+            # keep. The section moved twice in 2026-08 and a literal here followed neither.
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[profile.psn_username])}",
             'reviews_url': f"{settings.SITE_URL}/reviews/",
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,

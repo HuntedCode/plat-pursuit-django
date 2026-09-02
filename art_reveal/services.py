@@ -11,7 +11,8 @@ from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
-from trophies.models import Badge, Concept, EarnedTrophy
+from django.db.models import Q
+from trophies.models import BadgeSeries, Concept, EarnedTrophy
 
 from .models import ArtRevealEvent
 
@@ -32,11 +33,17 @@ _BANNER_CACHE_TTL = 60
 
 
 def _badge_concept_ids():
-    """All concept ids covered by at least one badge's stages (Badge and Stage
-    are linked by ``series_slug``; Stage.concepts is the M2M to Concept)."""
+    """All concept ids covered by at least one badge series' stages.
+
+    `BadgeSeries` and `Stage` are linked by `series_slug` (there is no FK). Both qualifier paths are
+    walked: a concept is either a direct `Stage.concepts` member OR a `ConceptBundle` member on that
+    stage, never both -- the legacy version matched only the first, so every bundled (episodic) game was
+    missing from the community platinum count this event's whole progress bar is built on.
+    """
+    slugs = BadgeSeries.objects.values_list('series_slug', flat=True)
     return (
         Concept.objects
-        .filter(stages__series_slug__in=Badge.objects.values_list('series_slug', flat=True))
+        .filter(Q(stages__series_slug__in=slugs) | Q(bundles__stage__series_slug__in=slugs))
         .values_list('id', flat=True)
         .distinct()
     )
@@ -79,7 +86,7 @@ def reconcile_event(event, *, now=None):
         ev = ArtRevealEvent.objects.select_for_update().get(pk=event.pk)
         total = ev.items.count()
         target = min(count // per, total)
-        for item in ev.items.select_related('badge').filter(
+        for item in ev.items.select_related('series').filter(
             released=False, order__lte=target
         ).order_by('order'):
             if item.release(now=now):
@@ -95,12 +102,12 @@ def reconcile_event(event, *, now=None):
     # revealed badge (credits the funder + sends them the artwork-complete
     # email/notification). Kept out of the locked transaction above.
     for item in released_items:
-        _complete_badge_claim_for_reveal(item.badge)
+        _complete_badge_claim_for_reveal(item.series)
 
     return {'count': count, 'target': min(count // per, event.items.count()), 'released': released}
 
 
-def _complete_badge_claim_for_reveal(badge):
+def _complete_badge_claim_for_reveal(series):
     """When an art reveal item goes live, complete its fundraiser badge-artwork claim
     (if any) so the funder is credited and notified. Cross-app and best-effort: a
     fundraiser-side failure must not break the reveal."""
@@ -110,7 +117,7 @@ def _complete_badge_claim_for_reveal(badge):
 
         claim = (
             DonationBadgeClaim.objects
-            .filter(badge=badge).exclude(status='completed')
+            .filter(series=series).exclude(status='completed')
             .select_related('profile').first()
         )
         if claim:
@@ -159,13 +166,13 @@ def get_active_banner():
 
     latest = (
         event.items.filter(released=True)
-        .select_related('badge', 'badge__base_badge').order_by('-order').first()
+        .select_related('series').order_by('-order').first()
     )
     payload = {'name': event.name, 'slug': event.slug, 'progress': event.progress(), 'latest': None}
     if latest:
         payload['latest'] = {
-            'series_title': latest.badge.effective_display_series or latest.badge.name,
-            'series_slug': latest.badge.series_slug,
+            'series_title': latest.series.display_series or latest.series.name,
+            'series_slug': latest.series.series_slug,
             'artwork_url': latest.artwork.url,
         }
     cache.set(_BANNER_CACHE_KEY, payload, _BANNER_CACHE_TTL)

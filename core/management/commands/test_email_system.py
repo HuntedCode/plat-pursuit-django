@@ -25,9 +25,15 @@ Usage:
     python manage.py test_email_system your.email@example.com --broadcast-preview
     python manage.py test_email_system your.email@example.com --weekly-digest-preview
 """
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand, CommandError
+from django.urls import reverse
 from django.conf import settings
+from django.utils import timezone
 from core.services.email_service import EmailService
+from users.constants import PREMIUM_PERKS
+from users.services.marks import worn_level_dict
 
 
 class Command(BaseCommand):
@@ -269,24 +275,12 @@ class Command(BaseCommand):
 
     def _send_verification_preview(self, recipient_email):
         """Send a preview of the email verification template."""
-        from users.services.email_preference_service import EmailPreferenceService
-
         self.stdout.write("\nSending email verification preview...")
-
-        # Sample data
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'activate_url': f'{settings.SITE_URL}/accounts/confirm-email/sample-key-abc123/',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
             'expiration_days': settings.ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS,
         }
 
@@ -317,24 +311,12 @@ class Command(BaseCommand):
 
     def _send_password_reset_preview(self, recipient_email):
         """Send a preview of the password reset template."""
-        from users.services.email_preference_service import EmailPreferenceService
-
         self.stdout.write("\nSending password reset preview...")
-
-        # Sample data
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'password_reset_url': f'{settings.SITE_URL}/accounts/password/reset/key/sample-uid-abc123-set-password/',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -364,26 +346,17 @@ class Command(BaseCommand):
 
     def _send_payment_failed_preview(self, recipient_email, is_final=False):
         """Send a preview of the payment failed email template."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         variant = "final warning (urgent)" if is_final else "first warning (friendly)"
         self.stdout.write(f"\nSending payment failed email preview ({variant})...")
 
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
         context = {
             'username': 'TestUser',
             'is_final_warning': is_final,
-            'portal_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'portal_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'tier_name': 'Premium Monthly',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
+            'premium_perks': PREMIUM_PERKS,
         }
 
         subject = (
@@ -419,24 +392,15 @@ class Command(BaseCommand):
 
     def _send_cancelled_preview(self, recipient_email):
         """Send a preview of the subscription cancelled farewell email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending subscription cancelled email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'tier_name': 'Premium Monthly',
-            'subscribe_url': f'{settings.SITE_URL}/users/subscribe/',
+            'subscribe_url': f'{settings.SITE_URL}/support/',
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
+            'premium_perks': PREMIUM_PERKS,
         }
 
         try:
@@ -466,24 +430,25 @@ class Command(BaseCommand):
 
     def _send_welcome_preview(self, recipient_email):
         """Send a preview of the subscription welcome email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending subscription welcome email preview...")
 
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
+        # ONE tier drives both the header name and the mark panel, because decoupling them let the
+        # preview render a state no member can be in: "Your Premium Monthly membership is active"
+        # over a Patron mark. `premium_monthly` is chosen on purpose -- it is a grandfathered tier,
+        # so the preview exercises the legacy branch (bought name + price-nearest level's mark),
+        # which is the half of this panel most likely to be got wrong.
+        level = worn_level_dict('premium_monthly')
 
         context = {
             'username': 'TestUser',
-            'tier_name': 'Premium Monthly',
+            'tier_name': level['display_name'],
             'site_url': settings.SITE_URL,
-            'profile_url': f'{settings.SITE_URL}/profiles/TestUser/',
-            'preference_url': preference_url,
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=['TestUser'])}",
+            'premium_perks': PREMIUM_PERKS,
+            'mark': level,
+            # Every production welcome carries this block; without it the preview hides it.
+            'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
         }
 
         try:
@@ -513,25 +478,16 @@ class Command(BaseCommand):
 
     def _send_payment_succeeded_preview(self, recipient_email):
         """Send a preview of the payment succeeded / renewal confirmation email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending payment succeeded email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'tier_name': 'Premium Monthly',
             'next_billing_date': 'March 19, 2026',
-            'manage_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'amount': '$4.99 USD',
+            'manage_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -561,24 +517,14 @@ class Command(BaseCommand):
 
     def _send_payment_action_required_preview(self, recipient_email):
         """Send a preview of the payment action required (3D Secure) email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending payment action required email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         context = {
             'username': 'TestUser',
             'tier_name': 'Premium Monthly',
-            'invoice_url': f'{settings.SITE_URL}/users/subscription-management/',
+            'invoice_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -608,35 +554,32 @@ class Command(BaseCommand):
 
     def _send_donation_receipt_preview(self, recipient_email):
         """Send a preview of the fundraiser donation receipt email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending donation receipt email preview...")
 
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
         # Build a mock donation-like object for template rendering
         class MockDonation:
-            amount = '25.00'
-            provider = 'stripe'
+            amount = Decimal('25.5')  # unpadded on purpose: Decimal('25.50') renders fine unfiltered
+            provider = 'paypal'
+            provider_transaction_id = 'cs_test_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0'
+            completed_at = timezone.now()
+            created_at = completed_at
+
+            def get_provider_display(self):
+                return 'PayPal'
 
         class MockFundraiser:
             name = 'Badge Artwork Fund'
             slug = 'badge-artwork-fund'
 
         context = {
-            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
+            'username': 'TestHunter',
             'donation': MockDonation(),
             'fundraiser': MockFundraiser(),
             'badge_picks_earned': 2,
-            'claim_url': f'{settings.SITE_URL}/fundraiser/badge-artwork-fund/',
+            'claim_url': f"{settings.SITE_URL}"
+                         f"{reverse('fundraiser', kwargs={'slug': 'badge-artwork-fund'})}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -666,28 +609,21 @@ class Command(BaseCommand):
 
     def _send_badge_claim_preview(self, recipient_email):
         """Send a preview of the badge claim confirmation email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending badge claim confirmation email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         class MockClaim:
             series_name = 'Trophy Hunter'
             series_slug = 'trophy-hunter'
 
         context = {
-            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
-            'claim': MockClaim(),
-            'badge_url': f'{settings.SITE_URL}/badges/trophy-hunter/',
+            'username': 'TestHunter',
+            'series_name': MockClaim.series_name,
+            'badge_url': f"{settings.SITE_URL}"
+                         f"{reverse('badge_detail', kwargs={'series_slug': 'trophy-hunter'})}",
+            'claim_url': f"{settings.SITE_URL}"
+                         f"{reverse('fundraiser', kwargs={'slug': 'badge-artwork-fund'})}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -717,28 +653,19 @@ class Command(BaseCommand):
 
     def _send_artwork_complete_preview(self, recipient_email):
         """Send a preview of the badge artwork complete notification email."""
-        from users.services.email_preference_service import EmailPreferenceService
 
         self.stdout.write("\nSending artwork complete email preview...")
-
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f"Failed to generate preference token: {e}"))
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
 
         class MockClaim:
             series_name = 'Trophy Hunter'
             series_slug = 'trophy-hunter'
 
         context = {
-            'user': type('User', (), {'first_name': 'TestUser', 'email': recipient_email})(),
-            'claim': MockClaim(),
-            'badge_url': f'{settings.SITE_URL}/badges/trophy-hunter/',
+            'username': 'TestHunter',
+            'series_name': MockClaim.series_name,
+            'badge_url': f"{settings.SITE_URL}"
+                         f"{reverse('badge_detail', kwargs={'series_slug': 'trophy-hunter'})}",
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -838,19 +765,11 @@ class Command(BaseCommand):
 
         self.stdout.write("\nSending free user welcome email preview...")
 
-        sample_user_id = 1
-        try:
-            preference_token = EmailPreferenceService.generate_preference_token(sample_user_id)
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}"
-        except Exception:
-            preference_url = f"{settings.SITE_URL}/users/email-preferences/"
-
         context = {
             'username': 'TestUser',
             'profile_url': f'{settings.SITE_URL}/profile/TestUser/',
             'discord_url': getattr(settings, 'DISCORD_INVITE_URL', 'https://discord.gg/example'),
             'site_url': settings.SITE_URL,
-            'preference_url': preference_url,
         }
 
         try:
@@ -1007,7 +926,7 @@ class Command(BaseCommand):
                 ],
                 'has_challenges': True,
                 'badges_earned': [
-                    {'name': 'Souls Series', 'tier_name': 'Gold'},
+                    {'name': 'Souls Series', 'edition': 'Ultra HD'},
                 ],
                 'has_badges_earned': True,
                 'closest_badge': {
@@ -1019,7 +938,7 @@ class Command(BaseCommand):
                 'has_closest_badge': True,
             },
             # Links
-            'profile_url': f'{settings.SITE_URL}/profiles/TestUser/',
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=['TestUser'])}",
             'reviews_url': f'{settings.SITE_URL}/reviews/',
             'site_url': settings.SITE_URL,
             'preference_url': preference_url,

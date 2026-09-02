@@ -1,0 +1,64 @@
+{% comment %} Shared GROUPING tile (.pp-gtile) -- used by the Genres & Themes list grid, the tag-detail related
+rail, AND the Franchise/Company lists. The representative member-game cover is a scrimmed backdrop with the
+grouping name + game count over it. Expects: `tag` (a Genre/Theme/Franchise/Company with `representative_game`
++ a `game_count` annotation), `detail_url_name`, `item_type`. The tile ADAPTS to the fields an object carries:
+`source_type` -> a Franchise/Series corner badge + a "· N versions" suffix (franchises); `logo_url` -> a studio
+logo chip and `country_display` -> a country meta line (companies). Optional `current_sort` (genre/theme LIST
+only) shows the stat the grid is sorted by. {% endcomment %}
+{% load humanize %}
+<a href="{% url detail_url_name slug=tag.slug %}" class="pp-gtile" data-gtile aria-label="{{ tag.name }}, {{ tag.game_count }} game{{ tag.game_count|pluralize }}">
+    {% comment %} Cover via display_image_url (single-source IGDB-first chain); has_cover_art picks cover vs
+    generic-icon styling. Null only for a brand-new grouping not yet recomputed -> the tag-glyph placeholder. {% endcomment %}
+    {% if tag.representative_game %}
+        <img src="{{ tag.representative_game.display_image_url }}" alt="" loading="lazy" class="pp-gtile__art{% if not tag.representative_game.has_cover_art %} pp-gtile__art--icon{% endif %}" />
+    {% else %}
+        {% comment %} No-cover placeholder glyph, matched to the grouping type so a coverless tile still reads
+        as what it is (a developer icon for companies, not the generic tag glyph). {% endcomment %}
+        <span class="pp-gtile__art pp-gtile__art--empty">
+            {% if item_type == 'company' %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4"/></svg>
+            {% elif tag.source_type == 'collection' %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            {% elif item_type == 'franchise' %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M8 11h.01"/></svg>
+            {% elif item_type == 'theme' %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h.01"/><path d="M20.83 12.83 12 21.66a2 2 0 0 1-2.83 0l-6-6a2 2 0 0 1 0-2.83l8.83-8.83A2 2 0 0 1 13.41 2H20a2 2 0 0 1 2 2v6.59a2 2 0 0 1-.59 1.41Z"/></svg>
+            {% endif %}
+        </span>
+    {% endif %}
+    <span class="pp-gtile__scrim"></span>
+
+    {% comment %} Franchise only: a type corner badge (Series vs Franchise). Absent on genres/themes/companies. {% endcomment %}
+    {% if tag.source_type %}
+    <span class="pp-gtile__tag">{% if tag.source_type == 'collection' %}Series{% else %}Franchise{% endif %}</span>
+    {% endif %}
+
+    {% comment %} Company only: the studio logo chip, top-right over the art. Absent on genres/themes/franchises. {% endcomment %}
+    {% if tag.logo_url %}
+    <span class="pp-gtile__logo"><img src="{{ tag.logo_url }}" alt="" loading="lazy" /></span>
+    {% endif %}
+
+    <span class="pp-gtile__body">
+        <span class="pp-gtile__name">{{ tag.name }}</span>
+        <span class="pp-gtile__meta">
+            <span class="pp-gtile__count">{{ tag.game_count|intcomma }} game{{ tag.game_count|pluralize }}{% if tag.source_type and tag.version_count and tag.version_count != tag.game_count %} &middot; {{ tag.version_count|intcomma }} version{{ tag.version_count|pluralize }}{% endif %}</span>
+            {% if tag.country_display %}<span class="pp-gtile__country" title="{{ tag.country_display }}">{{ tag.country_display }}</span>{% endif %}
+            {% comment %} Secondary stat, shown only for the sort it belongs to (the view annotates it then). {% endcomment %}
+            {% if current_sort == 'avg_rating' and tag.stat_rating %}
+            <span class="pp-gtile__stat" title="Average community rating">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>{{ tag.stat_rating|floatformat:1 }}
+            </span>
+            {% elif current_sort == 'players' and tag.stat_players %}
+            <span class="pp-gtile__stat" title="Players across this {{ item_type }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>{{ tag.stat_players|intcomma }}
+            </span>
+            {% elif current_sort == 'plats_earned' and tag.stat_plats %}
+            <span class="pp-gtile__stat" title="Platinums earned across this {{ item_type }}">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3h14a1 1 0 0 1 1 1v3a5 5 0 0 1-4 4.9A4 4 0 0 1 13 15v2h2a1 1 0 0 1 1 1v2H8v-2a1 1 0 0 1 1-1h2v-2a4 4 0 0 1-3-3.1A5 5 0 0 1 4 7V4a1 1 0 0 1 1-1Z"/></svg>{{ tag.stat_plats|intcomma }}
+            </span>
+            {% endif %}
+        </span>
+    </span>
+</a>

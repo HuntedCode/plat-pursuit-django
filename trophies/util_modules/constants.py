@@ -36,6 +36,23 @@ def platform_display_rank(title_platform):
         default=_PLATFORM_DISPLAY_FALLBACK,
     )
 
+
+def ordered_platform_union(platform_lists):
+    """The de-duplicated union of several games' title_platform lists, in display order.
+
+    DISPLAY order first (PS5, PS4, PSVR2, PSVR, PS3, PSVITA), then any PRIORITY-order
+    platforms display order omits (PSP, PS2, PS1 legacy tails), then unknown stragglers
+    alphabetically -- deterministic whatever PSN sends. Extracted verbatim from
+    GamePageView.get_context_data when Browse Games condensed to one card per page
+    identity and needed the SAME union per card (the two surfaces must never disagree
+    about a game's platform set).
+    """
+    seen = {p for platforms in platform_lists for p in (platforms or [])}
+    display_rank = list(PLATFORM_DISPLAY_ORDER) + [
+        p for p in PLATFORM_PRIORITY_ORDER if p not in PLATFORM_DISPLAY_ORDER
+    ]
+    return [p for p in display_rank if p in seen] + sorted(p for p in seen if p not in display_rank)
+
 # Title ID blacklist - Games with known issues or duplicates
 TITLE_ID_BLACKLIST = [
     'CUSA05214_00', 'CUSA01015_00', 'CUSA00129_00', 'CUSA00131_00',
@@ -68,6 +85,19 @@ BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
 # Every Contract pays the same global total T, split evenly among its jobs, across two
 # tiers: Platinum (the bulk) then 100% (the bonus). No-platinum games pay the FULL T at 100%.
 CONTRACT_XP_TOTAL = 6000        # global base T per Contract (override via Contract.xp_total_override); 6000 splits into clean integer shares across 1-6 jobs
+#: How long a Contract counts as NEW after it first goes live -- one definition behind the board's
+#: Latest chip, its facet count and the card's New marker, so those three cannot disagree. Keyed on
+#: Contract.went_live_at (NOT created_at: the candidate pipeline stages a contract long before staff
+#: publish it).
+#:
+#: The Discord announcement is NOT one of them, despite an earlier comment here claiming so. It asks
+#: a different question -- "have we told anyone yet" (`Contract.announced_at`) rather than "is this
+#: still recent" -- and the two have no shared floor. If the webhook is misconfigured for a fortnight,
+#: or a large backlog is trickled out with `--limit`, a post can legitimately announce contracts that
+#: have already fallen out of this window, and its link would land on a board that excludes them.
+#: `announce_contracts` therefore widens the window for its own link rather than relying on this one.
+NEW_CONTRACT_WINDOW_DAYS = 14
+
 MAX_CONTRACT_JOBS = 6          # hard cap on jobs per Contract (keeps per-job XP >= T/6 meaningful); enforced in auto-suggestion + the admin form
 CONTRACT_PLATINUM_FRAC = 0.70  # share of T paid at the Platinum tier
 CONTRACT_FULL_FRAC = 0.30      # share of T paid at the 100% (full-completion) tier

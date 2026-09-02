@@ -1,10 +1,11 @@
 """
 Hub-of-Hubs IA: sub-navigation infrastructure.
 
-PlatPursuit's IA is structured as four hubs (Dashboard, Browse, Community,
-My Pursuit). The global navbar contains direct links to each hub. A
+PlatPursuit's IA is a personal My Pursuit hub (rooted at the logged-in Home /)
+plus Browse, Community, and Support. The global navbar links to each. A
 persistent sub-navigation strip below the main navbar surfaces each hub's
-sub-pages on every URL in that hub's family, URL-prefix matched.
+sub-pages on every URL in that hub's family, URL-prefix matched (the personal
+strip is auth-gated).
 
 This module defines:
 
@@ -15,10 +16,10 @@ This module defines:
    that don't belong to any hub.
 
 Matching strategy: longest-prefix-wins. The matcher iterates the configured
-prefixes in order of length descending and returns the first match. The
-Dashboard hub's bare ``/`` prefix is special-cased: it only matches when
-``request.path == '/'`` exactly, so paths like ``/community/...`` correctly
-match the Community hub instead of falling through to the Dashboard catchall.
+prefixes in order of length descending and returns the first match. The bare
+``/`` root is special-cased to NO hub -- it is the lobby, which sits above the
+four hubs and carries no strip. It only matches when ``request.path == '/'``
+exactly, so deeper paths still fall through to their own hub.
 
 Pages that don't match any hub (settings, auth flows, error pages, staff
 admin pages) get ``None`` and the sub-nav strip is hidden via the template
@@ -41,6 +42,12 @@ class HubSubnavItem:
     url_name: str
     icon: str | None = None
     auth_required: bool = False
+    membership_required: bool = False  # dropped unless the viewer holds a premium tier (the
+                                       # cheap `user.premium_tier` truthiness the navbar's own
+                                       # Membership link already gates on -- never is_premium(),
+                                       # which costs provider queries on every request)
+    group: str = ''  # the rail group this item belongs to (e.g. 'Catalog' / 'Curation'). Items are
+                     # defined in group order so the template can {% regroup %} consecutive runs.
 
 
 @dataclass(frozen=True)
@@ -49,19 +56,23 @@ class RenderedSubnavItem:
     A sub-nav item with its URL already resolved.
 
     The template consumes these instead of HubSubnavItem so that dynamic
-    items whose URL requires kwargs (e.g., the Fundraiser tab, which takes
-    a slug) can coexist with static items that reverse from a url_name
-    alone. The resolver lives in the context processor so NoReverseMatch
+    items whose URL requires kwargs (e.g., the Profile tab, which takes the
+    viewer's username) can coexist with static items that reverse from a
+    url_name alone. The resolver lives in the context processor so NoReverseMatch
     failures degrade to "skip this item" rather than 500.
 
     ``icon`` is an optional Lucide-style icon name. The template renders
     a matching SVG inline when set; items without an icon render as
     label-only pills.
+
+    ``group`` is the rail group label (e.g. 'Catalog'); the template groups
+    consecutive same-group items under a quiet separator.
     """
     slug: str
     label: str
     url: str
     icon: str | None = None
+    group: str = ''
 
 
 @dataclass(frozen=True)
@@ -83,75 +94,123 @@ class HubSubnavConfig:
 # they continue to resolve correctly across any future rename without
 # touching this file.
 
-DASHBOARD_HUB = HubSubnavConfig(
-    key='dashboard',
-    label='Dashboard',
-    icon='layout-dashboard',
-    # The bare '/' prefix is checked separately as an exact-equality match
-    # in resolve_hub_subnav so it doesn't shadow other hubs. The /dashboard/
-    # prefix here covers /dashboard/stats/, /dashboard/shareables/,
-    # /dashboard/recap/, plus their nested children.
-    prefixes=('/dashboard/',),
-    items=(
-        HubSubnavItem('home', 'Dashboard', 'home', 'home', auth_required=True),
-        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True),
-        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True),
-        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True),
-    ),
-)
+# There is no Home hub. The logged-in Home (/) is the LOBBY: hub-less by design (see the exact-'/'
+# branch in resolve_hub_subnav), reached by the navbar wordmark and by landing there after login.
+# My Pursuit's landing is Career.
 
 
 BROWSE_HUB = HubSubnavConfig(
     key='browse',
     label='Browse',
-    icon='compass',
+    icon='search',   # matches the navbar's Browse hub icon
     prefixes=(
         '/games/',
         '/trophies/',
+        '/badges/',
         '/companies/',
         '/franchises/',
         '/genres/',
         '/themes/',
         '/engines/',
+        # The public jobs catalogue. Browse rather than Leaderboards: a catalogue of jobs is a browse
+        # surface, and its relationship to Career's Dossier is the Collection-vs-Browse-Badges split --
+        # scope, not pagination.
+        '/jobs/',
+        # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
+        # visitor landing on an old profile URL would otherwise lose the Browse rail on the way through.
+        '/hunters/',
+        '/profiles/',
     ),
+    # Grouped rail (kept consistent with the other hubs' grouped rails -- Community's Explore/Create,
+    # My Pursuit's Progress/Tools): Catalog = the core browse surfaces; Curation = the cross-cutting
+    # groupings. Order = group order (regroup-ready).
     items=(
-        HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2'),
-        HubSubnavItem('trophies', 'Trophies', 'trophies_list', 'trophy'),
-        HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock'),
-        HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag'),
-        HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers'),
-        HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag'),
-        HubSubnavItem('companies', 'Companies', 'companies_list', 'building'),
-        HubSubnavItem('engines', 'Engines', 'engines_list', 'cpu'),
+        HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
+        # SLUG deliberately not bare 'lists' (the hidden GameList system's guard pins that);
+        # display copy "Trophy Lists" per the IA doc's naming insurance.
+        HubSubnavItem('trophy-lists', 'Trophy Lists', 'trophy_lists', 'list', group='Catalog'),
+        HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
+        HubSubnavItem('jobs', 'Jobs', 'jobs_browse', 'briefcase', group='Catalog'),
+        HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock', group='Catalog'),
+        # Label is "Hunters" (2026-08); the SLUG stays `profiles`, matching the url names it maps to
+        # below -- it is an internal key, and churning it would touch the overrides map and its tests to
+        # no visible end.
+        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user', group='Catalog'),
+        HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
+        HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
+        HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
     ),
 )
 
 
-COMMUNITY_HUB = HubSubnavConfig(
-    key='community',
-    label='Community',
-    icon='users',
-    prefixes=('/community/',),
-    items=(
-        HubSubnavItem('hub', 'Hub', 'community_hub', 'home'),
-        HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user'),
-        HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star'),
-        HubSubnavItem('challenges', 'Challenges', 'challenges_browse', 'target'),
-        HubSubnavItem('lists', 'Lists', 'lists_browse', 'list'),
-        HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart'),
-    ),
-)
-
-
+# The personal hub is rooted at the logged-in Home (/): the Overview tab IS the Home, and the
+# other personal surfaces now live at ROOT paths (moved from /my-pursuit/* and /dashboard/* in
+# the unify). Profile is appended dynamically by the context processor (its URL needs the viewer's
+# own username). The strip renders for AUTHENTICATED viewers only (the context processor gates it)
+# -- anon sees a hero Home with no strip. Grouped: a gamification core (6) + personal tools.
 MY_PURSUIT_HUB = HubSubnavConfig(
     key='my_pursuit',
     label='My Pursuit',
-    icon='trophy',
-    prefixes=('/my-pursuit/',),
+    icon='layers',   # matches the navbar's My Pursuit hub icon
+    prefixes=(
+        '/collection/', '/career/', '/milestones/', '/titles/',
+        '/profile-editor/', '/shareables/', '/recap/', '/rate-my-games/',
+    ),
+    # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
+    # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
     items=(
-        HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
-        HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
-        HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
+        HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True, group='Progress'),
+        HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True, group='Progress'),
+        HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag', group='Progress'),
+        HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True, group='Progress'),
+        HubSubnavItem('shareables', 'Plat Cards', 'my_shareables', 'image', auth_required=True, group='Tools'),
+        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
+        HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', auth_required=True, group='Tools'),
+    ),
+)
+
+
+# The Leaderboards hub. NO items, which is where it started and where it has returned to: a rail would be
+# a single pill naming the page you are already on.
+#
+# It briefly carried four. The original comment here invited items "the moment a second kind lands", and
+# the rebuild landed three at once -- Game Boards, Badge Boards and Job Boards. They were removed in
+# 2026-08 because each was a catalogue of entities that `/games/`, `/badges/` and `/jobs/` already
+# catalogue, differing only by a sort those pages already had. Nothing linked to them except this rail,
+# which existed because they did; the justification was circular, and it collapsed the moment either half
+# was examined. Boards live on the thing they rank, so the full board is on game, badge and job detail.
+#
+# The Support hub ran in this same items=() shape until 2026-08 and then grew a rail -- the
+# difference is not taste but destination count: Leaderboards collapsed to ONE page, Support grew
+# to FOUR real ones. The removal reasoning above still holds here exactly because a single pill
+# naming the page you are on is not navigation.
+LEADERBOARDS_HUB = HubSubnavConfig(
+    key='leaderboards',
+    label='Leaderboards',
+    icon='bar-chart',
+    prefixes=('/leaderboards/',),
+    items=(),
+)
+
+
+# The Support hub: four real destinations as of 2026-08 (storefront, roadmap, Badge Art, My
+# Membership), which is what turned the rail on -- the reversal of the Leaderboards removal is
+# principled, see the comment above. The /fundraiser/ prefix keeps the campaign slug pages in
+# this hub; their active-item highlighting rides the overrides map below. My Membership is
+# membership_required (premium_tier truthiness, the navbar link's own gate) in its 'Yours'
+# group -- a non-member's door is the storefront -- except when it IS the active page, which
+# always names itself.
+SUPPORT_HUB = HubSubnavConfig(
+    key='support',
+    label='Support',
+    icon='heart',
+    prefixes=('/support/', '/fundraiser/'),
+    items=(
+        HubSubnavItem('support', 'Support', 'support_hub', 'heart', group='The project'),
+        HubSubnavItem('roadmap', 'Roadmap', 'support_roadmap', 'map', group='The project'),
+        HubSubnavItem('fundraiser', 'Badge Art', 'support_fundraiser', 'palette', group='The project'),
+        HubSubnavItem('membership', 'My Membership', 'subscription_management', 'star',
+                      auth_required=True, membership_required=True, group='Yours'),
     ),
 )
 
@@ -160,10 +219,10 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 # hub, prefixes are tried longest-first. Bare '/' is handled separately as
 # an exact-equality check below.
 HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
-    COMMUNITY_HUB,
     MY_PURSUIT_HUB,
     BROWSE_HUB,
-    DASHBOARD_HUB,
+    LEADERBOARDS_HUB,
+    SUPPORT_HUB,
 )
 
 
@@ -178,55 +237,50 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
 
 _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # url_name: (hub_key, item_slug)
-    # Browse
-    'game_detail': ('browse', 'games'),
-    'game_detail_with_profile': ('browse', 'games'),
+    # Browse. The Games/Trophy Lists IA split the highlighting with the pages: the CONCEPT Game
+    # page lights Games, while a LIST detail page (and the list-scoped roadmap editor reached
+    # from it) lights Trophy Lists -- each detail page points at the catalogue that browses it.
+    'game_detail': ('browse', 'trophy-lists'),
+    'game_detail_with_profile': ('browse', 'trophy-lists'),
+    # The concept Game page + its unmatched-concept fallback (Games/Trophy Lists IA). Without
+    # these lines the rail renders unlit on the new pages -- the documented job_detail failure.
+    'game_page': ('browse', 'games'),
+    'game_page_concept': ('browse', 'games'),
     'company_detail': ('browse', 'companies'),
     'franchise_detail': ('browse', 'franchises'),
+    'badge_detail': ('browse', 'badges'),
+    'badge_detail_with_profile': ('browse', 'badges'),
     'genre_detail': ('browse', 'genres'),
     'theme_detail': ('browse', 'genres'),
-    'engine_detail': ('browse', 'engines'),
-    'roadmap_edit': ('browse', 'games'),
+    # Added when Jobs joined the Catalog rail (2026-08) -- and missed at the time, so browsing a job left
+    # the whole strip unhighlighted. A detail page's URL name never matches its sub-nav item's
+    # (`job_detail` vs `jobs_browse`), so every one of them needs a line here; the item shipping without
+    # one is silent, because the strip still renders.
+    'job_detail': ('browse', 'jobs'),
+    # The whole roadmap family is /games/<np>/-scoped (you reach every one FROM a list), so all
+    # four light with the list family. The _ctg editor and BOTH public reader routes had no line
+    # at all before -- the silent-unlit trap, on sitemap-indexed pages for the readers.
+    'roadmap_edit': ('browse', 'trophy-lists'),
+    'roadmap_edit_ctg': ('browse', 'trophy-lists'),
+    'roadmap_detail': ('browse', 'trophy-lists'),
+    'roadmap_detail_dlc': ('browse', 'trophy-lists'),
     # Community
-    'profile_detail': ('community', 'profiles'),
-    'trophy_case': ('community', 'profiles'),
-    # Reviews archived 2026-05; the notice page highlights the Community hub
-    # root. Rate My Games is its own sub-nav item now that it lives at
-    # /community/rate-my-games/.
-    'reviews_landing': ('community', 'hub'),
-    'review_hub': ('community', 'hub'),
-    'rate_my_games': ('community', 'rate_my_games'),
-    'list_detail': ('community', 'lists'),
-    'list_create': ('community', 'lists'),
-    'list_edit': ('community', 'lists'),
-    'my_challenges': ('community', 'challenges'),
-    'az_challenge_create': ('community', 'challenges'),
-    'az_challenge_detail': ('community', 'challenges'),
-    'az_challenge_setup': ('community', 'challenges'),
-    'az_challenge_edit': ('community', 'challenges'),
-    'calendar_challenge_create': ('community', 'challenges'),
-    'calendar_challenge_detail': ('community', 'challenges'),
-    'genre_challenge_create': ('community', 'challenges'),
-    'genre_challenge_detail': ('community', 'challenges'),
-    'genre_challenge_setup': ('community', 'challenges'),
-    'genre_challenge_edit': ('community', 'challenges'),
-    'badge_leaderboards': ('community', 'leaderboards'),
-    # My Pursuit
-    'badge_detail': ('my_pursuit', 'badges'),
-    'badge_detail_with_profile': ('my_pursuit', 'badges'),
-    # Dashboard: nested sub-pages. The shareables sub-pages all live under
-    # /dashboard/shareables/* and should highlight the Shareables sub-nav
-    # item; the platinum_grid wizard is one of those nested children.
-    'my_shareables_platinums': ('dashboard', 'shareables'),
-    'my_shareables_profile_card': ('dashboard', 'shareables'),
-    'my_shareables_challenges': ('dashboard', 'shareables'),
-    'platinum_grid': ('dashboard', 'shareables'),
-    'recap_view': ('dashboard', 'recap'),
-    # Fundraiser: lives at /fundraiser/<slug>/ but conceptually belongs to
-    # the Dashboard hub while a campaign is active. The context processor
-    # appends the Fundraiser tab dynamically when one is live.
-    'fundraiser': ('dashboard', 'fundraiser'),
-    'fundraiser_success': ('dashboard', 'fundraiser'),
+    'profile_detail': ('browse', 'profiles'),
+    'trophy_case': ('browse', 'profiles'),
+    # Reviews archived 2026-05 and the Community hub retired 2026-08, so the notice page has no hub
+    # to sit in -- it renders without a sub-nav strip, which is right for a tombstone.
+    # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
+    # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
+    # so its one nested child is the cards browse; profile_card + platinum_grid are retired and their
+    # URLs bounce to the landing (no override needed for a redirect).
+    'my_shareables_platinums': ('my_pursuit', 'shareables'),
+    'recap_view': ('my_pursuit', 'recap'),
+    'rate_my_games': ('my_pursuit', 'rate_my_games'),
+    # Support: the slugged campaign pages carry a different URL name than the rail item
+    # (`fundraiser` vs the landing's `support_fundraiser`), so without these lines the strip
+    # renders with nothing lit -- the exact job_detail failure documented above.
+    'fundraiser': ('support', 'fundraiser'),
+    'fundraiser_success': ('support', 'fundraiser'),
 }
 
 
@@ -251,8 +305,8 @@ def resolve_hub_subnav(request) -> dict | None:
 
     The matcher uses longest-prefix-wins ordering across all configured
     prefixes from all hubs. The bare ``/`` route is special-cased to match
-    only when ``request.path == '/'`` exactly, so child paths under hubs
-    don't fall through to the Dashboard catchall.
+    only when ``request.path == '/'`` exactly (the personal hub's Overview), so
+    child paths under other hubs don't fall through to it.
     """
     path = request.path
 
@@ -268,10 +322,13 @@ def resolve_hub_subnav(request) -> dict | None:
             if hub is not None:
                 return {'hub': hub, 'active_slug': slug}
 
-    # 2. Bare-root match for the Dashboard hub. Only the exact '/' path
-    #    triggers this — '/community/...' etc. fall through.
+    # 2. Bare root: the LOBBY. It belongs to no hub -- it sits ABOVE the four of them, which is why it
+    #    carries no sub-nav strip: on a lobby the CTAs are the navigation, and a hub rail underneath them
+    #    would be a second, competing set of directions. Returning None here (rather than a hub) is what
+    #    makes the strip disappear, via the template's `{% if hub_section %}` guard. The navbar wordmark
+    #    is its only chrome affordance, and it highlights off `hub_section is None` + the '/' path.
     if path == '/':
-        return {'hub': DASHBOARD_HUB, 'active_slug': 'home'}
+        return None
 
     # 3. Longest-prefix-wins across all configured prefixes.
     best_match: tuple[HubSubnavConfig, str] | None = None
@@ -306,6 +363,8 @@ def build_rendered_items(
     hub: HubSubnavConfig,
     *,
     is_authenticated: bool,
+    is_member: bool = False,
+    active_slug: str | None = None,
     extras: tuple[RenderedSubnavItem, ...] = (),
 ) -> tuple[RenderedSubnavItem, ...]:
     """
@@ -322,12 +381,19 @@ def build_rendered_items(
     """
     rendered: list[RenderedSubnavItem] = []
     for item in hub.items:
-        if item.auth_required and not is_authenticated:
+        # The page you are ON always names itself: a gated item never drops while active, or
+        # the rail renders with no current pill and the mobile trigger reads bare (e.g. a
+        # non-member landing on /support/membership/, which serves them a real state).
+        is_active = active_slug is not None and item.slug == active_slug
+        if item.auth_required and not is_authenticated and not is_active:
+            continue
+        if item.membership_required and not is_member and not is_active:
             continue
         try:
             url = reverse(item.url_name)
         except NoReverseMatch:
             continue
-        rendered.append(RenderedSubnavItem(slug=item.slug, label=item.label, url=url))
+        rendered.append(RenderedSubnavItem(
+            slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group))
     rendered.extend(extras)
     return tuple(rendered)

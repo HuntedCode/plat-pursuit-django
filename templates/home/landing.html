@@ -1,566 +1,458 @@
 {% extends 'base.html' %}
-{% load static humanize %}
+{% load humanize static seo_tags mark_tags %}
+{% comment %}
+The gates surface (2026-08 rebuild; the gates merge made it the ONE template for all three
+pre-synced home-router states). home_state drives a per-state HERO and close: 'anonymous' gets
+the search hero, 'no_psn' the link hero (_hero_no_psn.html), 'syncing' the live status hero
+(_hero_syncing.html). The cached sections between them render for every state -- the site's
+best showcase is also the waiting room and the welcome mat.
 
-{% block title %}Platinum Pursuit - Track Every Trophy, Earn Every Badge{% endblock %}
-{% block meta_description %}Track every PSN trophy you've ever earned, light up your library with badges, take on real challenges, and turn your backlog into something worth running. Built by hunters, for hunters.{% endblock %}
+WHAT THE ANON PAGE IS: the front door for a stranger, built on the product-identity spine -- the
+moat first (handcrafted Badges, the Pursuer Career), the trustworthy extras after (Ratings from
+finishers, share cards, Discord), with the SEARCH as the hero: the fastest possible route from
+"curious" to "that's my trophy list". Everything it shows is real -- live medallion art, a real
+hunter's card refreshed hourly (fixture fallback), cron-cached community numbers -- and nothing
+it sells is parked: no Dashboard, no Challenges, no My Stats, no Reviews hub. The old landing
+marketed all four; that was the page this replaces.
 
-{% block global_banners %}{% endblock %}
+THE SYNC DELAY IS DESIGNED FOR, not hidden: a brand-new profile's first sync pulls an entire
+PSN history through rate-limited workers and takes real time. The hero says so up front, and
+the wait is staged as anticipation (queue line, live dot, then the profile link the moment
+basic ingestion lands) rather than a spinner pretending to be fast.
+
+DATA RULE (landing_service module docstring): cached community reads and cron artifacts only
+feed the SHARED sections; landing_service must never grow a per-user provider. The per-state
+heroes' context (profile, psn_found, sync progress) arrives from HomeView's state branches.
+
+Contracts: partials/_messages.html is the ONE messages renderer for every state (pinned by
+test_lobby -- the hero partials must never carry the breadcrumb renderer), global_banners
+suppressed for ANON only (authed pre-sync users keep their site/fundraiser banners), own <main>
+via main_layout, no breadcrumb ever.
+{% endcomment %}
+
+{% block title %}{% if home_state == 'no_psn' %}Welcome to Platinum Pursuit{% elif home_state == 'syncing' %}Syncing Your Pursuit{% else %}Free PlayStation Trophy Tracking{% endif %}{% endblock %}
+{% comment %} og/twitter blocks deliberately do NOT branch on home_state: the authed variants
+are auth-gated + noindex, so the share image only ever matters for the anon front door. {% endcomment %}
+{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
+{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/showcase/plat_card_example.png' %}{% endblock %}
+{% block twitter_card_type %}summary_large_image{% endblock %}
+{% block robots %}{% if home_state == 'no_psn' or home_state == 'syncing' %}noindex, nofollow{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block meta_description %}{% if home_state == 'no_psn' %}Link your PSN account to Platinum Pursuit and we catch up on everything you've already earned.{% elif home_state == 'syncing' %}Your Platinum Pursuit profile is syncing. We're catching up on your trophy grind.{% else %}Free trophy tracking for PlayStation hunters. Look up any PSN name to pull its full history, earn handcrafted badges, build a career from how you play, and read ratings from hunters who actually finished the platinum.{% endif %}{% endblock %}
+
+{% block extra_head %}
+{{ block.super }}
+{% if home_state != 'no_psn' and home_state != 'syncing' %}{% jsonld_website request %}{% endif %}
+<script>
+    {% comment %}Arms the section arrival BEFORE first paint (motion.css .pp-arrive): the hidden
+    state gates on html.pp-arm, so incremental painting can never flash a section visible before
+    the boot script hides it. Without JS this never runs and nothing is hidden.{% endcomment %}
+    document.documentElement.classList.add('pp-arm');
+</script>
+{% endblock %}
+
+{% comment %}The ANON front door carries no site banners: one message, told in order. Authed
+pre-sync users keep theirs (fundraiser, site notices) -- they are members, not strangers.
+Keyed on home_state, not is_authenticated, so ?preview=landing previews the true anon page.{% endcomment %}
+{% block global_banners %}{% if home_state == 'no_psn' or home_state == 'syncing' %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block main_layout %}
-<main id="main-content" class="flex-grow" role="main">
+<main id="main-content" class="flex-grow">
 
-{% comment %}SECTION 1: HERO{% endcomment %}
-<section class="relative min-h-[85vh] md:min-h-[calc(100vh_-_var(--chrome-height,_5rem))] flex items-center justify-center overflow-hidden">
-    {# Animated gradient background #}
-    <div class="absolute inset-0 landing-gradient opacity-15"></div>
-
-    {# Floating decorative stars (CSS-only, purely decorative) #}
-    <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <svg class="absolute top-[10%] left-[8%] w-4 h-4 text-primary/[0.08] float-slow" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute top-[20%] right-[12%] w-5 h-5 text-secondary/[0.07] float-medium" style="animation-delay: -2s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute top-[55%] left-[5%] w-3 h-3 text-accent/[0.06] float-fast" style="animation-delay: -4s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute top-[35%] right-[6%] w-4 h-4 text-warning/[0.06] float-slow" style="animation-delay: -3s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute bottom-[25%] left-[15%] w-5 h-5 text-primary/[0.05] float-medium" style="animation-delay: -1s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute bottom-[35%] right-[18%] w-3 h-3 text-secondary/[0.07] float-fast" style="animation-delay: -5s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    {% if messages %}
+    <div class="container mx-auto px-4 pt-4">
+        {% include 'partials/_messages.html' %}
     </div>
+    {% endif %}
 
-    {# Hero content #}
-    <div class="relative z-10 max-w-4xl mx-auto px-4 md:px-6 text-center flex flex-col items-center gap-4 md:gap-6">
-        <img src="{% static 'images/logo.png' %}"
-             alt="Platinum Pursuit"
-             class="w-24 h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 object-contain hero-enter hero-enter-1"
-             loading="eager" decoding="async" />
+    {# ── 1. The per-state hero ── #}
+    {% if home_state == 'syncing' %}
+        {% include 'home/_hero_syncing.html' %}
+    {% elif home_state == 'no_psn' %}
+        {% include 'home/_hero_no_psn.html' %}
+    {% else %}
+    {% comment %} Anon: the search IS the pitch. Anon-ONLY on purpose -- SearchSyncProfileView
+    creates unclaimed synced profiles, which would compete with the link CTA for a no_psn
+    member. {% endcomment %}
+    <section class="land-hero">
+        <div class="container mx-auto px-4">
+            <div class="land-hero__inner">
+                <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>For PlayStation trophy hunters</p>
+                <h1 class="land-hero__h1">The hunt deserves a record.</h1>
+                <p class="land-hero__sub">Platinum Pursuit is free trophy tracking for PlayStation. Type a PSN name and we pull the whole history: every game, every trophy, every platinum.</p>
 
-        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight hero-enter hero-enter-2">
-            <span class="text-gradient">No Trophy Can Hide From Us</span>
-        </h1>
+                <form class="land-search" method="post" action="{% url 'search_sync_profile' %}" data-land-search
+                      data-url-status="{% url 'add_sync_status' %}">
+                    {% csrf_token %}
+                    <label class="sr-only" for="land-psn">PSN name</label>
+                    <input id="land-psn" name="psn_username" type="text" class="land-search__input"
+                           placeholder="Your PSN name" maxlength="16" autocomplete="off"
+                           autocapitalize="none" spellcheck="false" required />
+                    <button type="submit" class="pp-cta land-search__go">Start tracking</button>
+                </form>
 
-        <p class="text-base md:text-lg lg:text-xl text-base-content/70 max-w-2xl hero-enter hero-enter-3">
-            Track every trophy. Earn badges automatically. Turn your backlog into something worth bragging about.
-        </p>
+                {% comment %}The honest line. A first sync is an entire history through rate-limited
+                workers; saying so up front turns the wait from a bug into a promise.{% endcomment %}
+                <p class="land-search__hint" data-land-hint>New here? A first sync pulls your entire history, and that takes a little while. We think it's worth the wait.</p>
 
-        <div class="flex flex-col sm:flex-row gap-3 mt-2 hero-enter hero-enter-4">
-            <a href="{% url 'account_signup' %}"
-               class="btn btn-primary btn-md md:btn-lg gap-2 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                Start Your Pursuit
-            </a>
-            <a href="{% url 'account_login' %}"
-               class="btn btn-ghost btn-md md:btn-lg border border-base-content/20 hover:border-base-content/40">
-                Log In
-            </a>
-        </div>
-
-        <p class="text-xs text-base-content/40 italic pr-1 hero-enter hero-enter-4">
-            Free for everyone. Premium perks for the truly obsessed.
-        </p>
-    </div>
-
-    {# Scroll indicator #}
-    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 scroll-indicator" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-    </div>
-</section>
-
-
-{% comment %}SECTION 2: LIVE COMMUNITY PULSE{% endcomment %}
-{% if site_heartbeat %}
-<section class="bg-base-300/60 border-y border-base-content/5">
-    <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
-
-        <div class="flex items-center justify-center gap-2 mb-4 reveal">
-            <span class="inline-block w-2 h-2 rounded-full bg-success animate-pulse"></span>
-            <span class="text-xs md:text-sm font-bold uppercase tracking-wider text-base-content/60">PlatPursuit at a Glance</span>
-            <span class="text-[10px] text-base-content/30 hidden md:inline">Updated hourly</span>
-        </div>
-
-        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2 md:gap-3 reveal reveal-stagger-1">
-            {# Primary 4 stats #}
-            {% with stat=site_heartbeat.always.trophies_total %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-primary leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
-            </div>
-            {% endwith %}
-
-            {% with stat=site_heartbeat.always.games_total %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-accent leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
-            </div>
-            {% endwith %}
-
-            {% with stat=site_heartbeat.always.profiles_total %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-secondary leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
-            </div>
-            {% endwith %}
-
-            {% with stat=site_heartbeat.always.trophies_24h %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="flex items-center justify-center gap-1">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                    <span class="text-xl md:text-2xl lg:text-3xl font-bold text-success leading-none"
-                          data-count-target="{{ stat.value|default:'0' }}">0</span>
+                {% comment %}The wait, staged: queue line with a live dot, then the profile link the
+                moment basic ingestion lands. aria-live so the state change is announced.{% endcomment %}
+                <div class="land-search__status" data-land-status aria-live="polite" hidden>
+                    <span class="land-search__dot" data-land-dot aria-hidden="true"></span>
+                    <span class="land-search__msg" data-land-msg></span>
+                    {% comment %}The resting href is real (the hunters browse) so the anchor is crawlable;
+                    JS overwrites it with the found profile before unhiding.{% endcomment %}
+                    <a class="land-search__visit" href="{% url 'profiles_list' %}" data-land-visit hidden>Open the profile
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </a>
                 </div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
+
+                <div class="land-hero__accounts">
+                    <a href="{% url 'account_signup' %}" class="land-hero__link">Create a free account</a>
+                    <span class="land-hero__sep" aria-hidden="true">&middot;</span>
+                    <a href="{% url 'account_login' %}" class="land-hero__link">Log in</a>
+                </div>
             </div>
-            {% endwith %}
         </div>
+    </section>
+    {% endif %}
 
-        {# Expanded stats row #}
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-2 md:mt-3 reveal reveal-stagger-2">
-            {% with stat=site_heartbeat.expanded.platinums_total %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-warning leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
+    {# ── 2. The heartbeat: live proof, cron-cached ── #}
+    {% if site_heartbeat %}
+    <section class="land-pulse pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-pulse__grid">
+                <div class="land-pulse__cell pp-arrive__it" style="--i: 0;">
+                    <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.always.trophies_total.value|default:0 }}">{{ site_heartbeat.always.trophies_total.value|default:0|intcomma }}</span>
+                    <span class="land-pulse__lbl">{{ site_heartbeat.always.trophies_total.label }}</span>
+                </div>
+                <div class="land-pulse__cell pp-arrive__it" style="--i: 1;">
+                    <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.always.trophies_24h.value|default:0 }}">{{ site_heartbeat.always.trophies_24h.value|default:0|intcomma }}</span>
+                    <span class="land-pulse__lbl"><span class="land-pulse__livedot" aria-hidden="true"></span>Earned in the last 24h</span>
+                </div>
+                <div class="land-pulse__cell pp-arrive__it" style="--i: 2;">
+                    <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.always.profiles_total.value|default:0 }}">{{ site_heartbeat.always.profiles_total.value|default:0|intcomma }}</span>
+                    <span class="land-pulse__lbl">{{ site_heartbeat.always.profiles_total.label }}</span>
+                </div>
+                <div class="land-pulse__cell pp-arrive__it" style="--i: 3;">
+                    <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.always.games_total.value|default:0 }}">{{ site_heartbeat.always.games_total.value|default:0|intcomma }}</span>
+                    <span class="land-pulse__lbl">{{ site_heartbeat.always.games_total.label }}</span>
+                </div>
             </div>
-            {% endwith %}
-
-            {% with stat=site_heartbeat.expanded.badges_total %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-info leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
-            </div>
-            {% endwith %}
-
-            {% with stat=site_heartbeat.expanded.badge_xp_total %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-secondary leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
-            </div>
-            {% endwith %}
-
-            {% with stat=site_heartbeat.expanded.hours_hunted %}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
-                <div class="text-xl md:text-2xl lg:text-3xl font-bold text-primary leading-none"
-                     data-count-target="{{ stat.value|default:'0' }}">0</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
-            </div>
-            {% endwith %}
+            <p class="land-pulse__tag pp-arrive__it" style="--i: 4;">{{ site_heartbeat.flavor.tagline }}</p>
         </div>
+    </section>
+    {% endif %}
 
-        <p class="text-center text-[10px] md:text-xs text-base-content/40 italic mt-3 pr-1 reveal reveal-stagger-3">
-            {{ site_heartbeat.flavor.tagline }}
-        </p>
-    </div>
-</section>
-{% endif %}
-
-
-{% comment %}SECTION 3: DASHBOARD SHOWCASE{% endcomment %}
-<section class="py-12 md:py-16 lg:py-20">
-    <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
-
-        <div class="text-center mb-8 md:mb-10">
-            <span class="text-xs font-bold uppercase tracking-widest text-primary/70 reveal">Your Command Center</span>
-            <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold mt-2 reveal reveal-stagger-1">A Dashboard That Actually Gets You</h2>
-            <p class="text-sm md:text-base text-base-content/60 max-w-2xl mx-auto mt-3 reveal reveal-stagger-2">
-                Drag the modules around, hide what you don't care about, pin the stats that matter. It refreshes the moment your next platinum lands.
+    {# ── 3. Badges: the moat, shown as the objects themselves ── #}
+    <section class="land-sec pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-sec__head pp-arrive__it" style="--i: 0;">
+                <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>The Collection</p>
+                <h2 class="land-sec__h2">Badges worth the chase</h2>
+                <p class="land-sec__sub">Series, franchise, and studio badges, every one illustrated by hand. No AI art, ever. Finish the games a badge asks for and its medallion is yours to keep.</p>
+            </div>
+            {% if badge_showcase %}
+            <div class="land-medals pp-arrive__it" style="--i: 1;">
+                {% for frame in badge_showcase %}
+                {% comment %}Each slot is an inspect trigger: the shared quick-peek modal (the
+                same one badge detail and How It Works hand to anon visitors) picks the medallion
+                up into a 3D tilt stage. The id rides the wrapper, How It Works' pattern.
+                {% endcomment %}
+                <div class="land-medals__slot pp-forge-peek" role="button" tabindex="0"
+                     data-badge-id="{{ frame.badge_id }}" title="{{ frame.series_name }}"
+                     aria-label="Inspect the {{ frame.series_name }} badge">
+                    {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
+                </div>
+                {% endfor %}
+            </div>
+            <p class="land-medals__hint pp-arrive__it" style="--i: 2;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11.5a3 3 0 1 1 6 0"/><path d="M12 2v3"/><path d="M4.2 5.2 6.3 7.3"/><path d="M19.8 5.2 17.7 7.3"/><path d="M12 11.5V20l2.5-2 2 3 2.5-1.5-2-3.5H20z"/></svg>
+                Click or tap a medallion to inspect it
             </p>
-        </div>
-
-        {# Screenshot frame with parallax #}
-        <div class="reveal reveal-stagger-2">
-            <div class="rounded-xl border-2 border-base-300 bg-base-200/90 shadow-2xl screenshot-glow overflow-hidden"
-                 data-parallax>
-                <img src="{% static 'images/showcase/dashboard-preview.png' %}"
-                     alt="The Platinum Pursuit dashboard showing customizable modules with trophy stats, badge progress, and challenge tracking"
-                     class="w-full h-auto"
-                     loading="lazy" decoding="async"
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-                <div class="hidden flex-col items-center justify-center text-center py-16 md:py-24 px-4 gap-3 bg-gradient-to-br from-base-200 to-base-300" aria-hidden="true">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-primary/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="7" height="9"></rect>
-                        <rect x="14" y="3" width="7" height="5"></rect>
-                        <rect x="14" y="12" width="7" height="9"></rect>
-                        <rect x="3" y="16" width="7" height="5"></rect>
-                    </svg>
-                    <p class="text-base-content/50 font-semibold text-lg">Your Dashboard Awaits</p>
-                    <p class="text-base-content/40 text-sm italic pr-1">30+ customizable modules, all powered by your real PSN data.</p>
-                </div>
+            {% endif %}
+            <div class="land-sec__foot pp-arrive__it" style="--i: 3;">
+                <a href="{% url 'badges_list' %}" class="pp-cta pp-cta--ghost">Browse the badge gallery</a>
             </div>
         </div>
+    </section>
 
-        {# Stat pills #}
-        <div class="grid grid-cols-3 gap-2 md:gap-4 mt-4 md:mt-6">
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center reveal reveal-stagger-3 shimmer-sweep">
-                <div class="text-lg md:text-xl lg:text-2xl font-bold text-primary leading-none">30+</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">Dashboard Modules</div>
+    {# ── 4. The Career: the Pursuer's card as the centerpiece ── #}
+    <section class="land-sec land-sec--alt pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-sec__head pp-arrive__it" style="--i: 0;">
+                <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>The Career</p>
+                <h2 class="land-sec__h2">Play your way. It all counts.</h2>
+                <p class="land-sec__sub">Twenty-five jobs across five disciplines turn your history into a career. Every platinum feeds the jobs it proves, and your card shows what you're made of.</p>
             </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center reveal reveal-stagger-4 shimmer-sweep">
-                <div class="text-lg md:text-xl lg:text-2xl font-bold text-accent leading-none">120+</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">Tracked Stats</div>
+            {% if showcase_card_html %}
+            <div class="land-card pp-arrive__it" style="--i: 1;">
+                <div class="land-card__frame" data-land-cardframe>
+                    {% comment %}|safe is load-bearing: the cron path round-trips Redis (JSON serializer),
+                    which strips SafeString -- without it the real card renders as escaped source
+                    while the in-process fixture works by accident.{% endcomment %}
+                    <div class="land-card__scaler" data-land-cardscaler>{{ showcase_card_html|safe }}</div>
+                </div>
+                <p class="land-card__note">{% if showcase_card_is_sample %}A sample Profile Card. Yours builds itself from your real history.{% else %}A real hunter's Profile Card, refreshed hourly. Yours builds itself from your real history.{% endif %}</p>
             </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center reveal reveal-stagger-5 shimmer-sweep">
-                <div class="text-lg md:text-xl lg:text-2xl font-bold text-warning leading-none">100%</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">Real PSN Data</div>
+            {% endif %}
+        </div>
+    </section>
+
+    {# ── 5. Ratings: trust as the feature ── #}
+    <section class="land-sec pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-sec__head pp-arrive__it" style="--i: 0;">
+                <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>The Ratings</p>
+                <h2 class="land-sec__h2">Ratings you can finally trust</h2>
+                <p class="land-sec__sub">Only hunters who finished the platinum, or cleared the whole list, can rate a game here. Difficulty, grind, fun, and a verdict, from people who went all the way.</p>
+            </div>
+            {% comment %}Real ratings from the showcase hunter (cron-cached, blurbs required,
+            positive verdicts first), as a slow crossfade carousel -- or the hand-written sample
+            when the cache is cold. Words and tones are precomputed through the site's own
+            filters, so the carousel can never teach vocabulary the product doesn't use.
+            {% endcomment %}
+            <div class="land-rdemo pp-arrive__it" style="--i: 1;" data-land-carousel>
+                <div class="land-rdemo__stack">
+                    {% for pair in demo_rating_pairs %}
+                    <div class="land-rdemo__slide{% if forloop.first %} is-active{% endif %}"{% if not forloop.first %} aria-hidden="true"{% endif %}>
+                        {% for r in pair %}
+                        <article class="land-rdemo__card" data-rec="{{ r.rec }}" aria-label="A rating of {{ r.title }}">
+                            {% comment %}The pp-rcard art treatment, copied: the game's landscape
+                            frame bled to the card's edges, fading into the surface (down into it
+                            stacked, across into it split) so the panel never ends in a hard seam.
+                            Absent art renders a panel-less card, never a broken one.{% endcomment %}
+                            {% if r.art_url %}
+                            <div class="land-rdemo__art" aria-hidden="true">
+                                <img class="land-rdemo__shot" src="{{ r.art_url }}" alt="" loading="lazy" decoding="async" />
+                            </div>
+                            {% endif %}
+                            <div class="land-rdemo__body">
+                                <div class="land-rdemo__head">
+                                    <div class="min-w-0">
+                                        <h3 class="land-rdemo__title">{{ r.title }}</h3>
+                                        <p class="land-rdemo__by">rated by a hunter who finished it</p>
+                                    </div>
+                                    <div class="land-rdemo__verdict">
+                                        <span class="pp-stars" style="--fill: {{ r.stars_pct }}%;" role="img" aria-label="Scored {{ r.overall }} out of 5"><span class="pp-stars__on"></span></span>
+                                        <span class="land-rdemo__score">{{ r.overall }}<span class="land-rdemo__of">/5</span></span>
+                                    </div>
+                                </div>
+                                <div class="land-rdemo__statswrap"><div class="land-rdemo__stats">
+                                    {% for st in r.stats %}
+                                    <div class="land-rdemo__stat" data-tone="{{ st.tone }}">
+                                        <span class="land-rdemo__k">{{ st.k }}</span>
+                                        <span class="land-rdemo__n">{{ st.n }}<span class="land-rdemo__of">{{ st.of }}</span></span>
+                                        {% if st.word %}<span class="land-rdemo__w">{{ st.word }}</span>{% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div></div>
+                                <p class="land-rdemo__take">&ldquo;{{ r.take }}&rdquo;</p>
+                                <div class="land-rdemo__foot">
+                                    <span class="land-rdemo__pill" data-rec="{{ r.rec }}">{{ r.rec_label }}</span>
+                                    <span class="land-rdemo__note">{% if demo_ratings_is_sample %}A sample rating. Real ones require the platinum.{% else %}A real rating. Every one requires the platinum.{% endif %}</span>
+                                </div>
+                            </div>
+                        </article>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if demo_rating_pairs|length > 1 %}
+                <div class="land-rdemo__dots" role="group" aria-label="More ratings">
+                    {% for pair in demo_rating_pairs %}
+                    <button type="button" class="land-rdemo__dot{% if forloop.first %} is-active{% endif %}" data-land-dotindex="{{ forloop.counter0 }}"{% if forloop.first %} aria-current="true"{% endif %} aria-label="Show ratings {{ forloop.counter }}"></button>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% if site_heartbeat.expanded.ratings_total.value %}
+            <div class="land-pulse__grid land-pulse__grid--duo pp-arrive__it" style="--i: 2;">
+                <div class="land-pulse__cell">
+                    <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.expanded.ratings_total.value }}">{{ site_heartbeat.expanded.ratings_total.value|intcomma }}</span>
+                    <span class="land-pulse__lbl">Ratings from finishers</span>
+                </div>
+                <div class="land-pulse__cell">
+                    <span class="land-pulse__num pp-tally" data-countup="{{ site_heartbeat.expanded.rated_games.value|default:0 }}">{{ site_heartbeat.expanded.rated_games.value|default:0|intcomma }}</span>
+                    <span class="land-pulse__lbl">Games rated</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {# ── 6. The shareable proof: plat cards + the Monthly Recap ── #}
+    <section class="land-sec land-sec--alt pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-sec__head pp-arrive__it" style="--i: 0;">
+                <p class="land-eyebrow"><span class="land-eyebrow__tick" aria-hidden="true"></span>The Proof</p>
+                <h2 class="land-sec__h2">Make it official</h2>
+                <p class="land-sec__sub">Every platinum earns a share card with your scores on it, and every month closes with a recap worth posting. The screenshot era is over.</p>
+            </div>
+            <div class="land-proof pp-arrive__it" style="--i: 1;">
+                <picture>
+                    <source srcset="{% static 'images/showcase/plat_card_example.webp' %}" type="image/webp" />
+                    <img src="{% static 'images/showcase/plat_card_example.png' %}" alt="A platinum share card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
+                </picture>
+                <picture>
+                    <source srcset="{% static 'images/showcase/recap_card_example.webp' %}" type="image/webp" />
+                    <img src="{% static 'images/showcase/recap_card_example.png' %}" alt="A monthly recap card" width="1200" height="630" class="land-proof__img" loading="lazy" decoding="async" />
+                </picture>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-
-{% comment %}SECTION 4: SHARE CARDS SHOWCASE{% endcomment %}
-<section class="py-12 md:py-16 lg:py-20 bg-base-300/40 border-y border-base-content/5">
-    <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
-
-        <div class="text-center mb-8 md:mb-10">
-            <span class="text-xs font-bold uppercase tracking-widest text-accent/70 reveal">Share the Grind</span>
-            <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold mt-2 reveal reveal-stagger-1">Cards Worth Sharing</h2>
-            <p class="text-sm md:text-base text-base-content/60 max-w-2xl mx-auto mt-3 reveal reveal-stagger-2">
-                Every platinum, every challenge, every monthly recap generates a share card you'll actually want to post.
-            </p>
-        </div>
-
-        {# Share card gallery #}
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-            {# Platinum Card #}
-            <div class="reveal reveal-stagger-1">
-                <div class="rounded-xl overflow-hidden border-2 border-base-300 shadow-lg hover:shadow-primary/20 hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 shimmer-sweep">
-                    <img src="{% static 'images/showcase/plat_card_example.png' %}"
-                         alt="Example platinum share card showing game completion stats and trophy data"
-                         class="w-full h-auto"
-                         loading="lazy" decoding="async" />
+    {# ── 7. Discord ── #}
+    <section class="land-sec land-sec--tight pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-discord pp-arrive__it" style="--i: 0;">
+                <div class="min-w-0">
+                    <h2 class="land-sec__h2 land-sec__h2--sm">The campfire is lit</h2>
+                    <p class="land-sec__sub">Compare cards, argue difficulty scores, and get help with that one last trophy.</p>
                 </div>
-                <div class="mt-3 text-center">
-                    <h3 class="font-bold text-sm md:text-base">Platinum Cards</h3>
-                    <p class="text-xs text-base-content/50 mt-1">Auto-generated when you earn a platinum. Every stat, every rating, ready to share.</p>
-                </div>
-            </div>
-
-            {# Challenge Card #}
-            <div class="reveal reveal-stagger-2">
-                <div class="rounded-xl overflow-hidden border-2 border-base-300 shadow-lg hover:shadow-accent/20 hover:border-accent/30 transition-all duration-300 hover:-translate-y-1 shimmer-sweep">
-                    <img src="{% static 'images/showcase/challenge_card_example.png' %}"
-                         alt="Example challenge share card showing A-to-Z challenge progress"
-                         class="w-full h-auto"
-                         loading="lazy" decoding="async" />
-                </div>
-                <div class="mt-3 text-center">
-                    <h3 class="font-bold text-sm md:text-base">Challenge Cards</h3>
-                    <p class="text-xs text-base-content/50 mt-1">A-to-Z, Calendar, and Genre challenges. Fill slots with games you'd play anyway.</p>
-                </div>
-            </div>
-
-            {# Recap Card #}
-            <div class="reveal reveal-stagger-3">
-                <div class="rounded-xl overflow-hidden border-2 border-base-300 shadow-lg hover:shadow-secondary/20 hover:border-secondary/30 transition-all duration-300 hover:-translate-y-1 shimmer-sweep">
-                    <img src="{% static 'images/showcase/recap_card_example.png' %}"
-                         alt="Example monthly recap card showing trophy hunting statistics in a Spotify Wrapped style"
-                         class="w-full h-auto"
-                         loading="lazy" decoding="async" />
-                </div>
-                <div class="mt-3 text-center">
-                    <h3 class="font-bold text-sm md:text-base">Monthly Recap</h3>
-                    <p class="text-xs text-base-content/50 mt-1">Spotify Wrapped, but for trophies. Your month in review, automatically.</p>
-                </div>
+                <a href="{{ discord_invite_url }}" target="_blank" rel="noopener noreferrer" class="pp-cta land-discord__go">Join the Discord</a>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-
-{% comment %}SECTION 5: BADGE SYSTEM SHOWCASE{% endcomment %}
-<section class="py-12 md:py-16 lg:py-20">
-    <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
-
-        <div class="text-center mb-8 md:mb-10">
-            <span class="text-xs font-bold uppercase tracking-widest text-warning/70 reveal">Collect Them All</span>
-            <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold mt-2 reveal reveal-stagger-1">Badges, Earned Automatically</h2>
-            <p class="text-sm md:text-base text-base-content/60 max-w-2xl mx-auto mt-3 reveal reveal-stagger-2">
-                100+ badge series with bronze through platinum tiers. No claim buttons, no grinding artifacts. Your sync catches up, your badges light up.
-            </p>
-        </div>
-
-        {# Badge screenshot #}
-        <div class="reveal reveal-stagger-2">
-            <div class="rounded-xl border-2 border-base-300 bg-base-200/90 shadow-xl overflow-hidden">
-                <img src="{% static 'images/showcase/badge-showcase.png' %}"
-                     alt="A collection of earned badges showing bronze, silver, gold, and platinum tiers with unique artwork"
-                     class="w-full h-auto"
-                     loading="lazy" decoding="async"
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-                <div class="hidden flex-col items-center justify-center text-center py-16 md:py-20 px-4 gap-3 bg-gradient-to-br from-base-200 to-base-300" aria-hidden="true">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-warning/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="8" r="7"></circle>
-                        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                    </svg>
-                    <p class="text-base-content/50 font-semibold text-lg">100+ Badge Series</p>
-                    <p class="text-base-content/40 text-sm italic pr-1">Bronze through Platinum, each with unique hand-crafted artwork.</p>
+    {# ── 8. The close ── #}
+    <section class="land-close pp-arrive">
+        <div class="container mx-auto px-4">
+            <div class="land-close__inner">
+                {% if home_state == 'no_psn' %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Ready, {% name_mark name=user.username mark=user.profile.display_mark %}?</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">One link and everything you just saw starts filling in with your real history.</p>
+                <div class="land-close__ctas pp-arrive__it" style="--i: 2;">
+                    <a href="{% url 'link_psn' %}" class="pp-cta land-rise">
+                        <span class="sup-go__rise" aria-hidden="true">
+                            {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                        </span>
+                        <span class="land-rise__lbl">Link my PSN account</span>
+                    </a>
+                    <a href="{% url 'games_list' %}" class="pp-cta pp-cta--ghost">Browse around first</a>
                 </div>
+                {% elif home_state == 'syncing' %}
+                {% comment %} The syncing state covers three sub-states; the close must not
+                promise motion while the sync is parked or broken. {% endcomment %}
+                {% if psn_outage %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Paused, not lost.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">The moment PSN is back, your sync picks up right where it left off.</p>
+                {% elif profile.sync_status == 'error' %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">We'll get it sorted.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">Retry the sync from your account menu, and your record picks up right here.</p>
+                {% else %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your record is being written.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">This page updates itself. The moment your sync lands, your Pursuit opens right here.</p>
+                {% endif %}
+                {% else %}
+                <h2 class="land-sec__h2 pp-arrive__it" style="--i: 0;">Your backlog is not going to hunt itself.</h2>
+                <p class="land-sec__sub pp-arrive__it" style="--i: 1;">Free to use. One search to see your whole history.</p>
+                <div class="land-close__ctas pp-arrive__it" style="--i: 2;">
+                    <a href="{% url 'account_signup' %}" class="pp-cta land-rise">
+                        <span class="sup-go__rise" aria-hidden="true">
+                            {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                        </span>
+                        <span class="land-rise__lbl">Create a free account</span>
+                    </a>
+                    <a href="{% url 'account_login' %}" class="pp-cta pp-cta--ghost">Log in</a>
+                </div>
+                {% endif %}
             </div>
         </div>
-
-        {# Badge feature callouts #}
-        <div class="grid grid-cols-3 gap-2 md:gap-4 mt-4 md:mt-6">
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center reveal reveal-stagger-3">
-                <div class="flex justify-center mb-2">
-                    <div class="w-10 h-10 rounded-full bg-success/15 border border-success/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                </div>
-                <div class="font-bold text-sm md:text-base">Auto-Awarded</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">No claim buttons needed</div>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center reveal reveal-stagger-4">
-                <div class="flex justify-center mb-2">
-                    <div class="w-10 h-10 rounded-full bg-warning/15 border border-warning/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"></path><path d="M18 20V4"></path><path d="M6 20v-4"></path></svg>
-                    </div>
-                </div>
-                <div class="font-bold text-sm md:text-base">4 Tiers</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">Bronze to Platinum</div>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center reveal reveal-stagger-5">
-                <div class="flex justify-center mb-2">
-                    <div class="w-10 h-10 rounded-full bg-secondary/15 border border-secondary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                    </div>
-                </div>
-                <div class="font-bold text-sm md:text-base">XP System</div>
-                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">Level up from badges</div>
-            </div>
-        </div>
-    </div>
-</section>
-
-
-{% comment %}SECTION 6: STATS & PROFILE SHOWCASE{% endcomment %}
-<section class="py-12 md:py-16 lg:py-20 bg-base-300/40 border-y border-base-content/5">
-    <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
-
-        <div class="text-center mb-8 md:mb-10">
-            <span class="text-xs font-bold uppercase tracking-widest text-secondary/70 reveal">Know Your Numbers</span>
-            <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold mt-2 reveal reveal-stagger-1">Stats Worth Bragging About</h2>
-            <p class="text-sm md:text-base text-base-content/60 max-w-2xl mx-auto mt-3 reveal reveal-stagger-2">
-                120+ stats sliced by genre, theme, engine, rarity, and playtime. We track everything so you can flex on everything.
-            </p>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-center">
-            {# Screenshot #}
-            <div class="reveal-left">
-                <div class="rounded-xl border-2 border-base-300 bg-base-200/90 shadow-xl overflow-hidden">
-                    <img src="{% static 'images/showcase/stats-preview.png' %}"
-                         alt="My Stats page showing rarity breakdown charts, genre distribution, and detailed trophy analytics"
-                         class="w-full h-auto"
-                         loading="lazy" decoding="async"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-                    <div class="hidden flex-col items-center justify-center text-center py-16 md:py-20 px-4 gap-3 bg-gradient-to-br from-base-200 to-base-300" aria-hidden="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 text-secondary/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="18" y1="20" x2="18" y2="10"></line>
-                            <line x1="12" y1="20" x2="12" y2="4"></line>
-                            <line x1="6" y1="20" x2="6" y2="14"></line>
-                        </svg>
-                        <p class="text-base-content/50 font-semibold text-lg">Deep Analytics</p>
-                        <p class="text-base-content/40 text-sm italic pr-1">120+ stats, charts, and breakdowns of your trophy hunting career.</p>
-                    </div>
-                </div>
-            </div>
-
-            {# Feature callouts grid #}
-            <div class="grid grid-cols-2 gap-3 reveal-right">
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-primary/15 border border-primary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                    </div>
-                    <div>
-                        <div class="font-bold text-sm">Rarity Breakdown</div>
-                        <div class="text-[10px] md:text-xs text-base-content/50 mt-0.5">How rare are your trophies?</div>
-                    </div>
-                </div>
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/><path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773a11 11 0 0 1-.739-.808c-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335z"/></svg>
-                    </div>
-                    <div>
-                        <div class="font-bold text-sm">Genre Mastery</div>
-                        <div class="text-[10px] md:text-xs text-base-content/50 mt-0.5">Your most-played genres</div>
-                    </div>
-                </div>
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-warning/15 border border-warning/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                    </div>
-                    <div>
-                        <div class="font-bold text-sm">Monthly Recap</div>
-                        <div class="text-[10px] md:text-xs text-base-content/50 mt-0.5">Spotify Wrapped for trophies</div>
-                    </div>
-                </div>
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-success/15 border border-success/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                    </div>
-                    <div>
-                        <div class="font-bold text-sm">Completion %</div>
-                        <div class="text-[10px] md:text-xs text-base-content/50 mt-0.5">Track your overall rate</div>
-                    </div>
-                </div>
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-info/15 border border-info/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    </div>
-                    <div>
-                        <div class="font-bold text-sm">Playtime</div>
-                        <div class="text-[10px] md:text-xs text-base-content/50 mt-0.5">Real PSN hours hunted</div>
-                    </div>
-                </div>
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-secondary/15 border border-secondary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                    </div>
-                    <div>
-                        <div class="font-bold text-sm">Platform Split</div>
-                        <div class="text-[10px] md:text-xs text-base-content/50 mt-0.5">PS3 / PS4 / PS5 / Vita</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-
-{% comment %}SECTION 7: ROADMAPS & COMMUNITY{% endcomment %}
-<section class="py-12 md:py-16 lg:py-20">
-    <div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8">
-
-        <div class="text-center mb-8 md:mb-10">
-            <span class="text-xs font-bold uppercase tracking-widest text-success/70 reveal">Hunt Together</span>
-            <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold mt-2 reveal reveal-stagger-1">Built by Hunters, for Hunters</h2>
-            <p class="text-sm md:text-base text-base-content/60 max-w-2xl mx-auto mt-3 reveal reveal-stagger-2">
-                Roadmaps from people who actually plated the game. Reviews from people who finished it. A community that speaks your language.
-            </p>
-        </div>
-
-        {# Three feature columns #}
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-xl p-5 md:p-6 text-center reveal reveal-stagger-1">
-                <div class="flex justify-center mb-3">
-                    <div class="w-12 h-12 rounded-full bg-info/15 border border-info/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                            <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                    </div>
-                </div>
-                <h3 class="font-bold text-base md:text-lg mb-2">Roadmaps</h3>
-                <p class="text-xs md:text-sm text-base-content/60">
-                    Step-by-step guides written by trophy hunters who actually earned the platinum. No filler, just the path.
-                </p>
-            </div>
-
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-xl p-5 md:p-6 text-center reveal reveal-stagger-2">
-                <div class="flex justify-center mb-3">
-                    <div class="w-12 h-12 rounded-full bg-warning/15 border border-warning/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                    </div>
-                </div>
-                <h3 class="font-bold text-base md:text-lg mb-2">Reviews</h3>
-                <p class="text-xs md:text-sm text-base-content/60">
-                    Difficulty, grind, and fun ratings from people who finished the game. Real opinions, not Metacritic noise.
-                </p>
-            </div>
-
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-xl p-5 md:p-6 text-center reveal reveal-stagger-3">
-                <div class="flex justify-center mb-3">
-                    <div class="w-12 h-12 rounded-full bg-success/15 border border-success/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
-                    </div>
-                </div>
-                <h3 class="font-bold text-base md:text-lg mb-2">Community</h3>
-                <p class="text-xs md:text-sm text-base-content/60">
-                    Browse libraries, climb leaderboards, compare progress, and trade tips on Discord. Better together.
-                </p>
-            </div>
-        </div>
-
-        {# Browse without account #}
-        <div class="reveal reveal-stagger-4">
-            <div class="text-center mb-4">
-                <h3 class="text-sm md:text-base font-bold text-base-content/70">Just Browsing? No account needed.</h3>
-            </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                <a href="{% url 'games_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-center justify-center gap-2 hover:bg-white/[0.06] hover:border-primary/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary shrink-0" viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/><path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773-.245-.232-.496-.526-.739-.808-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335z"/></svg>
-                    <span class="text-xs md:text-sm font-semibold group-hover:text-primary transition-colors">Games</span>
-                </a>
-                <a href="{% url 'profiles_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-center justify-center gap-2 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span class="text-xs md:text-sm font-semibold group-hover:text-secondary transition-colors">Profiles</span>
-                </a>
-                <a href="{% url 'badges_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-center justify-center gap-2 hover:bg-white/[0.06] hover:border-warning/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
-                    <span class="text-xs md:text-sm font-semibold group-hover:text-warning transition-colors">Badges</span>
-                </a>
-                <a href="{% url 'overall_badge_leaderboards' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-center justify-center gap-2 hover:bg-white/[0.06] hover:border-accent/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                    <span class="text-xs md:text-sm font-semibold group-hover:text-accent transition-colors">Leaderboards</span>
-                </a>
-            </div>
-        </div>
-    </div>
-</section>
-
-
-{% comment %}SECTION 8: FINAL CTA{% endcomment %}
-<section class="relative py-16 md:py-20 lg:py-24 overflow-hidden">
-    {# Animated gradient background (bookend with hero) #}
-    <div class="absolute inset-0 landing-gradient opacity-10"></div>
-
-    {# Floating decorative stars #}
-    <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <svg class="absolute top-[15%] left-[10%] w-4 h-4 text-primary/[0.06] float-medium" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute bottom-[20%] right-[8%] w-5 h-5 text-secondary/[0.05] float-slow" style="animation-delay: -3s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        <svg class="absolute top-[60%] left-[20%] w-3 h-3 text-accent/[0.07] float-fast" style="animation-delay: -2s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-    </div>
-
-    <div class="relative z-10 max-w-3xl mx-auto px-4 md:px-6 text-center flex flex-col items-center gap-4 reveal">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 md:w-16 md:h-16 text-primary" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-
-        <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold">Ready to Start the Hunt?</h2>
-
-        <p class="text-sm md:text-base text-base-content/60 max-w-xl">
-            Sign up, link your PSN, and let us catch up on every trophy you've already grabbed.
-            The library you've been quietly building all this time is about to look a lot more interesting.
-        </p>
-
-        <a href="{% url 'account_signup' %}"
-           class="btn btn-primary btn-lg gap-2 mt-2 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transition-all shimmer">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="8.5" cy="7" r="4"></circle>
-                <line x1="20" y1="8" x2="20" y2="14"></line>
-                <line x1="23" y1="11" x2="17" y2="11"></line>
-            </svg>
-            Create Your Account
-        </a>
-
-        <p class="text-xs text-base-content/40 mt-1">
-            Already have one? <a href="{% url 'account_login' %}" class="link link-primary">Log in instead</a>.
-        </p>
-    </div>
-</section>
-
+    </section>
 </main>
 {% endblock %}
 
+{% block fixed_overlays %}
+{% comment %}The badge inspect modal: the shared pick-it-up stage (medallion.js detailModal),
+fed by the anon-safe quick-peek endpoint -- the same experience badge detail hands a logged-out
+visitor. Lives in fixed_overlays so it sits outside #page-recede.{% endcomment %}
+<div class="pp-detail-modal" id="badge-peek" data-peek-url="{% url 'group_badge_quick_peek' 0 %}" hidden>
+    <div class="pp-detail-modal__scrim" data-peek-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-peek-close aria-label="Close badge detail">&times;</button>
+        <div class="pp-detail-modal__body" data-peek-body></div>
+    </div>
+</div>
+{% endblock %}
+
 {% block js_scripts %}
-<script src="{% static 'js/landing.js' %}" defer></script>
+<script src="{% static 'js/landing.js' %}"></script>
+{% if home_state == 'syncing' %}
+{% comment %} syncing.js owns the personalization upgrade + the enter-moment state machine +
+the dev panel. The inline block keeps only the two server-data-coupled mirrors (progress +
+elapsed) riding navsync.js's events -- this page never polls. {% endcomment %}
+<script src="{% static 'js/syncing.js' %}" defer></script>
+<script>
+(function() {
+    // Progress mirror: navsync.js dispatches 'platpursuit:sync-progress' on every poll;
+    // keep the hero card's bar in lockstep with the navbar sync panel.
+    var bar = document.getElementById('home-sync-progress-bar');
+    var text = document.getElementById('home-sync-progress-text');
+    var phaseText = document.getElementById('home-sync-phase-text');
+    var defaultPhaseCopy = phaseText ? phaseText.textContent : '';
+
+    // Friendly labels for the sub-phases _job_sync_complete moves through.
+    var FINALIZE_PHASE_LABELS = {
+        health_check: 'Verifying your trophy data with PSN...',
+        stats_badges: 'Updating stats and awarding badges...',
+        finishing:    'Wrapping things up...'
+    };
+
+    if (bar || text || phaseText) {
+        document.addEventListener('platpursuit:sync-progress', function(e) {
+            var data = (e && e.detail) || {};
+            if (bar && data.sync_percentage != null) {
+                bar.value = parseInt(data.sync_percentage, 10) || 0;
+            }
+            if (text) {
+                if (data.is_finalizing) {
+                    text.textContent = 'Finalizing sync...';
+                } else if (data.sync_target) {
+                    var progress = Number(data.sync_progress || 0).toLocaleString('en-US');
+                    var target = Number(data.sync_target).toLocaleString('en-US');
+                    text.textContent = progress + ' / ' + target + ' tasks';
+                } else {
+                    text.textContent = 'Getting started...';
+                }
+            }
+            if (phaseText) {
+                if (data.is_finalizing && data.finalize_phase && FINALIZE_PHASE_LABELS[data.finalize_phase]) {
+                    phaseText.textContent = FINALIZE_PHASE_LABELS[data.finalize_phase];
+                } else {
+                    phaseText.textContent = defaultPhaseCopy;
+                }
+            }
+        });
+    }
+
+    // Elapsed counter: server seeds data-elapsed; tick once per second, stop at the synced
+    // transition (the finale hides this element).
+    var elapsedEl = document.getElementById('home-sync-elapsed');
+    if (elapsedEl) {
+        var elapsed = parseInt(elapsedEl.dataset.elapsed, 10) || 0;
+
+        function formatElapsed(s) {
+            if (s < 10) return 'Started just now';
+            if (s < 60) return 'Started ' + s + 's ago';
+            var minutes = Math.floor(s / 60);
+            if (minutes < 60) return 'Started ' + minutes + 'm ago';
+            var hours = Math.floor(minutes / 60);
+            var remMin = minutes % 60;
+            return 'Started ' + hours + 'h ' + remMin + 'm ago';
+        }
+
+        function tick() {
+            elapsed += 1;
+            elapsedEl.textContent = formatElapsed(elapsed);
+        }
+
+        elapsedEl.textContent = formatElapsed(elapsed);
+        var elapsedTimer = setInterval(tick, 1000);
+        document.addEventListener('platpursuit:sync-status-changed', function (e) {
+            if (e.detail && e.detail.status === 'synced') { clearInterval(elapsedTimer); }
+        });
+    }
+})();
+</script>
+{% endif %}
 {% endblock %}

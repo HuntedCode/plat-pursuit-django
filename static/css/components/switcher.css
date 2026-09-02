@@ -1,0 +1,49 @@
+/* ============================================================
+ * SEGMENTED SWITCHER -- the ONE view/tab-toggle treatment site-wide (Career Jobs/Radar/Contracts,
+ * Collection Case/Gallery, Badges Series/Gallery). A bordered container of transparent chips with a
+ * tinted-flat active state. Works for both <button> chips (JS toggles) and <a> chips (HTMX).
+ *
+ * Behavior is shared too: keyboard model + ignite via PlatPursuit.wireTablist / igniteTab, the directional
+ * panel slide via slideViewIn (see components/motion.css + js-utilities). This replaced three near-identical
+ * class systems (.lab-view-tab / .pp-collection__view-chip / .pp-vtoggle__chip). Secondary segmented
+ * controls with their own look stay separate: Career's .jlayout__btn (rounded pill), the Case's
+ * .pp-case__set-tab (completion-ring filter chips).
+ * ============================================================ */
+.pp-switch {
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    padding: 4px; border-radius: 8px;
+    border: 1px solid var(--pp-border); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent);
+}
+.pp-switch__chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
+    color: var(--pp-text-mute); background: transparent;
+    border: 1px solid transparent; border-radius: 5px; padding: 6px 14px;
+    cursor: pointer; text-decoration: none;
+    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.pp-switch__chip:hover { color: var(--pp-text); }
+.pp-switch__chip:active { transform: translateY(1px); }
+.pp-switch__chip.is-active,
+/* Radio-backed variant (a segmented FILTER, not a JS view toggle -- e.g. the Franchise/Series/All type
+   toggle): a chip whose wrapped radio is checked reads active, so native form submit + browser Back keep the
+   selection correct with zero JS. Harmless for the JS-active switchers (their chips wrap no checked radio). */
+.pp-switch__chip:has(input:checked) {
+    color: var(--pp-text); font-weight: 700;
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+}
+/* Focus ring: JS chips (<a>/<button>) take focus directly; radio-backed chips take focus on the sr-only
+   <input> inside, so mirror the ring via :has() so keyboard users always see the indicator. */
+.pp-switch__chip:focus-visible,
+.pp-switch__chip:has(input:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-switch__chip svg { width: 15px; height: 15px; flex: none; }
+@media (min-width: 768px) { .pp-switch__chip { padding: 7px 18px; } }   /* roomier chips on desktop */
+
+/* The one unguarded beat in the shared switcher: `transition: ... transform 0.12s` plus the `:active`
+   nudge above had no reduced-motion path, and this file had no `prefers-reduced-motion` block at all.
+   It is small, but it is shared by every `.pp-switch` on the site, so the gap was site-wide. */
+@media (prefers-reduced-motion: reduce) {
+    .pp-switch__chip { transition: none; }
+    .pp-switch__chip:active { transform: none; }
+}

@@ -81,10 +81,10 @@ Grow the suite outward from the coupling spine identified in the
 
 1. `Concept.absorb()` — data migration on concept reassignment (highest blast radius)
 2. Sync pipeline (`token_keeper` / `psn_api_service`) — completion detection
-3. Badge evaluation (`badge_service`) — tiers, stages, bundles, prerequisites
-4. XP (`xp_service`) — calculation + bulk update + signals
-5. IGDB matching (`igdb_service`) — the 6-strategy pipeline + enrichment
-6. Leaderboards (`redis_leaderboard_service`)
+3. Badge evaluation (`badge_engine` / `badge_apply`) — gating vs satisfaction, bundles, per-edition scope
+4. Badge XP + standings (`badge_xp`) — `recompute_standing` replaces a series' standing wholesale
+5. IGDB matching (`igdb_service`) — the 10-strategy pipeline + enrichment
+6. Leaderboards (`badge_leaderboards`) — rank must equal position on every board
 
 ### Regression tests from hard-won bugs
 
@@ -126,6 +126,19 @@ gate is wired after the first spine tests exist — a gate over zero tests is mo
   from the compose default — another reason tests use the disposable `db-test`.
 - **`--reuse-db` staleness.** The test DB is reused for speed. After a new
   migration, run `pytest --create-db` once so the schema rebuilds.
+- **Transactional tests truncate migration-seeded data — and `--reuse-db` keeps the
+  damage.** Any test using a transactional DB (`live_server`, `TransactionTestCase`,
+  `django_db(transaction=True)` — including a throwaway Playwright repro) flushes EVERY
+  table at teardown. Data migrations only run at DB creation, so catalog rows they seeded
+  (the 25 Jobs from `0247_seed_jobs`, notification templates, ...) stay gone for every
+  later test and every later RUN. This gutted the Job catalog in 2026-08: every
+  contract-claim test silently banked 0 XP (XP splits across a contract's jobs) and the
+  failures pointed nowhere near the cause. `conftest.py`'s `django_db_setup` wrapper now
+  re-seeds an empty Job catalog and raises a warning (visible in the run's warnings
+  summary) when it does; if OTHER seeded data goes missing, `pytest --create-db` is the
+  general repair. Prefer keeping transactional
+  tests out of the committed suite; if one becomes necessary, look at pytest-django's
+  `serialized_rollback` before accepting the flush.
 - **Management commands named `test_*`.** Several Django commands are literally
   named `test_*.py` (e.g. `test_email_system`). They are NOT pytest tests; the
   `norecursedirs = [..., "*/management"]` rule keeps pytest from collecting them.

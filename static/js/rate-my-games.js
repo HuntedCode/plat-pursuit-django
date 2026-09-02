@@ -1,669 +1,708 @@
 /**
- * Rate My Games Wizard: cycle through platinumed games to rate them.
+ * Rate My Games -- the rating wizard at /rate-my-games/.
  *
- * Fetches a queue of unrated games from the API and presents them one at a
- * time with rating sliders plus a trophy-list reference panel. (The review
- * half of this wizard was removed when the review system was archived.)
+ * Owns the QUEUE: fetch a page of unrated games, show one, skip or submit, advance, prefetch before
+ * running out. It does NOT own the rating form -- that is `PlatPursuit.RatingFields` (quick-rate.js),
+ * the same controller behind the quick-rate modal on Game Detail and the plat-card share flow. This file
+ * used to carry a second copy, which had drifted into having no quick take, no live readouts and no
+ * field-level errors.
+ *
+ * The form is attached ONCE and re-pointed per game via setTarget(). Re-attaching per game would stack a
+ * fresh set of listeners on the same <form> every time the queue advanced, and one submit would post as
+ * many times as you had rated.
  */
 window.PlatPursuit = window.PlatPursuit || {};
 
-PlatPursuit.RateMyGames = {
-    config: null,
-    queue: [],
-    currentIndex: 0,
-    totalCount: 0,
-    completedCount: 0,
-    queueType: 'base',
-    isLoading: false,
-    offset: 0,
-    limit: 20,
-    includeShovelware: false,
+(function () {
+    'use strict';
 
-    // DLC queue: grouped response from API
-    dlcGroups: [],
-    dlcFlatQueue: [],
-    hasMore: false,
+    var PP = window.PlatPursuit;
+    var PAGE = 20;              // queue page size
+    var PREFETCH_AT = 5;        // fetch the next page once this many games are left
+    var ORDER = ['base', 'dlc'];   // tab order -- drives the direction the incoming queue slides from
+    // Input types where a keystroke is CONTENT rather than a shortcut. `number` and `range` are absent on
+    // purpose: they discard a letter silently, so a bare S there is a skip, not a typo.
+    var TEXT_ENTRY = ['text', 'search', 'email', 'url', 'tel', 'password'];
 
-    init(config) {
-        this.config = config;
+    function el(id) { return document.getElementById(id); }
 
-        // Check URL for queue_type deep-link (e.g. ?queue_type=dlc)
-        var urlQueue = new URLSearchParams(window.location.search).get('queue_type');
-        if (urlQueue === 'dlc') {
-            this.queueType = 'dlc';
-        }
+    PP.RateMyGames = {
+        queue: [],
+        index: 0,
+        done: 0,                // ratings SUBMITTED this session (a skip is not progress)
+        ratableTotal: 0,        // every game in the library that could be rated
+        ratedTotal: 0,          // how many of them already were, before this session
+        queueType: 'base',
+        includeShovelware: false,
+        offset: 0,
+        hasMore: false,
+        loading: false,
+        entered: false,         // the opening beat is one-shot, not per game
+        fields: null,           // the RatingFields handle
 
-        this.initQueueTabs();
-        this.initShovelwareToggle();
-        this.initRatingValidation();
-        this.initActionButtons();
-        this.initTrophyToggle();
+        /**
+         * @param {boolean} first  true on the initial load, false on each HTMX history restore. Element
+         *   wiring re-runs every time (those nodes are new); document-level listeners must not.
+         */
+        init(first) {
+            // `?view=` is the site-wide view param (PlatPursuit.syncViewParam writes it); `?queue_type=`
+            // is the older spelling this page shipped with and is still read so existing links land right.
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('view') === 'dlc' || params.get('queue_type') === 'dlc') {
+                this.queueType = 'dlc';
+            }
 
-        // Sync tab button styles with active queue type
-        document.querySelectorAll('.wizard-queue-tab').forEach(b => {
-            var isActive = b.dataset.queue === this.queueType;
-            b.classList.toggle('btn-primary', isActive);
-            b.classList.toggle('btn-ghost', !isActive);
-            b.classList.toggle('border', !isActive);
-            b.classList.toggle('border-base-300', !isActive);
-        });
+            this.wireTabs();
+            this.wireShovelware();
+            this.wireActions();
+            // Document-level, so exactly once per page load -- see wireKeys().
+            if (first !== false) { this.wireKeys(); }
+            this.wireTrophyPanel();
+            this.wireForm();
 
-        this.loadQueue();
-    },
+            document.querySelectorAll('.scard__value[data-countup]').forEach(function (n) { PP.countUp(n, 850); });
 
-    // ------------------------------------------------------------------ //
-    //  Queue Type Controls
-    // ------------------------------------------------------------------ //
+            this.syncTabs();
+            // reset() rather than load(): onPageReady runs this again on an HTMX history restore, where the
+            // DOM is fresh but this singleton still holds the last visit's queue, index and offset.
+            this.reset();
+        },
 
-    initQueueTabs() {
-        document.querySelectorAll('.wizard-queue-tab').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const newType = btn.dataset.queue;
-                if (newType === this.queueType) return;
+        // ---------------------------------------------------------------- //
+        //  Queue selection
+        // ---------------------------------------------------------------- //
 
-                this.queueType = newType;
+        tabs() { return Array.prototype.slice.call(document.querySelectorAll('.rmg-qtab')); },
 
-                document.querySelectorAll('.wizard-queue-tab').forEach(b => {
-                    const isActive = b.dataset.queue === newType;
-                    b.classList.toggle('btn-primary', isActive);
-                    b.classList.toggle('btn-ghost', !isActive);
-                    b.classList.toggle('border', !isActive);
-                    b.classList.toggle('border-base-300', !isActive);
-                });
-
-                this.resetQueue();
+        wireTabs() {
+            var self = this;
+            // Shared tablist behaviour: click + arrow keys + roving tabindex, and the one-shot ignite bloom
+            // on the chip that just became active. It binds the click itself -- adding our own would call
+            // setQueue twice per press.
+            this.tablist = PP.wireTablist(this.tabs(), {
+                ignite: true,
+                onSelect: function (tab) { self.setQueue(tab.dataset.queue); },
             });
-        });
-    },
+        },
 
-    initShovelwareToggle() {
-        const checkbox = document.getElementById('wizard-include-shovelware');
-        if (!checkbox) return;
-        this.includeShovelware = checkbox.checked;
-        checkbox.addEventListener('change', () => {
-            this.includeShovelware = checkbox.checked;
-            this.resetQueue();
-        });
-    },
+        setQueue(type) {
+            if (!type || type === this.queueType) { return; }
+            var from = this.queueType;
+            this.queueType = type;
+            this.syncTabs();
+            if (PP.syncViewParam) { PP.syncViewParam(type, { default: 'base' }); }
+            // Settle rather than blank: the stage dims in place and the incoming queue slides in from the
+            // side its tab lives on. Tearing down to a spinner read as a full-page reload.
+            this.reset({ settle: true, slideFrom: from });
+        },
 
-    /** Build the wizard queue endpoint URL for the current state. */
-    _queueUrl() {
-        let url = `/api/v1/ratings/wizard/queue/?queue_type=${this.queueType}`
-            + `&limit=${this.limit}&offset=${this.offset}`;
-        if (this.includeShovelware) url += '&include_shovelware=1';
-        return url;
-    },
-
-    resetQueue() {
-        this.queue = [];
-        this.dlcGroups = [];
-        this.dlcFlatQueue = [];
-        this.hasMore = false;
-        this.currentIndex = 0;
-        this.completedCount = 0;
-        this.offset = 0;
-        this.totalCount = 0;
-        this.loadQueue();
-    },
-
-    // ------------------------------------------------------------------ //
-    //  Queue Management
-    // ------------------------------------------------------------------ //
-
-    async loadQueue() {
-        if (this.isLoading) return;
-        this.isLoading = true;
-
-        const loading = document.getElementById('wizard-loading');
-        const card = document.getElementById('wizard-card');
-        const empty = document.getElementById('wizard-empty');
-
-        if (loading) loading.classList.remove('hidden');
-        if (card) card.classList.add('hidden');
-        if (empty) empty.classList.add('hidden');
-
-        try {
-            const data = await PlatPursuit.API.get(this._queueUrl());
-
-            if (this.queueType === 'dlc') {
-                this.loadDlcQueue(data);
-            } else {
-                this.loadBaseQueue(data);
-            }
-        } catch (error) {
-            const errData = await error.response?.json().catch(() => null);
-            PlatPursuit.ToastManager.error(errData?.error || 'Failed to load game queue.');
-        } finally {
-            this.isLoading = false;
-            if (loading) loading.classList.add('hidden');
-        }
-    },
-
-    loadBaseQueue(data) {
-        if (this.offset === 0) {
-            this.queue = data.queue || [];
-            this.totalCount = data.count || 0;
-            this.currentIndex = 0;
-        } else {
-            this.queue = this.queue.concat(data.queue || []);
-        }
-
-        if (this.queue.length === 0) {
-            this.showEmpty();
-        } else {
-            this.showCurrentGame();
-        }
-    },
-
-    loadDlcQueue(data) {
-        this.hasMore = data.has_more || false;
-
-        if (this.offset === 0) {
-            this.dlcGroups = data.groups || [];
-            this.dlcFlatQueue = this.flattenDlcGroups(this.dlcGroups);
-            this.totalCount = data.total_items || 0;
-            this.currentIndex = 0;
-        } else {
-            const newGroups = data.groups || [];
-            this.dlcGroups = this.dlcGroups.concat(newGroups);
-            this.dlcFlatQueue = this.dlcFlatQueue.concat(this.flattenDlcGroups(newGroups));
-        }
-
-        // Use dlcFlatQueue as the working queue for DLC
-        this.queue = this.dlcFlatQueue;
-
-        if (this.queue.length === 0) {
-            this.showEmpty();
-        } else {
-            this.showCurrentGame();
-        }
-    },
-
-    flattenDlcGroups(groups) {
-        // Flatten grouped DLC response into a flat array of items,
-        // each enriched with parent concept info for rendering
-        const flat = [];
-        for (const group of groups) {
-            for (const item of group.items) {
-                flat.push({
-                    concept_id: group.concept_id,
-                    unified_title: group.unified_title,
-                    concept_icon_url: group.concept_icon_url,
-                    slug: group.slug,
-                    is_shovelware: !!group.is_shovelware,
-                    trophy_group_id: item.trophy_group_id,
-                    trophy_group_name: item.trophy_group_name,
-                    has_rating: item.has_rating,
-                    is_dlc: true,
-                    existing_rating: item.existing_rating || null,
-                });
-            }
-        }
-        return flat;
-    },
-
-    showCurrentGame() {
-        const card = document.getElementById('wizard-card');
-        const empty = document.getElementById('wizard-empty');
-        const loading = document.getElementById('wizard-loading');
-
-        if (loading) loading.classList.add('hidden');
-
-        if (this.currentIndex >= this.queue.length) {
-            // Check if there are more pages to fetch
-            const moreAvailable = this.queueType === 'dlc'
-                ? this.hasMore
-                : this.offset + this.limit < this.totalCount;
-
-            if (moreAvailable) {
-                this.offset += this.limit;
-                this.loadQueue();
-                return;
-            }
-            this.showEmpty();
-            return;
-        }
-
-        if (empty) empty.classList.add('hidden');
-        if (card) card.classList.remove('hidden');
-
-        const game = this.queue[this.currentIndex];
-
-        // Game header
-        const img = document.getElementById('wizard-game-img');
-        if (img) {
-            img.src = game.concept_icon_url || '';
-            img.alt = game.unified_title || '';
-        }
-
-        const title = document.getElementById('wizard-game-title');
-        if (title) title.textContent = game.unified_title || '';
-
-        const groupName = document.getElementById('wizard-group-name');
-        const dlcBadge = document.getElementById('wizard-dlc-badge');
-        const isDlc = !!game.is_dlc;
-        if (groupName) {
-            if (isDlc || game.trophy_group_id !== 'default') {
-                groupName.textContent = `▸ ${game.trophy_group_name || ''}`;
-                groupName.classList.remove('hidden');
-                // DLC group names get stronger styling
-                groupName.classList.toggle('text-secondary', isDlc);
-                groupName.classList.toggle('font-semibold', isDlc);
-                groupName.classList.toggle('text-base-content/50', !isDlc);
-            } else {
-                groupName.classList.add('hidden');
-            }
-        }
-        if (dlcBadge) {
-            dlcBadge.classList.toggle('hidden', !isDlc);
-        }
-
-        const shovelwareBadge = document.getElementById('wizard-shovelware-badge');
-        if (shovelwareBadge) {
-            shovelwareBadge.classList.toggle('hidden', !game.is_shovelware);
-        }
-
-        // Dynamic hours label
-        var hoursLabel = document.getElementById('wizard-hours-label');
-        if (hoursLabel) hoursLabel.textContent = game.hours_label || 'Hours to Platinum';
-
-        // Status badge
-        const ratingBadge = document.getElementById('wizard-has-rating');
-        if (ratingBadge) ratingBadge.classList.toggle('hidden', !game.has_rating);
-
-        // Reset the rating form and trophy section, then pre-fill if existing
-        this.resetRatingForm();
-        this.updateTrophyPanel();
-
-        // Pre-fill rating sliders if user has an existing rating
-        if (game.existing_rating) {
-            this.prefillRatingForm(game.existing_rating);
-        }
-
-        // Update rating section heading
-        const ratingHeading = document.querySelector('#wizard-rating-section h3');
-        if (ratingHeading) {
-            const starSvg = ratingHeading.querySelector('svg').outerHTML;
-            const rateTarget = game.is_dlc ? 'This DLC' : 'This Game';
-            ratingHeading.innerHTML = `${starSvg} ${game.has_rating ? 'Update Your Rating' : `Rate ${rateTarget}`}`;
-        }
-
-        // Show the rating section
-        const ratingSection = document.getElementById('wizard-rating-section');
-        if (ratingSection) ratingSection.classList.remove('hidden');
-
-        // Populate stats bar
-        this.populateStats(game);
-
-        this.updateProgress();
-        this.updateSubmitButton();
-
-        // Progress section
-        const progressSection = document.getElementById('wizard-progress-section');
-        if (progressSection) progressSection.classList.remove('hidden');
-
-        const badge = document.getElementById('wizard-progress-badge');
-        if (badge) badge.classList.remove('hidden');
-    },
-
-    showEmpty() {
-        const card = document.getElementById('wizard-card');
-        const empty = document.getElementById('wizard-empty');
-        const loading = document.getElementById('wizard-loading');
-        const progressSection = document.getElementById('wizard-progress-section');
-
-        if (card) card.classList.add('hidden');
-        if (loading) loading.classList.add('hidden');
-        if (empty) empty.classList.remove('hidden');
-        if (progressSection) progressSection.classList.add('hidden');
-    },
-
-    advance() {
-        this.completedCount++;
-        this.currentIndex++;
-
-        // Pre-fetch next batch when running low
-        const shouldPrefetch = this.queueType === 'dlc'
-            ? this.hasMore
-            : this.offset + this.limit < this.totalCount;
-
-        if (
-            this.currentIndex >= this.queue.length - 5
-            && shouldPrefetch
-            && !this.isLoading
-        ) {
-            this.offset += this.limit;
-            this.prefetch();
-        }
-
-        this.showCurrentGame();
-    },
-
-    async prefetch() {
-        try {
-            const data = await PlatPursuit.API.get(this._queueUrl());
-
-            if (this.queueType === 'dlc') {
-                this.hasMore = data.has_more || false;
-                const newGroups = data.groups || [];
-                this.dlcGroups = this.dlcGroups.concat(newGroups);
-                const newFlat = this.flattenDlcGroups(newGroups);
-                this.dlcFlatQueue = this.dlcFlatQueue.concat(newFlat);
-                this.queue = this.dlcFlatQueue;
-            } else {
-                this.queue = this.queue.concat(data.queue || []);
-            }
-        } catch {
-            // Silently fail on prefetch, main load will catch errors
-        }
-    },
-
-    // ------------------------------------------------------------------ //
-    //  Rating Form
-    // ------------------------------------------------------------------ //
-
-    resetRatingForm() {
-        const form = document.getElementById('wizard-rating-form');
-        if (!form) return;
-        form.querySelector('[name="difficulty"]').value = 5;
-        form.querySelector('[name="grindiness"]').value = 5;
-        form.querySelector('[name="hours_to_platinum"]').value = '';
-        form.querySelector('[name="fun_ranking"]').value = 5;
-        form.querySelector('[name="overall_rating"]').value = 3;
-        this.updateHoursChecklist();
-    },
-
-    prefillRatingForm(rating) {
-        const form = document.getElementById('wizard-rating-form');
-        if (!form || !rating) return;
-        form.querySelector('[name="difficulty"]').value = rating.difficulty;
-        form.querySelector('[name="grindiness"]').value = rating.grindiness;
-        form.querySelector('[name="hours_to_platinum"]').value = rating.hours_to_platinum;
-        form.querySelector('[name="fun_ranking"]').value = rating.fun_ranking;
-        form.querySelector('[name="overall_rating"]').value = rating.overall_rating;
-        this.updateHoursChecklist();
-    },
-
-    populateStats(game) {
-        const bar = document.getElementById('wizard-stats-bar');
-        if (!bar) return;
-
-        const stats = game.stats;
-        const hasAnyStats = stats || game.platinum_date;
-
-        bar.classList.toggle('hidden', !hasAnyStats);
-        if (!hasAnyStats) return;
-
-        // Platinum date
-        const platEl = document.getElementById('wizard-stat-plat');
-        const platText = document.getElementById('wizard-stat-plat-text');
-        if (platEl && platText) {
-            if (game.platinum_date) {
-                const d = new Date(game.platinum_date);
-                platText.textContent = `Platted ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
-                platEl.classList.remove('hidden');
-            } else {
-                platEl.classList.add('hidden');
-            }
-        }
-
-        // Trophies
-        const trophiesEl = document.getElementById('wizard-stat-trophies');
-        const trophiesText = document.getElementById('wizard-stat-trophies-text');
-        if (trophiesEl && trophiesText && stats) {
-            trophiesText.textContent = `${stats.earned_trophies} / ${stats.total_trophies} trophies`;
-            trophiesEl.classList.remove('hidden');
-        } else if (trophiesEl) {
-            trophiesEl.classList.add('hidden');
-        }
-
-        // Progress
-        const progressEl = document.getElementById('wizard-stat-progress');
-        const progressText = document.getElementById('wizard-stat-progress-text');
-        if (progressEl && progressText && stats) {
-            progressText.textContent = `${stats.progress}% complete`;
-            progressEl.classList.remove('hidden');
-        } else if (progressEl) {
-            progressEl.classList.add('hidden');
-        }
-
-        // Playtime
-        const playtimeEl = document.getElementById('wizard-stat-playtime');
-        const playtimeText = document.getElementById('wizard-stat-playtime-text');
-        if (playtimeEl && playtimeText && stats && stats.play_hours !== null) {
-            playtimeText.textContent = `${stats.play_hours}h played`;
-            playtimeEl.classList.remove('hidden');
-        } else if (playtimeEl) {
-            playtimeEl.classList.add('hidden');
-        }
-    },
-
-    initRatingValidation() {
-        const form = document.getElementById('wizard-rating-form');
-        if (!form) return;
-
-        const hoursInput = form.querySelector('[name="hours_to_platinum"]');
-        if (hoursInput) {
-            hoursInput.addEventListener('input', () => {
-                this.updateHoursChecklist();
-                this.updateSubmitButton();
+        syncTabs() {
+            var self = this;
+            this.tabs().forEach(function (tab) {
+                var on = tab.dataset.queue === self.queueType;
+                tab.classList.toggle('is-active', on);
+                tab.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) {
+                    var stage = el('rmg-stage');
+                    if (stage) { stage.setAttribute('aria-labelledby', tab.id); }
+                }
             });
-        }
-    },
+            if (this.tablist) { this.tablist.syncTabindex(); }
+        },
 
-    updateHoursChecklist() {
-        const el = document.getElementById('wizard-req-hours');
-        if (!el) return;
+        wireShovelware() {
+            var self = this;
+            var box = el('rmg-shovelware');
+            if (!box) { return; }
+            this.includeShovelware = box.checked;
+            box.addEventListener('change', function () {
+                self.includeShovelware = box.checked;
+                // Same settle as a queue switch -- it re-queries the same queue, so there is no direction
+                // to slide from, just the dim.
+                self.reset({ settle: true });
+            });
+        },
 
-        const form = document.getElementById('wizard-rating-form');
-        const hours = parseInt(form?.querySelector('[name="hours_to_platinum"]')?.value) || 0;
+        reset(opts) {
+            this.queue = [];
+            this.index = 0;
+            this.done = 0;
+            this.offset = 0;
+            this.hasMore = false;
+            this.load(opts);
+        },
 
-        const x = el.querySelector('.wizard-req-icon-x');
-        const check = el.querySelector('.wizard-req-icon-check');
-        if (hours > 0) {
-            if (x) x.classList.add('hidden');
-            if (check) check.classList.remove('hidden');
-        } else {
-            if (x) x.classList.remove('hidden');
-            if (check) check.classList.add('hidden');
-        }
-    },
+        // ---------------------------------------------------------------- //
+        //  Fetching
+        // ---------------------------------------------------------------- //
 
-    getRatingPayload() {
-        const form = document.getElementById('wizard-rating-form');
-        if (!form) return null;
-        const fd = new FormData(form);
-        return {
-            difficulty: parseInt(fd.get('difficulty')),
-            grindiness: parseInt(fd.get('grindiness')),
-            hours_to_platinum: parseInt(fd.get('hours_to_platinum')) || 0,
-            fun_ranking: parseInt(fd.get('fun_ranking')),
-            overall_rating: parseFloat(fd.get('overall_rating')),
-        };
-    },
+        url() {
+            var u = '/api/v1/ratings/wizard/queue/?queue_type=' + this.queueType
+                + '&limit=' + PAGE + '&offset=' + this.offset;
+            if (this.includeShovelware) { u += '&include_shovelware=1'; }
+            return u;
+        },
 
-    // ------------------------------------------------------------------ //
-    //  Trophy Panel (always visible on desktop, collapsible on tablet)
-    // ------------------------------------------------------------------ //
+        /** DLC comes back grouped by parent concept; flatten it, carrying the parent's identity down.
+         *
+         * The ITEM is spread and the parent's fields laid over it, rather than the item's fields being
+         * re-listed. Re-listing silently dropped everything added to a queue item afterwards, and it had
+         * already cost two: the prefill payload for a re-served DLC rating (so the form would have opened
+         * on 5/5/5/3.0 and written those over a real rating on save -- the exact hazard the base queue's
+         * prefill exists to prevent), and the per-set recommendation wording.
+         */
+        flatten(groups) {
+            var flat = [];
+            (groups || []).forEach(function (g) {
+                (g.items || []).forEach(function (item) {
+                    flat.push(Object.assign({}, item, {
+                        concept_id: g.concept_id,
+                        unified_title: g.unified_title,
+                        concept_icon_url: g.concept_icon_url,
+                        slug: g.slug,
+                        is_shovelware: !!g.is_shovelware,
+                        is_dlc: true,
+                    }));
+                });
+            });
+            return flat;
+        },
 
-    isDesktop() {
-        return window.innerWidth >= 1024;
-    },
-
-    initTrophyToggle() {
-        const toggle = document.getElementById('wizard-trophy-toggle');
-        const content = document.getElementById('wizard-trophy-content');
-        const chevron = document.getElementById('wizard-trophy-chevron');
-        if (!toggle || !content) return;
-
-        // On tablet: bind click to toggle collapse + lazy-load
-        // On desktop: toggle is non-interactive (CSS handles visibility)
-        toggle.addEventListener('click', () => {
-            if (this.isDesktop()) return;
-
-            const isHidden = content.classList.contains('hidden');
-            content.classList.toggle('hidden');
-            if (chevron) chevron.classList.toggle('rotate-180');
-
-            // Lazy-load trophies on first expand
-            if (isHidden && !content.dataset.loaded) {
-                this.loadTrophies();
+        take(data) {
+            // Library totals ride on every page of the response, but only the first page of a fresh queue
+            // may set them: a later page must not clobber the baseline the meter is counting up from.
+            if (this.offset === 0) {
+                this.ratableTotal = data.ratable_total || 0;
+                this.ratedTotal = data.rated_total || 0;
             }
-        });
-    },
-
-    async loadTrophies() {
-        const game = this.queue[this.currentIndex];
-        if (!game) return;
-
-        const content = document.getElementById('wizard-trophy-content');
-        if (!content) return;
-
-        content.innerHTML = '<div class="flex justify-center py-3"><span class="loading loading-dots loading-sm text-primary"></span></div>';
-
-        try {
-            const data = await PlatPursuit.API.get(
-                `/api/v1/ratings/${game.concept_id}/group/${game.trophy_group_id}/trophies/`
-            );
-
-            content.innerHTML = PlatPursuit.TrophyListRenderer.buildList(data.trophies);
-            content.dataset.loaded = 'true';
-
-            const countBadge = document.getElementById('wizard-trophy-count');
-            if (countBadge) countBadge.textContent = data.count;
-        } catch (error) {
-            const errData = await error.response?.json().catch(() => null);
-            content.innerHTML = `<p class="text-sm text-error italic py-2 pr-1">${PlatPursuit.HTMLUtils.escape(errData?.error || 'Failed to load trophies.')}</p>`;
-        }
-    },
-
-    updateTrophyPanel() {
-        const content = document.getElementById('wizard-trophy-content');
-        const chevron = document.getElementById('wizard-trophy-chevron');
-        const countBadge = document.getElementById('wizard-trophy-count');
-
-        if (countBadge) countBadge.textContent = '';
-
-        if (content) {
-            content.innerHTML = '';
-            delete content.dataset.loaded;
-
-            if (this.isDesktop()) {
-                // Desktop: always visible, load immediately
-                this.loadTrophies();
+            if (this.queueType === 'dlc') {
+                this.hasMore = !!data.has_more;
+                var flat = this.flatten(data.groups);
+                this.queue = this.offset === 0 ? flat : this.queue.concat(flat);
             } else {
-                // Tablet: collapse and wait for user toggle
-                content.classList.add('hidden');
-                if (chevron) chevron.classList.remove('rotate-180');
+                var page = data.queue || [];
+                this.queue = this.offset === 0 ? page : this.queue.concat(page);
+                this.hasMore = !!data.has_more;
             }
-        }
-    },
+        },
 
-    updateSubmitButton() {
-        const ratingBtn = document.getElementById('wizard-submit-btn');
-        if (!ratingBtn) return;
+        async load(opts) {
+            if (this.loading) { return; }
+            var o = opts || {};
+            this.loading = true;
+            var stage = el('rmg-stage');
 
-        const game = this.queue[this.currentIndex];
-        if (!game) return;
-
-        const form = document.getElementById('wizard-rating-form');
-        const hours = parseInt(form?.querySelector('[name="hours_to_platinum"]')?.value) || 0;
-        const hoursValid = hours > 0;
-
-        const checkSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
-        const rateLabel = game.has_rating ? 'Update Rating' : 'Submit Rating';
-
-        ratingBtn.innerHTML = `${checkSvg} ${rateLabel}`;
-        ratingBtn.disabled = !hoursValid;
-    },
-
-    // ------------------------------------------------------------------ //
-    //  Action Buttons
-    // ------------------------------------------------------------------ //
-
-    initActionButtons() {
-        const skipBtn = document.getElementById('wizard-skip-btn');
-        const submitBtn = document.getElementById('wizard-submit-btn');
-
-        if (skipBtn) skipBtn.addEventListener('click', () => this.skip());
-        if (submitBtn) submitBtn.addEventListener('click', () => this.submit());
-    },
-
-    skip() {
-        this.advance();
-    },
-
-    submit() {
-        const game = this.queue[this.currentIndex];
-        if (!game) return;
-
-        const doSubmit = async () => {
-            const submitBtn = document.getElementById('wizard-submit-btn');
-            if (submitBtn) submitBtn.disabled = true;
+            // The spinner is for the FIRST load, when there is nothing on screen yet. Every later fetch --
+            // switching queue, toggling shovelware -- dims what is already there instead, so the page never
+            // blanks out from under the hunter.
+            if (o.settle && stage) { stage.classList.add('is-swapping'); } else { this.show('loading'); }
 
             try {
-                const payload = this.getRatingPayload();
-                if (payload) {
-                    await PlatPursuit.API.post(
-                        `/api/v1/ratings/${game.concept_id}/group/${game.trophy_group_id}/rate/`,
-                        payload,
-                    );
+                this.take(await PP.API.get(this.url()));
+                if (this.queue.length === 0) { this.showDone(); } else { this.render(); }
+                // Directional: forward in the tab order enters from the right, backward from the left.
+                if (o.slideFrom && stage && PP.slideViewIn) {
+                    PP.slideViewIn(stage, o.slideFrom, this.queueType, ORDER);
                 }
-
-                const rateWord = game.has_rating ? 'updated' : 'rated';
-                PlatPursuit.ToastManager.success(`${game.unified_title} ${rateWord}!`);
-                this.advance();
             } catch (error) {
-                const errData = await error.response?.json().catch(() => null);
-                PlatPursuit.ToastManager.error(
-                    this._extractErrorMessage(errData, 'Failed to submit. Please try again.')
-                );
-                if (submitBtn) submitBtn.disabled = false;
+                var data = await error.response?.json().catch(function () { return null; });
+                var msg = data?.error || 'Could not load your games. Try again in a moment.';
+                PP.ToastManager.error(msg);
+                // A toast alone would leave the stage blank, with nothing to press. Say it where they are
+                // looking and give them the retry.
+                var line = el('rmg-fail-text');
+                if (line) { line.textContent = msg; }
+                this.show('fail');
+            } finally {
+                // In `finally`, not after the render: a settle-load that THROWS would otherwise leave the
+                // stage dimmed and pointer-events:none forever -- including the retry button inside it.
+                if (stage) { stage.classList.remove('is-swapping'); }
+                this.loading = false;
             }
-        };
+        },
 
-        doSubmit();
-    },
+        /** Top up the queue in the background, before the hunter reaches the end of it. */
+        async prefetch() {
+            if (this.loading) { return; }
+            this.loading = true;
+            try {
+                this.take(await PP.API.get(this.url()));
+            } catch {
+                // Silent: the queue still has games in it, and load() surfaces a failure that matters.
+            } finally {
+                this.loading = false;
+            }
+        },
 
-    // ------------------------------------------------------------------ //
-    //  Error Helpers
-    // ------------------------------------------------------------------ //
+        // ---------------------------------------------------------------- //
+        //  Stage
+        // ---------------------------------------------------------------- //
 
-    _extractErrorMessage(errData, fallback) {
-        if (!errData) return fallback;
-        if (errData.error) return errData.error;
-        // Form validation errors come as {errors: {field: [messages]}}
-        if (errData.errors && typeof errData.errors === 'object') {
-            const firstField = Object.values(errData.errors)[0];
-            if (Array.isArray(firstField) && firstField.length) return firstField[0];
-        }
-        return fallback;
-    },
+        /** Exactly one of loading / card / done / fail shows at a time. */
+        show(which) {
+            var map = { loading: 'rmg-loading', card: 'rmg-card', done: 'rmg-done', fail: 'rmg-fail' };
+            Object.keys(map).forEach(function (key) {
+                var node = el(map[key]);
+                if (node) { node.classList.toggle('hidden', key !== which); }
+            });
+            var prog = el('rmg-progress');
+            if (prog) { prog.classList.toggle('hidden', which !== 'card'); }
+        },
 
-    // ------------------------------------------------------------------ //
-    //  Progress Tracking
-    // ------------------------------------------------------------------ //
+        current() { return this.queue[this.index] || null; },
 
-    updateProgress() {
-        const current = this.completedCount + 1;
-        const total = this.totalCount;
+        /**
+         * The opening beat, played once when the first thing the hunter can actually look at arrives.
+         *
+         * It can't live in the markup: the card comes from a fetch, so a CSS animation on it would have
+         * run and finished while it was still `hidden`. Hence adding the shared `.pp-head-cascade` at the
+         * moment of first paint -- same primitive every rebuilt page's header uses, so the page opens on
+         * one curve from the header down through the meter to the card.
+         *
+         * One-shot on purpose: from here on, arrivals are the deal motion's job, and re-running this per
+         * game would be motion for its own sake.
+         */
+        playEntrance(node) {
+            if (this.entered || !node) { return; }
+            this.entered = true;
+            var prog = el('rmg-progress');
+            if (prog && !prog.classList.contains('hidden')) { prog.classList.add('rmg__rise'); }
+            node.classList.add('pp-head-cascade');
+        },
 
-        const textEl = document.getElementById('wizard-progress-text');
-        const pctEl = document.getElementById('wizard-progress-pct');
-        const bar = document.getElementById('wizard-progress-bar');
-        const currentNum = document.getElementById('wizard-current-num');
-        const totalNum = document.getElementById('wizard-total-num');
+        render() {
+            var game = this.current();
+            if (!game) { this.showDone(); return; }
 
-        const label = this.queueType === 'dlc' ? 'DLC' : 'Game';
-        if (textEl) textEl.textContent = `${label} ${current} of ${total}`;
-        if (currentNum) currentNum.textContent = current;
-        if (totalNum) totalNum.textContent = total;
+            this.show('card');
 
-        const pct = total > 0 ? Math.round((this.completedCount / total) * 100) : 0;
-        if (pctEl) pctEl.textContent = `${pct}%`;
-        if (bar) {
-            bar.value = pct;
-            bar.max = 100;
-        }
-    },
-};
+            var cover = el('rmg-cover');
+            var img = el('rmg-cover-img');
+            var art = game.concept_icon_url || '';
+            if (cover && img) {
+                cover.classList.toggle('rmg__cover--none', !art);
+                img.src = art;
+                img.alt = art ? game.unified_title || '' : '';
+            }
+
+            var title = el('rmg-title');
+            if (title) { title.textContent = game.unified_title || ''; }
+
+            // The trophy group only earns a line when it isn't just "the base game".
+            var isDlc = !!game.is_dlc;
+            var group = el('rmg-group');
+            var groupName = el('rmg-group-name');
+            var named = isDlc || game.trophy_group_id !== 'default';
+            if (group) { group.classList.toggle('hidden', !named); }
+            if (groupName && named) { groupName.textContent = game.trophy_group_name || ''; }
+
+            var dlcFlag = el('rmg-flag-dlc');
+            if (dlcFlag) { dlcFlag.classList.toggle('hidden', !isDlc); }
+            var shovelFlag = el('rmg-flag-shovel');
+            if (shovelFlag) { shovelFlag.classList.toggle('hidden', !game.is_shovelware); }
+
+            var formTitle = el('rmg-form-title');
+            if (formTitle) { formTitle.textContent = isDlc ? 'Rate this DLC' : 'Rate this game'; }
+
+            this.renderFacts(game);
+            this.pointFormAt(game);
+            this.loadTrophies();
+            this.renderProgress();
+
+            // Straight into the one field we need, so a hunter working through a long queue types rather
+            // than clicks. Pointer-based only: on a touch device this would throw the keyboard up over the
+            // card they are meant to be looking at.
+            if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                var hours = document.querySelector('#rmg-form [name="hours_to_platinum"]');
+                if (hours) { hours.focus({ preventScroll: true }); }
+            }
+
+            this.playEntrance(el('rmg-card'));
+        },
+
+        /**
+         * How long ago, in the units a memory actually works in. TimeFormatter.relative() drops to a plain
+         * date past 30 days, and "3 years ago" is the phrase that jogs a memory where "12/04/2023" doesn't.
+         */
+        since(date) {
+            var days = Math.floor((Date.now() - date.getTime()) / 86400000);
+            if (days < 1) { return 'today'; }
+            if (days < 30) { return days + (days === 1 ? ' day ago' : ' days ago'); }
+            var months = Math.round(days / 30.44);
+            if (months < 18) { return months + (months === 1 ? ' month ago' : ' months ago'); }
+            var years = Math.round(days / 365.25);
+            return years + (years === 1 ? ' year ago' : ' years ago');
+        },
+
+        renderFacts(game) {
+            var ledger = el('rmg-facts');
+            if (!ledger) { return; }
+            var stats = game.stats;
+            var any = Boolean(stats || game.platinum_date);
+            ledger.classList.toggle('hidden', !any);
+            if (!any) { return; }
+
+            var set = function (id, on, value, sub) {
+                var cell = el('rmg-fact-' + id);
+                var slot = el('rmg-fact-' + id + '-value');
+                if (!cell || !slot) { return; }
+                cell.classList.toggle('hidden', !on);
+                if (!on) { return; }
+                slot.textContent = value;
+                var subEl = el('rmg-fact-' + id + '-sub');
+                if (subEl) { subEl.textContent = sub || ''; }
+            };
+
+            // When you finished it leads the ledger: of everything here it is the strongest memory anchor.
+            var when = '', ago = '';
+            if (game.platinum_date) {
+                var d = new Date(game.platinum_date);
+                when = d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+                ago = this.since(d);
+            }
+            set('finished', Boolean(when), when, ago);
+            set('trophies', Boolean(stats), stats ? stats.earned_trophies + ' / ' + stats.total_trophies : '');
+            set('progress', Boolean(stats), stats ? stats.progress + '%' : '');
+            set('playtime', Boolean(stats && stats.play_hours), stats ? stats.play_hours + 'h' : '');
+        },
+
+        /**
+         * The meter describes the LIBRARY, not the session.
+         *
+         * It used to be denominated in the queue, which holds only what is still unrated -- so rating a
+         * game shrank the denominator instead of advancing the numerator ("Game 1 of 70" -> "Game 1 of
+         * 69" on the next visit), and the bar could never fill by definition: you are always at the start
+         * of what is left. Denominated in every ratable game, the numerator is everything rated so far
+         * plus the one on screen, and the bar reflects real progress through the library across sessions.
+         */
+        renderProgress() {
+            var total = this.ratableTotal;
+            var reviewed = this.ratedTotal + this.done;
+            // "+ 1" for the game in front of you -- but only while there IS one, or a finished queue reads
+            // as one past the end.
+            var current = Math.min(reviewed + (this.current() ? 1 : 0), total);
+            var noun = this.queueType === 'dlc' ? 'DLC' : 'Game';
+            var text = el('rmg-progress-text');
+            if (text) { text.textContent = noun + ' ' + current + ' of ' + total; }
+
+            var pct = total > 0 ? Math.round((reviewed / total) * 100) : 0;
+            var pctEl = el('rmg-progress-pct');
+            if (pctEl) { pctEl.textContent = pct + '%'; }
+            // Horizon's own client API: sets the fill AND recomputes the cool->warm band, so the meter
+            // warms as the queue empties instead of being one flat colour the whole way down.
+            if (PP.Horizon) { PP.Horizon.update(el('rmg-horizon'), pct); }
+        },
+
+        showDone() {
+            this.show('done');
+            var dlcBtn = el('rmg-done-dlc');
+            // Only offer the other queue when you're not already in it.
+            if (dlcBtn) { dlcBtn.classList.toggle('hidden', this.queueType === 'dlc'); }
+
+            var title = el('rmg-done-title');
+            var copy = el('rmg-done-copy');
+            var nothing = this.done === 0;
+            var noun = this.queueType === 'dlc' ? 'DLC' : 'games';
+            if (title) { title.textContent = nothing ? 'Nothing waiting' : 'All caught up'; }
+            if (copy) {
+                copy.textContent = nothing
+                    ? 'There are no unrated ' + noun + ' in your library right now. Finish something and come back.'
+                    : "That's every " + noun + ' you had left to rate. Nice work, hunter.';
+            }
+            // A hunter with nothing waiting never sees a card, so this is their opening beat instead.
+            this.playEntrance(el('rmg-done'));
+        },
+
+        // ---------------------------------------------------------------- //
+        //  The form (behaviour lives in RatingFields)
+        // ---------------------------------------------------------------- //
+
+        wireForm() {
+            var self = this;
+            var form = el('rmg-form');
+            var submit = el('rmg-submit');
+            if (!form || !PP.RatingFields) { return; }
+
+            this.fields = PP.RatingFields.attach(form, {
+                submitEl: submit,
+                submitLabel: 'Submit rating',
+                // The requirement line is STATE; refusal is FEEDBACK, and the two are different
+                // jobs. The button stays enabled always -- a disabled button swallows the press
+                // and reads as a broken page (his report: "left sitting there waiting for
+                // nothing"). A press with the gate unmet lands in onRefused below.
+                onChange: function (state) {
+                    var req = el('rmg-req');
+                    if (req) {
+                        req.classList.toggle('is-met', state.ready);
+                        // The urge is a moment, not a mode: any state change (typing hours, the
+                        // next game's prefill) clears it, so one refusal cannot pre-scold the
+                        // rest of a 70-game run -- the line is static chrome that survives the
+                        // card swap.
+                        req.classList.remove('is-urging');
+                    }
+                },
+                onRefused: function (msg, fieldName) {
+                    PP.ToastManager.show(msg, 'warning');
+                    var req = el('rmg-req');
+                    if (req) {
+                        req.classList.remove('is-urging');
+                        void req.offsetWidth;   // restart the pulse when refused twice running
+                        req.classList.add('is-urging');
+                    }
+                    var missing = form.querySelector('[name="' + fieldName + '"]');
+                    if (missing && missing.focus) { missing.focus(); }
+                },
+                // This host names the GAME in its toast ("Elden Ring rated!"), which is what makes a bulk
+                // run legible -- the card has already been replaced by the next one by the time you read
+                // it. Claiming it stops RatingFields adding a generic second toast.
+                announcesSave: true,
+                onSaved: function () {
+                    var game = self.current();
+                    PP.ToastManager.success((game && game.unified_title ? game.unified_title : 'Rating') + ' rated!');
+                    self.tickWaiting();
+                    self.advance();
+                },
+                onError: function (msg) { PP.ToastManager.error(msg); },
+            });
+        },
+
+        /**
+         * Tick the header's waiting-count for the queue just rated in. The counters are the page's whole
+         * subject -- how much is left -- and one that only moves on refresh reads as broken on a surface
+         * whose entire purpose is emptying it.
+         *
+         * Ticks old -> new through the shared countUp rather than snapping, so the number reads as
+         * something that changed rather than something that was replaced.
+         */
+        tickWaiting() {
+            var node = el(this.queueType === 'dlc' ? 'rmg-waiting-dlc' : 'rmg-waiting-base');
+            if (!node) { return; }
+            var from = parseInt(node.dataset.countup, 10);
+            if (isNaN(from) || from <= 0) { return; }
+            var to = from - 1;
+            node.dataset.countup = String(to);
+            if (PP.countUp) { PP.countUp(node, 450, { from: from }); } else { node.textContent = String(to); }
+        },
+
+        /** Re-point the one attached form at the game now on screen, and clear the last one's answers. */
+        pointFormAt(game) {
+            if (!this.fields) { return; }
+            this.fields.setTarget(game.concept_id, game.trophy_group_id);
+            this.fields.label({
+                hoursLabel: game.hours_label || 'Hours to Platinum',
+                // Per-game wording for the middle recommendation and its question: a DLC pack, or a game
+                // that never had a platinum, has no platinum to call rough.
+                recLabel: game.rec_label,
+                recLegend: game.rec_legend,
+                // Their tracked playtime for THIS game, where we have it -- the number they're being asked
+                // to estimate is one we can often help with.
+                playtimeHint: game.stats && game.stats.play_hours
+                    ? 'Playtime: about ' + game.stats.play_hours + ' hour' + (game.stats.play_hours === 1 ? '' : 's') + '.'
+                    : '',
+            });
+            // A re-served rating MUST arrive with its own scores. The queue serves two kinds of card now:
+            // never-rated games, and ratings written before the recommendation existed. For the second
+            // kind the form's defaults (5 / 5 / 5 / 3.0) are not a neutral starting point -- submitting
+            // them writes those numbers over a considered rating, silently. `existing` is absent on a
+            // fresh card, and prefill() with nothing falls back to the defaults, which is correct there.
+            this.fields.prefill(game.existing, game.existing_blurb);
+            this.showPriorRating(game);
+        },
+
+        /**
+         * "You rated this in Sep 2024" -- shown only on a re-served card.
+         *
+         * Without it, a hunter who has rated for years opens the wizard and is handed back a game they
+         * remember scoring, with no explanation. That reads as a bug, and the fix is one sentence rather
+         * than a second queue: the card says why it is here and what is missing.
+         */
+        showPriorRating(game) {
+            var note = el('rmg-prior');
+            if (!note) { return; }
+            if (!game.rated_at) { note.classList.add('hidden'); return; }
+            var when = new Date(game.rated_at);
+            note.textContent = 'You rated this ' + this.since(when) + '. Add your recommendation to finish it.';
+            note.classList.remove('hidden');
+        },
+
+        // ---------------------------------------------------------------- //
+        //  Trophy reference panel
+        // ---------------------------------------------------------------- //
+
+        isDesktop() { return window.innerWidth >= 1024; },
+
+        wireTrophyPanel() {
+            var self = this;
+            var toggle = el('rmg-trophy-toggle');
+            var body = el('rmg-trophy-body');
+            if (!toggle || !body) { return; }
+
+            toggle.addEventListener('click', function () {
+                // Desktop keeps the panel open (CSS pins it visible); the header is inert there.
+                if (self.isDesktop()) { return; }
+                var opening = body.classList.contains('hidden');
+                body.classList.toggle('hidden', !opening);
+                toggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+                if (opening && !body.dataset.loaded) { self.loadTrophies(true); }
+            });
+        },
+
+        /**
+         * Fetch the current game's trophies. On desktop the panel is open, so this runs on every advance;
+         * on smaller screens it waits for the hunter to open it (`force`), because the list is a reference
+         * they may never look at and it is a request per game.
+         */
+        async loadTrophies(force) {
+            var game = this.current();
+            var body = el('rmg-trophy-body');
+            var content = el('rmg-trophy-content');
+            var count = el('rmg-trophy-count');
+            if (!game || !content || !body) { return; }
+
+            if (!force && !this.isDesktop()) {
+                // Collapsed: clear the last game's list so opening it can't show the wrong trophies.
+                content.innerHTML = '';
+                delete body.dataset.loaded;
+                body.classList.add('hidden');
+                var toggle = el('rmg-trophy-toggle');
+                if (toggle) { toggle.setAttribute('aria-expanded', 'false'); }
+                if (count) { count.textContent = ''; }
+                return;
+            }
+
+            var token = (this._troToken = (this._troToken || 0) + 1);
+            content.innerHTML = '<div class="pp-gbrowse__loading"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>';
+            if (count) { count.textContent = ''; }
+
+            try {
+                var data = await PP.API.get('/api/v1/ratings/' + game.concept_id + '/group/' + game.trophy_group_id + '/trophies/');
+                // A fast skip can land a stale response after the next game's request went out. Drop it --
+                // otherwise the panel shows the previous game's trophy list under the current game's name.
+                if (token !== this._troToken) { return; }
+                content.innerHTML = PP.TrophyListRenderer.buildList(data.trophies);
+                body.dataset.loaded = 'true';
+                if (count) { count.textContent = data.count; }
+            } catch (error) {
+                if (token !== this._troToken) { return; }
+                var err = await error.response?.json().catch(function () { return null; });
+                content.innerHTML = '<p class="pp-trolist__err">' + PP.HTMLUtils.escape(err?.error || 'Could not load the trophy list.') + '</p>';
+            }
+        },
+
+        // ---------------------------------------------------------------- //
+        //  Advancing
+        // ---------------------------------------------------------------- //
+
+        wireActions() {
+            var self = this;
+            var skip = el('rmg-skip');
+            var submit = el('rmg-submit');
+            var dlc = el('rmg-done-dlc');
+            var retry = el('rmg-retry');
+
+            // Skipping is not progress: it does not move the meter, and the game is still waiting next time.
+            if (skip) { skip.addEventListener('click', function () { self.advance(false); }); }
+            if (submit) { submit.addEventListener('click', function () { if (self.fields) { self.fields.submit(); } }); }
+            if (dlc) { dlc.addEventListener('click', function () { self.setQueue('dlc'); }); }
+            // Retries at the SAME offset -- a mid-queue page that failed is the page we still want.
+            if (retry) { retry.addEventListener('click', function () { self.load(); }); }
+        },
+
+        /**
+         * Keyboard shortcuts. This is a bulk flow -- the same four movements, seventy times -- so it earns
+         * them: Enter submits, S skips.
+         *
+         * Bound to the document, so `boot(first)` guards it: onPageReady re-runs the element wiring on an
+         * HTMX history restore, and a document listener would stack up one per restore.
+         */
+        wireKeys() {
+            var self = this;
+            document.addEventListener('keydown', function (e) {
+                var card = el('rmg-card');
+                if (!card || card.classList.contains('hidden')) { return; }
+                if (e.ctrlKey || e.metaKey || e.altKey) { return; }
+
+                var target = e.target;
+                var tag = (target && target.tagName) || '';
+                // "Typing" means a field where a letter is CONTENT. Treating every <input> as typing broke
+                // the S shortcut outright: this page focuses the hours field on each game's arrival, so the
+                // hunter is always inside an <input> when the card lands, and S did nothing at all while
+                // the hint sat there promising it would. A number field and a slider swallow the letter
+                // without showing it; a <select> genuinely type-aheads on it, so it counts.
+                var typing = tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable)
+                    || (tag === 'INPUT' && TEXT_ENTRY.indexOf(String(target.type || '').toLowerCase()) !== -1);
+
+                if (e.key === 'Enter') {
+                    // Enter is a submit from anywhere EXCEPT the quick take, where it is a newline the
+                    // hunter is deliberately typing. With the gate unmet it still fires -- and is
+                    // refused out loud (toast + focus), never swallowed.
+                    if (tag === 'TEXTAREA') { return; }
+                    var submit = el('rmg-submit');
+                    if (submit) { e.preventDefault(); submit.click(); }
+                    return;
+                }
+                // A bare S -- never while they are typing, or skipping would eat a letter of their take.
+                if ((e.key === 's' || e.key === 'S') && !typing) {
+                    e.preventDefault();
+                    self.advance(false);
+                }
+            });
+        },
+
+        advance(counts) {
+            if (counts !== false) { this.done++; }
+            this.index++;
+
+            if (this.hasMore && this.queue.length - this.index <= PREFETCH_AT) {
+                this.offset += PAGE;
+                this.prefetch();
+            }
+
+            if (this.index >= this.queue.length) {
+                // Ran out mid-page: if more is coming, wait for it rather than declaring the queue finished.
+                if (this.hasMore || this.loading) { this.show('loading'); this.waitForMore(); return; }
+                this.showDone();
+                return;
+            }
+            this.deal();
+        },
+
+        /** Wait out the in-flight prefetch, then continue. */
+        waitForMore() {
+            var self = this;
+            if (this.loading) { setTimeout(function () { self.waitForMore(); }, 120); return; }
+            if (this.index < this.queue.length) { this.deal(); return; }
+            // Still short with more to come: the prefetch failed (it fails silently by design). Ask again at
+            // the same offset, this time through load(), which reports it. Otherwise a dropped request would
+            // read as "all caught up" and hide games the hunter still has waiting.
+            if (this.hasMore) { this.load(); return; }
+            this.showDone();
+        },
+
+        /**
+         * The one signature moment on this page: the game just dealt with slides out to the left, the next
+         * one arrives from the right. The stage holds the OUTGOING height across the swap so the page
+         * doesn't lurch when a 12-trophy game follows a 60-trophy one, and the whole thing collapses to a
+         * plain swap under reduced motion.
+         */
+        deal() {
+            var self = this;
+            var stage = el('rmg-stage');
+            var card = el('rmg-card');
+            var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!stage || !card || still) { this.render(); return; }
+
+            stage.style.minHeight = stage.offsetHeight + 'px';
+            stage.classList.add('is-dealing');
+            setTimeout(function () {
+                stage.classList.remove('is-dealing');
+                self.render();
+                card.classList.remove('pp-view-in-right');
+                void card.offsetWidth;              // restart the entrance on every deal
+                card.classList.add('pp-view-in-right');
+                // Released on the next frame, once the incoming card has laid out at its own height.
+                requestAnimationFrame(function () { stage.style.minHeight = ''; });
+            }, 180);                                 // matches rmgDealOut
+        },
+    };
+})();

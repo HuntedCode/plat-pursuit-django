@@ -1,0 +1,1655 @@
+/* ============================================================
+   Game Detail (rebuild) — hero + view switcher panels + trophies.
+   Tokens only (--pp-* / --disc-* / --color-trophy-*). Artwork-overlay
+   page: the hero carries a restrained blurred backdrop of the game art;
+   everything else sits on the deepened substrate.
+   ============================================================ */
+
+/* ---- View panels ---- */
+.gd-view[hidden] { display: none; }
+#browse-results { transition: opacity var(--pp-dur) var(--pp-ease); }
+#browse-results.is-swapping { opacity: 0.8; pointer-events: none; }
+
+/* Result count + in-flight indeterminate bar (a real loading affordance instead of just dimming). */
+.gd-listmeta { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.gd-listmeta__count { flex-shrink: 0; font-size: 0.82rem; font-weight: 600; color: var(--pp-text-mute); }
+.gd-listmeta__count .pp-tally { color: var(--pp-text); font-size: 0.95rem; font-weight: 800; margin-right: 1px; }
+.gd-loadbar { position: relative; flex: 1; height: 2px; border-radius: 999px; overflow: hidden; opacity: 0; transition: opacity 0.2s var(--pp-ease); }
+.gd-loadbar.is-active { opacity: 1; background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
+.gd-loadbar > span { position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 999px; background: linear-gradient(90deg, transparent, var(--pp-primary), transparent); }
+.gd-loadbar.is-active > span { animation: gdLoadSlide 1s var(--pp-ease) infinite; }
+@keyframes gdLoadSlide { from { left: -40%; } to { left: 100%; } }
+
+/* Sticky minibar (page-level; persists across all views). Per-view extras show only for the active view. */
+/* Defensive: the bar is position:fixed, so any control overflow would add page scroll width. Clip contains it. */
+.gd-minibar { overflow-x: clip; }
+/* Per-view elements (identity icon + per-view extras) show only when their tab is active; the natural display
+   is preserved for the active one. Each tab's icon carries data-mb-only, so the minibar icon matches the tab. */
+.gd-minibar:not([data-mb-active="trophies"]) [data-mb-only="trophies"] { display: none; }
+.gd-minibar:not([data-mb-active="lists"]) [data-mb-only="lists"] { display: none; }   /* the concept Game page's default view */
+.gd-minibar:not([data-mb-active="roadmap"]) [data-mb-only="roadmap"] { display: none; }
+.gd-minibar:not([data-mb-active="ratings"]) [data-mb-only="ratings"] { display: none; }
+.gd-minibar:not([data-mb-active="leaderboard"]) [data-mb-only="leaderboard"] { display: none; }
+.gd-minibar:not([data-mb-active="about"]) [data-mb-only="about"] { display: none; }
+/* The active board's title in the minibar: Ranks tab, desktop widths only (the mobile minibar is too tight
+   already). Filled by lbSyncMbTitle; the middot separates it from the game name. */
+.gd-lb__mbtitle { display: none; font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem; }
+.gd-lb__mbtitle::before { content: "\2022"; margin: 0 9px; color: var(--pp-text-mute); font-weight: 400; }
+@media (min-width: 1024px) { .gd-minibar[data-mb-active="leaderboard"] .gd-lb__mbtitle { display: inline-block; } }
+/* Mobile minibar is tight with the leaderboard's search + You + Filters, so drop the game title (the page
+   header already shows it) and the "You" word (the #N + chevron carry it). */
+@media (max-width: 767px) {
+    .gd-minibar[data-mb-active="leaderboard"] .pp-minibar__title { display: none; }
+    .gd-lb__mbrank-lbl { display: none; }
+    .gd-lb__mbrank { padding: 5px 10px; }
+}
+
+/* Minibar-compact variant of the rank/hunter search: shorter, sized to the 30px minibar control row. */
+.gd-lb__find--mb { flex: 0 1 11rem; min-width: 7rem; }
+.gd-lb__find--mb .gd-lb__findinput { padding: 5px 10px 5px 30px; background: var(--pp-bg-2); }
+.gd-lb__find--mb .gd-lb__findicon { left: 9px; width: 14px; height: 14px; }
+/* The minibar sits above the panel, so let the dropdown be a touch wider than the compact field. */
+.gd-lb__find--mb .gd-lb__suggest { min-width: 15rem; }
+/* Both minibar selects use the shared .pp-gallery__select look (matches Browse Games). The group-jump keeps
+   the compact minibar sizing but stays visible on mobile (unlike the sort, which hides < 768px). */
+.gd-minibar .pp-minibar__groupjump { height: 30px; font-size: 0.75rem; max-width: 150px; }
+/* The Game page's list switch sits INSIDE the flexed __id (beside the title), so it must be
+   allowed to shrink with it rather than shoving the controls off the bar at phone widths. */
+.gd-minibar .pp-minibar__listswitch { height: 30px; font-size: 0.75rem; max-width: 170px; min-width: 4.5rem; flex-shrink: 1; }
+
+/* ============================================================
+   Hero
+   ============================================================ */
+/* Clean substrate hero — no art backdrop (deliberate: cleaner, more premium). */
+/* Mobile: cover -> main (identity + progress) -> extras (screenshots + spine), in source order so the
+   title/progress follow the cover immediately. Desktop: cover + extras stack in the left column; main
+   spans the right. */
+.gd-hero__grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+@media (min-width: 1024px) {
+    .gd-hero__grid {
+        grid-template-columns: minmax(180px, 250px) 1fr;
+        grid-template-areas: "cover main" "extras main";
+        grid-template-rows: auto auto;
+        column-gap: 1.5rem; row-gap: 1rem;
+        align-items: stretch;
+    }
+    .gd-cover { grid-area: cover; align-self: start; }   /* don't stretch the aspect-ratio cover */
+    .gd-hero__main { grid-area: main; }
+    .gd-hero__extras { grid-area: extras; align-self: start; }
+}
+
+
+/* Cover + screenshots */
+.gd-hero__extras { display: flex; flex-direction: column; gap: 10px; }
+.gd-cover {
+    position: relative; aspect-ratio: 3 / 4; width: 58%; max-width: 220px; margin: 0 auto;
+    border-radius: var(--pp-radius-md); border: 2px solid var(--pp-border); overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 30px rgba(0,0,0,0.4);
+    transition: transform var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+@media (min-width: 1024px) { .gd-cover { width: 100%; max-width: none; } }
+
+/* Headline "X Players". Mobile: in flow, a left-aligned row that sits below the issue flags and above the
+   progress section (its entrance rides the .pp-head-cascade, so reduced-motion is handled for free). md+:
+   pinned absolute to the hero card's top-right corner so it never reflows the content. */
+.gd-hero__players {
+    display: inline-flex; flex-direction: row; align-items: baseline; gap: 6px;
+    align-self: flex-start; line-height: 1; text-decoration: none;
+}
+.gd-hero__players-n { color: var(--pp-primary); line-height: 1; }
+.gd-hero__players-lbl { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--pp-text-mute); transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-hero__players:hover .gd-hero__players-lbl { color: var(--pp-primary); }
+.gd-hero__players:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 3px; border-radius: var(--pp-radius-sm); }
+@media (min-width: 768px) {
+    .gd-hero__players {
+        position: absolute; top: 18px; right: 20px; z-index: 2;
+        flex-direction: column; align-items: flex-end; text-align: right; gap: 0;
+    }
+    .gd-hero__players-lbl { margin-top: 3px; }
+}
+/* The corner is pinned against the CARD (the .card sets position: relative), so it measures from the card's
+   top edge -- above the ownership banner entirely, landing inside the banner's tinted box on top of its
+   "View mine" link.
+
+   Fixed by re-anchoring rather than by offsetting: when the banner is present the corner measures from the
+   content ROW instead, which begins below the banner. So the banner stays full-width -- reading as a
+   statement about the whole page, the way badge detail's does -- and the stat sits under it at whatever
+   height it ends up, with no magic number to drift if a long username wraps it to two lines.
+
+   Reserving horizontal space instead was the wrong shape: it left the stat BESIDE the banner, which reads
+   as though the two belong together. */
+@media (min-width: 768px) {
+    .gd-hero__body:has(.pp-viewing) .gd-hero__grid { position: relative; }
+    .gd-hero__body:has(.pp-viewing) .gd-hero__players { top: 0; right: 0; }
+}
+@media (min-width: 1024px) {
+    .gd-hero__players { top: 22px; right: 24px; }
+    /* Reserve the corner's footprint on the title so a long name wraps before it (only on desktop,
+       where main sits beside the cover; below 1024px the corner is up beside the stacked cover). */
+    .gd-hero__body:has(.gd-hero__players) .gd-hero__title { padding-right: 96px; }
+}
+@media (hover: hover) {
+    .gd-cover:hover {
+        transform: translateY(-3px);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 16px 42px rgba(0,0,0,0.5);
+    }
+}
+/* Cover art materialises on load -- a subtle focus-in (fade + settle from a hair zoomed). Animating the
+   IMG (not the figure) keeps the figure's hover transform free of conflict. */
+.gd-cover img { animation: gdCoverIn 0.6s var(--pp-ease) both; }
+@keyframes gdCoverIn { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gd-cover img { animation: none; } }
+.gd-shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; }
+.gd-shots__thumb {
+    position: relative; aspect-ratio: 16 / 9; border-radius: var(--pp-radius-sm); overflow: hidden;
+    border: 1px solid var(--pp-border); cursor: pointer; padding: 0; background: none;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-shots__thumb:hover { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+.gd-shots__more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.55); color: #fff; font-weight: 700; font-size: 0.8rem; }
+
+/* Identity column — a tight cluster (chips → title → facts → flags). The .pp-head-cascade
+   lives on the card-body, so the hero row / substance / actions / band are the real beats. */
+.gd-hero__main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gd-hero__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gd-plat {
+    display: inline-flex; align-items: center; gap: 3px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+    padding: 2px 8px; border-radius: 999px; color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-bg-2) 70%, transparent); border: 1px solid var(--pp-border);
+}
+.gd-plat--region { color: var(--pp-text); }
+.gd-plat--ww svg { width: 12px; height: 12px; }
+.gd-plat--warn { color: var(--pp-warning); border-color: color-mix(in oklab, var(--pp-warning) 40%, var(--pp-border)); }
+
+.gd-hero__title { font-family: var(--pp-font-display); font-weight: 800; line-height: 1.05; font-size: clamp(1.5rem, 4vw, 2.4rem); color: var(--pp-text); }
+
+.gd-hero__facts { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.gd-fact { display: flex; flex-direction: column; gap: 1px; }
+.gd-fact__k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.gd-fact__v { font-size: 0.82rem; color: var(--pp-text-dim); }
+.gd-fact__v--link { color: var(--pp-text); text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-fact__v--link:hover { color: var(--pp-primary); }
+
+/* "Versions & editions" cross-link (opens the versions modal). Quiet pill so it doesn't rival the actions. */
+.gd-versions-link { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 5px 8px 5px 10px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); color: var(--pp-text-dim); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-versions-link > svg:first-child { width: 15px; height: 15px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-versions-link:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.gd-versions-link__n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: color-mix(in oklab, var(--pp-primary) 22%, transparent); color: var(--pp-primary); font-size: 0.68rem; font-weight: 800; }
+.gd-versions-link__chev { width: 14px; height: 14px; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-versions-link:hover .gd-versions-link__chev { transform: translateX(2px); color: var(--pp-primary); }
+.gd-versions-link:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .gd-versions-link__chev, .gd-vrow__chev { transition: none; } }
+
+/* Condensed About — fills the space beside the tall cover; jumps to the full About tab. */
+/* Hidden on mobile to save vertical space (the full About lives in the About tab); shown from md up. */
+.gd-hero__about { display: none; flex-direction: column; gap: 8px; margin-top: 2px; }
+@media (min-width: 768px) { .gd-hero__about { display: flex; } }
+.gd-about-blurb { font-size: 0.82rem; line-height: 1.5; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+/* When JS clamps the blurb to fit the header boundary, fade the cut edge instead of a hard clip. */
+.gd-hero__about.is-clamped .gd-about-blurb { -webkit-mask-image: linear-gradient(180deg, #000 58%, transparent 100%); mask-image: linear-gradient(180deg, #000 58%, transparent 100%); }
+.gd-about-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.gd-tag { font-size: 0.68rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 65%, transparent); border: 1px solid var(--pp-border); }
+.gd-tag--theme { color: var(--pp-text-mute); }
+.gd-about-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); background: none; border: none; cursor: pointer; }
+.gd-about-more svg { width: 14px; height: 14px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-about-more:hover svg { transform: translateX(2px); }
+/* Desktop: a few more summary lines; the genre/theme tags + "More about this game" sit directly beneath it. */
+@media (min-width: 1024px) { .gd-about-blurb { -webkit-line-clamp: 6; line-clamp: 6; } }
+
+/* Substance: the lean, ownership-aware progress readout (the game is the star). */
+/* Flex column so the anon stack (Outlook verdict, trophy grid, CTA) is spaced; 6px gap + the blocks'
+   2px margins == 8px, matching the badge/contract spine. Harmless for the authed single .gd-prog child;
+   margin-top:auto still floats it down. */
+.gd-substance { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--pp-divider); }
+.gd-prog { display: flex; flex-direction: column; gap: 0.6rem; }
+.gd-prog__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gd-prog__state { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-prog__state svg { width: 15px; height: 15px; color: var(--pp-primary); }
+.gd-prog__avenue { font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); text-decoration: none; white-space: nowrap; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-prog__avenue:hover { text-decoration: underline; }
+.gd-prog__meter { display: flex; align-items: center; gap: 0; }
+/* Neutral by default so the game title wins the hero; the % earns the cyan accent only at 100%. */
+.gd-prog__pct { color: var(--pp-text); line-height: 1; flex: none; }
+.gd-prog__pct.is-complete { color: var(--pp-primary); }
+.gd-prog__pctsign { font-family: var(--pp-font-display); font-weight: 800; font-size: 1rem; color: var(--pp-text-mute); flex: none; margin: 0 12px 0 1px; }
+.gd-prog__bar { flex: 1; }
+
+/* Composite per-trophy-group progress bar: one segment per group. Base = cyan (wide), DLC = violet. */
+.gd-groupbar { display: flex; align-items: stretch; gap: 3px; height: 11px; }
+.gd-groupbar__seg { position: relative; min-width: 12px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+/* Colour the track outline + a faint tint by type, so each segment reads even at 0% progress. */
+.gd-groupbar__seg--main { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 9%, var(--pp-bg-0)); }
+.gd-groupbar__seg--dlc { border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-secondary) 9%, var(--pp-bg-0)); }
+.gd-groupbar__fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; transition: width 0.6s cubic-bezier(0.34, 1.3, 0.64, 1); }
+.gd-groupbar__seg--main .gd-groupbar__fill { background: linear-gradient(90deg, color-mix(in oklab, var(--pp-primary) 60%, transparent), var(--pp-primary)); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 60%, transparent), 0 0 4px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+.gd-groupbar__seg--dlc .gd-groupbar__fill { background: linear-gradient(90deg, color-mix(in oklab, var(--pp-secondary) 60%, transparent), var(--pp-secondary)); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-secondary) 60%, transparent), 0 0 4px color-mix(in oklab, var(--pp-secondary) 45%, transparent); }
+.gd-groupbar__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 0.62rem; color: var(--pp-text-mute); }
+.gd-groupbar__legend span { display: inline-flex; align-items: center; gap: 5px; }
+.gd-groupbar__dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.gd-groupbar__dot--main { background: var(--pp-primary); }
+.gd-groupbar__dot--dlc { background: var(--pp-secondary); }
+
+/* Actions */
+/* Centred on mobile (wrapped, left-aligned buttons read as accidental); left-aligned from md up. */
+.gd-hero__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+@media (min-width: 768px) { .gd-hero__actions { justify-content: flex-start; } }
+.gd-btn {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    padding: 7px 14px; border-radius: var(--pp-radius-sm); color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    transition: background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-btn svg { width: 15px; height: 15px; }
+.gd-btn:hover { background: color-mix(in oklab, var(--pp-primary) 22%, transparent); box-shadow: 0 0 14px -3px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+/* Plat card: the reward for finishing, and the only action in this row that is EARNED -- so it carries
+   the variant accent of the artifact it leads to (primary for a platinum card, accent for 100%, the same
+   rule .pcard uses on the browse grid) rather than the row's default cyan. It shows at most once, and
+   never on a game still in progress, so it can afford to be the loudest thing here. */
+.gd-btn--card {
+    --gdpc: var(--pp-primary);
+    text-decoration: none;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--gdpc) 18%, transparent);
+    border-color: color-mix(in oklab, var(--gdpc) 52%, var(--pp-border));
+}
+.gd-btn--card svg { color: var(--gdpc); }
+.gd-btn--card:hover {
+    background: color-mix(in oklab, var(--gdpc) 28%, transparent);
+    box-shadow: 0 0 16px -3px color-mix(in oklab, var(--gdpc) 65%, transparent);
+}
+/* Doubled class for specificity: the generic `.gd-btn:focus-visible` is declared LATER in this file, so
+   at equal specificity it would win and a 100% card would take the primary cyan ring instead of its own
+   accent. */
+.gd-btn.gd-btn--card:focus-visible { outline: 2px solid var(--gdpc); outline-offset: 2px; }
+.gd-btn--card-full { --gdpc: var(--pp-accent); }
+.gd-btn--ghost { background: transparent; border-color: var(--pp-border); color: var(--pp-text-dim); }
+.gd-btn--ghost:hover { background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); box-shadow: none; color: var(--pp-text); }
+#quick-add-container { position: relative; display: inline-flex; }
+
+/* ---- Left-column spine rows: the Badge series + Job Board contract this game belongs to.
+   Clickable rows (not boxes); the medallions / job icons are the focal point, with a caption
+   beneath and a chevron. Each opens a detail modal. ---- */
+.gd-spine { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.gd-spine__row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-md); text-align: left; cursor: pointer; color: inherit; text-decoration: none; background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid transparent; transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-spine__row:hover { background: var(--pp-bg-2); border-color: var(--pp-border); }
+.gd-spine__row:hover .gd-spine__chev { transform: translateX(2px); color: var(--pp-text-dim); }
+/* Badge row — cyan (brand) accent bar + wash. Contract row — coloured by the discipline(s) it spans. */
+.gd-spine__row--badges { position: relative; border-color: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent)); }
+.gd-spine__row--badges:hover { border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.gd-spine__row--contract { position: relative; border-color: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 28%, var(--pp-border)); background: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 9%, color-mix(in oklab, var(--pp-bg-2) 45%, transparent)); }
+.gd-spine__row--contract:hover { border-color: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 48%, var(--pp-border)); background: color-mix(in oklab, var(--disc-1, var(--pp-primary)) 14%, var(--pp-bg-2)); }
+.gd-spine__disc { position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 0 3px 3px 0; background: var(--disc-grad, var(--pp-primary)); }
+.gd-spine__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.gd-spine__peek { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.gd-spine__peek:has(.gd-spine__obj--badge) { gap: 7px; }   /* badges get more room; the 6-job row stays tight */
+.gd-spine__obj { width: 40px; height: 40px; display: grid; place-items: center; }
+.gd-spine__obj--badge { width: auto; height: auto; }               /* the Medallion carries its own cast/rim depth */
+.gd-spine__obj--badge .pp-med { --sz: 44px; }                       /* override .pp-med's own --sz default */
+.gd-spine__obj--badge .pp-med__count { display: none; }            /* declutter the small peek */
+/* Empty badge socket: a dashed medallion-sized well, not a faded floating icon. */
+.gd-spine__obj--ph {
+    width: 44px; height: 44px; border-radius: 999px; color: var(--pp-text-mute);
+    background: radial-gradient(circle at 50% 36%, color-mix(in oklab, var(--pp-bg-3) 75%, transparent), var(--pp-bg-1));
+    border: 1.5px dashed color-mix(in oklab, var(--pp-border) 78%, var(--pp-text-mute));
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.28);
+}
+.gd-spine__obj--ph svg { width: 19px; height: 19px; opacity: 0.5; }
+.gd-spine__more { align-self: center; font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-spine__cap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.72rem; color: var(--pp-text-dim); }
+.gd-spine__chev { width: 16px; height: 16px; flex: none; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease); }
+.gd-spine__row--empty { cursor: default; background: transparent; border-style: dashed; border-color: var(--pp-border); }
+.gd-spine__row--empty:hover { background: transparent; border-style: dashed; border-color: var(--pp-border); }
+.gd-spine__row--empty .gd-spine__cap { color: var(--pp-text-mute); }
+.gd-spine__state { font-size: 0.55rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.gd-spine__state--todo { background: color-mix(in oklab, var(--pp-text-mute) 16%, transparent); color: var(--pp-text-dim); }
+.gd-spine__state--active { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); color: var(--pp-primary); }
+.gd-spine__state--done { background: color-mix(in oklab, var(--pp-success) 20%, transparent); color: var(--pp-success); }
+.gd-spine__state--claim { background: color-mix(in oklab, var(--pp-accent) 20%, transparent); color: var(--pp-accent); }
+
+/* Disc-tinted job icon tile (contract peek + placeholder) — sized so all 6 possible jobs fit one line. */
+.gd-jobmini { --disc: var(--pp-primary); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--disc); background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 42%, var(--pp-border)); box-shadow: 0 2px 5px rgba(0,0,0,0.4); transition: transform 0.18s var(--pp-ease), box-shadow 0.18s var(--pp-ease); }
+.gd-jobmini svg { width: 15px; height: 15px; }
+/* Hovering the contract row lifts its job icons in a soft left-to-right wave; drop-out is uniform (no delay off :hover). */
+.gd-spine__row--contract:hover .gd-jobmini { transform: translateY(-3px); box-shadow: 0 5px 11px rgba(0,0,0,0.45); }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(2) { transition-delay: 0.03s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(3) { transition-delay: 0.06s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(4) { transition-delay: 0.09s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(5) { transition-delay: 0.12s; }
+.gd-spine__row--contract:hover .gd-jobmini:nth-child(6) { transition-delay: 0.15s; }
+/* Empty job socket: same dashed-well language at the 28px job-tile footprint. */
+.gd-jobmini--ph {
+    --disc: var(--pp-text-mute); color: var(--pp-text-mute);
+    background: radial-gradient(circle at 50% 34%, color-mix(in oklab, var(--pp-bg-3) 75%, transparent), var(--pp-bg-1));
+    border: 1.5px dashed color-mix(in oklab, var(--pp-border) 78%, var(--pp-text-mute));
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.28);
+}
+.gd-jobmini--ph svg { opacity: 0.5; }
+
+/* Spine detail modals (badges list / contract summary). */
+/* position: fixed + inset:0 + margin:auto == viewport-centred. Without this the native <dialog> falls
+   back to position:absolute anchored at the document top, so mobile scrolls to y=0 to reveal it. */
+.gd-modal { position: fixed; inset: 0; border: none; padding: 0; width: min(92vw, 440px); max-width: 440px; margin: auto; border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); color: var(--pp-text); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
+/* Toasts raised while a modal is open render into the dialog's own top-layer container (so they're not hidden
+   behind the backdrop). Pin them as a top-of-screen banner rather than in-flow at the modal's bottom edge,
+   where they read as jarring content inside the form. */
+/* Modal toasts live in a top-layer popover so they rest on the viewport (bottom-end), above the modal --
+   not trapped in the dialog's box (the dialog is a containing block for `position: fixed` while its entrance
+   animation fills, so a plain fixed child would anchor to the 440px modal and clip against its overflow).
+   ToastManager promotes this popover on show and hides it when the last toast clears. */
+.modal-toast-container { position: fixed; inset: auto 1rem 1rem auto; margin: 0; padding: 0; border: none; background: transparent; overflow: visible; width: max-content; max-width: min(92vw, 26rem); pointer-events: none; }
+.modal-toast-container:popover-open { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.modal-toast-container > * { pointer-events: auto; }
+.gd-modal:not([open]) { display: none; }
+.gd-modal[open] { animation: gdModalIn 0.2s var(--pp-ease) both; }
+@keyframes gdModalIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+/* Choreographed exit (JS adds .is-closing, waits for animationend, then .close()) -- exits as carefully
+   as entrances rather than popping shut. */
+.gd-modal.is-closing { animation: gdModalOut 0.18s var(--pp-ease) both; }
+@keyframes gdModalOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(6px) scale(0.985); } }
+.gd-modal.is-closing::backdrop { animation: gdModalScrimOut 0.18s ease both; }
+@keyframes gdModalScrimOut { from { opacity: 1; } to { opacity: 0; } }
+.gd-modal::backdrop { background: rgba(2, 4, 8, 0.78); }   /* solid dim, no backdrop-blur (re-blurred the page on every modal repaint -- see motion-patterns.md) */
+/* Swipe-to-close grabber shows on touch (dismissableSheet adds .pp-dismissable + the shared
+   .pp-dismissable::before pill). Nudge the header down so the pill sits clear above the title. */
+@media (hover: none) and (pointer: coarse) { .gd-modal.pp-dismissable .gd-modal__head { padding-top: 18px; } }
+.gd-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--pp-divider); }
+.gd-modal__head h3 { font-size: 0.95rem; font-weight: 700; }
+.gd-modal__close { background: none; border: none; cursor: pointer; color: var(--pp-text-mute); font-size: 1.4rem; line-height: 1; padding: 0 4px; }
+.gd-modal__close:hover { color: var(--pp-text); }
+.gd-modal__body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; max-height: 70vh; overflow-y: auto; }
+/* Badges-this-game-is-in: a showcase grid of medallion objects (as-designed look). */
+.gd-modal--badges { width: min(94vw, 520px); max-width: 520px; }
+
+/* Versions & editions modal: two sections (other platforms / same family), each a list of cover + name + platforms. */
+.gd-modal--versions { width: min(94vw, 460px); max-width: 460px; }
+.gd-vsec + .gd-vsec { margin-top: 14px; }
+.gd-vsec__h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-dim); }
+.gd-vsec__sub { font-size: 0.72rem; color: var(--pp-text-mute); margin: 1px 0 8px; }
+.gd-vlist { display: flex; flex-direction: column; gap: 6px; }
+.gd-vrow { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px solid var(--pp-border); text-decoration: none; transition: border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-vrow:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); }
+.gd-vrow:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-vrow__cover { width: 38px; aspect-ratio: 3 / 4; flex-shrink: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--pp-border); background: var(--pp-bg-0); }
+.gd-vrow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.gd-vrow__name { font-size: 0.85rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-vrow__meta { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Defined trophy composition (reuses the .gd-gcount tier dots), a touch smaller for the compact card. */
+.gd-vrow__trophies { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px; margin-top: 3px; }
+.gd-vrow__trophies .gd-gcount__n { font-size: 0.74rem; }
+.gd-vrow__plat { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 1px 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+.gd-vrow__plat--region { color: var(--pp-secondary); border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
+.gd-vrow__chev { width: 16px; height: 16px; flex-shrink: 0; color: var(--pp-text-mute); transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-vrow:hover .gd-vrow__chev { transform: translateX(2px); color: var(--pp-primary); }
+.gd-badgegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.gd-badgecard {
+    display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 8px 11px; text-align: center; text-decoration: none;
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    transition: transform var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-badgecard:hover { transform: translateY(-3px); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: 0 8px 22px -8px rgba(0,0,0,0.5); }
+.gd-badgecard__art { flex: none; }
+.gd-badgecard__art .pp-med { --sz: 70px; }        /* the medallion is the object; give it room */
+.gd-badgecard__art .pp-med__count { display: none; }
+.gd-badgecard__name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; color: var(--pp-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gd-badgecard__type { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* Staggered rise on open (JS re-arms .is-revealing). */
+@keyframes gdBadgeRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+.gd-badgegrid.is-revealing .gd-badgecard { animation: gdBadgeRise 0.38s var(--pp-ease) both; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(2) { animation-delay: 0.045s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(3) { animation-delay: 0.09s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(4) { animation-delay: 0.135s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(5) { animation-delay: 0.18s; }
+.gd-badgegrid.is-revealing .gd-badgecard:nth-child(n+6) { animation-delay: 0.225s; }
+@media (prefers-reduced-motion: reduce) { .gd-badgegrid.is-revealing .gd-badgecard { animation: none; } }
+
+/* ============================================================
+   Report-an-issue modal form (rebuilt from the old DaisyUI one)
+   ============================================================ */
+.gd-modal--report { width: min(94vw, 460px); max-width: 460px; }
+.gd-report { gap: 13px; }
+.gd-report__field { display: flex; flex-direction: column; gap: 5px; }
+.gd-report__label { font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-report__select, .gd-report__textarea {
+    width: 100%; font-family: inherit; font-size: 0.85rem; color: var(--pp-text);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    padding: 9px 11px; transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-report__select {
+    appearance: none; -webkit-appearance: none; padding-right: 32px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; background-size: 15px;
+}
+.gd-report__select:focus, .gd-report__textarea:focus {
+    outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent);
+}
+.gd-report__textarea { min-height: 82px; resize: vertical; line-height: 1.5; }
+.gd-report__textarea::placeholder { color: var(--pp-text-mute); }
+.gd-report__count { align-self: flex-end; font-size: 0.68rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-report__count b { color: var(--pp-text-dim); font-weight: 700; }
+.gd-report__note {
+    display: flex; gap: 8px; align-items: flex-start; font-size: 0.76rem; line-height: 1.45; color: var(--pp-text-dim);
+    padding: 9px 11px; border-radius: var(--pp-radius-md);
+    background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--pp-primary) 20%, var(--pp-border));
+}
+.gd-report__note svg { width: 15px; height: 15px; flex: none; color: var(--pp-primary); margin-top: 1px; }
+.gd-report__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+
+/* ============================================================
+   Premium polish: tactile press + keyboard focus (Google/Apple lens)
+   ============================================================ */
+/* Press: a subtle compress that reads as "physical", preserving any resting transform. */
+.gd-btn, .gd-shots__thumb, .gd-about-more, .gd-shotmodal__close, .gd-shotmodal__thumb { transition: transform 0.12s var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-btn:active { transform: scale(0.96); }
+.gd-shots__thumb:active { transform: scale(0.96); }
+.gd-about-more:active { transform: scale(0.96); }
+.gd-spine__row:active { transform: scale(0.985); }
+.gd-badgecard:active { transform: translateY(-1px) scale(0.98); }
+.gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: scale(0.9); }
+.gd-shotmodal__nav:active { transform: translateY(-50%) scale(0.9); }   /* keep the vertical centering */
+
+/* Focus-visible: one cohesive keyboard ring across the hero's interactive elements. */
+.gd-btn:focus-visible, .gd-spine__row:focus-visible, .gd-badgecard:focus-visible, .gd-shots__thumb:focus-visible,
+.gd-about-more:focus-visible, .gd-prog__avenue:focus-visible, .gd-shotmodal__thumb:focus-visible,
+.gd-shotmodal__nav:focus-visible, .gd-shotmodal__close:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .gd-btn:active, .gd-shots__thumb:active, .gd-about-more:active, .gd-spine__row:active, .gd-badgecard:active,
+    .gd-shotmodal__close:active, .gd-shotmodal__thumb:active { transform: none; }
+    .gd-shotmodal__nav:active { transform: translateY(-50%); }
+}
+
+/* ============================================================
+   Trophy haul cards (hero) + My Stats modal
+   ============================================================ */
+
+/* Lead action button — a hair more presence than a peer .gd-btn, not a solid fill. */
+.gd-btn--primary { background: color-mix(in oklab, var(--pp-primary) 24%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 65%, transparent); font-weight: 700; }
+.gd-btn--primary:hover { background: color-mix(in oklab, var(--pp-primary) 34%, transparent); box-shadow: 0 0 16px -3px color-mix(in oklab, var(--pp-primary) 65%, transparent); }
+
+/* 4-across trophy tier cards, reusing the shared .scard. Mobile keeps all four in ONE compact row
+   (the tier colour already identifies each, so the label can shrink); md+ restores the fuller card. */
+.gd-tro { margin-top: 2px; }
+.scard--tro { padding: 8px 4px; }
+.scard--tro .scard__label { font-size: 9px; letter-spacing: 0.02em; margin-bottom: 5px; }
+.scard--tro .scard__value { font-size: 15px; }
+.scard--tro .scard__sub { font-size: 9.5px; margin-top: 3px; }
+.scard--tro-none { opacity: 0.5; }
+/* Per-tier progress topper: pp-horizon recoloured to the tier (--horizon-accent), the tier's ratio. */
+.gd-tro__bar { display: block; width: 100%; margin-bottom: 6px; }
+
+/* ============================================================
+   Anonymous Platinum Outlook + join CTA (logged-out hero substance)
+   ============================================================ */
+.gd-outlook { display: flex; flex-direction: column; gap: 9px; }
+
+/* Verdict: PSN-global platinum rarity as the difficulty headline. */
+.gd-outlook__verdict {
+    display: flex; align-items: center; gap: 12px; padding: 11px 13px;
+    border-radius: var(--pp-radius-md); border: 1px solid var(--pp-border);
+    background: linear-gradient(105deg, color-mix(in oklab, var(--pp-accent) 8%, var(--pp-bg-2)), var(--pp-bg-2) 62%);
+}
+/* Est. 100% time, tucked into the verdict card's right edge. */
+.gd-outlook__time { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; }
+.gd-outlook__time svg { width: 13px; height: 13px; color: var(--pp-text-mute); flex: none; }
+.gd-outlook__verdict--noplat { background: var(--pp-bg-2); }
+.gd-outlook__ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; }
+.gd-outlook__ico img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.45)); }
+.gd-outlook__ico--noplat { color: var(--pp-text-mute); }
+.gd-outlook__ico--noplat svg { width: 26px; height: 26px; opacity: 0.6; }
+.gd-outlook__vmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gd-outlook__tier { font-family: var(--pp-font-display); font-size: 1rem; font-weight: 800; line-height: 1.1; }
+.gd-outlook__rate { font-size: 0.77rem; color: var(--pp-text-dim); }
+.gd-outlook__rate b { color: var(--pp-text); font-weight: 800; font-size: 0.9rem; }
+.gd-outlook__meter { display: flex; align-items: center; gap: 3px; margin-top: 6px; }
+.gd-outlook__seg { width: 16px; height: 4px; border-radius: 999px; background: var(--pp-bg-3); }
+.gd-outlook__seg.is-on { background: var(--pp-accent); box-shadow: 0 0 6px -1px color-mix(in oklab, var(--pp-accent) 60%, transparent); }
+/* The difficulty gauge "charges" -- lit segments fill left-to-right in sequence on load. */
+.gd-outlook__seg.is-on { transform-origin: left; animation: gdSegCharge 0.3s var(--pp-ease) both; }
+@keyframes gdSegCharge { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.gd-outlook__seg.is-on:nth-child(2) { animation-delay: 0.08s; }
+.gd-outlook__seg.is-on:nth-child(3) { animation-delay: 0.16s; }
+.gd-outlook__seg.is-on:nth-child(4) { animation-delay: 0.24s; }
+@media (prefers-reduced-motion: reduce) { .gd-outlook__seg.is-on { animation: none; } }
+.gd-outlook__meter-lbl { margin-left: 6px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-accent); }
+
+/* Contract detail modal (shared .pp-detail-modal) CLOSE fade: bdModalOut (fade the whole dialog) is
+   ID-scoped to the badge modals; a generic collection rule disables the dialog animation for every
+   other .pp-detail-modal (it uses a medallion shrink instead). Our contract modal has no medallion, so
+   opt it back in -- the ID selector beats the generic rule, so the content fades WITH the scrim. */
+#gd-contract-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: bdModalOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+#gd-contract-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.22s ease forwards; }
+
+/* Join CTA: social proof + the primary conversion action. */
+.gd-cta {
+    display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; margin-top: 2px;
+    border-radius: var(--pp-radius-md); border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)), var(--pp-bg-2) 70%);
+}
+.gd-cta__proof { font-size: 0.82rem; color: var(--pp-text-dim); }
+.gd-cta__proof b { color: var(--pp-text); font-weight: 800; }
+.gd-cta__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gd-cta__alt { font-size: 0.74rem; color: var(--pp-text-mute); }
+.gd-cta__alt a { color: var(--pp-primary); font-weight: 600; text-decoration: none; }
+.gd-cta__alt a:hover { text-decoration: underline; }
+.scard__value--none { color: var(--pp-text-mute); font-family: var(--pp-font-display); }
+@media (min-width: 768px) {
+    .scard--tro { padding: 13px 10px; }
+    .scard--tro .scard__label { font-size: 11px; letter-spacing: 0.12em; margin-bottom: 12px; }
+    .scard--tro .scard__value { font-size: 24px; }
+    .scard--tro .scard__sub { font-size: 12px; margin-top: 7px; }
+    .gd-tro__bar { margin-bottom: 9px; }
+}
+
+/* Stats modal is wider than the peek modals. */
+.gd-modal--stats { width: min(94vw, 560px); max-width: 560px; }
+
+.gd-mystats { display: flex; flex-direction: column; gap: 14px; }
+.gd-mystats__eyebrow { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--pp-text-mute); }
+.gd-mystats__title { font-family: var(--pp-font-display); font-size: 1.15rem; font-weight: 800; line-height: 1.15; margin-top: -8px; }
+
+/* Hero trio */
+/* Mobile drops the Complete card (the you-vs-community bar below already shows it) for room -> Trophies
+   + Playtime, 2-up; the full 3-up trio returns at md. */
+.gd-mystats__hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* compound selector so it beats the later `.gd-mystats__big { display: flex }` at equal specificity */
+.gd-mystats__big.gd-mystats__big--completion { display: none; }
+@media (min-width: 768px) {
+    .gd-mystats__hero { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .gd-mystats__big.gd-mystats__big--completion { display: flex; }
+}
+.gd-mystats__big { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 13px 6px; border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border); text-align: center; }
+.gd-mystats__big-v { font-size: 1.55rem; font-weight: 800; line-height: 1; color: var(--pp-text); white-space: nowrap; }
+.gd-mystats__big-v--accent { color: var(--pp-primary); }
+.gd-mystats__unit { font-size: 0.78rem; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
+.gd-mystats__big-k { font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* Standing — you vs community completion */
+.gd-mystats__vs { display: flex; flex-direction: column; gap: 4px; }
+.gd-mystats__vs-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gd-mystats__vs-k { font-size: 0.74rem; color: var(--pp-text-dim); }
+.gd-mystats__vs-v { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-mystats__vs-v--you { color: var(--pp-text); }
+.gd-mystats__vs-comm { margin-top: 1px; }
+.gd-mystats__vs-comm .pp-horizon__fill { background: var(--pp-text-mute); box-shadow: none; }
+
+/* Trophy haul pips */
+.gd-mystats__haul { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.gd-mystats__pip { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 4px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.gd-mystats__pip i { width: 10px; height: 10px; border-radius: 999px; margin-bottom: 3px; }
+.gd-mystats__pip span { font-size: 0.98rem; font-weight: 800; color: var(--pp-text); line-height: 1; }
+.gd-mystats__pip b { font-size: 0.68rem; font-weight: 500; color: var(--pp-text-mute); }
+.gd-mystats__pip em { font-size: 0.58rem; font-style: normal; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 2px; }
+.gd-mystats__pip--platinum i { background: var(--color-trophy-platinum); }
+.gd-mystats__pip--gold i { background: var(--color-trophy-gold); }
+.gd-mystats__pip--silver i { background: var(--color-trophy-silver); }
+.gd-mystats__pip--bronze i { background: var(--color-trophy-bronze); }
+
+/* Journey timeline */
+.gd-mystats__sec { display: flex; flex-direction: column; gap: 9px; }
+.gd-mystats__sech { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.gd-mystats__timeline { list-style: none; margin: 0; padding: 0; }
+.gd-mystats__tl { position: relative; display: flex; gap: 10px; padding-bottom: 12px; }
+.gd-mystats__tl:last-child { padding-bottom: 0; }
+.gd-mystats__tl::before { content: ''; position: absolute; left: 5px; top: 13px; bottom: -1px; width: 2px; background: var(--pp-divider); }
+.gd-mystats__tl:last-child::before { display: none; }
+.gd-mystats__tl-dot { position: relative; z-index: 1; flex: none; width: 12px; height: 12px; margin-top: 2px; border-radius: 999px; background: var(--pp-bg-3); border: 2px solid var(--pp-border); }
+.gd-mystats__tl.is-hit .gd-mystats__tl-dot { background: var(--pp-primary); border-color: var(--pp-primary); box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-primary) 70%, transparent); }
+.gd-mystats__tl-body { flex: 1; min-width: 0; }
+.gd-mystats__tl-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gd-mystats__tl-label { font-size: 0.82rem; font-weight: 600; color: var(--pp-text-dim); }
+.gd-mystats__tl.is-hit .gd-mystats__tl-label { color: var(--pp-text); }
+.gd-mystats__tl-date { font-size: 0.72rem; color: var(--pp-text-mute); white-space: nowrap; flex: none; }
+.gd-mystats__tl-trophy { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+.gd-mystats__tl-trophy img { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; flex: none; }
+.gd-mystats__tl-trophy span { font-size: 0.74rem; color: var(--pp-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Play footer */
+.gd-mystats__foot { display: flex; flex-wrap: wrap; gap: 4px 16px; padding-top: 11px; border-top: 1px solid var(--pp-divider); font-size: 0.76rem; color: var(--pp-text-dim); }
+.gd-mystats__foot b { color: var(--pp-text); font-weight: 700; }
+
+/* Reveal choreography — staggered rise on open (re-armed by JS each time). */
+@keyframes gdStatsRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+.gd-mystats.is-revealing > * { animation: gdStatsRise 0.4s var(--pp-ease) both; }
+.gd-mystats.is-revealing > *:nth-child(2) { animation-delay: 0.05s; }
+.gd-mystats.is-revealing > *:nth-child(3) { animation-delay: 0.10s; }
+.gd-mystats.is-revealing > *:nth-child(4) { animation-delay: 0.15s; }
+.gd-mystats.is-revealing > *:nth-child(5) { animation-delay: 0.20s; }
+.gd-mystats.is-revealing > *:nth-child(6) { animation-delay: 0.25s; }
+@media (prefers-reduced-motion: reduce) { .gd-mystats.is-revealing > * { animation: none; } }
+
+/* Journey timeline draws itself on reveal: each connector grows from the top and its dot pops, staggered
+   top-to-bottom (--i is the row index, set in the template) after the sections have risen in. */
+@keyframes gdTlLine { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes gdTlDot { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: none; } }
+.gd-mystats.is-revealing .gd-mystats__tl::before { transform-origin: top; animation: gdTlLine 0.3s var(--pp-ease) both; animation-delay: calc(var(--i, 0) * 0.06s + 0.3s); }
+.gd-mystats.is-revealing .gd-mystats__tl-dot { animation: gdTlDot 0.34s cubic-bezier(0.34, 1.4, 0.64, 1) both; animation-delay: calc(var(--i, 0) * 0.06s + 0.26s); }
+@media (prefers-reduced-motion: reduce) {
+    .gd-mystats.is-revealing .gd-mystats__tl::before, .gd-mystats.is-revealing .gd-mystats__tl-dot { animation: none; }
+}
+
+/* Screenshots placeholder — keeps the left column consistent when a game has no shots. */
+.gd-shots--empty { display: flex; align-items: center; justify-content: center; gap: 7px; height: 54px; border-radius: var(--pp-radius-sm); border: 1px dashed var(--pp-border); font-size: 0.75rem; font-style: italic; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-2) 40%, transparent); }
+.gd-shots--empty svg { width: 18px; height: 18px; opacity: 0.6; }
+
+/* Screenshot lightbox — image floats on the blurred scrim; filmstrip below. */
+.gd-shotmodal { border: none; padding: 0; background: transparent; width: min(92vw, 1100px); max-width: 1100px; margin: auto; color: #fff; }
+.gd-shotmodal:not([open]) { display: none; }
+.gd-shotmodal[open] { display: flex; flex-direction: column; gap: 8px; }
+.gd-shotmodal::backdrop { background: rgba(2, 4, 8, 0.85); }   /* solid dim, no backdrop-blur (see motion-patterns.md) */
+.gd-shotmodal[open]::backdrop { animation: gdScrimIn 0.28s ease both; }
+.gd-shotmodal.is-closing::backdrop { animation: gdScrimOut 0.22s ease both; }
+@keyframes gdScrimIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gdScrimOut { from { opacity: 1; } to { opacity: 0; } }
+.gd-shotmodal__stage { position: relative; line-height: 0; border-radius: var(--pp-radius-md); }
+/* Clip the stage only while paging, so the sliding image can't overflow the viewport (scrollbar
+   flash). NOT clipped during the open/close FLIP — that image must fly outside, to/from the thumb. */
+.gd-shotmodal.is-paging .gd-shotmodal__stage { overflow: hidden; }
+.gd-shotmodal__img { width: 100%; height: auto; max-height: 74vh; object-fit: contain; border-radius: var(--pp-radius-md); display: block; box-shadow: 0 24px 70px rgba(0,0,0,0.55); }
+/* Outgoing image during a push swap: overlays the current image box, slid out by JS. */
+.gd-shotmodal__ghost { position: absolute; inset: 0; height: auto; max-height: 74vh; pointer-events: none; }
+.gd-shotmodal__close, .gd-shotmodal__nav { position: absolute; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 999px; border: none; cursor: pointer; background: rgba(0,0,0,0.55); color: #fff; transition: background var(--pp-dur-fast) var(--pp-ease); }
+.gd-shotmodal__close:hover, .gd-shotmodal__nav:hover { background: rgba(0,0,0,0.82); }
+.gd-shotmodal__close svg, .gd-shotmodal__nav svg { width: 20px; height: 20px; }
+.gd-shotmodal__close { top: 8px; right: 8px; }
+.gd-shotmodal__nav { top: 50%; transform: translateY(-50%); }
+.gd-shotmodal__nav--prev { left: 8px; }
+.gd-shotmodal__nav--next { right: 8px; }
+.gd-shotmodal__count { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); border-radius: 999px; padding: 3px 11px; font-size: 0.75rem; font-weight: 600; line-height: 1.5; }
+/* Chrome (arrows / close / count) stays hidden while the image is flying in/out, so it never
+   floats in empty space waiting for the image to arrive; it fades in once the image lands. */
+.gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count { transition: opacity 0.2s var(--pp-ease); }
+.gd-shotmodal.is-animating .gd-shotmodal__close,
+.gd-shotmodal.is-animating .gd-shotmodal__nav,
+.gd-shotmodal.is-animating .gd-shotmodal__count { opacity: 0; pointer-events: none; }
+.gd-shotmodal__strip { display: flex; gap: 6px; overflow-x: auto; padding: 4px; scrollbar-width: thin; scroll-behavior: smooth; }
+.gd-shotmodal__thumb { flex: 0 0 auto; width: 96px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; padding: 0; background: none; cursor: pointer; border: 2px solid transparent; opacity: 0.5; transition: opacity var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-shotmodal__thumb:hover { opacity: 0.85; }
+.gd-shotmodal__thumb.is-active { opacity: 1; border-color: var(--pp-primary); }
+
+/* ============================================================
+   Trophies panel
+   ============================================================ */
+.gd-syncing { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: var(--pp-radius-md); font-size: 0.9rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-info) 12%, transparent); border: 1px solid color-mix(in oklab, var(--pp-info) 30%, var(--pp-border)); }
+
+/* Toolbar (quiet chrome) */
+.gd-toolbar.pp-toolbar-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.22); }
+/* Collapsible filter body: mobile shows a "Filters & Sort" toggle over a collapsed body; md+ hides the toggle
+   and keeps the body open. grid-template-rows 0fr->1fr animates height with no magic max-height number. */
+.gd-toolbar__toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 2px; background: none; border: none; color: var(--pp-text); font: inherit; font-weight: 700; cursor: pointer; }
+.gd-toolbar__toggle > svg:first-child { width: 15px; height: 15px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-toolbar__toggle-lbl { flex: 1; text-align: left; }
+.gd-toolbar__badge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; font-size: 0.66rem; font-weight: 800; color: var(--pp-bg-0); background: var(--pp-primary); }
+.gd-toolbar__badge[hidden] { display: none; }
+.gd-toolbar__chev { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-toolbar__toggle[aria-expanded="true"] .gd-toolbar__chev { transform: rotate(180deg); }
+.gd-toolbar__body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--pp-dur) var(--pp-ease); }
+.gd-toolbar__body.is-open { grid-template-rows: 1fr; }
+.gd-toolbar__body-inner { display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-height: 0; }
+@media (min-width: 768px) {
+    .gd-toolbar__toggle { display: none; }
+    .gd-toolbar__body { grid-template-rows: 1fr; }
+    .gd-toolbar__body-inner { overflow: visible; }
+}
+.gd-toolbar__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.gd-field { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; }   /* mobile: each select full-width on its own row */
+@media (min-width: 768px) { .gd-field { flex-basis: 0; min-width: 120px; } }   /* tablet+: three across */
+.gd-field__lbl { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.gd-select { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-2) 80%, transparent); color: var(--pp-text); font-size: 0.85rem; padding: 7px 10px; cursor: pointer; }
+.gd-select:focus-visible { outline: 2px solid color-mix(in oklab, var(--pp-primary) 60%, transparent); outline-offset: 1px; }
+.gd-toolbar__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
+.gd-toolbar__lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-toolbar__sep { width: 1px; height: 16px; background: var(--pp-divider); margin: 0 4px; }
+/* Mobile: break the chip row so Type and Rarity get their own rows (the separator becomes a full-width gap). */
+@media (max-width: 767px) { .gd-toolbar__sep { flex-basis: 100%; width: auto; height: 0; margin: 2px 0; background: none; } }
+.gd-chip { cursor: pointer; }
+.gd-chip__face { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-chip__face:hover { color: var(--pp-text); }
+.gd-chip input:checked + .gd-chip__face { --c: var(--pp-secondary); color: var(--pp-text); font-weight: 700; background: color-mix(in oklab, var(--c) 18%, transparent); border-color: color-mix(in oklab, var(--c) 50%, var(--pp-border)); }
+.gd-chip input:checked + .gd-chip__face--type { --c: var(--pp-primary); }      /* Type: cyan */
+.gd-chip input:checked + .gd-chip__face--rarity { --c: var(--pp-secondary); }  /* Rarity: violet */
+.gd-chip input:focus-visible + .gd-chip__face { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-chip__face.is-pop { animation: gdChipPop 0.32s cubic-bezier(0.34, 1.6, 0.64, 1); }
+@keyframes gdChipPop { 0% { transform: scale(1); } 40% { transform: scale(1.13); } 100% { transform: scale(1); } }
+
+/* Group nav */
+/* Wrap the jump pills (don't horizontally scroll): a scroll container here sits in the page's flex column
+   (#zoom-wrapper) and its intrinsic min-content propagates up, widening the whole page on many-DLC games.
+   Wrapping has no intrinsic-width to leak, and shows every group at once. */
+.gd-groupnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.gd-groupnav__chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 5px 10px; border-radius: 999px; text-decoration: none; font-size: 0.78rem; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-groupnav__chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-groupnav__icon { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+.gd-groupnav__name { white-space: nowrap; }
+.gd-groupnav__count { font-size: 0.62rem; font-weight: 700; padding: 0 6px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 50%, transparent); }
+
+/* Adaptive "Jump to pack" menu -- the group nav's many-DLC form (grid.html renders it above the
+   chip threshold). Native <details>; the popover mirrors .gd-rate__dropmenu's surface so the two
+   dropdown idioms on these pages read as one family. NOT sticky: on BOTH hosts the sticky
+   minibar (List detail's, and the Game page's port of it) owns mid-scroll jumping via its
+   jump-to-group select, so pinning this control too would double the chrome. */
+/* No z-index on the pill itself (a sticky-era leftover): it tied the fixed .pp-minibar's 30 and
+   DOM order made the pill paint OVER the pinned bar. Unpositioned-z, the bar wins; the OPEN
+   popover keeps its own 30 so its rows never render half-hidden under the bar. */
+.gd-jumpmenu { position: relative; margin-bottom: 14px; width: fit-content; }
+.gd-jumpmenu__none { padding: 10px 9px; font-size: 0.78rem; color: var(--pp-text-mute); }
+.gd-jumpmenu__btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; cursor: pointer;
+    list-style: none; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: var(--pp-text-dim);
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-jumpmenu__btn::-webkit-details-marker { display: none; }
+.gd-jumpmenu__btn:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-jumpmenu__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-jumpmenu__btn > svg { width: 14px; height: 14px; flex-shrink: 0; }
+.gd-jumpmenu__caret { transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-jumpmenu[open] .gd-jumpmenu__caret { transform: rotate(180deg); }
+.gd-jumpmenu__tally { font-size: 0.68rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-bg-0) 50%, transparent); }
+.gd-jumpmenu__pop {
+    position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+    width: min(21rem, calc(100vw - 2rem));
+    display: flex; flex-direction: column; gap: 4px; padding: 6px;
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.gd-jumpmenu__filter {
+    width: 100%; padding: 7px 11px; font-size: 0.78rem; color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-bg-0) 60%, transparent);
+    border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm);
+}
+.gd-jumpmenu__filter:focus { outline: 2px solid var(--pp-primary); outline-offset: -1px; }
+.gd-jumpmenu__filter::placeholder { color: var(--pp-text-mute); }
+.gd-jumpmenu__list { max-height: min(19rem, 55vh); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.gd-jumpmenu__row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 9px; text-decoration: none;
+    font-size: 0.78rem; color: var(--pp-text-dim); border-radius: var(--pp-radius-sm);
+}
+.gd-jumpmenu__row:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+.gd-jumpmenu__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.gd-jumpmenu__row .gd-groupnav__name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-jumpmenu__pct { font-size: 0.68rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .gd-jumpmenu__caret { transition: none; } }
+
+/* Mobile tap targets: enlarge the interactive filter/jump controls (and their spacing) on phones -- the
+   desktop-compact sizes are too small to reliably tap. Restored to compact at md+ (mouse precision). */
+@media (max-width: 767px) {
+    .gd-select { padding: 10px 12px; }
+    .gd-toolbar__chips { gap: 8px; }
+    .gd-chip__face { padding: 8px 13px; }
+    .gd-groupnav { gap: 8px; }
+    .gd-groupnav__chip { padding: 9px 13px; }
+}
+
+/* Group header */
+.gd-group--sep { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--pp-divider); }
+/* Sticky under the chrome + pinned minibar (52px): each group header pins while its trophies scroll, then
+   the next one pushes it up (iOS section-header behavior). Near-opaque bg so rows don't bleed through. */
+.gd-group__head { --head-bg: color-mix(in oklab, var(--pp-bg-1) 96%, var(--pp-bg-0)); position: sticky; top: calc(var(--sticky-top, 3.625rem) + 52px); z-index: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; padding: 8px 12px; border-radius: var(--pp-radius-md); background: var(--head-bg); border: 1px solid var(--pp-border); border-left: 3px solid color-mix(in oklab, var(--pp-accent) 60%, var(--pp-border)); }
+/* Landing highlight: a soft background wash + glow (no hard ring -- reads cleaner against the sticky pin).
+   Colors hoisted to custom props so the keyframe carries no color-mix() (lightningcss drops those frames). */
+.gd-group__head.is-flash { --flash-wash: color-mix(in oklab, var(--pp-primary) 15%, var(--head-bg)); --flash-glow: color-mix(in oklab, var(--pp-primary) 42%, transparent); animation: gdHeadFlash 1.05s var(--pp-ease); }
+@keyframes gdHeadFlash {
+    0%, 100% { background-color: var(--head-bg); box-shadow: 0 0 0 0 transparent; }
+    22% { background-color: var(--flash-wash); box-shadow: 0 0 20px -2px var(--flash-glow); }
+}
+.gd-group__icon { width: 36px; height: 36px; border-radius: 8px; overflow: hidden; flex-shrink: 0; border: 1px solid var(--pp-border); }
+.gd-group__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.gd-group__name { font-weight: 700; font-style: italic; font-size: 0.95rem; color: var(--pp-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-group__progress { display: flex; align-items: center; gap: 8px; }
+.gd-group__bar { flex: 1 1 auto; max-width: 240px; }   /* a short bar; the % sits right at its end, not the header edge */
+.gd-group__pct { font-size: 0.8rem; font-weight: 800; color: var(--pp-text-dim); flex-shrink: 0; line-height: 1; }
+/* Flat tier dots (the glowing colored dot from the Collection header): color carries the tier, no boxes/labels.
+   Mobile: drops to its own row under the header (indented past the icon) so the group name has room; md: inline. */
+.gd-group__counts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-basis: 100%; padding-left: 46px; margin-top: 2px; }
+.gd-gcount { --tc: var(--pp-text-mute); display: inline-flex; align-items: center; gap: 5px; }
+.gd-gcount--bronze { --tc: var(--color-trophy-bronze); }
+.gd-gcount--silver { --tc: var(--color-trophy-silver); }
+.gd-gcount--gold { --tc: var(--color-trophy-gold); }
+.gd-gcount--platinum { --tc: var(--color-trophy-platinum); }
+.gd-gcount__dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--tc); box-shadow: 0 0 6px color-mix(in oklab, var(--tc) 55%, transparent); }
+.gd-gcount__n { font-size: 0.82rem; font-weight: 700; color: var(--pp-text-dim); line-height: 1; white-space: nowrap; }
+.gd-gcount__n b { color: var(--pp-text); }
+@media (min-width: 768px) {
+    .gd-group__head { flex-wrap: nowrap; }
+    .gd-group__counts { flex-basis: auto; padding-left: 0; margin-top: 0; gap: 14px; }
+}
+
+/* Trophy cards */
+.gd-trophies { display: flex; flex-direction: column; gap: 7px; }
+/* Staggered arrival: staggerReveal drives the per-row WAAPI motion (the backwards-fill is what holds each
+   row hidden through its stagger delay). This rule is the strand-proof safety net -- a row is only ever
+   hidden while un-revealed. .pp-reveal is added by JS ONLY when it will animate (motion-gated -- reduced-
+   motion viewers never hide anything, and without JS the class is never added, so rows always show). */
+@media (prefers-reduced-motion: no-preference) {
+    #browse-results.pp-reveal .gd-trophy:not(.is-revealed) { opacity: 0; }
+}
+.gd-trophy {
+    --tt: var(--pp-border); display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 9px 11px;
+    border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 65%, transparent); border: 1px solid var(--pp-border);
+    transition: border-color var(--pp-dur-fast) var(--pp-ease), box-shadow var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-trophy--bronze { --tt: var(--color-trophy-bronze); }
+.gd-trophy--silver { --tt: var(--color-trophy-silver); }
+.gd-trophy--gold { --tt: var(--color-trophy-gold); }
+.gd-trophy--platinum { --tt: var(--color-trophy-platinum); }
+.gd-trophy:hover { border-color: color-mix(in oklab, var(--tt) 55%, var(--pp-border)); box-shadow: 0 0 16px -6px color-mix(in oklab, var(--tt) 60%, transparent); }
+.gd-trophy.is-earned { border-left: 3px solid var(--pp-success); }
+.gd-trophy__icon { width: 52px; height: 52px; border-radius: 9px; overflow: hidden; flex-shrink: 0; border: 2px solid var(--pp-border); transition: border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-trophy:hover .gd-trophy__icon { border-color: color-mix(in oklab, var(--tt) 55%, var(--pp-border)); }
+.gd-trophy__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gd-trophy__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gd-trophy__name { font-weight: 600; font-size: 0.92rem; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.gd-trophy__type { --tc: var(--pp-text-mute); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; color: var(--tc); border: 1px solid color-mix(in oklab, var(--tc) 45%, transparent); flex-shrink: 0; }
+.gd-trophy__detail { font-size: 0.76rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.gd-trophy__earned { font-size: 0.68rem; font-style: italic; color: color-mix(in oklab, var(--pp-success) 80%, var(--pp-text)); }
+.gd-trophy__prog { display: flex; align-items: center; gap: 8px; margin-top: 3px; max-width: 260px; }
+.gd-trophy__progbar { flex: 1; }   /* shared pp-horizon; amber via --horizon-accent (set inline) */
+.gd-trophy__progval { font-size: 0.62rem; font-weight: 700; color: var(--pp-accent); white-space: nowrap; }
+/* One rates block, reflowed responsively (no duplicate markup): mobile wraps it below the row (inline,
+   labels hidden, indented past the icon); desktop is the right-hand stacked column with labels. */
+.gd-trophy__rates { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-basis: 100%; padding-left: 64px; }
+.gd-trophy__got { display: inline-flex; }
+.gd-trate { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--pp-text-dim); }   /* per-trophy earn-rate readout (renamed from .gd-rate: collided with the ratings-panel block) */
+.gd-trate--stacked { flex-direction: row; align-items: center; gap: 4px; }
+.gd-trate__val { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); }
+.gd-trate__lbl { display: none; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .gd-trophy { flex-wrap: nowrap; }
+    .gd-trophy__rates { flex-basis: auto; padding-left: 0; gap: 12px; }
+    .gd-trate--stacked { flex-direction: column; gap: 1px; min-width: 52px; }
+    .gd-trate__val { font-size: 0.85rem; }
+    .gd-trate__lbl { display: block; }
+    .gd-trophy__icon { width: 56px; height: 56px; }
+}
+
+/* Filter-empty state */
+.gd-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 16px; text-align: center; color: var(--pp-text-mute); }
+.gd-empty svg { width: 44px; height: 44px; opacity: 0.5; }
+.gd-empty__title { font-weight: 600; color: var(--pp-text-dim); }
+.gd-empty__hint { font-size: 0.82rem; }
+/* Turns the dead end into a path -- opens the same report modal as the hero's Report button. */
+.gd-empty__cta { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim); cursor: pointer; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-empty__cta svg { width: 14px; height: 14px; color: var(--pp-text-mute); transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-empty__cta:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)); }
+.gd-empty__cta:hover svg { color: var(--pp-primary); }
+.gd-empty__cta:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ============================================================
+   About panel
+   Stacked cards; the discrete sections sit in a 2-up grid on tablet+ so the wide panel isn't one tall
+   skinny column. Reuses .gd-fact (key/value), .gd-tag (genre/theme chips) and .gd-empty (empty state).
+   ============================================================ */
+.gd-about { display: flex; flex-direction: column; gap: 12px; }
+.gd-acard { padding: 14px 16px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-1) 70%, transparent); border: 1px solid var(--pp-border); }
+.gd-acard__h { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); margin-bottom: 10px; }
+/* Full summary (the hero carries the clamped teaser, so nothing is truncated here). */
+.gd-about__summary { font-size: 0.9rem; line-height: 1.65; color: var(--pp-text-dim); }
+.gd-about__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+/* .gd-tag is a span in the hero; here it's a link, so it needs link + hover/focus states. */
+a.gd-tag { text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+a.gd-tag:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)); }
+a.gd-tag--theme:hover { border-color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-secondary) 10%, var(--pp-bg-2)); }
+a.gd-tag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Sections are stacked full-width bands (see game_about_card.html) -- no grid, so a missing section can
+   never leave an empty cell. Each band adapts internally instead. */
+/* Band cascade on first arrival. staggerReveal drives the WAAPI motion; these only hold the hidden/shown
+   states, and it only adds .pp-reveal when it will actually reveal, so a band can never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .gd-about.pp-reveal > .gd-acard,
+    .gd-about.pp-reveal > .gd-empty { opacity: 0; }
+    .gd-about.pp-reveal > .gd-acard.is-revealed,
+    .gd-about.pp-reveal > .gd-empty.is-revealed { opacity: 1; }
+}
+
+/* Time to beat: three figures (speedrun / normal / completionist). */
+/* Time to beat: label / shared-scale bar / value rows. The bars carry the information (the RATIO between
+   the estimates), so they get the width; max-width keeps them from stretching across a full-width band. */
+.gd-ttb { display: grid; gap: 7px; }
+@media (min-width: 768px) { .gd-ttb { max-width: 560px; } }
+.gd-ttb__row { display: grid; grid-template-columns: 5.5rem 1fr auto; align-items: center; gap: 10px; }
+.gd-ttb__lbl { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.gd-ttb__bar { --horizon-accent: var(--pp-primary); min-width: 0; }
+.gd-ttb__val { font-size: 0.82rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+/* The viewer's own time is the one row that isn't an estimate -- accent it so it reads as "you are here". */
+.gd-ttb__row--you .gd-ttb__lbl { color: var(--pp-accent); }
+.gd-ttb__row--you .gd-ttb__val { color: var(--pp-accent); }
+
+/* Fallback for a lone estimate (no ratio to show): the original centred tally. */
+.gd-ttb__solo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 768px) { .gd-ttb__solo { max-width: 460px; } }
+.gd-ttb__cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: var(--pp-radius-sm); background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent); border: 1px solid var(--pp-border); }
+.gd-ttb__v { font-size: 1rem; font-weight: 800; color: var(--pp-text); line-height: 1; }
+.gd-ttb__k { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); text-align: center; }
+
+/* Quick facts: shared .gd-fact key/value blocks flowed into columns, so a full-width band reads as a short
+   wide block instead of one long ladder (a game crediting seven studios was the worst case). */
+.gd-about__facts { display: grid; grid-template-columns: 1fr; gap: 10px 20px; }
+@media (min-width: 768px) { .gd-about__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .gd-about__facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.gd-fact__link { color: var(--pp-primary); text-decoration: none; }
+.gd-fact__link:hover { text-decoration: underline; }
+/* No-JS "+N more" disclosure for long franchise/series lists. */
+.gd-more { display: inline; }
+/* nowrap so the toggle never splits across lines. The separating comma lives OUTSIDE the <details> so it
+   stays welded to the preceding name instead of being dragged down with the toggle on a wrap. */
+.gd-more > summary { display: inline; white-space: nowrap; cursor: pointer; list-style: none; color: var(--pp-text-mute); }
+.gd-more > summary::-webkit-details-marker { display: none; }
+.gd-more > summary:hover { color: var(--pp-primary); }
+.gd-more > summary:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+/* Open: flex ONLY so `order` can move the toggle after the revealed names -- otherwise it would interrupt
+   the list mid-run. The summary must stay visible: hiding it left no way to re-collapse, and a focused
+   element going display:none drops keyboard focus to <body>, silently losing the user's place. */
+.gd-more[open] { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.35em; }
+.gd-more[open] > summary { order: 2; font-size: 0.72rem; }
+.gd-more__rest { order: 1; }
+.gd-more__shut { display: none; }
+.gd-more[open] .gd-more__open { display: none; }
+.gd-more[open] .gd-more__shut { display: inline; }
+
+/* External links. */
+.gd-about__links { display: flex; flex-wrap: wrap; gap: 6px; }
+.gd-alink { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: var(--pp-text-dim); text-decoration: none; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); border: 1px solid var(--pp-border); transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-alink svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--pp-text-mute); }
+.gd-alink:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2)); }
+.gd-alink:hover svg { color: var(--pp-primary); }
+.gd-alink:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+    .gd-cover, .gd-spine__row, .gd-spine__chev, .gd-about-more svg, .gd-trophy, .gd-trophy__icon, #browse-results,
+    .gd-groupbar__fill, .gd-jobmini, .gd-shotmodal__close, .gd-shotmodal__nav, .gd-shotmodal__count, .gd-shotmodal__thumb { transition: none; }
+    .gd-spine__row--contract:hover .gd-jobmini { transform: none; }
+    .gd-loadbar.is-active > span { animation: none; }
+    .gd-toolbar__body, .gd-toolbar__chev { transition: none; }
+    .gd-shotmodal__strip { scroll-behavior: auto; }
+    .gd-shotmodal[open]::backdrop, .gd-shotmodal.is-closing::backdrop { animation: none; }
+    .gd-modal[open] { animation: none; }
+}
+
+/* ── Leaderboard panel ─────────────────────────────────────────────────────────────────────────────
+   Ranked by completion, ties broken by who got there first, so completers lead ordered by when they
+   finished and chasers follow by closeness. Rows are a grid so the rank, name and percentage columns
+   stay aligned down the whole list -- a ragged left edge is what makes a leaderboard read as a list
+   instead of a ranking. Fetched on first tab activation, so it needs its own loading state. */
+/* --lb-row-h is the FIXED virtual-row height the JS keys everything off (spacer height, row offsets, jump
+   targets). Two-line rows on mobile are taller; the single-line table at md+ is shorter. */
+/* NO `--lb-row-h` here. The engine's row pitch is declared on `.lb-wall` (leaderboards.css) and read
+   from there; a second declaration on the board root shadowed nothing today and was a loaded gun -- the
+   values differed by 4-24px, so anything that read the property from an ancestor other than the wall
+   would have misplaced every row by a growing offset. */
+.gd-lb { display: flex; flex-direction: column; gap: 10px; }
+/* While a board/filter switch is fetching, dim the board content and block input (the switcher stays lit so
+   the change you just made reads as active). The JS removes it by swapping in the new panel, which settles
+   in via lbEntrance. */
+/* The swap state. `.is-swapping` lands on `.gd-lb` (game-detail.js), while the shared rule in
+   leaderboards.css targets `.lb-board` -- a DESCENDANT -- so after the chrome moved onto the shared
+   partials nothing dimmed and a board switch blocked input with no feedback at all. */
+.gd-lb.is-swapping { pointer-events: none; }
+.gd-lb.is-swapping .lb-controls,
+.gd-lb.is-swapping .lb-board { opacity: 0.55; transition: opacity var(--pp-dur) var(--pp-ease); }
+
+/* Board switcher: the segmented-switcher standard (bordered pill container, transparent chips, tinted-flat
+   active). A primary mode row (Standings / Fastest / Most Played) and, on DLC games, a smaller group row
+   below it. Scrolls horizontally rather than wrapping so it stays one clean line on a phone. */
+/* A thin divider under the switcher separates picking a board from viewing it (the filters + list below). */
+.gd-lb__boards { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid color-mix(in oklab, var(--pp-border) 60%, transparent); }
+/* Most Played has no group row; a ghost copy (same markup) reserves the EXACT height so switching to it
+   never shifts the page -- unlike a min-height estimate, this can't be off. */
+.gd-lb__seg--ghost { visibility: hidden; }
+.gd-lb__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
+.gd-lb__seg::-webkit-scrollbar { display: none; }
+.gd-lb__segchip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__segchip svg { width: 14px; height: 14px; }
+.gd-lb__segchip:hover { color: var(--pp-text); }
+.gd-lb__segchip[aria-pressed="true"] { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, var(--pp-bg-1)); }
+.gd-lb__segchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The group row is the secondary axis: same treatment, smaller. It holds a dropdown, so it must NOT clip
+   (the mode row keeps overflow-x for its scroll). */
+.gd-lb__seg--groups { overflow: visible; }
+.gd-lb__seg--groups .gd-lb__segchip { font-size: 0.72rem; font-weight: 600; padding: 5px 11px; }
+
+/* DLC dropdown: the trigger is a segchip with a chevron; its menu is an anchored popover of DLC boards. */
+.gd-lb__drop { position: relative; display: inline-flex; }
+.gd-lb__dropbtn { gap: 4px; }
+.gd-lb__dropbtn svg { width: 12px; height: 12px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__dropbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.gd-lb__dropmenu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; min-width: max(100%, 9.5rem); max-height: 15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+.gd-lb__dropmenu[hidden] { display: none; }
+.gd-lb__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; }
+.gd-lb__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+
+
+/* Rank-or-hunter search: reuses the shared [data-search-wrap] chrome (clear button + spinner) that the
+   browse/collection toolbars use, with a leading search glyph like .pp-bgal__search. */
+/* The hunter search sits in `.lb-jumpbar`'s slot, between "you're #N" and the rank box. The bar is
+   `justify-content: space-between`, so the search takes the middle and grows into whatever the two ends
+   leave -- `flex: 1 1 12rem` rather than the `0 1` it used when it was the last item on its own row.
+   It falls to a full-width row of its own when the three no longer fit, which is what `flex-wrap` on the
+   jump bar already does for the other two. */
+.gd-lb__find { position: relative; flex: 1 1 12rem; min-width: 8.5rem; max-width: 22rem; }
+@media (max-width: 519px) { .gd-lb__find { flex-basis: 100%; max-width: none; order: 1; } }
+.gd-lb__findicon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--pp-text-mute); pointer-events: none; }
+.gd-lb__findinput { width: 100%; padding: 7px 12px 7px 32px; font-size: 0.75rem; color: var(--pp-text); background: var(--pp-bg-0); border: 1px solid var(--pp-border); border-radius: 999px; }
+.gd-lb__findinput::placeholder { color: var(--pp-text-mute); }
+.gd-lb__findinput:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+
+/* Typeahead dropdown (mirrors the navsearch panel): board hunters matching the query, each with rank. */
+.gd-lb__suggest { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 15rem; overflow-y: auto; padding: 4px; border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4); }
+.gd-lb__suggest[hidden] { display: none; }
+.gd-lb__sugg { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: var(--pp-radius-sm); cursor: pointer; text-align: left; color: var(--pp-text); background: none; border: none; }
+.gd-lb__sugg.is-active, .gd-lb__sugg:hover { background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
+.gd-lb__sugg-av { flex: none; width: 24px; height: 24px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.gd-lb__sugg-av img { width: 100%; height: 100%; object-fit: cover; }
+.gd-lb__sugg-name { flex: 1; min-width: 0; font-size: 0.8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-lb__sugg-rank { flex: none; font-size: 0.74rem; font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+
+.gd-lb__loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px; font-size: 0.82rem; color: var(--pp-text-mute); }
+.gd-lb__spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--pp-border); border-top-color: var(--pp-primary); animation: gdLbSpin 0.7s linear infinite; }
+@keyframes gdLbSpin { to { transform: rotate(360deg); } }
+
+/* First-load skeleton: placeholder rows that shimmer while the panel fetches. The panel is lazy-loaded, so
+   there's nothing to dim -- a skeleton reads better than a spinner and matches the rest of the site. */
+.gd-lb__skel { display: flex; flex-direction: column; gap: 10px; }
+.gd-lb__skel-bar { height: 34px; width: 55%; border-radius: 999px; }
+.gd-lb__skel-list { display: flex; flex-direction: column; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); overflow: hidden; }
+.gd-lb__skel-row { display: grid; grid-template-columns: 1.5rem 26px minmax(0, 1fr) 5rem; align-items: center; gap: 10px; height: 44px; padding: 0 10px; border-bottom: 1px solid color-mix(in oklab, var(--pp-border) 55%, transparent); }
+.gd-lb__skel-cell { border-radius: 6px; background: linear-gradient(90deg, var(--pp-bg-2) 0%, color-mix(in oklab, var(--pp-bg-2) 82%, var(--pp-text-dim)) 50%, var(--pp-bg-2) 100%); background-size: 200% 100%; animation: gdLbSkel 1.4s ease-in-out infinite; }
+.gd-lb__skel-rank { height: 0.8rem; }
+.gd-lb__skel-av { width: 26px; height: 26px; border-radius: 50%; }
+.gd-lb__skel-name { height: 0.9rem; width: 55%; }
+.gd-lb__skel-meta { height: 0.9rem; }
+@keyframes gdLbSkel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .gd-lb__skel-cell { animation: none; } }
+
+/* The active board's title is the header; the count sits under it as a muted subtitle. */
+
+/* Same slot, same shape, none of the affordance: it is a statement, not a control, so it drops the accent
+   and the pointer. Keeping the pill keeps the heading row from reflowing between the two states. */
+
+/* The list is a card: it frames the rows as one object, so they read as a ranking table rather than a
+   stack of floating chips. Rows lose their own background (chip-in-card is busy) and separate by a
+   hairline instead. */
+/* Virtual list: the card is a full-height spacer (JS sets height = board_size * --lb-row-h) so the page
+   scrollbar spans the WHOLE board; rows are absolutely positioned inside by rank, only the visible ~30 in
+   the DOM. overflow: hidden clips rows to the rounded card. */
+
+/* Each row is a fixed-height (--lb-row-h) absolutely-positioned band; the JS sets `top`. A bottom hairline
+   is the divider (absolute rows have no flow adjacency).
+   MOBILE: a two-line layout -- rank|name|% on top, trophy haul + date/time beneath -- because cramming
+   everything into 375px left only name + % legible. md+: a single-line table (grid-template-areas: none
+   lets the cells flow in DOM order); the trophy column is fixed-width so a platinum dot can't shove % and
+   date out of alignment. */
+
+/* Cell placement. On mobile the metadata line is ONE spanning area holding the trophy haul (pinned left)
+   and date/time (pinned right); keeping pct in its own narrow row-1 column stops the wide date from
+   coupling to pct and squeezing the name. At md+ (areas:none) the cells resolve to auto and flow in DOM
+   order into the linear table. */
+/* max-width reserves the right side of the shared meta cell for the date/time, so a big trophy haul
+   (a completionist on a large game, on a narrow phone) clips its tail instead of colliding with the date.
+   Reset at md+ where trophies gets its own 9rem column. */
+/* Mobile: tighter dots/counts and a slightly larger date reserve so the four-tier haul, the numeric date
+   AND the time all fit the two-line row -- an extreme completionist haul still clips its tail rather than
+   shoving the date off. md+ gets its own 9rem column, so it relaxes back to comfortable spacing. */
+
+/* Medals key off canonical rank (set in the row template), not DOM order -- virtualized rows mount in
+   scroll order, so nth-child would colour the wrong rows after any scroll-away-and-back. The soft glow gives
+   the podium quiet weight without a badge that would shove the tabular alignment around. */
+
+/* A "You" pill on the viewer's own row, so it's scannable while scrolling past. */
+
+/* Bar only at lg (the trophy column already carries visual weight at md); date at md. */
+/* The time is the visible tiebreaker. On mobile it sits inline after the date on the metadata line (with
+   a middot) to keep rows to two lines; at md+ it stacks under the date in the narrow date column. */
+/* The timestamp is the tiebreaker between equal-progress players, so the TIME earns its place even on
+   mobile -- boards are often minutes apart. To fit the two-line row it goes compact: a numeric date
+   (7/24/26) with the time inline after a middot. md+ has room to stack the spelled-out date over the time. */
+
+/* Speed / playtime rows flow the cells in DOM order (no standings grid areas). MOBILE: there's only room
+   for the headline number, so every context column is hidden -- rank | who | metric. md+ restores the
+   context columns (Started/Finished, Progress/Last played) and anchors them (below). */
+@media (min-width: 768px) {
+    /* Anchor the metric area to the SAME left edge as the standings board's trophy section, so all three
+       board types line up. Standings' metric block is 9+3+6.5 = 18.5rem at md (name column = 1fr, 10px
+       gaps); matching the three metric columns to that total, with the same 1fr name column and gap, starts
+       them at the same x. Values run start / center / end across the block. */
+}
+@media (min-width: 1024px) {
+    /* lg adds the bar column to standings, growing its block to 9+7+3+6.5 = 25.5rem; grow the metric
+       columns to match so the left edge stays aligned. */
+}
+/* The metric (elapsed / play time) is the row's headline number. On mobile it sits at the right (its column
+   is content-width after the 1fr name). md+ centers speed between the two dates / leads playtime after the
+   name. */
+
+/* A context cell (speed dates / playtime progress + last-played). Columns are labelled once by the header
+   row above, so the cells hold just values. */
+/* The time under the date on the Fastest board -- a speedrun's start/finish matter to the minute. */
+
+/* Column header: labels the columns once, desktop only (mobile rows are 2-line / headline-only). It mirrors
+   each board's row grid, plus the row's 10px inset and the card's 1px border (11px padding), so each label
+   sits over its column. The lg-only h-bar slot matches the standings progress-bar column. */
+
+/* The viewer's own row, and the flash when they jump to it. */
+/* A jumped-to row stays lit (background + ring) until the user scrolls away -- the JS adds/removes
+   .is-found. It transitions in so the landing reads as "here you are", and the ring sits INSIDE the row
+   (inset) so a fixed-height absolutely-positioned row can't clip it. */
+
+/* Minibar "You #N" widget: your standing while scrolled, replacing the old floating self-row. The chevron
+   points toward your rank (down = below you, up = above) and springs the flip as you cross your own row;
+   a lit "here" state when your row is on screen. Click jumps to it. */
+.gd-lb__mbrank { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px 5px 8px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; cursor: pointer; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 13%, transparent); border: 1px solid color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border)); transition: background var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.gd-lb__mbrank:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
+.gd-lb__mbrank:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-lb__mbrank-arrow { width: 13px; height: 13px; transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gd-lb__mbrank-lbl { color: var(--pp-text-dim); font-weight: 600; }
+.gd-lb__mbrank-n { font-variant-numeric: tabular-nums; }
+/* Chevron SVG points DOWN at rest; rotate 180 to point up. */
+.gd-lb__mbrank[data-lb-dir="up"] .gd-lb__mbrank-arrow { transform: rotate(180deg); }
+/* "Here": your row is on screen, so the widget lights up and the arrow relaxes to a neutral, dimmed dot. */
+.gd-lb__mbrank[data-lb-dir="here"] { color: var(--pp-accent); background: color-mix(in oklab, var(--pp-accent) 16%, transparent); border-color: color-mix(in oklab, var(--pp-accent) 48%, var(--pp-border)); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-accent) 14%, transparent); }
+.gd-lb__mbrank[data-lb-dir="here"] .gd-lb__mbrank-lbl { color: var(--pp-accent); }
+.gd-lb__mbrank[data-lb-dir="here"] .gd-lb__mbrank-arrow { transform: scale(0.55); opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .gd-lb__mbrank-arrow { transition: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .gd-lb__spinner { animation-duration: 1.6s; }
+}
+
+/* ============================================================
+ * RATINGS TAB (.gd-rate) -- community-stats context strip over per-group community ratings.
+ * Bars are pp-horizon primitives tinted by a per-stat tone (--rate-accent, set from [data-tone]).
+ * ============================================================ */
+/* The Ratings tab is a stack of full-width framed sections (.gd-acard, like the About panel) -- nothing sits
+   bare on the page substrate. Consistent section rhythm via flex-gap. */
+.gd-rate { display: flex; flex-direction: column; gap: 14px; }
+.gd-rate__panel { display: flex; flex-direction: column; gap: 14px; }
+
+/* Band cascade on first arrival -- same shared staggerReveal engine as the About panel. These hold only the
+   hidden/shown states; ALL panels' cards get revealed (so switching DLC never lands on an unrevealed band), and
+   staggerReveal adds .pp-reveal only when it will actually reveal, so a band can never stick hidden. */
+@media (prefers-reduced-motion: no-preference) {
+    .gd-rate.pp-reveal .gd-rate__snapshot,
+    .gd-rate.pp-reveal .gd-rate__sel,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-acard,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-blurbs { opacity: 0; }
+    .gd-rate.pp-reveal .gd-rate__snapshot.is-revealed,
+    .gd-rate.pp-reveal .gd-rate__sel.is-revealed,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-acard.is-revealed,
+    .gd-rate.pp-reveal .gd-rate__panel > .gd-blurbs.is-revealed { opacity: 1; }
+}
+
+/* Community snapshot: the four per-game numbers as a plain stat row inside the band (dividers on md+). */
+.gd-rate__stats { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.gd-rate__stat { flex: 1 1 calc(50% - 4px); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px; text-align: center; }
+@media (min-width: 768px) { .gd-rate__stat { flex: 1 1 0; } .gd-rate__stat:not(:last-child) { border-right: 1px solid var(--pp-divider); } }
+.gd-rate__stat-n { font-size: 1.4rem; font-weight: 800; color: var(--pp-text); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.gd-rate__stat-unit { font-size: 0.8rem; font-weight: 700; color: var(--pp-text-dim); margin-left: 1px; }
+.gd-rate__stat-lbl { font-size: 0.64rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+
+/* Adaptive DLC selector: pill row (few groups) or Base pill + dropdown (many) -- mirrors the leaderboard switcher. */
+.gd-rate__seg { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 2px; padding: 3px; border-radius: 999px; background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent); border: 1px solid var(--pp-border); overflow-x: auto; scrollbar-width: none; }
+.gd-rate__seg::-webkit-scrollbar { display: none; }
+/* overflow-x:auto (for the horizontal pill-scroll) forces overflow-y to auto too, which clips the absolutely-
+   positioned DLC dropdown hanging below. In dropdown mode the row is just Base + the menu button and never
+   needs to scroll, so let that variant overflow visibly instead of eating the menu. */
+.gd-rate__seg:has([data-rate-drop]) { overflow: visible; }
+.gd-rate__segchip { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; color: var(--pp-text-dim); background: none; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-rate__segchip:hover { color: var(--pp-text); }
+.gd-rate__segchip.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, var(--pp-bg-1)); }
+.gd-rate__segchip:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-rate__drop { position: relative; display: inline-flex; }
+.gd-rate__dropbtn { gap: 4px; }
+.gd-rate__dropbtn svg { width: 12px; height: 12px; transition: transform var(--pp-dur-fast) var(--pp-ease); }
+.gd-rate__dropbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.gd-rate__dropmenu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; min-width: max(100%, 10rem); max-height: 15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: var(--pp-radius-md); background: var(--pp-bg-1); border: 1px solid var(--pp-border); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+.gd-rate__dropmenu[hidden] { display: none; }
+.gd-rate__dropitem { justify-content: flex-start; width: 100%; text-align: left; border-radius: var(--pp-radius-sm); padding: 7px 11px; white-space: nowrap; }
+.gd-rate__dropitem:hover { background: color-mix(in oklab, var(--pp-primary) 10%, transparent); }
+.gd-rate__dropitem:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Only the active group's panel shows; the rest are hidden (no unmount -- state is cheap and SSR'd). */
+.gd-rate__panel.is-hidden { display: none; }
+
+/* Per-group title on the verdict card (only when the game has DLC, so you can tell which group you're viewing).
+   Uses the band-header treatment, a touch brighter than a plain label since it's the "you are here" indicator. */
+.gd-rate__grouptitle { color: var(--pp-text-dim); }
+
+/* ---- Ratings surface: a "conditions card" -- a plain-language summary headline over icon tiles (no chart) ---- */
+.gd-cond { display: flex; flex-direction: column; gap: 16px; }
+
+/* Hero: the synthesized summary sentence IS the headline (what a hunter reads to get the whole picture in a
+   glance); the star score + count sit beneath it. */
+.gd-cond__hero { display: flex; flex-direction: column; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid var(--pp-divider); }
+/* The two hard facts flank the top: score+stars (how good) left, time-to-plat (how long) right. */
+.gd-cond__herorow { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; flex-wrap: wrap; }
+.gd-cond__rating { display: flex; align-items: baseline; gap: 9px; }
+/* Fractional gold stars: a dim 5-star base with a gold overlay clipped to the score % (--fill). */
+/* letter-spacing: 0 is GEOMETRY, not taste -- see components/stars.css. The overlay is clipped by width,
+   so a gap between the glyphs makes the fill's unit `glyph + gap`, and a half-fill then lands past the
+   middle of the third glyph. This carried 3px and drew a 4.5 nearer a 4.6. */
+.gd-cond__stars { position: relative; display: inline-block; font-size: 1.35rem; line-height: 1; letter-spacing: 0; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
+.gd-cond__stars::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-cond__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--pp-rating-star); transition: width var(--pp-dur) var(--pp-ease); }
+.gd-cond__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-cond__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
+.gd-cond__score-n { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-cond--empty .gd-cond__score-n, .gd-cond--empty .gd-cond__of { color: var(--pp-text-mute); }
+.gd-cond__of { font-size: 0.9rem; font-weight: 700; color: var(--pp-text-mute); }
+/* The recommendation split: three shares of the same total, so they are laid out as equal columns rather
+   than as a sentence -- the comparison IS the information, and equal widths are what let it be read at a
+   glance instead of parsed.
+   `is-empty` collapses the whole block (nobody has answered yet), which is every game until the
+   recommendation backlog clears; it stays in the DOM so the live update only sets values. */
+.gd-cond__recs { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; }
+.gd-cond__recs.is-empty { display: none; }
+.gd-cond__recrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
+.gd-cond__rec {
+    display: flex; flex-direction: column; align-items: center; gap: 1px; text-align: center;
+    padding: 7px 6px; border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--rec-c) 9%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rec-c) 26%, transparent);
+    --rec-c: var(--pp-text-mute);
+}
+/* Same three tokens the form's options and the profile card's chip use, so an answer is the same colour
+   wherever it appears. */
+/* An option nobody picked is drawn but held back -- present because a zero is information, quiet because
+   it is not a finding. Driven by a class rather than by matching the text, which CSS cannot do; the live
+   update toggles it alongside the figures. */
+.gd-cond__rec.is-none { opacity: 0.5; }
+
+/* Glyph beside the figure rather than above it: the icon says WHICH answer and the percentage says how
+   many, and reading them as one line is what makes the row scannable at three cells wide. */
+.gd-cond__rec-fig { display: inline-flex; align-items: center; gap: 4px; }
+.gd-cond__rec-fig svg { width: 15px; height: 15px; flex: none; color: var(--rec-c); }
+.gd-cond__rec-pct { font-size: 1.05rem; font-weight: 800; line-height: 1.1; color: var(--rec-c); font-variant-numeric: tabular-nums; }
+.gd-cond__rec-lbl { font-size: 0.62rem; font-weight: 600; line-height: 1.25; color: var(--pp-text-dim); }
+.gd-cond__rec-n { font-size: 0.6rem; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-cond__rec-from { font-size: 0.68rem; color: var(--pp-text-mute); }
+.gd-cond__count { font-size: 0.76rem; color: var(--pp-text-mute); }
+/* On an UNRATED game this reads "Be the first to rate this." -- a nudge rather than a figure, so it comes
+   up a size. Reached through `:has()` because the count moved out of `.gd-cond` and down to the action
+   row, so it is no longer a descendant of the element carrying `--empty`. */
+.gd-rate__verdict:has(.gd-cond--empty) .gd-cond__count { font-size: 0.84rem; color: var(--pp-text-dim); }
+
+/* Rating spread: a compact column chart that shares the metrics row with the quality tiles (framed like a
+   fourth tile). One column per exact 0.5 step (0.5 left -> 5.0 right). Each column is a VISIBLE slot sitting
+   on a baseline rule -- App Store / iOS-Health style -- so short bars read as a silhouette, not floating
+   squares. Cyan (brand accent) fills the earned portion; the count rides just above each bar's top; whole-
+   star slots are a touch stronger + numeral-labeled so the eye anchors on 1..5, half-steps fill between. */
+.gd-cond__disttile { display: flex; flex-direction: column; gap: 7px; padding: 13px 13px 11px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
+.gd-dist { display: flex; align-items: flex-end; gap: 3px; flex: 1; min-height: 52px; padding-top: 15px; border-bottom: 1.5px solid var(--pp-border); }   /* padding-top reserves headroom for the peak bar's count */
+.gd-dist__col { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; border-radius: 2px 2px 0 0; background: color-mix(in oklab, var(--pp-bg-2) 50%, transparent); overflow: visible; }
+.gd-dist__col.is-whole { background: color-mix(in oklab, var(--pp-bg-2) 74%, transparent); }
+.gd-dist__n { flex: 0 0 auto; margin-bottom: 2px; font-size: 0.58rem; font-weight: 700; line-height: 1; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.gd-dist__n:empty { display: none; }   /* zero-count bars carry no label */
+.gd-dist__fill { flex: 0 0 auto; width: 100%; background: var(--pp-primary); border-radius: 2px 2px 0 0; transition: height var(--pp-dur) var(--pp-ease); }
+.gd-dist__col:not(.is-whole) .gd-dist__fill { background: color-mix(in oklab, var(--pp-primary) 80%, transparent); }   /* half-steps read a touch quieter */
+.gd-dist__axis { display: flex; gap: 3px; }
+.gd-dist__axis span { flex: 1; min-width: 0; text-align: center; font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; line-height: 1; }
+
+/* md+: the chart joins the tiles inline as a wider fourth column (only when a rating exists). */
+@media (min-width: 768px) {
+    .gd-cond__metrics.is-wide { grid-template-columns: repeat(3, 1fr) 1.55fr; }
+    .gd-cond__metrics.is-wide .gd-cond__disttile { grid-column: auto; }
+}
+.gd-cond__summary { font-size: 1.18rem; font-weight: 700; line-height: 1.35; letter-spacing: -0.01em; color: var(--pp-text); text-wrap: balance; }
+.gd-cond--empty .gd-cond__summary { color: var(--pp-text-dim); font-weight: 700; }
+
+/* Conditions tiles: the number is the figure (prioritized, Tally face), the verdict word its plain-language
+   descriptor (polarity lives in the WORD, so nothing reads backwards). Only the icon + verdict take the tone
+   accent -- the tile surface stays neutral. */
+/* Metrics row: the three quality tiles, plus the rating-spread chart as a fourth framed cell (.is-wide adds
+   the extra track when a rating exists). On mobile the chart drops to its own full-width row under the tiles. */
+.gd-cond__metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.gd-cond__metrics .gd-cond__disttile { grid-column: 1 / -1; }
+.gd-cond__tile { display: flex; flex-direction: column; gap: 3px; padding: 13px 13px 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); --rate-accent: var(--pp-text-dim); }
+.gd-cond__tile[data-tone="good"] { --rate-accent: var(--pp-success); }
+.gd-cond__tile[data-tone="warn"] { --rate-accent: var(--pp-warning); }
+.gd-cond__tile[data-tone="bad"]  { --rate-accent: var(--pp-error); }
+.gd-cond__tile[data-tone="high"] { --rate-accent: var(--pp-accent); }
+.gd-cond__icon { width: 18px; height: 18px; color: var(--rate-accent); margin-bottom: 3px; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.gd-cond--empty .gd-cond__icon { color: var(--pp-text-mute); opacity: 0.6; }
+.gd-cond__lbl { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+.gd-cond__figure { display: inline-flex; align-items: baseline; gap: 1px; margin-top: 2px; }
+.gd-cond__num { font-size: 1.7rem; line-height: 1; color: var(--pp-text); }   /* .pp-tally supplies the display face */
+.gd-cond--empty .gd-cond__num { color: var(--pp-text-mute); }
+.gd-cond__unit { font-size: 0.72rem; font-weight: 700; color: var(--pp-text-mute); }
+.gd-cond--empty .gd-cond__unit { display: none; }
+.gd-cond__verdict { font-size: 0.9rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; color: var(--rate-accent); transition: color var(--pp-dur-fast) var(--pp-ease); }
+
+/* Empty state: a calm invitation, not a skeleton of dashes. Drop the big "-/5" score, the "~-h" hours, and
+   each tile's blank figure + "-" verdict; keep the outline stars as a quiet anchor and let "Not yet rated" +
+   the CTA lead, with the three quality icons as a bare, centered preview of what a rating contributes. The
+   submit handler strips .gd-cond--empty and repopulates on the first rating, so every hidden hook returns. */
+.gd-cond--empty .gd-cond__scoreline,
+.gd-cond--empty .gd-cond__hours,
+.gd-cond--empty .gd-cond__figure,
+.gd-cond--empty .gd-cond__verdict { display: none; }
+.gd-cond--empty .gd-cond__hero { gap: 7px; padding-bottom: 16px; }
+.gd-cond--empty .gd-cond__tile { padding: 6px 8px; gap: 5px; background: transparent; border-color: transparent; align-items: center; text-align: center; }
+.gd-cond--empty .gd-cond__icon { margin-bottom: 0; }
+.gd-cond--empty .gd-cond__lbl { color: var(--pp-text-dim); }
+
+/* Hours: a labeled time value, set apart from the qualities (a duration, not a 1-10 opinion). */
+.gd-cond__hours { display: inline-flex; align-items: center; gap: 9px; }
+.gd-cond__hours svg { width: 20px; height: 20px; color: var(--pp-text-mute); flex-shrink: 0; }
+.gd-cond__hours-txt { display: flex; flex-direction: column; line-height: 1.1; }
+.gd-cond__hours-num { font-size: 0.95rem; color: var(--pp-text-dim); }
+.gd-cond__hours-num b { font-size: 1.1rem; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.gd-cond--empty .gd-cond__hours-num b { color: var(--pp-text-dim); }
+.gd-cond__hours-lbl { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); margin-top: 1px; }
+
+/* "Your take": the viewer's personal comparison layer -- a quiet, primary-tinted band under the community
+   tiles. Distinct from the neutral aggregate above it (this one is about YOU), but low-weight. */
+.gd-cond__you { display: flex; flex-direction: column; gap: 4px; padding: 11px 13px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-primary) 6%, transparent); border: 1px solid color-mix(in oklab, var(--pp-primary) 20%, var(--pp-border)); }
+.gd-cond__you-lbl { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pp-primary); }
+.gd-cond__you-txt { font-size: 0.92rem; font-weight: 600; line-height: 1.35; color: var(--pp-text); text-wrap: balance; }
+.gd-cond__you-scores { font-size: 0.72rem; color: var(--pp-text-mute); }
+.gd-cond__you-scores b { font-size: 0.86rem; font-weight: 800; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.gd-cond__you-vs { margin: 0 5px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+
+/* The rating count sits at the far left of this row, opposite the action. `space-between` rather than a
+   margin so the row still puts the button on the right when there is no count to show (an unrated game a
+   visitor cannot rate renders the span empty), and still puts the count on the left when there is no
+   button (already rated, or not eligible). */
+.gd-rate__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.gd-rate__cta { flex-shrink: 0; }
+
+/* ---- Desktop (lg+): scale the aggregate up so it fills the width -- the tab previously had NO desktop tier.
+   Per the design-system responsive progressions: type + padding + gaps step up; the columns do not reflow. ---- */
+@media (min-width: 1024px) {
+    .gd-rate .gd-acard { padding: 20px 24px; }
+    .gd-rate .gd-acard__h, .gd-blurbs__title { font-size: 0.78rem; }
+    .gd-rate .gd-acard__h { margin-bottom: 14px; }
+    .gd-rate { gap: 16px; }
+    .gd-rate__panel { gap: 16px; }
+    .gd-rate__stat-n { font-size: 1.85rem; }
+    .gd-rate__stat-unit { font-size: 1rem; }
+    .gd-rate__stat-lbl { font-size: 0.7rem; }
+
+    .gd-cond { gap: 18px; }
+    .gd-cond__stars { font-size: 1.6rem; }   /* no letter-spacing -- it skews the fractional fill */
+    .gd-cond__score-n { font-size: 2.75rem; }
+    .gd-cond__of { font-size: 1.05rem; }
+    .gd-cond__summary { font-size: 1.42rem; }
+    .gd-cond__metrics { gap: 12px; }
+    .gd-cond__metrics.is-wide { grid-template-columns: repeat(3, 1fr) 1.5fr; }
+    .gd-cond__tile { padding: 18px 16px 16px; }
+    .gd-cond__disttile { padding: 16px 16px 14px; }
+    .gd-cond__icon { width: 22px; height: 22px; }
+    .gd-cond__num { font-size: 2.1rem; }
+    .gd-cond__unit { font-size: 0.82rem; }
+    .gd-cond__verdict { font-size: 1rem; }
+    .gd-cond__hours svg { width: 24px; height: 24px; }
+    .gd-cond__hours-num { font-size: 1.05rem; }
+    .gd-cond__hours-num b { font-size: 1.3rem; }
+    .gd-cond__you-txt { font-size: 1rem; }
+
+    /* Quick takes scale up too (they were the one thing left at mobile size next to the enlarged aggregate),
+       and go a touch wider so the text has room. */
+    .gd-blurbs__list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+    .gd-blurb { padding: 14px 16px; gap: 12px; }
+    .gd-blurb__av { width: 40px; height: 40px; }
+    .gd-blurb__name { font-size: 0.9rem; }
+    .gd-blurb__stars { font-size: 0.88rem; }
+    .gd-blurb__text { font-size: 0.95rem; line-height: 1.5; }
+    .gd-blurb__time { font-size: 0.72rem; }
+}
+
+/* ---- Quick-rate modal (gd-modal--qr) ----------------------------------------------------------
+ * The form is WIDE and two-column so the whole thing fits without scrolling. At 460px single-column it
+ * ran past `.gd-modal__body`'s 70vh on a laptop, and a form you must scroll to find the submit button on
+ * is a form people abandon halfway -- which on a BULK rating flow is the whole product.
+ *
+ * Two columns is also why the recommendation could be added without cost: it takes one row where the
+ * fields it sits above take half a row each.
+ *
+ * Scoped to the modal on purpose rather than done with a container query. The other host (the Rate My
+ * Games wizard) renders these fields in a fixed 360px rail where a second column is not an option, so
+ * there is no width to adapt to -- two known hosts, two known layouts.
+ */
+.gd-modal--qr { width: min(94vw, 620px); max-width: 620px; }
+/* The DIALOG is capped and the body takes what is left, rather than the body carrying a vh cap of its own.
+   A `max-height: 88vh` on the body added to the ~46px header and overran the dialog, whose own height is
+   bounded by the UA's `calc(100% - 6px - 2em)` and whose `overflow: hidden` then clipped the difference --
+   on a 375x667 phone that ate the actions row, which is the one thing that must never be the part off
+   screen. Worst exactly where the form is tallest, too, since the two-column grid only engages at 640px. */
+.gd-modal--qr { max-height: 92vh; }
+.gd-modal--qr[open] { display: flex; flex-direction: column; }
+.gd-modal--qr .gd-modal__head { flex: none; }
+/* `min-height: 0` so the body can actually shrink below its content height and scroll -- a flex item
+   defaults to `min-height: auto`, which refuses to. */
+.gd-modal--qr .gd-modal__body { max-height: none; flex: 1 1 auto; min-height: 0; }
+.gd-qr { display: flex; flex-direction: column; gap: 15px; }
+
+/* Which fields span both columns, for ANY host that lays the form out two-up. Unconditional because
+ * `grid-column` is inert on a child that is not a grid item -- so this can be stated once here rather
+ * than repeated inside each host's media query. The hosts (the modal below, the wizard's rail in
+ * rate-wizard.css) only own the `display: grid` half.
+ *
+ * The reading order the two columns produce:
+ *
+ *     Difficulty | Grindiness
+ *     Hours      | Fun
+ *     Overall            (full)
+ *     Recommendation     (full)
+ *     Quick take         (full)
+ *
+ * The four axes pair up as two rows of related questions, then the three full-width rows are the
+ * conclusion: the score, what it adds up to, and anything you want to say about it. SOURCE order in the
+ * partial matches, because a host that is too narrow for two columns renders the identical fields in one
+ * and has to read the same way -- grid `order` would have made the hosts disagree. */
+.gd-qr__field--rec,
+.gd-qr__field--blurb,
+.gd-qr__field:has([name="overall_rating"]),
+.gd-qr__notice,
+.gd-qr__actions { grid-column: 1 / -1; }
+
+/* TWO COLUMNS AT EVERY WIDTH the modal is shown at, not from 640px up.
+ *
+ * Eight stacked fields is roughly 130px more than a 360x740 phone has, so the submit button started below
+ * the fold -- and the fix is not smaller controls. The four scored axes are the only fields that pair, and
+ * a 1fr column here is ~149px, which a range input, its "Easy/Brutal" scale and a "Grindiness" label all
+ * sit in comfortably. Pairing them turns four rows into two and buys back more than the overflow.
+ *
+ * The three conclusion rows (Overall, the recommendation, the quick take) still span, so the reading order
+ * is unchanged from the one the source order sets -- which is the point of that rule sitting outside this
+ * block. The wizard's rail is untouched: this is scoped to the modal, and the rail is a different width
+ * with a trophy list beside it.
+ */
+.gd-modal--qr .gd-qr {
+    /* `minmax(0, 1fr)`, never a bare `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, and the auto floor is the
+       item's MIN-CONTENT width -- which for the Hours field is the intrinsic width of its `<input>` (the
+       UA sizes that from `size`, and `width: 100%` resolves to auto against an indefinite track). Two of
+       those floors exceed a 360px phone and the grid overflows its own scrollport sideways. It never bit
+       while this was gated at 640px, because the columns were wide enough that the floor never bound.
+       The house convention throughout this codebase, for exactly this reason. */
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 11px 12px; align-content: start;
+}
+.gd-modal--qr .gd-qr__actions { margin-top: 0; }
+@media (min-width: 640px) { .gd-modal--qr .gd-qr { gap: 11px 16px; } }
+
+/* And the actions STICK to the bottom of the scroll area, so "scroll to reach submit" stops being possible
+ * at any height. The two-column pass above is what makes the form nearly fit on a 360x740 phone; this is
+ * what makes it not matter on the ones it still does not fit -- a shorter phone, a landscape keyboard, or
+ * a hunter running large text. The button is the one control that must never be the part off screen.
+ *
+ * Full-bleed via negative margins against the body's own padding, so content scrolls behind it rather than
+ * down its sides, and it sits flush to the bottom edge instead of floating 12px above it. When the form
+ * DOES fit, nothing is stuck and the rule above the buttons simply reads as the separator it looks like.
+ */
+.gd-modal--qr .gd-qr__actions {
+    position: sticky; bottom: -12px; z-index: 1;
+    margin-inline: -14px; margin-bottom: -12px;
+    padding: 10px 14px 12px;
+    background: var(--pp-bg-1);
+    border-top: 1px solid var(--pp-divider, var(--pp-border));
+}
+.gd-qr__field { display: flex; flex-direction: column; gap: 6px; }
+.gd-qr__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
+.gd-qr__val { font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+.gd-qr__of { font-size: 0.7rem; color: var(--pp-text-mute); font-weight: 600; }
+.gd-qr__range { width: 100%; accent-color: var(--pp-primary); cursor: pointer; }
+/* The overall track takes the STAR colour, because its output is stars: the control and the figure it
+   sets are then visibly the same measurement rather than two unrelated readings. Selected by input name
+   so the partial needs no extra class -- the name is already the API contract. */
+.gd-qr__range[name="overall_rating"] { accent-color: var(--pp-rating-star); }
+/* The live star bar, pushed to the label's far end so the row reads "Overall .......... ★★★½☆ 3.5 / 5":
+   name on the left, value on the right, the way every other readout in this form sits. */
+.gd-qr__stars { margin-left: auto; --star: 0.95rem; }
+.gd-qr__num { width: 100%; padding: 8px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font-size: 0.85rem; }
+.gd-qr__num:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gd-qr__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--pp-text-mute); }
+.gd-qr__hint { font-size: 0.7rem; color: var(--pp-text-dim); }
+.gd-qr__hint b { color: var(--pp-primary); font-weight: 800; }
+.gd-qr__hint--muted { color: var(--pp-text-mute); }
+.gd-qr__actions { display: flex; gap: 10px; margin-top: 4px; }
+.gd-qr__actions .gd-btn { flex: 1; justify-content: center; }
+
+/* ---- The recommendation: the form's one required field, and its first ----------------------------
+ * Three tiles ACROSS, not stacked. Across costs one row's height instead of three, which is most of what
+ * keeps the modal whole -- and it works in the wizard's 360px rail too, because the tile stacks its icon
+ * over a wrapping label rather than sitting them side by side.
+ *
+ * Not a segmented strip: a strip implies these are points on one axis, and the middle option is a
+ * statement about the game AND the platinum separately rather than a midpoint between the other two.
+ */
+/* A wider gap than the other fields use: a `<legend>` sits tight against what follows it, and the three
+   tiles are a block rather than the single control the other labels head, so they need the question to
+   read as separate from them rather than stuck to them. */
+.gd-qr__field--rec { gap: 11px; border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.gd-qr__field--rec legend { padding: 0; margin-bottom: 2px; }
+.gd-qr__recs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.gd-qr__rec {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: 5px; cursor: pointer; text-align: center;
+    padding: 9px 7px; border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    font-size: 0.72rem; font-weight: 600; line-height: 1.25; color: var(--pp-text-dim);
+    transition: border-color var(--pp-dur-fast) var(--pp-ease),
+                background var(--pp-dur-fast) var(--pp-ease),
+                color var(--pp-dur-fast) var(--pp-ease);
+    --rec-c: var(--pp-text-mute);
+}
+/* The radio is the state, not the picture: hidden from sight, still focusable and still what
+   `:has(:checked)` reads. `appearance: none` + zero size rather than `display: none`, which would take it
+   out of the tab order and make the group unreachable by keyboard. */
+.gd-qr__rec input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.gd-qr__rec svg { width: 18px; height: 18px; flex: none; color: var(--rec-c); }
+.gd-qr__rec-lbl { min-width: 0; }
+
+
+@media (hover: hover) {
+    .gd-qr__rec:hover { border-color: color-mix(in oklab, var(--rec-c) 40%, var(--pp-border)); color: var(--pp-text); }
+}
+.gd-qr__rec:has(input:checked) {
+    border-color: color-mix(in oklab, var(--rec-c) 60%, transparent);
+    background: color-mix(in oklab, var(--rec-c) 14%, var(--pp-bg-2));
+    color: var(--pp-text);
+}
+/* The ring belongs to the row -- the input it describes is a 1px box. */
+.gd-qr__rec:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Blurb field inside the quick-rate modal: textarea + remaining-char counter + guidelines fine print. */
+.gd-qr__field--blurb { gap: 5px; }
+.gd-qr__opt { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.gd-qr__count { margin-left: auto; font-size: 0.7rem; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.gd-qr__count.is-low { color: var(--pp-warning); }
+.gd-qr__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; line-height: 1.4; resize: none; }
+.gd-qr__area::placeholder { color: var(--pp-text-mute); }
+.gd-qr__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+/* Persistent guidelines notice above the Post button (always shown; posting is the agreement). */
+.gd-qr__notice { font-size: 0.72rem; line-height: 1.45; color: var(--pp-text-mute); }
+.gd-qr__guidelink { display: inline; padding: 0; border: none; background: none; font: inherit; font-weight: 700; color: var(--pp-primary); cursor: pointer; }
+.gd-qr__guidelink:hover { text-decoration: underline; }
+.gd-qr__guidelink:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+
+/* Community Guidelines sheet (opens over the compose modal; reading the rules keeps the draft). */
+.gd-modal--guidelines { width: min(94vw, 500px); max-width: 500px; }
+.gd-guide { display: flex; flex-direction: column; gap: 13px; }
+.gd-guide__lead { font-size: 0.85rem; line-height: 1.45; color: var(--pp-text-dim); }
+.gd-guide__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.gd-guide__rule { position: relative; padding-left: 16px; font-size: 0.82rem; line-height: 1.45; color: var(--pp-text-mute); }
+.gd-guide__rule::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+.gd-guide__rule b { color: var(--pp-text); font-weight: 700; }
+
+/* ---- Quick takes: individual community blurbs as a BARE card grid (the cards are the frames, like the
+   games-list browse grid), under a section label -- no outer card so each card reads clearly. ---- */
+.gd-blurbs { display: flex; flex-direction: column; gap: 10px; }
+.gd-blurbs.is-empty { display: none; }
+.gd-blurbs__title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }   /* matches .gd-acard__h */
+.gd-blurbs__count { margin-left: 5px; color: var(--pp-text-dim); font-weight: 700; }
+/* Wider-than-tall cards: a ~320px floor packs 2 columns on a standard panel (3 when very wide, 1 when narrow),
+   so a full 140-char blurb lands in ~2-3 lines rather than a skinny 6-line column. auto-fill (not auto-fit)
+   keeps a lone card at track width instead of stretching it to the full panel. */
+.gd-blurbs__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 9px; }
+
+.gd-blurb { display: flex; gap: 10px; padding: 12px; border-radius: var(--pp-radius-md); background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent); border: 1px solid var(--pp-border); }
+.gd-blurb--you { border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 5%, transparent); }
+.gd-blurb.is-reported { opacity: 0.45; }
+.gd-blurb.is-reported .gd-blurb__report { pointer-events: none; }
+.gd-blurb__av { flex: none; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.gd-blurb__av img { width: 100%; height: 100%; object-fit: cover; }
+.gd-blurb__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.gd-blurb__head { display: flex; align-items: center; gap: 7px; }
+.gd-blurb__name { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gd-blurb__name:hover { color: var(--pp-primary); }
+.gd-blurb__you { flex: none; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 15%, transparent); padding: 1px 6px; border-radius: 999px; }
+/* Fractional gold stars: same two-layer technique as the conditions hero, sized down for the card. */
+/* letter-spacing: 0 -- same clipped-overlay geometry as .gd-cond__stars above. */
+.gd-blurb__stars { position: relative; display: inline-block; flex: none; margin-left: auto; font-size: 0.78rem; line-height: 1; letter-spacing: 0; color: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); }
+.gd-blurb__stars::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-blurb__stars-on { position: absolute; top: 0; left: 0; width: var(--fill, 0%); overflow: hidden; white-space: nowrap; color: var(--pp-rating-star); }
+.gd-blurb__stars-on::before { content: "\2605\2605\2605\2605\2605"; }
+.gd-blurb__text { font-size: 0.86rem; line-height: 1.42; color: var(--pp-text); overflow-wrap: anywhere; }
+.gd-blurb__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 1px; }
+.gd-blurb__time { font-size: 0.66rem; color: var(--pp-text-mute); }
+.gd-blurb__report { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: none; border-radius: var(--pp-radius-sm); background: none; color: var(--pp-text-mute); cursor: pointer; opacity: 0; transition: opacity var(--pp-dur-fast) var(--pp-ease), color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.gd-blurb__report svg { width: 14px; height: 14px; }
+.gd-blurb:hover .gd-blurb__report, .gd-blurb__report:focus-visible { opacity: 1; }
+.gd-blurb__report:hover { color: var(--pp-error); background: color-mix(in oklab, var(--pp-error) 12%, transparent); }
+/* Coarse pointers have no hover to reveal the report control, so keep it faintly visible there. */
+@media (hover: none) { .gd-blurb__report { opacity: 0.6; } }
+
+/* ---- Report-a-blurb modal (gd-modal--breport). Namespaced apart from the hero report modal's .gd-report*
+   (both dialogs live on the page at once, so sharing the bare class names cross-contaminated -- the shared
+   .gd-report__select `background` shorthand wiped the hero's chevron). See game-ratings.md gotchas. ---- */
+.gd-modal--breport { width: min(94vw, 440px); max-width: 440px; }
+.gd-breport { display: flex; flex-direction: column; gap: 14px; }
+.gd-breport__lead { font-size: 0.82rem; color: var(--pp-text-dim); line-height: 1.4; }
+.gd-breport__field { display: flex; flex-direction: column; gap: 6px; }
+.gd-breport__lbl { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--pp-text); }
+.gd-breport__select, .gd-breport__area { width: 100%; padding: 9px 11px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-2); border: 1px solid var(--pp-border); color: var(--pp-text); font: inherit; font-size: 0.85rem; }
+.gd-breport__select { appearance: none; -webkit-appearance: none; padding-right: 32px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b93a1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 15px; }
+.gd-breport__area { line-height: 1.4; resize: none; }
+.gd-breport__select:focus, .gd-breport__area:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.gd-breport__area::placeholder { color: var(--pp-text-mute); }
+
+@media (prefers-reduced-motion: reduce) { .gd-rate__dropbtn svg { transition: none; } .gd-blurb__report { transition: none; } }
+
+/* The quick-take cards sit on a bg-2 wash, so the mobile facepile rim (supporter.css) matches
+   that ground instead of bg-1. */
+.gd-blurb { --mark-rim: var(--pp-bg-2); }
+
+
+/* Identity affordance up to the concept Game page (Games/Trophy Lists IA): one quiet line. */
+.gd-partof {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    opacity: 0.75;
+    text-decoration: none;
+    margin-bottom: 0.35rem;
+}
+.gd-partof:hover { opacity: 1; }
+.gd-partof .gd-partof__cta { color: var(--pp-accent); white-space: nowrap; }
+.gd-partof:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }

@@ -32,6 +32,14 @@
     if (!form) return;
 
     // ── Auto-submit for non-text controls ──────────────────────────────
+    // RADIOS ARE COALESCED. A native radio group selects on ARROW, not on Enter, so a keyboard user
+    // sweeping from "All" to the last chip fires one `change` per step -- five requests and, with
+    // `hx-push-url`, five history entries, so Back then takes six presses to leave the page. Mouse users
+    // never see it. A short debounce collapses a sweep into the selection it lands on; a single click
+    // still submits within ~120ms, under the threshold where a filter feels laggy.
+    //
+    // Checkboxes and selects are NOT debounced: each of those changes is a deliberate, separate act.
+    let radioTimer = null;
     form.addEventListener('change', function (e) {
       const el = e.target;
       const isAutoSubmit =
@@ -39,6 +47,19 @@
         el.type === 'radio' ||
         el.tagName === 'SELECT' ||
         el.closest('[data-auto-submit]');
+
+      if (el.type === 'radio') {
+        clearTimeout(radioTimer);
+        const radioPage = form.querySelector('input[name="page"]');
+        if (radioPage) radioPage.value = '1';
+        // The badge updates IMMEDIATELY, only the request is coalesced. It reflects the current
+        // selection, so debouncing it too would leave "3 filters active" visibly lagging the chip the
+        // reader just pressed. (This call was missing when the branch was added, which silently froze the
+        // active-filter badge on all five pages with radio filters -- Browse Games among them.)
+        updateFilterBadge();
+        radioTimer = setTimeout(function () { htmx.trigger(form, 'submit'); }, 120);
+        return;
+      }
 
       if (isAutoSubmit) {
         // Reset to page 1 on any filter change
@@ -100,18 +121,37 @@
       });
     });
 
-    // ── Text search: submit on Enter ───────────────────────────────────
+    // ── Text search + shared search-toolbar affordances ──────────────────
+    // Enter submits; forms with `data-live-search` also live-filter (debounced). PLUS the universal search
+    // niceties every browse toolbar gets for free: Escape clears, a clear (x) button, an in-flight spinner,
+    // and `/` or Cmd/Ctrl+K to focus. The BEHAVIOUR is shared here; pages opt into the VISUALS with markup
+    // (a [data-search-clear] button inside the field) + CSS keyed on `.has-value` / `.is-searching` on the
+    // field wrapper. See docs/reference/design-system.md "Search toolbar".
     const searchInputs = form.querySelectorAll('input[type="text"], input[type="search"]');
+    const liveSearch = form.hasAttribute('data-live-search');
+    let searchTimer = null;
+    const searchFields = [];
+    function submitSearch() {
+      const pageInput = form.querySelector('input[name="page"]');
+      if (pageInput) pageInput.value = '1';
+      searchFields.forEach(function (sf) { sf.setBusy(true); });
+      htmx.trigger(form, 'submit');
+    }
     searchInputs.forEach(function (input) {
+      // Shared affordances (has-value / clear button / Escape-to-clear); clearing re-applies the filter.
+      const sf = (window.PlatPursuit && PlatPursuit.wireSearchField)
+        ? PlatPursuit.wireSearchField(input, { onClear: function () { clearTimeout(searchTimer); submitSearch(); } })
+        : { setBusy: function () {} };
+      searchFields.push(sf);
       input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const pageInput = form.querySelector('input[name="page"]');
-          if (pageInput) pageInput.value = '1';
-          htmx.trigger(form, 'submit');
-        }
+        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); submitSearch(); }
+      });
+      input.addEventListener('input', function () {
+        if (liveSearch) { clearTimeout(searchTimer); searchTimer = setTimeout(submitSearch, 400); }
       });
     });
+    // Clear the in-flight search spinner once the form's request settles. (`/`+Cmd/K focus is global, utils.js.)
+    form.addEventListener('htmx:afterRequest', function () { searchFields.forEach(function (sf) { sf.setBusy(false); }); });
 
     // ── Submit button (for users who click instead of pressing Enter) ──
     const submitBtn = form.querySelector('[data-submit-btn]');
@@ -126,9 +166,6 @@
 
     // ── Range sliders (ratings + time-to-beat) ────────────────────────────
     initBrowseSliders(form);
-
-    // ── Badge picker modal ──────────────────────────────────────────────
-    initBadgePicker(form);
 
     // ── Community flag split-controls ([+ Label −]) ───────────────────
     initFlagSplitControls(form);
@@ -146,42 +183,12 @@
       group.dataset.flagSplitBound = 'true';
 
       var flag = group.dataset.flagGroup;
-      var color = group.dataset.flagColor || 'error';
       var showInput = group.querySelector('input[name="show_' + flag + '"]');
       var hideInput = group.querySelector('input[name="hide_' + flag + '"]');
       var showBtn = group.querySelector('[data-flag-action="show"]');
       var hideBtn = group.querySelector('[data-flag-action="hide"]');
       var label = group.querySelector('[data-flag-label]');
       if (!showInput || !hideInput || !showBtn || !hideBtn || !label) return;
-
-      function applyVisual() {
-        // Indicate state via background color and line-through only.
-        // Never toggle font-weight: bold text is wider than regular and
-        // would shift neighboring pills on every click.
-        var resetBtn = [
-          'btn-ghost', 'border', 'border-base-300',
-          'text-base-content/40', 'hover:text-base-content',
-          'btn-error', 'btn-warning', 'btn-info', 'btn-primary', 'btn-secondary',
-          'btn-outline',
-        ];
-        resetBtn.forEach(function (c) {
-          showBtn.classList.remove(c);
-          hideBtn.classList.remove(c);
-        });
-        label.classList.remove('line-through', 'text-base-content/60');
-
-        if (showInput.checked) {
-          showBtn.classList.add('btn-' + color);
-          hideBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-        } else if (hideInput.checked) {
-          hideBtn.classList.add('btn-' + color, 'btn-outline');
-          showBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-          label.classList.add('line-through', 'text-base-content/60');
-        } else {
-          showBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-          hideBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
-        }
-      }
 
       function submit() {
         var pageInput = form.querySelector('input[name="page"]');
@@ -190,6 +197,7 @@
         htmx.trigger(form, 'submit');
       }
 
+      // The active visual is pure CSS (.pp-flag :has(input:checked)); the JS only flips the checkboxes.
       showBtn.addEventListener('click', function (e) {
         e.preventDefault();
         if (showInput.checked) {
@@ -198,7 +206,6 @@
           showInput.checked = true;
           hideInput.checked = false;
         }
-        applyVisual();
         submit();
       });
 
@@ -210,7 +217,6 @@
           hideInput.checked = true;
           showInput.checked = false;
         }
-        applyVisual();
         submit();
       });
     });
@@ -293,209 +299,9 @@
     });
   }
 
-  // ── Badge picker modal logic ────────────────────────────────────────────
-  function initBadgePicker(form) {
-    var modal = document.getElementById('browse-badge-picker');
-    if (!modal) return;
-
-    var searchInput = modal.querySelector('#badge-picker-search');
-    var grid = modal.querySelector('#badge-picker-grid');
-    var emptyState = modal.querySelector('#badge-picker-empty');
-    var countLabel = modal.querySelector('#badge-picker-count');
-    var sortSelect = modal.querySelector('#badge-picker-sort');
-    var typeChips = modal.querySelectorAll('.badge-type-chip');
-    var items = grid.querySelectorAll('.badge-pick-item');
-
-    var activeType = '';
-    var debounceTimer = null;
-
-    // Trigger button opens modal
-    var triggerBtn = document.getElementById('badge-picker-trigger');
-    if (triggerBtn) {
-      triggerBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        modal.showModal();
-      });
-    }
-
-    // Search: debounced filtering
-    if (searchInput) {
-      searchInput.addEventListener('input', function () {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(filterBadgeGrid, 150);
-      });
-    }
-
-    // Type chip selection
-    typeChips.forEach(function (chip) {
-      chip.addEventListener('click', function () {
-        activeType = chip.dataset.badgeType;
-        typeChips.forEach(function (c) {
-          if (c.dataset.badgeType === activeType) {
-            c.className = 'badge-type-chip btn btn-xs btn-secondary rounded-full';
-          } else {
-            c.className = 'badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300';
-          }
-        });
-        filterBadgeGrid();
-      });
-    });
-
-    // Sort
-    if (sortSelect) {
-      sortSelect.addEventListener('change', function () {
-        sortBadgeGrid();
-      });
-    }
-
-    // Badge card selection (event delegation on grid)
-    grid.addEventListener('click', function (e) {
-      var card = e.target.closest('.badge-pick-item');
-      if (!card) return;
-
-      var slug = card.dataset.seriesSlug;
-      var name = card.dataset.badgeName;
-
-      // Update hidden input
-      var hiddenInput = form.querySelector('#badge-series-input');
-      if (hiddenInput) hiddenInput.value = slug;
-
-      // Update trigger button
-      var trigger = document.getElementById('badge-picker-trigger');
-      var label = document.getElementById('badge-picker-label');
-      if (trigger) {
-        trigger.classList.remove('btn-ghost', 'border', 'border-dashed', 'border-base-300');
-        trigger.classList.add('btn-secondary', 'font-bold');
-      }
-      if (label) label.textContent = name;
-
-      // Ensure clear button exists (create if needed after HTMX restore)
-      ensureClearButton();
-
-      // Close modal
-      modal.close();
-
-      // Submit form with page reset
-      var pageInput = form.querySelector('input[name="page"]');
-      if (pageInput) pageInput.value = '1';
-      htmx.trigger(form, 'submit');
-    });
-
-    // Clear button
-    bindClearButton(form);
-
-    // Reset modal state when closed (so it's fresh on next open)
-    modal.addEventListener('close', function () {
-      if (searchInput) searchInput.value = '';
-      activeType = '';
-      typeChips.forEach(function (c) {
-        if (c.dataset.badgeType === '') {
-          c.className = 'badge-type-chip btn btn-xs btn-secondary rounded-full';
-        } else {
-          c.className = 'badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300';
-        }
-      });
-      filterBadgeGrid();
-      if (sortSelect) sortSelect.value = 'alpha';
-      sortBadgeGrid();
-    });
-
-    function filterBadgeGrid() {
-      var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      var visibleCount = 0;
-
-      items.forEach(function (item) {
-        var nameMatch = !query || (item.dataset.badgeName || '').toLowerCase().indexOf(query) !== -1;
-        var typeMatch = !activeType || item.dataset.badgeType === activeType;
-        var visible = nameMatch && typeMatch;
-
-        item.style.display = visible ? '' : 'none';
-        if (visible) visibleCount++;
-      });
-
-      if (emptyState) {
-        emptyState.classList.toggle('hidden', visibleCount > 0);
-      }
-      if (grid) {
-        grid.classList.toggle('hidden', visibleCount === 0);
-      }
-      if (countLabel) {
-        countLabel.textContent = visibleCount + ' badge' + (visibleCount !== 1 ? 's' : '');
-      }
-    }
-
-    function sortBadgeGrid() {
-      var sortVal = sortSelect ? sortSelect.value : 'alpha';
-      var arr = Array.from(items);
-
-      arr.sort(function (a, b) {
-        if (sortVal === 'earned') {
-          return (parseInt(b.dataset.badgeEarned, 10) || 0) - (parseInt(a.dataset.badgeEarned, 10) || 0);
-        }
-        if (sortVal === 'stages') {
-          return (parseInt(b.dataset.badgeStages, 10) || 0) - (parseInt(a.dataset.badgeStages, 10) || 0);
-        }
-        // alpha (default)
-        return a.dataset.badgeName.localeCompare(b.dataset.badgeName);
-      });
-
-      var fragment = document.createDocumentFragment();
-      arr.forEach(function (item) {
-        fragment.appendChild(item);
-      });
-      grid.appendChild(fragment);
-    }
-
-    function ensureClearButton() {
-      if (document.getElementById('badge-picker-clear')) return;
-      var trigger = document.getElementById('badge-picker-trigger');
-      if (!trigger) return;
-
-      var clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
-      clearBtn.id = 'badge-picker-clear';
-      clearBtn.className = 'btn btn-xs btn-ghost border border-base-300 text-error/70 hover:text-error hover:border-error/30 transition-all';
-      clearBtn.title = 'Clear badge filter';
-      clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-      trigger.parentNode.insertBefore(clearBtn, trigger.nextSibling);
-      bindClearButton(form);
-    }
-
-    function bindClearButton(browseForm) {
-      var clearBtn = document.getElementById('badge-picker-clear');
-      if (!clearBtn || clearBtn.dataset.bound) return;
-      clearBtn.dataset.bound = 'true';
-
-      clearBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-
-        // Clear hidden input
-        var hiddenInput = browseForm.querySelector('#badge-series-input');
-        if (hiddenInput) hiddenInput.value = '';
-
-        // Reset trigger button
-        var trigger = document.getElementById('badge-picker-trigger');
-        var label = document.getElementById('badge-picker-label');
-        if (trigger) {
-          trigger.classList.remove('btn-secondary', 'font-bold');
-          trigger.classList.add('btn-ghost', 'border', 'border-base-300', 'border-dashed');
-        }
-        if (label) label.textContent = 'Pick a Badge';
-
-        // Remove clear button
-        clearBtn.remove();
-
-        // Submit form
-        var pageInput = browseForm.querySelector('input[name="page"]');
-        if (pageInput) pageInput.value = '1';
-        htmx.trigger(browseForm, 'submit');
-      });
-    }
-  }
-
   // ── Active filter badge on drawer summary ──────────────────────────────
   // Keys that don't count as "active filters" (display/pagination state only)
-  var IGNORED_KEYS = {'page': 1, 'view': 1, 'category': 1};
+  var IGNORED_KEYS = {'page': 1, 'view': 1};
 
   function updateFilterBadge() {
     var form = document.querySelector('[data-browse-form]');
@@ -535,17 +341,20 @@
   }
 
   // ── Loading indicator ──────────────────────────────────────────────────
+  // Dim via the shared `.is-swapping` settle class (CSS: #browse-results.is-swapping { opacity }) rather
+  // than a second opacity utility, so the request-time dim matches the change-time settle exactly (one value,
+  // one system). pointer-events-none blocks clicks on the stale grid mid-swap.
   document.addEventListener('htmx:beforeRequest', function (e) {
     const results = document.getElementById('browse-results');
     if (results && e.detail.target === results) {
-      results.classList.add('opacity-50', 'pointer-events-none');
+      results.classList.add('is-swapping', 'pointer-events-none');
     }
   });
 
   document.addEventListener('htmx:afterSwap', function (e) {
     const results = document.getElementById('browse-results');
     if (results) {
-      results.classList.remove('opacity-50', 'pointer-events-none');
+      results.classList.remove('is-swapping', 'pointer-events-none');
     }
 
     // Re-bind page-jump forms inside the swapped content

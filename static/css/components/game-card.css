@@ -1,0 +1,246 @@
+/* ============================================================
+ * GAME COVER CARD (.pp-gcard) -- the from-scratch browse game cell. A 3:4 cover (community flags + quick-add
+ * + the viewer's progress on the bottom edge) over a compact body: title, a facts line (rating + colored
+ * B/S/G/P counts + plat tag), then the two Pursuer hooks -- the badge SERIES the game belongs to + its home
+ * CONTRACT (Browse Games only, gated on show_game_hooks; empty-slot placeholders keep a consistent height).
+ * Neutral surface, single cyan hover-warm (colour restraint). Shared by Browse Games and (via game_cards.html)
+ * the Flagged / Recently Added / Tag grids -- those don't set show_game_hooks, so they get the card sans band.
+ * Depth-pass card per playbook section 4.
+ * ============================================================ */
+.pp-gcard {
+    display: flex; flex-direction: column; height: 100%;
+    border-radius: 13px; overflow: hidden;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    text-decoration: none; color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+@media (hover: hover) {
+    .pp-gcard:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-primary) 42%, #000);
+    }
+    .pp-gcard:hover .pp-gcard__art { transform: scale(1.05); }
+}
+/* Press feedback: a small tactile dip on tap/click (touch + mouse). */
+.pp-gcard:active { transform: scale(0.985); }
+@media (prefers-reduced-motion: reduce) { .pp-gcard { transition: border-color 0.18s ease, box-shadow 0.18s ease; } .pp-gcard:active { transform: none; } }
+.pp-gcard:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Cover: IGDB-first via display_image_url; real art crops from the top, the generic placeholder is contained. */
+.pp-gcard__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2)); }
+.pp-gcard__cover img { width: 100%; height: 100%; }
+.pp-gcard__art { object-fit: cover; object-position: top; transition: transform 0.3s ease; }
+.pp-gcard__art--placeholder { object-fit: contain; padding: 14px; opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) { .pp-gcard__art { transition: none; } }
+
+/* Viewer's progress along the cover's bottom edge. Fill colour encodes completion state (cool = you have
+   the plat, warm/muted = still hunting or none): platinum+100% -> platinum cyan; plat earned but <100%
+   (post-plat DLC) -> muted teal; 100% w/o a plat -> green; a plat available but unearned -> amber (the
+   hunt); in progress w/o a plat -> slate. */
+.pp-gcard__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0, 0, 0, 0.45); z-index: 2; }
+.pp-gcard__barfill { display: block; height: 100%; transform-origin: left center; }  /* scaleX-grown on card reveal (JS) */
+.pp-gcard__barfill--plat    { background: var(--color-trophy-platinum); }
+.pp-gcard__barfill--platdlc { background: color-mix(in oklab, var(--color-trophy-platinum) 62%, var(--pp-info)); }
+.pp-gcard__barfill--full    { background: var(--pp-success); }
+.pp-gcard__barfill--chase   { background: var(--pp-accent); }
+.pp-gcard__barfill--prog    { background: color-mix(in oklab, var(--pp-info) 52%, var(--pp-text-mute)); }
+
+/* Footer: platform chips on the left (the partition UNION on condensed grids), the lists chip
+   when the work has stacks, player count on the right. A solid body row (top divider) so
+   platform reads on any cover art -- unlike an over-the-art badge. All denormalized/batched
+   columns: zero extra queries. (Region chips retired 2026-08-30 with the condensing -- the card
+   describes the WORK; region stays a filter. .pp-gcard__plat--region removed with them.) */
+.pp-gcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--pp-divider); }
+.pp-gcard__plats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.pp-gcard__plat { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid var(--pp-border); }
+/* Region chips, the LIST-IDENTITY mode's own (Trophy Lists browse only -- .pp-gcard__plat--region
+   stays retired; the work-describing cards remain region-free). Secondary-tinted like the lists
+   tally: region is list META here, not a platform. --global mutes to a quiet whole-world tag. */
+.pp-gcard__region { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-secondary); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
+.pp-gcard__region--global { color: var(--pp-text-mute); border-color: var(--pp-border); }
+/* The stacks tally: secondary-tinted so it reads as META (how many lists share this page), not
+   as another platform. Same chip anatomy as its neighbors. */
+.pp-gcard__lists { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; line-height: 1; padding: 3px 6px; border-radius: 4px; color: var(--pp-secondary); background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent); border: 1px solid color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border)); }
+.pp-gcard__players { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 0.7rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); }
+.pp-gcard__players svg { width: 13px; height: 13px; color: var(--pp-info); flex-shrink: 0; }
+
+/* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
+.pp-gcard__add {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: color-mix(in oklab, var(--pp-info) 88%, var(--pp-bg-0)); color: var(--pp-text);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+    opacity: 0; transform: scale(0.82); transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.pp-gcard__add svg { width: 13px; height: 13px; }
+@media (hover: hover) { .pp-gcard:hover .pp-gcard__add { opacity: 1; transform: none; } }
+@media (hover: none) { .pp-gcard__add { opacity: 0.92; transform: none; } }
+.pp-gcard__add:focus-visible { opacity: 1; transform: none; outline: 2px solid var(--pp-text); outline-offset: 1px; }
+/* Press dip (wins over the hover/touch reveal rules by specificity). */
+@media (hover: hover) { .pp-gcard:hover .pp-gcard__add:active { transform: scale(0.9); } }
+@media (hover: none) { .pp-gcard__add:active { transform: scale(0.9); } }
+@media (prefers-reduced-motion: reduce) { .pp-gcard__add:active { transform: none; } }
+
+/* Body */
+.pp-gcard__body { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px; flex: 1; }
+.pp-gcard__title {
+    font-size: 12.5px; font-weight: 700; color: var(--pp-text); line-height: 1.25; padding-right: 1px;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; min-height: 2.5em;
+}
+@media (hover: hover) { .pp-gcard:hover .pp-gcard__title { color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-text)); } }
+
+/* Facts line: rating (left) + colored B/S/G/P trophy counts (center) + plat availability (right). */
+.pp-gcard__facts { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; font-size: 11px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-gcard__facts > :first-child { justify-self: start; }
+.pp-gcard__facts > :last-child { justify-self: end; }
+.pp-gcard__fact { display: inline-flex; align-items: center; gap: 3px; font-weight: 700; color: var(--pp-text); }
+.pp-gcard__star { width: 12px; height: 12px; color: var(--pp-rating-star); }
+.pp-gcard__fact--none { color: var(--pp-text-mute); font-weight: 400; }
+.pp-gcard__fact--none .pp-gcard__star { color: var(--pp-text-mute); }
+.pp-gcard__tro { display: inline-flex; align-items: center; font-weight: 800; letter-spacing: -0.01em; }
+.pp-gcard__tro-d { color: var(--pp-text-mute); margin: 0 1.5px; font-weight: 400; }
+.pp-gcard__plat { font-weight: 700; color: var(--pp-text-dim); }
+.pp-gcard__plat.is-earned { color: var(--color-trophy-platinum); }
+/* Sized EXPLICITLY, matching the `Plat` chip it stands in for. It carried no font-size and simply
+   inherited, which made it render at whatever its container happened to set -- 11px inside the browse
+   card's `__facts`, but 16px (body size) in the profile card's `__foot`. A chip that resizes by
+   location is a chip that will be wrong somewhere; this also makes the two states finally agree on
+   browse, where `Plat` was already 0.58rem and `No Plat` was not. */
+.pp-gcard__plat--no { font-size: 0.58rem; font-weight: 500; color: var(--pp-text-mute); }
+/* Center cell = trophy counts + an optional DLC tag (only when the game has DLC trophy groups; the total
+   counts already include DLC, so this is a neutral "there's extra DLC" scope flag, not an added number). */
+.pp-gcard__mid { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Phone + small tablet: the facts row becomes TWO lines, because on one it does not fit and is silently
+   truncated rather than squeezed.
+ *
+ * `1fr auto 1fr` cannot shrink to the card: `1fr` is `minmax(auto, 1fr)`, so each track has a min-content
+ * floor, and both inner groups are `inline-flex` (i.e. nowrap) so their min-content IS their full width.
+ * The row's floor is ~182px against a 148px body at 2 columns and 178px at 3 -- and `.pp-gcard` sets
+ * `overflow: hidden`, so the overflow does not scroll or wrap, it CLIPS the last item. That item is the
+ * platinum indicator, which is the single fact a trophy hunter scans a browse wall for.
+ *
+ * It fits from 768px (221px of body) up, which is why this is invisible on desktop.
+ *
+ * Two lines cost ~18px of card height and lose nothing. Hiding the DLC chip below 768px would fix the
+ * overflow for free (~131px on one line) and is the trade to make if the extra height ever matters more
+ * than the chip.
+ *
+ * Gated on `:has(> .pp-gcard__mid)` because `.pp-gcard__facts` has a SECOND consumer with a different
+ * shape: the Recently Added DLC card (recently_added/dlc_card.html) puts just `__tro` + `__count` in it.
+ * Those get no grid-area, so an ungated rule auto-placed them into this two-column grid -- packing them
+ * left instead of spanning, and adding a row-gap for a declared-but-empty second row. `__mid` is the
+ * three-part row's own marker, so the gate names the shape rather than the page. */
+@media (max-width: 767px) {
+    .pp-gcard__facts:has(> .pp-gcard__mid) {
+        grid-template-columns: auto auto;
+        grid-template-areas: "rating plat" "mid mid";
+        gap: 4px 8px;
+    }
+    .pp-gcard__facts > .pp-gcard__fact { grid-area: rating; }
+    .pp-gcard__facts > .pp-gcard__mid  { grid-area: mid; }
+    /* Scoped through `.pp-gcard__facts` because `.pp-gcard__plat` means two different things on this
+       card: the platinum indicator here, and a platform chip inside `.pp-gcard__plats` in the footer.
+       An unscoped rule would move the PS5 chips into a grid area that does not exist there. */
+    .pp-gcard__facts > .pp-gcard__plat,
+    .pp-gcard__facts > .pp-gcard__plat--no { grid-area: plat; justify-self: end; }
+}
+.pp-gcard__dlc { flex-shrink: 0; font-size: 8px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 4px; border-radius: 4px; color: var(--pp-text-dim); background: color-mix(in oklab, var(--pp-text) 7%, transparent); border: 1px solid var(--pp-border); }
+.pp-gcard__dlc-n { margin-left: 2px; color: var(--pp-text-mute); font-weight: 700; }  /* count reads a touch quieter than the DLC label */
+
+/* ── Pursuer hook: badge band (count + series names). Muted dashed placeholder when the game is in none. ── */
+.pp-gcard__badges { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.pp-gcard__badges > svg { width: 13px; height: 13px; color: var(--pp-secondary); flex-shrink: 0; }
+.pp-gcard__badges-n { font-size: 11px; font-weight: 800; color: var(--pp-text); flex-shrink: 0; }
+.pp-gcard__badges-names { font-size: 10px; color: var(--pp-text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-gcard__badges--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border-style: dashed; }
+.pp-gcard__badges--empty > svg { color: var(--pp-text-mute); }
+
+/* ── Pursuer hook: contract chip -- a row of the contract's job icons (each in its discipline colour,
+   mirroring the badge-detail stage card) over a subtle discipline-tinted band, + total XP. No name (the
+   icons + XP carry it; contracts cap at 6 jobs so they all fit). Display-only (the card is the link).
+   Muted dashed placeholder when there's no contract. --ctr-accent + the band background come in inline. ── */
+.pp-gcard__ctr { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; background: var(--pp-bg-2); border: 1px solid color-mix(in oklab, var(--ctr-accent, var(--pp-secondary)) 34%, var(--pp-border)); }
+.pp-gcard__ctr-jobs { display: inline-flex; align-items: center; gap: 3px; flex: 1; min-width: 0; }
+.pp-gcard__ctr-job { display: inline-flex; width: 15px; height: 15px; flex-shrink: 0; }
+.pp-gcard__ctr-job svg { width: 100%; height: 100%; }
+.pp-gcard__ctr-xp { font-size: 10px; font-weight: 800; color: var(--pp-text); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.pp-gcard__ctr--empty { background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent); border: 1px dashed var(--pp-border); }
+.pp-gcard__ctr--empty > svg { width: 13px; height: 13px; color: var(--pp-text-mute); flex-shrink: 0; }
+.pp-gcard__ctr-label { font-size: 10.5px; font-weight: 500; color: var(--pp-text-mute); }
+
+/* Empty state (spans the grid). Reuses the shared ppResultsEmptyIn fade (browse-gallery.css). */
+.pp-gcard-empty { grid-column: 1 / -1; text-align: center; color: var(--pp-text-mute); padding: 48px 16px; }
+.pp-gcard-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }
+.pp-gcard-empty__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
+.pp-gcard-empty__hint { font-size: 12.5px; margin-top: 2px; }
+.pp-gcard-empty__reset {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 8px 16px; border-radius: 9px;
+    background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+    color: var(--pp-primary); font-size: 13px; font-weight: 700; text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+.pp-gcard-empty__reset svg { width: 15px; height: 15px; margin: 0; opacity: 1; }   /* override the generic 40px empty-state svg */
+@media (hover: hover) { .pp-gcard-empty__reset:hover { border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 20%, var(--pp-bg-2)); } }
+.pp-gcard-empty__reset:active { transform: scale(0.96); }
+.pp-gcard-empty__reset:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pp-gcard-empty__reset:active { transform: none; } }
+
+/* ============================================================
+ * DLC VARIANT (.pp-gcard--dlc) -- a recently-added DLC pack (a TrophyGroup, not a Game), rendered in the same
+ * cell system as the base card so the two read as one family. Differences: a SECONDARY accent (DLC's colour
+ * across the site), a "DLC" tag on the cover, a parent-game subtitle line, and a trophy-count facts row. DLC
+ * packs have no platinum / viewer progress / player count, so those pieces are simply absent. PSN pack icons
+ * are landscape -- --contain letterboxes them instead of top-cropping a portrait frame.
+ * ============================================================ */
+/* Landscape-icon letterbox (generic modifier -- kept unscoped so any card can reuse it for wide art). */
+.pp-gcard__art--contain { object-fit: contain; padding: 10px; }
+
+/* DLC-only sub-elements, scoped under the variant so the base card is free to add its own __sub/__count/__tag
+   later without a collision (per the "suspect a class collision" lesson). */
+/* Cover tag (top-left): the DLC marker. Sits where base-card flags live; secondary-tinted. */
+.pp-gcard--dlc .pp-gcard__tag {
+    position: absolute; top: 6px; left: 6px; z-index: 3;
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 6px; border-radius: 5px; line-height: 1;
+    font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-text); background: color-mix(in oklab, var(--pp-secondary) 82%, var(--pp-bg-0));
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+.pp-gcard--dlc .pp-gcard__tag svg { width: 10px; height: 10px; }
+
+/* Parent-game subtitle: which game this pack belongs to. One quiet line under the pack title. */
+.pp-gcard--dlc .pp-gcard__sub {
+    font-size: 10.5px; color: var(--pp-text-mute); line-height: 1.3; padding-right: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* DLC facts: trophy counts left, a small "N trophies" tally right (no rating / plat columns). */
+.pp-gcard--dlc .pp-gcard__facts { display: flex; align-items: center; justify-content: space-between; }
+.pp-gcard--dlc .pp-gcard__count { font-size: 10px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+/* Secondary hover-warm (override the base card's primary tint; equal specificity, so this must follow it). */
+@media (hover: hover) {
+    .pp-gcard--dlc:hover {
+        border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-secondary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-secondary) 42%, #000);
+    }
+    .pp-gcard--dlc:hover .pp-gcard__title { color: color-mix(in oklab, var(--pp-secondary) 45%, var(--pp-text)); }
+}
+
+/* Scroll-reveal: PlatPursuit.staggerReveal drives the per-card WAAPI motion; these rules only hold the
+   hidden/shown states. The .pp-reveal class is added by JS ONLY when it will observe, so cards never stick
+   hidden (and it's motion-gated -- reduced-motion viewers never hide anything). Empty panel fades in on swap
+   via the shared ppResultsEmptyIn keyframe (browse-gallery.css). */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gcard { opacity: 0; }
+    .pp-reveal .pp-gcard.is-revealed { opacity: 1; }
+    .pp-gcard-empty { animation: ppResultsEmptyIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}

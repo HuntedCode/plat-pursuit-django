@@ -12,53 +12,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // them. The Tailwind classes remain as the pre-JS fallback (avoids FOUC on
     // slow loads) and the JS overrides them once the layout is known.
     function alignStickyChrome() {
-        const navbar = document.querySelector('nav.navbar');
+        const navbar = document.querySelector('.pp-nav');
         if (!navbar) return;
+        // Each pinned tier laps the tier above it by 1px. On fractional-DPR devices (real phones) a
+        // measured-flush boundary between two separately-composited bars can leave a sub-pixel seam where
+        // the page shows through un-blurred/un-dimmed; a 1px overlap closes it and is invisible (the upper
+        // bar has the higher z-index, so it paints over the lapped pixel). Desktop and emulated-mobile snap
+        // to integer device pixels and never gap, which is why it only showed on a physical phone.
+        const LAP = 1;
         const navH = Math.round(navbar.getBoundingClientRect().height);
+        let bottom = navH;   // running bottom edge of the pinned chrome stack
 
-        const subnav = document.querySelector('.hub-subnav');
-        let subnavH = 0;
+        const subnav = document.querySelector('.pp-sub');
         if (subnav) {
-            subnav.style.top = navH + 'px';
-            subnavH = Math.round(subnav.getBoundingClientRect().height);
+            subnav.style.top = (bottom - LAP) + 'px';
+            bottom = (bottom - LAP) + Math.round(subnav.getBoundingClientRect().height);
         }
 
-        // --chrome-nav-height: navbar + sub-nav only (excludes the reveal banner).
-        // The pinned Badge Art Reveal banner offsets its own sticky top by this.
-        const navChromeH = navH + subnavH;
-        document.documentElement.style.setProperty('--chrome-nav-height', navChromeH + 'px');
+        // --chrome-nav-height: bottom of navbar + sub-nav. The pinned Badge Art Reveal banner offsets its
+        // own sticky top by this (already lapped, so the banner overlaps the sub-nav too).
+        document.documentElement.style.setProperty('--chrome-nav-height', (bottom - LAP) + 'px');
 
-        // The reveal banner pins directly below the nav chrome and joins the
-        // pinned stack, so everything downstream must clear it too.
-        let bannerH = 0;
+        // The reveal banner pins directly below the nav chrome and joins the pinned stack, so everything
+        // downstream must clear it too.
         const revealBanner = document.getElementById('art-reveal-banner');
         if (revealBanner) {
-            bannerH = Math.round(revealBanner.getBoundingClientRect().height);
+            bottom = (bottom - LAP) + Math.round(revealBanner.getBoundingClientRect().height);
         }
 
-        // --chrome-height: navbar + sub-nav (+ reveal banner). Used by elements
-        // outside the main content column (sidebar ads) that don't overlap the hotbar.
-        const chromeH = navChromeH + bannerH;
-        document.documentElement.style.setProperty('--chrome-height', chromeH + 'px');
+        // --chrome-height: full chrome-stack bottom. Used by elements outside the main content column
+        // (sidebar ads) to clear the chrome; the 1px laps are immaterial to that layout offset.
+        document.documentElement.style.setProperty('--chrome-height', bottom + 'px');
 
-        // --sticky-top: the full pinned-chrome stack including the hotbar
-        // (when present). Elements inside main that need to clear the entire
-        // stack use this property for their sticky `top` offset.
-        let stickyTop = chromeH;
-        const hotbar = document.getElementById('hotbar-wrapper');
-        if (hotbar) {
-            // When the hotbar is expanded, leave 8px breathing room between it
-            // and whatever pins above. When collapsed, drop the gap to 0 so the
-            // toggle "tab" attaches flush against the bottom of the sub-nav (or
-            // navbar on non-hub pages), reading as a tab handle of the chrome
-            // above rather than a floating element.
-            const isCollapsed = localStorage.getItem('hotbar_hidden') === 'true';
-            const gap = isCollapsed ? 0 : 8;
-            const hotbarTop = chromeH + gap;
-            hotbar.style.top = hotbarTop + 'px';
-            stickyTop = hotbarTop + Math.round(hotbar.getBoundingClientRect().height);
-        }
-        document.documentElement.style.setProperty('--sticky-top', stickyTop + 'px');
+        // --sticky-top: where in-content bars (the page mini-bar, etc.) pin. Lap the last chrome bar by 1px
+        // so the mini-bar/sub-nav seam closes the same way.
+        document.documentElement.style.setProperty('--sticky-top', (bottom - LAP) + 'px');
     }
 
     alignStickyChrome();
@@ -70,26 +58,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(alignStickyChrome);
     }
-    // Re-measure when the hotbar is toggled. A rAF loop runs during the
-    // collapse/expand transition so --sticky-top tracks the hotbar's
-    // changing height in real-time, keeping dependent sticky elements
-    // smooth. The loop stops on transitionend (or a 500ms safety timeout).
-    document.addEventListener('hotbar:toggle', function() {
-        const container = document.getElementById('hotbar-container');
-        if (!container) { alignStickyChrome(); return; }
-        let frame;
-        function tick() {
-            alignStickyChrome();
-            frame = requestAnimationFrame(tick);
-        }
-        tick();
-        container.addEventListener('transitionend', function handler() {
-            cancelAnimationFrame(frame);
-            alignStickyChrome();
-            container.removeEventListener('transitionend', handler);
-        });
-        setTimeout(function() { cancelAnimationFrame(frame); alignStickyChrome(); }, 500);
-    });
+
+    // (The hub sub-nav's mobile sheet + desktop overflow "More" moved to static/js/subnav.js.)
 
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');
@@ -118,63 +88,39 @@ document.addEventListener('DOMContentLoaded', function() {
         handleScroll();
     }
 
-    // ===== Theme Toggle (shared logic for all theme toggle elements) =====
-    function getCurrentTheme() {
-        return localStorage.getItem('theme') || 'plat-pursuit-dark';
-    }
+    // Light mode was removed 2026-08-22: the rebuild's --pp-* token foundation is dark-first
+    // (every rebuilt surface reads dark values), so the old toggle produced a broken hybrid.
+    // A proper light theme is a future rebuild item (parallel --pp palette + contrast audit).
 
-    function setTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-        updateAllThemeIcons();
-    }
-
-    function toggleTheme() {
-        const current = getCurrentTheme();
-        const newTheme = current === 'plat-pursuit-dark' ? 'plat-pursuit-light' : 'plat-pursuit-dark';
-        setTheme(newTheme);
-    }
-
-    function updateAllThemeIcons() {
-        const isDark = getCurrentTheme() === 'plat-pursuit-dark';
-
-        // Dropdown theme toggle (desktop user menu)
-        const dropdownSun = document.getElementById('dropdown-theme-icon-sun');
-        const dropdownMoon = document.getElementById('dropdown-theme-icon-moon');
-        const dropdownLabel = document.getElementById('theme-toggle-label');
-        if (dropdownSun) dropdownSun.classList.toggle('hidden', !isDark);
-        if (dropdownMoon) dropdownMoon.classList.toggle('hidden', isDark);
-        if (dropdownLabel) dropdownLabel.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-
-        // More drawer theme toggle (mobile - authenticated)
-        const drawerSun = document.getElementById('drawer-theme-icon-sun');
-        const drawerMoon = document.getElementById('drawer-theme-icon-moon');
-        const drawerLabel = document.getElementById('drawer-theme-toggle-label');
-        if (drawerSun) drawerSun.classList.toggle('hidden', !isDark);
-        if (drawerMoon) drawerMoon.classList.toggle('hidden', isDark);
-        if (drawerLabel) drawerLabel.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-
-        // More drawer theme toggle (mobile - guest)
-        const drawerSunGuest = document.getElementById('drawer-theme-icon-sun-guest');
-        const drawerMoonGuest = document.getElementById('drawer-theme-icon-moon-guest');
-        const drawerLabelGuest = document.getElementById('drawer-theme-toggle-label-guest');
-        if (drawerSunGuest) drawerSunGuest.classList.toggle('hidden', !isDark);
-        if (drawerMoonGuest) drawerMoonGuest.classList.toggle('hidden', isDark);
-        if (drawerLabelGuest) drawerLabelGuest.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-    }
-
-    // Bind theme toggle to user dropdown item
-    const themeToggleItem = document.getElementById('theme-toggle-item');
-    if (themeToggleItem) {
-        themeToggleItem.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleTheme();
+    // ── Avatar account menu: crafted entrance + a little life over DaisyUI's focus dropdown ──
+    // DaisyUI shows/hides the panel on focus; we layer an .is-open class (the CSS spring + section cascade)
+    // and count the trophy loot up on open. Open/close is detected via focusin/focusout on the wrap (its own
+    // mechanism is focus-based, so these align). Purely additive -- absent this, the menu still works.
+    (function () {
+        const wrap = document.getElementById('nav-account');
+        const panel = wrap && wrap.querySelector('.pp-avpanel');
+        if (!wrap || !panel) return;
+        let menuOpen = false;
+        wrap.addEventListener('focusin', () => {
+            if (menuOpen) return;
+            menuOpen = true;
+            panel.classList.add('is-open');
+            // Count the loot up on open -- but not mid-sync, so we don't fight navsync's live number updates.
+            const av = wrap.querySelector('[data-nav-avatar]');
+            if (av && av.getAttribute('data-sync') === 'syncing') return;
+            if (window.PlatPursuit && PlatPursuit.countUp) {
+                panel.querySelectorAll('[data-nav-loot]').forEach((el) => {
+                    const n = parseInt((el.textContent || '').replace(/[^0-9]/g, ''), 10);
+                    if (!isNaN(n)) { el.dataset.countup = n; PlatPursuit.countUp(el, 620, { from: 0 }); }
+                });
+            }
         });
-    }
-
-    // Initialize theme icons on load
-    updateAllThemeIcons();
+        wrap.addEventListener('focusout', (e) => {
+            if (wrap.contains(e.relatedTarget)) return;   // focus moved WITHIN the menu -> still open
+            menuOpen = false;
+            panel.classList.remove('is-open');
+        });
+    })();
 
     // Note: legacy mega-menu dropdown handlers and the path-based mobile
     // tab bar active-state setter were removed when the navbar was

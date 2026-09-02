@@ -1,0 +1,420 @@
+/* ============================================================
+ * BADGE MEDALLION -- the composited badge as a precious OBJECT.
+ * The badge art is already a self-contained laurel-framed medallion (backdrop + main + foreground),
+ * so this presents it as an object on a stage rather than boxing it in a trading-card Frame. Four
+ * states: earned / in_progress / unearned / maintenance. Markup: templates/components/badge_medallion.html.
+ * The art lives in a square .pp-med__stage; the progress count sits BELOW it (never over the art).
+ * Sizing via --sz (the container sets it per breakpoint). GPU-only motion; reduced-motion safe.
+ * ============================================================ */
+.pp-med {
+    --sz: 160px;
+    --med-cast: 0 4px 6px;   /* the grounding cast-shadow offset/blur -- shared by the grid badge + the modal's fade-in shadow */
+    position: relative;
+    width: var(--sz);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+/* tier accents (aura / ring / count) */
+.pp-med[data-tier="bronze"]   { --med-c: #cf9160; --med-glow: #e6ad74; }
+.pp-med[data-tier="silver"]   { --med-c: #b9c6d6; --med-glow: #dae4f0; }
+.pp-med[data-tier="gold"]     { --med-c: #e7c25c; --med-glow: #f4d778; }
+.pp-med[data-tier="platinum"] { --med-c: #8fd2ea; --med-glow: #c4edfb; }
+
+/* the square that holds the object (art + glint + aura + pedestal) */
+.pp-med__stage { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; isolation: isolate; }
+
+.pp-med__art {
+    position: relative; width: 100%; height: 100%; z-index: 1;
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    /* Material weight -- reads as a raised object, not a flat sticker: a top rim-light + one soft cast.
+       Kept to TWO drop-shadows on purpose -- the old 9-stack "metal wall" re-rasterised expensively and
+       made the grid scroll laggy. drop-shadow (not box-shadow) traces the badge's real silhouette. */
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.22))
+        drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4));
+}
+.pp-med__l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+.pp-med__art .pp-med__l:nth-child(3) { display: none; }   /* foreground overlay permanently hidden -- the back-plate + main art read cleaner as an object; the decorative front layer muddied it */
+/* User-badge subject = a PSN avatar (often square / 4:3). Circle-mask it and pull it IN off the plate edges so
+   the backing reads as the medallion and the avatar sits ON it rather than covering it. Subject = nth-child(2).
+   Centre it with inset:0 + margin:auto (NOT transform: the detail-modal drives a translateZ parallax on these
+   layers, which would override a transform-based centre and offset the avatar). Explicit size, since an <img>
+   with width:auto would fall back to its intrinsic pixels and overflow. */
+.pp-med--avatar .pp-med__l:nth-child(2) {
+    /* inset:0 + margin:auto centres it (transform-free, so the modal's translateZ parallax leaves it put). */
+    inset: 0; margin: auto; width: 70%; height: 70%;
+    border-radius: 50%; object-fit: cover;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), 0 3px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* rising-colour fill (in_progress + maintenance) -- a full-colour copy of ONLY the subject, revealed
+   from the bottom up to --fill (progress_pct). The base subject stays darkened/tarnished behind it. */
+.pp-med__fill {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    -webkit-mask: linear-gradient(to top, #000 var(--fill, 0%), transparent calc(var(--fill, 0%) + 6%));
+    mask: linear-gradient(to top, #000 var(--fill, 0%), transparent calc(var(--fill, 0%) + 6%));
+}
+.pp-med__fill-l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+
+/* aura (earned only) -- a soft tier bloom behind the object */
+.pp-med__stage::before {
+    content: ''; position: absolute; top: 46%; left: 50%; width: 76%; aspect-ratio: 1;
+    transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(circle, var(--med-glow), transparent 62%);
+    opacity: 0; filter: blur(14px); z-index: 0;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.pp-med--earned .pp-med__stage::before { opacity: 0.2; }
+/* maintenance = "needs repair": a neon silhouette glow, RED -- emitted light hugging the emblem, not a disc
+   behind it. Appended to the art's base rim+cast drop-shadows (see .pp-med__art above) so the object keeps
+   its weight; keep the two base shadows byte-identical or it loses its material weight. Static now (the
+   old pulsing red disc + ppMedBroken keyframe are gone). */
+.pp-med--maintenance .pp-med__art {
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.22))
+        drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4))
+        drop-shadow(0 0 4px color-mix(in oklab, white 12%, #e23026))
+        drop-shadow(0 0 12px color-mix(in oklab, #e23026 58%, transparent));
+}
+/* pedestal -- a soft ground shadow just BELOW the medallion (grounds it; visible at rest, not just hover) */
+.pp-med__stage::after {
+    content: ''; position: absolute; bottom: -4%; left: 50%; width: 50%; height: 6%;
+    transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(0, 0, 0, 0.5), transparent 72%); z-index: 0;
+}
+
+/* light-catch glint -- a soft diagonal sheen that sweeps the WHOLE medallion on hover (earned). Matches the
+   backplate exactly (.pp-med__plate: inset -4%, border-radius 26%) so the sheen covers the full plate area. */
+.pp-med__glint {
+    position: absolute; inset: -4%; border-radius: 26%; overflow: hidden; pointer-events: none; z-index: 2;
+    transform: translateY(-4%);   /* nudge up: the -4% inset otherwise bleeds the sheen below the badge into the count text */
+}
+.pp-med__glint::before {
+    content: ''; position: absolute; top: -30%; bottom: -30%; left: 0; width: 55%;
+    transform: skewX(-14deg) translateX(-170%);
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.42) 50%, transparent);
+    mix-blend-mode: screen;
+}
+@keyframes ppMedGlint { to { transform: skewX(-14deg) translateX(330%); } }
+
+@media (hover: hover) {
+    .pp-med--earned { cursor: pointer; }
+    .pp-med--earned:hover .pp-med__art { transform: translateY(-6%) scale(1.04); }
+    .pp-med--earned:hover .pp-med__stage::before { opacity: 0.5; transform: translate(-50%, -53%) scale(1.06); }
+    .pp-med--earned:hover .pp-med__glint::before { animation: ppMedGlint 0.8s ease 0.05s 1; }
+    /* Non-earned badges answer the cursor with a gentler LIFT only -- no sheen sweep, no aura bloom (those
+       stay earned-only, so the done/not-done read holds). Subtler than earned's -6%/1.04 so it feels alive
+       without pretending to be earned. */
+    .pp-med--unearned, .pp-med--in_progress, .pp-med--maintenance { cursor: pointer; }
+    .pp-med--unearned:hover .pp-med__art,
+    .pp-med--in_progress:hover .pp-med__art,
+    .pp-med--maintenance:hover .pp-med__art { transform: translateY(-3%) scale(1.02); }
+}
+
+/* First-earn "minting" ceremony (collection.js adds .is-minting the first time you see a newly-earned
+   badge): it pops into place, its aura flares, and a light sweeps across -- struck like a fresh coin.
+   Motion-gated (JS also skips it under reduced motion). No filter animation, so the material shadow is
+   untouched; the flash comes from the aura + glint sweep. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-med.is-minting .pp-med__art { animation: ppMedMint 0.9s cubic-bezier(0.3, 1.35, 0.5, 1) both; }
+    .pp-med--earned.is-minting .pp-med__stage::before { animation: ppMedMintAura 0.9s ease both; }
+    .pp-med.is-minting .pp-med__glint::before { animation: ppMedGlint 0.85s ease 0.2s 1; }
+}
+@keyframes ppMedMint {
+    0% { transform: scale(1); }
+    24% { transform: scale(1.17); }
+    52% { transform: scale(0.965); }
+    100% { transform: scale(1); }
+}
+@keyframes ppMedMintAura {
+    0%, 100% { opacity: 0.2; transform: translate(-50%, -50%) scale(1); }
+    28% { opacity: 0.92; transform: translate(-50%, -50%) scale(1.34); }
+}
+
+/* Tactile press: an interactive medallion (a modal-opening slot) DIPS when you push it -- a real-button
+   cue -- then settles back on release via the base .pp-med__art transition (snappy in, gentle out). It
+   presses .pp-med__art; the disc's own box is unchanged, so the container-transform grow still measures
+   the natural size. Motion-gated: reduced-motion users skip the dip (no abrupt jump). */
+@media (prefers-reduced-motion: no-preference) {
+    [data-modal-url]:active .pp-med__art { transform: scale(0.94); transition: transform 0.11s cubic-bezier(0.4, 0, 0.6, 1); }
+}
+/* But when the badge is LIFTED on hover, a plain scale() would REPLACE the lift -- dropping the whole -6%
+   translateY on press, a big down-then-up swing that fights the pick-up grow. So the hovered press KEEPS
+   the lift and just presses it IN (shrink + a touch toward the surface), composing with the lift instead
+   of cancelling it. (Non-lifted badges keep the plain dip above; that combo already reads fine.) */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+    [data-modal-url]:active .pp-med--earned:hover .pp-med__art { transform: translateY(-5%) scale(0.97); }
+}
+
+/* holographic "chase card" foil (rare / top-tier earned badges only) -- an iridescent sheen over the art,
+   faintly present at rest so the badge stands out, brightening + shifting on hover. NO mix-blend-mode: it
+   lives inside the card and a blend mode would flatten the modal's preserve-3d parallax. */
+.pp-med__foil {
+    position: absolute; inset: -4%; border-radius: 26%; pointer-events: none; z-index: 3;   /* matches the plate footprint */
+    background: linear-gradient(115deg,
+        transparent 20%,
+        hsla(310, 95%, 74%, 0.62) 35%,
+        hsla(200, 95%, 70%, 0.62) 45%,
+        hsla(122, 90%, 70%, 0.62) 54%,
+        hsla(48, 100%, 72%, 0.62) 63%,
+        transparent 80%);
+    background-size: 260% 260%;
+    background-position: var(--foil-x, 78%) var(--foil-y, 22%);
+    opacity: 0.3;
+    transition: opacity 0.45s ease, background-position 0.6s ease;
+}
+@media (hover: hover) {
+    .pp-med--holographic:hover .pp-med__foil { opacity: 0.58; background-position: 22% 78%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-med__foil { transition: opacity 0.45s ease; }   /* keep the fade, drop the positional sweep */
+}
+
+/* ---- flip-to-base: the object's engraved "underside" (modal only, with_back) ----
+   A tier-metal disc with the PP maker's mark embossed + the set number engraved, like the hallmark on the
+   base of a minted medal. Sits at rotateY(180) so it's hidden (backface-visibility) until the card flips.
+   The flip mechanics + the front-face backface-hiding live in badge-inspect.css (the modal 3D context). */
+/* The base is a round metal disc. The badge itself may be any shape, so the hero mounts it on a matching
+   round BACKPLATE (.pp-med__plate, styled in badge-inspect.css) that normalizes every badge to a round
+   medal body -- so this round base always reads as the object's genuine underside, not a mismatched disc. */
+.pp-med__back {
+    position: absolute; inset: -4%; z-index: 4; border-radius: 26%;
+    transform: rotateY(180deg);
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: calc(var(--sz) * 0.03);
+    overflow: hidden; pointer-events: none;
+    background: radial-gradient(circle at 50% 34%, color-mix(in oklab, var(--med-c) 26%, #141821), #0a0d13 78%);
+    border: 1px solid color-mix(in oklab, var(--med-c) 42%, transparent);
+    box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.12),
+        inset 0 -3px 12px rgba(0, 0, 0, 0.55),
+        inset 0 0 28px color-mix(in oklab, var(--med-c) 16%, transparent);
+}
+.pp-med__back-ring {   /* engraved rim following the plate's rounded-square edge */
+    position: absolute; inset: 9%; border-radius: 20%; pointer-events: none;
+    border: 1px solid color-mix(in oklab, var(--med-c) 22%, transparent);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 color-mix(in oklab, var(--med-glow) 12%, transparent);
+}
+/* Rounded-square mount behind the badge -- normalizes any badge shape to a consistent medal body. Rendered
+   on EVERY medallion (grid + hero); sits behind the art (z-index -1 within the art's own stacking context).
+   The hero adds 3D depth (translateZ) + backface in badge-inspect.css. */
+/* Contact shadow the raised badge casts onto its plate -- hero-only (shown/positioned in the 3D block).
+   Sits just above the plate; the badge floats above it, so the tilt parallax shifts it under the badge. */
+.pp-med__contact { display: none; }
+.pp-med__plate {
+    position: absolute; inset: -4%; z-index: -1; border-radius: 26%; overflow: hidden;
+    background: radial-gradient(circle at 50% 36%, color-mix(in oklab, var(--med-c) 24%, #161b24), #0a0d13 82%);
+    border: 1px solid color-mix(in oklab, var(--med-c) 40%, transparent);
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), inset 0 -4px 14px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+/* Environment reflection: a soft diagonal light band that slides across the metal with the tilt (--tx/--ty
+   set by collection.js) -- a room reflecting on a polished surface. On BOTH faces (front mount + flipped
+   base) since both are metal. Transform-driven (compositor-cheap); static + centred on the grid (no tilt).
+   Clipped to each face's shape by their overflow:hidden. The back's copy sits behind its engraving. */
+/* Hero-only: the reflection band is tilt-driven, so it's pointless (and a needless per-cell paint) on the
+   grid where nothing tilts. The back only exists in the hero, so its band is scoped there already. */
+.pp-bdetail__stage .pp-med__plate::before,
+.pp-med__back::before {
+    content: ''; position: absolute; inset: -40%; pointer-events: none;
+    background: linear-gradient(118deg, transparent 32%,
+        rgba(255, 255, 255, 0.08) 44%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.08) 56%, transparent 68%);
+    transform: translate(calc(var(--tx, 0) * 26px), calc(var(--ty, 0) * 26px));
+    transition: transform 0.16s ease-out;   /* a touch of lag = a "liquid metal" reflection */
+}
+/* Specular rim: a crisp bright inner edge -- the machined-bevel cue. The sweeping band lights it up as it
+   passes, so the rim reads as catching the moving reflection. Both faces. */
+.pp-med__plate::after,
+.pp-med__back::after {
+    content: ''; position: absolute; inset: 0; border-radius: 26%; pointer-events: none;
+    box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.16), inset 0 0 0 1px color-mix(in oklab, var(--med-glow) 20%, transparent);
+}
+.pp-med__back-mark {   /* the maker's mark, foil-stamped + embossed */
+    width: 42%; height: auto; object-fit: contain; -webkit-user-drag: none; user-select: none;
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.2)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
+}
+.pp-med__back-sub {   /* the badge's affiliation (franchise/collection/developer/series), engraved -- the subject */
+    max-width: 84%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: calc(var(--sz) * 0.064); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    line-height: 1; text-align: center;
+    color: color-mix(in oklab, var(--med-glow) 88%, #ffffff);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14), 0 -1px 1px rgba(0, 0, 0, 0.72);
+}
+.pp-med__back-word {   /* maker's wordmark */
+    font-size: calc(var(--sz) * 0.048); font-weight: 700; letter-spacing: 0.26em; text-transform: uppercase;
+    line-height: 1; color: color-mix(in oklab, var(--med-c) 52%, transparent);
+}
+.pp-med__back-owner {   /* the owner engraving: their name + the rank they earned it at (earned badges only) */
+    max-width: 84%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin-top: calc(var(--sz) * 0.01);
+    font-size: calc(var(--sz) * 0.052); font-weight: 700; letter-spacing: 0.04em; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--med-glow) 68%, #e2e8f0);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.12), 0 -1px 1px rgba(0, 0, 0, 0.7);
+}
+
+/* Non-earned base: a tarnished, un-personalised plate -- colourless dark metal, dimmed mark + engraving,
+   and no owner line. Earning a badge lights its base up in the tier metal and engraves it with the owner,
+   so it visibly becomes theirs -- the earned base feels special against the "not yet yours" one. */
+.pp-med--unearned .pp-med__back,
+.pp-med--in_progress .pp-med__back {
+    background: radial-gradient(circle at 50% 34%, #191c22, #08090d 78%);
+    border-color: rgba(255, 255, 255, 0.07);
+}
+.pp-med--unearned .pp-med__back-mark,
+.pp-med--in_progress .pp-med__back-mark {
+    filter: grayscale(1) brightness(0.5) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    opacity: 0.5;
+}
+.pp-med--unearned .pp-med__back-sub,
+.pp-med--in_progress .pp-med__back-sub {
+    color: rgba(148, 163, 184, 0.5); text-shadow: none;
+}
+.pp-med--unearned .pp-med__back-word,
+.pp-med--in_progress .pp-med__back-word { color: rgba(148, 163, 184, 0.3); }
+.pp-med--unearned .pp-med__back-ring,
+.pp-med--in_progress .pp-med__back-ring { border-color: rgba(255, 255, 255, 0.06); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6); }
+/* Tarnish the reflection too -- drop the bright tier-glow rim + polished sheen to plain, colourless dark. */
+.pp-med--unearned .pp-med__back::after,
+.pp-med--in_progress .pp-med__back::after {
+    box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.05), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.pp-med--unearned .pp-med__back::before,
+.pp-med--in_progress .pp-med__back::before { opacity: 0.35; }
+
+/* ---- states ---- */
+/* UNEARNED + IN PROGRESS both wear a DARK, waiting mount -- earned badges are the only bright ones, so
+   "done vs not done" reads at a glance. In-progress is told apart by its meter (below), not brighter art. */
+.pp-med--unearned .pp-med__l:nth-child(1),
+.pp-med--in_progress .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52); }
+.pp-med--unearned .pp-med__l:nth-child(2),
+.pp-med--in_progress .pp-med__l:nth-child(2) { filter: grayscale(1) brightness(0.16); opacity: 0.58; }
+.pp-med--unearned .pp-med__glint,
+.pp-med--in_progress .pp-med__glint { display: none; }
+
+/* The meter colour, defaulted on the BASE so every state that draws a meter has one.
+   It used to be declared only on the two states that could draw one, which was fine until `always_meter`
+   let an earned badge draw one too: with `--meter-c` undefined, every color-mix() referencing it is
+   invalid, the fill's `background` drops entirely, and a COMPLETED badge renders an empty bar. An
+   undefined custom property does not fall back to the previous declaration -- it invalidates the whole
+   value -- so the failure is silent and total rather than degraded.
+
+   The literal fallback is load-bearing, not belt-and-braces: `--med-c` itself only exists for the four
+   known tiers, and the tier comes from `PlatformGroup.backing_key` -- a free-text admin field with no
+   choices. One typo there leaves `--med-c` undefined, which makes `--meter-c` invalid, which empties the
+   bar all over again. Gold is the same default the tier resolver falls back to. */
+.pp-med { --meter-c: var(--med-c, #e7c25c); --meter-dim: rgba(255, 255, 255, 0.09); }
+
+/* In-progress takes the COOL tier colour, which is now just the base default -- it used to redeclare it
+   identically, which re-introduced the no-fallback trap one state over. Maintenance takes a WARM repair
+   amber, and is the only state that genuinely differs. */
+
+/* MAINTENANCE = tarnished base layers + WARM meter + the pulsing red "broken" halo (a held-but-lapsed
+   badge). The tarnish is on the base layers (not the whole art), so the rising-colour fill reads as RESTORED. */
+.pp-med--maintenance { --meter-c: #eeae42; --meter-dim: rgba(205, 58, 46, 0.26); }
+.pp-med--maintenance .pp-med__l { filter: grayscale(0.68) brightness(0.64) sepia(0.08); }
+.pp-med--maintenance .pp-med__glint { display: none; }
+
+/* segmented progress meter (in_progress + maintenance) -- a multi-bar echoing the job page's tier
+   ladder: one rounded cell per platinum/100% toward the badge, filled up to stages_done. */
+.pp-med__meter { display: flex; gap: 3px; width: 72%; margin-top: 16px; }
+.pp-med__seg {
+    flex: 1 1 0; min-width: 0; height: 5px; border-radius: 999px;
+    background: var(--meter-dim, rgba(255, 255, 255, 0.09));
+}
+.pp-med__seg.is-on {
+    background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 55%, transparent), var(--meter-c));
+    box-shadow: 0 0 6px color-mix(in oklab, var(--meter-c) 45%, transparent);
+}
+/* capped: too many platinums to count as cells -> one smooth bar (the "X / Y" number carries the detail) */
+.pp-med__meter--smooth {
+    position: relative; height: 5px; border-radius: 999px; overflow: hidden;
+    background: var(--meter-dim, rgba(255, 255, 255, 0.09));
+}
+.pp-med__meter-fill {
+    position: absolute; inset: 0 auto 0 0; border-radius: 999px;
+    background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 55%, transparent), var(--meter-c));
+    box-shadow: 0 0 6px color-mix(in oklab, var(--meter-c) 45%, transparent);
+}
+/* A FULL meter -- an earned badge on a surface that opted into the permanent bar (`always_meter`).
+   Distinguished from a partial one on purpose: a bar sitting at 100% otherwise reads as a gauge pinned at
+   max rather than as a finished thing. The fill takes the tier colour at full strength and blooms wider,
+   so scanning down a wall the completed rows read as a shape before you read a single number.
+   Glow only -- no animation. A wall is mostly earned badges, and a moving highlight on every one of them
+   is the "motion everywhere" the standard warns against. */
+.pp-med__meter.is-full .pp-med__meter-fill,
+.pp-med__meter.is-full .pp-med__seg.is-on {
+    background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 88%, transparent), var(--meter-c));
+}
+/* The glow goes on the TRACK, not on the fill it belongs to. `--smooth` sets `overflow: hidden` to clip
+   the fill to the rounded track, which clips its box-shadow with it -- so a glow declared on the fill
+   renders and is then cut off exactly at the bar's edge, i.e. invisible. The track is not clipped by
+   anything, and at 100% it is the same shape as the fill, so glowing it glows the bar. */
+.pp-med__meter--smooth.is-full {
+    box-shadow: 0 0 14px color-mix(in oklab, var(--meter-c) 62%, transparent),
+                0 0 5px color-mix(in oklab, var(--meter-c) 78%, transparent);
+}
+/* The segmented variant has no overflow clip, so its cells can carry their own. */
+.pp-med__meter.is-full .pp-med__seg.is-on {
+    box-shadow: 0 0 10px color-mix(in oklab, var(--meter-c) 65%, transparent),
+                0 0 3px color-mix(in oklab, var(--meter-c) 85%, transparent);
+}
+
+/* progress count (platinums earned / required) -- shown for EVERY state. Earned/unearned reserve the
+   meter's vertical space (margin) so their count aligns with the metered states'; when a meter precedes
+   the count (in_progress/maintenance) the meter has already supplied that space. */
+.pp-med__count {
+    margin-top: 27px;   /* clears the neon glow's downward bloom; = 16 (meter top) + 5 (meter) + 6, so
+                           non-metered counts stay aligned with metered ones */
+    font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em; color: var(--meter-c, var(--med-c)); line-height: 1;
+}
+.pp-med__meter + .pp-med__count { margin-top: 6px; }                    /* meter already spaced it */
+.pp-med--unearned .pp-med__count { color: rgba(148, 163, 184, 0.7); }   /* dim -- 0 toward it */
+
+/* Repair cue (pp-med--repair, set when the Case passes show_repair to a lapsed badge): the badge is yours
+   but needs re-earning, so an amber wrench pulses beside the count and the UNFILLED meter (kept neutral gray)
+   breathes a soft red glow. ONE clock drives both so they pulse in lockstep: a single animation on the
+   medallion sweeps a shared --repair-pulse (0->1->0), and the wrench + meter derive their look from it (no
+   two-animation drift). @property makes the number interpolate; the keyframe only sets a number, never a
+   color-mix (lightningcss drops color-mix keyframes). initial-value 1 = the rest/reduced-motion look. */
+@property --repair-pulse { syntax: '<number>'; inherits: true; initial-value: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-med--repair { animation: ppRepairPulse 1.7s ease-in-out infinite; }
+}
+@keyframes ppRepairPulse { 0%, 100% { --repair-pulse: 0; } 50% { --repair-pulse: 1; } }
+
+.pp-med__wrench {
+    display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: -2px; color: #eeae42;
+    transform-origin: 60% 40%;
+    opacity: calc(0.6 + 0.4 * var(--repair-pulse));
+    transform: scale(calc(0.9 + 0.15 * var(--repair-pulse))) rotate(calc(-6deg + 9deg * var(--repair-pulse)));
+}
+.pp-med--repair .pp-med__seg:not(.is-on),
+.pp-med--repair .pp-med__meter--smooth {
+    background: rgba(255, 255, 255, 0.09);
+    box-shadow: 0 0 calc(3px + 6px * var(--repair-pulse)) rgb(226 48 38 / calc(0.28 + 0.32 * var(--repair-pulse)));
+}
+
+/* edition + earn marks -- surfaced under the badge so you read the earn rank without opening it.
+   Earn rank (earned only, "5th") glows in the tier accent. */
+.pp-med__ids {
+    display: flex; align-items: center; gap: 7px; margin-top: 5px;
+    font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.pp-med__earnno {
+    color: var(--med-glow); letter-spacing: 0.01em;
+    text-shadow: 0 0 8px color-mix(in oklab, var(--med-glow) 40%, transparent);
+}
+
+/* Keep the info row legible ON TOP of the art's glow: the neon "next"/maintenance drop-shadow blooms
+   downward past the emblem into this area, and the art sits at z-index 1 -- so lift the meter/count/ids
+   above it. */
+.pp-med__meter, .pp-med__count, .pp-med__ids { position: relative; z-index: 2; }
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-med__art, .pp-med__stage::before { transition: none; }
+    .pp-med--earned:hover .pp-med__glint::before { animation: none; }
+}

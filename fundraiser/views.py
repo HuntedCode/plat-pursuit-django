@@ -17,12 +17,38 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.generic import TemplateView
 
+from users.services.marks import mark_style
+
 from trophies.mixins import StaffRequiredMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
-from trophies.models import Badge, Profile
+from fundraiser.services.donation_service import DonationService
+from trophies.models import Concept, Profile
 
 logger = logging.getLogger(__name__)
+
+
+class FundraiserLandingView(TemplateView):
+    """/support/fundraiser/ -- the Support hub's doorway, and the rail item's no-args target.
+
+    A pure RESOLVER, not a second campaign page: the slug URL is the single payment-adjacent
+    surface (cancel URLs, emails and notifications all land there), so rendering a campaign at
+    a second URL would fork the flows. Latest campaign wins -- live first, else the most recent
+    (which covers both the upcoming preview and the ended celebration); lifecycle handling
+    stays in FundraiserView. A site that has never run a campaign gets a quiet card.
+    """
+    template_name = 'fundraiser/fundraiser_landing_empty.html'
+
+    def get(self, request, *args, **kwargs):
+        from fundraiser.models import get_live_fundraiser
+
+        fundraiser = get_live_fundraiser() or (
+            Fundraiser.objects.filter(start_date__lte=timezone.now())
+            .order_by('-start_date').first()
+        )
+        if fundraiser:
+            return redirect('fundraiser', slug=fundraiser.slug)
+        return super().get(request, *args, **kwargs)
 
 
 class FundraiserView(TemplateView):
@@ -115,13 +141,17 @@ class FundraiserView(TemplateView):
         )
         for claim in (DonationBadgeClaim.objects
                       .filter(donation_id__in=donation_ids_for_wall)
-                      .select_related('badge')
+                      .select_related('series')
                       .order_by('-claimed_at')):
             profile_claims[claim.profile_id].append(claim)
 
         context['donors'] = [
             {
                 'profile': profiles_by_id.get(d['profile_id']),
+                # The worn mark (supporter stars / staff wrench / mod shield), resolved from the
+                # denorm by the one resolver -- the wall thanks PEOPLE, and people wear their
+                # marks here like everywhere else (2026-08-23, with the credits wall's glyphs).
+                'mark': mark_style(profiles_by_id[d['profile_id']].display_mark),
                 'total_amount': d['total_amount'],
                 'donation_count': d['donation_count'],
                 'latest_donation': d['latest_donation'],
@@ -139,14 +169,37 @@ class FundraiserView(TemplateView):
             all_claims = list(
                 DonationBadgeClaim.objects
                 .filter(donation_id__in=fundraiser_donation_ids)
-                .select_related('badge', 'badge__base_badge', 'profile')
+                .select_related('series', 'profile')
+                .prefetch_related('series__group_badges__platform_group')
                 .order_by('-claimed_at')
             )
 
             completed_claims = []
             pending_claims = []
+            from trophies.services.badge_detail_service import group_medallion_layers
+
             for claim in all_claims:
-                claim.badge_layers = claim.badge.get_badge_layers() if claim.badge else None
+                # The wearer's mark, resolved once per claim (bounded list). Static rendering on
+                # the tiles -- see the template note; the flow treatment is banned on grids.
+                claim.mark = mark_style(claim.profile.display_mark) if claim.profile else None
+                # Medallion composition lives on GroupBadge (the backdrop and shape come from the
+                # PlatformGroup), so a series resolves one edition to draw itself.
+                #
+                # `group_medallion_layers` rather than the raw `art_layers()` dict, because that dict is
+                # NOT what a template consumes: its `backdrop` is either an absolute storage URL or None,
+                # and the legacy `partials/badge.html` runs it through `{% static %}`. In DEBUG that
+                # accidentally resolves; against S3 it percent-encodes the scheme into a 404. This helper
+                # is what every other medallion surface uses -- it returns full URLs and supplies the
+                # backdrop-plate fallback when a PlatformGroup has no background image.
+                edition = claim.series.representative_group_badge if claim.series_id else None
+                if edition:
+                    tier, layers, is_avatar = group_medallion_layers(edition)
+                    claim.medallion = {
+                        'tier': tier, 'state': 'earned', 'art_layers': layers,
+                        'is_avatar': is_avatar, 'series_name': claim.series_name,
+                    }
+                else:
+                    claim.medallion = None
                 if claim.status == 'completed':
                     completed_claims.append(claim)
                 else:
@@ -155,14 +208,12 @@ class FundraiserView(TemplateView):
             context['completed_claims'] = completed_claims
             context['pending_claims'] = pending_claims
 
-            # Badge tracker stats
-            total_needing_art = Badge.objects.live().filter(
-                tier=1,
-            ).filter(
-                Q(badge_image__isnull=True) | Q(badge_image=''),
-            ).exclude(
-                series_slug__isnull=True,
-            ).exclude(series_slug='').exclude(badge_type='user').count()
+            # Badge tracker stats. NOTE the `include_claimed=True`: the tracker counts every series that
+            # still LACKS ARTWORK, claimed or not, because a claimed-but-pending series has no art yet.
+            # The picker's already-claimed exclusion must not leak in here -- with it, the denominator
+            # shrinks each time somebody claims, so the progress bar jumps forward before any artwork
+            # exists and "15 of 95" is measured against a moving total.
+            total_needing_art = DonationService.series_needing_artwork(include_claimed=True).count()
 
             claimed_count = len(all_claims)
             completed_count = len(completed_claims)
@@ -171,25 +222,30 @@ class FundraiserView(TemplateView):
             # total_needing_art includes claimed-but-pending badges (still no image).
             # Completed claims have artwork uploaded, so they're no longer in that query.
             # True total = still needing art + already completed artwork.
+            tracker_total = total_needing_art + completed_count
             context['badge_tracker'] = {
-                'total': total_needing_art + completed_count,
+                'total': tracker_total,
                 'claimed': claimed_count,
                 'completed': completed_count,
                 'pending': pending_count,
+                # Integer percentages for the horizon bar's two fills (completed accent over a
+                # claimed underlay), so the template never does width math in a style attribute.
+                'completed_pct': round(completed_count * 100 / tracker_total) if tracker_total else 0,
+                'claimed_pct': (round((completed_count + pending_count) * 100 / tracker_total)
+                                if tracker_total else 0),
             }
 
-            # Available badges for claiming (logged-in users only)
-            claimed_badge_ids = DonationBadgeClaim.objects.values_list('badge_id', flat=True)
-            context['available_badges'] = (
-                Badge.objects.live().filter(tier=1)
-                .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
-                .exclude(series_slug__isnull=True)
-                .exclude(series_slug='')
-                .exclude(badge_type='user')
-                .exclude(id__in=claimed_badge_ids)
-                .select_related('base_badge')
-                .order_by(Lower('name'))
+            # Available series for claiming (logged-in users only). The already-claimed exclusion is
+            # inside the helper, via the artwork_claim reverse OneToOne.
+            available_badges = list(
+                DonationService.series_needing_artwork().order_by(Lower('name'))
             )
+            context['available_badges'] = available_badges
+            # The on-page grid shows a bounded preview; the picker modal alone carries the full
+            # list (the page used to render every tile TWICE -- ~400 tiles in the DOM). The list
+            # is materialized once (bounded, ~100-200 rows), so the count costs nothing.
+            context['available_badges_preview'] = available_badges[:18]
+            context['available_badges_count'] = len(available_badges)
 
         # User-specific context
         if self.request.user.is_authenticated:
@@ -223,7 +279,7 @@ class FundraiserView(TemplateView):
                     context['user_claims'] = (
                         DonationBadgeClaim.objects
                         .filter(donation_id__in=donation_ids)
-                        .select_related('badge')
+                        .select_related('series')
                         .order_by('-claimed_at')
                     )
                 else:
@@ -263,7 +319,6 @@ class DonationSuccessView(LoginRequiredMixin, TemplateView):
                     # In DEBUG mode, complete the donation on redirect since
                     # webhooks can't reach the local dev server.
                     if settings.DEBUG:
-                        from fundraiser.services.donation_service import DonationService
                         donation_id = session.metadata.get('donation_id')
                         if donation_id:
                             donation = Donation.objects.filter(
@@ -290,7 +345,6 @@ class DonationSuccessView(LoginRequiredMixin, TemplateView):
 
         elif paypal_token:
             # PayPal: attempt capture on redirect (webhook as backup)
-            from fundraiser.services.donation_service import DonationService
             try:
                 capture_data = DonationService.capture_paypal_order(paypal_token)
                 if capture_data.get('status') == 'COMPLETED':
@@ -378,7 +432,7 @@ class FundraiserAdminView(StaffRequiredMixin, TemplateView):
             context['donations'] = (
                 selected.donations.all()
                 .select_related('profile', 'user')
-                .prefetch_related('badge_claims__badge')
+                .prefetch_related('badge_claims__series')
                 .order_by('-created_at')
             )
 
@@ -399,7 +453,7 @@ class FundraiserAdminView(StaffRequiredMixin, TemplateView):
             context['claims'] = (
                 DonationBadgeClaim.objects
                 .filter(donation_id__in=donation_ids)
-                .select_related('badge', 'profile', 'donation')
+                .select_related('series', 'profile', 'donation')
                 .order_by('status', '-claimed_at')
             )
 
@@ -433,41 +487,53 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
         pool_claims = list(
             DonationBadgeClaim.objects
             .filter(status='in_progress')
-            .select_related(
-                'badge', 'badge__most_recent_concept',
-                'badge__most_recent_concept__igdb_match', 'profile',
-            )
+            .select_related('series', 'profile')
+            .prefetch_related('series__group_badges__platform_group')
             .order_by(Lower('series_name'))
         )
+
+        # A representative game per series, for the spinner's tease line. ONE query for the whole pool
+        # rather than one per claim: the legacy version read `Badge.most_recent_concept`, a denorm the
+        # series model does not carry, so the concept is resolved from the series' stages instead --
+        # through BOTH qualifier paths, since a bundled game is not in `Stage.concepts`.
+        game_by_slug = {}
+        slugs = [c.series_slug for c in pool_claims if c.series_slug]
+        if slugs:
+            # TWO queries, one per qualifier path, because a single OR'd query cannot project both. The
+            # OR forces a LEFT JOIN, so a bundle-only concept comes back with `stages__series_slug=None`
+            # and is dropped -- or worse, carries the slug of an unrelated series it does have stages in,
+            # attributing the game to the wrong badge. Filtering through both paths is not the same as
+            # reading through both.
+            paths = (
+                ('stages__series_slug', Q(stages__series_slug__in=slugs)),
+                ('bundles__stage__series_slug', Q(bundles__stage__series_slug__in=slugs)),
+            )
+            for column, condition in paths:
+                for slug, title in (
+                    Concept.objects.filter(condition)
+                    .values_list(column, 'unified_title')
+                    .order_by(column, 'unified_title')      # deterministic: same tease line every render
+                    .distinct()
+                ):
+                    if slug and title and slug not in game_by_slug:
+                        game_by_slug[slug] = title
 
         # Build pool data for template and JSON serialization
         pool_badges = []
         for claim in pool_claims:
-            badge = claim.badge
-            concept = badge.most_recent_concept if badge else None
+            series = claim.series
+            edition = series.representative_group_badge if series else None
 
-            # Use game icon from the badge's most recent concept, fall back to badge layers
             icon_url = ''
-            if concept and concept.cover_url:
-                icon_url = concept.cover_url
-            elif badge:
-                layers = badge.get_badge_layers()
-                icon_url = layers.get('main', '')
-
-            game_name = ''
-            if concept:
-                game_name = concept.unified_title or ''
-
-            donor_name = ''
-            if claim.profile:
-                donor_name = claim.profile.display_psn_username or ''
+            if edition:
+                icon_url = edition.art_layers().get('main', '')
 
             pool_badges.append({
-                'badge_id': badge.id if badge else 0,
-                'series_name': claim.series_name or (badge.name if badge else ''),
-                'game_name': game_name,
+                'series_id': series.id if series else 0,
+                'series_name': claim.series_name or (series.name if series else ''),
+                'game_name': game_by_slug.get(claim.series_slug, ''),
                 'icon': icon_url,
-                'donor': donor_name,
+                'donor': claim.profile.display_psn_username or '' if claim.profile else '',
             })
 
         context['pool_badges'] = pool_badges

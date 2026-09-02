@@ -2,18 +2,22 @@
 {% load static %}
 {% load query_tags %}
 {% load humanize %}
+{% load job_icons %}
 {% block title %}Browse Games{% endblock %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block extra_head %}{% load seo_tags %}{% jsonld_item_list request seo_item_list %}{% endblock %}
 
 {% block content %}
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Header Card ── #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-4 lg:p-5">
-            <div class="flex items-center justify-between gap-3">
+    {# ── Page header: accented card + --pp-* substance, opening-beat cascade (rebuild standard). ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
                 <div class="min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <rect x="2" y="6" width="20" height="12" rx="2"></rect>
                             <line x1="6" y1="12" x2="10" y2="12"></line>
                             <line x1="8" y1="10" x2="8" y2="14"></line>
@@ -21,22 +25,10 @@
                             <circle cx="18" cy="13" r="1" fill="currentColor"></circle>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Games</h1>
-                        {% with sort_val=request.GET.sort %}
-                            {% if sort_val %}
-                                {% for value, display in form.sort.field.choices %}
-                                    {% if value == sort_val %}
-                                        <span class="badge badge-sm badge-ghost">{{ display }}</span>
-                                    {% endif %}
-                                {% endfor %}
-                            {% else %}
-                                <span class="badge badge-sm badge-ghost">Alphabetical</span>
-                            {% endif %}
-                        {% endwith %}
                     </div>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {% if request.GET.query %}
-                            Hunting for "{{ request.GET.query }}"
-                            {% if is_paginated %}across {{ paginator.count|intcomma }} result{{ paginator.count|pluralize }}...{% endif %}
+                            Hunting for "{{ request.GET.query }}"{% if is_paginated %} across {{ paginator.count|intcomma }} result{{ paginator.count|pluralize }}...{% endif %}
                         {% elif show_only_platinum == 'on' %}
                             Platinum or bust. {{ paginator.count|intcomma|default:"No" }} game{{ paginator.count|pluralize }} with the ultimate prize.
                         {% elif request.GET.letter %}
@@ -44,375 +36,609 @@
                         {% elif filter_shovelware == 'on' %}
                             Quality over quantity. {{ paginator.count|intcomma }} game{{ paginator.count|pluralize }}, no filler.
                         {% else %}
-                            {% if is_paginated %}
-                                {{ paginator.count|intcomma }} games and counting. Your next platinum is in here somewhere.
-                            {% else %}
-                                {{ object_list|length|intcomma }} games and counting. Your next platinum is in here somewhere.
-                            {% endif %}
+                            Every platinum starts here. Your next one is in the pile somewhere.
                         {% endif %}
                     </p>
                 </div>
 
-                {# View toggle (display preference, not a data filter) #}
-                <div class="shrink-0">
-                    <button type="button" id="view-toggle-btn"
-                            data-view-toggle="{% if view_type == 'list' %}grid{% else %}list{% endif %}"
-                            class="btn btn-xs md:btn-sm gap-1 btn-ghost border border-base-300"
-                            title="{% if view_type == 'list' %}Switch To Grid View{% else %}Switch To List View{% endif %}">
-                        {% if view_type == 'list' %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                        {% else %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                        {% endif %}
-                        {% if view_type == 'list' %}Grid{% else %}List{% endif %}
-                    </button>
+                {% comment %} Filtered-result count as the headline Tally (mirrors Collection/Badges). The
+                catalogue scale lives in the .scard grid below, so the sublabel just names the shown results. {% endcomment %}
+                {# Mobile: a compact single line that rides the title row. md+: the tall stacked Tally. #}
+                <div class="shrink-0 text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                    <span id="gbrowse-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-games-count data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">game{{ paginator.count|pluralize }} shown</span>
                 </div>
+            </div>
+
+            {% comment %} Catalogue substance: a full-width .scard grid (the Career-header treatment) giving
+            the header body -- overall scale + how much of the catalogue is wired into the gamification
+            systems (discovery hooks) + fresh-sync momentum. Neutral (the filtered-count Tally is the one
+            primary hero). All four are cached hourly on the site heartbeat -> zero DB cost here, so the grid
+            only shows once the cron has warmed the cache. {% endcomment %}
+            {% if catalog_games_total %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Total games</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_total }}">{{ catalog_games_total|intcomma }}</div>
+                    <div class="scard__sub">in the catalogue</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">In badge series</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_in_badges|default:0 }}">{{ catalog_games_in_badges|default:0|intcomma }}</div>
+                    <div class="scard__sub">part of a badge</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">In contracts</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_in_contracts|default:0 }}">{{ catalog_games_in_contracts|default:0|intcomma }}</div>
+                    <div class="scard__sub">on the job board</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">New this week</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ catalog_games_new_this_week|default:0 }}">{{ catalog_games_new_this_week|default:0|intcomma }}</div>
+                    <div class="scard__sub">freshly synced</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: "Browse Games" + the live result count + a Filters reach, re-surfaced when
+    the toolbar scrolls away on this long, infinite-scroll page. Sits OUTSIDE #browse-results so it persists
+    across filter swaps; the sentinel sits after the toolbar form below -- once that scrolls under the chrome,
+    the shared StickyReveal pins this. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#gbrowse-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="11" r="1" fill="currentColor"/><circle cx="18" cy="13" r="1" fill="currentColor"/></svg>
+                <span class="pp-minibar__title">Browse Games</span>
+                <span class="pp-minibar__count" data-minibar-count title="games shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                {% comment %} Quick search + sort, proxied to the real toolbar controls in JS (these sit OUTSIDE
+                the form, so they can't be real fields -- two name="query"/"sort" inputs would double-submit).
+                Sort is desktop-only; on phones the bar keeps the icon + search + Filters. {% endcomment %}
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ request.GET.query }}" placeholder="Search&hellip;" aria-label="Search games by title" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort games"></select>
+                <button type="button" class="pp-minibar__filters" data-minibar-filters aria-label="Scroll to the filters and open the panel">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span class="pp-minibar__flbl">Filters</span>
+                </button>
             </div>
         </div>
     </div>
 
-    {# ── Search + Sort Toolbar Card ── #}
-    <form data-browse-form
+    {% comment %} Job-icon <symbol> sprite, emitted ONCE (before the first job_icon_use -- the filter panel's
+    job chips + the cards' contract bands both <use> it, rather than re-inlining glyphs). Outside
+    #browse-results so it survives filter swaps + serves infinite-scroll-appended cards. {% endcomment %}
+    {% job_icon_sprite %}
+
+    {% comment %} Toolbar: quiet chrome. Primary bar (search + sort + Lucky + Filters toggle) with the big
+    filter panel tucked into a collapsible drawer. Filters auto-apply via browse-filters.js (HTMX swap); no
+    Apply button. The bare-/games/ dispatch redirect (saved defaults) is preserved by the view. {% endcomment %}
+    <form data-browse-form data-live-search id="gbrowse-form"
           hx-get="{% url 'games_list' %}"
           hx-target="#browse-results"
           hx-push-url="true"
           hx-swap="innerHTML"
           hx-trigger="submit"
           hx-indicator="#browse-results">
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-            <div class="card-body p-3 md:p-4">
-                {# Search + Sort row #}
-                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                    {# Search input #}
-                    <div class="relative flex-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" name="query" value="{{ request.GET.query }}"
-                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                               placeholder="Search for a game..." />
-                    </div>
+        <div class="pp-toolbar-card pp-gbrowse__toolbar">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="query" value="{{ request.GET.query }}" placeholder="Search for a game&hellip;" aria-label="Search games by title" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
 
-                    {# Sort dropdown with optgroups (auto-submits on change via browse-filters.js) #}
-                    <select name="sort"
-                            class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort games</span>
+                    <select name="sort" class="pp-gallery__select">
                         {% for group_label, group_choices in form.SORT_GROUPS %}
-                            <optgroup label="{{ group_label }}">
-                                {% for value, display in group_choices %}
-                                    <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'alpha' %}selected{% endif %}>{{ display }}</option>
-                                {% endfor %}
-                            </optgroup>
+                        <optgroup label="{{ group_label }}">
+                            {% for value, display in group_choices %}
+                            <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'alpha' %}selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </optgroup>
                         {% endfor %}
                     </select>
+                </label>
 
-                    {# Submit button (for text search confirmation) #}
-                    <button type="button" data-submit-btn
-                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <span class="hidden md:inline">Feel The Power</span>
-                    </button>
+                {# I'm Feeling Lucky: opens a random game matching the current filters (data-lucky-btn). #}
+                <button type="button" class="pp-gbrowse__lucky" data-lucky-btn aria-label="Open a random game matching your filters" title="Open a random game matching your filters">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+                    <span class="pp-gbrowse__lucky__lbl">Lucky</span>
+                </button>
 
-                    {# I'm Feeling Lucky button (random game redirect) #}
-                    <button type="button" data-lucky-btn
-                            class="btn btn-sm md:btn-md btn-accent w-full md:w-auto gap-1.5"
-                            title="Open a random game matching your filters">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-                            <circle cx="9" cy="9" r="1" fill="currentColor"></circle>
-                            <circle cx="15" cy="9" r="1" fill="currentColor"></circle>
-                            <circle cx="9" cy="15" r="1" fill="currentColor"></circle>
-                            <circle cx="15" cy="15" r="1" fill="currentColor"></circle>
-                            <circle cx="12" cy="12" r="1" fill="currentColor"></circle>
-                        </svg>
-                        <span class="hidden md:inline">I'm Feeling Lucky</span>
-                    </button>
+                <button type="button" class="pp-bgal__advbtn" id="gbrowse-filters-toggle" aria-expanded="false" aria-controls="gbrowse-advanced">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                    <span>Filters</span>
+                    <span class="pp-bgal__advbtn__n" id="gbrowse-filter-count" aria-live="polite" aria-label="active filters" hidden>0</span>
+                </button>
+            </div>
+
+            {# Active-filter chips (dismissable). OOB-refreshed from browse_results on filter swaps. #}
+            {% include 'partials/browse/active_filters.html' %}
+
+            {# Collapsible advanced panel (JS-toggled; renders open for the no-JS case, collapsed on load). #}
+            <div class="pp-bgal__advanced" id="gbrowse-advanced">
+            {% include 'partials/browse/drawer_precollapse.html' with panel_id='gbrowse-advanced' drawer_open=filter_chips|length only %}
+              <div class="pp-bgal__advanced-in">
+                {# ── Platforms ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>
+                        Platforms
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        {% for value, display in form.platform.field.choices %}
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" name="platform" value="{{ value }}" {% if value in selected_platforms %}checked{% endif %} />
+                            {{ display }}
+                        </label>
+                        {% endfor %}
+                    </div>
                 </div>
 
-                {# Collapsible filter drawer #}
-                <details class="collapse collapse-arrow bg-white/[0.03] rounded-lg mt-2 border border-base-content/5"
->
-                    <summary class="collapse-title min-h-0 py-2 px-3 text-sm font-semibold text-base-content/60 flex items-center gap-2 {% if has_advanced_filters %}text-primary{% endif %}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                        </svg>
-                        Filters
-                        {% if has_advanced_filters %}<span class="badge badge-xs badge-primary animate-pulse" data-filter-badge>Active</span>{% endif %}
-                    </summary>
-                    <div class="collapse-content px-3 pb-3 pt-0">
-                        {# ── Platforms ── #}
-                        <div class="mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                                    <line x1="6" y1="12" x2="10" y2="12"></line>
-                                    <line x1="8" y1="10" x2="8" y2="14"></line>
-                                    <circle cx="15" cy="11" r="0.5" fill="currentColor"></circle>
-                                    <circle cx="18" cy="13" r="0.5" fill="currentColor"></circle>
-                                </svg>
-                                Platforms
-                            </h4>
-                            <div class="flex flex-wrap gap-1.5">
-                                {% for value, display in form.platform.field.choices %}
-                                    <label class="cursor-pointer">
-                                        <input type="checkbox" name="platform" value="{{ value }}"
-                                               class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                            {{ display }}
-                                        </span>
-                                    </label>
+                {# ── Regions ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        Regions
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        {% for value, display in form.regions.field.choices %}
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" name="regions" value="{{ value }}" {% if value in selected_regions %}checked{% endif %} />
+                            {{ display }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Quick filters ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                        Quick Filters
+                    </div>
+                    <div class="pp-gbrowse__fchips">
+                        <label class="pp-bgal__chip">
+                            <input type="checkbox" name="show_only_platinum" value="on" {% if show_only_platinum == 'on' %}checked{% endif %} />
+                            {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3 h-3' %}
+                            Platinum Only
+                        </label>
+                        <label class="pp-bgal__chip pp-bgal__chip--warn">
+                            <input type="checkbox" name="filter_shovelware" value="on" {% if filter_shovelware == 'on' %}checked{% endif %} />
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Z"/></svg>
+                            Hide Shovelware
+                        </label>
+                        {% include 'partials/browse/badge_filter.html' %}
+                        {% if contract_disciplines %}
+                        <label class="pp-bgal__chip pp-bgal__chip--sec">
+                            <input type="checkbox" name="in_contract" value="on" {% if in_contract == 'on' %}checked{% endif %} />
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                            In a contract
+                        </label>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# ── Contract (Job-Board pursuit hook) ── #}
+                {% if contract_disciplines %}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                        Contract
+                    </div>
+                    {% comment %} Job drill-down: a discipline chip opens a dropdown of its jobs (the Career
+                    board's rp-disc popover, reused for consistency). Each job is a checkbox; a per-discipline
+                    "All ... jobs" head selects the group. All resolve to contract_jobs slugs (backend ORs). {% endcomment %}
+                    <div class="rp-discs pp-gbrowse__discs">
+                        {% for d in contract_disciplines %}
+                        <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-disc-trigger="{{ d.slug }}" aria-haspopup="true" aria-expanded="false">
+                                <span class="rp-disc__name">{{ d.label }}</span>
+                                <span class="rp-disc__count" data-disc-count="{{ d.slug }}" hidden>0</span>
+                                <svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" data-disc-pop="{{ d.slug }}" hidden>
+                                <button type="button" class="rp-pop__item rp-pop__item--head" data-disc-all="{{ d.slug }}">All {{ d.label }} jobs</button>
+                                {% for j in d.jobs %}
+                                <label class="rp-pop__item" data-disc="{{ d.slug }}">
+                                    {% job_icon_use j.icon 'rp-pop__ico' %}
+                                    <span>{{ j.name }}</span>
+                                    <input type="checkbox" name="contract_jobs" value="{{ j.slug }}" class="sr-only" {% if j.slug in selected_contract_jobs %}checked{% endif %} />
+                                </label>
                                 {% endfor %}
                             </div>
                         </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
 
-                        {# ── Regions ── #}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="2" y1="12" x2="22" y2="12"></line>
-                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                                </svg>
-                                Regions
-                            </h4>
-                            <div class="flex flex-wrap gap-1.5">
-                                {% for value, display in form.regions.field.choices %}
-                                    <label class="cursor-pointer">
-                                        <input type="checkbox" name="regions" value="{{ value }}"
-                                               class="sr-only peer" {% if value in selected_regions %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                            {{ display }}
-                                        </span>
-                                    </label>
-                                {% endfor %}
-                            </div>
-                        </div>
+                {# ── Community flags ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                        Community Flags
+                    </div>
+                    {% include 'partials/browse/flag_filters.html' %}
+                </div>
 
-                        {# ── Quick Filters ── #}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"></polyline>
-                                </svg>
-                                Quick Filters
-                            </h4>
-                            <div class="flex flex-wrap gap-1.5">
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="show_only_platinum" value="on"
-                                           class="sr-only peer" {% if show_only_platinum == 'on' %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
-                                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3 h-3' %}
-                                        Platinum Only
-                                    </span>
-                                </label>
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="filter_shovelware" value="on"
-                                           class="sr-only peer" {% if filter_shovelware == 'on' %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/>
-                                        </svg>
-                                        Hide Shovelware
-                                    </span>
-                                </label>
-                                {% include 'partials/browse/badge_filter.html' %}
-                            </div>
-                        </div>
-
-                        {# ── Community Flags ── #}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-                                    <line x1="4" y1="22" x2="4" y2="15"></line>
-                                </svg>
-                                Community Flags
-                            </h4>
-                            {% include 'partials/browse/flag_filters.html' %}
-                        </div>
-
-                        {# ── Ratings ── #}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                </svg>
+                {# ── Ratings + Time (side by side on wider screens) ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__ftwo">
+                        <div>
+                            <div class="pp-gbrowse__flabel">
+                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                                 Community Ratings
-                            </h4>
+                            </div>
                             {% include 'partials/browse/rating_filters.html' %}
                         </div>
-
-                        {# ── Time to Beat ── #}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <polyline points="12 6 12 12 16 14"></polyline>
-                                </svg>
+                        <div>
+                            <div class="pp-gbrowse__flabel">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                                 Time to Beat
-                            </h4>
+                            </div>
                             {% include 'partials/browse/time_filters.html' %}
                         </div>
-
-                        {# ── Genres ── #}
-                        {% if form.genres.field.choices %}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                                </svg>
-                                Genres
-                            </h4>
-                            <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                                {% for value, display in form.genres.field.choices %}
-                                    <label class="cursor-pointer">
-                                        <input type="checkbox" name="genres" value="{{ value }}"
-                                               class="sr-only peer" {% if value|stringformat:"s" in selected_genres %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                            {{ display }}
-                                        </span>
-                                    </label>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        {# ── Themes ── #}
-                        {% if form.themes.field.choices %}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="13.5" cy="6.5" r="2.5"></circle>
-                                    <path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"></path>
-                                </svg>
-                                Themes
-                            </h4>
-                            <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                                {% for value, display in form.themes.field.choices %}
-                                    <label class="cursor-pointer">
-                                        <input type="checkbox" name="themes" value="{{ value }}"
-                                               class="sr-only peer" {% if value|stringformat:"s" in selected_themes %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                            {{ display }}
-                                        </span>
-                                    </label>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        {# ── Game Engine ── #}
-                        {% if form.engine.field.choices|length > 1 %}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                                </svg>
-                                Game Engine
-                            </h4>
-                            <select name="engine" class="select select-bordered select-xs w-full md:w-64">
-                                {% for value, display in form.engine.field.choices %}
-                                    <option value="{{ value }}" {% if request.GET.engine == value|stringformat:"s" %}selected{% endif %}>{{ display }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endif %}
-
-                        {# ── Letter filter ── #}
-                        <div class="border-t border-base-content/10 pt-3">
-                            <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="4 7 4 4 20 4 20 7"></polyline>
-                                    <line x1="9" y1="20" x2="15" y2="20"></line>
-                                    <line x1="12" y1="4" x2="12" y2="20"></line>
-                                </svg>
-                                Filter by Letter
-                            </h4>
-                            <div class="flex gap-1 overflow-x-auto md:flex-wrap md:overflow-x-visible pb-1">
-                                {% for value, display in form.fields.letter.choices %}
-                                    <label class="cursor-pointer flex-shrink-0">
-                                        <input type="radio" name="letter" value="{{ value }}"
-                                               class="sr-only peer" {% if request.GET.letter == value %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all duration-200">
-                                            {{ display|default:"All" }}
-                                        </span>
-                                    </label>
-                                {% endfor %}
-                            </div>
-                        </div>
-
-                        {# Filter actions: Reset / Save / Clear defaults #}
-                        <div class="border-t border-base-content/10 pt-3 mb-3">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <a href="{% url 'games_list' %}"
-                                   class="btn btn-xs btn-ghost border border-base-300 gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="1 4 1 10 7 10"></polyline>
-                                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                                    </svg>
-                                    Reset Filters
-                                </a>
-                                {% if user.is_authenticated %}
-                                <button type="button" data-save-defaults="games"
-                                        class="btn btn-xs btn-accent btn-outline gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                        <polyline points="7 3 7 8 15 8"></polyline>
-                                    </svg>
-                                    Save as Defaults
-                                </button>
-                                <button type="button" data-clear-defaults="games"
-                                        class="btn btn-xs btn-ghost border border-base-300 gap-1 text-base-content/40 hover:text-error hover:border-error">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                    Clear Defaults
-                                </button>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        {# IGDB attribution note #}
-                        <div class="border-t border-base-content/10 pt-3 mt-1">
-                            <p class="text-[10px] text-base-content/30 italic pr-1">
-                                Genre, theme, engine, and time-to-beat data is sourced from
-                                <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>
-                                and may not be available for every game. Community flags and ratings are contributed by Platinum Pursuit users.
-                            </p>
-                        </div>
                     </div>
-                </details>
+                </div>
+
+                {# ── Genres ── #}
+                {% if form.genres.field.choices %}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                        Genres
+                    </div>
+                    <div class="pp-gbrowse__fchips pp-gbrowse__fchips--scroll">
+                        {% for value, display in form.genres.field.choices %}
+                        <label class="pp-bgal__chip pp-bgal__chip--sec">
+                            <input type="checkbox" name="genres" value="{{ value }}" {% if value|stringformat:"s" in selected_genres %}checked{% endif %} />
+                            {{ display }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# ── Themes ── #}
+                {% if form.themes.field.choices %}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="2.5"/><path d="M17 2H7a5 5 0 0 0-5 5v10a5 5 0 0 0 5 5h10a5 5 0 0 0 5-5V7a5 5 0 0 0-5-5Z"/></svg>
+                        Themes
+                    </div>
+                    <div class="pp-gbrowse__fchips pp-gbrowse__fchips--scroll">
+                        {% for value, display in form.themes.field.choices %}
+                        <label class="pp-bgal__chip pp-bgal__chip--sec">
+                            <input type="checkbox" name="themes" value="{{ value }}" {% if value|stringformat:"s" in selected_themes %}checked{% endif %} />
+                            {{ display }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# ── Game engine ── #}
+                {% if form.engine.field.choices|length > 1 %}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        Game Engine
+                    </div>
+                    <select name="engine" class="pp-gallery__select">
+                        {% for value, display in form.engine.field.choices %}
+                        <option value="{{ value }}" {% if request.GET.engine == value|stringformat:"s" %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                {# ── Filter by letter ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__flabel">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                        Filter by Letter
+                    </div>
+                    <div class="pp-gbrowse__fchips pp-gbrowse__fchips--letters">
+                        {% for value, display in form.fields.letter.choices %}
+                        <label class="pp-bgal__chip">
+                            <input type="radio" name="letter" value="{{ value }}" {% if request.GET.letter == value %}checked{% endif %} />
+                            {{ display|default:"All" }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Actions + attribution ── #}
+                <div class="pp-gbrowse__fsec">
+                    <div class="pp-gbrowse__acts">
+                        <a href="{% url 'games_list' %}" class="pp-gbrowse__act">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            Reset Filters
+                        </a>
+                        {% if user.is_authenticated %}
+                        <button type="button" class="pp-gbrowse__act pp-gbrowse__act--save" data-save-defaults="games">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                            Save as Defaults
+                        </button>
+                        <button type="button" class="pp-gbrowse__act pp-gbrowse__act--danger" data-clear-defaults="games">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            Clear Defaults
+                        </button>
+                        {% endif %}
+                    </div>
+                    <p class="pp-gbrowse__note">
+                        Genre, theme, engine, and time-to-beat data is sourced from
+                        <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer">IGDB</a>
+                        and may not be available for every game. Community flags and ratings are contributed by Platinum Pursuit users.
+                    </p>
+                </div>
+              </div>
             </div>
         </div>
 
-        {# Hidden inputs for non-filter state #}
-        <input type="hidden" name="view" value="{{ view_type|default:'grid' }}" />
+        {# Non-filter state carried on the form. view is grid-only now; page drives the (soon infinite) fetch. #}
+        <input type="hidden" name="view" value="grid" />
         <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
     </form>
 
-    {# Badge picker modal (outside form to avoid form interference) #}
-    {% include 'partials/browse/badge_picker_modal.html' %}
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar above. #}
+    <span id="gbrowse-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
 
-    {% include 'partials/ad_unit.html' with ad_slot="5270350613" %}
-
-    {# ── Browse Results (HTMX swap target) ── #}
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
         {% include 'trophies/partials/game_list/browse_results.html' %}
     </div>
 
+    {% comment %} Infinite scroll: the sentinel (observed) + loading spinner sit OUTSIDE #browse-results so
+    they persist across filter swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. {% endcomment %}
+    <div id="gbrowse-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="gbrowse-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+</div>
 {% endblock %}
 
 {% block js_scripts %}
+{% if applied_default_query %}
+{% comment %}The bare hub rendered with bound defaults (SEO Lane 1): surface them in the URL
+without a redirect, so the scroller/pagination/filters -- which all read location.search --
+behave exactly as the old redirected flow. Crawlers never run this and index the bare 200.
+{% endcomment %}
+<script>if (!window.location.search) { history.replaceState(null, '', '?{{ applied_default_query|escapejs }}'); }</script>
+{% endif %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script>
+    // Owns the page's motion + chrome: header count-up, the animated collapsible Filters panel (toggle +
+    // live active-count badge), the sticky mini-bar, the staggered card reveal, infinite scroll, and the
+    // filter-swap settle. Filtering itself is HTMX-native via browse-filters.js.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.PlatPursuit && PlatPursuit.countUp) {
+            var countEl = document.querySelector('[data-games-count]');
+            if (countEl) { PlatPursuit.countUp(countEl, 900); }
+            // Catalogue .scard values animate in on the same beat as the headline Tally.
+            document.querySelectorAll('[data-scard-count]').forEach(function (el) { PlatPursuit.countUp(el, 900); });
+        }
+
+        var form = document.getElementById('gbrowse-form');
+        if (!form) { return; }
+
+        // The filter drawer. Everything this used to do by hand -- the height tween, the aria/is-open
+        // bookkeeping, the active-count badge and its pop, the results dim, the open-on-load rule, the
+        // edge-fades on the long chip lists, and hiding the active-filter chips while the box is open --
+        // is the shared controller now. This page only names its elements and its display-state params.
+        var panelHandle = PlatPursuit.filterPanel && PlatPursuit.filterPanel({
+            form: form,
+            toggle: '#gbrowse-filters-toggle',
+            panel: '#gbrowse-advanced',
+            countEl: '#gbrowse-filter-count',
+            // platform/regions are SCOPE here, not filters: the saved-defaults dispatch redirect always
+            // carries a platform, so counting it would show a permanent "2" and auto-open the drawer on
+            // every landing. Tag detail counts the same params precisely because it has no such default.
+            skip: { page: 1, view: 1, sort: 1, query: 1, platform: 1, regions: 1 },
+            chipsHost: '.pp-gbrowse__toolbar',
+        });
+
+        // Contract discipline dropdowns. PlatPursuit.discPopovers owns the open/close mechanics (shared with
+        // the Career board); this owns the server-side SELECTION -- the job checkboxes, a per-discipline count
+        // on the chip, and the "All ... jobs" select-all. Selecting a job auto-applies via browse-filters.js.
+        function jobBoxes(disc) {
+            return form.querySelectorAll('.rp-pop__item[data-disc="' + disc + '"] input[type="checkbox"]');
+        }
+        function updateDisc(disc) {
+            var boxes = jobBoxes(disc), n = 0;
+            boxes.forEach(function (b) {
+                b.closest('.rp-pop__item').classList.toggle('is-selected', b.checked);
+                if (b.checked) { n += 1; }
+            });
+            var badge = form.querySelector('[data-disc-count="' + disc + '"]');
+            if (badge) { badge.textContent = n; badge.hidden = (n === 0); }
+            var trig = form.querySelector('[data-disc-trigger="' + disc + '"]');
+            if (trig) { trig.classList.toggle('is-active', n > 0); }
+        }
+        var discsRoot = form.querySelector('.rp-discs');
+        if (discsRoot && window.PlatPursuit && PlatPursuit.discPopovers) { PlatPursuit.discPopovers(discsRoot); }
+        form.querySelectorAll('[data-disc-trigger]').forEach(function (trig) { updateDisc(trig.getAttribute('data-disc-trigger')); });
+        form.querySelectorAll('[data-disc-all]').forEach(function (head) {
+            head.addEventListener('click', function () {
+                var disc = head.getAttribute('data-disc-all');
+                var boxes = jobBoxes(disc);
+                if (!boxes.length) { return; }
+                var turnOn = Array.prototype.some.call(boxes, function (b) { return !b.checked; });
+                boxes.forEach(function (b) { b.checked = turnOn; });
+                updateDisc(disc);
+                boxes[0].dispatchEvent(new Event('change', { bubbles: true }));   // auto-apply via browse-filters.js
+            });
+        });
+        form.querySelectorAll('.rp-pop__item input[type="checkbox"]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var item = cb.closest('.rp-pop__item');
+                if (item) { updateDisc(item.getAttribute('data-disc')); }
+            });
+        });
+
+        // ── Infinite scroll + staggered card reveal (mirrors the Badges gallery). browse-filters.js owns the
+        // filtering; this owns the scroll append, the card reveal, and the filter/sort settle dim. ──
+        var scroller = null, revealHandle = null, handledGrid = null;
+        function initReveal() {
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+            var grid = document.getElementById('items-grid');
+            if (!grid || !window.PlatPursuit || !PlatPursuit.staggerReveal) { return; }
+            // Land-in: OPACITY fades on a smooth decel curve, TRANSFORM springs with a soft overshoot
+            // (matches the Badges Gallery). They must be SEPARATE animations -- putting the overshoot easing
+            // on opacity too makes it spike to 1 almost instantly (the >1 control point), which reads as a
+            // hard "flash"/pop instead of a fade.
+            var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+            var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+            revealHandle = PlatPursuit.staggerReveal({
+                grid: grid, cardSelector: '.pp-gcard', step: 22,
+                reveal: function (el, delayMs) {
+                    if (!el.animate) { return; }
+                    el.animate([{ opacity: 0 }, { opacity: 1 }],
+                               { duration: 420, delay: delayMs, easing: fadeEase, fill: 'backwards' });
+                    el.animate([{ transform: 'translateY(14px) scale(0.965)' }, { transform: 'none' }],
+                               { duration: 500, delay: delayMs, easing: springEase, fill: 'backwards' });
+                    // The completion bar (only present for signed-in users with progress) wipes in from the
+                    // left just after the card lands, so the fill reads as a deliberate reveal, not a static bar.
+                    var bar = el.querySelector('.pp-gcard__barfill');
+                    if (bar) {
+                        bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
+                                    { duration: 540, delay: delayMs + 150, easing: fadeEase, fill: 'backwards' });
+                    }
+                },
+            });
+        }
+        function initScroller() {
+            if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+            if (!(window.PlatPursuit && PlatPursuit.InfiniteScroller)) { return; }
+            scroller = PlatPursuit.InfiniteScroller.create({
+                gridId: 'items-grid', sentinelId: 'gbrowse-sentinel', loadingId: 'gbrowse-loading',
+                paginateBy: 30, cardSelector: '.pp-gcard',   // matches GamesListView.paginate_by
+                onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
+            });
+        }
+        // Settle the results the instant a filter/sort changes (spans the slider hx-trigger debounce),
+        // cleared when the fresh grid swaps in. Motion-gated via the shared #browse-results.is-swapping rule.
+        // Skip text/search inputs: their `change` fires on blur WITHOUT auto-submitting (only the debounced
+        // live-search or Enter submits), so dimming here would leave the grid stuck faded with no request to
+        // clear it. Live search does its own dim via htmx:beforeRequest.
+        form.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t && (t.type === 'text' || t.type === 'search')) { return; }
+            var r = document.getElementById('browse-results');
+            if (r) { r.classList.add('is-swapping'); }
+        });
+        // last-shown result count, JS-tracked -- survives DOM/attribute resets (hx-push-url history
+        // handling wipes data-countup back to the load value between swaps), so each tick starts from
+        // the number actually on screen, not the page-load count.
+        var browseCountLast = null;
+        document.body.addEventListener('htmx:afterSwap', function (e) {
+            var t = (e.detail && e.detail.target) || e.target;
+            if (!t || t.id !== 'browse-results') { return; }
+            // A single filter/sort swap fires afterSwap on #browse-results TWICE: once for the grid swap and
+            // once for the paired OOB swap of the active-filter chips (htmx reports both against #browse-results).
+            // Re-running the reveal on the duplicate replays the arrival animation on the same cards -- the
+            // flash. Only a genuinely NEW #items-grid element should re-init; ignore the duplicate afterSwap.
+            var grid = t.querySelector('#items-grid');
+            if (grid && grid === handledGrid) { return; }
+            handledGrid = grid;
+            t.classList.remove('is-swapping');
+            if (panelHandle) { panelHandle.refresh(); }
+            // Header result-count tick (old -> new). Read the NEW total off the freshly-swapped grid
+            // (#items-grid[data-result-count]) -- that's the main swap target, so it's reliably the new
+            // content right here, unlike an OOB text swap on the header (whose timing raced the animation
+            // and made it read a stale/previous count). Start from the JS-tracked last value.
+            var countEl = document.getElementById('gbrowse-count');
+            if (grid && countEl && window.PlatPursuit && PlatPursuit.countUp) {
+                var newVal = parseFloat(grid.getAttribute('data-result-count'));
+                if (!isNaN(newVal)) {
+                    if (browseCountLast === null) { browseCountLast = parseFloat(countEl.dataset.countup); }
+                    countEl.dataset.countup = newVal;
+                    if (!isNaN(browseCountLast) && browseCountLast !== newVal) {
+                        PlatPursuit.countUp(countEl, 700, { from: browseCountLast });
+                    } else {
+                        countEl.textContent = newVal.toLocaleString();
+                    }
+                    browseCountLast = newVal;
+                    // Keep the mini-bar's count in sync (it may be pinned + on-screen mid-scroll).
+                    var mbCount = document.querySelector('[data-minibar-count]');
+                    if (mbCount) { mbCount.textContent = newVal.toLocaleString(); }
+                }
+            }
+            initReveal();   // before initScroller so revealHandle exists for its onAppend hook
+            initScroller();
+        });
+        // Safety net: clear the settle dim (+ browse-filters.js's opacity-50/pointer-events-none) when the
+        // FILTER request completes, incl. non-2xx / aborted requests where afterSwap never fires -- otherwise
+        // the results stay dimmed AND unclickable. Scoped to this form's request via e.detail.elt.
+        document.body.addEventListener('htmx:afterRequest', function (e) {
+            var elt = e.detail && e.detail.elt;
+            if (!elt || elt.id !== 'gbrowse-form') { return; }
+            var r = document.getElementById('browse-results');
+            if (r) { r.classList.remove('is-swapping', 'pointer-events-none'); }
+        });
+
+        initReveal();
+        initScroller();
+
+        // Sticky mini-bar: re-surfaces the identity + count + a Filters reach once the toolbar scrolls under
+        // the chrome. The reach scrolls the toolbar back into view and opens the (animated) filter panel.
+        if (window.PlatPursuit && PlatPursuit.StickyReveal) { PlatPursuit.StickyReveal.init(); }
+        var mbFilters = document.querySelector('[data-minibar-filters]');
+        if (mbFilters) {
+            mbFilters.addEventListener('click', function () {
+                if (panelHandle) { panelHandle.setOpen(true, true); }
+                if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+            });
+        }
+
+        // Mini-bar quick search + sort: proxied into the real (out-of-form-invisible) toolbar controls so
+        // there's a single source of truth + no duplicate form fields. We mirror the value and re-dispatch
+        // the native event, so browse-filters.js's own live-search debounce / auto-submit drives the fetch.
+        var realSearch = form.querySelector('input[name="query"]');
+        var realSort = form.querySelector('select[name="sort"]');
+        var mbSearch = document.querySelector('[data-minibar-search]');
+        var mbSort = document.querySelector('[data-minibar-sort]');
+        if (mbSearch && realSearch) {
+            mbSearch.addEventListener('input', function () {
+                realSearch.value = mbSearch.value;
+                realSearch.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            mbSearch.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    realSearch.value = mbSearch.value;
+                    realSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                }
+            });
+            // Keep the mini-bar in sync when the user types in the toolbar search instead.
+            realSearch.addEventListener('input', function () {
+                if (document.activeElement !== mbSearch) { mbSearch.value = realSearch.value; }
+            });
+        }
+        if (mbSort && realSort) {
+            mbSort.innerHTML = realSort.innerHTML;   // one source of truth for the 22 options/optgroups
+            mbSort.value = realSort.value;
+            mbSort.addEventListener('change', function () {
+                realSort.value = mbSort.value;
+                realSort.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            realSort.addEventListener('change', function () { mbSort.value = realSort.value; });
+        }
+    });
+    </script>
     {% if user.is_authenticated and user.profile %}
-    <script src="{% static 'js/game-lists.js' %}"></script>
-    <script>document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());</script>
+    {% comment %}game-lists.js is not loaded here while the lists system is hidden: its only entry
+    point on this page was the add-to-list button, so it would download and parse ~1,200 lines to
+    bind nothing. Restore with the button.{% endcomment %}
     {% endif %}
 {% endblock %}

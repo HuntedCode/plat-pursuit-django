@@ -1,0 +1,46 @@
+{% comment %}The Card tab -- the owner's Profile Card, previewed and downloaded in place.
+
+Owner-only (the view normalizes the slug away for visitors). No header chrome: the card IS the
+page (his call), with the family's own controls beneath it -- the same curated grounds and the
+same three-state download button the recap ceremony and the plat card modal use, so a hunter
+meets one palette and one flow on all three cards. Game-art backings are excluded upstream: they
+need a game, and a career is not one.
+
+The preview is the REAL 1200x630 artifact scaled to fit with a transform (one template for
+preview and PNG, so the two cannot drift); the chosen ground paints onto the live preview from
+the swatch's own gradient, recap's pattern -- the thing you clicked and the thing that paints are
+the same value.{% endcomment %}
+<div class="pfc" data-pfc>
+    {% if card_html %}
+    <div class="pfc__frame" data-pfc-frame>
+        <div class="pfc__scaler" data-pfc-scaler>{{ card_html }}</div>
+    </div>
+
+    {% if card_themes %}
+    <div class="pfc__grounds" role="radiogroup" aria-label="Card background">
+        {% for key, theme in card_themes %}
+        <label class="pc-theme" title="{{ theme.description }}" style="--pc-theme-bg: {{ theme.background_css }};">
+            <input type="radio" name="pfc-theme" value="{{ key }}" class="sr-only"
+                   {% if forloop.first %}checked{% endif %} data-pfc-theme />
+            <span class="pc-theme__swatch" aria-hidden="true"></span>
+            <span class="pc-theme__name">{{ theme.name }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="pfc__actions">
+        <button type="button" class="pp-cta pp-dl" data-pfc-download
+                data-url="{{ card_png_url }}" data-filename="{{ card_filename }}">
+            {% include 'partials/download_button_icons.html' %}
+            <span data-dl-label>Download</span>
+        </button>
+    </div>
+    {% else %}
+    <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 md:p-7 text-center">
+            <p class="text-sm text-base-content/60">Your card could not be built just now. Give it a moment and try again.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>

@@ -5,8 +5,7 @@ Useful for testing the notification detail views in the inbox.
 Usage:
     python manage.py create_test_notification
     python manage.py create_test_notification --type platinum
-    python manage.py create_test_notification --type challenge
-    python manage.py create_test_notification --type challenge --username myuser
+    python manage.py create_test_notification --type platinum --username myuser
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
@@ -15,7 +14,7 @@ from notifications.models import NotificationTemplate
 
 User = get_user_model()
 
-NOTIFICATION_TYPES = ['platinum', 'challenge']
+NOTIFICATION_TYPES = ['platinum']
 
 
 class Command(BaseCommand):
@@ -101,28 +100,6 @@ class Command(BaseCommand):
                 'game_image': 'https://image.api.playstation.com/vulcan/ap/rnd/202110/2000/aGhopp3MHppi7kooGE2Dnt8C.png',
                 'rarity_label': 'Ultra Rare',
             }
-        )
-
-        self._print_success(notification)
-
-    def _create_challenge(self, user):
-        """Create a test challenge completed notification."""
-        from django.urls import reverse
-        notification = NotificationService.create_notification(
-            recipient=user,
-            notification_type='challenge_completed',
-            title='A-Z Challenge Complete!',
-            message=f'You completed your A-Z Challenge "My Epic A-Z Challenge"! Welcome to the Hall of Fame!',
-            icon='\U0001f3c6',
-            action_url=reverse('challenges_browse'),
-            action_text='View Challenge',
-            metadata={
-                'challenge_id': 1,
-                'challenge_type': 'az',
-                'challenge_name': 'My Epic A-Z Challenge',
-                'completed_count': 26,
-                'total_items': 26,
-            },
         )
 
         self._print_success(notification)

@@ -77,6 +77,7 @@ class EmailLog(models.Model):
         ('welcome', 'Welcome'),
         # Admin
         ('admin_announcement', 'Admin Announcement'),
+        ('launch_announcement', 'Launch Announcement'),
         # Fundraiser
         ('donation_receipt', 'Donation Receipt'),
         ('badge_claim_confirmation', 'Badge Claim Confirmation'),

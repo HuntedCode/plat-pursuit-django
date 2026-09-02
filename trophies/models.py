@@ -21,7 +21,7 @@ from trophies.util_modules.constants import (
 )
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager, CommentManager, ChecklistManager,
+    BadgeManager, CommentManager, ChecklistManager,
 )
 import re
 
@@ -47,6 +47,49 @@ def clean_game_title(value: str) -> str:
     for pattern in _GAME_SUFFIX_PATTERNS:
         cleaned = pattern.sub('', cleaned).strip()
     return cleaned
+
+
+#: Code-point ranges that mark a name as NOT Latin-script for display_list_name's tiebreak.
+#: Deliberately a "not CJK" test, not a script classifier -- Cyrillic/Greek count as Latin-enough.
+#: The rule exists only to stop the JP/US locale flap on dual-region lists, nothing more.
+_NON_LATIN_NAME_RANGES = (
+    (0x3040, 0x30FF),   # Hiragana + Katakana
+    (0x3400, 0x4DBF),   # CJK Extension A
+    (0x4E00, 0x9FFF),   # CJK Unified Ideographs
+    (0xAC00, 0xD7AF),   # Hangul syllables
+    (0xF900, 0xFAFF),   # CJK Compatibility Ideographs
+)
+
+
+def _is_latin_script_name(value: str) -> bool:
+    return not any(
+        lo <= ord(ch) <= hi for ch in value for lo, hi in _NON_LATIN_NAME_RANGES
+    )
+
+
+def _pick_observed_name(observations, now):
+    """Choose ONE observed raw name for a list from [(title_name_raw, last_seen_at), ...].
+
+    The flap this exists to stop: a game synced by JP and US accounts holds two live
+    trophy_titles observations, and plain freshest-wins alternates the label between syncs --
+    made worse by last_seen_at's deliberate 24h damping, which makes same-day freshness
+    arbitrary. Rule (docs/design/games-and-trophy-lists-ia.md): when SEVERAL names were seen in
+    the last 30 days, prefer the freshest Latin-script one; otherwise freshest overall. A single
+    recent name cannot flap and wins as-is. Returns the RAW string (cleaning is the caller's
+    render concern) or None when there is nothing observed.
+    """
+    if not observations:
+        return None
+    ordered = sorted(observations, key=lambda pair: pair[1], reverse=True)
+    window_start = now - timedelta(days=30)
+    recent = [pair for pair in ordered if pair[1] >= window_start]
+    # No length guard on `recent`: with a single recent name the scan can only return that same
+    # name or nothing, so guarding on len(recent) > 1 was provably dead logic (an equivalent
+    # mutant in the verification round) -- "a single recent name cannot flap" holds either way.
+    latin = next((name for name, _seen in recent if _is_latin_script_name(name)), None)
+    if latin:
+        return latin
+    return (recent or ordered)[0][0]
 
 
 # Create your models here.
@@ -95,6 +138,11 @@ class Profile(models.Model):
     extra_data = models.JSONField(default=dict, blank=True)
     last_synced = models.DateTimeField(default=timezone.now)
     user_is_premium = models.BooleanField(default=False)
+    # THE WORN MARK, denormalised: 'staff' | 'mod' | a supporter-ladder slug | ''. Precedence
+    # (staff > mod > supporter) is baked at write time in users/services/marks.py -- surfaces
+    # that render hundreds of names read this one field and never re-derive it. Writers:
+    # reconcile_premium and CustomUser.save.
+    display_mark = models.CharField(max_length=16, blank=True, default='')
     sync_tier = models.CharField(
         max_length=10,
         choices=[("basic", "Basic"), ("preferred", "Preferred")],
@@ -109,6 +157,16 @@ class Profile(models.Model):
     sync_progress_value = models.IntegerField(default=0, help_text='Current sync progress value')
     sync_progress_target = models.IntegerField(default=0, help_text='Current sync progress target')
     is_linked = models.BooleanField(default=False)
+    show_on_supporter_wall = models.BooleanField(
+        default=True,
+        help_text=(
+            "Whether this hunter appears on the public supporter wall at /support/. Consulted ONLY "
+            "for a profile with an active premium tier, so it is inert for everyone else. "
+            "Defaults True on purpose: it auto-opts-in the people already supporting when the wall "
+            "shipped, who never got a checkout step to be asked at. New supporters will be asked "
+            "explicitly during checkout once the ladder's own checkout exists (lane 2) -- until then they are auto-opted-in too -- and anyone can flip it from subscription management."
+        ),
+    )
     psn_history_public = models.BooleanField(default=True, help_text="Flag indicating if PSN gaming history is public.")
     created_at = models.DateTimeField(auto_now_add=True)
     discord_id = models.BigIntegerField(unique=True, blank=True, null=True, help_text='Unique Discord user ID. Set on bot linking.')
@@ -125,22 +183,10 @@ class Profile(models.Model):
     avg_progress = models.FloatField(default=0.0)
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
-    selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
-    banner_image_url = models.URLField(
-        max_length=500, blank=True, null=True,
-        help_text='Exact banner image the user picked from the selected '
-                  "concept's landscape images (IGDB artwork/screenshot/cover). "
-                  'When set, takes precedence over selected_background.bg_url.',
-    )
-    banner_position = models.PositiveSmallIntegerField(default=50, help_text='Banner vertical position (0=top, 50=center, 100=bottom).')
-    selected_theme = models.CharField(max_length=50, blank=True, null=True, help_text='Selected gradient theme key for premium site-wide background.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
     guidelines_agreed = models.BooleanField(default=False, help_text="True if user has agreed to community guidelines for commenting.")
     guidelines_agreed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user agreed to community guidelines.")
-    tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Welcome Tour.")
-    game_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Game Detail Tour.")
-    badge_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Badge Detail Tour.")
     roadmap_role = models.CharField(
         max_length=20,
         choices=[
@@ -183,9 +229,28 @@ class Profile(models.Model):
             models.Index(fields=['last_synced'], name='profile_last_synced_idx'),
             models.Index(fields=['created_at'], name='profile_created_at_idx'),
             models.Index(fields=['country_code'], name='profile_country_code_idx'),
+            # The TROPHIES board on /leaderboards/, in board order. Platinums lead because a platinum takes
+            # a whole game; total trophies is the tiebreak, and `id` closes the ordering so it is TOTAL
+            # (see badge_leaderboards: rank and row position must agree, which needs a unique final key).
+            #
+            # It reads Profile's own counters -- signal-maintained in steady state, reconciled nightly by
+            # `recalc_profile_counters` -- rather than a badge-scoped denorm. The board this replaced
+            # counted trophies in badge-covered games, which needed a full-library aggregate per profile
+            # and mostly measured how many badge games somebody had played.
+            # PARTIAL on the board's own population. The board reads `is_linked=True, total_trophies > 0`
+            # (see badge_leaderboards.trophy_store), and neither predicate used to be in the index, so
+            # `is_linked` became a heap filter on every row scanned: measured at 300k profiles / 50k
+            # linked, page 500 walked 149,308 index entries to yield 25,000 (49.7 ms), and `trophy_rank`
+            # abandoned the index entirely for a seq scan of a 48-column table (16.0 ms) on EVERY
+            # authenticated page view. Partial takes all three reads to Index Only Scans (2.6 / 4.2 /
+            # 3.9 ms) and shrinks the index to the ranked population rather than every profile row.
+            models.Index(fields=['-total_plats', '-total_trophies', 'id'], name='profile_board_idx',
+                         condition=Q(is_linked=True, total_trophies__gt=0)),
+            models.Index(fields=['country_code', '-total_plats', '-total_trophies', 'id'],
+                         name='profile_board_cc_idx',
+                         condition=Q(is_linked=True, total_trophies__gt=0)),
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
-            models.Index(fields=['user_is_premium', 'selected_background']),
         ]
 
     def __str__(self):
@@ -247,6 +312,15 @@ class Profile(models.Model):
         self.sync_tier = 'preferred' if is_premium else 'basic'
         self.user_is_premium = is_premium
         self.save(update_fields=['sync_tier', 'user_is_premium'])
+        # The worn mark can change with premium (unless a service role outranks it).
+        if self.user_id:
+            from users.services.marks import refresh_display_mark
+            refresh_display_mark(self.user, is_premium=is_premium)
+        elif self.display_mark:
+            # Unlinking nulls the user before this runs; an orphaned profile keeps rendering on
+            # Browse Hunters and the boards, so the mark must come off with the account.
+            self.display_mark = ''
+            self.save(update_fields=['display_mark'])
     
     def get_time_since_last_sync(self) -> timedelta:
         """
@@ -345,26 +419,24 @@ class Profile(models.Model):
         self.is_discord_verified = True
         self.save(update_fields=['discord_id', 'discord_linked_at', 'is_discord_verified'])
 
-        # Check for Discord linking milestones
-        from trophies.services.milestone_service import check_all_milestones_for_user
-        check_all_milestones_for_user(self, criteria_type='discord_linked')
-    
     def unlink_discord(self):
         # Collect all Discord roles to remove while discord_id is still set
         all_role_ids = set()
         should_remove_roles = self.discord_id and self.is_discord_verified
 
         if should_remove_roles:
-            from trophies.services.badge_service import notify_bot_role_removed
+            from trophies.services.discord_roles import notify_bot_role_removed
 
             # Badges no longer grant Discord roles (retired); only milestone + premium
             # roles are managed now.
 
-            # Collect milestone roles
-            all_role_ids.update(
-                UserMilestone.objects.filter(profile=self, milestone__discord_role_id__isnull=False, milestone__is_active=True)
-                .values_list('milestone__discord_role_id', flat=True)
-            )
+            # Collect milestone roles. Use the MANAGED set (every configured milestone role,
+            # including retired milestones' and superseded lower rungs), not just the currently
+            # desired ones: after unlink `reconcile_discord_roles` early-returns on
+            # is_discord_verified=False, so anything missed here is stranded permanently.
+            # Removing a role the member doesn't hold is a no-op for the bot.
+            from milestones.services import managed_milestone_roles
+            all_role_ids.update(managed_milestone_roles())
 
             # Collect premium roles if applicable
             from django.conf import settings
@@ -525,6 +597,13 @@ class Game(models.Model):
     # Recomputed nightly by recalc_earn_rates alongside the four above.
     total_earns_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of earned trophies across all of this game's trophies.")
     monthly_players_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that played this game in the last 30 days.")
+    # Trending's signal, and the reason it is a SEPARATE column from monthly_players_count: this counts
+    # owners who EARNED A TROPHY here in the window, not owners who merely launched it. On a trophy
+    # site those differ -- booting a game and bouncing is not trending activity -- so the browse sort
+    # would quietly change meaning if it read monthly_players_count instead. Costs nothing extra to
+    # maintain: it is one more filtered Count on the ProfileGame GROUP BY recalc_earn_rates already
+    # runs. Indexed because Trending ORDERS BY it across the whole filtered catalogue.
+    monthly_earners_count = models.PositiveIntegerField(default=0, help_text="Denormalized count of profiles that earned a trophy in this game in the last 30 days.")
     is_regional = models.BooleanField(default=False)
     region_lock = models.BooleanField(default=False, help_text="Admin region override lock - won't be automatically updated.")
     concept_lock = models.BooleanField(default=False, help_text="Admin concept override lock - won't be automatically updated.")
@@ -556,6 +635,13 @@ class Game(models.Model):
         indexes = [
             models.Index(fields=["np_communication_id", "title_name"], name="game_idx"),
             models.Index(fields=['played_count'], name='game_played_count_idx'),
+            # Trending sorts on this across the catalogue before pagination. The other denormed
+            # community stats are deliberately NOT indexed -- nothing orders by them, and every
+            # index here is re-churned by the nightly full rewrite of these columns.
+            # Plain, not DESC: Postgres scans a btree backwards, so an ascending index serves
+            # `ORDER BY ... DESC` identically for a single column, and this matches
+            # game_played_count_idx above (which is also ascending while its sorts are descending).
+            models.Index(fields=['monthly_earners_count'], name='game_monthly_earners_idx'),
             models.Index(fields=['title_name'], name='game_title_idx'),
             GinIndex(fields=['title_platform'], name='game_platform_gin_idx'),
             models.Index(fields=['created_at'], name='game_created_idx'),
@@ -662,7 +748,10 @@ class Game(models.Model):
         return self.shovelware_status in ('auto_flagged', 'manually_flagged')
 
     def get_total_defined_trophies(self):
-        return self.defined_trophies['bronze'] + self.defined_trophies['silver'] + self.defined_trophies['gold'] + self.defined_trophies['platinum']
+        # Tolerate a missing/partial defined_trophies blob. It defaults to {} on the model, so indexing the
+        # tiers directly raised KeyError and 500'd any page that summarises a not-yet-synced game.
+        dt = self.defined_trophies or {}
+        return sum(int(dt.get(tier) or 0) for tier in ('bronze', 'silver', 'gold', 'platinum'))
 
     def get_icon_url(self):
         if self.force_title_icon or not self.title_image:
@@ -749,6 +838,49 @@ class Game(models.Model):
         if not self.title_platform:
             return 'Unknown'
         return ', '.join(self.title_platform)
+
+    @classmethod
+    def display_list_names(cls, games):
+        """{np_communication_id: display name} for these lists -- the display_image_url of names.
+
+        Why `title_name` alone cannot be the list's label: save() cleans it unconditionally, every
+        sync rewrites it unless lock_title, and the IGDB CJK promotion replaces it and LOCKS the
+        replacement -- so it is not reliably the list's own name, which is the entire point of a
+        list label. Chain: freshest trophy_titles-source PSNTitleObservation raw name (Latin-script
+        preference inside a 30-day window, see _pick_observed_name), display-cleaned HERE via
+        clean_game_title (the raw stays raw in the table; cleaning is a render concern), falling
+        back to title_name when nothing was observed or cleaning empties the string.
+
+        BATCH-FIRST, one query for N games: the observation table's only index is the unique
+        (np_communication_id, content_hash) btree, so the np `__in` read is indexed but a per-row
+        property on a grid would N+1 it -- any grid surface MUST come through here. Coverage of the
+        observation branch grows with every sync; the fallback carries the rest.
+        """
+        games = list(games)
+        if not games:
+            return {}
+        observed = {}
+        rows = PSNTitleObservation.objects.filter(
+            np_communication_id__in=[g.np_communication_id for g in games],
+            source='trophy_titles',
+        ).exclude(title_name_raw='').values_list(
+            'np_communication_id', 'title_name_raw', 'last_seen_at',
+        )
+        for np_id, raw_name, seen in rows:
+            observed.setdefault(np_id, []).append((raw_name, seen))
+
+        now = timezone.now()
+        names = {}
+        for game in games:
+            raw = _pick_observed_name(observed.get(game.np_communication_id, []), now)
+            cleaned = clean_game_title(raw) if raw else ''
+            names[game.np_communication_id] = cleaned or game.title_name
+        return names
+
+    @property
+    def display_list_name(self):
+        """Single-row convenience over display_list_names -- costs one query; grids use the batch."""
+        return type(self).display_list_names([self])[self.np_communication_id]
 
     @property
     def platform_release_date(self):
@@ -1010,6 +1142,25 @@ class Concept(models.Model):
             return match.cover_url(size)
         return None
 
+    def game_page_url(self):
+        """THE concept Game page URL (Games/Trophy Lists IA slice 1) -- the one helper search,
+        canonicals, sitemap and the identity chip all use, so the routing rule lives once.
+
+        Page identity is the IGDB id: deliberately-split concepts sharing an igdb_id share one
+        page, so a trusted match routes to /games/<igdb_id>/. The unmatched tail (PP_* stubs,
+        PSN-only concepts) routes to /games/c/<concept_id>/, and the view 301s a concept URL to
+        its igdb URL the moment the concept graduates to a trusted match.
+
+        Callers rendering many concepts must select_related('igdb_match') (and defer
+        raw_response, the house rule) or this walks the FK per row.
+        """
+        from django.urls import reverse
+
+        match = getattr(self, 'igdb_match', None)
+        if match is not None and match.is_trusted and match.igdb_id is not None:
+            return reverse('game_page', kwargs={'igdb_id': match.igdb_id})
+        return reverse('game_page_concept', kwargs={'concept_id': self.concept_id})
+
     def get_cover_url(self, size='cover_big'):
         """Return portrait cover art URL for display in square/portrait containers.
 
@@ -1247,9 +1398,6 @@ class Concept(models.Model):
         # Featured guides
         other.featured_entries.update(concept=self)
 
-        # Profiles using old concept as background
-        other.selected_by_profiles.update(selected_background=self)
-
         # Badge most_recent_concept
         other.most_recent_for_badges.update(most_recent_concept=self)
 
@@ -1303,56 +1451,7 @@ class Concept(models.Model):
             cbundle.concepts.remove(other)
 
         # GameFamilyProposal M2M removed — proposal model deleted in Phase 2.6.
-
-        # Genre challenge slots. unique_together is (challenge, genre) here, so
-        # the concept column carries no constraint and a bulk re-point is safe:
-        # the survivor legitimately ends up filling two genre slots of the same
-        # challenge when both merged concepts were assigned to it.
-        affected_challenge_ids = set(
-            other.genre_challenge_slots.values_list('challenge_id', flat=True)
-        )
-        other.genre_challenge_slots.update(concept=self)
-
-        # Genre bonus slots. unique_together IS (challenge, concept) here, so a
-        # bulk re-point blows up with an IntegrityError whenever both concepts
-        # sit in the same challenge's bonus pool — the survivor already owns
-        # that (challenge, concept) row. Collapse the pair instead: the two
-        # slots were always the same game, so the survivor's row stays (taking
-        # on completion, which is real user progress) and the duplicate is
-        # deleted. Deleting is required rather than optional — `concept` is
-        # SET_NULL, so a duplicate left in place would outlive other.delete()
-        # as a phantom empty bonus slot in the user's challenge.
-        survivor_bonus_by_challenge = {
-            slot.challenge_id: slot for slot in self.genre_bonus_slots.all()
-        }
-        for slot in other.genre_bonus_slots.all():
-            affected_challenge_ids.add(slot.challenge_id)
-            survivor_slot = survivor_bonus_by_challenge.get(slot.challenge_id)
-            if survivor_slot is None:
-                slot.concept = self
-                slot.save(update_fields=['concept'])
-                survivor_bonus_by_challenge[slot.challenge_id] = slot
-                continue
-            if slot.is_completed and not survivor_slot.is_completed:
-                survivor_slot.is_completed = True
-                survivor_slot.completed_at = slot.completed_at
-                survivor_slot.save(update_fields=['is_completed', 'completed_at'])
-            slot.delete()
-
-        # Both paths change what a challenge actually holds (a collapsed bonus
-        # slot drops bonus_count; two slots merging onto one concept shrinks the
-        # collected-subgenre set), so refresh the denormalized counters on every
-        # challenge this absorb touched. Imported locally: challenge_service
-        # imports from this module.
-        if affected_challenge_ids:
-            from trophies.services.challenge_service import recalculate_challenge_counts
-
-            for challenge in Challenge.objects.filter(id__in=affected_challenge_ids):
-                recalculate_challenge_counts(challenge)
-                challenge.save(update_fields=[
-                    'filled_count', 'completed_count', 'subgenre_count',
-                    'platted_subgenre_count', 'bonus_count', 'updated_at',
-                ])
+        # Genre challenge/bonus slots removed — Challenge system retired (Lane 2 teardown).
 
         # GameFamily — inherit if this concept doesn't have one
         if other.family and not self.family:
@@ -1584,6 +1683,75 @@ class UserConceptRating(models.Model):
     hours_to_platinum = models.PositiveIntegerField(help_text='Estimated hours to achieve platinum.')
     fun_ranking = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(10)], help_text='Fun ranking for the platinum (1-10)')
     overall_rating = models.FloatField(validators=[MinValueValidator(0.5), MaxValueValidator(5.0)], help_text="Overall game rating (1-5 stars)")
+    # The one DIRECTIVE field. Every score above describes what the platinum was LIKE; none of them says
+    # whether anyone else should do it, which is the question a trophy site exists to answer. The archived
+    # Review model carried `recommended` (a bool) and archiving reviews took it with it; this restores it.
+    #
+    # THREE values, and the middle one is the reason the field exists at all: a platinum can be a bad
+    # experience attached to a game worth playing, and no single yes/no can say that.
+    #
+    # A fourth ("only for the trophy" -- a bad game with an easy platinum) was built and then dropped,
+    # because these two fields already say it together: the STARS rate the game and the RECOMMENDATION
+    # rates the platinum, so a shovelware plat is "Do it" at 1.5 stars. Splitting that across two controls
+    # is what makes three enough.
+    #
+    # Deliberately NOT called `verdict`: `rating_verdict` (and its `verdictOf` JS twin, and
+    # `.gd-cond__verdict` / `.pp-rcard__verdict`) already mean the plain-language WORDS for
+    # difficulty/grind/fun ("Brutal", "A blast"). Two unrelated things under one name is a permanent tax.
+    #
+    # `blank=True` keeps every pre-existing row valid and makes `recommendation=''` the "needs one"
+    # predicate the wizard queues on. The REQUIREMENT lives in UserConceptRatingForm, which every server
+    # write path goes through -- permissive model, strict form.
+    RECOMMENDATIONS = [
+        ('worth_it', 'Do it'),
+        ('good_game_bad_plat', 'Good game, tough plat'),
+        ('skip', 'Skip it'),
+    ]
+    #: The same three for a trophy set with NO platinum in it -- every DLC pack, and the games that never
+    #: had one. Only the middle option changes, because it is the only one that NAMES the thing that was
+    #: rough; "Do it" and "Skip it" are about the set either way.
+    #:
+    #: Two lists rather than a format string, so the wording of an answer is always a literal you can read
+    #: and grep. The VALUES are identical, which is what lets `choices` stay on the platinum list -- the
+    #: field validates the value and never the label, so this needs no migration and no second column.
+    RECOMMENDATIONS_NO_PLAT = [
+        ('worth_it', 'Do it'),
+        ('good_game_bad_plat', 'Good game, tough trophies'),
+        ('skip', 'Skip it'),
+    ]
+
+    @classmethod
+    def recommendation_choices(cls, has_platinum=True):
+        """The three answers, worded for a set that does or does not end in a platinum."""
+        return cls.RECOMMENDATIONS if has_platinum else cls.RECOMMENDATIONS_NO_PLAT
+
+    def recommendation_label(self, has_platinum=True):
+        """This rating's answer, worded for its set.
+
+        Use this rather than `get_recommendation_display` anywhere the caller knows whether a platinum is
+        involved -- which is everywhere that renders a specific game. `get_recommendation_display` cannot
+        know, so it always says "platinum", which is wrong on a DLC pack.
+        """
+        return dict(self.recommendation_choices(has_platinum)).get(self.recommendation, '')
+
+    @classmethod
+    def recommendation_copy(cls, has_platinum=True):
+        """The two strings the rating FORM has to swap per game, as context/data-attribute keys.
+
+        One helper because both halves have to move together: swapping the middle option to "rough
+        trophies" while the question above it still asks about a platinum is worse than leaving both
+        wrong. Hosts spread this into their context (`**UserConceptRating.recommendation_copy(has_plat)`)
+        and the form picks it up through `RatingFields.label()`.
+        """
+        return {
+            'rec_label': dict(cls.recommendation_choices(has_platinum))['good_game_bad_plat'],
+            'rec_legend': ('Would you recommend the platinum?' if has_platinum
+                           else 'Would you recommend these trophies?'),
+        }
+    recommendation = models.CharField(
+        max_length=20, choices=RECOMMENDATIONS, blank=True, default='',
+        help_text="Would you send someone else after this platinum? Blank = predates the field (re-asked by the wizard).",
+    )
     # Optional public "quick take" (community micro-review), attached to the rating. Reactive moderation:
     # auto-filtered on submit (banned words / sanitize), reportable, staff soft-hide via blurb_hidden.
     blurb = models.CharField(max_length=140, blank=True, default='', help_text="Optional short public quick take (<=140 chars).")
@@ -1606,6 +1774,26 @@ class UserConceptRating(models.Model):
     def __str__(self):
         group_label = f" ({self.concept_trophy_group.display_name})" if self.concept_trophy_group else ""
         return f"{self.profile.display_psn_username}'s rating for {self.concept.unified_title}{group_label}"
+
+    def as_prefill(self):
+        """This rating in the shape the client form prefills from.
+
+        ONE definition, because the alternative is what shipped first: four hand-built copies of this
+        object (the wizard queue, the plat-card service, and two in JS), each of which had to be updated
+        when `recommendation` was added and three of which were not. That failure is invisible in review
+        and near-invisible in use -- the field simply arrives blank, so the hunter re-answers a question
+        they already answered, or worse, an omitted field is written back as its default.
+
+        Keys are the input NAMES, which are the API contract (see partials/_rating_fields.html).
+        """
+        return {
+            'recommendation': self.recommendation,
+            'difficulty': self.difficulty,
+            'grindiness': self.grindiness,
+            'hours_to_platinum': self.hours_to_platinum,
+            'fun_ranking': self.fun_ranking,
+            'overall_rating': self.overall_rating,
+        }
 
     @classmethod
     def visible_blurbs(cls):
@@ -2045,10 +2233,6 @@ class Badge(models.Model):
         'Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='developed_badges',
         help_text="Associated developer/company (developer badges). Drives the Frame's subject name + enables developer reporting.",
     )
-    set_number = models.PositiveIntegerField(
-        null=True, blank=True,
-        help_text="Edition / print-run number engraved on the Frame. Admin-assigned per tier (4 consecutive numbers per series), numbered independently within each badge type (every type starts its own sequence at 1).",
-    )
     rarity_pct = models.FloatField(
         null=True, blank=True,
         help_text="Denormalized: % of linked profiles who have earned this badge. Refreshed by the rarity command (not hand-edited).",
@@ -2189,38 +2373,54 @@ class Badge(models.Model):
             'is_avatar': False,
         }
 
+    # Rarity buckets by % of linked profiles who earned the badge (lower = rarer).
+    RARITY_THRESHOLDS = ((1.0, 'mythic'), (5.0, 'rare'), (20.0, 'uncommon'))
+
+    @staticmethod
+    def rarity_class_for(pct):
+        """Bucket a rarity percentage; lower percentages are rarer."""
+        for ceiling, name in Badge.RARITY_THRESHOLDS:
+            if pct < ceiling:
+                return name
+        return 'common'
+
     @classmethod
-    def assign_next_set_numbers(cls, series_slugs):
-        """Stamp the next sequential set numbers onto each series' four tier badges
-        (Bronze=N, Silver=N+1, Gold=N+2, Platinum=N+3). Numbering is scoped PER BADGE TYPE:
-        each type (Series, Franchise, Developer, ...) is its own "set" with an independent
-        sequence starting at 1, so the same number can appear once per type. Atomic, so each
-        series gets a contiguous, non-overlapping block even under concurrent admin actions.
-        Skips a series that doesn't have exactly 4 tiers (1-4) or that already has set
-        numbers. Returns {'assigned': [...], 'invalid_tiers': [...],
-        'already_numbered': [...]} (slugs)."""
-        result = {'assigned': [], 'invalid_tiers': [], 'already_numbered': []}
-        with transaction.atomic():
-            next_by_type = {}  # badge_type -> next set_number (independent sequence per type)
-            for slug in dict.fromkeys(series_slugs):  # dedup, preserve order
-                tiers = list(cls.objects.filter(series_slug=slug).order_by('tier'))
-                if [b.tier for b in tiers] != [1, 2, 3, 4]:
-                    result['invalid_tiers'].append(slug)
-                    continue
-                if any(b.set_number for b in tiers):
-                    result['already_numbered'].append(slug)
-                    continue
-                btype = tiers[0].badge_type  # a series' four tiers share one badge type
-                if btype not in next_by_type:
-                    next_by_type[btype] = (
-                        cls.objects.filter(badge_type=btype).aggregate(m=Max('set_number'))['m'] or 0
-                    ) + 1
-                for badge in tiers:
-                    badge.set_number = next_by_type[btype]
-                    badge.save(update_fields=['set_number'])
-                    next_by_type[btype] += 1
-                result['assigned'].append(slug)
-        return result
+    def recompute_rarity(cls):
+        """Refresh rarity_pct / rarity_class / rarity_rank for every badge from the
+        current earner counts over the PSN-linked profile base:
+          - rarity_pct  = linked profiles who earned it / all linked profiles * 100
+          - rarity_class = bucket of that percentage (lower = rarer)
+          - rarity_rank  = rank among LIVE badges, 1 = rarest (non-live get None)
+
+        DB-aggregated; iterates the bounded set of badges (not per-user). Run via the
+        recalc_badge_rarity command, off the request path. Returns a summary dict.
+        """
+        from django.db.models import Count
+
+        linked = Profile.objects.filter(is_linked=True).count()
+        # Numerator is linked earners only, so the ratio can't exceed 100%. Counts
+        # every earner regardless of status (maintenance rows still "earned" it).
+        earner_counts = dict(
+            UserBadge.objects.filter(profile__is_linked=True)
+            .values('badge_id').annotate(c=Count('id'))
+            .values_list('badge_id', 'c')
+        )
+
+        badges = list(cls.objects.all())
+        for badge in badges:
+            earners = earner_counts.get(badge.id, 0)
+            pct = (earners / linked * 100.0) if linked else 0.0
+            badge.rarity_pct = round(pct, 2)
+            badge.rarity_class = cls.rarity_class_for(pct)
+            badge.rarity_rank = None  # only live badges are ranked (set below)
+
+        # Rank live badges, rarest (lowest %) first; deterministic id tie-break.
+        live = sorted((b for b in badges if b.is_live), key=lambda b: (b.rarity_pct, b.id))
+        for index, badge in enumerate(live, start=1):
+            badge.rarity_rank = index
+
+        cls.objects.bulk_update(badges, ['rarity_pct', 'rarity_class', 'rarity_rank'])
+        return {'badges': len(badges), 'live_ranked': len(live), 'linked_profiles': linked}
 
     def update_most_recent_concept(self):
         concepts = Concept.objects.filter(stages__series_slug=self.series_slug).distinct()
@@ -2377,98 +2577,6 @@ class UserBadge(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} - {self.badge.name}"
-
-class ProfileBadgeShowcase(models.Model):
-    """
-    Premium feature: up to 3 badge series showcased on a user's public profile.
-    Separate from UserBadge.is_displayed (which controls the share card badge).
-    """
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_showcase')
-    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='showcased_by')
-    display_order = models.PositiveSmallIntegerField(default=0, help_text="Position in the showcase (1-5), auto-assigned on creation")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ['profile', 'badge']
-        ordering = ['display_order', 'created_at']
-        indexes = [
-            models.Index(fields=['profile', 'display_order'], name='showcase_profile_order_idx'),
-        ]
-
-    def save(self, *args, **kwargs):
-        if not self.pk:
-            from django.db import transaction
-            with transaction.atomic():
-                count = ProfileBadgeShowcase.objects.select_for_update().filter(
-                    profile=self.profile
-                ).count()
-                if count >= 5:
-                    raise ValueError("Maximum 5 showcase badges allowed.")
-                if not self.display_order or self.display_order < 1:
-                    self.display_order = count + 1
-                super().save(*args, **kwargs)
-        else:
-            super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.profile.psn_username} showcase #{self.display_order}: {self.badge.name}"
-
-
-class ProfileShowcase(models.Model):
-    """
-    Steam-style profile customization. Users select showcase types to feature
-    on their profile (up to 2 free, 5 premium). Each type can be used once per
-    profile. Config JSON stores user-selected item IDs for user-controlled types.
-    """
-    SHOWCASE_PLATINUM_CASE = 'platinum_case'
-    SHOWCASE_FAVORITE_GAMES = 'favorite_games'
-    SHOWCASE_BADGE = 'badge_showcase'
-    SHOWCASE_RECENT_PLATS = 'recent_platinums'
-    # SHOWCASE_REVIEW removed 2026-05 (text reviews archived). Existing
-    # 'review_showcase' rows are deleted by migration 0237.
-    # SHOWCASE_RAREST removed 2026-08. Unlike every other showcase, its item set was
-    # DERIVED rather than user-selected, which meant sorting the profile's entire earned
-    # set on a joined column (trophy__trophy_earn_rate) on every profile render -- a full
-    # join + top-N sort over 250K rows for a heavy account, and the single most expensive
-    # thing an anonymous visitor could trigger. Existing 'rarest_trophies' rows are
-    # deleted by migration 0275.
-    SHOWCASE_CHALLENGE = 'challenge_showcase'
-    SHOWCASE_TITLE = 'title_showcase'
-
-    SHOWCASE_TYPES = [
-        (SHOWCASE_PLATINUM_CASE, 'Platinum Trophy Case'),
-        (SHOWCASE_FAVORITE_GAMES, 'Favorite Games'),
-        (SHOWCASE_BADGE, 'Badge Showcase'),
-        (SHOWCASE_RECENT_PLATS, 'Recent Platinums'),
-        (SHOWCASE_CHALLENGE, 'Challenge Showcase'),
-        (SHOWCASE_TITLE, 'Title Showcase'),
-    ]
-
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='showcases')
-    showcase_type = models.CharField(max_length=30, choices=SHOWCASE_TYPES)
-    sort_order = models.PositiveSmallIntegerField(default=0)
-    is_active = models.BooleanField(
-        default=True, db_index=True,
-        help_text="False when a premium-only showcase is preserved during downgrade.",
-    )
-    config = models.JSONField(
-        default=dict, blank=True,
-        help_text="User-selected item IDs for this showcase (schema varies per type).",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = [('profile', 'showcase_type')]
-        ordering = ['sort_order', 'created_at']
-        indexes = [
-            models.Index(fields=['profile', 'is_active', 'sort_order'],
-                         name='profileshowcase_active_idx'),
-        ]
-
-    def __str__(self):
-        return f"{self.profile.psn_username} showcase: {self.get_showcase_type_display()}"
-
 
 class UserBadgeProgress(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_progress')
@@ -2659,6 +2767,7 @@ class Job(models.Model):
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+
     class Meta:
         ordering = ['discipline', 'display_order', 'name']
 
@@ -2683,6 +2792,21 @@ class Contract(models.Model):
                    'whose concepts come from its bundles instead.'),
     )
     is_live = models.BooleanField(default=False, help_text='Visible/active to users. Curate while False.')
+    went_live_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text=('When this Contract FIRST went live, i.e. when the community could first see '
+                   'it. Distinct from created_at: the pipeline stages a contract (is_live=False) '
+                   'possibly weeks before staff publish it, so created_at answers "when was this '
+                   'drafted", not "what is new". Stamped once and never reset, so un-publishing '
+                   'and re-publishing does not re-announce a contract.'),
+    )
+    announced_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text=('When `announce_contracts` posted this Contract to Discord. A COLUMN rather '
+                   'than a cursor/watermark on the side: a watermark that is lost (a Redis flush, '
+                   'a fresh environment) re-announces everything behind it, and one that is ahead '
+                   'silently swallows a wave. Per-row, the answer is exact and survives both.'),
+    )
     jobs = models.ManyToManyField(
         Job, related_name='contracts', blank=True,
         help_text='The job profile -- job XP splits evenly across these jobs.',
@@ -2700,6 +2824,37 @@ class Contract(models.Model):
 
     def __str__(self):
         return self.name
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        """Remember whether this row was live when we loaded it, so `save()` can tell a PUBLISH
+        from an ordinary edit of something already published. Django's standard previous-value
+        pattern; there is no cheaper way for save() to know, and re-reading the row would be a
+        query on every write."""
+        instance = super().from_db(db, field_names, values)
+        instance._was_live = instance.is_live
+        return instance
+
+    def save(self, *args, **kwargs):
+        """Stamp `went_live_at` when this Contract TRANSITIONS to live.
+
+        Set here rather than in a view so every save path gets it (admin edit, shell, the staging
+        pipeline's later publish). The admin's bulk `make_live` uses `queryset.update()`, which
+        bypasses this, so it applies the same transition rule itself -- keep the two in step.
+
+        THE TRANSITION IS LOAD-BEARING, not a refinement of "is live and unstamped". Every contract
+        published before this column existed is live with a NULL stamp, which is honest: their first
+        publish predates the record. Stamping on any save of such a row meant a curator opening one
+        to fix a typo silently republished it -- a New badge for 14 days and a Discord post
+        announcing a game that had been on the board since launch. The launch set would have leaked
+        into "new" one edit at a time.
+        """
+        if self.is_live and not getattr(self, '_was_live', False) and self.went_live_at is None:
+            self.went_live_at = timezone.now()
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = set(kwargs['update_fields']) | {'went_live_at'}
+        super().save(*args, **kwargs)
+        self._was_live = self.is_live   # so a second save() in the same instance's life agrees
 
     def member_concept_ids(self):
         """Concept ids belonging to this Contract: every ANCHORED + TRUSTED-matched Concept
@@ -2871,17 +3026,90 @@ class ProfileJobXP(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='profile_xp')
     total_xp = models.PositiveIntegerField(default=0)
     level = models.PositiveIntegerField(default=0)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ['profile', 'job']
         indexes = [
             models.Index(fields=['profile'], name='profilejobxp_profile_idx'),
-            models.Index(fields=['job', 'total_xp'], name='profilejobxp_job_xp_idx'),
+            # PARTIAL on the board's own population (`_linked` + the `> 0` membership rule), the
+            # same shape migration 0307 measured on Profile. The tail is `profile_id`, so the index
+            # expresses the board's FULL ordering and a rank COUNT can be index-only rather than
+            # re-sorting. See the 0308 docstring for the numbers.
+            models.Index(fields=['job', '-total_xp', 'profile'], name='profilejobxp_job_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            # Country-sliced per-job board. Same column order rationale as the series boards: the always-
+            # filtered key first, then the slice, then the sort.
+            models.Index(fields=['job', 'country_code', '-total_xp', 'profile'], name='pjx_job_cc_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
         ]
 
     def __str__(self):
         return f"{self.profile.display_psn_username} {self.job.slug} Lv{self.level}"
+
+
+class ProgressionMilestone(models.Model):
+    """A logged achievement moment: when a Pursuer crosses a job prestige tier (Initiate..Legend)
+    or an account Pursuer rank (Newbie..Ascendant). Written at ACCEPT time (the earning moment),
+    forward-only -- there is no backfill, because XP does not exist until it is banked. Feeds the
+    Career ladders (each reached rung shows its date) and the future 'your journey' view.
+
+    Only the ~19 tier/rank crossings are logged, never the V..I rank divisions, so the journey stays
+    meaningful. `from_first_claim` flags the onboarding catch-up burst (the first accept, when the
+    profile had 0 banked XP) so it can be grouped/celebrated later."""
+    JOB_TIER = 'job_tier'
+    PURSUER_RANK = 'pursuer_rank'
+    KIND_CHOICES = [(JOB_TIER, 'Job tier'), (PURSUER_RANK, 'Pursuer rank')]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='milestones')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    key = models.CharField(max_length=32)    # tier/rank key, e.g. 'adept' / 'warden'
+    name = models.CharField(max_length=48)   # display name, e.g. 'Adept' / 'Warden'
+    level_at = models.PositiveIntegerField()  # the job level / Pursuer Level at which the rung was reached
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, null=True, blank=True, related_name='milestones')  # job_tier only
+    from_first_claim = models.BooleanField(default=False)
+    reached_at = models.DateTimeField(default=timezone.now)   # settable (not auto_now_add) so the seed command can vary dates
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['profile', 'reached_at'], name='milestone_profile_time_idx'),
+            models.Index(fields=['profile', 'kind'], name='milestone_profile_kind_idx'),
+        ]
+        constraints = [
+            # A profile reaches each per-job tier once (job not null).
+            models.UniqueConstraint(fields=['profile', 'kind', 'key', 'job'], name='uniq_milestone_job'),
+            # Rank rows have job=NULL, and NULLs are distinct in the constraint above -- a partial unique
+            # index enforces one-per-rank so concurrent accepts can't double-log the same crossing.
+            models.UniqueConstraint(fields=['profile', 'kind', 'key'], condition=models.Q(job__isnull=True),
+                                    name='uniq_milestone_rank'),
+        ]
+
+    def __str__(self):
+        who = self.job.slug if self.job_id else 'pursuer'
+        return f"{self.profile.display_psn_username} {who} -> {self.name}"
 
 
 class Stage(models.Model):
@@ -2937,6 +3165,14 @@ class ConceptBundle(models.Model):
         return f"{self.stage} - {self.label}"
 
 
+# =====================================================================================================
+#  BADGE REBUILD (sealed subsystem) — grouping badges: PlatformGroup / BadgeSeries / GroupBadge /
+#  UserGroupBadge. These are NEW, isolated tables that REPLACE the tier-based Badge/UserBadge system at
+#  cutover. They are dormant until the rebuild's evaluation engine + display flip to them; the legacy
+#  Badge/UserBadge models above keep serving prod untouched in the meantime. Reuse Stage/Concept/Game/
+#  ProfileGame as read-only inputs. Design: docs/design/rebuild/badge-backend-rebuild.md.
+# =====================================================================================================
+
 class PlatformGroup(models.Model):
     """A backward-compatibility platform grouping that a series' games route into (e.g. Legacy HD = PS3/Vita,
     Ultra HD = PS4/PS5). Each group is its own earnable badge per series. The group owns the shared medallion
@@ -2987,7 +3223,7 @@ class BadgeSeries(models.Model):
 
     series_slug = models.SlugField(max_length=100, unique=True, help_text="Stable series identity; shared by this series' group badges.")
     name = models.CharField(max_length=255)
-    badge_type = models.CharField(max_length=12, choices=BADGE_TYPES, default='series', help_text="Attribution/flavor (drives subject name, set-numbering group, display label). All types share one earn engine.")
+    badge_type = models.CharField(max_length=12, choices=BADGE_TYPES, default='series', help_text="Attribution/flavor (drives subject name and display label). All types share one earn engine.")
     completion_policy = models.CharField(max_length=12, choices=COMPLETION_POLICIES, default='all', help_text="How a group badge is earned: 'all' gating stages, or 'min_count' (megamix).")
     min_required = models.PositiveIntegerField(default=0, help_text="For completion_policy='min_count' (megamix): stages needed. Interpretation under the per-group split is resolved by the evaluator.")
     description = models.TextField(blank=True)
@@ -3007,6 +3243,7 @@ class BadgeSeries(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+
     class Meta:
         ordering = ['name']
         indexes = [
@@ -3017,6 +3254,33 @@ class BadgeSeries(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_badge_type_display()})"
 
+    @property
+    def representative_group_badge(self):
+        """One edition to stand for the whole series when a surface needs art but has no edition in hand.
+
+        Medallion composition lives on `GroupBadge.art_layers()` because the backdrop, backing and shape
+        come from the `PlatformGroup` -- a series alone cannot draw itself. Callers that legitimately
+        have no edition (the fundraiser's claim tiles, an art-reveal event page) resolve one here rather
+        than re-deriving the layer dict, which is already duplicated once in the admin and should not be
+        duplicated again.
+
+        Prefers a LIVE edition in the group's own display order, then any edition, then None for a series
+        whose editions have not been created yet.
+
+        Sorts in PYTHON off `group_badges.all()` deliberately. A `.filter()` or `.order_by()` on a
+        related manager bypasses `_prefetched_objects_cache` and issues a fresh query, so the obvious
+        queryset version cost one query per series even with `prefetch_related` warm -- and made the
+        prefetch itself pure waste. Both callers loop over an unbounded claim list on a public page.
+        """
+        def order(gb):
+            pg = gb.platform_group
+            return (pg.sort_order, pg.name)
+
+        editions = sorted(self.group_badges.all(), key=order)
+        if not editions:
+            return None
+        return next((gb for gb in editions if gb.is_live), editions[0])
+
 
 class GroupBadge(models.Model):
     """The earnable per-group badge: one row per (BadgeSeries x PlatformGroup). Carries group-specific state and
@@ -3026,7 +3290,6 @@ class GroupBadge(models.Model):
     series = models.ForeignKey(BadgeSeries, on_delete=models.CASCADE, related_name='group_badges')
     platform_group = models.ForeignKey(PlatformGroup, on_delete=models.PROTECT, related_name='group_badges')
     is_live = models.BooleanField(default=False, help_text="Hidden until released. Dormant grouping badges stay False until the cutover flip.")
-    set_number = models.PositiveIntegerField(null=True, blank=True, help_text="Edition/print-run number engraved on the medallion. Assigned by the new numbering scheme (see rebuild doc).")
 
     # Per-group denormalization (owned by the evaluator's apply() step, not signals).
     earned_count = models.PositiveIntegerField(default=0, help_text="Active earners (status='earned'). Rarity uses the same count.")
@@ -3067,6 +3330,7 @@ class GroupBadge(models.Model):
         """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
         resolved subject art). Subject art resolves: per-group override -> series default -> (user badge:
         submitter avatar) -> static default. Mirrors the legacy Badge.get_badge_layers behavior."""
+        from trophies.util_modules.assets import safe_static
         grp = self.platform_group
         main_url, is_avatar = None, False
         if self.badge_image_override:
@@ -3079,7 +3343,14 @@ class GroupBadge(models.Model):
                 main_url, is_avatar = submitter.avatar_url, True
         has_custom = main_url is not None
         if not main_url:
-            main_url = 'images/badges/default.png'
+            # Resolve the placeholder to a real static URL -- the branches above return `.url`s, so a raw path
+            # here would render as a broken relative <img src> (the default-art bug).
+            #
+            # safe_static: this runs BEFORE the backdrop in group_medallion_layers, so for a badge with
+            # no custom art it is the first `static()` call on the whole medallion path -- and that path
+            # is reached from cron as well as from page renders. An unresolvable placeholder degrades to
+            # the bare metal plate rather than ending the caller.
+            main_url = safe_static('images/badges/default.png')
         return {
             'backdrop': grp.background_image.url if grp.background_image else None,
             'main': main_url,
@@ -3105,6 +3376,41 @@ class UserGroupBadge(models.Model):
         help_text="CURRENT-iteration completion date (the engine's earned_date) -- the leaderboard sort key, "
                   "resynced on re-evaluation if the badge changes. NOT the sync time.",
     )
+    created_at = models.DateTimeField(
+        default=timezone.now, editable=False, db_index=True,
+        help_text="When WE awarded this row. Distinct from earned_at, which is the hunter's completion "
+                  "date and moves when the badge's iteration changes. Use this for 'earned this week'.",
+    )
+
+    # Denormalized from Profile, same reason as the `is_linked` mirror below and as the five standing
+    # stores that already carry this: a predicate on another table cannot go in this table's indexes.
+    #
+    # Added LAST of the six, in 2026-08, and the lateness was not a decision -- `UserGroupBadge` is the
+    # badge EARN-LIFECYCLE table, written by `badge_apply`, and it predates the Lane B standing stores that
+    # established the mirror pattern. It got read as a board without ever being reframed as one.
+    #
+    # What it buys is a country-scoped `earners_rank` -- "4th in your country to earn this" reads better on
+    # a medallion back than "#847 worldwide". It does NOT buy a sliceable list: `earners_rows` has no
+    # production caller, so the earners board is a STAT rather than a surface.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, for the same reason the standing stores carry it: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, like the standing stores: `badge_apply.apply_changes` stamps it on award, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ['profile', 'group_badge']
@@ -3112,44 +3418,463 @@ class UserGroupBadge(models.Model):
             models.Index(fields=['profile', 'is_displayed'], name='ugb_display_idx'),
             # Serves the per-badge earners leaderboard (ORDER BY earned_at) AND a profile's live rank
             # (COUNT earned_at < mine) -- the value shown on the medallion back.
-            models.Index(fields=['group_badge', 'earned_at'], name='ugb_badge_earned_idx'),
+            # PARTIAL on `is_linked`, with `profile` as the tail. `earners_rank` counts everyone ahead
+            # and `earners_rows` seats them, and both express the same total ordering (earned_at, then
+            # profile id) -- so the tail is what lets the COUNT be index-only. No `> 0` half here: a held
+            # badge is the membership rule, and holding one has no quantity.
+            models.Index(fields=['group_badge', 'earned_at', 'profile'], name='ugb_badge_earned_idx',
+                         condition=Q(is_linked=True)),
+            # The country-sliced form. Same column order as every other board's country index: the
+            # always-filtered key first, then the slice, then the sort.
+            models.Index(fields=['group_badge', 'country_code', 'earned_at', 'profile'],
+                         name='ugb_badge_cc_earned_idx', condition=Q(is_linked=True)),
         ]
 
     def __str__(self):
         return f"{self.profile.psn_username} - {self.group_badge}"
 
 
+class GroupBadgeAnnouncement(models.Model):
+    """One row per (profile, group_badge) that has EVER been announced to Discord. Append-only.
+
+    Exists because `UserGroupBadge` is binary: a revoke deletes the row, so a later re-earn is
+    indistinguishable from a first earn and would announce again. PSN flux, a DLC drop, or a curator
+    editing a stage can therefore re-ping a hunter about a badge they have held for a year -- something the
+    legacy engine's `maintenance` state made structurally impossible.
+
+    A Redis cooldown was the other candidate and is not sufficient: any TTL short enough to be a cooldown
+    has expired by the time the year-later flux happens, which is the exact case that motivates this. So
+    the marker is durable and is deliberately NEVER deleted -- not on revoke, not on re-earn. That
+    permanence IS the feature; the row means "this hunter has been told", which stays true forever.
+
+    Rows die only with their profile or their badge (both CASCADE), and at that point there is no one left
+    to re-notify.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_announcements')
+    group_badge = models.ForeignKey(GroupBadge, on_delete=models.CASCADE, related_name='announcements')
+    announced_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'group_badge']
+
+    def __str__(self):
+        return f"{self.profile.psn_username} announced {self.group_badge}"
+
+
 class ProfileBadgeStanding(models.Model):
     """Sealed per-profile GRAND badge-XP total for the new subsystem -- the global XP leaderboard sort key (and
     a profile's overall total). Per-series XP + progress live in SeriesBadgeStanding. Recomputed from scratch on
     every evaluation (see services/badge_xp.py), so it can't drift. Isolated from the legacy tier-based
-    ProfileGamification.total_badge_xp (repointed at cutover)."""
+    ProfileGamification.total_badge_xp (repointed at cutover).
+
+    This row is the ALL-EDITIONS standing. ProfileEditionStanding carries the same figures sliced per
+    platform edition, and is a separate table rather than a JSON column here for the same reason country is
+    denormalized rather than joined: a board is an ORDER BY that has to ride an index.
+
+    It used to also carry `trophies_*` -- trophies earned across every badge-stage game, for a board then
+    called Badge Trophies. Those are GONE (2026-08). Maintaining them meant a full-library `EarnedTrophy`
+    aggregate per profile inside this write seam, which was affordable while the seam only ran from a
+    management command and became a per-sync cost the moment the engine was wired into `sync_complete` --
+    the same shape as the inline aggregates that `recalc_earn_rates` exists to undo. The board they fed was
+    replaced by one reading `Profile`'s own trophy counters, which are already maintained; see
+    `badge_leaderboards.trophy_rows`."""
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='badge_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)   # global leaderboard sort key
+
+    # Group badges HELD -- the Badge Points board's supporting figure. Materialized here rather than counted
+    # per render: it rode along as a `Count('group_badges', distinct=True)` annotation on the identity
+    # hydrate, which is a LEFT JOIN + GROUP BY on every board page for a figure nothing was displaying.
+    # As a column it is one more value off the board read the page already does.
+    #
+    # HELD in the new subsystem (UserGroupBadge), which includes lapsed maintenance tiers -- deliberately
+    # the same surface the Collection and the milestones metric read, and NOT the legacy
+    # ProfileGamification.total_badges_earned, which counts retired UserBadge tiers and is a different
+    # number. One figure, one meaning, everywhere.
+    badges_held = models.PositiveIntegerField(default=0)
+
+    # Denormalized from Profile so a country slice is an index range scan instead of a join-then-filter.
+    # See CountryStandingMixin for why this is copied rather than joined.
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
+
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            # PARTIAL on the board's own population (`_linked` + the `> 0` membership rule), the
+            # same shape migration 0307 measured on Profile. The tail is `profile_id`, so the index
+            # expresses the board's FULL ordering and a rank COUNT can be index-only rather than
+            # re-sorting. See the 0308 docstring for the numbers.
+            models.Index(fields=['-total_xp', 'profile'], name='pbs_board_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            # The country-sliced form: a slice is a range scan rather than a filter over a board-ordered
+            # scan. (`total_xp` keeps its own plain db_index for non-board reads.)
+            models.Index(fields=['country_code', '-total_xp', 'profile'], name='pbs_country_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+        ]
 
     def __str__(self):
         return f"{self.profile.psn_username} - badge XP {self.total_xp}"
+
+
+class SeriesEditionStanding(models.Model):
+    """SeriesBadgeStanding sliced per PLATFORM EDITION -- what backs the per-edition board on badge detail.
+
+    A TABLE, and it replaced a JSON annotation for the two reasons that made the JSON version wrong:
+
+    ORDERING. The board sorted on `Cast(group_xp -> key)` and gated membership on
+    `Cast(group_progress -> key -> 0) > 0`, so `sbs_series_board_idx` narrowed it to one badge's rows and
+    then Postgres extracted JSON for EVERY one of them, to filter and to sort. Nothing could stop early,
+    the count and the rank paid it too, and the virtualizer re-runs the query per window -- so scrolling a
+    popular badge re-sorted tens of thousands of rows per screenful. The same argument
+    `ProfileEditionStanding` makes against a `{key: xp}` blob on its parent, one level down.
+
+    THE TIEBREAK. `SeriesBadgeStanding.advanced_at` is SERIES-wide: `compute_series_standings` derives it
+    from the furthest-along edition, whichever that is. Ordering an edition's board by it meant two
+    hunters tied on Legacy HD points were separated by their Ultra HD progress -- so ADVANCING IN ONE
+    EDITION COULD DROP YOUR RANK IN ANOTHER, which is indefensible on a board a hunter is chasing.
+    `advanced_at` here is the edition's own, from `badge_xp._advanced_at`, which has always taken a
+    per-edition `GroupBadgeResult`; the value was computed and discarded.
+
+    ONLY STARTED EDITIONS GET A ROW (`stages_cleared > 0`), which is the board's own membership rule. That
+    is the difference between this and `SeriesBadgeStanding.group_progress`, which deliberately keeps
+    untouched editions so the Collection wall has a denominator for "0 / 5 stages". A board needs no such
+    row, and storing them would roughly double a table the nightly badge chain writes for every profile.
+
+    TWO STORES THAT MUST AGREE. A series whose XP drops to zero deletes its SeriesBadgeStanding row, and
+    these must go with it; an edition that stops being started must drop out on the next recompute. The
+    write seam does both in one pass -- see `badge_xp.recompute_standing`, which already warns about exactly
+    this shape one store up ("one of them holding a hunter the other has dropped is the kind of
+    disagreement nobody would think to check").
+
+    Same recompute-from-scratch rule as every other standing, so it cannot drift from its parent.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_edition_standings')
+    series_slug = models.SlugField(max_length=100)
+    # Denormalized as a slug rather than an FK, like `series_slug` above and
+    # `ProfileEditionStanding.platform_group_key`: it keeps the board's composite indexes narrow and lets
+    # a slice be filtered straight off the URL's value without resolving a row first.
+    platform_group_key = models.SlugField(max_length=40)
+
+    xp = models.PositiveIntegerField(default=0)                # Badge Points, this series, this edition
+    stages_cleared = models.PositiveIntegerField(default=0)
+    gating_count = models.PositiveIntegerField(default=0)      # this edition's denominator
+
+    # The moment this profile reached its current standing IN THIS EDITION -- the board's tiebreak, and
+    # the whole reason this table exists rather than another JSON key. A DateField, matching its parent:
+    # `badge_xp._advanced_at` returns a stage's `base_date` or a badge's `earned_date`, both dates, and a
+    # DateTimeField here would silently coerce them and warn on every write. Nullable for the same reason
+    # its parent's is: a hunter with a row but no dated stage sorts last within their rung rather than
+    # ahead of everyone.
+    advanced_at = models.DateField(null=True, blank=True)
+
+    # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
+    # DataError waiting to happen.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+    # Denormalized from Profile for the same reason every other standing store carries it: it is a board
+    # PREDICATE, and a predicate on another table cannot go in this table's indexes. Kept in step by the
+    # two paths the others use -- stamped by every recompute, and repaired by the `_propagate_*` receiver
+    # in `signals` (over the store list `profile_mirrored_standings()` returns) for the edge those miss:
+    # a hunter VERIFYING, which changes it with no recompute behind it.
+    is_linked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'series_slug', 'platform_group_key'],
+                                    name='uniq_profile_series_edition'),
+        ]
+        indexes = [
+            # THE BOARD. Leading (series, edition) narrows to the one being read, then the sort key, then
+            # the unique tail that lets a rank COUNT be index-only -- `badge_leaderboards` numbers a
+            # window by SLOT and computes a rank by counting everyone ahead, and those agree only because
+            # the ordering ends in a unique key.
+            #
+            # PARTIAL on `is_linked`, like every other scrolled board (0309/0311): the reads are gated on
+            # it, so the index should not carry rows no board can return.
+            models.Index(fields=['series_slug', 'platform_group_key', '-xp', 'advanced_at', 'profile'],
+                         name='ses_board_idx', condition=Q(is_linked=True)),
+            # Country-sliced. Column order matters: the two always-filtered keys, then the slice, then the
+            # sort -- so both forms of the board are a range scan rather than a filter over a scan.
+            models.Index(fields=['series_slug', 'platform_group_key', 'country_code', '-xp',
+                                 'advanced_at', 'profile'],
+                         name='ses_board_cc_idx', condition=Q(is_linked=True)),
+        ]
+
+    def __str__(self):
+        return f'{self.profile_id} - {self.series_slug} [{self.platform_group_key}] xp {self.xp}'
+
+
+class ProfileEditionStanding(models.Model):
+    """ProfileBadgeStanding sliced per PLATFORM EDITION -- what backs the edition filter on the two badge boards.
+
+    Legacy HD and Ultra HD are different games (the XP model says so explicitly: XP accrues PER GROUP BADGE),
+    so "who leads Legacy HD" is a real question the all-editions board cannot answer. This is that answer,
+    materialized.
+
+    A TABLE rather than a JSON column on ProfileBadgeStanding, for the same reason `country_code` is
+    denormalized rather than joined: a leaderboard is an ORDER BY over the whole population, and it has to
+    ride a composite index. A `{key: xp}` blob would force a per-key expression index to sort at all, and the
+    country slices would each need their own -- which is a table with extra steps.
+
+    Same write seam and the same recompute-from-scratch rule as its parent (services/badge_xp.py), so it
+    cannot drift from it. The columns are deliberately NAMED IDENTICALLY to ProfileBadgeStanding's, which is
+    what lets the read layer swap stores by picking a manager instead of branching every query body.
+
+    WHAT OVERLAPS AND WHAT DOES NOT -- these are easy to conflate and the two answers are opposite:
+
+      GAMES overlap editions. A cross-gen game on ['PS3','PS4'] qualifies for both groups, because the
+      engine's rule is platform INTERSECTION. So the same playthrough can advance a hunter in two editions
+      at once, and can earn them the same series' badge twice.
+
+      BADGES do not. A `GroupBadge` belongs to exactly ONE `PlatformGroup`, so every row here partitions
+      cleanly: `badges_held` and `total_xp` across a profile's editions SUM to the ProfileBadgeStanding
+      row. `badge_xp.badges_held_counts` states the same rule from the write side.
+
+    This docstring previously claimed the opposite ("per-edition figures do not sum to the all-editions
+    row"), describing per-edition TROPHY columns that no longer exist. Left standing beside the current
+    columns it read as license for exactly the double-count it was warning about, and the reason the
+    all-editions total is read from ProfileBadgeStanding is NOT that these fail to add up -- it is that
+    one indexed read beats an aggregate over a hunter's edition rows on every board render.
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='edition_standings')
+    # The PlatformGroup key, denormalized as a slug rather than an FK -- the same call SeriesBadgeStanding
+    # makes with `series_slug`. It keeps the board's composite indexes narrow and lets a slice be filtered
+    # straight off the URL's value without resolving a row first.
+    platform_group_key = models.SlugField(max_length=40)
+
+    total_xp = models.PositiveIntegerField(default=0)          # Badge Points, this edition
+    # Badges held IN THIS EDITION. Sliced for the same reason the points total is: showing a global badge
+    # count beside an edition-sliced points total would describe two different things in one row.
+    badges_held = models.PositiveIntegerField(default=0)
+
+    # max_length MATCHES Profile.country_code (5). See ProfileBadgeStanding for why a narrower mirror is a
+    # DataError waiting to happen.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'platform_group_key']
+        indexes = [
+            # Edition first (always filtered), then the board's own ORDER BY -- so a sliced board is a range
+            # scan. The country form puts the slice between the two, matching ProfileBadgeStanding's pattern.
+            # Only Badge Points slices by edition now, so there is one ordering to serve rather than two.
+            # PARTIAL on the board's membership rule, with `profile` as the tail -- see the note on
+            # SeriesBadgeStanding's indexes for why 0309 skipped these and 0311 added them.
+            models.Index(fields=['platform_group_key', '-total_xp', 'profile'], name='pes_ed_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            models.Index(fields=['platform_group_key', 'country_code', '-total_xp', 'profile'],
+                         name='pes_ed_cc_xp_idx', condition=Q(is_linked=True, total_xp__gt=0)),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.platform_group_key} xp {self.total_xp}"
+
+
+class ProfileCareerStanding(models.Model):
+    """Per-profile roll-up of the JOBS economy -- the Career XP board's sort key, and Pursuer Level.
+
+    A sibling of ProfileBadgeStanding, deliberately: the two economies are sealed apart ("Badge XP +
+    leaderboards live inside the box. They never read/write the jobs/contracts economy"), so they get
+    parallel stores rather than sharing one. It is NOT folded into ProfileGamification, which is the LEGACY
+    badge-XP denorm that cutover repoints -- mixing a new economy into a model being retired would tie the
+    two together at exactly the wrong moment.
+
+    Both figures are derivable (total = Sum of the profile's ProfileJobXP.total_xp; level = Sum of their
+    .level), which is why they are safe to materialize: recompute-from-scratch in the seam that already
+    rebuilds ProfileJobXP from the ContractXPGrant ledger. Without this, a global board would aggregate
+    ~24 rows per user across the whole population on every read."""
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='career_standing')
+    total_xp = models.PositiveIntegerField(default=0, db_index=True)      # Career XP board sort key
+    pursuer_level = models.PositiveIntegerField(default=0, db_index=True)  # sum of per-job levels
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            # PARTIAL on the board's own population (`_linked` + the `> 0` membership rule), the
+            # same shape migration 0307 measured on Profile. The tail is `profile_id`, so the index
+            # expresses the board's FULL ordering and a rank COUNT can be index-only rather than
+            # re-sorting. See the 0308 docstring for the numbers.
+            models.Index(fields=['-total_xp', 'profile'], name='pcs_board_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+            models.Index(fields=['country_code', '-total_xp', 'profile'], name='pcs_country_xp_idx',
+                         condition=Q(is_linked=True, total_xp__gt=0)),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - career XP {self.total_xp} (Lv {self.pursuer_level})"
 
 
 class SeriesBadgeStanding(models.Model):
     """Sealed per-(profile, series) standing -- backs the per-series XP + progress ("chasers") leaderboards and a
     profile's per-series breakdown. Recomputed from scratch on every evaluation; a row exists only while the
     profile has progress in the series. progress_bp is the furthest-along fraction (basis points, 0-10000) over
-    the series' group badges; stages_cleared/total describe that best group for display."""
+    the series' group badges; stages_cleared/total describe that best group for display.
+
+    group_progress is the per-EDITION read-model: {platform_group_key: [stages_cleared, gating_count]} for every
+    EARNABLE edition of the series -- started or not. An untouched edition is stored as [0, gating] rather than
+    omitted, because the Collection needs its DENOMINATOR to offer "0 / 5 stages"; gating is per edition, so no
+    series-level count can stand in for it. Editions with gating_count == 0 (not offered in that platform group)
+    stay out: an unearnable edition must advertise no chase. Presence never means "started" -- only cleared > 0
+    does, via edition_display_state. It's a materialized read-model (same pattern as stages_cleared/
+    total -- factual, recompute-from-scratch here, so it can't drift), NOT a leaderboard key. It exists so the
+    Collection wall can render each edition's OWN progress for MANY series in one cheap read, instead of live-
+    evaluating the badge engine per page load. The badge-detail page still live-evals (it needs the full stage
+    journey); both derive from the same engine + reflect the last sync, so they can't disagree. See
+    docs/design/rebuild/badge-backend-rebuild.md."""
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='series_badge_standings')
     series_slug = models.SlugField(max_length=100)
     xp = models.PositiveIntegerField(default=0)
     progress_bp = models.PositiveIntegerField(default=0, help_text="Furthest-along fraction, basis points (0-10000).")
     stages_cleared = models.PositiveIntegerField(default=0)
     stages_total = models.PositiveIntegerField(default=0)
+    group_progress = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-edition read-model {platform_group_key: [stages_cleared, gating_count]} for every EARNABLE "
+                  "edition (gating_count > 0), started or not -- so an untouched edition still carries its "
+                  "denominator. Lets the Collection show each edition's own progress without a live eval.",
+    )
+    # Per-edition XP for THIS series: {platform_group_key: xp}. Kept beside group_progress rather than folded
+    # into it, because the two answer different questions and group_progress is a documented shape the
+    # Collection unpacks as a 2-list -- widening it to a 3-list would break every reader to save a column.
+    #
+    # It exists to keep the per-edition GRAND total honest under scoped recomputes. `recompute_standing` may
+    # be called for a SUBSET of series, and its invariant is that the profile-wide totals are re-summed from
+    # every one of the profile's series rows rather than from the call's own results. `xp` gives that for the
+    # overall total; this gives it per edition. Without it, a scoped run would have to either rewrite the
+    # per-edition standing from partial data (undercount) or leave it stale.
+    group_xp = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-edition XP {platform_group_key: xp} for this series. Re-summed across the profile's "
+                  "series rows into ProfileEditionStanding, so scoped recomputes stay correct.",
+    )
+    # The moment this profile reached its current standing: the badge's earn date once earned, otherwise
+    # the latest gating stage they cleared (services/badge_xp._advanced_at).
+    #
+    # This is the per-series board's TIEBREAK, and it is what lets earners and chasers be ONE board rather
+    # than two. A 3-stage series stacks everyone on 1/3 or 2/3, so `progress_bp` alone leaves large ties
+    # sorted by profile id -- arbitrary, and it reads as unranked. Ordering
+    # `(-xp, advanced_at)` gives: the most badge points for this series on top, then each rung of
+    # chasers with whoever got there first ahead. Same rule the earners board always used, applied the
+    # whole way down.
+    #
+    # A row only exists once xp > 0, i.e. at least one stage cleared, so there is no "tied at zero" cohort
+    # to rank at all -- and no row without an `advanced_at` in practice (the null is defensive).
+    advanced_at = models.DateField(null=True, blank=True)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
+    # column narrower than its source turns any over-long value into a DataError on the propagating
+    # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+
+    # Denormalized from Profile, alongside `country_code` above and for the same reason: it is a board
+    # PREDICATE, and a predicate that lives on another table cannot go in this table's indexes. Migration
+    # 0307 made the Trophies-board indexes partial on `is_linked` and measured `trophy_rank` from 16.0 ms
+    # (planner abandons the index, seq-scans a 48-column table, on every authenticated page view) to
+    # 3.9 ms index-only. That fix could only reach Trophies, which reads Profile directly; this column is
+    # what lets the same one reach the boards that read standings.
+    #
+    # Kept in step by TWO paths, exactly like country_code: every recompute seam stamps it on the rows it
+    # writes, and `_propagate_profile_flags_to_standings` catches the edge those miss -- a hunter
+    # VERIFYING, which changes this with no recompute behind it. Without that second path a hunter would
+    # stay off every board until their next evaluation.
+    #
+    # NO `db_index` of its own: a standalone btree on a two-value column is close to useless (the planner
+    # will seq-scan rather than walk half the table's tuples), and six of them would mean six locking
+    # CREATE INDEXes for nothing. Where it earns its keep is as the PREDICATE of a partial index on the
+    # board's real sort key -- which is what the migration builds, CONCURRENTLY, and only for the stores
+    # whose reads are not already narrowed by a leading column.
+    is_linked = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ['profile', 'series_slug']
         indexes = [
-            models.Index(fields=['series_slug', '-xp'], name='sbs_series_xp_idx'),            # per-series XP board
-            models.Index(fields=['series_slug', '-progress_bp'], name='sbs_series_prog_idx'),  # per-series chasers
+            # The `(series_slug, -xp)` pair that used to sit here served `series_xp_rows`, a per-series XP
+            # board deleted in the 2026-08 audit for having no caller. The indexes outlived it and were
+            # dead write cost on a table every badge evaluation writes. Dropped in 0311.
+            #
+            # PARTIAL on `is_linked`, with `profile` as the tail. 0309 left the per-entity boards on plain
+            # indexes, reasoning that a leading key narrows them enough that the flag is a cheap heap
+            # filter -- true for PAGINATION, false for the virtual scrolling these boards use now. Scrolled
+            # deep into a popular series the scan walks the index fetching `is_linked` per candidate, the
+            # exact shape 0307 measured at 49.7 ms. The `profile` tail lets a rank COUNT be index-only,
+            # since it completes the board's total ordering.
+            #
+            # KEYED ON `xp`, not `progress_bp`. The board ranks by BADGE POINTS for the series (summed
+            # across editions) rather than by the furthest-along edition's fraction; these two indexes
+            # existed only for that ordering, so they move with it rather than being kept alongside. The
+            # other `progress_bp` orderings in the codebase (collection_service, monthly_recap_service)
+            # are PROFILE-scoped and never used an index that leads with `series_slug`.
+            models.Index(fields=['series_slug', '-xp', 'advanced_at', 'profile'],
+                         name='sbs_series_board_idx', condition=Q(is_linked=True)),
+            # Country-sliced. The column order matters: series first (always filtered), then country (the
+            # slice), then the sort key -- so both forms of the board are a range scan, not a filter over
+            # a scan.
+            models.Index(fields=['series_slug', 'country_code', '-xp', 'advanced_at', 'profile'],
+                         name='sbs_series_cc_board_idx', condition=Q(is_linked=True)),
         ]
 
     def __str__(self):
@@ -3164,6 +3889,7 @@ class TitleManager(models.Manager):
 class Title(models.Model):
     name = models.CharField(max_length=100, unique=True, help_text="The title text.")
     created_at = models.DateTimeField(auto_now_add=True)
+
 
     objects = TitleManager()
 
@@ -3204,110 +3930,6 @@ class UserTitle(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} - {self.title.name}"
-
-class Milestone(models.Model):
-    CRITERIA_TYPES = [
-        ('manual', 'Manual Award'),
-        ('plat_count', 'Earned Plats'),
-        ('psn_linked', 'PSN Profile Linked'),
-        ('discord_linked', 'Discord Connected'),
-        ('rating_count', 'Games Rated'),
-        ('playtime_hours', 'Total Playtime (Hours)'),
-        ('trophy_count', 'Total Trophies Earned'),
-        ('checklist_upvotes', 'Checklist Upvotes Received'),
-        ('badge_count', 'Badge Tiers Earned'),
-        ('unique_badge_count', 'Unique Badges Earned'),
-        ('completion_count', 'Games 100% Completed'),
-        ('stage_count', 'Badge Stages Completed'),
-        ('az_progress', 'A-Z Challenge Letters'),
-        ('genre_progress', 'Genre Challenge Genres'),
-        ('subgenre_progress', 'Subgenre Collection'),
-        ('calendar_month_jan', 'Calendar: January Complete'),
-        ('calendar_month_feb', 'Calendar: February Complete'),
-        ('calendar_month_mar', 'Calendar: March Complete'),
-        ('calendar_month_apr', 'Calendar: April Complete'),
-        ('calendar_month_may', 'Calendar: May Complete'),
-        ('calendar_month_jun', 'Calendar: June Complete'),
-        ('calendar_month_jul', 'Calendar: July Complete'),
-        ('calendar_month_aug', 'Calendar: August Complete'),
-        ('calendar_month_sep', 'Calendar: September Complete'),
-        ('calendar_month_oct', 'Calendar: October Complete'),
-        ('calendar_month_nov', 'Calendar: November Complete'),
-        ('calendar_month_dec', 'Calendar: December Complete'),
-        ('calendar_months_total', 'Calendar Months Completed'),
-        ('calendar_complete', 'Calendar Challenge Complete'),
-        ('is_premium', 'Premium Subscriber'),
-        ('subscription_months', 'Subscription Months'),
-        ('review_count', 'Quality Reviews Written'),
-        ('review_helpful_count', 'Review Helpful Votes Received'),
-    ]
-
-    name = models.CharField(max_length=255, unique=True, help_text="Unique name")
-    description = models.TextField(blank=True, help_text="Description for display")
-    image = models.ImageField(upload_to='milestones/', blank=True, null=True, help_text='Visual icon')
-    title = models.ForeignKey(Title, on_delete=models.SET_NULL, null=True, blank=True, related_name='milestones')
-    discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to assign upon earning")
-    criteria_type = models.CharField(max_length=30, choices=CRITERIA_TYPES, default='manual')
-    criteria_details = models.JSONField(default=dict, blank=True, help_text="Flexible details")
-    premium_only = models.BooleanField(default=False, help_text="If True, can only be earned by current premium users")
-    is_active = models.BooleanField(default=True, db_index=True, help_text="If False the milestone is RETIRED: hidden from the milestones page and no longer awarded. Existing earned records persist. Retire via the retire_milestones command, which also removes the titles it granted.")
-    required_value = models.PositiveIntegerField(default=0, help_text="Target for milestone")
-    earned_count = models.PositiveIntegerField(default=0, help_text="Counter for user earns")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    objects = MilestoneManager()
-
-    class Meta:
-        ordering = ['name']
-        indexes = [
-            models.Index(fields=['criteria_type'], name='milestone_type_idx'),
-            models.Index(fields=['earned_count'],  name='milestone_earned_count_idx'),
-        ]
-        verbose_name = 'Milestone'
-        verbose_name_plural = 'Milestones'
-
-    def save(self, *args, **kwargs):
-        # Intentionally set on every save (not just creation) so required_value
-        # always stays in sync with criteria_details['target']. Admin edits to
-        # required_value alone will be overwritten: update criteria_details instead.
-        self.required_value = self.criteria_details.get('target', 0)
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.name
-    
-class UserMilestone(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_milestones')
-    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='user_milestones')
-    earned_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ['profile', 'milestone']
-        indexes = [
-            models.Index(fields=['earned_at'], name='usermilestone_earned_at_idx'),
-        ]
-        verbose_name = 'User Milestone'
-        verbose_name_plural = 'User Milestones'
-
-    def __str__(self):
-        return f"{self.profile.psn_username} - {self.milestone.name}"
-    
-class UserMilestoneProgress(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_milestone_progress')
-    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='milestone_progress')
-    progress_value = models.PositiveIntegerField(default=0, help_text="Current progress")
-    last_checked = models.DateTimeField(auto_now=True, help_text="Timestamp of last progress update")
-
-    class Meta:
-        unique_together = ['profile', 'milestone']
-        indexes = [
-            models.Index(fields=['last_checked'], name='usermilestoneprog_checked_idx'),
-        ]
-        verbose_name = 'User Milestone Progress'
-        verbose_name_plural = 'User Milestone Progress'
-    
-    def __str__(self):
-        return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
 
 class Median(models.Aggregate):
@@ -4691,8 +5313,26 @@ class MonthlyRecap(models.Model):
     )
 
     # Badge/XP stats
-    badge_xp_earned = models.PositiveIntegerField(default=0)
+    badge_xp_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Badge XP earned in this month, bucketed from the engine's stage/badge completion "
+                  "dates (badge_xp.monthly_xp). Snapshotted at generation; there is no XP ledger.",
+    )
     badges_earned_count = models.PositiveIntegerField(default=0)
+    taste_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="Top genre + franchise for the month (get_taste_for_month).",
+    )
+    community_comparison_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="This month's headline game vs the community's denormed stats "
+                  "(get_community_comparison_for_month).",
+    )
+    month_in_history_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="This same month across the hunter's other years, plus a first-platinum anniversary "
+                  "when one falls here (get_month_in_history).",
+    )
     badges_data = models.JSONField(
         default=list,
         blank=True,
@@ -4884,256 +5524,31 @@ class GameListLike(models.Model):
         return f"{self.profile.psn_username} likes {self.game_list.name}"
 
 
-# ─── Challenge System ───────────────────────────────────────────────────────────
+# ─── Archived A-Z Challenge data (retired Challenge system, Lane 2 teardown) ─────
 
-class Challenge(models.Model):
+class ArchivedAZChallenge(models.Model):
+    """Frozen A-Z Platinum Challenge progress, preserved when the Challenge system was retired.
+
+    One row per archived A-Z challenge, keyed on stable PSN ids (psn_username + per-slot
+    np_communication_id) so a future rebuilt Challenge system can re-import it. Read-only historical
+    data, not wired into any live feature. Populated by the teardown migration from the dropped
+    Challenge / AZChallengeSlot tables. Calendar/Genre progress was intentionally NOT preserved.
     """
-    Base challenge model. Houses shared fields for all challenge types.
-    challenge_type determines which related data (slots, tasks, etc.) applies.
-    """
-    CHALLENGE_TYPES = [
-        ('az', 'A-Z Platinum Challenge'),
-        ('calendar', 'Platinum Calendar'),
-        ('genre', 'Genre Challenge'),
-    ]
-
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='challenges')
-    challenge_type = models.CharField(max_length=30, choices=CHALLENGE_TYPES, db_index=True)
-    name = models.CharField(max_length=75)
-    description = models.TextField(blank=True, default='')
-
-    # Progress (meaning varies by type — for AZ: X/26)
-    total_items = models.PositiveIntegerField(default=0)
-    filled_count = models.PositiveIntegerField(default=0)
+    psn_username = models.CharField(max_length=32, db_index=True)
+    profile = models.ForeignKey(Profile, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    name = models.CharField(max_length=75, blank=True, default='')
     completed_count = models.PositiveIntegerField(default=0)
-
-    # Stats
-    view_count = models.PositiveIntegerField(default=0)
-
-    # Display
-    cover_letter = models.CharField(max_length=1, blank=True, default='')
-    cover_genre = models.CharField(max_length=50, blank=True, default='')
-
-    # Genre challenge: unique subgenres collected from assigned concepts
-    subgenre_count = models.PositiveIntegerField(default=0)
-    platted_subgenre_count = models.PositiveIntegerField(default=0)
-    bonus_count = models.PositiveIntegerField(default=0)
-
-    # Status
     is_complete = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    # Soft delete
-    is_deleted = models.BooleanField(default=False)
-    deleted_at = models.DateTimeField(null=True, blank=True)
+    was_deleted = models.BooleanField(default=False, help_text="The source challenge was soft-deleted at archive time.")
+    created_at = models.DateTimeField(null=True, blank=True, help_text="Original challenge creation time.")
+    slots = models.JSONField(default=list, help_text="[{letter, game_np_communication_id, game_title, is_completed, completed_at}]")
+    archived_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        indexes = [
-            models.Index(fields=['profile', 'is_deleted', 'challenge_type'], name='challenge_profile_idx'),
-            models.Index(fields=['challenge_type', 'is_deleted', 'is_complete'], name='challenge_type_status_idx'),
-            models.Index(fields=['challenge_type', 'is_deleted', '-completed_count'], name='challenge_type_progress_idx'),
-        ]
-        ordering = ['-created_at']
+        ordering = ['psn_username']
 
     def __str__(self):
-        return f"{self.name} ({self.get_challenge_type_display()}) by {self.profile.psn_username}"
-
-    def soft_delete(self):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save(update_fields=['is_deleted', 'deleted_at'])
-        # Invalidate dashboard cache so challenge hub reflects the deletion
-        from trophies.services.dashboard_service import invalidate_dashboard_cache
-        invalidate_dashboard_cache(self.profile_id)
-
-    @property
-    def progress_percentage(self):
-        if self.total_items == 0:
-            return 0
-        return int((self.completed_count / self.total_items) * 100)
-
-
-class AZChallengeSlot(models.Model):
-    """One of the 26 letter slots (A-Z) in an A-Z Challenge."""
-    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name='az_slots')
-    letter = models.CharField(max_length=1, db_index=True)
-    game = models.ForeignKey(
-        Game, on_delete=models.SET_NULL, null=True, blank=True, related_name='az_slots'
-    )
-
-    # Progress
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    assigned_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        unique_together = ['challenge', 'letter']
-        ordering = ['letter']
-
-    def __str__(self):
-        status = 'completed' if self.is_completed else ('assigned' if self.game else 'empty')
-        game_name = self.game.title_name if self.game else 'empty'
-        return f"{self.letter}: {game_name} ({status})"
-
-
-# Non-leap-year day counts per month (Feb 29 excluded from calendar challenge)
-CALENDAR_DAYS_PER_MONTH = {
-    1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
-    7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31,
-}
-
-
-class CalendarChallengeDay(models.Model):
-    """
-    One of 365 day slots (Jan 1 - Dec 31, no Feb 29) in a Platinum Calendar Challenge.
-    Filled automatically when the user earns a platinum on a matching calendar day.
-    """
-    challenge = models.ForeignKey(
-        Challenge, on_delete=models.CASCADE, related_name='calendar_days'
-    )
-    month = models.PositiveSmallIntegerField()   # 1-12
-    day = models.PositiveSmallIntegerField()      # 1-31
-
-    # The first game whose platinum filled this day
-    game = models.ForeignKey(
-        Game, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='calendar_day_slots'
-    )
-
-    # Fill status
-    is_filled = models.BooleanField(default=False)
-    filled_at = models.DateTimeField(null=True, blank=True)
-
-    # The actual earned_date_time of the platinum that filled this day
-    platinum_earned_at = models.DateTimeField(null=True, blank=True)
-
-    # Total platinums earned on this calendar day (month/day) across all years
-    plat_count = models.PositiveSmallIntegerField(default=0)
-
-    class Meta:
-        unique_together = ['challenge', 'month', 'day']
-        ordering = ['month', 'day']
-        indexes = [
-            models.Index(
-                fields=['challenge', 'is_filled'],
-                name='calday_challenge_filled_idx'
-            ),
-        ]
-
-    def __str__(self):
-        status = 'filled' if self.is_filled else 'empty'
-        game_name = self.game.title_name if self.game else 'none'
-        return f"{self.month:02d}/{self.day:02d}: {game_name} ({status})"
-
-
-class GenreChallengeSlot(models.Model):
-    """One genre slot in a Genre Challenge. Points to a Concept, not a Game."""
-    challenge = models.ForeignKey(
-        Challenge, on_delete=models.CASCADE, related_name='genre_slots'
-    )
-    genre = models.CharField(max_length=50, db_index=True)
-    genre_display = models.CharField(max_length=100, blank=True, default='')
-    concept = models.ForeignKey(
-        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='genre_challenge_slots'
-    )
-
-    # Progress
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    assigned_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        unique_together = ['challenge', 'genre']
-        ordering = ['genre']
-        indexes = [
-            models.Index(
-                fields=['challenge', 'is_completed'],
-                name='genreslot_chal_completed_idx'
-            ),
-        ]
-
-    def __str__(self):
-        concept_name = self.concept.unified_title if self.concept else 'empty'
-        status = 'done' if self.is_completed else 'pending'
-        return f"{self.genre_display}: {concept_name} ({status})"
-
-
-class GenreBonusSlot(models.Model):
-    """Bonus game slot for subgenre hunting in a Genre Challenge (no genre restriction)."""
-    challenge = models.ForeignKey(
-        Challenge, on_delete=models.CASCADE, related_name='bonus_slots'
-    )
-    concept = models.ForeignKey(
-        'Concept', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='genre_bonus_slots'
-    )
-
-    # Progress
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Timestamps
-    assigned_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ['challenge', 'concept']
-        ordering = ['assigned_at']
-        indexes = [
-            models.Index(
-                fields=['challenge', 'is_completed'],
-                name='bonusslot_chal_completed_idx'
-            ),
-        ]
-
-    def __str__(self):
-        concept_name = self.concept.unified_title if self.concept else 'empty'
-        status = 'done' if self.is_completed else 'pending'
-        return f"Bonus: {concept_name} ({status})"
-
-
-class DashboardConfig(models.Model):
-    """
-    Per-user dashboard preferences: visible modules, ordering, and per-module settings.
-
-    module_order: ordered list of module slugs (premium-only to customize).
-        ["trophy_summary", "active_challenges", "recent_activity", ...]
-
-    hidden_modules: slugs the user has toggled off (free users: max 3).
-        ["community_engagement", "quick_links"]
-
-    module_settings: per-module config overrides (premium-only).
-        {"games_in_progress": {"limit": 10}, "recent_activity": {"limit": 12}}
-    """
-    profile = models.OneToOneField(
-        Profile,
-        on_delete=models.CASCADE,
-        related_name='dashboard_config',
-        primary_key=True,
-    )
-    module_order = models.JSONField(default=list, blank=True)
-    hidden_modules = models.JSONField(default=list, blank=True)
-    module_settings = models.JSONField(default=dict, blank=True)
-    tab_config = models.JSONField(
-        default=dict, blank=True,
-        help_text='Tab layout: {active_tab, tab_order, custom_tabs, module_tab_overrides}'
-    )
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Dashboard Config'
-        verbose_name_plural = 'Dashboard Configs'
-
-    def __str__(self):
-        return f"DashboardConfig for {self.profile.psn_username}"
+        return f"Archived A-Z ({self.psn_username}, {self.completed_count}/26)"
 
 
 class ProfileCardSettings(models.Model):
@@ -6174,6 +6589,18 @@ class Company(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Materialized browse-tile cover -- see Genre.representative_game. Recomputed by `recompute_tag_covers`.
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+
+    # Materialized browse counts (recompute_tag_covers, nightly): the live versions were
+    # correlated aggregate subqueries per row, paid by the browse COUNT + page + every scroll
+    # fetch (the 2026-08-31 browse-backend audit's landmine). game_count = distinct IGDB ids;
+    # version_count = distinct Game rows (all links; ConceptCompany has no visibility flags).
+    game_count = models.PositiveIntegerField(default=0)
+    version_count = models.PositiveIntegerField(default=0)
+
     class Meta:
         verbose_name_plural = 'companies'
         ordering = ['name']
@@ -6281,6 +6708,25 @@ class Genre(models.Model):
     igdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, unique=True)
+    # Materialized cover for the browse tile: a representative member game (contract-preferred, stable
+    # per-tag variety, most-recent fallback), recomputed off the request path by `recompute_tag_covers`.
+    # Read O(1) at render (a single FK) so the tile scales regardless of catalogue / contract-catalogue size.
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    # Materialized "related genres" for the detail-page rail: an ordered list of genre SLUGS ranked by game
+    # co-occurrence (genres whose games overlap this one's most), recomputed by `recompute_tag_covers`. A
+    # JSON slug list (not an M2M) so the co-occurrence GROUP BY runs off the request path, not per page load.
+    related_tags = models.JSONField(default=list, blank=True)
+
+    # Materialized browse stats (recompute_tag_covers, nightly): the per-tag counts the live
+    # sorts computed as correlated subqueries per request -- `players` scanned the whole
+    # ProfileGame table per load (the 2026-08-31 browse-backend audit's landmine). game_count =
+    # distinct member Games; player_count = distinct profiles across them; avg_rating = the
+    # concept-level community average. Read as plain indexed-enough columns at render.
+    game_count = models.PositiveIntegerField(default=0)
+    player_count = models.PositiveIntegerField(default=0)
+    avg_rating = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ['name']
@@ -6294,6 +6740,21 @@ class Theme(models.Model):
     igdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, unique=True)
+    # Materialized browse-tile cover -- see Genre.representative_game.
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    # Materialized "related themes" (co-occurrence slug list) -- see Genre.related_tags.
+    related_tags = models.JSONField(default=list, blank=True)
+
+    # Materialized browse stats (recompute_tag_covers, nightly): the per-tag counts the live
+    # sorts computed as correlated subqueries per request -- `players` scanned the whole
+    # ProfileGame table per load (the 2026-08-31 browse-backend audit's landmine). game_count =
+    # distinct member Games; player_count = distinct profiles across them; avg_rating = the
+    # concept-level community average. Read as plain indexed-enough columns at render.
+    game_count = models.PositiveIntegerField(default=0)
+    player_count = models.PositiveIntegerField(default=0)
+    avg_rating = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ['name']
@@ -6446,6 +6907,18 @@ class Franchise(models.Model):
     source_type = models.CharField(
         max_length=20, choices=SOURCE_TYPE_CHOICES, default='franchise',
     )
+    # Materialized browse-tile cover -- see Genre.representative_game. Recomputed by `recompute_tag_covers`
+    # (the cover pick honours the ConceptFranchise is_excluded / is_spinoff flags).
+    representative_game = models.ForeignKey(
+        'Game', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+
+    # Materialized browse counts (recompute_tag_covers, nightly): the live versions were
+    # correlated aggregate subqueries per row, paid by the browse COUNT + page + every scroll
+    # fetch (the 2026-08-31 browse-backend audit's landmine). game_count = distinct IGDB ids;
+    # version_count = distinct Game rows, both over VISIBLE links (is_excluded=False, is_spinoff=False).
+    game_count = models.PositiveIntegerField(default=0)
+    version_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['name']
@@ -6674,7 +7147,7 @@ class IGDBMatch(models.Model):
         ]
 
     @staticmethod
-    def _format_seconds(seconds):
+    def format_seconds(seconds):
         """Format a duration in seconds to a human-readable string like '42h' or '30m'."""
         if not seconds:
             return None
@@ -6695,21 +7168,21 @@ class IGDBMatch(models.Model):
         """
         if not self.is_trusted:
             return None
-        return self._format_seconds(self.time_to_beat_completely)
+        return self.format_seconds(self.time_to_beat_completely)
 
     @property
     def speedrun_time_display(self):
         """Human-readable speedrun time estimate. None on untrusted matches."""
         if not self.is_trusted:
             return None
-        return self._format_seconds(self.time_to_beat_hastily)
+        return self.format_seconds(self.time_to_beat_hastily)
 
     @property
     def normal_time_display(self):
         """Human-readable average playthrough time estimate. None on untrusted matches."""
         if not self.is_trusted:
             return None
-        return self._format_seconds(self.time_to_beat_normally)
+        return self.format_seconds(self.time_to_beat_normally)
 
     @property
     def has_time_to_beat(self):

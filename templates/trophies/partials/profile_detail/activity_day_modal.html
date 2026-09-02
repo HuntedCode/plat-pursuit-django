@@ -1,0 +1,38 @@
+{% load custom_filters humanize %}{% comment %} Activity, tier 2: one day's games, in the shared detail modal.
+
+Every game opens ALREADY EXPANDED. A collapsed poster grid was built here and removed: inside a dialog the
+posters were small, the extra click bought nothing, and the morph between the two states was motion for
+its own sake. A day has few games -- showing them is cheaper than making someone ask.
+
+The site's `.pp-detail-modal` primitive, not a bespoke dialog: scrim, dialog, close and the entrance
+choreography all come with it, and a second dialog implementation is the drift the rebuild removes.
+
+Fetched from `profile_day`, the same real URL the tile links to, so this content is crawlable and linkable
+rather than existing only behind a click.
+{% endcomment %}
+<div class="pp-detail-modal pp-actday" id="act-day" hidden data-act-modal>
+    <div class="pp-detail-modal__scrim" data-act-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true"
+         aria-label="{{ day|date:'D, M j, Y' }} activity" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-act-close aria-label="Close">&times;</button>
+
+        <header class="pp-actday__head">
+            <h2 class="pp-actday__date">{{ day|date:"l, F j, Y" }}</h2>
+            <p class="pp-actday__stats">
+                <b>{{ day_trophies|intcomma }}</b> troph{{ day_trophies|pluralize:"y,ies" }}
+                &middot; {{ sessions|length }} game{{ sessions|length|pluralize }}
+                {% if day_platinums %}<span class="pp-actday__plat">&middot; {{ day_platinums }} platinum{{ day_platinums|pluralize }}</span>{% endif %}
+            </p>
+        </header>
+
+        <div class="pp-actday__games">
+            {% for s in sessions %}
+            {% include 'trophies/partials/profile_detail/_activity_session.html' with s=s %}
+            {% endfor %}
+        </div>
+
+        <a class="pp-actday__link" href="{% url 'profile_day' psn_username=profile.psn_username day=day|date:'Y-m-d' %}">
+            Open this day on its own page &rsaquo;
+        </a>
+    </div>
+</div>

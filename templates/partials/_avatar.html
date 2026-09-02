@@ -1,0 +1,19 @@
+{% comment %}
+Avatar image with a safe fallback. Renders the profile's avatar when `url` is set,
+otherwise a neutral person glyph -- the same icon the navbar shows for logged-out /
+no-profile users. Replaces the old `|default:'/static/default-avatar.png'` fallback,
+which 404'd because that asset does not exist under static/.
+
+Fills its parent, so the CALLER owns the size + shape (a `w-N h-N rounded-full`
+wrapper, or a DaisyUI `.avatar` inner div). Params:
+  url    -- avatar URL (falsy => glyph)
+  alt    -- alt / aria-label text (default "Avatar")
+  eager  -- truthy => loading="eager" (above-the-fold heroes); default lazy
+{% endcomment %}
+{% if url %}
+<img src="{{ url }}" alt="{{ alt|default:'Avatar' }}" class="w-full h-full object-cover" {% if eager %}loading="eager"{% else %}loading="lazy"{% endif %} decoding="async" />
+{% else %}
+<span class="w-full h-full rounded-full flex items-center justify-center bg-base-content/10 text-base-content/40" role="img" aria-label="{{ alt|default:'Avatar' }}">
+    <svg class="w-3/5 h-3/5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+</span>
+{% endif %}

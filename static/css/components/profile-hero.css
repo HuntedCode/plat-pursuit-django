@@ -1,0 +1,1232 @@
+/* ==========================================================================
+ * PROFILE HERO (/hunters/<user>/) -- identity and standing.
+ *
+ * Composition comes from Tailwind + the shared primitives (accented header card, .pp-head-cascade,
+ * .scard, .pp-tally); this file is only the profile-specific parts those do not cover: the identity
+ * dial (avatar + level ring), the small identity tags, and the trophy tier row.
+ *
+ * `.pp-horizon` is deliberately no longer among them -- the level progress it used to draw as a
+ * full-width band is now the ring on the avatar, next to the figure it belongs to.
+ * ========================================================================== */
+
+/* ---- Identity dial: avatar + level + progress, as ONE object -------------------------------------
+ *
+ * The level and its progress used to be two things at opposite ends of the hero -- the figure top-right,
+ * its bar a full-width band under the whole identity row, with the avatar and username between them. That
+ * is one fact split in half: nothing that shows a value and its progress (a battery, a ring, a storage
+ * bar) puts them in different places. The ring closes it -- the avatar wears its own progress, the level
+ * plate sits on the ring, and the caption sits under both.
+ *
+ * The full-width Horizon band is gone with it, which also buys back ~34px of hero on a phone.
+ */
+/* No `position: relative` here: every absolutely-positioned part of the dial (ring, avatar, level plate)
+   anchors to `.pp-phero__ringwrap`. It was needed while the plate was a child of the dial rather than of
+   the ring box, and became a containing block for nothing when the plate moved onto the ring. */
+.pp-phero__dial { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+
+.pp-phero__ringwrap { position: relative; width: 78px; height: 78px; }
+@media (min-width: 768px) { .pp-phero__ringwrap { width: 100px; height: 100px; } }
+
+/* A NOTCHED ring: the arc spans 70 of its 100 units and leaves a 30-unit (108 degree) gap centred at six
+   o'clock, which is where the level plate sits.
+ *
+ * The plate used to be welded there over a complete ring, which looks right and is wrong: 0% started at
+ * twelve o'clock, so 50% put the arc's leading edge at six o'clock -- exactly under an opaque plate. It
+ * hid the one thing the dial exists to show, across roughly 36-64% progress, and hid MORE of it the
+ * higher the level (a wider plate covers more arc). Moving the plate below the ring fixed the lie and
+ * cost the look. Cutting the ring instead keeps both: there is no arc behind the plate to hide.
+ *
+ * Geometry, so the numbers are not magic. Gap G=28 units centred on unit 50 spans units 36-64; the arc
+ * therefore starts at unit 64 and runs 100-G=72 units. A unit is 3.6 degrees, so the drawing origin has
+ * to move 64*3.6=230.4 degrees from the default three-o'clock start: rotate(-90 + 230.4) = 140.4deg.
+ *
+ * G is sized to the PLATE, and 28 is the tightest it goes. The notch has to clear the plate's chord
+ * (~64px on the 100px ring, ~48px on the 78px one) plus the fill's round linecap, which overhangs the
+ * arc's end by half a stroke-width -- ~2.5px at desktop, ~2px on a phone -- whenever progress is near
+ * 100%. At G=28 the arc stops ~3.2px from the plate; at G=26 that falls to 1.3px and the cap starts
+ * drawing under the plate for exactly the hunters closest to levelling, which is the occlusion this
+ * shape exists to remove. Widen G if the plate ever gets wider; do not narrow it past the cap.
+ * Progress now grows from lower-left, clockwise over the top, to lower-right -- a gauge, which is a
+ * fair reading of a value between two bounds. (This is why it no longer matches Career's `.rp-ring`
+ * house idiom: that ring has nothing sitting in it.) */
+.pp-phero__ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(140.4deg); overflow: visible; }
+.pp-phero__ring circle { fill: none; stroke-width: 5; }
+.pp-phero__ring-track { stroke: var(--pp-border); stroke-dasharray: 72 28; }
+/* `pathLength="100"` makes the dash units percentages, so the template writes the progress figure
+   straight in with no circumference arithmetic -- scaled by 0.7 here because the arc is 70 units, not
+   100. A `--lvl` of 100 must fill the arc exactly, not overrun it into the gap. */
+.pp-phero__ring-fill {
+    stroke: var(--pp-primary); stroke-linecap: round;
+    stroke-dasharray: 72 100;
+    /* `* 1px` is load-bearing, not decoration. The keyframe below compiles to `stroke-dashoffset: 72px`,
+       and interpolating a LENGTH against a bare <number> is not guaranteed -- browsers may fall back to a
+       discrete step, which shows as the ring snapping into place instead of drawing. Both sides are
+       lengths, so the animation is a real interpolation. */
+    stroke-dashoffset: calc((72 - var(--lvl, 0) * 0.72) * 1px);
+    filter: drop-shadow(0 0 3px color-mix(in oklab, var(--pp-primary) 45%, transparent));
+}
+/* The page's one opening flourish on this surface: the arc draws from empty to its real value while the
+   level counts up beside it. A DECELERATING curve, deliberately not a spring -- an overshoot would draw
+   the ring past the hunter's actual progress and settle back, which is a small lie about a real number.
+   The keyframe declares only `from`, so it interpolates to the element's own computed offset; that keeps
+   `var(--lvl)` out of the keyframe, where a custom property is not reliably interpolated. */
+@keyframes ppLevelRing { from { stroke-dashoffset: 72px; } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-phero__ring-fill { animation: ppLevelRing 1.05s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
+}
+
+/* The level, worn on the ring at its bottom centre -- sitting IN the notch, not over the arc.
+   It has to stay narrower than the gap's chord or it starts covering arc again, which is the whole
+   problem this shape solves. At a 108 degree gap the chord is ~74px on the 100px desktop ring and ~51px
+   on the 68px phone one, so the plate steps down on mobile rather than keeping one size for both. */
+.pp-phero__lvl {
+    position: absolute; left: 50%; bottom: -3px; transform: translateX(-50%);
+    display: inline-flex; align-items: baseline; gap: 2px;
+    padding: 1px 6px; border-radius: 999px;
+    background: var(--pp-bg-0, #0b0d12);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 55%, transparent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    line-height: 1.35; white-space: nowrap;
+}
+.pp-phero__lvl-n { font-size: 0.82rem; font-weight: 800; color: var(--pp-primary); font-variant-numeric: tabular-nums; }
+.pp-phero__lvl-k { font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .pp-phero__lvl { padding: 2px 9px; bottom: -4px; }
+    .pp-phero__lvl-n { font-size: 1.05rem; }
+    .pp-phero__lvl-k { font-size: 0.56rem; }
+}
+
+/* The caption the full-width bar used to carry, now under the thing it describes. */
+.pp-phero__tonext { font-size: 0.6rem; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+@media (min-width: 768px) { .pp-phero__tonext { font-size: 0.66rem; } }
+
+/* ---- Avatar ------------------------------------------------------------------------------------- */
+.pp-phero__avatar {
+    position: absolute; inset: 7px; border-radius: 50%;
+    overflow: hidden; background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+.pp-phero__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* No avatar on file: a quiet glyph rather than a broken-image icon. */
+.pp-phero__avatar--none { display: grid; place-items: center; color: var(--pp-text-mute); }
+.pp-phero__avatar--none img { display: none; }
+.pp-phero__avatar:not(.pp-phero__avatar--none) .pp-phero__ph { display: none; }
+.pp-phero__ph { width: 30px; height: 30px; }
+
+/* ---- Identity ----------------------------------------------------------------------------------- */
+/* The supporter mark, same glyph and hue as the hunter wall so the two surfaces agree about what a
+   supporter looks like. */
+/* .pp-phero__supp retired 2026-08-21: the flat amber supporter star predated the mark system
+   (components/name_mark.html), which the header h1 now renders instead. */
+.pp-phero__tag {
+    display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--pp-text-dim); border: 1px solid var(--pp-border); background: var(--pp-bg-2);
+}
+.pp-phero__tag--quiet { letter-spacing: 0.07em; color: var(--pp-text-mute); }
+
+/* The worn title carries the secondary here too -- one vocabulary for "earned" across the profile and
+   the hunter wall. Held back from the raw token for the same reason it is there: it should read as a
+   tint, and stay under the level's cyan in the hierarchy. */
+.pp-phero__title {
+    margin-top: 3px; font-size: 0.82rem; font-style: italic; line-height: 1.3;
+    color: color-mix(in oklab, var(--pp-secondary) 72%, var(--pp-text));
+    padding-right: 1px;   /* italic glyphs slant past their box */
+}
+
+.pp-phero__sync {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 5px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-mute);
+}
+.pp-phero__dot {
+    width: 6px; height: 6px; border-radius: 50%; flex: none;
+    background: color-mix(in oklab, var(--pp-text-mute) 70%, transparent);
+}
+/* Mid-sync gets the one moving thing in the hero, and only while it is true. */
+.pp-phero__dot--live { background: var(--pp-success); }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-phero__dot--live { animation: ppPheroPulse 1.8s ease-in-out infinite; }
+}
+@keyframes ppPheroPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+
+.pp-phero__unit { font-size: 0.62em; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
+
+/* ---- Trophy tiers -------------------------------------------------------------------------------- */
+/* The one surface the scoped trophy colour family belongs on -- it IS trophies. Read as a SHAPE (a wide
+   bronze base narrowing to a few platinums) rather than as four separate figures, which is why they sit
+   in one row instead of four cards.
+
+   It is the identity row's THIRD COLUMN now, across from the name, filling the corner the level figure
+   left when it folded into the ring. It used to be a bordered row at the foot of the card; the divider
+   went with the move, since it was separating a bottom section that no longer exists.
+
+   Big enough to read as a shape at a glance, which the old 0.85rem was not -- at that size four figures
+   beside a name are fine print. */
+.pp-phero__tiers {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 6px 14px; margin-top: 9px;
+    /* Phone: a full-width row UNDER both columns. A third column at 375px would squeeze the username to
+       nothing, and the username is the one thing on this card that cannot be compromised. `flex-wrap` on
+       the identity row is what lets it drop; `flex-basis: 100%` is what makes it take the whole line
+       rather than sharing one with whatever fits. */
+    flex-basis: 100%;
+}
+@media (min-width: 768px) {
+    /* A COLUMN from here up, and that is the better read rather than merely the one that fits: right-
+       aligned tabular figures stack their digits into a literal widening shape -- 12 over 140 over 380
+       over 1,400 -- which is the wide-base-narrowing-to-platinums shape this block exists to show.
+       `space-between` inside a fixed-width row puts every dot on one edge and every figure on the other,
+       so both align down the column without needing a grid. */
+    .pp-phero__tiers {
+        flex: none; flex-basis: auto; flex-direction: column; align-items: stretch;
+        gap: 5px; margin-top: 0; margin-left: auto;
+        min-width: 104px;
+    }
+    .pp-phero__tier { justify-content: space-between; width: 100%; }
+}
+.pp-phero__tier {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 1.05rem; font-weight: 800; color: var(--pp-text);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+    line-height: 1.15;
+}
+@media (min-width: 768px) { .pp-phero__tier { font-size: 1.3rem; gap: 10px; } }
+.pp-phero__tier i {
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+    background: var(--tier-c); box-shadow: 0 0 9px -1px var(--tier-c);
+}
+@media (min-width: 768px) { .pp-phero__tier i { width: 11px; height: 11px; } }
+.pp-phero__tier[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-phero__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-phero__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-phero__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+
+
+/* ---- Phone fit ----------------------------------------------------------------------------------
+ *
+ * The hero stood ~365px tall at 375px -- over half an iPhone SE before the tab bar, on a page whose
+ * content is the tabs. Almost none of that was the content's fault.
+ *
+ * The dial column is ~110px tall (ring + level plate + caption) while the name column beside it is ~64px
+ * (name, worn title, sync line). That left ~46px of dead corner, and the tier block -- which is almost
+ * exactly that size -- was stacking BELOW both of them rather than filling it. `flex-wrap` + `flex-basis:
+ * 100%` is what put it there: correct when the alternative was a third column squeezing the username,
+ * wrong once the row could be a grid that spans the dial instead.
+ *
+ * So on a phone the identity row becomes a two-column grid with the dial spanning both rows. Nothing is
+ * removed and nothing shrinks below its own legibility floor; the layout just stops leaving a hole.
+ * ------------------------------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+    .pp-phero__id {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas: "dial name" "dial tiers";
+        align-items: start; gap: 9px 12px;
+    }
+    /* Named areas on named elements. A structural selector (`> div:not(.pp-phero__dial)`) would have
+       matched the tier block too -- and at higher specificity than `.pp-phero__tiers`, so the tiers would
+       have landed in the name area and stacked on top of the username. */
+    .pp-phero__dial  { grid-area: dial; }
+    .pp-phero__who   { grid-area: name; min-width: 0; }
+    .pp-phero__tiers { grid-area: tiers; }
+
+    /* The ring keeps its full 78px here. It was briefly cut to 68 to shorten the dial column, and then
+       the level plate moved onto the ring -- which took ~23px out of that column by itself, more than
+       the shrink had saved. A smaller ring would now be a cost with nothing bought: the plate has to
+       fit inside the arc's notch, and at 68px the gap's chord is 51px against a ~50px plate, i.e. it
+       would touch the arc ends and put back the occlusion the notch exists to remove. */
+    .pp-phero__lvl { padding: 1px 5px; }
+
+    /* The tier block now lives in a ~215px column instead of the full 311px, so it reads as a 2x2 rather
+       than one row -- which is a better shape here anyway: four figures across a narrow column is a line
+       of fine print, four in a square is a block you take in at once. `flex-basis: 100%` has to go with
+       the flex layout that needed it, or it forces one tier per line inside the grid cell. */
+    .pp-phero__tiers { flex-basis: auto; margin-top: 0; gap: 5px 12px; }
+    .pp-phero__tier  { font-size: 0.98rem; gap: 5px; }
+    .pp-phero__tier i { width: 9px; height: 9px; }
+
+    /* No `.scard` override here any more. This header carried the first copy of the phone squeeze,
+       scoped deliberately because a site-wide change to a primitive on 22 surfaces is its own decision.
+       Browse Games then wanted the identical rule, so it moved into the primitive (elements.css) rather
+       than becoming a second copy. `.pp-phero__stats` stays on the grid as a hook, but nothing styles
+       it -- re-adding a local squeeze here would now be a duplicate that can drift from the primitive. */
+}
+
+
+/* ==========================================================================
+ * PROFILE GAME CARD -- `.pp-gcard--lib`, the library variant of the site's game card.
+ *
+ * The card is still game-card.css's `.pp-gcard`; this modifier changes only its PROPORTIONS. A modifier
+ * and not a new block on purpose: `profile_detail.html` names `.pp-gcard` in three JS hooks (the
+ * scroller's append unit, the reveal's animated element, and `.pp-gcard__barfill` in the bar animation),
+ * and a `cardSelector` that matches nothing fails silently as "no more pages". The base block is also
+ * shared with Browse Games, Recently Added and the DLC card, so overriding nothing keeps that at zero
+ * risk.
+ *
+ * Why the proportions changed (2026-08): the tab was built as a browse page and is not one -- it is a
+ * record of what somebody played. At 2xl the wall ran 6 columns of ~240px cards whose 3/4 cover was
+ * ~240x320 over a ~110px data block: about 75% art. The constraint was WIDTH, not height -- nine fields
+ * laid out in horizontal rows inside a 240px column -- so shrinking the cover would have bought vertical
+ * room and fixed nothing. Fewer, wider columns plus a landscape band instead. Those are one decision:
+ * at 4 columns a 3/4 cover would stand ~489px tall, taller than what we started from.
+ * ========================================================================== */
+.pp-pgcard__stats {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    font-variant-numeric: tabular-nums;
+}
+/* The percentage leads because the bar below it is the card's headline fact; this is that bar's value in
+   words, so it sits at the size of a figure rather than of a label. */
+.pp-pgcard__pct { font-size: 0.8rem; font-weight: 700; color: var(--pp-text); }
+.pp-pgcard__count { font-size: 0.68rem; font-weight: 600; color: var(--pp-text-mute); }
+
+/* The band: a fixed-height BACKDROP strip, not the card's picture.
+   FIXED HEIGHT, not an aspect ratio -- that was the first attempt's mistake. `aspect-ratio: 16/9` scales
+   with the card, so at 4 columns (~367px) the band stood 206px tall and was as dominant as the poster it
+   replaced; the whole point was to stop the art out-weighing the record. A height in px stays a strip at
+   every column count.
+   Rendered only when the concept HAS landscape art (~95%): with the cover now on the card, falling the
+   band back to that same cover would print one image twice. */
+.pp-gcard--lib .pp-gcard__cover { aspect-ratio: auto; height: 72px; flex: none; }
+.pp-gcard--lib .pp-gcard__art { object-position: center; }
+
+/* The band dissolves into the card instead of ending at a hard horizontal seam. Same overlay, and the
+   same two jobs, as `.pp-rcard__art::after` on the Ratings card: fade the image into the surface, and
+   hold the whole thing back a little so a wall of fifty screenshots does not out-shout the numbers the
+   card exists for. Direction follows the layout -- `to bottom` here because the body is BELOW the band,
+   which is the Ratings card's stacked (mobile) variant rather than its side-by-side one. */
+.pp-gcard--lib .pp-gcard__cover::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(to bottom,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
+                var(--pp-bg-1, var(--pp-bg-2)) 100%);
+}
+
+/* The cover sits fully ON the card, below the band rather than straddling it. Recognition is a different
+   job from decoration: two shooters' screenshots look alike in a way their box art never does, so the
+   strip alone cannot answer "which game is this" at a glance the way a poster can. The ring + shadow keep
+   it reading as an object placed on the card -- which it still needs now that it no longer breaks a seam
+   to prove it is one. */
+.pp-pgcard__cover {
+    width: 52px; aspect-ratio: 3 / 4; flex: none; align-self: flex-start;
+    object-fit: cover; object-position: top; /* a cover keeps its logo at the top */
+    border-radius: 7px; background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 14%, transparent);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+.pp-pgcard__cover--placeholder { object-fit: contain; padding: 7px; opacity: 0.85; }
+
+/* Body becomes a row: cover in a left gutter, the record in a column beside it. */
+.pp-gcard--lib .pp-gcard__body { flex-direction: row; gap: 10px; align-items: flex-start; }
+/* The record beside the cover, as a GRID so the two layouts differ only in where the parts land -- the
+   mobile block below re-places the same four areas rather than restating them.
+   Order: title, then platform/plat, then the progress pair. The title is clamped to ONE line, and the
+   chip row moves up into the line that frees. A two-line reserve is what the browse card needs to keep a
+   six-column wall even; here the rows are already even because every card has the same four, so the
+   second line was empty on most titles and the chips were stranded at the bottom under a divider.
+   Grouping identity (name + platform) above progress (% + bar) is the arrangement that leaves. */
+.pp-pgcard__meta {
+    display: grid; gap: 5px; flex: 1; min-width: 0;
+    grid-template-areas: "title" "foot" "stats" "bar";
+}
+.pp-gcard--lib .pp-gcard__title {
+    grid-area: title;
+    -webkit-line-clamp: 1; line-clamp: 1; min-height: 0;
+}
+.pp-gcard--lib .pp-pgcard__stats { grid-area: stats; }
+.pp-gcard--lib .pp-gcard__foot   { grid-area: foot; }
+/* The divider earned its keep under a footer. Mid-card it would cut the title off from the chips that
+   now belong with it, and the bar below already draws a line across the card. */
+.pp-gcard--lib .pp-gcard__foot { padding-top: 0; border-top: none; }
+
+/* The bar lives in the BODY here, not absolutely positioned along the cover's bottom edge. It has to
+   clear the mobile thumbnail below, and splitting its position across a breakpoint would mean two
+   things to keep in step. Same class names either way, so the reveal animation finds it untouched. */
+.pp-gcard--lib .pp-gcard__bar {
+    grid-area: bar;
+    position: relative; height: 4px; border-radius: 999px; overflow: hidden;
+    background: color-mix(in oklab, var(--pp-text) 10%, transparent);
+}
+.pp-gcard--lib .pp-gcard__barfill { border-radius: 999px; }
+
+/* Mobile: the card turns into a list row. A full-width row gives the record ~343px to lay out in at
+   375px, against ~166px in the old 2-column grid -- the single biggest legibility win here, and denser
+   too (~56px of scroll per game against ~82px). The art becomes a square thumbnail: it is there to say
+   WHICH game, and a band at this width would cost more height than it earns. */
+@media (max-width: 767px) {
+    /* The BAND goes, not the cover. A 343px-wide strip on top of a row card is a second picture stacked
+       over the one that identifies the game, and it costs ~72px of height per row on the size where
+       height is scarcest. The cover carries recognition here on its own. */
+    .pp-gcard--lib .pp-gcard__cover { display: none; }
+
+    .pp-gcard--lib .pp-gcard__body { flex-direction: row; align-items: center; gap: 10px; padding: 8px; }
+    .pp-pgcard__cover { width: 40px; align-self: center; border-radius: 6px; }
+
+    /* THREE rows, not four. Stacking title / foot / stats / bar made a ~100px list item -- most of it
+       gaps rather than content. The percentage belongs on the title's line anyway: it is the answer to
+       the question the title asks, and pairing them is what a list row is for.
+       Only the PLACEMENT differs from the desktop card -- the areas, the one-line title clamp and the
+       dropped divider are all set once on the base rule, so the two layouts cannot drift apart on
+       anything except where the parts land. */
+    .pp-pgcard__meta {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "title stats" "bar bar" "foot foot";
+        align-items: center;
+    }
+    .pp-gcard--lib .pp-pgcard__stats { justify-content: flex-end; gap: 6px; }
+}
+
+/* ==========================================================================
+ * PROFILE ACTIVITY -- trophy hunting as SESSIONS (one game, one day).
+ *
+ * A column you scan down by DATE: the day heading is the axis, the cards under it are what happened. That
+ * is why the date is stated once per group rather than repeated on every card, and why the cards are wide
+ * rows rather than a grid -- a grid has no reading order, and this has exactly one.
+ * ========================================================================== */
+/* ---- The day: a full-width CARD holding a wall of session posters ------------------------------- */
+/* The combined shape the Franchise/Company pages use (.fgroup): one card per grouping, its members
+   inside. The day stays FULL WIDTH rather than sharing a row -- the posters are what use a wide screen
+   here, and a two-column day grid took the width the art needs. */
+/* ---- Tier 1: the day wall ----------------------------------------------------------------------- */
+/* Days ARE the shared grouping tile (.pp-gtile) -- a tile representing a collection of games is exactly
+   what a day is, mosaic and all -- so this file only adds what that tile does not already carry. The grid
+   is .pp-gtile-grid, unchanged: 2 / 3 / 4 / 5 across by width. */
+/* A platinum day. The seal is the franchise cards' corner-star treatment; the edge is so the day reads
+   as special before you get to any text on it. Both, because on a wall of thirty tiles a 9px word in the
+   count line is not a signal. */
+.pp-act__tile--plat {
+    border-color: color-mix(in oklab, var(--color-trophy-platinum) 45%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 6px 20px rgba(0, 0, 0, 0.30),
+                0 0 0 1px color-mix(in oklab, var(--color-trophy-platinum) 18%, transparent);
+}
+.pp-act__seal {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    display: inline-flex; align-items: center; gap: 3px;
+    min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-trophy-platinum) 55%, transparent);
+    color: var(--color-trophy-platinum);
+    backdrop-filter: blur(3px);
+}
+.pp-act__seal svg { width: 11px; height: 11px; }
+/* The count only when there is more than one -- a bare star already says "a platinum happened here". */
+.pp-act__seal b { font-size: 0.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* One day: its month header (when it opens one) and its tile, as a single appendable unit.
+   `display: contents` so both children remain direct grid items -- the wrapper is a handle for the
+   infinite scroller, not a box. Without it the scroller, which appends only what matches its card
+   selector, dropped every month header on every page after the first. */
+.pp-act__cell { display: contents; }
+
+/* A month break across the whole wall. `1 / -1` regardless of how many columns the tile grid is running,
+   so it stays a full-width rule at every breakpoint without knowing the count.
+
+   The SPACE is what makes it read as a break -- more than the type does. Scrolling a wall of evenly
+   spaced tiles, a divider with a tile's own gap above it is just another row; the gap is the signal that
+   one stretch of time ended and another began. */
+.pp-act__month {
+    grid-column: 1 / -1;
+    display: flex; align-items: baseline; gap: 12px;
+    margin: 22px 0 2px;
+    font-size: 0.95rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--pp-text);
+}
+@media (min-width: 768px) { .pp-act__month { margin-top: 30px; font-size: 1.05rem; gap: 14px; } }
+
+/* The YEAR held back from the month. You scan for "August", not for "2026" -- and on a wall that is mostly
+   one year, the year repeated at full strength on every header is the least useful thing on it. */
+.pp-act__month-yr { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; color: var(--pp-text-mute); }
+
+/* The rule is the divider; the label sits at its head. A centred label would put a break in the middle of
+   a wall you are scanning down the left edge of. */
+.pp-act__month::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg,
+        color-mix(in oklab, var(--pp-primary) 34%, transparent),
+        var(--pp-divider, var(--pp-border)) 42%,
+        transparent);
+}
+
+/* Only the wall's FIRST header sits flush -- it opens the wall rather than breaking it.
+   Scoped through the CELL, not `:first-child` on the header: every header is the first child of its own
+   wrapper, so the naive form matched all of them and quietly zeroed the spacing this whole rule is for. */
+.pp-act__cell:first-child .pp-act__month { margin-top: 0; }
+
+/* ---- Tier 2: the day modal ---------------------------------------------------------------------- */
+/* The shared .pp-detail-modal supplies the scrim, dialog and close; this sizes it for a wall of game
+   posters, which is the room the tiered structure exists to give them. */
+.pp-actday .pp-detail-modal__dialog { width: min(1040px, 100%); max-height: 88vh; overflow-y: auto; }
+.pp-actday__head { padding: 4px 4px 12px; border-bottom: 1px solid var(--pp-divider, var(--pp-border)); margin-bottom: 12px; }
+/* NO grabber clearance rule here, deliberately. The pill occupies 9-13px and this dialog already has
+   28px of its own padding (34px below 640px, added for the badge peek's medallion), so the header's
+   content starts well clear of it. The precedents that DO pad -- the quick-rate modal and the plat-card
+   sheet -- both set `padding: 0` on their dialog and butt their heads against its top edge, which is why
+   they need it and this does not. A rule was added here on the assumption it was needed and cost 12px of
+   dead space above the date on every touch device. */
+.pp-actday__date { margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--pp-text); }
+@media (min-width: 768px) { .pp-actday__date { font-size: 1.25rem; } }
+.pp-actday__stats { margin: 4px 0 0; font-size: 0.76rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-actday__stats b { color: var(--pp-text-dim); font-weight: 800; }
+.pp-actday__plat { color: var(--color-trophy-platinum); }
+
+/* A STACK, not a grid. It was an `auto-fill` grid from when a session could be a collapsed poster, but
+   every session renders open now and each one spanned `1 / -1` -- a grid that could never produce more
+   than one column. Saying so directly is what it always meant, and it cannot be broken by removing the
+   span rule, which is exactly how this regressed: the sessions fell back into narrow columns and clipped
+   their own trophy cards. */
+.pp-actday__games { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 768px) { .pp-actday__games { gap: 10px; } }
+
+.pp-actday__link {
+    display: block; margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--pp-divider, var(--pp-border));
+    text-align: center; font-size: 0.74rem; font-weight: 700;
+    color: var(--pp-text-mute); text-decoration: none;
+}
+.pp-actday__link:hover { color: var(--pp-primary); }
+
+/* ---- A session: poster by default, row when open ------------------------------------------------ */
+/* ---- A session: one game of one day ------------------------------------------------------------- */
+/* A ROW, unconditionally. `.is-open` used to mean "row rather than poster" back when a session could be a
+   collapsed cover; it means "trophies showing" now, and nothing else. Leaving the row's LAYOUT scoped
+   under it was a live bug: collapsing a game dropped every layout rule at once and the cover fell back to
+   its old poster size, blowing the art up to full width. A class that changed meaning has to be re-read
+   everywhere it is used, not just where it is set. */
+.pp-act__session {
+    border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    overflow: hidden; min-width: 0;
+}
+.pp-act__session--plat { border-color: color-mix(in oklab, var(--color-trophy-platinum) 38%, var(--pp-border)); }
+
+/* The header. NOT a button: the title is a link to the game and the chevron is the toggle, two controls
+   each named for what it does. Making the whole row a button forced the link out (an `<a>` inside a
+   `<button>` is invalid) and left the day with no route to a game at all. */
+.pp-act__row { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; }
+@media (min-width: 768px) { .pp-act__row { gap: 13px; padding: 9px 12px; } }
+
+/* The collapse control: a small target of its own, so the row's other content is not swept into its
+   accessible name. */
+.pp-act__toggle {
+    flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px;
+    border-radius: 50%; background: none; border: 0; color: var(--pp-text-mute); cursor: pointer;
+    transition: background var(--pp-dur-fast, 0.15s) var(--pp-ease), color var(--pp-dur-fast, 0.15s) var(--pp-ease);
+}
+@media (hover: hover) { .pp-act__toggle:hover { background: color-mix(in oklab, var(--pp-text) 8%, transparent); color: var(--pp-text); } }
+.pp-act__toggle:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+.pp-act__cover {
+    flex: none; width: 38px; aspect-ratio: 3 / 4;
+    border-radius: var(--pp-radius-sm); overflow: hidden; background: var(--pp-bg-1, var(--pp-bg-2));
+}
+@media (min-width: 768px) { .pp-act__cover { width: 44px; } }
+/* object-top: PSN fallback art is wider than the 3/4 container, and the logo lives at the top. */
+.pp-act__art { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.pp-act__art--placeholder { object-fit: contain; padding: 5px; }
+
+.pp-act__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.pp-act__title {
+    font-size: 0.82rem; font-weight: 700; color: var(--pp-text); text-decoration: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (hover: hover) { .pp-act__title:hover { color: var(--pp-primary); } }
+.pp-act__title:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+@media (min-width: 768px) { .pp-act__title { font-size: 0.88rem; } }
+
+.pp-act__stats { display: flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
+.pp-act__n { font-size: 0.88rem; font-weight: 800; color: var(--pp-primary); line-height: 1; }
+.pp-act__n-lbl { font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); }
+/* Context, not a headline -- pushed off the count so it reads as an aside. */
+.pp-act__span { margin-left: 6px; font-size: 0.64rem; color: var(--pp-text-mute); }
+
+/* Same dot-and-figure vocabulary as the hero's tier strip and the game card's, so a colour means one
+   thing everywhere on this profile. */
+.pp-act__tiers { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-variant-numeric: tabular-nums; }
+.pp-act__tier { display: inline-flex; align-items: center; gap: 3px;
+                font-size: 0.62rem; font-weight: 700; color: var(--pp-text-dim); white-space: nowrap; }
+.pp-act__tier i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--tier-c); }
+.pp-act__tier[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-act__tier[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-act__tier[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-act__tier[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+/* Below 380px the title is what matters, and four tier figures push it to an ellipsis. */
+@media (max-width: 379px) { .pp-act__tiers { display: none; } }
+
+/* The one moving part: the chevron turns to say the game is collapsed. */
+.pp-act__chev { width: 15px; height: 15px; transition: transform 0.2s var(--pp-ease); }
+.pp-act__toggle[aria-expanded="false"] .pp-act__chev { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .pp-act__chev { transition: none; } }
+
+/* ---- The trophies, which are what `.is-open` actually governs ----------------------------------- */
+/* The collapsible panel, driven by the shared `PlatPursuit.animatePanel`. Its contract: `overflow: hidden`
+   plus a height/opacity transition, and it MUST be able to collapse to a true 0 -- so NO border or padding
+   here. Under border-box those would clamp the collapsed height and snap away the moment `hidden` lands.
+   The divider lives on the inner wall instead.
+
+   `hidden` is also what takes a collapsed panel out of the accessibility tree: `height: 0` hides it from
+   the eye only, so a screen reader would read every trophy while the control said `aria-expanded="false"`. */
+.pp-act__trophies {
+    overflow: hidden;
+    transition: height 0.26s var(--pp-ease), opacity 0.26s var(--pp-ease);
+}
+.pp-act__trophies[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .pp-act__trophies { transition: none; } }
+/* The divider, on the inner wall so the panel itself stays borderless. */
+.pp-act__trophies > .pp-actt, .pp-act__trophies > .pp-actt__empty { border-top: 1px solid var(--pp-divider, var(--pp-border)); }
+
+/* The expanded session's trophies: a wall of small CARDS, not a list.
+   `auto-fill` with a min track, because these sit inside the day CARD -- the container's width is what
+   they answer to, and it is not the viewport's. */
+.pp-actt {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px; padding: 8px; align-items: start;
+}
+@media (min-width: 768px) { .pp-actt { grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 8px; padding: 10px; } }
+
+/* The search results' wall. A track FLOOR rather than a fixed column count: `auto-fill` alone packed a
+   fifth column of truncated text, but pinning it to two made a 2-across wall inside a tab whose day view
+   runs to five. Its cards are PORTRAIT -- art on top, facts below -- so the track is narrower than the
+   old horizontal card's and the card is bigger for it. */
+.pp-actt--log { padding: 0; grid-template-columns: repeat(auto-fill, minmax(182px, 1fr)); gap: 10px; }
+@media (min-width: 768px) { .pp-actt--log { grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 14px; } }
+
+.pp-actt__card {
+    display: flex; align-items: center; gap: 9px; min-width: 0;
+    padding: 7px 9px; border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-1, var(--pp-bg-2));
+    border: 1px solid var(--pp-border);
+    /* The tier reads as an edge rather than a fill: a wall of these, each flooded with its tier colour,
+       would out-shout the session card holding them. */
+    border-left: 3px solid var(--tier-c, var(--pp-border));
+}
+.pp-actt__card[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-actt__card[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-actt__card[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-actt__card[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+
+/* In the search wall the card is FREE content on the substrate, not a well inside a raised session card,
+   so it takes the content-card lift -- catch light above, cast below. */
+.pp-actt--log .pp-actt__card {
+    position: relative;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.26);
+    transition: border-color var(--pp-dur-fast, 0.15s) var(--pp-ease),
+                box-shadow var(--pp-dur-fast, 0.15s) var(--pp-ease);
+}
+/* Hover glow, not scale -- the wall is dense and a scaling card shoves its neighbours. */
+@media (hover: hover) {
+    .pp-actt--log .pp-actt__card:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    0 6px 20px -4px color-mix(in oklab, var(--pp-primary) 34%, transparent);
+    }
+}
+/* The whole card is the link (a stretched anchor), so the ring belongs to the card, not the 11px text. */
+.pp-actt--log .pp-actt__card:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* PORTRAIT: the composed art on top, everything else beneath it. The same shape the badge gallery card
+   uses -- object above, caption below, centred -- so a wall of these reads like the site's other walls
+   rather than like a table that lost its columns. The tier keeps its edge, now along the top. */
+.pp-actt__card--game {
+    flex-direction: column; align-items: center; text-align: center;
+    /* Generous, and deliberately so. The horizontal card could sit on 9px because its text ran along one
+       axis with the art beside it; centred two-line text fills the card's whole width, so at 10px it read
+       as touching the edges. A poster card's padding has to clear its widest line, not its tallest. */
+    gap: 10px; padding: 16px 18px 14px;
+    border-left: 1px solid var(--pp-border);
+    border-top: 3px solid var(--tier-c, var(--pp-border));
+}
+@media (min-width: 768px) { .pp-actt__card--game { gap: 12px; padding: 18px 20px 15px; } }
+
+/* Cover + the trophy icon set into it. One object, not two images competing side by side.
+   `align-self: center` rather than stretch: a stretched flex item takes its cross size from the STRETCH,
+   not from `aspect-ratio`, which grew the cover by a different amount per card and let
+   `object-position: top` crop the bottom off by that varying amount. */
+.pp-actt__art { position: relative; flex: none; align-self: center; width: 88px; aspect-ratio: 3 / 4; overflow: visible; }
+@media (min-width: 768px) { .pp-actt__art { width: 104px; } }
+/* Pinned to the art box, NOT sized at 100% of it.
+   The box takes its height from `width` + `aspect-ratio`, and a percentage-sized child resolving against
+   a derived height is indeterminate -- the image falls back to its INTRINSIC size, which differs between
+   an IGDB cover and a PSN fallback. That is why only some cards came out taller than their neighbours.
+   `inset: 0` makes the image exactly the box, whatever the source's own dimensions are. */
+.pp-actt__cover {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: top; display: block;
+    border-radius: 6px; background: var(--pp-bg-1, var(--pp-bg-2));
+}
+/* object-contain for a PS placeholder icon, which is a logo rather than cover art. */
+.pp-actt__cover--placeholder { object-fit: contain; padding: 6px; }
+.pp-actt__ico--inset {
+    position: absolute; right: -7px; bottom: -7px; width: 36px; height: 36px; border-radius: 7px;
+    /* Ringed in the CARD's own surface so it reads as sitting on top of the cover rather than punched out
+       of it, with the tier hue kept as a hairline outside that -- the session's icon carries the tier ring,
+       and the variant with more room should not lose it. */
+    border: 2px solid var(--pp-bg-1, var(--pp-bg-2));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--tier-c) 45%, transparent),
+                0 2px 6px rgba(0, 0, 0, 0.5);
+}
+@media (min-width: 768px) { .pp-actt__ico--inset { width: 40px; height: 40px; } }
+
+.pp-actt__ico {
+    flex: none; width: 34px; height: 34px; border-radius: 6px; object-fit: cover;
+    border: 1px solid color-mix(in oklab, var(--tier-c) 45%, transparent);
+}
+.pp-actt__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pp-actt__card--game .pp-actt__body { width: 100%; flex: none; align-items: center; gap: 3px; }
+
+/* Type. The session's sizes were set for a 200px track inside a day card; the Log puts the same card in a
+   340px+ one, so it steps up rather than inheriting a scale built for a narrower box. Nothing readable
+   sits under 12px here -- the design system's floor -- and the meta row collapses to two sizes instead of
+   three near-identical ones. */
+.pp-actt__name {
+    font-size: 0.74rem; font-weight: 700; color: var(--pp-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pp-actt__card--game .pp-actt__name {
+    font-size: 0.8rem; line-height: 1.3;
+    white-space: normal; overflow: hidden; width: 100%;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    /* Two lines RESERVED, not just capped: a one-line name beside a two-line one made every row of the
+       wall a different height. The space is held whether or not the text needs it. */
+    min-height: calc(2 * 1.3em);
+}
+@media (min-width: 768px) { .pp-actt__card--game .pp-actt__name { font-size: 0.85rem; } }
+
+/* The game, in the search results only -- there it is what you are searching by, so it takes the
+   secondary the profile uses for "earned" elsewhere rather than the muted grey of a description. */
+.pp-actt__game {
+    font-size: 0.72rem; font-weight: 700; text-decoration: none;
+    color: color-mix(in oklab, var(--pp-secondary) 72%, var(--pp-text));
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* On a poster card it WRAPS rather than running as one nowrap line. A single centred line stretches to
+   whatever measure it is given, so it reads as touching the edges however much padding sits outside it --
+   which is why adding padding alone never looked like it did anything. Two lines, reserved like the
+   others so the card height stays uniform. */
+.pp-actt__card--game .pp-actt__game {
+    white-space: normal; line-height: 1.3; width: 100%;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    min-height: calc(2 * 1.3em);
+}
+.pp-actt--log .pp-actt__card:hover .pp-actt__game { color: var(--pp-secondary); }
+
+.pp-actt__desc {
+    font-size: 0.65rem; color: var(--pp-text-mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Two lines in the Log: the description is the half worth reading, and one nowrap line at this width is a
+   fragment. Same treatment the shared trophy list uses. */
+.pp-actt__card--game .pp-actt__desc {
+    font-size: 0.68rem; line-height: 1.35; width: 100%;
+    white-space: normal; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    /* Reserved for the same reason as the name, and rendered even when EMPTY -- a trophy with no
+       description must not make its card shorter than the one beside it. */
+    min-height: calc(2 * 1.35em);
+}
+
+.pp-actt__meta { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+/* Centred, and the time no longer pushed to an edge there is none of -- the row is the card's footer now,
+   not a right-aligned tail. */
+.pp-actt__card--game .pp-actt__meta { justify-content: center; flex-wrap: wrap; gap: 4px 9px; width: 100%; }
+.pp-actt__card--game .pp-actt__time { margin-left: 0; }
+/* The tier is NAMED, not just tinted -- colour alone is not a label -- but it does not outrank the number:
+   the left stripe already carries the tier, while rarity is a sort axis of this wall and half of what the
+   card is for. */
+.pp-actt__tier {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--tier-c, var(--pp-text-mute)) 70%, var(--pp-text-mute));
+}
+/* PSN's mark on the number: the site publishes BOTH a PlatPursuit rate and a PSN one, and a bare "4.2%"
+   on a trophy card could as easily read as completion.
+
+   `align-items: baseline` INSIDE, with the logo opted out of it, is load-bearing. The meta row aligns its
+   items on their baselines, and an inline-flex box takes its baseline from its first flex item -- which
+   here is the logo, whose baseline is its bottom EDGE, not a text baseline. That lifted the whole rate a
+   few pixels above the tier and the date beside it. Opting the logo out of baseline alignment leaves the
+   NUMBER as the baseline the row aligns on, which is the one that should have been all along. */
+.pp-actt__rate {
+    font-size: 0.68rem; font-weight: 700; color: var(--pp-text);
+    display: inline-flex; align-items: baseline; gap: 3px;
+}
+.pp-actt__rate svg, .pp-actt__rate img { width: 11px; height: 11px; opacity: 0.75; align-self: center; }
+.pp-actt__time { font-size: 0.68rem; color: var(--pp-text-mute); margin-left: auto; }
+/* Short date on a phone: "Aug 13, 2026" takes ~62px of a meta row that has ~275px to share with the tier
+   and the rate. The full form returns as soon as there is room for it. */
+.pp-actt__date-lg { display: none; }
+@media (min-width: 768px) { .pp-actt__date-sm { display: none; } .pp-actt__date-lg { display: inline; } }
+
+/* Stretched link: the anchor is the game name, its ::after is the whole card. */
+.pp-actt__link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+.pp-actt--log .pp-actt__card { position: relative; }
+
+/* ──────────────────────────────────────────────────────────────────────────────────────────────────
+ * SEARCH RESULTS AS A LIST -- mobile only, matching the Games tab's `.pp-gcard--lib` rows.
+ *
+ * The poster shape is right on a wide wall and wrong on a phone: it is ~230px tall, of which most is
+ * reserved rather than written. Three fields (name, game, description) each hold TWO lines whether or
+ * not they need them -- deliberately, because that is what keeps a multi-column wall's rows even. At one
+ * column there is no neighbour to line up with, so the reserve buys nothing and costs everything.
+ *
+ * Single column first: the wall is `auto-fill minmax(182px, 1fr)`, which still makes THREE columns at
+ * 640px. Rows squeezed into 202px would read worse than the posters they replaced.
+ * ────────────────────────────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+    .pp-actt--log { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+
+    .pp-actt__card--game {
+        flex-direction: row; align-items: center; text-align: left;
+        gap: 10px; padding: 8px;
+        /* The stripe follows the reading direction: a row's tier belongs on its leading edge, which is
+           where the horizontal variant of this card has always carried it. */
+        border-top: 1px solid var(--pp-border);
+        border-left: 3px solid var(--tier-c, var(--pp-border));
+    }
+
+    /* Scoped to `--game` even though the art + inset icon only render when `show_game` is passed (today,
+       only the search results): the session card inside a day modal shares this partial, and an unscoped
+       rule here would silently reshape it the day someone passes the flag from there too. */
+    .pp-actt__card--game .pp-actt__art { width: 40px; }
+    .pp-actt__card--game .pp-actt__ico--inset {
+        width: 20px; height: 20px; right: -5px; bottom: -5px; border-width: 1.5px;
+    }
+
+    /* `display: contents` on the meta so its three children become grid items of the BODY and can be
+       placed individually -- the tier up on the name's line, the rate and date down on the game's. This
+       is the one thing `display: contents` is actually for; its usual trap (no box, so nothing to style
+       or animate) is precisely the effect wanted here. */
+    .pp-actt__card--game .pp-actt__body {
+        display: grid; width: auto; flex: 1; min-width: 0;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-areas: "name name tier" "desc desc desc" "game rate time";
+        align-items: center; gap: 2px 8px; text-align: left;
+    }
+    .pp-actt__card--game .pp-actt__meta { display: contents; }
+
+    .pp-actt__card--game .pp-actt__name { grid-area: name; }
+    .pp-actt__card--game .pp-actt__desc { grid-area: desc; }
+    .pp-actt__card--game .pp-actt__game { grid-area: game; }
+    .pp-actt__card--game .pp-actt__tier { grid-area: tier; }
+    .pp-actt__card--game .pp-actt__rate { grid-area: rate; }
+    .pp-actt__card--game .pp-actt__time { grid-area: time; margin-left: 0; }
+
+    /* Release all three two-line reserves and clamp to one. Every row here has the same structure, so
+       they stay even without the reserve -- and an empty description now collapses instead of holding a
+       blank 28px. The 53px cover is the row's real floor either way. */
+    .pp-actt__card--game .pp-actt__name,
+    .pp-actt__card--game .pp-actt__game,
+    .pp-actt__card--game .pp-actt__desc {
+        -webkit-line-clamp: 1; line-clamp: 1; min-height: 0; width: auto;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+    }
+}
+
+.pp-actt__empty { padding: 14px; font-size: 0.75rem; color: var(--pp-text-mute); text-align: center; }
+
+/* ---- Paging + empty ----------------------------------------------------------------------------- */
+.pp-act__empty { padding: 46px 24px; text-align: center; color: var(--pp-text-mute); }
+.pp-act__empty svg { width: 30px; height: 30px; margin: 0 auto 10px; opacity: 0.5; display: block; }
+.pp-act__empty-title { font-size: 0.86rem; font-weight: 700; color: var(--pp-text-dim); margin: 0 0 4px; }
+.pp-act__empty-hint { font-size: 0.72rem; margin: 0; }
+
+
+/* ==========================================================================
+ * TROPHY SEARCH -- the Trophies tab's one control.
+ *
+ * Layout only. The SURFACE is `.pp-toolbar-card`, the field is `.pp-bgal__search` and the chips are
+ * `.pp-bgal__chip` -- all shared, so this page gets the clear button, the in-flight spinner, the `/` hint
+ * and Escape-to-clear from `browse-filters.js` rather than re-rolling a field that only looks similar.
+ *
+ * `.pp-toolbar-card` is SURFACE ONLY: no padding, no margin. Every page supplies its own box metrics, and
+ * these are Browse Games' and the hunter wall's numbers so the three toolbars sit at the same height.
+ * ========================================================================== */
+.pp-tsearch { padding: 12px 14px; margin-bottom: 14px; }
+.pp-tsearch__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pp-tsearch__bar > .pp-bgal__search { flex: 1 1 14rem; min-width: 0; }
+
+.pp-tsearch__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* The tier dot, same vocabulary as every other tier figure on the profile -- so a chip and the cards it
+   filters for speak the same language. The shared chip supplies everything else. */
+.pp-tsearch__chip i { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-right: 6px; background: var(--tier-c); }
+.pp-tsearch__chip[data-tier="platinum"] { --tier-c: var(--color-trophy-platinum); }
+.pp-tsearch__chip[data-tier="gold"]     { --tier-c: var(--color-trophy-gold); }
+.pp-tsearch__chip[data-tier="silver"]   { --tier-c: var(--color-trophy-silver); }
+.pp-tsearch__chip[data-tier="bronze"]   { --tier-c: var(--color-trophy-bronze); }
+/* Active takes the TIER's own tint rather than the shared chip's primary: the chip IS the tier, and two
+   colours claiming one control is one too many. Specificity beats `.pp-bgal__chip:has(input:checked)`. */
+.pp-tsearch__chip:has(input:checked) {
+    border-color: color-mix(in oklab, var(--tier-c) 55%, transparent);
+    background: color-mix(in oklab, var(--tier-c) 15%, transparent);
+    color: color-mix(in oklab, var(--tier-c) 60%, var(--pp-text));
+}
+.pp-tsearch__chip:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-tsearch__clear { color: var(--pp-text-mute); font: inherit; font-size: 12px; font-weight: 600; }
+
+
+/* ==========================================================================
+ * RATINGS TAB -- a hunter's taste.
+ *
+ * `.pp-taste` is the summary above the wall; `.pp-rcard` is one rating.
+ *
+ * Tone is the shared `[data-tone]` vocabulary from the game-detail conditions card (good / warn / bad /
+ * high, from the `rating_tone` filter), so a 9/10 difficulty is the same colour on a hunter's profile as
+ * it is on the game's own page. The token name is local to each block; the SCALE is not.
+ * ========================================================================== */
+
+/* ---- The summary ---------------------------------------------------------------------------------
+ * A content card, not a `.pp-toolbar-card`: that surface is quiet chrome, and this is the tab's headline.
+ */
+.pp-taste {
+    padding: 16px 16px 14px;
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-1, var(--pp-bg-2));
+    border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 16px rgba(0, 0, 0, 0.24);
+    margin-bottom: 14px;
+}
+@media (min-width: 768px) { .pp-taste { padding: 20px 22px 18px; } }
+
+.pp-taste__head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+/* Score beside sentence from tablet up. On a phone the sentence needs the full measure -- it is a whole
+   clause list, and at 375px sharing a row with a star bar leaves it three words wide. */
+@media (min-width: 768px) {
+    .pp-taste__head { flex-direction: row; align-items: center; gap: 20px; margin-bottom: 18px; }
+    .pp-taste__say { flex: 1; min-width: 0; }
+}
+.pp-taste__say { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* The recommend rate, under the sentence rather than beside it: both are prose about the same hunter, and
+   a second column would make the eye choose between them. */
+.pp-taste__rec { margin: 0; font-size: 0.78rem; color: var(--pp-text-mute); }
+.pp-taste__rec b { color: var(--pp-success); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* `.pp-stars` -- the fractional star bar this header and every rating card draw -- moved to
+   components/stars.css when the quick-rate form became its third caller. Callers set `--fill` and
+   `--star`; this surface sets `--star` on `.pp-taste__score` below. */
+.pp-taste__score { display: flex; align-items: baseline; gap: 9px; flex: none; }
+.pp-taste__scoreline { display: inline-flex; align-items: baseline; gap: 1px; }
+.pp-taste__score-n { font-size: 1.8rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.pp-taste__of { font-size: 0.8rem; font-weight: 600; color: var(--pp-text-mute); }
+@media (min-width: 768px) {
+    .pp-taste__score { --star: 1.5rem; }
+    .pp-taste__score-n { font-size: 2.2rem; }
+}
+
+.pp-taste__summary { margin: 0; font-size: 1rem; line-height: 1.35; font-weight: 600; color: var(--pp-text-dim); text-wrap: balance; }
+@media (min-width: 768px) { .pp-taste__summary { font-size: 1.15rem; } }
+
+/* The "/10" after a Tally figure: a quiet subscript, not part of the number, so the eye lands on the
+   figure the way it does in every other `.scard` on the site. */
+.pp-taste__unit { font-size: 0.5em; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+
+/* Two columns at 375px rather than four: four `.scard`s across a phone leaves each one narrower than the
+   figure it holds. */
+.pp-taste__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+@media (min-width: 768px) { .pp-taste__stats { grid-template-columns: repeat(4, 1fr); gap: 12px; } }
+
+/* ---- The wall ------------------------------------------------------------------------------------
+ * WIDE cards, not tall ones. The first cut was a cover-forward portrait card, which borrowed `.pp-gcard`'s
+ * shape and with it its EMPHASIS: the game as the subject and the score as an annotation on it. This tab
+ * is the other way round. A wide card gives the rating room to be shown in full -- all four axes side by
+ * side and the quick take at its real length -- and demotes the cover to what it is here: a recognition
+ * anchor, not the headline.
+ *
+ * Two columns from `md:` up, one below. A track floor of 420px means a 1024px viewport gets two and a
+ * wide desktop three, without the count being pinned to a breakpoint.
+ */
+.pp-rwall { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 768px) { .pp-rwall { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; } }
+
+.pp-rcard {
+    position: relative;
+    /* STACKED on a phone, split from `md:`. The split is right whenever the card is wide -- but below
+       768px the wall is a single column, so the card is always full width and the art panel was a 92px
+       PORTRAIT window showing a LANDSCAPE screenshot: `object-fit: cover` cropped it to about a third of
+       its width, a vertical slice out of the middle. That is the same mistake this card was rebuilt to
+       fix, pointed the other way (the first cut was portrait-cover art in a wide card).
+       Stacking fixes both halves at once: the band finally shows the whole frame, and the body goes from
+       ~251px to the full width, so the title and the quick take wrap less. */
+    display: flex; flex-direction: column; min-width: 0;
+    /* No padding on the CARD: the art panel bleeds to its edges, so the box metrics live on the body.
+       `overflow: hidden` is what clips that panel to the card's radius. */
+    padding: 0; overflow: hidden;
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-1, var(--pp-bg-2));
+    border: 1px solid var(--pp-border);
+    /* The score's tone as a left edge, the way the trophy cards carry their tier. An edge rather than a
+       fill: a wall of cards each flooded with its verdict colour would read as an alert list, and most of
+       these are perfectly ordinary games. */
+    border-left: 3px solid var(--rec-c);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.26);
+    transition: border-color var(--pp-dur-fast, 0.15s) var(--pp-ease),
+                box-shadow var(--pp-dur-fast, 0.15s) var(--pp-ease);
+    /* The edge carries the RECOMMENDATION, not the star tone it used to. Those are different facts: the
+       stars rate the game and the recommendation rates the platinum, so a card could be edged red for a
+       2-star game the hunter still says to do. The verdict is the thing worth spotting down a wall.
+
+       Declared on the BASE, not only on the [data-rec] states that can set it: an undefined custom
+       property invalidates the whole declaration it appears in rather than falling back, so a rating that
+       predates the field would leave the card with no left border at all. The same trap emptied the badge
+       meters. Cyan is that fallback -- the house accent, so an unanswered card reads as neutral rather
+       than as a fourth verdict. */
+    --rec-c: var(--pp-primary);
+}
+
+/* Hover glow, not scale -- the wall is dense and a scaling card shoves its neighbours. */
+@media (hover: hover) {
+    .pp-rcard:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                    0 6px 20px -4px color-mix(in oklab, var(--pp-primary) 34%, transparent);
+    }
+}
+/* The whole card is the link, so the ring belongs to the card and not to a line of title text. */
+.pp-rcard:focus-within { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* The art panel: the game's landscape image, full card height and bled to its edges.
+   A FIXED WIDTH and a stretched height rather than an `aspect-ratio` box -- the panel's job is to fill
+   the card's left column whatever that card's content makes it, so its ratio has to give. That is also
+   why the image is absolutely positioned rather than sized at 100%: the panel's height comes from the
+   flex stretch, and a percentage against a height resolved that way is the indeterminate case where an
+   image silently falls back to its intrinsic size. */
+/* 80px against a ~343px card is 4.3:1 -- WIDER than the 16:9 source, so it crops the top and bottom a
+   little and shows the full width, which is the whole point. Deliberately a band rather than a picture:
+   this wall is scanned, and every pixel of art height is scroll a reader pays on all twenty cards. */
+.pp-rcard__art { position: relative; flex: none; width: 100%; height: 80px; background: var(--pp-bg-2); }
+@media (min-width: 768px) { .pp-rcard { flex-direction: row; } .pp-rcard__art { width: 150px; height: auto; } }
+.pp-rcard__shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* A COVER standing in for missing landscape art. `top` was written for the 92px COLUMN, where a 3:4 cover
+   scaled by height and the value did nothing anyway. In the 4.3:1 band it scales by WIDTH instead, so
+   `top` shows the topmost ~17% of the box art -- usually the background above the key art. Centre is the
+   honest crop for a wide band, and the column at `md:` is unaffected either way (it also scales by
+   height there, so the value is inert). */
+.pp-rcard__shot--cover { object-position: center; }
+/* Only the generic PSN title icon: contain it rather than blowing a small square up to fill the panel. */
+/* A FIXED inset on the band, a percentage only on the column.
+   Percentage padding resolves against the containing block's WIDTH on all four sides -- so 16% of a
+   343px-wide band is ~55px top AND bottom inside an 80px box, collapsing the content to zero and
+   rendering the icon invisible. It was safe while the panel was 92px wide and ~140px tall; it stopped
+   being safe the moment the panel turned into a wide short band. */
+.pp-rcard__shot--placeholder { object-fit: contain; padding: 14px; opacity: 0.7; }
+@media (min-width: 768px) { .pp-rcard__shot--placeholder { padding: 16%; } }
+
+/* Two jobs, one overlay. It fades the image into the card's surface on the right so the panel does not
+   end in a hard vertical seam, and it holds the whole image back a little -- a wall of 20 screenshots at
+   full strength competes with the numbers, which are what the card is for. */
+.pp-rcard__art::after {
+    content: ''; position: absolute; inset: 0;
+    /* Fades toward the BODY, so the direction follows the layout: down into it when stacked, across into
+       it when split. Left pointing right on a top band, it would fade out the card's right edge and leave
+       a hard seam along the bottom, which is the one edge that actually meets the content. */
+    background: linear-gradient(to bottom,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
+                color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
+                var(--pp-bg-1, var(--pp-bg-2)) 100%);
+}
+@media (min-width: 768px) {
+    .pp-rcard__art::after {
+        background: linear-gradient(to right,
+                    color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 22%, transparent) 0%,
+                    color-mix(in oklab, var(--pp-bg-1, var(--pp-bg-2)) 30%, transparent) 55%,
+                    var(--pp-bg-1, var(--pp-bg-2)) 100%);
+    }
+}
+
+.pp-rcard__body {
+    display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1;
+    padding: 11px 13px 12px;
+}
+@media (min-width: 768px) { .pp-rcard__body { gap: 7px; padding: 13px 15px 14px; } }
+
+/* Title left, score right. The score is the HEADLINE of this card -- same line as the title, not tucked
+   under it -- which is the whole point of the wide shape. */
+.pp-rcard__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pp-rcard__ident { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pp-rcard__title {
+    font-size: 0.88rem; font-weight: 700; line-height: 1.3; color: var(--pp-text);
+    /* TWO LINES RESERVED, for the same reason the quick take reserves four: the card lets a title wrap,
+       so a card whose title does NOT wrap has to hold that second line open or the two sit at different
+       heights. (An earlier note here claimed the opposite -- that a grid row stretches to its tallest
+       member anyway, so reserving would only pad the short cards. The padding is what makes them match.)
+       Clamped to the same two, because a title long enough for a third line would push straight past the
+       space just reserved for it. */
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    min-height: calc(2 * 1.3em);
+    transition: color var(--pp-dur-fast, 0.15s) var(--pp-ease);
+}
+@media (min-width: 768px) { .pp-rcard__title { font-size: 0.95rem; } }
+@media (hover: hover) { .pp-rcard:hover .pp-rcard__title { color: var(--pp-secondary); } }
+/* Stretched link: the anchor is the title, its ::after is the whole card. */
+.pp-rcard__link::after { content: ''; position: absolute; inset: 0; z-index: 2; }
+
+.pp-rcard__dlc {
+    align-self: flex-start; max-width: 100%;
+    padding: 1px 7px; border-radius: 999px;
+    font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--pp-secondary);
+    background: color-mix(in oklab, var(--pp-secondary) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-secondary) 32%, transparent);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Their verdict in WORDS. Plain text rather than a chip: the card's edge and the stamp on the art
+   already carry the colour, and a third bordered, tinted treatment of the same fact was one too many.
+   The glyph says which answer at a glance; this says exactly which, and only needs to be read once the
+   card has your attention. It inherits `--rec-c` from the card, so all three always agree. */
+.pp-rcard__rec {
+    align-self: flex-start; max-width: 100%;
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.01em; color: var(--rec-c);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The verdict, stamped over the art. Big enough to read down a scrolling wall -- which is the whole
+   point, and only affordable here because the art panel is the one part of the card that is not text.
+   Centred rather than cornered: a corner badge reads as a status pip on the artwork, where a centred
+   disc reads as a mark laid ON it. */
+/* On the BAND it sits at the right end: centred, it lands on the middle of the screenshot -- the part
+   worth seeing -- and it reads better next to the score below it. Centred again from `md:`, where the
+   panel is a column and the middle is the only place it can go. */
+.pp-rcard__stamp {
+    position: absolute; top: 50%; right: 12px; transform: translateY(-50%); z-index: 1;
+    display: grid; place-items: center;
+    width: 46px; height: 46px; border-radius: 50%;
+    color: var(--rec-c);
+    /* Opaque ground, not a tint: a translucent disc sits on a different screenshot every card, and a
+       glyph that is legible over a dark scene and not over a bright one is not legible. */
+    background: color-mix(in oklab, var(--pp-bg-0, #0b0d12) 82%, var(--rec-c));
+    border: 1.5px solid color-mix(in oklab, var(--rec-c) 62%, transparent);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
+}
+.pp-rcard__stamp svg { width: 24px; height: 24px; }
+@media (min-width: 768px) {
+    .pp-rcard__stamp {
+        left: 50%; right: auto; transform: translate(-50%, -50%);
+        width: 58px; height: 58px; border-width: 2px;
+    }
+    .pp-rcard__stamp svg { width: 30px; height: 30px; }
+}
+
+/* The overall score: stars over the figure, right-aligned, tabular so a column of cards lines up. */
+.pp-rcard__verdict { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; --star: 0.86rem; }
+.pp-rcard__scoreline { display: inline-flex; align-items: baseline; gap: 1px; font-variant-numeric: tabular-nums; }
+.pp-rcard__score-n { font-size: 1.15rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--pp-text); }
+.pp-rcard__of { font-size: 0.62rem; font-weight: 600; color: var(--pp-text-mute); }
+@media (min-width: 768px) { .pp-rcard__verdict { --star: 0.95rem; } .pp-rcard__score-n { font-size: 1.3rem; } }
+
+/* All FOUR scored axes, in full -- the fifth is the overall above. Every cell is figure-over-word, and the
+   word carries the polarity (a 9 difficulty says "Brutal") because a bare number can be read backwards
+   and a word cannot. 2x2 at 375px, one row from `md:` where the card has the width for it. */
+.pp-rcard__stats {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;
+}
+
+/* One row only once a cell can hold the word "Difficulty" -- 360px of body is ~84px per cell, which is
+   the point where the key stops needing an ellipsis. Below that it stays 2x2 rather than truncating four
+   labels to fit a shape. */
+/* The query container is a WRAPPER, and it has to be: an element is never its own container, so
+   `container-type` on the strip itself left this @container rule with nothing to resolve against and it
+   silently never matched -- the strip was 2x2 at every width, desktop included.
+   It cannot go back on the card BODY either. `container-type` applies layout containment, which makes the
+   element a containing block for absolutely-positioned descendants; on the body that captured
+   `.pp-rcard__link::after`, whose `inset: 0` then covered the body instead of the card, so the art panel,
+   the verdict stamp and the card's padding all stopped being clickable while `:focus-within` went on
+   ringing the whole card. The wrapper is a block child of the body -- same inline size, and nothing inside
+   it needs to escape.
+   A media query is the wrong tool regardless: this card's width is the wall's `auto-fill` track minus the
+   art panel, so one viewport gives it different widths depending on how many columns fit. */
+.pp-rcard__statswrap { container-type: inline-size; }
+@container (min-width: 360px) { .pp-rcard__stats { grid-template-columns: repeat(4, 1fr); } }
+.pp-rcard__stat {
+    display: flex; flex-direction: column; gap: 1px; min-width: 0;
+    padding: 5px 8px; border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-bg-2) 45%, transparent);
+    border: 1px solid var(--pp-border);
+    --stat-c: var(--pp-text-dim);
+}
+.pp-rcard__stat[data-tone="good"] { --stat-c: var(--pp-success); }
+.pp-rcard__stat[data-tone="warn"] { --stat-c: var(--pp-warning); }
+.pp-rcard__stat[data-tone="bad"]  { --stat-c: var(--pp-error); }
+.pp-rcard__stat[data-tone="high"] { --stat-c: var(--pp-accent); }
+.pp-rcard__stat-k { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+.pp-rcard__stat-n { font-size: 0.92rem; font-weight: 800; line-height: 1.15; color: var(--stat-c); font-variant-numeric: tabular-nums; }
+.pp-rcard__stat-of { font-size: 0.58rem; font-weight: 600; color: var(--pp-text-mute); margin-left: 1px; }
+.pp-rcard__stat-lbl {
+    font-size: 0.6rem; font-weight: 600; color: var(--pp-text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Their words, behind the plat card's big opening quote -- the same mark on both surfaces, so a take
+   looks like a take wherever you meet it. The quote replaced a bordered, tinted block: with the card's
+   edge and the stamp both carrying colour, a third framed panel was more chrome than the sentence
+   inside it.
+
+   THREE LINES ARE RESERVED whether or not there is a take. A grid row is as tall as its tallest card, so
+   one long take inflates every card beside it and the takeless ones become mostly blank -- reserving is
+   what removes that variance rather than adding to it. Three because the blurb is capped at 140
+   characters, which is about three lines at this width, so the clamp almost never actually bites. */
+/* Sized and coloured like the game page's quick takes (`.gd-blurb__text`), so the same sentence is as
+   easy to read on either surface. UPRIGHT, not italic: the slant was costing legibility at this size for
+   nothing, now that a 1.5rem quote mark says "someone said this" far more plainly than a lean did. */
+/* FOUR lines, and the quote is INLINE rather than a flex column beside the text.
+ *
+ * That second part is what actually made a full take fit. As a flex item the quote reserved its width on
+ * every line of the block, not just the line it appears on -- about 31px off all three lines, which at
+ * the wall's narrowest track left room for roughly 90 of the 140 characters a blurb can hold. Inline it
+ * costs ~13px, once. With the fourth line that comes to ~146 characters at both breakpoints, so a
+ * maxed-out take fits with a little room rather than being cut mid-sentence.
+ *
+ * The size came down only slightly (0.84 -> 0.78rem); the colour and weight are the game page's, which is
+ * what makes it readable. Dropping to 3 lines of tiny text would have traded the wrong one away. */
+.pp-rcard__take {
+    display: flex; align-items: flex-start;
+    margin: 3px 0 0; padding: 7px;
+    /* Four TEXT lines plus the box's own padding and border, because `box-sizing: border-box` means
+       min-height measures the border box. Get this wrong and the box reserves four lines but shows three
+       and a bit. */
+    min-height: calc(4 * 1.45em + 16px);
+    border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-bg-2) 42%, transparent);
+    border: 1px solid var(--pp-border);
+    font-size: 0.72rem; line-height: 1.45; color: var(--pp-text);
+}
+@media (min-width: 768px) { .pp-rcard__take { font-size: 0.76rem; } }
+
+/* The equal-height reserves are released below `md:`. They exist so cards in the same GRID ROW match,
+   and under 768px `.pp-rwall` is a single column -- every row holds exactly one card, so there is nothing
+   to even out and the reserved lines are pure height. That matters here because the stacked band already
+   adds 80px, and the stack's own rationale ("the title and take wrap less") is worth nothing while a
+   clamped two-line title reserves two lines whether it uses them or not. */
+@media (max-width: 767px) {
+    .pp-rcard__title { min-height: 0; }
+    .pp-rcard__take { min-height: 0; }
+}
+
+/* The box is drawn at the same size whether or not there is a take, so the placeholder centres in it --
+   top-left would read as text that failed to arrive rather than as a stated absence. */
+.pp-rcard__take--empty { align-items: center; justify-content: center; }
+.pp-rcard__none { font-size: 0.72rem; font-style: italic; color: var(--pp-text-mute); }
+
+.pp-rcard__take-txt {
+    min-width: 0;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical;
+    /* A take is 140 characters of anything, including a URL or an unspaced run that would otherwise push
+       the card's grid track wider than its share. Same guard the game page's blurbs use. */
+    overflow-wrap: anywhere;
+}
+/* The house cyan, NOT the verdict colour. Three things on this card already carry that -- the edge, the
+   stamp on the art and the label -- and a fourth turned the quote into another verdict signal when it is
+   really punctuation. Cyan keeps it a typographic mark, and matches the same mark on a platinum plat
+   card.
+
+   `line-height: 1` so a glyph two thirds larger than the text does not deepen the line box it sits in --
+   which would break the reserve above, since that counts four lines at the TEXT's line-height. */
+.pp-rcard__quote {
+    font-size: 1.05rem; line-height: 1; vertical-align: -0.08em; margin-right: 4px;
+    color: var(--pp-primary);
+}
+
+.pp-rcard__foot {
+    display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap;
+    margin-top: auto; padding-top: 1px;
+    font-size: 0.63rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+.pp-rcard__vs b { color: var(--pp-text-dim); font-weight: 700; }
+.pp-rcard__when { margin-left: auto; }

@@ -1,345 +1,213 @@
-"""
-Service for collecting all data needed for profile card / forum signature rendering.
+"""Data layer for the Profile Card -- the share image for a hunter's whole career.
 
-Centralizes data gathering from Profile, ProfileGamification, UserBadge,
-UserTitle, and Redis leaderboards into a single dict suitable for template
-rendering and change-detection hashing.
+The third sibling in the share-card family (plat card, recap card): same 1200x630 landscape
+artifact, same ground / frame / identity-strip anatomy, but its subject is the HUNTER -- trophy
+totals, the badge collection, and the Pursuer's standing -- where the plat card's subject is one
+completion. It replaces the retired 2025 profile card, which was deleted with the dashboard; this
+one is built on the new systems (grouping badges, Jobs/Contracts, marks) rather than revived.
+
+Whale-safe by construction, which for a whole-career card is the entire game: every figure is a
+Profile denorm (`trophy_snapshot` reads zero queries), a materialized read-model (held group-badge
+rows), or a catalog-bounded career aggregate (`build_hero_context` -- ~25-row Job catalog).
+Nothing here iterates trophies.
+
+Ownership is structural: the card is built FROM a profile and only ever served to that profile's
+own user (see the PNG endpoint), so unlike the plat card there is no eligibility predicate --
+having a linked profile IS the eligibility.
 """
-import hashlib
-import json
 import logging
+
+from trophies.models import EarnedTrophy, GroupBadge, UserGroupBadge
+from trophies.services import career_service, profile_stats_service
+from trophies.services.badge_detail_service import group_medallion_layers
+from users.services.marks import mark_style
+
+# One colour vocabulary across the family: the card renders with no stylesheet, and these maps are
+# the hand-ported token hexes the plat card already keeps in sync with input.css. Imported, not
+# copied -- a second copy is a second thing to drift.
+from core.services.completion_card_service import (
+    DISCIPLINE_COLOURS, JOB_ICON_PATHS, TIER_DISPLAY,
+)
 
 logger = logging.getLogger(__name__)
 
+#: How many recently-earned medallions the Collection band shows. Sized so the strip plus the
+#: count/chase/catalog blocks fill the band's full width (his call: the bottom should fill);
+#: each is one subject-art image to cache and base64 into the render, so the cap is a budget too.
+RECENT_MEDALLION_CAP = 8
 
-class ProfileCardDataService:
-    """Gather profile data for share card and forum signature rendering."""
 
-    @staticmethod
-    def get_profile_card_data(profile):
-        """
-        Collect all data needed for profile card templates.
+def _badge_summary(profile):
+    """The hunter's badge standing: held / catalog counts plus their newest medallions.
 
-        Returns a dict with all stats, badge info, title, leaderboard rank, etc.
-        All values are plain Python types (no model instances) for cache safety
-        and hash stability.
-        """
-        from trophies.models import UserBadge, UserTitle, ProfileGamification
-        from trophies.services.redis_leaderboard_service import (
-            get_xp_rank, get_xp_count,
-            get_country_xp_rank, get_country_xp_count,
+    Counts LIVE editions only, matching the Collection gallery's summary (`catalog_total` is the
+    same denominator it uses), so the card can never claim a badge the Collection wouldn't show.
+    All reads are bounded by holdings, never by trophies.
+    """
+    from trophies.models import SeriesBadgeStanding
+    from trophies.services.collection_service import closest_badge
+
+    catalog_total = GroupBadge.objects.filter(is_live=True).count()
+    held = UserGroupBadge.objects.filter(profile=profile, group_badge__is_live=True)
+    earned = held.count()
+    holo = held.filter(is_holo=True).count()
+
+    # Chases still open: standings short of complete, minus series already held in ANY edition
+    # (megamix badges are earned at min_count while progress_bp measures cleared/gating, so a held
+    # series can sit under 10000 bp -- the same wrinkle closest_badge excludes held series for; and
+    # like closest_badge's exclusion the held set is deliberately NOT live-filtered, so a retired
+    # edition still counts as holding the series). The live-series gate mirrors closest_badge's
+    # third exclusion: standings survive a series going dormant forever, and a curator smoke-testing
+    # an unreleased series against real profiles must not put a phantom chase on their card. All
+    # reads bounded by engagement, never trophies.
+    held_slugs = set(
+        UserGroupBadge.objects.filter(profile=profile)
+        .values_list('group_badge__series__series_slug', flat=True)
+    )
+    chasing = (
+        SeriesBadgeStanding.objects
+        .filter(profile=profile, progress_bp__lt=10000,
+                series_slug__in=GroupBadge.objects.filter(is_live=True).values('series__series_slug'))
+        .exclude(series_slug__in=held_slugs)
+        .count()
+    )
+
+    medallions = []
+    recent = (
+        held.select_related(
+            'group_badge__series', 'group_badge__platform_group', 'group_badge__series__submitted_by',
         )
-
-        # ---- Core profile fields ----
-        data = {
-            'psn_username': profile.display_psn_username or profile.psn_username,
-            'avatar_url': profile.avatar_url or '',
-            'country': profile.country or '',
-            'country_code': profile.country_code or '',
-            'flag': profile.flag or '',
-            'is_plus': profile.is_plus,
-            'is_premium': profile.user_is_premium,
-            'trophy_level': profile.trophy_level,
-            'tier': profile.tier,
-        }
-
-        # ---- Trophy counts ----
-        # NOTE: profile.total_trophies already stores the EARNED count
-        # (see profile_stats_service.update_profile_trophy_counts), NOT the
-        # grand total. The grand total is earned + unearned.
-        total_earned = profile.total_trophies
-        total_all = total_earned + profile.total_unearned
-        # Trophy breakdown percentages (for visual proportion bar)
-        # Use sum of type counts as denominator (avoids mismatch with total_earned
-        # which may include hidden trophies differently)
-        type_total = (
-            profile.total_plats + profile.total_golds
-            + profile.total_silvers + profile.total_bronzes
-        )
-        pct_plats = round(profile.total_plats / type_total * 100, 1) if type_total else 0
-        pct_golds = round(profile.total_golds / type_total * 100, 1) if type_total else 0
-        pct_silvers = round(profile.total_silvers / type_total * 100, 1) if type_total else 0
-        pct_bronzes = round(profile.total_bronzes / type_total * 100, 1) if type_total else 0
-
-        data.update({
-            'total_trophies': total_all,
-            'total_earned': total_earned,
-            'total_unearned': profile.total_unearned,
-            'total_bronzes': profile.total_bronzes,
-            'total_silvers': profile.total_silvers,
-            'total_golds': profile.total_golds,
-            'total_plats': profile.total_plats,
-            'pct_plats': pct_plats,
-            'pct_golds': pct_golds,
-            'pct_silvers': pct_silvers,
-            'pct_bronzes': pct_bronzes,
-            'total_games': profile.total_games,
-            'total_completes': profile.total_completes,
-            'avg_progress': round(profile.avg_progress, 1),
-            'earn_rate': round(total_earned / total_all * 100, 1) if total_all else 0,
+        .order_by('-earned_at')[:RECENT_MEDALLION_CAP]
+    )
+    for row in recent:
+        _tier, layers, is_avatar = group_medallion_layers(row.group_badge)
+        medallions.append({
+            # SUBJECT ART ONLY, same call as the plat card's spine: the backdrop plate exists to
+            # sit behind a circle mask, and the card shows the badge's own silhouette instead.
+            'layers': layers[-1:],
+            'is_avatar': is_avatar,
         })
 
-        # ---- Displayed title ----
-        displayed_title = None
-        try:
-            ut = UserTitle.objects.filter(
-                profile=profile, is_displayed=True,
-            ).select_related('title').first()
-            if ut:
-                displayed_title = ut.title.name
-        except Exception:
-            logger.exception('Error fetching displayed title for profile %s', profile.pk)
-        data['displayed_title'] = displayed_title
+    return {
+        'earned': earned,
+        'catalog_total': catalog_total,
+        'pct': round(earned / catalog_total * 100) if catalog_total else 0,
+        'holo': holo,
+        'chasing': chasing,
+        # The series they're nearest to finishing -- the Collection CTA's own read (or None).
+        'closest': closest_badge(profile),
+        'medallions': medallions,
+        # Holdings beyond the strip, for the "+N" chip that says the shelf continues.
+        'more': max(0, earned - len(medallions)),
+    }
 
-        # ---- Latest earned badge (most recently unlocked, with custom art) ----
-        badge_data = ProfileCardDataService._get_latest_badge(profile)
-        data.update(badge_data)
 
-        # ---- Gamification / XP ----
-        gamification = {
-            'total_badge_xp': 0,
-            'total_badges_earned': 0,
-            'unique_badges_earned': 0,
-        }
-        try:
-            gam = ProfileGamification.objects.filter(profile=profile).first()
-            if gam:
-                gamification = {
-                    'total_badge_xp': gam.total_badge_xp,
-                    'total_badges_earned': gam.total_badges_earned,
-                    'unique_badges_earned': gam.unique_badges_earned,
-                }
-        except Exception:
-            logger.exception('Error fetching gamification for profile %s', profile.pk)
-        data.update(gamification)
+def get_card_data(profile):
+    """Everything the Profile Card template needs, flat, in the family's shape."""
+    career_ctx = career_service.build_hero_context(profile)
+    hero = (career_ctx or {}).get('hero') or {}
+    snap = profile_stats_service.trophy_snapshot(profile)
 
-        # ---- Leaderboard ranks ----
-        xp_rank = None
-        xp_total_users = 0
-        try:
-            xp_rank = get_xp_rank(profile.pk)
-            xp_total_users = get_xp_count()
-        except Exception:
-            logger.exception('Error fetching XP rank for profile %s', profile.pk)
+    # The ring arcs arrive with server-precomputed stroke-dash geometry (career_service._RING_C);
+    # the card only has to attach each discipline's hex, because `var(--disc-*)` does not exist in
+    # the renderer's stylesheet-free document.
+    ring = [
+        {**f, 'colour': DISCIPLINE_COLOURS.get(f.get('slug'), '#9da5b1')}
+        for f in (hero.get('ring') or [])
+    ]
 
-        # DB fallback if Redis doesn't have the rank but user has XP
-        if xp_rank is None and gamification['total_badge_xp'] > 0:
-            try:
-                xp_rank = (
-                    ProfileGamification.objects
-                    .filter(
-                        profile__is_linked=True,
-                        total_badge_xp__gt=gamification['total_badge_xp'],
-                    )
-                    .count()
-                ) + 1
-                if xp_total_users == 0:
-                    xp_total_users = (
-                        ProfileGamification.objects
-                        .filter(profile__is_linked=True, total_badge_xp__gt=0)
-                        .count()
-                    )
-            except Exception:
-                logger.exception('Error in DB fallback for XP rank, profile %s', profile.pk)
-
-        data['xp_rank'] = xp_rank
-        data['xp_total_users'] = xp_total_users
-
-        # Country XP rank (Redis primary, DB fallback)
-        country_xp_rank = None
-        country_xp_total = 0
-        try:
-            if profile.country_code and gamification['total_badge_xp'] > 0:
-                country_xp_rank = get_country_xp_rank(profile.country_code, profile.pk)
-                country_xp_total = get_country_xp_count(profile.country_code)
-
-                # DB fallback if Redis doesn't have the rank yet
-                if country_xp_rank is None:
-                    country_xp_rank = (
-                        ProfileGamification.objects
-                        .filter(
-                            profile__country_code=profile.country_code,
-                            profile__is_linked=True,
-                            total_badge_xp__gt=gamification['total_badge_xp'],
-                        )
-                        .count()
-                    ) + 1
-                    if country_xp_total == 0:
-                        country_xp_total = (
-                            ProfileGamification.objects
-                            .filter(
-                                profile__country_code=profile.country_code,
-                                profile__is_linked=True,
-                                total_badge_xp__gt=0,
-                            )
-                            .count()
-                        )
-        except Exception:
-            logger.exception('Error fetching country XP rank for profile %s', profile.pk)
-        data['country_xp_rank'] = country_xp_rank
-        data['country_xp_total'] = country_xp_total
-
-        # ---- Recent / Rarest platinum ----
-        data.update(ProfileCardDataService._get_notable_plats(profile))
-
-        # ---- Most played game (by play duration) ----
-        data.update(ProfileCardDataService._get_most_played(profile))
-
-        # ---- Card theme ----
-        card_theme = 'default'
-        try:
-            if hasattr(profile, 'card_settings'):
-                card_theme = profile.card_settings.card_theme or 'default'
-        except Exception:
-            pass
-        data['card_theme'] = card_theme
-
-        return data
-
-    @staticmethod
-    def _get_badge_image_url(badge):
-        """
-        Get a full URL for a badge image suitable for share card rendering.
-        Returns a full URL (http/media) or empty string.
-        Only returns URLs for badges with custom artwork.
-        """
-        from django.conf import settings
-
-        try:
-            layers = badge.get_badge_layers()
-            if not layers.get('has_custom_image'):
-                return ''
-            main_url = layers.get('main', '')
-            if not main_url:
-                return ''
-            # If it's already a full URL (external avatar, etc.), return as-is
-            if main_url.startswith('http'):
-                return main_url
-            # If it's a media URL (starts with /media/ or MEDIA_URL), make absolute
-            if main_url.startswith('/'):
-                return main_url
-            # It's a relative media path from ImageField.url
-            return main_url
-        except Exception:
-            return ''
-
-    @staticmethod
-    def _get_latest_badge(profile):
-        """
-        Get the user's most recently earned badge with custom artwork.
-        """
-        from trophies.models import UserBadge
-
-        result = {
-            'badge_name': None,
-            'badge_series': None,
-            'badge_tier': None,
-            'badge_image_url': None,
+    # The rarest and latest platinums as MINI CARDS (cover art + name + figure), off the denormed
+    # FKs -- one PK lookup each, no scan. The cover chain needs the Game + Concept + IGDBMatch in
+    # hand (display_image_url is IGDB-first), so this is the one place the card selects a concept
+    # join -- with the mandatory raw_response defer riding along.
+    def _plat_mini(pk):
+        if not pk:
+            return None
+        et = (
+            EarnedTrophy.objects.filter(pk=pk)
+            .select_related('trophy__game__concept__igdb_match')
+            .defer('trophy__game__concept__igdb_match__raw_response')
+            .first()
+        )
+        if not et or not et.trophy or not et.trophy.game:
+            return None
+        game = et.trophy.game
+        concept = game.concept
+        rate = et.trophy.trophy_earn_rate
+        return {
+            'name': (concept.unified_title if concept else '') or game.title_name,
+            'cover_url': game.display_image_url or '',
+            'earn_rate': round(float(rate), 2) if rate is not None else None,
+            'earned_at': et.earned_date_time,
         }
 
-        try:
-            earned_badges = (
-                UserBadge.objects
-                .filter(profile=profile)
-                .select_related('badge', 'badge__base_badge')
-                .order_by('-earned_at')
-            )
+    rarest_plat = _plat_mini(profile.rarest_plat_id)
+    # For a hunter with one platinum (or a rarest that IS the latest) two cards would show the
+    # same game twice; the latest card simply drops, and its query with it.
+    latest_plat = None
+    if profile.recent_plat_id and profile.recent_plat_id != profile.rarest_plat_id:
+        latest_plat = _plat_mini(profile.recent_plat_id)
 
-            for ub in earned_badges:
-                badge = ub.badge
-                image_url = ProfileCardDataService._get_badge_image_url(badge)
-                if image_url:
-                    series_name = badge.effective_display_series or badge.series_slug
-                    result['badge_name'] = series_name
-                    result['badge_series'] = series_name
-                    result['badge_tier'] = badge.tier
-                    result['badge_image_url'] = image_url
-                    break
+    # All four tiers, unconditionally: this is a career, not one game's trophy list, so a zero is
+    # a true statement about the hunter rather than a tier the game never defined.
+    tier_totals = {
+        'platinum': snap.get('total_plats', 0),
+        'gold': snap.get('total_golds', 0),
+        'silver': snap.get('total_silvers', 0),
+        'bronze': snap.get('total_bronzes', 0),
+    }
+    tier_counts = [
+        {'tier': tier, 'count': tier_totals[tier], 'colour': colour}
+        for tier, colour in TIER_DISPLAY
+    ]
 
-        except Exception:
-            logger.exception('Error fetching latest badge for profile %s', profile.pk)
+    # Jobs actually touched (personal, unlike jobs['total'] which is the 25-job catalog size).
+    jobs = (career_ctx or {}).get('career') or {}
+    jobs_played = sum(d.get('played', 0) for d in jobs.get('disciplines', []))
 
-        return result
+    # The highest-leveled job, with its real Lucide glyph in its discipline's colour -- the grid's
+    # sixth slot. Only once real XP exists: the level-1 floor makes every untouched job "level 1",
+    # and crowning an arbitrary one would be a claim the hunter never earned.
+    top_job = None
+    if jobs.get('total_xp'):
+        tiles = [t for d in jobs.get('disciplines', []) for t in d.get('jobs', [])]
+        started = [t for t in tiles if t.get('started')]
+        if started:
+            t = max(started, key=lambda t: t.get('level', 0))
+            top_job = {
+                'name': t.get('name', ''),
+                'level': t.get('level', 0),
+                'icon_paths': JOB_ICON_PATHS.get(t.get('icon', ''), ''),
+                'colour': DISCIPLINE_COLOURS.get(t.get('disc_slug'), '#9da5b1'),
+            }
 
-    @staticmethod
-    def _get_notable_plats(profile):
-        """Get recent and rarest platinum data."""
-        result = {
-            'recent_plat_name': None,
-            'recent_plat_icon': None,
-            'rarest_plat_name': None,
-            'rarest_plat_icon': None,
-            'rarest_plat_earn_rate': None,
-        }
+    return {
+        'username': profile.display_psn_username or profile.psn_username,
+        'mark': mark_style(profile.display_mark),
+        'user_avatar_url': profile.avatar_url or '',
+        # The title they're WEARING -- the same worn title every other surface leads with.
+        'display_title': hero.get('active_title'),
+        'total_games': snap.get('total_games', 0),
 
-        try:
-            if profile.recent_plat_id:
-                rp = profile.recent_plat
-                if rp and rp.trophy and rp.trophy.game:
-                    game = rp.trophy.game
-                    result['recent_plat_name'] = (
-                        game.concept.unified_title if game.concept else game.title_name
-                    )
-                    result['recent_plat_icon'] = game.display_image_url
-        except Exception:
-            logger.exception('Error fetching recent plat for profile %s', profile.pk)
+        'total_plats': snap.get('total_plats', 0),
+        'total_completes': snap.get('total_completes', 0),
+        'total_earned': snap.get('total_earned', 0),
+        'total_unearned': snap.get('total_unearned', 0),
+        'trophy_level': snap.get('trophy_level', 0),
+        'avg_progress': snap.get('avg_progress') or 0,
+        'tier_counts': tier_counts,
+        'rarest_plat': rarest_plat,
+        'latest_plat': latest_plat,
 
-        try:
-            if profile.rarest_plat_id:
-                rp = profile.rarest_plat
-                if rp and rp.trophy and rp.trophy.game:
-                    game = rp.trophy.game
-                    result['rarest_plat_name'] = (
-                        game.concept.unified_title if game.concept else game.title_name
-                    )
-                    result['rarest_plat_icon'] = game.display_image_url
-                    result['rarest_plat_earn_rate'] = rp.trophy.earn_rate
-        except Exception:
-            logger.exception('Error fetching rarest plat for profile %s', profile.pk)
+        'pursuer_level': hero.get('pursuer_level') or 0,
+        'rank_label': (hero.get('pursuer_rank') or {}).get('label', ''),
+        'ring': ring,
+        'top_job': top_job,
+        'jobs_played': jobs_played,
+        'jobs_total': jobs.get('total') or 0,
+        'tiers_earned': (career_ctx or {}).get('tiers_earned') or 0,
+        # Compact ("2.6M"); zeros render honestly -- the career row is a fixed shape.
+        'career_xp_compact': (career_ctx or {}).get('total_xp_compact') or '0',
 
-        return result
-
-    @staticmethod
-    def _get_most_played(profile):
-        """Get the user's most-played game by play duration."""
-        from trophies.models import ProfileGame
-
-        result = {
-            'most_played_name': None,
-            'most_played_icon': None,
-            'most_played_hours': None,
-        }
-
-        try:
-            pg = (
-                ProfileGame.objects
-                .filter(profile=profile, play_duration__isnull=False)
-                .exclude(hidden_flag=True)
-                .exclude(user_hidden=True)
-                .select_related('game', 'game__concept', 'game__concept__igdb_match')
-                .order_by('-play_duration')
-                .first()
-            )
-            if pg and pg.game and pg.play_duration:
-                game = pg.game
-                result['most_played_name'] = (
-                    game.concept.unified_title if game.concept else game.title_name
-                )
-                result['most_played_icon'] = game.display_image_url
-                result['most_played_hours'] = int(pg.play_duration.total_seconds() / 3600)
-        except Exception:
-            logger.exception('Error fetching most played game for profile %s', profile.pk)
-
-        return result
-
-    @staticmethod
-    def compute_data_hash(data):
-        """
-        Compute MD5 hash of card data for change detection.
-
-        Used by the pre-rendering pipeline to skip re-rendering when data
-        hasn't changed since the last render.
-        """
-        # Sort keys for deterministic serialization
-        serialized = json.dumps(data, sort_keys=True, default=str)
-        return hashlib.md5(serialized.encode()).hexdigest()
+        'badges': _badge_summary(profile),
+    }

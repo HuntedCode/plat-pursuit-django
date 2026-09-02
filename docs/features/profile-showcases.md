@@ -1,12 +1,35 @@
 # Profile Showcases
 
+> **DELETED 2026-08, not hidden.** An earlier version of this banner promised the models, service, API
+> views, editor page and JS were only parked. They are gone: `ProfileShowcase` and `ProfileBadgeShowcase`
+> were dropped by migration `0303`, along with `showcase_service.py`, `api/profile_showcase_views.py` and
+> `profile_editor.html`. The cited `tests/engine/test_showcases_hidden.py` no longer exists either; the
+> live invariants moved into `tests/engine/test_profile_banner_retired.py`.
+>
+> Kept as the record of what the feature was and why it went. Rebuilding means designing it again, not
+> un-commenting anything.
+
+> **HIDDEN (2026-08) pending a ground-up rebuild of profile customization.** The profile no longer
+> renders the showcase band, `/profile-editor/` 302s to the homepage, and the four write endpoints are
+> withdrawn. **No data was touched** -- every `ProfileShowcase`, `UserTrophySelection` and
+> `ProfileBadgeShowcase` row is intact, as are the models, the service, the API views, all five display
+> partials, the editor page and its JS. Restoring the surface is reopening those doors: put back the
+> `profile_showcases_section.html` include in `profile_detail.html`, the `rendered_showcases` context in
+> `ProfileDetailView`, the `/profile-editor/` route, and the four routes in `api/urls.py`.
+>
+> Why: the About surface these were going to anchor turned out to pair them with a trophy timeline that
+> had rendered nowhere since the header rebuild, and there is a second, competing customization story in
+> the Pursuer Card's own showcase slot. Rather than hide working customization behind a tab click to
+> pair it with a husk, the whole surface comes off and gets rebuilt deliberately.
+> Pinned by `tests/engine/test_showcases_hidden.py`.
+
 Steam-style profile customization. Users pick showcase types to feature on their profile between the identity header and the game list tabs. Up to 2 slots for free users, 5 for premium. Each showcase type can only be used once per profile. Free users get access to Platinum Trophy Case and Favorite Games; premium unlocks Badge, Recent Platinums, and Title showcases.
 
 ## Architecture Overview
 
-The system uses a registry pattern (similar to `DASHBOARD_MODULES`): each showcase type is defined as a descriptor with metadata, a provider function that fetches display data, and an optional picker for user-controlled item selection. Adding a new showcase type means registering a descriptor, implementing a provider, and creating a template partial — no model changes.
+The system uses a registry pattern (similar to `DASHBOARD_MODULES`): each showcase type is defined as a descriptor with metadata and a provider function that fetches display data. (Descriptors used to carry an `editor_template` key pointing into a `trophies/partials/profile_editor/` directory that has never existed; nothing read it and it was removed. The real pickers are branches in `profile_editor.html`.) Adding a new showcase type means registering a descriptor, implementing a provider, and creating a template partial — no model changes.
 
-Storage is split by complexity. Showcases with dedicated per-item tables (`UserTrophySelection`, `ProfileBadgeShowcase`) reuse those tables as-is; the `ProfileShowcase.config` JSONField stays empty for those types. Showcases with small fixed-size selection lists (favorite games, reviews, titles) store selected IDs in the JSON config. Automatic showcases (Recent Platinums) have empty configs and derive items from earned trophies.
+Storage is split by complexity. Showcases with dedicated per-item tables (`UserTrophySelection`, `ProfileBadgeShowcase`) reuse those tables as-is; the `ProfileShowcase.config` JSONField stays empty for those types. Showcases with small fixed-size selection lists (favorite games, titles) store selected IDs in the JSON config. Automatic showcases (Recent Platinums) have empty configs and derive items from earned trophies.
 
 Premium gating happens at the slot-add layer (not at view time). Users can configure their showcases while premium, then keep enjoying them after downgrade — but premium-only showcases become `is_active=False` and can't be re-activated or reordered until they re-subscribe. Anyone can view anyone else's showcases regardless of their own subscription status.
 
@@ -17,12 +40,12 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 | `trophies/models.py` (ProfileShowcase) | Polymorphic showcase model with JSON config |
 | `trophies/services/showcase_service.py` | Registry, providers, validators, CRUD service, downgrade handler |
 | `api/profile_showcase_views.py` | 4 REST endpoints (add/remove/reorder/update-config) |
-| `trophies/views/profile_views.py` (ProfileEditorView) | `/my-pursuit/profile-editor/` editor page |
+| `trophies/views/profile_views.py` (ProfileEditorView) | The editor page. Parked: `/profile-editor/` now redirects home |
 | `trophies/views/profile_views.py` (ProfileDetailView) | Adds `rendered_showcases` to profile context |
 | `templates/trophies/profile_editor.html` | Two-column editor with drag-reorder and per-type pickers |
 | `templates/trophies/partials/profile_detail/profile_showcases_section.html` | Container rendered on the profile page |
-| `templates/trophies/partials/profile_showcases/*.html` | Per-type display templates (7 files) |
-| `static/js/profile-editor.js` | Editor JS: add/remove/reorder + 4 batched pickers |
+| `templates/trophies/partials/profile_showcases/*.html` | Per-type display templates (5 live + an orphan `showcase_reviews.html`) |
+| `static/js/profile-editor.js` | Editor JS: add/remove/reorder + 3 batched pickers |
 | `users/services/subscription_service.py` | Calls `handle_premium_downgrade()` on cancel |
 
 ## Data Model
@@ -31,7 +54,7 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 | Field | Type | Notes |
 |-------|------|-------|
 | `profile` | FK(Profile) | CASCADE |
-| `showcase_type` | CharField(30) | 8 choices (7 active + 1 retained) |
+| `showcase_type` | CharField(30) | 5 choices, all registered and renderable |
 | `sort_order` | PositiveSmallIntegerField | 1-based, user-controlled via drag |
 | `is_active` | BooleanField | False preserves configuration across downgrade |
 | `config` | JSONField | Per-type payload (see registry) |
@@ -47,10 +70,9 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 | `favorite_games` | No | 6 | `{"game_ids": [...]}` | JSON |
 | `badge_showcase` | Yes | 5 | `{}` | `ProfileBadgeShowcase` |
 | `recent_platinums` | Yes | 6 | `{}` | Derived |
-| `review_showcase` | Yes | 2 | `{"review_ids": [...]}` | JSON |
 | `title_showcase` | Yes | 6 | `{"user_title_ids": [...]}` | JSON |
 
-`challenge_showcase` is defined as a model choice but not registered; deferred for future work. Profiles that had one saved will gracefully skip rendering (service logs a warning).
+**Three types have been removed and must not be re-added casually.** `review_showcase` went with the text-review archive (migration `0237`). `rarest_trophies` was deleted outright after the 2026-08-09 outage -- it was the only DERIVED type, ranking the profile's entire earned set on a joined column (migration `0275`; see the warning below and `tests/engine/test_anon_profile_render.py`). `challenge_showcase` went with the Challenges retirement (migration `0292`), and had never been renderable anyway: it was offered as a model choice but never registered, so a stored row displayed nothing. `tests/engine/test_profile_banner_retired.py` now pins that the model's choices and the registry agree in both directions, which is what would have caught it.
 
 ## Key Flows
 
@@ -69,7 +91,7 @@ Premium gating happens at the slot-add layer (not at view time). Users can confi
 4. Sort order reassigned 1..N inside `select_for_update` transaction
 
 ### Updating Config (batched picker)
-1. User opens a picker modal (Favorite Games, Reviews, Titles)
+1. User opens a picker modal (Favorite Games, Titles)
 2. Local `selectedIds` tracks checkbox state
 3. On "Save", JS POSTs `{config: {game_ids: [...]}}` to `/api/v1/profile/showcases/<slug>/config/`
 4. Service runs the type's validator (ownership check, cap enforcement)
@@ -89,6 +111,11 @@ There is no auto-restore on re-subscribe — users re-activate via the editor. T
 
 ## API Endpoints
 
+> **All four of these routes are WITHDRAWN** (2026-08) along with the rest of the surface -- they 404
+> today. The views are parked in `api/profile_showcase_views.py`; restoring them is putting the four
+> `path()` lines and the import back in `api/urls.py`. Documented as they were, because that is what a
+> restore has to recreate.
+
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | POST | `/api/v1/profile/showcases/` | User | Add showcase (body: `{showcase_type}`) |
@@ -100,9 +127,8 @@ All endpoints resolve premium status via `profile.user_is_premium`.
 
 ## Integration Points
 
-- **Profile page** renders showcases via `profile_showcases_section.html` (inserted in `profile_detail.html` after the header partial)
-- **Trophy Case page** (`/profile/<user>/trophy-case/`) is still the picker UX for `platinum_case` — linked from the editor
-- **Dashboard module providers** (`provide_az_challenge`, `provide_calendar_challenge`, `provide_genre_challenge`) accept an optional `challenge=` parameter so they could later serve a Challenge showcase without duplicating logic
+- **Profile page** rendered showcases via `profile_showcases_section.html`, included in `profile_detail.html` after the header partial. That include is currently commented out (see the banner at the top); the partial itself is unchanged.
+- **Trophy Case page** (`/hunters/<psn_username>/trophy-case/`) is still the picker UX for `platinum_case` — linked from the editor
 - **Subscription lifecycle** calls `handle_premium_downgrade()` on every cancel path
 
 ## Gotchas and Pitfalls
@@ -114,11 +140,9 @@ All endpoints resolve premium status via `profile.user_is_premium`.
 - **Platinum Trophy Case cap changed from 10 to 20**: `UserTrophySelection.save()` enforces 20 now. If you see older code referencing 10, check whether it's legitimate.
 - **`is_automatic` is cosmetic.** It only skips the Configure-button fallback in the editor; it is not a behavioral flag and nothing in the service branches on it.
 - **A derived showcase must stay bounded.** `rarest_trophies` was retired in 2026-08 (migration `0275`) because it was the one type whose item set came from ranking the profile's ENTIRE earned set, on a joined column (`trophy__trophy_earn_rate`) that no index could serve. One showcase cost more than the other five combined on a large account, and it ran on every profile render including anonymous ones. `recent_platinums` is also derived but stays cheap because it reads a date-ordered index and stops at 6. Before adding a derived type, ask what it costs on a 250K-trophy profile: if the answer scales with the account rather than with the slot count, it does not belong here.
-- **Challenge showcase (deferred)**: `SHOWCASE_CHALLENGE` is still a model constant, but not registered. Any old `ProfileShowcase` row with this type will be skipped at render (logged as a warning). Re-registering it in the future will instantly light up any preserved rows.
+- **An offered type must be a registered type.** `challenge_showcase` was a model choice that was never registered, so a row of it could be stored and would then render nothing -- silently, with only a service warning. It is gone (migration `0292`), and `tests/engine/test_profile_banner_retired.py` now asserts the model's choices and `SHOWCASE_REGISTRY` match in both directions.
 
 ## Related Docs
 
-- [Review Hub](review-hub.md): Review Showcase links into the hub with DLC-aware `?group=` parameter
-- [Challenge Systems](challenge-systems.md): challenges are the source data for the deferred Challenge showcase
 - [Payment Webhooks](../architecture/payment-webhooks.md): `deactivate_subscription()` flow where the downgrade hook fires
 - [Dashboard](dashboard.md): uses the same registry pattern

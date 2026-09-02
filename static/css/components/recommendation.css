@@ -1,0 +1,24 @@
+/* ==========================================================================
+ * RECOMMENDATION COLOUR (--rec-c)
+ *
+ * One map from a hunter's verdict to its colour, for every surface that draws one: the game page's split,
+ * the quick-rate form's radios, and the rating cards on a profile. Three copies of the same three lines
+ * had accumulated, which is how a reworded palette ends up disagreeing with itself across two pages.
+ *
+ * Green / amber / red, and deliberately the semantic tokens rather than bespoke hexes -- "do it", "rough
+ * but worth it" and "skip it" ARE a good/warning/bad axis, so they should move with the rest of the site
+ * when those tokens move.
+ *
+ * Consumers set their own fallback on their base rule (`--rec-c: var(--pp-primary)`, the house cyan) so a
+ * rating that predates the field still resolves. That is not redundant: an UNDEFINED custom property
+ * invalidates the whole declaration it appears in rather than falling back to anything, which is what
+ * emptied the badge meters once already.
+ *
+ * The attribute is doubled to make these 0-2-0. A consumer's fallback lives on a single class, so with
+ * plain `[data-rec="..."]` selectors (0-1-0) the two would tie and the winner would depend on the order
+ * these files happen to be imported in -- a fallback silently beating a real verdict, on whichever page
+ * imported last. The specificity makes the order irrelevant.
+ * ========================================================================== */
+[data-rec="worth_it"][data-rec]           { --rec-c: var(--pp-success); }
+[data-rec="good_game_bad_plat"][data-rec] { --rec-c: var(--pp-warning); }
+[data-rec="skip"][data-rec]               { --rec-c: var(--pp-error); }

@@ -23,7 +23,7 @@ from django.core.management.base import BaseCommand
 from django.db.models.functions import Lower
 
 from trophies.models import Profile
-from trophies.services.badge_service import sync_discord_roles
+from trophies.services.discord_roles import sync_discord_roles
 
 logger = logging.getLogger(__name__)
 

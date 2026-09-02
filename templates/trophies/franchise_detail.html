@@ -1,230 +1,146 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load humanize %}
-{% load custom_filters %}
-{% block title %}{{ object.name }} Franchise Trophy Lists{% endblock %}
-{% block meta_description %}Explore every PlayStation trophy list in the {{ object.name }} franchise. Track platinum progress across all games on Platinum Pursuit.{% endblock %}
+{% block title %}{{ object.name }} {% if is_series %}Series{% else %}Franchise{% endif %} Trophy Lists{% endblock %}
+{% comment %} Thin-page rule (closing audit): one game = the game page already answers it. {% endcomment %}
+{% block robots %}{% if request.GET or total_games < 2 %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 {% block og_type %}video.other{% endblock %}
-{% block og_title %}{{ object.name }} Franchise on Platinum Pursuit{% endblock %}
-{% block og_description %}Every PlayStation game in the {{ object.name }} franchise with trophy lists, ratings, and community progress.{% endblock %}
+{% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
+{% block og_description %}Every PlayStation game in the {{ object.name }} {% if is_series %}series{% else %}franchise{% endif %} with trophy lists, ratings, and community progress.{% endblock %}
 
 {% block content %}
+<div class="pp-gbrowse">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# -- Franchise Header (Poster Hero) -- #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
-        <div class="card-body p-4 md:p-6 lg:p-8">
-            <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6 lg:gap-8">
-                {# Poster-style cover. Portrait aspect, meaty size, soft ring accent. #}
-                <div class="w-32 h-40 md:w-40 md:h-52 lg:w-48 lg:h-64 shrink-0 rounded-lg bg-base-300 overflow-hidden ring-2 ring-primary/30 ring-offset-2 ring-offset-base-200 shadow-xl shadow-primary/10">
+    {# ── Page header: accented card + cover thumb + franchise totals; opening-beat cascade. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            {% comment %} Mobile stacks the cover thumb on its own line so the name + stats get full width;
+            md+ places it beside the identity column. {% endcomment %}
+            <div class="flex flex-col md:flex-row gap-3 md:gap-5 md:items-start">
+                {# Cover thumb: the franchise's most recent release (portrait 3:4, object-top keeps logos). #}
+                <div class="fr-thumb shrink-0 mx-auto md:mx-0">
                     {% if hero_cover %}
-                        <img src="{{ hero_cover }}" alt="{{ object.name }}"
-                             class="w-full h-full object-cover object-top" />
+                    <img src="{{ hero_cover }}" alt="{{ object.name }}" loading="lazy" />
                     {% else %}
-                        <div class="w-full h-full flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 md:w-14 md:h-14 text-primary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                                <path d="M12 11h4"></path>
-                                <path d="M12 16h4"></path>
-                                <path d="M8 11h.01"></path>
-                                <path d="M8 16h.01"></path>
-                            </svg>
-                        </div>
+                    <span class="fr-thumb__empty">
+                        {% if is_series %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                        {% else %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M8 11h.01"/></svg>
+                        {% endif %}
+                    </span>
                     {% endif %}
                 </div>
 
-                <div class="flex-1 min-w-0 text-center sm:text-left">
-                    {% comment %}
-                        Eyebrow label reflects the underlying source_type so a
-                        series reads as "Series" (and a franchise as "Franchise").
-                        The page layout is otherwise identical: browse treats both
-                        uniformly, the label just tells the user which kind of
-                        grouping they landed on. The DB column name is still
-                        'collection' to match IGDB's namespace.
-                    {% endcomment %}
-                    <div class="flex items-center gap-2 justify-center sm:justify-start mb-1.5">
-                        <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-primary/80">
-                            {% if object.source_type == 'collection' %}Series{% else %}Franchise{% endif %}
-                        </span>
-                        <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-primary/40 to-transparent"></div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        {% if is_series %}
+                        <svg class="w-4 h-4 md:w-5 md:h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                        {% else %}
+                        <svg class="w-4 h-4 md:w-5 md:h-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M8 11h.01"/></svg>
+                        {% endif %}
+                        <span class="text-[0.6rem] font-extrabold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 rounded-full px-2 py-0.5">{% if is_series %}Series{% else %}Franchise{% endif %}</span>
                     </div>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold leading-tight mt-1">{{ object.name }}</h1>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        {{ total_games|intcomma }} game{{ total_games|pluralize }}{% if total_versions != total_games %} across {{ total_versions|intcomma }} version{{ total_versions|pluralize }}{% endif %}.
+                        {% if is_series %}Part of a broader franchise universe.{% else %}The full saga in one place.{% endif %}
+                    </p>
 
-                    <h1 class="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black leading-tight">
-                        {{ object.name }}
-                    </h1>
-
-                    {% if user_progress_stats %}
-                        {# "Your Progress" stat cells: numerator/denominator format with overall completion ring on the Trophies cell. #}
-                        <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4">
-                            <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Your Progress</span>
-                            <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
-                        </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">
-                                    {{ user_progress_stats.games_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_games|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Games Played</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black">
-                                    {{ user_progress_stats.versions_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_versions|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">
-                                    {{ user_progress_stats.trophies_earned|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_trophies|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">
-                                    {{ user_progress_stats.games_platinumed|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_platinums|intcomma }}</span>
-                                </div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
-                            </div>
-                        </div>
-
-                        {# Overall franchise completion bar #}
-                        <div class="mt-3 md:mt-4">
-                            <div class="flex items-center justify-between text-xs mb-1">
-                                <span class="text-base-content/60 font-medium">Franchise Completion</span>
-                                <span class="font-bold text-primary">{{ user_progress_stats.completion_pct }}%</span>
-                            </div>
-                            <div class="h-2 bg-base-300 rounded-full overflow-hidden">
-                                <div class="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-500"
-                                     style="width: {{ user_progress_stats.completion_pct }}%"></div>
-                            </div>
-                        </div>
-                    {% else %}
-                        {# Totals-only view (anonymous / unlinked) #}
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4 md:mt-5">
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ total_games|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Game{{ total_games|pluralize }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black">{{ total_versions|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">{{ total_trophies|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
-                            </div>
-                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
-                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">{{ total_platinums|intcomma }}</div>
-                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
-                            </div>
-                        </div>
-                    {% endif %}
-
-                    <p class="text-[10px] text-base-content/30 italic mt-4 pr-1">
-                        Franchise data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
-                        Cover art shown is the franchise's most recent release.
+                    <p class="text-[0.7rem] md:text-xs text-base-content/40 mt-1">
+                        Data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-hover">IGDB</a>.
                     </p>
                 </div>
             </div>
+
+            {# Franchise totals (objective facts about the grouping). #}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+                <div class="scard">
+                    <div class="scard__label">Games</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_games }}">{{ total_games|intcomma }}</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Versions</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_versions }}">{{ total_versions|intcomma }}</div>
+                    <div class="scard__sub">on PSN</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Trophies</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_trophies }}">{{ total_trophies|intcomma }}</div>
+                    <div class="scard__sub">defined</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Platinums</div>
+                    <div class="scard__value pp-tally" data-scard-count data-countup="{{ total_platinums }}">{{ total_platinums|intcomma }}</div>
+                    <div class="scard__sub">to earn</div>
+                </div>
+            </div>
+
+            {% if user_progress_stats %}
+            {# "Your progress" across the whole franchise (authed only). #}
+            <div class="fr-prog">
+                <div class="fr-prog__head">
+                    <span class="fr-prog__label">Your progress</span>
+                    {# % lives in CSS (::after) so the count-up's textContent write can't eat it. #}
+                    <span class="fr-prog__pct pp-tally" data-countup="{{ user_progress_stats.completion_pct }}">{{ user_progress_stats.completion_pct }}</span>
+                </div>
+                {% include 'components/horizon.html' with progress=user_progress_stats.completion_pct height='8px' %}
+                <div class="fr-prog__stats">
+                    <span><strong>{{ user_progress_stats.games_played|intcomma }}</strong>/{{ total_games|intcomma }} played</span>
+                    <span><strong>{{ user_progress_stats.trophies_earned|intcomma }}</strong> troph{{ user_progress_stats.trophies_earned|pluralize:"y,ies" }} earned</span>
+                    <span><strong style="color: var(--color-trophy-platinum)">{{ user_progress_stats.games_platinumed|intcomma }}</strong> platinum{{ user_progress_stats.games_platinumed|pluralize }}</span>
+                </div>
+            </div>
+            {% endif %}
         </div>
+    </section>
+
+    {# ── Sort toolbar: the only interactive control; change swaps just #franchise-groups via HTMX. ── #}
+    <form id="fr-form"
+          hx-get="{% url 'franchise_detail' slug=object.slug %}"
+          hx-target="#franchise-groups"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-trigger="change"
+          hx-indicator="#franchise-groups"
+          class="pp-toolbar-card pp-gbrowse__toolbar mb-3">
+        <div class="pp-gbrowse__bar pp-gbrowse__bar--end">
+            <label class="pp-gbrowse__sort">
+                <span class="sr-only">Sort games</span>
+                <select name="sort" class="pp-gallery__select">
+                    {% for value, display in sort_choices %}
+                    <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+    </form>
+
+    {# ── Grouped game list (HTMX sort-swap target). ── #}
+    <div id="franchise-groups">
+        {% include 'trophies/partials/franchise_detail/game_groups_list.html' %}
     </div>
 
-    {% if also_featured_groups or related_entries %}
-        {% comment %}
-            Each tab carries the current ?sort= so switching tabs preserves
-            the user's sort selection. HTMX attrs swap only the tab body;
-            the inline script below flips .tab-active on click so the bar
-            reflects the active tab during the HTMX round-trip. href stays
-            as a no-JS fallback.
-        {% endcomment %}
-        <div class="tabs tabs-boxed bg-base-300/60 mb-3" role="tablist" aria-label="Franchise sections"
-             data-franchise-tabs>
-            <a href="?tab=games&sort={{ current_sort }}"
-               hx-get="{% url 'franchise_detail' slug=object.slug %}?tab=games&sort={{ current_sort }}"
-               hx-target="#franchise-tab-content"
-               hx-swap="innerHTML"
-               hx-push-url="true"
-               hx-indicator="#franchise-tab-content"
-               data-franchise-tab
-               role="tab"
-               class="tab {% if current_tab == 'games' %}tab-active{% endif %}"
-               aria-selected="{% if current_tab == 'games' %}true{% else %}false{% endif %}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                    <line x1="6" y1="12" x2="10" y2="12"></line>
-                    <line x1="8" y1="10" x2="8" y2="14"></line>
-                    <circle cx="16" cy="11" r="1"></circle>
-                    <circle cx="18" cy="13" r="1"></circle>
-                </svg>
-                <span class="text-xs md:text-sm">Games <span class="opacity-50">({{ total_games }})</span></span>
-            </a>
-            {% if also_featured_groups %}
-                <a href="?tab=also_featured&sort={{ current_sort }}"
-                   hx-get="{% url 'franchise_detail' slug=object.slug %}?tab=also_featured&sort={{ current_sort }}"
-                   hx-target="#franchise-tab-content"
-                   hx-swap="innerHTML"
-                   hx-push-url="true"
-                   hx-indicator="#franchise-tab-content"
-                   data-franchise-tab
-                   role="tab"
-                   class="tab {% if current_tab == 'also_featured' %}tab-active{% endif %}"
-                   aria-selected="{% if current_tab == 'also_featured' %}true{% else %}false{% endif %}"
-                   title="Games where this franchise appears as a tie-in or featured IP">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                    </svg>
-                    <span class="text-xs md:text-sm">Also Featured <span class="opacity-50">({{ also_featured_count }})</span></span>
-                </a>
-            {% endif %}
-            {% if related_entries %}
-                <a href="?tab=series&sort={{ current_sort }}"
-                   hx-get="{% url 'franchise_detail' slug=object.slug %}?tab=series&sort={{ current_sort }}"
-                   hx-target="#franchise-tab-content"
-                   hx-swap="innerHTML"
-                   hx-push-url="true"
-                   hx-indicator="#franchise-tab-content"
-                   data-franchise-tab
-                   role="tab"
-                   class="tab {% if current_tab == 'series' %}tab-active{% endif %}"
-                   aria-selected="{% if current_tab == 'series' %}true{% else %}false{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                        <polyline points="2 17 12 22 22 17"></polyline>
-                        <polyline points="2 12 12 17 22 12"></polyline>
-                    </svg>
-                    <span class="text-xs md:text-sm">{{ related_entries_label }} <span class="opacity-50">({{ related_entries|length }})</span></span>
-                </a>
-            {% endif %}
+    {% comment %} Related rail: the opposite-type groupings that share games (series for a franchise, and vice
+    versa), rendered with the shared .pp-gtile. Mirrors the Genre/Theme detail related-tags rail. {% endcomment %}
+    {% if related_entries %}
+    <section class="pp-related">
+        <div class="pp-related__head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <h2 class="pp-related__title">Related {{ related_entries_label|lower }}</h2>
+            <span class="pp-related__sub">{% if is_series %}franchises this series belongs to{% else %}series within this franchise{% endif %}</span>
         </div>
+        <div class="pp-related__grid">
+            {% for entry in related_entries %}
+            {% include 'trophies/partials/tag_tile.html' with tag=entry detail_url_name='franchise_detail' item_type='franchise' %}
+            {% endfor %}
+        </div>
+    </section>
     {% endif %}
+</div>
+{% endblock %}
 
-    {% include 'partials/ad_unit.html' with ad_slot="8944812256" %}
-
-    {# -- Tab body (swap target for HTMX-driven tab + sort changes) -- #}
-    <div id="franchise-tab-content" class="transition-opacity duration-150">
-        {% include 'trophies/partials/franchise_detail/tab_content.html' %}
-    </div>
-
-    {% comment %}
-        Instant active-state feedback on tab click: HTMX swaps the body but
-        the tab bar lives outside the swap target, so the class flip has to
-        happen client-side. Re-applied on htmx:historyRestore (back/forward
-        cached snapshots reflect the right tab) without re-binding handlers,
-        since the tab bar DOM is preserved across swaps.
-    {% endcomment %}
-    <script>
-        (function () {
-            var tabs = document.querySelectorAll('[data-franchise-tabs] [data-franchise-tab]');
-            tabs.forEach(function (tab) {
-                tab.addEventListener('click', function () {
-                    tabs.forEach(function (t) {
-                        t.classList.remove('tab-active');
-                        t.setAttribute('aria-selected', 'false');
-                    });
-                    tab.classList.add('tab-active');
-                    tab.setAttribute('aria-selected', 'true');
-                });
-            });
-        })();
-    </script>
-
+{% block js_scripts %}
+    <script src="{% static 'js/franchise-detail.js' %}"></script>
 {% endblock %}

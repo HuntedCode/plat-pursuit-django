@@ -1,12 +1,14 @@
 {% load static %}
 
 {% comment %}
-Mobile bottom tab bar — the 4-hub navigation for <lg: viewports.
+Mobile bottom tab bar — the hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (Dashboard / Browse / Community /
-My Pursuit) at the bottom of the viewport so mobile users have one-tap
-access to every hub at all scroll positions. The desktop navbar's hub
-buttons are hidden on <lg: precisely because this bar takes over.
+Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Leaderboards /
+Support) at the bottom of the viewport so mobile users have one-tap access to
+every hub at all scroll positions. The desktop navbar's hub buttons are hidden
+on <lg: precisely because this bar takes over. My Pursuit is login-gated (the
+personal hub is), so logged-out visitors see 3 tabs; the flex `justify-around`
+inner distributes 3 or 4 evenly.
 
 The previous mobile chrome (search button + overlay, More drawer) was
 removed in the navbar consolidation: search was dropped site-wide because
@@ -15,59 +17,51 @@ redundant once the bottom tab bar surfaced the 4 hubs directly. The hubs'
 sub-pages are reachable via the hub_subnav strip pinned at top-16.
 
 Active state: each tab compares hub_section (from the hub_subnav context
-processor) and renders with text-primary when active. The Dashboard tab
-is also active when hub_section is None (e.g. settings, notifications)
-because tapping the Dashboard tab on a non-hub page should always feel
-correct — settings is "your account" which conceptually belongs under
-Dashboard.
+processor) and renders with text-primary when active. The My Pursuit tab is
+active on the personal hub (hub_section='my_pursuit', which owns the root /);
+non-hub pages (settings, auth, notifications) leave no tab highlighted.
 
 See docs/architecture/ia-and-subnav.md for the design rationale.
 {% endcomment %}
 
 <nav class="mobile-tabbar lg:hidden" role="navigation" aria-label="Mobile navigation">
     <div class="mobile-tabbar-inner">
-        <!-- Dashboard -->
-        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'dashboard' %}active{% endif %}" aria-label="Dashboard">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="9"/>
-                <rect x="14" y="3" width="7" height="5"/>
-                <rect x="14" y="12" width="7" height="9"/>
-                <rect x="3" y="16" width="7" height="5"/>
+        {% if user.is_authenticated %}
+        <!-- My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the personal hub is -->
+        <!-- login-gated, so for logged-out visitors it's just the hero the logo already reaches. -->
+        <a href="{% url 'career' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
-            <span>Dashboard</span>
+            <span>My Pursuit</span>
         </a>
+        {% endif %}
 
         <!-- Browse -->
-        <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" aria-label="Browse">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+        <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" {% if hub_section == 'browse' %}aria-current="page"{% endif %} aria-label="Browse">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
             </svg>
             <span>Browse</span>
         </a>
 
-        <!-- Community -->
-        <a href="{% url 'community_hub' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" aria-label="Community">
+        <!-- Leaderboards -->
+        <a href="{% url 'overall_badge_leaderboards' %}" class="mobile-tabbar-item {% if hub_section == 'leaderboards' %}active{% endif %}" {% if hub_section == 'leaderboards' %}aria-current="page"{% endif %} aria-label="Leaderboards">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
-            <span>Community</span>
+            <span>Leaderboards</span>
         </a>
 
-        <!-- My Pursuit -->
-        <a href="{% url 'my_pursuit_hub' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" aria-label="My Pursuit">
+        <!-- Support -->
+        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item {% if hub_section == 'support' %}active{% endif %}" {% if hub_section == 'support' %}aria-current="page"{% endif %} aria-label="Support">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                <path d="M4 22h16"/>
-                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
-            <span>My Pursuit</span>
+            <span>Support</span>
         </a>
+
     </div>
 </nav>

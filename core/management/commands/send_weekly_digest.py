@@ -1,6 +1,9 @@
 """
 Management command to send "This Week in PlatPursuit" community newsletter.
 
+DISABLED (2026-08) while the email system awaits its rebuild: `settings.WEEKLY_DIGEST_SEND_ENABLED`
+defaults to False and the command no-ops (except --dry-run) until it is flipped via the environment.
+
 Community-focused weekly email with site-wide stats, top platted games, review of
 the week, and condensed personal stats. Uses EmailLog for deduplication (no
 dedicated model).
@@ -24,6 +27,7 @@ Requirements:
 import logging
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -68,6 +72,19 @@ class Command(BaseCommand):
         profile_id = options.get('profile_id')
         force = options.get('force', False)
         batch_size = options.get('batch_size', 100)
+
+        # DISABLED (2026-08) with the rest of the non-vital emails, pending the email-system
+        # rebuild (same fail-safe pattern as MONTHLY_RECAP_SEND_ENABLED: the Render cron should
+        # be paused too, this flag exists so the command no-ops if it fires anyway).
+        # --dry-run is still allowed through: it writes nothing and sends nothing, and staying
+        # able to preview the queryset is the whole point of having it.
+        if not getattr(settings, 'WEEKLY_DIGEST_SEND_ENABLED', False) and not dry_run:
+            self.stdout.write(self.style.WARNING(
+                "Weekly digest sends are DISABLED (settings.WEEKLY_DIGEST_SEND_ENABLED is False).\n"
+                "No emails will be sent. Re-enable via the environment once the rebuilt email "
+                "system ships; --dry-run still previews."
+            ))
+            return
 
         self.stdout.write("=" * 70)
         self.stdout.write("This Week in PlatPursuit")

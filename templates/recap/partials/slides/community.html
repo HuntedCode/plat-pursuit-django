@@ -1,0 +1,50 @@
+{% comment %}
+Recap Slide: You vs the community
+Variables: game_name, game_image, your_completion, avg_completion, played_count, plats_earned_count,
+           beats_average, flavor_text
+
+The deck's only outward-looking beat -- every other slide is the hunter alone. Two bars on one baseline,
+because the whole point is the gap between them; two separate figures would make the reader do the
+subtraction. The hunter's bar takes the accent whether it wins or loses: being below average on a game you
+played all month is not a failure state, and colouring it as one would be the mobile-game tone the visual
+identity's anti-references warn about.
+
+Cover art follows the house rules: aspect-[3/4] with object-top, since PSN fallback art is wider than
+IGDB's cover and loses its logo without the anchor.
+{% endcomment %}
+<div class="rcp {% if beats_average %}rcp--accent-success{% endif %}">
+    <p class="rcp__kicker">You and everyone else on</p>
+
+    <div class="rcp-vs__head">
+        {% if game_image %}
+        <img class="rcp-vs__cover" src="{{ game_image }}" alt="" loading="lazy" draggable="false" />
+        {% endif %}
+        <h3 class="rcp-vs__game">{{ game_name }}</h3>
+    </div>
+
+    <div class="rcp__body">
+        <div class="rcp-vs">
+            <div class="rcp-vs__row rcp-vs__row--you">
+                <span class="rcp-vs__label">You</span>
+                <span class="rcp-vs__track">
+                    <span class="rcp-vs__fill" style="width: {{ your_completion }}%;"></span>
+                </span>
+                <span class="rcp-vs__pct pp-tally pp-tally--sm">{{ your_completion }}%</span>
+            </div>
+            <div class="rcp-vs__row">
+                <span class="rcp-vs__label">Everyone</span>
+                <span class="rcp-vs__track">
+                    <span class="rcp-vs__fill" style="width: {{ avg_completion }}%;"></span>
+                </span>
+                <span class="rcp-vs__pct pp-tally pp-tally--sm">{{ avg_completion }}%</span>
+            </div>
+        </div>
+
+        <p class="rcp__sub">
+            {{ played_count }} hunter{{ played_count|pluralize }} {{ played_count|pluralize:"has,have" }} played it{% if plats_earned_count %},
+            {{ plats_earned_count }} platinum{{ plats_earned_count|pluralize }} earned{% endif %}.
+        </p>
+    </div>
+
+    {% if flavor_text %}<p class="rcp__flavor">{{ flavor_text }}</p>{% endif %}
+</div>

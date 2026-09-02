@@ -1,0 +1,118 @@
+{% comment %}
+Controller for the first-run timezone prompt.
+
+Opening rules, in order:
+  1. The header button always opens it, on purpose, forever.
+  2. It opens BY ITSELF only when the server says the hunter has never confirmed a zone AND this device
+     has not dismissed it in the last 30 days. Both conditions, because they answer different questions:
+     the server stamp is "have you ever answered" (durable, cross-device) and localStorage is "not right
+     now" (per-device, and deliberately so -- a dismissal on a phone should not silence the prompt on a
+     desktop).
+
+     The local half EXPIRES, which it did not at first. A permanent flag meant one dismissal silenced the
+     prompt on that device forever, for someone who had never answered the question -- and it made the
+     admin's "clearing the stamp re-arms the prompt" false on any device that had closed the dialog once.
+
+The picker itself is loaded HERE, next to its only consumer. It used to be pulled in by the timezone
+utility row that sat further down the archive; that row was removed as a duplicate control and the tag
+went with it, which left this controller bailing on its own first line -- `TZ` undefined, `return`, no
+error anywhere. A silent guard over a missing dependency is a broken feature that looks like a working
+one, so the dependency travels with the thing that needs it now.
+{% endcomment %}
+{% load static %}
+<script src="{% static 'js/timezone-picker.js' %}"></script>
+<script>
+(function () {
+    const TZ = PlatPursuit.TimezonePicker;
+    const modal = document.getElementById('tz-modal');
+    const openBtn = document.getElementById('tz-open');
+    if (!TZ || !modal) { return; }
+
+    const DISMISS_KEY = 'pp.tz.prompt.dismissed';
+    // "Not right now" has to actually MEAN not right now. This was a permanent flag, so one dismissal
+    // silenced the prompt on that device forever -- for a hunter who had never answered the question.
+    // It also made the admin's "clearing the stamp re-arms the prompt" untrue on any device that had
+    // ever closed the dialog, which is where this was noticed.
+    const DISMISS_DAYS = 30;
+    const confirmed = {{ timezone_confirmed|yesno:"true,false" }};
+    const currentTz = '{{ user_timezone|escapejs }}';
+
+    const guess = TZ.detect();
+    const guessBox = document.getElementById('tz-modal-guess');
+    const guessZone = document.getElementById('tz-modal-guess-zone');
+    const pickBox = document.getElementById('tz-modal-pick');
+    const select = document.getElementById('tz-modal-select');
+    const confirmBtn = document.getElementById('tz-modal-confirm');
+    const confirmLabel = document.getElementById('tz-modal-confirm-label');
+    const otherBtn = document.getElementById('tz-modal-other');
+
+    // Fall straight through to the picker when the browser will not tell us where it is: a confirm button
+    // with nothing to confirm is a dead control.
+    let picking = !guess;
+    if (guess) {
+        guessZone.textContent = TZ.label(guess) + ' (' + guess + ')';
+        guessBox.hidden = false;
+    }
+    TZ.populate(select, currentTz);
+
+    function render() {
+        guessBox.hidden = picking || !guess;
+        pickBox.hidden = !picking;
+        otherBtn.hidden = picking || !guess;
+        confirmLabel.textContent = picking ? 'Save' : 'Use this';
+    }
+    render();
+
+    otherBtn.addEventListener('click', function () { picking = true; render(); select.focus(); });
+
+    function dismissedHere() {
+        try {
+            // A timestamp, not a flag. The old value was the literal '1', which parses to a 1970 stamp
+            // and so reads as long expired -- exactly the right answer for it, and no migration needed.
+            const at = parseInt(localStorage.getItem(DISMISS_KEY), 10);
+            if (!at) { return false; }
+            return (Date.now() - at) < DISMISS_DAYS * 86400000;
+        } catch (e) { return false; }
+    }
+    function rememberDismissal() {
+        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) { /* private mode */ }
+    }
+
+    confirmBtn.addEventListener('click', async function () {
+        const tz = picking ? select.value : guess;
+        if (!tz) { return; }
+        confirmBtn.disabled = true;
+        try {
+            const result = await TZ.save(tz);
+            // Close BEFORE reloading, so the page does not appear to freeze behind an open dialog.
+            modal.close();
+            if (result.changed) {
+                PlatPursuit.ToastManager.success('Timezone set. Rebuilding your months...');
+                setTimeout(function () { window.location.reload(); }, 1200);
+            } else {
+                PlatPursuit.ToastManager.success('Timezone confirmed.');
+            }
+        } catch (err) {
+            PlatPursuit.ToastManager.error(err.message);
+            confirmBtn.disabled = false;
+        }
+    });
+
+    // Any close that is not a successful save counts as "not now" on this device. Confirming stamps the
+    // server flag instead, which outranks this and works everywhere.
+    modal.addEventListener('close', rememberDismissal);
+
+    if (openBtn) {
+        openBtn.addEventListener('click', function () {
+            picking = false; render();          // reopening starts from the guess again, not mid-flow
+            confirmBtn.disabled = false;
+            modal.showModal();
+        });
+    }
+
+    if (!confirmed && !dismissedHere()) {
+        // A frame's grace so the prompt lands on a painted page rather than over a blank one.
+        requestAnimationFrame(function () { modal.showModal(); });
+    }
+})();
+</script>

@@ -1,0 +1,173 @@
+/* ============================================================================
+ * HOME -- premium motion touches for the synced landing.
+ *   - Entrance settle: the sections below the Pursuer Card rise + fade in, staggered.
+ *   - Hover glows: navigator (launcher) icons warm to a soft glow on hover.
+ * Count-ups on the headline numbers are handled in static/js/home-motion.js.
+ * ========================================================================== */
+
+/* Each section below the hero settles in on load. Pure CSS: the `both` fill applies the hidden
+   `from` state from the first paint (no FOUC, no JS needed), and the per-section stagger (--rev)
+   reads as the page assembling itself. Reduced-motion opts out (content is simply present). */
+.home-reveal { animation: homeSettle 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--rev, 0) * 0.07s); }
+@keyframes homeSettle { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* Premium micro-touch: the navigator (launcher) icons warm to a soft glow on hover. The resting
+   state carries a ZERO-blur drop-shadow of the same colour (invisible), not `none`, so the hover
+   only grows the blur (0 -> 7px) and the glow fades in/out -- browsers can't interpolate
+   `none` -> drop-shadow, which pops. */
+/* ---- Welcome-back header. The lobby's page-header card: identity, freshness, one headline number. ---- */
+.home-hi__av { flex: none; width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: var(--pp-bg-2); box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 45%, transparent), 0 0 0 4px var(--pp-bg-1); }
+@media (min-width: 768px) { .home-hi__av { width: 60px; height: 60px; } }
+.home-hi__av img, .home-hi__av svg { width: 100%; height: 100%; object-fit: cover; }
+.home-hi__eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
+.home-hi__name { font-family: var(--pp-font-display); font-size: clamp(1.35rem, 3.2vw, 1.9rem); font-weight: 800; line-height: 1.1; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-hi__sync { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 12.5px; color: var(--pp-text-dim); }
+/* The freshness dot BREATHES while the data is current and sits still once an update is due -- the state
+   is the animation, so it reads without being read. */
+.home-hi__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--pp-text-mute); }
+.home-hi__dot.is-ready { background: var(--pp-success); box-shadow: 0 0 0 0 color-mix(in oklab, var(--pp-success) 60%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+    .home-hi__dot.is-ready { animation: homeBreathe 3.2s ease-in-out infinite; }
+}
+@keyframes homeBreathe {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(94, 234, 190, 0.55); }
+    50%      { box-shadow: 0 0 0 5px rgba(94, 234, 190, 0); }
+}
+.home-hi__sync-btn { padding: 0; border: none; background: none; font: inherit; font-weight: 700; color: var(--pp-primary); cursor: pointer; }
+.home-hi__sync-btn:hover { text-decoration: underline; }
+.home-hi__sync-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+.home-hi__tally { flex: none; min-width: 190px; text-align: center; }
+
+/* ---- The two moats. The lobby's whole outbound job: two destinations at band weight, each carrying a
+ * live tease. Career takes the accent (it is the identity), Collection sits one step back -- one accent
+ * per surface, and the trophy block above already spends the primary on its numbers. ---- */
+.home-moats { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 768px) { .home-moats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.home-moat {
+    position: relative; display: flex; align-items: center; gap: 14px; overflow: hidden;
+    padding: 16px 18px; border-radius: var(--pp-radius-lg); text-decoration: none;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+/* Career's ambient tint is its dominant discipline -- the same signal Career's own hero glows with, so
+   the two surfaces agree at a glance. Falls back to the brand accent for a Pursuer with no dominant. */
+.home-moat--career::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--dominant, var(--pp-primary)) 20%, transparent), transparent 62%);
+}
+.home-moat--career { border-left: 3px solid color-mix(in oklab, var(--dominant, var(--pp-primary)) 55%, var(--pp-border)); }
+@media (hover: hover) {
+    .home-moat:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 10px 26px rgba(0, 0, 0, 0.36); }
+}
+.home-moat:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+.home-moat__body { position: relative; z-index: 1; display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.home-moat__eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
+.home-moat__name { font-family: var(--pp-font-display); font-size: clamp(1.05rem, 2vw, 1.3rem); font-weight: 800; line-height: 1.15; color: var(--pp-text); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-moat__rank { font-size: 12.5px; color: var(--pp-text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-moat__go { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--pp-primary); }
+/* The body is a stretch column so the name/rank can ellipsis against its width -- but the chip and the
+   go-link are content-width things, and stretching them drew a full-width pill and a full-width hit area
+   for a short label. align-self, not a container change, so the truncation above keeps working. */
+.home-moat__body .hero-disc-chip, .home-moat__go { align-self: flex-start; }
+.home-moat__arrow { transition: transform 0.18s ease; }
+@media (hover: hover) { .home-moat:hover .home-moat__arrow { transform: translateX(3px); } }
+
+.home-moat__ring { position: relative; z-index: 1; flex: none; }
+.home-moat__ring--glyph { width: 76px; height: 76px; display: grid; place-items: center; color: var(--pp-text-mute); opacity: 0.55; }
+
+/* Recently-earned medallions on the Collection CTA. Three at most: a GLANCE that teases the wall, never
+   the wall embedded. They shrink hard on mobile so the CTA stays one comfortable row beside its text. */
+.home-moat__meds { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 8px; flex: none; }
+.home-moat__med { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.home-moat__med .pp-med { --sz: 54px; }
+@media (min-width: 1024px) { .home-moat__med .pp-med { --sz: 64px; } }
+.home-moat__med-when { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--pp-text-mute); white-space: nowrap; }
+/* Past two, the row competes with the text for a narrow card -- so the oldest drops out below md. */
+@media (max-width: 767px) { .home-moat__med:nth-child(n+3) { display: none; } }
+.home-moat__ring--glyph svg { width: 42px; height: 42px; }
+
+/* ---- D. The moats respond BEFORE you commit -- the object reacts to approach, not just to the click.
+ * Transform / opacity / animation-duration only, so nothing reflows and nothing repaints a filter. ---- */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    /* Career: the glow blooms and the ring leans forward slightly. The ring also SPEEDS UP, but that
+       part is deliberately not here -- CSS can only change `animation-duration`, which re-maps elapsed
+       time and makes labDnaSpin snap to a different angle (the flip). home-motion.js does it with
+       updatePlaybackRate() instead, which preserves the current time. The primitive's own pause-on-hover
+       still wins when you point at the ring itself. */
+    .home-moat--career .lab-dna { transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .home-moat--career:hover .lab-dna { transform: scale(1.05); }
+    .home-moat--career::after { transition: opacity 0.25s ease, transform 0.25s ease; }
+    .home-moat--career:hover::after { opacity: 1; transform: scale(1.06); }
+
+    /* Collection: each medallion rises only when IT is hovered -- a straight lift, no tilt. An earlier
+       cut fanned all three at an angle whenever the card was hovered; it drew the eye away from the
+       thing being pointed at and made a badge you were not touching move. The object you point at is
+       the object that responds. */
+    .home-moat__med { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .home-moat__med:hover { transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-reveal { animation: none; }
+    .home-moat, .home-moat__arrow, .home-moat__med, .home-moat--career .lab-dna { transition: none; }
+}
+
+/* ---- E. Mobile fit. The lobby ran 3.2 screens at 375; the standard prefers compacting AIRINESS over
+ * scrolling. Padding, gaps and the marquee come down on small screens and are restored at md: -- nothing
+ * that carries weight (the counts themselves, the medallions) is shrunk. ---- */
+@media (max-width: 767px) {
+    /* The headline stat stops being a card and becomes a line: same information, ~60px less page. The
+       scard chrome is what costs the height, not the number. */
+    .home-hi__tally {
+        min-width: 0; width: 100%; display: flex; align-items: baseline; gap: 8px;
+        padding: 0; border: none; background: none; box-shadow: none; text-align: left;
+    }
+    .home-hi__tally .scard__label { margin-bottom: 0; order: 2; }
+    .home-hi__tally .scard__value { order: 1; font-size: 22px; }
+    .home-hi__tally .scard__sub { display: none; }          /* "across N games" is in the row below */
+    .home-moat { padding: 13px 14px; gap: 10px; }
+    .home-moat__go { margin-top: 9px; }
+    .home-marquee__track { gap: 8px; }
+    /* Two of the six secondary figures are the ones nobody scrolls a phone for -- omitted here and
+       restored at md:, which is the standard's "omit the expendable rather than scroll". */
+    .home-secondary [data-mobile-drop] { display: none; }
+}
+
+/* ── The 1.0 launch greeting's flourish (partials/home/_launch_welcome.html) ─────
+   Lives here, not with the badge-series styles it was first parked beside: this is
+   lobby chrome. The exit animation stays in series-list.css beside its pp-howto
+   siblings, which is the one part that IS shared with the other howto modals. */
+.lwm__standing {
+    display: flex; align-items: center; justify-content: center; gap: 0.9rem;
+    margin-top: 1.1rem; padding: 0.8rem 0.9rem; border-radius: 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 25%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
+    text-align: left;
+}
+/* The five disciplines, in the Career dossier band's own chip idiom (.jdoss__ic): a
+   disc-tinted rounded square with the icon in that discipline's colour, name beneath.
+   Five across at every width -- they are the axes, and a wrapped axis reads as a list. */
+.lwm__standing--stack { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+.lwm__discs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem; }
+.lwm__disc { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-width: 0; }
+.lwm__disc-ic {
+    width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
+    background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent);
+    color: var(--disc);
+}
+.lwm__disc-ic svg { width: 18px; height: 18px; }
+.lwm__disc-n {
+    font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 10px;
+    letter-spacing: 0.03em; color: var(--disc); text-align: center; line-height: 1.1;
+}
+@media (min-width: 768px) {
+    .lwm__disc-ic { width: 38px; height: 38px; }
+    .lwm__disc-ic svg { width: 21px; height: 21px; }
+    .lwm__disc-n { font-size: 11.5px; }
+}
+.lwm__line { font-size: 0.82rem; line-height: 1.55; color: var(--pp-text-dim); }
+.lwm__line b { color: var(--pp-text); }

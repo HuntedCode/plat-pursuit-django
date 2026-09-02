@@ -1,8 +1,7 @@
-{% load humanize %}
-{% include 'partials/pagination.html' with position='top' show_page_jump=True anchor='filter-form' %}
-
-<div id="items-grid" class="space-y-1.5 md:space-y-2">
+{% comment %} Series results: the rows grid InfiniteScroller appends into. No page pager -- scrolling appends
+the next page (the sentinel/loader live in series_view.html, outside this swapped region). {% endcomment %}
+{# Total for this filter -- read off the swapped content to tick the header count old->new (see badge_list.html). #}
+<span hidden data-result-count="{{ paginator.count }}"></span>
+<div id="items-grid" class="pp-slist__rows">
     {% include 'trophies/partials/badge_list/badge_list_items.html' %}
 </div>
-
-{% include 'partials/pagination.html' with position='bottom' show_page_jump=False anchor='filter-form' %}

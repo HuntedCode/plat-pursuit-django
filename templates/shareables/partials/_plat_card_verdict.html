@@ -1,0 +1,18 @@
+{% comment %} The verdict pill on a plat card.
+
+A partial only because the colour has to be chosen with `{% if %}` (this template is inline-styled for
+Playwright -- there is no stylesheet and no custom properties, so a `--rec-c` cannot carry it), and three
+copies of the pill differing by one hex is exactly the drift this feature keeps removing. The caller picks
+`rec_c` and includes this once.
+
+Expects `rec_c` (a literal hex) and `user_rating` (with `recommendation` + `recommendation_label`).
+
+`color` is set on the pill so the shared glyph's `stroke="currentColor"` picks the same hue up, which is
+the whole reason that partial does not colour itself.
+{% endcomment %}
+<div style="display: flex; margin-top: 18px;">
+    <div style="display: inline-flex; align-items: center; gap: 10px; padding: 9px 17px 9px 14px; border-radius: 999px; color: {{ rec_c }}; background: {{ rec_c }}1f; border: 1px solid {{ rec_c }}59;">
+        {% include 'partials/_recommendation_icon.html' with value=user_rating.recommendation size=22 %}
+        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: -0.01em;">{{ user_rating.recommendation_label }}</span>
+    </div>
+</div>

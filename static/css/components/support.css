@@ -1,0 +1,1143 @@
+/* ============================================================================================
+   Support / membership storefront (`/support/`)
+   --------------------------------------------------------------------------------------------
+   A PERSUASION surface, which is rare here: nearly every other rebuilt page presents a hunter's
+   own data. Three things follow from that.
+
+   IT STILL LIVES ON CARDS. An earlier version set prose directly on the page substrate and read as
+   foreign, because nothing else on this site does that. "Free content" here means page-filling
+   grids of items, never paragraphs -- a discrete prose or stats section still gets a surface. So
+   the section chrome is the standard `card bg-base-200/90 border-2 border-base-300` and only the
+   INSIDES are bespoke.
+
+   DENSITY. Data pages are dense because they are scanned; this one is read. Type runs larger than a
+   dashboard's and the measure is capped in `ch`, but inside the normal card rhythm rather than
+   floating in space.
+
+   RESTRAINT. One accent (the cyan primary) carries the page. The six level hues are the single
+   exception; they live in `users/constants.py` (the palette note is there) and are deliberately
+   not the trophy metals.
+   ============================================================================================ */
+
+/* -------------------------------------------------------------------------- split header ---- */
+/* A WASH, not a flat panel. The first version of this page used the bare card background and every
+   piece of text on it came from `--pp-text-mute` or `--pp-text-dim`; measured, more than half the
+   colour calls in this file were the most muted token available. Grey on grey reads as calm on a
+   data page and as drab on a page with no data, which is what this one is.
+   Two cool hues laid across the card, both far too faint to read as decoration, so the surface has
+   somewhere to go rather than sitting at one value from edge to edge. */
+.sup-headcard .card-body {
+    background:
+        radial-gradient(120% 90% at 8% 0%, color-mix(in oklab, var(--pp-primary) 9%, transparent) 0%, transparent 58%),
+        radial-gradient(90% 80% at 100% 100%, color-mix(in oklab, var(--pp-secondary) 8%, transparent) 0%, transparent 62%);
+    border-radius: inherit;
+}
+
+.sup-head {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 22px;
+    align-items: start;
+}
+
+/* The ask sits beside the statement rather than below four sections of argument. Slightly narrower
+   than the copy so the eye lands on the words first and the box second. */
+@media (min-width: 900px) {
+    .sup-head { grid-template-columns: 1.15fr 0.85fr; gap: 34px; }
+}
+
+.sup-head__eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--pp-primary);
+}
+
+.sup-head__h1 {
+    margin-top: 10px;
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: clamp(1.75rem, 5.4vw, 2.7rem);
+    font-weight: 800;
+    line-height: 1.09;
+    letter-spacing: -0.025em;
+    color: var(--pp-text);
+    text-wrap: balance;
+}
+
+/* The lede is the ASK, so it sits at full text colour rather than the dimmed body value this file
+   was using everywhere. Dimming the one paragraph that has to persuade was most of why the header
+   read as flat. */
+.sup-head__lede {
+    margin-top: 14px;
+    font-size: 0.98rem;
+    line-height: 1.68;
+    color: var(--pp-text);
+    max-width: 52ch;
+}
+
+/* ------------------------------------------------------------------------- header artwork ---- */
+/* The commissioned drawings, which are the moat and were the thing this page conspicuously lacked.
+   They also carry nearly all of its colour: the palette elsewhere is deliberately restrained, and
+   the art is what stops that restraint reading as absence. */
+.sup-head__art { margin-top: 22px; }
+
+.sup-art {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.sup-art__cell {
+    width: clamp(46px, 11vw, 66px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+}
+
+/* `object-contain`: badge art is a transparent, custom-shaped drawing, never a photo to crop. */
+.sup-art__cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.4));
+}
+
+/* Alternating lift, so the row reads as an arrangement rather than a filmstrip. Nothing moves on
+   hover: these are not interactive and should not pretend to be. */
+/* On the IMG, not the cell: the cell runs ppRevealIn, whose last frame is `transform: none` -- an
+   offset on the animated element is wiped the instant the entrance ends, which read as the row
+   snapping 6px at settle. */
+.sup-art__cell:nth-child(even) img { transform: translateY(6px); }
+
+.sup-art__cap {
+    margin-top: 12px;
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: var(--pp-text-mute);
+    max-width: 46ch;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .sup-art__cell {
+        animation: ppRevealIn 0.6s var(--pp-ease) backwards;
+        animation-delay: calc(var(--i, 0) * 80ms + 260ms);
+    }
+}
+
+/* --------------------------------------------------------------------- we currently serve ---- */
+/* The factual floor under the ask: people, their work, their wins, their time. Numbers lead and the
+   labels sit under them, because the figures are the point and the words only name them. */
+.sup-serve {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--pp-border);
+}
+
+.sup-serve__k {
+    font-size: 0.63rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.sup-serve__row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px 16px;
+    margin-top: 12px;
+}
+
+@media (min-width: 560px) { .sup-serve__row { grid-template-columns: repeat(4, 1fr); } }
+
+.sup-serve__cell dd {
+    font-size: 1.35rem;
+    line-height: 1.05;
+    color: var(--pp-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.sup-serve__cell dt {
+    margin-top: 3px;
+    font-size: 0.66rem;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+/* The <dl> reads value-then-label visually while staying label-then-value in the DOM, which is the
+   order assistive tech needs. */
+.sup-serve__cell { display: flex; flex-direction: column-reverse; align-items: flex-start; }
+
+@media (min-width: 768px) { .sup-serve__cell dd { font-size: 1.6rem; } }
+
+@media (min-width: 768px) {
+    .sup-head__lede { font-size: 1rem; }
+
+}
+
+/* ------------------------------------------------------------------------------- the box ---- */
+/* A nested surface, so it steps UP the depth ladder (bg-1 -> bg-2) rather than lightening toward
+   the page. Deepening is how this codebase separates nested things. */
+.sup-box {
+    padding: 16px;
+    border-radius: var(--pp-radius-lg);
+    border: var(--pp-border-w) solid color-mix(in oklab, var(--pp-primary) 22%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 6%, transparent) 0%, transparent 40%),
+        var(--pp-bg-2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+@media (min-width: 768px) { .sup-box { padding: 20px; } }
+
+.sup-box__switch { width: 100%; justify-content: center; }
+.sup-box__switch .pp-switch__chip { flex: 1; justify-content: center; cursor: pointer; }
+
+/* --------------------------------------------------------------- the amount grid + tier ---- */
+/* AMOUNT FIRST, TIER DERIVED. Six rows each with their own button read as a form; a grid of amounts
+   plus one action reads as a single decision, which is what it is. Borrowed from Blender's
+   Development Fund widget, which solves exactly this problem.
+
+   All of it is `:has(:checked)` off real radios, so the cycle switch and the amount grid both work
+   with JavaScript off. Nothing here depends on the script at the bottom of the page. */
+
+.sup-buy { display: block; }
+
+/* THE CYCLE FLIPS ON THE RADIOS THEMSELVES, like the tier reveal -- not on a data-cycle
+   attribute. The attribute was set only by JS, which made the switch dead with scripts off while
+   the page (and a test) claimed the box was CSS-driven: a user who picked Yearly saw monthly prices
+   and would have submitted a cycle they were never shown. */
+
+/* The yearly chip's bonus pill: always rendered (the box must not resize between tabs), tinted
+   by the selected level through --sup-t like everything else in the box. */
+.sup-cycle__bonus {
+    font-size: 0.65rem;   /* it is a pricing promise, not a chart legend -- the 12px-floor rule's
+                             micro-label carve-out does not cover it */
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--sup-t, var(--pp-primary)) 40%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t, var(--pp-primary)) 12%, transparent);
+    color: var(--pp-text-mute);   /* the CHECKED chip owns the brightness hierarchy... */
+    white-space: nowrap;
+}
+
+/* ...and the pill brightens with its chip. */
+.pp-switch__chip:has(input:checked) .sup-cycle__bonus { color: var(--pp-text); }
+
+/* Narrow phones: chips may shrink below min-content (min-width: 0 re-arms wrapping, which
+   flex-basis: 0 otherwise disables) and the pill drops under its label instead of spilling
+   past the switcher's border. */
+.sup-box__switch .pp-switch__chip { min-width: 0; }
+
+@media (max-width: 420px) {
+    .sup-box__switch .pp-switch__chip { flex-wrap: wrap; row-gap: 2px; }
+    .sup-cycle__bonus { flex-basis: 100%; justify-content: center; display: inline-flex; }
+}
+
+.sup-box__perklink {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.76rem;
+    color: var(--pp-text-dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.sup-box__perklink:hover { color: var(--pp-text); }
+
+.sup-box__perklink:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+/* The beta-only store preview toggle (display escape hatch; POST guard untouched). */
+.sup-box__betapeek {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: var(--pp-text-mute);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.sup-box__betapeek-note {
+    margin-bottom: 10px;
+    font-size: 0.74rem;
+    color: var(--pp-text-mute);
+}
+
+.sup-box__betapeek-note a { color: var(--pp-primary); text-decoration: underline; text-underline-offset: 3px; }
+
+/* THE ROADMAP BAND (data-sup-road): the pitch's forward look. Head row, then three tier cells,
+   each wearing the roadmap page's chip primitive and up to three feature miniatures. */
+.sup-road__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.sup-road__k {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+.sup-road__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--pp-primary);
+    text-decoration: none;
+}
+
+.sup-road__link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.sup-road__link:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+.sup-road__link svg { width: 13px; height: 13px; }
+
+
+.sup-road__tiers {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px 18px;
+    margin-top: 14px;
+}
+
+@media (min-width: 768px) {
+    .sup-road__tiers { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* The chip is the roadmap page's primitive at band scale; variants come from
+   support-roadmap.css via the cell's is-* class. */
+.sup-road__cell .rm-tier__chip {
+    font-size: 0.62rem;
+    padding: 3px 9px;
+}
+
+/* Each feature is the page's rm-feat card in MINIATURE: its own little surface + icon tile,
+   stacked under the tier chip. Icon tier-tints come from support-roadmap.css via the cell's
+   is-* class, same as the chips. */
+.sup-road__cell dd { margin-top: 8px; }
+
+.sup-road__cell dd ul {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sup-road__feat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 0.76rem;
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--pp-text-dim);
+}
+
+.sup-road__feat .rm-feat__icon {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--pp-radius-sm);
+}
+
+.sup-road__feat .rm-feat__icon svg { width: 13px; height: 13px; }
+
+/* Mobile fit: at base width the band stacks to a single column, and three miniatures per tier
+   ran it to ~535px -- four-fifths of an iPhone SE viewport sitting between the ask and the
+   supporter-count proof. Two per tier below md keeps the tease and returns ~110px. */
+@media (max-width: 767px) {
+    .sup-road__cell .sup-road__feat:nth-child(3) { display: none; }
+}
+
+/* 3 across, 2 rows. Six amounts, six levels, one to one. */
+.sup-amts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    margin-top: 14px;
+    border: 0;
+    padding: 0;
+}
+
+.sup-amt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 9px 6px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.05);
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--pp-text);
+    cursor: pointer;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease),
+                background var(--pp-dur-fast) var(--pp-ease),
+                color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-amt:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--sup-t) 45%, var(--pp-border)); }
+
+/* The selected amount carries its own level's hue, so picking a number is visibly picking a level
+   even before the block below names it. */
+.sup-amt:has(input:checked) {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--sup-t) 65%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t) 16%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--sup-t) 30%, transparent),
+                0 4px 16px color-mix(in oklab, var(--sup-t) 18%, transparent);
+}
+
+/* Keyboard focus has to be visible on a label wrapping an `sr-only` radio. */
+.sup-amt:focus-within {
+    outline: 2px solid color-mix(in oklab, var(--sup-t) 70%, transparent);
+    outline-offset: 2px;
+}
+
+/* One face at a time. Both ship in the markup so the switch is a state change, not a round trip. */
+.sup-amt__y { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-amt__m { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-amt__y { display: block; }
+
+
+/* The mark's containers. The mark itself lives in `components/supporter.css` -- it is site-wide and
+   leaderboards must not end up depending on the storefront's stylesheet to draw a username. */
+.sup-stars,
+.sup-becomes__stars { display: inline-flex; align-items: center; gap: 1px; }
+
+.sup-becomes__stars .pp-supstar { width: 13px; height: 13px; }
+
+/* --------------------------------------------------------------------- what you become ---- */
+/* All six ship; the checked amount reveals its own. Pure CSS, no JS involved. */
+.sup-becomes { display: none; }
+
+.sup-box:has(.sup-amt input[value="backer"]:checked) .sup-becomes[data-for="backer"],
+.sup-box:has(.sup-amt input[value="contributor"]:checked) .sup-becomes[data-for="contributor"],
+.sup-box:has(.sup-amt input[value="patron"]:checked) .sup-becomes[data-for="patron"],
+.sup-box:has(.sup-amt input[value="sponsor"]:checked) .sup-becomes[data-for="sponsor"],
+.sup-box:has(.sup-amt input[value="benefactor"]:checked) .sup-becomes[data-for="benefactor"],
+.sup-box:has(.sup-amt input[value="cornerstone"]:checked) .sup-becomes[data-for="cornerstone"] {
+    display: block;
+}
+
+.sup-becomes { margin-top: 16px; }
+
+.sup-becomes__h {
+    font-size: 0.82rem;
+    color: var(--pp-text-dim);
+}
+
+.sup-becomes__h b {
+    font-family: var(--pp-font-display), sans-serif;
+    color: var(--sup-t);
+    font-weight: 800;
+}
+
+/* ------------------------------------------------------------------- the level preview ---- */
+/* PLACEHOLDER. What belongs here is the supporter mark shown IN CONTEXT -- your own name on a real
+   leaderboard row, wearing the level you are about to pick. That is the most persuasive thing this
+   box could show and the reason it is worth designing properly rather than approximating, so this
+   is deliberately a mock: real geometry, real name, stand-in mark. The caption says so.
+
+   Geometry is taken from the leaderboard row rather than invented, so replacing it later is a swap
+   rather than a redesign. */
+.sup-prev {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    margin-top: 9px;
+    padding: 9px 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--sup-t) 30%, var(--pp-border));
+    background:
+        linear-gradient(90deg, color-mix(in oklab, var(--sup-t) 10%, transparent) 0%, transparent 55%),
+        var(--pp-bg-1);
+}
+
+.sup-prev__rank {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+.sup-prev__av {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--sup-t) 40%, var(--pp-border));
+}
+
+.sup-prev__av img,
+.sup-prev__av svg { width: 100%; height: 100%; object-fit: cover; }
+
+/* Name over sub-line, which is the shape a real leaderboard row already uses. */
+.sup-prev__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+}
+
+.sup-prev__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    font-size: 0.84rem;
+    font-weight: 650;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Matched to `.lb-row__title` in `components/leaderboards.css` -- 10.5px, muted, clamped to one.
+   An earlier version copied `leaderboard_user_cell.html` instead, which LOOKS like the leaderboard
+   row and is actually orphaned legacy: nothing includes it, and its 0.6rem accent-coloured line is
+   not what a board renders. Matching the live row is the whole point of the preview, since the
+   promise it makes is "this is how you will appear".
+
+   The level joins the worn title after a dot IN WORDS, so a reader sees what a supporter is instead
+   of decoding a star count. `pr-1` because italic glyphs slant past a clamped box. */
+.sup-prev__sub {
+    font-size: 10.5px;
+    font-style: italic;
+    color: var(--pp-text-mute);
+    line-height: 1.2;
+    padding-right: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The stand-in mark, in context beside the name.
+   It is a CONTAINER for the level's stars, not a shape of its own. It used to be a single 11px pip
+   with a gradient, and when the stars replaced the pip that fixed width stayed behind and crushed
+   all five of them into the space of one -- which looked exactly like the mark never escalating.
+   Sized by its contents now, like every other star row. */
+.sup-prev__mark {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.sup-prev__score {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--pp-text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------------------- what you get ---- */
+/* The first line is identical at every level and opens the modal, because the answer does not change
+   with the amount. Stating that at the moment of choosing is the model made visible. */
+.sup-gets {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 14px;
+}
+
+.sup-gets li {
+    position: relative;
+    padding-left: 19px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--pp-text);
+}
+
+.sup-gets li::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 0.4em;
+    width: 8px;
+    height: 4px;
+    border-left: 2px solid var(--sup-t);
+    border-bottom: 2px solid var(--sup-t);
+    transform: rotate(-45deg);
+}
+
+.sup-gets__modal {
+    font: inherit;
+    color: var(--pp-text);
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: color-mix(in oklab, var(--sup-t) 60%, transparent);
+    cursor: pointer;
+    transition: text-decoration-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-gets__modal:hover { text-decoration-color: var(--sup-t); }
+
+/* ---------------------------------------------------------------------- the perks link ---- */
+
+
+/* ------------------------------------------------------------------------------ the CTA ---- */
+/* Side by side (decided 2026-08-21; they were stacked first), with the primary DOMINANT: most
+   people pay by card, so the alternative sits beside it at ~60/40, not equal. flex-wrap is the
+   responsive story -- when the box gets too tight for both min-widths, PayPal wraps below and the
+   pair is simply stacked again, no breakpoint needed. */
+.sup-pays {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.sup-buy__go {
+    position: relative;   /* the floating-star emitter positions against the button */
+    flex: 1.6 1 0;
+    /* 200, not 170: at 170 the side-by-side threshold fell at ~386px viewport, so the most
+       common phones (390/393) got the pair 4-7px inside it and "Become a Cornerstone" wrapped
+       into a lopsided two-line button at the exact moment of conversion. At 200 those widths
+       wrap to the stacked layout instead, which is the intended narrow behaviour. */
+    min-width: 200px;
+    padding: 12px 16px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--sup-t) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--sup-t) 20%, transparent);
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: var(--pp-text);
+    cursor: pointer;
+    transition: background var(--pp-dur-fast) var(--pp-ease),
+                border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-buy__go:hover:not(:disabled) {
+    /* LONGHAND on purpose: the shorthand resets background-image/size/position, and this rule
+       also matches the PayPal button at higher specificity than its gradient -- the shorthand
+       version erased the flow the moment you hovered it. */
+    background-color: color-mix(in oklab, var(--sup-t) 30%, transparent);
+    border-color: color-mix(in oklab, var(--sup-t) 75%, var(--pp-border));
+}
+
+.sup-buy__go:active:not(:disabled) { transform: translateY(1px); }
+
+.sup-buy__go:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+/* FLOATING STARS on the primary button -- the enticement layer. Each star launches from inside
+   the button and drifts up past its top edge, staggered so the emission never reads as a loop.
+   All variation is per-star custom props consumed by the ppStarRise keyframes (motion.css);
+   transform + opacity only, so this stays off the compositor's naughty list. The fill rides
+   --sup-t, so the stars ALWAYS wear the currently selected level's colour. */
+.sup-go__rise {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;         /* stars bubble up THROUGH the button, never past it */
+    border-radius: calc(var(--pp-radius-sm) - 1px);   /* the clip box sits inside the 1px border;
+                                                         inheriting the outer radius left a
+                                                         sub-pixel corner seam */
+    pointer-events: none;
+}
+
+.sup-go__risestar {
+    position: absolute;
+    bottom: -12px;            /* below the clip edge: each star EMERGES rather than appears */
+    width: 14px;
+    height: 14px;
+    fill: var(--sup-t, var(--pp-accent));
+    opacity: 0;
+}
+
+/* Declared under no-preference like every other ambient motion (the reduce-block display:none
+   on .sup-go__rise stays as the belt -- a static stack of stars reads as a glitch). */
+@media (prefers-reduced-motion: no-preference) {
+    .sup-go__risestar {
+        animation: ppStarRise var(--rise-t, 5s) ease-out var(--rise-d, 0s) infinite;
+    }
+}
+
+/* Five launch lanes: positions, tempos and drifts co-prime enough that the pattern takes ~half a
+   minute to visibly repeat. The two smaller stars read as further away. */
+.sup-go__risestar:nth-child(1) { left: 10%; --rise-t: 5.3s; --rise-d: 0s;    --rise-x: -7px; --rise-r: -16deg; }
+.sup-go__risestar:nth-child(2) { left: 29%; --rise-t: 6.1s; --rise-d: 2.3s;  --rise-x: 5px;  --rise-r: 20deg; width: 11px; height: 11px; }
+.sup-go__risestar:nth-child(3) { left: 51%; --rise-t: 4.7s; --rise-d: 1.2s;  --rise-x: -4px; --rise-r: 12deg; }
+.sup-go__risestar:nth-child(4) { left: 72%; --rise-t: 5.9s; --rise-d: 3.6s;  --rise-x: 8px;  --rise-r: -22deg; width: 11px; height: 11px; }
+.sup-go__risestar:nth-child(5) { left: 89%; --rise-t: 4.9s; --rise-d: 2.9s;  --rise-x: -6px; --rise-r: 15deg; }
+
+/* An unpressable button must not advertise. */
+.sup-buy__go:disabled .sup-go__rise { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .sup-go__rise { display: none; }
+}
+
+/* Inert while the ladder is design-only. Still legible: this is the shape under review, so it must
+   be obviously unpressable without being greyed into illegibility. */
+.sup-buy__go:disabled { cursor: default; opacity: 0.6; }
+
+/* Quieter than the card button: an alternative, not a competitor -- but not bland. It runs THE
+   CURRENT: the same ppSupFlow water the supporter name wears (shared keyframes, shared invisible-
+   wrap gradient recipe: flat first and last thirds, an irregular train of bands between), drifting
+   the selected level's hue across the fill. Slower than the name's 16s because this is a surface,
+   not a headline. Two ambient motions, two characters: the primary RISES, the alternative FLOWS.
+
+   The band strengths live in custom props so hover can deepen the water without swapping the
+   gradient; color-mix stays out here in the rule, never in keyframes (the lightningcss trap). */
+.sup-buy__go--pp {
+    --flow-base: color-mix(in oklab, var(--sup-t) 6%, transparent);
+    --flow-band: color-mix(in oklab, var(--sup-t) 15%, transparent);
+    --flow-crest: color-mix(in oklab, var(--sup-t) 22%, transparent);
+    background-color: transparent;
+    background-image: linear-gradient(
+        100deg,
+        var(--flow-base) 0%,
+        var(--flow-base) 30%,
+        var(--flow-band) 37%,
+        var(--flow-base) 45%,
+        var(--flow-crest) 54%,
+        var(--flow-base) 59%,
+        var(--flow-band) 65%,
+        var(--flow-base) 70%,
+        var(--flow-base) 100%
+    );
+    background-size: 300% 100%;
+    background-position: 0% 50%;
+    border-color: color-mix(in oklab, var(--sup-t) 22%, var(--pp-border));
+    color: var(--pp-text);
+    font-size: 0.85rem;
+    flex: 1 1 0;
+    min-width: 104px;
+}
+
+/* The animation only EXISTS under no-preference (the .pp-supname pattern): an override in the
+   reduce block lost the cascade to this later same-specificity rule, so reduced-motion users
+   kept the flow -- gating at the source cannot lose that fight. will-change isolates the
+   per-frame gradient repaint onto its own compositor layer, per the motion-patterns gotcha
+   about animating near the nav's backdrop-filter. */
+@media (prefers-reduced-motion: no-preference) {
+    .sup-buy__go--pp {
+        animation: ppSupFlow 24s linear infinite;
+        will-change: background-position;
+    }
+}
+
+/* Deliberately PLAIN "PayPal" in the button's own type: a styled two-tone italic recreation of
+   their wordmark was tried and pulled -- recreating a registered mark in a substitute typeface
+   is the thing brand guidelines prohibit, and nominative plain text is zero-risk. The official
+   monogram SVG from their brand kit can replace it whenever we want the real logo. */
+.sup-go__ppword {
+    position: relative;
+    font-weight: 700;
+}
+
+.sup-buy__go--pp:hover:not(:disabled),
+.sup-buy__go--pp:focus-visible {
+    --flow-base: color-mix(in oklab, var(--sup-t) 12%, transparent);
+    --flow-band: color-mix(in oklab, var(--sup-t) 24%, transparent);
+    --flow-crest: color-mix(in oklab, var(--sup-t) 32%, transparent);
+    background-color: transparent;   /* the shared hover fill belongs to the primary; here the
+                                        deepened water IS the hover state */
+    border-color: color-mix(in oklab, var(--sup-t) 50%, var(--pp-border));
+}
+
+/* A still surface when it cannot be pressed; the flat first third makes the static frame a plain
+   quiet tint rather than a frozen mid-swell. */
+.sup-buy__go--pp:disabled { animation: none; }
+
+/* The face text paints ABOVE the star layer: positioned elements stack later than the emitter,
+   which is earlier in source. Without this the stars swim in front of the words. */
+.sup-buy__go-m,
+.sup-buy__go-y { position: relative; }
+
+/* One span per level inside each face; the template's emitted :has() rules reveal exactly the
+   selected one, so the CTA names the level in the same instant the colours change. */
+.sup-go__t { display: none; }
+
+.sup-buy__go-y { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-m { display: none; }
+.sup-box:has(input[name="sup-cycle"][value="yearly"]:checked) .sup-buy__go-y { display: inline; }
+
+.sup-box__soon {
+    margin-top: 9px;
+    text-align: center;
+    font-size: 0.71rem;
+    color: var(--pp-warning);
+}
+
+/* The box-level hue is emitted as six inline `:has(input[name="tier"]...)` rules by the TEMPLATE,
+   straight from `SUPPORT_TIERS[*]['colour']` -- one source, and it reaches the CTA and the level
+   block, which inline styles on sibling elements never could. This fallback exists only for the
+   impossible nothing-checked state (an amount is preselected server-side); it deliberately matches
+   the second rung rather than introducing a seventh colour. */
+.sup-box { --sup-t: #47b6e6; }
+
+/* --------------------------------------------------------------------- member / off states ---- */
+.sup-box--member,
+.sup-box--off { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+
+.sup-box--member {
+    border-color: color-mix(in oklab, var(--pp-accent) 34%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-accent) 9%, transparent) 0%, transparent 44%),
+        var(--pp-bg-2);
+}
+
+.sup-box__ic { width: 26px; height: 26px; color: var(--pp-accent); }
+
+.sup-box__thanks {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-box__thanksub { font-size: 0.88rem; line-height: 1.6; color: var(--pp-text-dim); }
+
+.sup-box__manage {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-box__manage:hover { color: var(--pp-text); }
+
+/* -------------------------------------------------------------------------- perks modal ---- */
+/* A native <dialog>, so Escape, the focus trap and the backdrop are the browser's job.
+
+   The scrim is a SOLID dim with NO backdrop-filter, per motion-patterns.md: a blurred backdrop
+   re-samples on any repaint in its stacking context and is the documented cause of modal jank
+   here. The depth comes from the dialog's own elevation instead. */
+.sup-modal {
+    /* WITHOUT THIS THE DIALOG PINS TO THE TOP-LEFT. A modal <dialog> centres itself through the UA
+       stylesheet's `margin: auto` against `inset: 0` -- and Tailwind's preflight sets `margin: 0` on
+       every element, which silently removes it. Nothing about the markup looks wrong when this
+       happens, which is why it survived review. */
+    margin: auto;
+    width: min(680px, calc(100vw - 32px));
+    max-height: min(80vh, 720px);
+    overflow-y: auto;
+    padding: 20px;
+    border: var(--pp-border-w) solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    background: var(--pp-bg-1);
+    color: var(--pp-text);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.sup-modal::backdrop { background: rgba(2, 4, 8, 0.8); }
+
+@media (min-width: 768px) { .sup-modal { padding: 26px 28px; } }
+
+.sup-modal__head {
+    position: sticky;   /* the Close button must not scroll away inside a modal taller than the
+                           viewport (at 375x667 most of the tile stack sits below the fold) */
+    top: -20px;
+    z-index: 1;
+    background: inherit;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.sup-modal__head h2 {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: clamp(1.05rem, 3.4vw, 1.35rem);
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+.sup-modal__x {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--pp-text-mute);
+    cursor: pointer;
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+
+.sup-modal__x svg { width: 15px; height: 15px; }
+.sup-modal__x:hover { color: var(--pp-text); border-color: var(--pp-text-mute); }
+.sup-modal__x:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+.sup-modal__lede {
+    margin-top: 8px;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--pp-text-mute);
+    max-width: 58ch;
+}
+
+.sup-modal__foot {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pp-divider, var(--pp-border));
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--pp-text-mute);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .sup-modal[open] { animation: ppRevealIn 0.28s var(--pp-ease); }
+}
+
+/* Perk tiles: the roadmap's icon-card language inside the modal. The member line leads (it is
+   the thing being bought); what everyone gets rides underneath, so the more-not-different frame
+   survives the table it replaced. */
+.sup-perks-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+@media (min-width: 640px) {
+    .sup-perks-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.sup-perk {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+@media (max-width: 639px) {
+    .sup-perk { padding: 10px; }
+}
+
+/* The wide closer (beta access): full row. Border deliberately NEUTRAL -- a magenta-tinted
+   border on the emphasis tile made the top ramp hue read as a top-tier perk, on a page whose
+   lede says levels change nothing. */
+.sup-perk--wide {
+    grid-column: 1 / -1;
+    padding: 14px;
+}
+
+/* The icon wears its perk's stop from the giving ramp: tinted stroke, whisper fill, tinted
+   border -- colour without the tiles shouting. COMPOUND selector on purpose: the base
+   .rm-feat__icon rule lives in support-roadmap.css, which loads AFTER this file, so a bare
+   .sup-perk__icon at equal specificity loses the tie and the tint never shows (the bug). */
+.sup-perk .sup-perk__icon {
+    margin-top: 2px;
+    color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text));
+    border-color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 35%, var(--pp-border));
+    background: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 10%, transparent);
+}
+
+.sup-perk__name {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.sup-perk__mem {
+    margin-top: 3px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--pp-text);
+}
+
+
+/* The flavour line: the perk in use, spoken in the perk's own colour off a thin tinted rail.
+   The mark's example renders the actual object -- name plus star -- in the tile's tint. */
+.sup-perk__ex {
+    margin-top: 8px;
+    padding-left: 8px;
+    border-left: 2px solid color-mix(in oklab, var(--perk-c, var(--pp-primary)) 55%, transparent);
+    font-size: 0.73rem;
+    line-height: 1.5;
+    color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 70%, var(--pp-text));
+}
+
+.sup-perk__ex--mark {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 700;
+}
+
+.sup-perk__ast {
+    margin-left: 2px;
+    color: color-mix(in oklab, var(--perk-c, var(--pp-primary)) 80%, var(--pp-text));
+}
+
+/* The footnote the asterisk points at, quieter than the accountability line below it. */
+.sup-modal__fn {
+    margin-top: 12px;
+    font-size: 0.72rem;
+    color: var(--pp-text-mute);
+}
+
+
+
+/* ------------------------------------------------------------------------------- the credits ---- */
+/* A CREDIT ROLL, not a donor board. One flat run, every card identical in size and weight, ordered
+   by level but never ranked within it -- so the section reads as thanks rather than as a scoreboard
+   of who paid most, on a site where the real hierarchy is earned.
+
+   The card borrows the preview row's geometry on purpose: avatar, name with its mark, level
+   underneath. Somebody who saw themselves in the purchase box meets the same object here. */
+.sup-credits__h {
+    font-family: var(--pp-font-display), sans-serif;
+    font-size: clamp(1.6rem, 5.5vw, 2.4rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--pp-text);
+}
+
+.sup-credits__p {
+    margin-top: 6px;
+    font-size: 0.86rem;
+    color: var(--pp-text-mute);
+    max-width: 52ch;
+}
+
+/* Auto-fill tracks: this has to look composed at four credits and at two hundred, and a fixed column
+   count looks broken at one end or the other. Wider than the old tiles because each card now carries
+   a second line. */
+.sup-credits {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 8px;
+    margin-top: 20px;
+    padding: 0;
+}
+
+/* Each credit IS the purchase box's preview row -- same classes, so the "this is how you will
+   appear" promise and the place it is kept cannot drift apart. The modifier drops the mock rank and
+   score columns and adds what a grid of real rows needs: an entrance, a hover, and a top margin of
+   zero because the grid gap owns the spacing here. */
+.sup-prev--credit {
+    grid-template-columns: auto 1fr;
+    margin-top: 0;
+    transition: border-color var(--pp-dur) var(--pp-ease),
+                transform var(--pp-dur) var(--pp-ease),
+                box-shadow var(--pp-dur) var(--pp-ease);
+}
+
+/* Pre-ladder supporters have no `--sup-t`, and `.sup-prev`'s border/background color-mix the raw
+   variable with NO fallback -- an unset var there invalidates the whole declaration, not just the
+   colour. So the legacy state restates both explicitly. Neutral, and deliberately not lesser: they
+   were here first. */
+.sup-prev--credit.is-legacy {
+    border-color: var(--pp-border);
+    background: var(--pp-bg-1);
+}
+
+/* Lift, not scale: a tight grid, and a growing row shoves its neighbours. */
+@media (hover: hover) {
+    .sup-prev--credit:hover {
+        transform: translateY(-2px);
+        border-color: color-mix(in oklab, var(--sup-t, var(--pp-border)) 55%, var(--pp-border));
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+    }
+}
+
+/* The preview's name treatment, HELD STILL. `.pp-supname` is base-colour `var(--sup-t)` plus a
+   continuous flow; two hundred looping names is the pulsing wall a test here forbids, so the credit
+   name takes the colour without the animation. The truncation lives on this block-level child
+   because `text-overflow` on the flex container does nothing for its items (the `.lb-row__uname`
+   trap), and a PSN id has no spaces to break on. */
+/* The box's mock row renders its name through `.pp-supname` (the animated treatment), which has no
+   width of its own -- same flex-item truncation trap as everywhere else, so the ellipsis lives on a
+   scoped rule rather than on the shared class. */
+.sup-prev__name .pp-supname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sup-prev__cname {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+    color: var(--sup-t, var(--pp-text));
+}
+
+/* The service override on the wall: staff/mod NAMES wear their service colour while the stars
+   and level sub-line stay the paid level's -- the wall is about who pays, the name about who
+   they are; the mark slot draws their service glyph (wrench/shield) rather than the paid
+   level's stars (2026-08-23). --svc-t is set per card by the view for service roles. */
+.sup-prev--credit[style*="--svc-t"] .sup-prev__cname,
+.sup-prev--credit[style*="--svc-t"] .sup-prev__sub { color: var(--svc-t); }
+
+/* The service glyph in the mark slot (wrench/shield): sized with the stars it stands in for,
+   filled with the role's colour. */
+.sup-prev__mark--svc svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--svc-t, var(--pp-text));
+}
+
+/* The credits' entrance moved to the shared section arrival (motion.css .pp-arrive):
+   the load-time rule that lived here animated below-fold cards unseen, and once the section
+   was gated it FOUGHT the gate (animation beat the hidden state, then backwards-fill blanked
+   the cards until boot). One owner now. */
+
+/* Mobile facepile on wall credit rows: a NAME context, so the star run imbricates exactly as
+   .pp-markname does (see supporter.css for the full rationale). The purchase-box become-preview
+   shares .sup-prev__mark but not .sup-prev--credit -- it is a PRODUCT surface and keeps the
+   flat run at every size. */
+@media (max-width: 767.98px) {
+    .sup-prev--credit .sup-prev__mark { gap: 0; }
+    .sup-prev--credit .sup-prev__mark .pp-supstar:not(:first-child) { margin-left: -6px; }
+    .sup-prev--credit .sup-prev__mark .pp-supstar:not(:only-child) path {
+        paint-order: stroke;
+        stroke: var(--mark-rim, var(--pp-bg-1));
+        stroke-width: 3;
+        stroke-linejoin: round;
+    }
+}
+

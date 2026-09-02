@@ -1,0 +1,25 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   The syncing hero's enter finale (home/_hero_syncing.html + static/js/syncing.js).
+   Only the finale styles live here: the walkthrough carousel this file used to style
+   was retired by the gates merge (the landing's real sections are the tour).
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Finale ── */
+/* The card's warning accent flips to success when the Pursuer emerges. */
+[data-sync-card].is-emerged { border-left-color: var(--color-success); }
+.swf__stat {
+    display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+    padding: 0.5rem 0.25rem; border-radius: 0.5rem;
+    border: 1px solid color-mix(in oklab, currentColor 12%, transparent);
+    background: color-mix(in oklab, currentColor 5%, transparent);
+}
+.swf__n { font-weight: 800; font-size: 1.05rem; line-height: 1; }
+.swf__l { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.55; }
+@media (min-width: 768px) {
+    .swf__n { font-size: 1.3rem; }
+    .swf__l { font-size: 0.65rem; }
+}
+.swf__stat--plat   .swf__n { color: var(--color-info); }
+.swf__stat--gold   .swf__n { color: var(--color-warning); }
+.swf__stat--silver .swf__n { opacity: 0.85; }
+.swf__stat--bronze .swf__n { color: var(--color-accent); }

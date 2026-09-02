@@ -89,10 +89,6 @@ class ReviewService:
             )
             ReviewService._invalidate_recommendation_cache(concept, concept_trophy_group)
 
-            # Trigger review milestone check
-            from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(profile, criteria_type='review_count')
-
             logger.info(
                 f"Review {review.id} created by {profile.psn_username} "
                 f"on concept {concept.id} group {concept_trophy_group.trophy_group_id}"
@@ -157,11 +153,6 @@ class ReviewService:
                 review.concept, review.concept_trophy_group,
             )
 
-        # Trigger review milestone recheck (word count may have changed)
-        if 'body' in update_fields:
-            from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(review.profile, criteria_type='review_count')
-
         logger.info(f"Review {review.id} edited by {profile.psn_username}")
         return True, None
 
@@ -200,10 +191,6 @@ class ReviewService:
 
         action = "admin deleted" if is_admin else "deleted"
         logger.info(f"Review {review.id} {action} by {profile.psn_username}")
-
-        from trophies.services.milestone_service import check_all_milestones_for_user
-        check_all_milestones_for_user(review.profile, criteria_type='review_count')
-        check_all_milestones_for_user(review.profile, criteria_type='review_helpful_count')
 
         return True, None
 
@@ -265,9 +252,6 @@ class ReviewService:
             # Check helpful milestones (only for helpful votes)
             if vote_type == 'helpful':
                 ReviewService._check_helpful_milestones(review)
-                # Trigger site-wide milestone for review author's total helpful votes
-                from trophies.services.milestone_service import check_all_milestones_for_user
-                check_all_milestones_for_user(review.profile, criteria_type='review_helpful_count')
 
             return True, None
 

@@ -1,0 +1,184 @@
+{% load humanize custom_filters %}
+{% comment %} One group's community ratings, "conditions card" treatment (the Apple-Weather model: a plain-
+language headline over a grid of self-describing tiles -- no chart). The synthesized summary sentence is what
+a hunter reads to get the whole picture in two seconds; each subjective quality is an icon tile whose HEADLINE
+is the verdict word (polarity lives in the word, so nothing can be misread the way a bar length can), with the
+number as a quiet subscript; hours-to-plat is a separate time callout. Words come from rating_summary /
+rating_verdict, tone from rating_tone -- game-detail.js mirrors all three for the live-update.
+
+Structure is IDENTICAL rated or not (all tiles present, muted via .gd-cond--empty), so the live-update only
+sets values -- it never builds DOM when the first rating lands.
+
+Expects: averages (dict|None), can_rate, user_rating, concept_id, group_id, hours_label, hours_label_long,
+and has_platinum -- REQUIRED, and its absence fails silently: an unresolved template variable is '',
+which is falsy, so every group would quietly get the no-platinum wording of the middle recommendation.
+The .quick-rate-btn data-* and the [data-rate-grid]/[data-rate-count]/[data-stat]/[data-cond-*] hooks are the contract. {% endcomment %}
+<section class="gd-acard gd-rate__verdict">
+{% if has_dlc %}<h3 class="gd-acard__h gd-rate__grouptitle">{{ group_name }}</h3>{% endif %}
+<div class="gd-cond{% if not averages %} gd-cond--empty{% endif %}" data-rate-grid>
+
+    {% comment %} Hero: the two HARD FACTS up top -- score+stars (how good) opposite time-to-plat (how long) --
+       then the synthesized summary sentence as the headline. The subjective 'feel' qualities are the tiles below. {% endcomment %}
+    <div class="gd-cond__hero">
+        <div class="gd-cond__herorow">
+            <div class="gd-cond__rating">
+                <span class="gd-cond__stars" data-cond-stars style="--fill: {% if averages %}{% widthratio averages.avg_rating 5 100 %}{% else %}0{% endif %}%;" role="img" aria-label="{% if averages %}{{ averages.avg_rating|floatformat:1 }} out of 5{% else %}Not rated{% endif %}"><span class="gd-cond__stars-on"></span></span>
+                <span class="gd-cond__scoreline" aria-hidden="true"><b class="gd-cond__score-n pp-tally{% if averages %} pp-tally--glow{% endif %}" data-cond-score>{% if averages %}{{ averages.avg_rating|floatformat:1 }}{% else %}&mdash;{% endif %}</b><span class="gd-cond__of">/5</span></span>
+            </div>
+            <div class="gd-cond__hours">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span class="gd-cond__hours-txt">
+                    <span class="gd-cond__hours-num">~<b data-cond-hours>{% if averages %}{{ averages.avg_hours|floatformat:0|intcomma }}{% else %}&mdash;{% endif %}</b>h</span>
+                    <span class="gd-cond__hours-lbl">{{ hours_label_long|default:"Hours to Platinum" }}</span>
+                </span>
+            </div>
+        </div>
+        <p class="gd-cond__summary" data-cond-summary>{% if averages %}{{ averages|rating_summary }}{% else %}Not yet rated.{% endif %}</p>
+
+        {% comment %}The recommendation split -- the one thing here that is a VERDICT rather than an
+        average, and the only one that answers "should I". It sits in the hero band with the score and the
+        hours because it is a headline fact, not a fourth quality axis.
+
+        ALL THREE options, including the ones nobody picked. Showing only the recommend share reports
+        "everybody said Do it" and "most said Do it, one said skip" as 100% against 83%, when the dissent
+        is often the interesting half -- and a zero is a fact too: nobody calling a platinum a slog says
+        something about the game.
+
+        Figure over word, the same idiom as the quality tiles above: the percentage leads, the raw count
+        is a quiet subscript, and the label says which answer it was. The N is stated once underneath at
+        every sample size rather than hidden behind a floor -- 80% is honest at five ratings and
+        misleading without them, and only the count tells the reader which they are looking at.
+
+        The block is present but collapsed until someone has answered (every game until the recommendation
+        backlog clears), so the live-update only ever sets values and never builds DOM.
+
+        Which is why the cells come from `recommendation_split_cells` rather than straight off `averages`:
+        it always yields all three, zeroed when there is nothing yet, and words them for THIS group. See
+        the tag for the two bugs that shape it.{% endcomment %}
+        {% recommendation_split_cells averages has_platinum as rec_cells %}
+        <div class="gd-cond__recs{% if not averages.recommendation_split.answered %} is-empty{% endif %}" data-cond-rec>
+            <div class="gd-cond__recrow">
+                {% for opt in rec_cells %}
+                {% comment %}The glyph is the SHARED one the rating form uses for the same answer -- thumbs
+                for the two ends, a tilde for the qualified middle -- so a verdict looks the same wherever
+                it appears. Colour rides `--rec-c`, set per option below.{% endcomment %}
+                {% comment %}`data-rec-label` so the live-update can rebuild this tooltip after a save. It
+                was the one thing in the block left stale, contradicting the percentage it sits on.
+                {% endcomment %}
+                <span class="gd-cond__rec{% if not opt.count %} is-none{% endif %}" data-rec="{{ opt.value }}" data-rec-cell="{{ opt.value }}"
+                      data-rec-label="{{ opt.label }}"
+                      title="{{ opt.count|intcomma }} of {{ averages.recommendation_split.answered|default:0|intcomma }} said &ldquo;{{ opt.label }}&rdquo;">
+                    <span class="gd-cond__rec-fig">
+                        {% include 'partials/_recommendation_icon.html' with value=opt.value %}
+                        <b class="gd-cond__rec-pct" data-rec-pct>{{ opt.pct }}%</b>
+                    </span>
+                    <span class="gd-cond__rec-lbl">{{ opt.label }}</span>
+                    <span class="gd-cond__rec-n" data-rec-count>{{ opt.count|intcomma }}</span>
+                </span>
+                {% endfor %}
+            </div>
+            <span class="gd-cond__rec-from">from <span data-cond-rec-n>{{ averages.recommendation_split.answered|intcomma }}</span> rating{{ averages.recommendation_split.answered|pluralize }} that answered</span>
+        </div>
+    </div>
+
+    {% comment %} Conditions: one icon tile per quality; the verdict word is the headline, the number a quiet
+       subscript. The rating-spread column chart shares this row as a fourth framed cell (full-width below on
+       mobile). {% endcomment %}
+    <div class="gd-cond__metrics{% if averages.count >= 3 %} is-wide{% endif %}">
+        <div class="gd-cond__tile" data-stat="difficulty"{% if averages %} data-tone="{{ averages.avg_difficulty|rating_tone:'difficulty' }}"{% endif %}>
+            <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            <span class="gd-cond__lbl">Difficulty</span>
+            <span class="gd-cond__figure"><b class="gd-cond__num pp-tally" data-cond-num>{% if averages %}{{ averages.avg_difficulty|floatformat:1 }}{% endif %}</b><span class="gd-cond__unit">/10</span></span>
+            <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_difficulty|rating_verdict:'difficulty' }}{% else %}&mdash;{% endif %}</span>
+        </div>
+        <div class="gd-cond__tile" data-stat="grindiness"{% if averages %} data-tone="{{ averages.avg_grindiness|rating_tone:'grindiness' }}"{% endif %}>
+            <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+            <span class="gd-cond__lbl">Grindiness</span>
+            <span class="gd-cond__figure"><b class="gd-cond__num pp-tally" data-cond-num>{% if averages %}{{ averages.avg_grindiness|floatformat:1 }}{% endif %}</b><span class="gd-cond__unit">/10</span></span>
+            <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_grindiness|rating_verdict:'grindiness' }}{% else %}&mdash;{% endif %}</span>
+        </div>
+        <div class="gd-cond__tile" data-stat="fun"{% if averages %} data-tone="{{ averages.avg_fun|rating_tone:'fun' }}"{% endif %}>
+            <svg class="gd-cond__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>
+            <span class="gd-cond__lbl">Fun</span>
+            <span class="gd-cond__figure"><b class="gd-cond__num pp-tally" data-cond-num>{% if averages %}{{ averages.avg_fun|floatformat:1 }}{% endif %}</b><span class="gd-cond__unit">/10</span></span>
+            <span class="gd-cond__verdict" data-cond-verdict>{% if averages %}{{ averages.avg_fun|rating_verdict:'fun' }}{% else %}&mdash;{% endif %}</span>
+        </div>
+
+        {% comment %} Rating spread: the SHAPE the average hides -- a 4.0 that's mostly 5s and a few 1s is
+        polarizing, not just "above average." One column per exact 0.5 step (0.5 left -> 5.0 right), grounded on
+        a baseline with visible slots so short bars read as a silhouette, not floating squares. Numerals anchor
+        the whole stars; exact counts live in each column's tooltip. game-detail.js updates the bars live.
+        Gated to 3+ ratings -- a 1-2 rating spread is noise, not shape. {% endcomment %}
+        {% if averages.count >= 3 and averages.distribution %}
+        <div class="gd-cond__disttile">
+            <span class="gd-cond__lbl">Rating spread</span>
+            <div class="gd-dist" role="img" aria-label="Rating distribution across {{ averages.count|intcomma }} rating{{ averages.count|pluralize }}, half a star to 5 stars">
+                {% for row in averages.distribution %}
+                <div class="gd-dist__col{% if row.starnum %} is-whole{% endif %}" data-dist-step="{{ row.step }}" title="{{ row.value|floatformat:'-1' }} star{{ row.value|pluralize }}: {{ row.count }} rating{{ row.count|pluralize }} ({{ row.pct }}%)">
+                    <span class="gd-dist__n" data-dist-n>{% if row.count %}{{ row.count }}{% endif %}</span>
+                    <span class="gd-dist__fill" data-dist-fill style="height: {{ row.bar }}%;"></span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="gd-dist__axis" aria-hidden="true">
+                {% for row in averages.distribution %}<span>{% if row.starnum %}{{ row.starnum }}{% endif %}</span>{% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% comment %} Your take: a quiet personal layer comparing the viewer's own scores to the community. Shown
+    only when they've rated AND more than one rating exists (a lone rater has nothing to compare against). The
+    sentence is rating_comparison; game-detail.js syncYouTake adds/updates/removes it live on submit. {% endcomment %}
+    {% if user_rating and averages.count > 1 %}
+    <div class="gd-cond__you" data-cond-you>
+        <span class="gd-cond__you-lbl">Your take</span>
+        <p class="gd-cond__you-txt" data-cond-you-txt>{% rating_comparison user_rating averages %}</p>
+        <span class="gd-cond__you-scores" data-cond-you-scores>You <b>{{ user_rating.overall_rating|floatformat:1 }}</b><span class="gd-cond__you-vs">vs</span>community <b>{{ averages.avg_rating|floatformat:1 }}</b></span>
+    </div>
+    {% endif %}
+</div>
+
+{% comment %}The total sits down here rather than in the hero, opposite the action.
+
+It used to follow the split's own "from N ratings that answered", and two counts touching read as one
+confused sentence -- the reader has to work out that they are different denominators (every rating, versus
+only those carrying a recommendation) before either means anything. A row of content between them is what
+makes that legible.
+
+Its `data-rate-count` hook is unchanged, but the live-update now looks for it from the PANEL rather than
+from the conditions grid, because it no longer lives inside that grid.{% endcomment %}
+<div class="gd-rate__foot">
+    <span class="gd-cond__count" data-rate-count>{% if averages %}{{ averages.count|intcomma }} rating{{ averages.count|pluralize }}{% elif can_rate %}Be the first to rate this.{% endif %}</span>
+    {% if can_rate %}
+    <button type="button" class="gd-btn gd-btn--primary gd-rate__cta quick-rate-btn"
+            data-concept-id="{{ concept_id }}"
+            data-group-id="{{ group_id }}"
+            data-hours-label="{{ hours_label_long|default:'Hours to Platinum' }}"
+            {% comment %}The modal is rendered ONCE for the whole page and re-pointed per group, so the
+            group's own wording rides on the button that opens it -- exactly as the hours label does.
+            Without this a DLC pack's form would ask about a platinum it has not got.{% endcomment %}
+            data-rec-label="{{ rec_label|default:'Good game, tough plat' }}"
+            data-rec-legend="{{ rec_legend|default:'Would you recommend the platinum?' }}"
+            {% comment %}`recommendation` is a STRING in a payload that was otherwise purely numeric, so it
+            is quoted. Safe to interpolate raw: it is a choices field, so its only possible values are the
+            four slugs the model defines.{% endcomment %}
+            {% if user_rating %}data-existing='{"recommendation":"{{ user_rating.recommendation }}","difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}
+            {% if user_rating.blurb %}data-existing-blurb="{{ user_rating.blurb }}"{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg>
+        <span>{% if user_rating %}Update rating{% else %}Rate this game{% endif %}</span>
+    </button>
+    {% endif %}
+</div>
+</section>
+
+{% comment %} Quick takes: the individual human voices under the aggregate. A BARE card grid (the blurb cards
+are the frames, so no outer card -- item-grid rule, same as the games list), under a section label. Hidden
+entirely when a group has none. Fed by UserConceptRating.visible_blurbs() (bounded preview, index-backed).
+game-detail.js live-prepends the viewer's own card here after they post, un-hiding when it's the first. {% endcomment %}
+<section class="gd-blurbs{% if not blurbs %} is-empty{% endif %}" data-blurbs data-group-id="{{ group_id }}">
+    <h3 class="gd-blurbs__title">Quick takes <span class="gd-blurbs__count" data-blurbs-count>{{ blurb_count|default:0 }}</span></h3>
+    <ul class="gd-blurbs__list" data-blurbs-list>
+        {% for b in blurbs %}{% include 'trophies/partials/game_detail/_blurb_card.html' %}{% endfor %}
+    </ul>
+</section>

@@ -10,9 +10,11 @@
     {# Tally face: Bricolage Grotesque -- locked in the Tally workshop. #}
     {# Used wherever a Tally-class number appears (the Job-row big #}
     {# numbers in Section 6, the slider readout, the percent labels). #}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+    <style>
+      /* Self-hosted fonts (SEO Lane 3): same faces as output.css, inlined because this lab has a standalone head. */
+      @font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 200 800; font-stretch: 75% 100%; font-display: swap; src: url('/static/fonts/bricolage-grotesque-var-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      @font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('/static/fonts/inter-var-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+    </style>
 
     <style>
         /* ============================================================

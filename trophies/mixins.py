@@ -1,7 +1,8 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.core.paginator import Page, Paginator
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
-from django.views.generic import View
+from django.utils.cache import patch_vary_headers
 
 
 class PremiumRequiredMixin(LoginRequiredMixin):
@@ -63,32 +64,6 @@ class StaffRequiredAPIMixin(LoginRequiredAPIMixin):
             return JsonResponse({'error': 'Staff access required.'}, status=403)
 
         return super().dispatch(request, *args, **kwargs)
-
-
-class StaffOrRoadmapAuthorRequiredMixin(LoginRequiredMixin):
-    """
-    Mixin that grants access to staff OR roadmap authors (writer / editor /
-    publisher). Trial-role users are rejected because the global
-    `has_roadmap_role('writer')` check tops out below `writer` for them
-    when no per-roadmap escalation target is supplied (this gate is global,
-    not roadmap-scoped, so it never escalates).
-
-    Used by surfaces that are primarily authoring tools but also need
-    staff oversight access (e.g. the legacy-checklist viewer used to mine
-    historical prose for new Roadmaps).
-    """
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return self.handle_no_permission()
-
-        if request.user.is_staff:
-            return super().dispatch(request, *args, **kwargs)
-
-        profile = getattr(request.user, 'profile', None)
-        if profile is not None and profile.has_roadmap_role('writer'):
-            return super().dispatch(request, *args, **kwargs)
-
-        return redirect('home')
 
 
 class RoadmapAuthorRequiredMixin(LoginRequiredMixin):
@@ -178,28 +153,16 @@ class RecapSyncGateMixin:
         return None
 
 
-class ProfileHotbarMixin(View):
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
-            profile = self.request.user.profile
-            seconds_to_next_sync = profile.get_seconds_to_next_sync()
-            hotbar_data = {
-                'active': True,
-                'profile': profile,
-                'sync_status': profile.sync_status,
-                'sync_progress': profile.sync_progress_value,
-                'sync_target': profile.sync_progress_target,
-                'progress_percentage': profile.sync_percentage,
-                'seconds_to_next_sync': seconds_to_next_sync,
-            }
+class _ScrollPage(Page):
+    """Page for the countless scroll branch below: has_next comes from the +1-row probe, never
+    from a count."""
 
-            if profile.sync_status == 'syncing':
-                from trophies.views.sync_views import _get_queue_position
-                hotbar_data['queue_position'] = _get_queue_position(profile.id)
+    def __init__(self, object_list, number, paginator, has_next):
+        super().__init__(object_list, number, paginator)
+        self._has_next = has_next
 
-            context['hotbar'] = hotbar_data
-        return context
+    def has_next(self):
+        return self._has_next
 
 
 class HtmxListMixin:
@@ -209,13 +172,79 @@ class HtmxListMixin:
     (cards + pagination). On normal requests the full page template is rendered;
     on HTMX requests only the partial is returned, enabling snappy filter
     updates without a full page reload.
+
+    Infinite-scroll fetches (plain XHR, page >= 2) additionally get COUNTLESS pagination: the
+    InfiniteScroller appends cards and stops on the ``X-Has-Next`` header (or an empty page) --
+    it never reads ``paginator.count`` -- yet Django's paginator ran a full ``COUNT(*)`` over
+    the queryset on every fetch. On the browse pages whose querysets carry the page-identity
+    WINDOW election (Games, tag detail), that count executed the whole election a SECOND time
+    per scroll page, which is what made deep scrolling feel slow on the beta. The scroll branch
+    instead slices ``page_size + 1`` rows: one query, has_next from the probe row, past-end
+    still 404s (the scroller's stop contract). Filter swaps (HX-Request) and full pages keep
+    the real count -- their headers render it.
     """
     partial_template_name = None  # e.g. 'trophies/partials/game_list/browse_results.html'
 
     def get_template_names(self):
-        if self.request.htmx and self.partial_template_name:
+        # Return the rows-only partial for BOTH django-htmx filter swaps (HX-Request) and plain XHR page
+        # fetches (X-Requested-With) -- the latter is how InfiniteScroller pulls the next ?page. Without the
+        # XHR branch the scroller would receive the full page and never append. Harmless to the pager-based
+        # grids (they only ever send HX-Request today).
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if (self.request.htmx or is_xhr) and self.partial_template_name:
             return [self.partial_template_name]
         return super().get_template_names()
+
+    def _is_scroll_fetch(self):
+        """A plain-XHR fetch of page >= 2: the InfiniteScroller pulling the next page."""
+        if self.request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+            return False
+        try:
+            return int(self.request.GET.get('page', 1)) > 1
+        except (TypeError, ValueError):
+            return False
+
+    def paginate_queryset(self, queryset, page_size):
+        if not self._is_scroll_fetch():
+            return super().paginate_queryset(queryset, page_size)
+        page_number = int(self.request.GET.get('page'))
+        offset = (page_number - 1) * page_size
+        rows = list(queryset[offset:offset + page_size + 1])
+        if not rows:
+            # Past the end: the scroller's fallback stop signal (and the pre-existing contract
+            # every suite pins). Matches what Django's paginator raises through ListView.
+            raise Http404(f'Empty scroll page {page_number}')
+        has_next = len(rows) > page_size
+        rows = rows[:page_size]
+        # A local paginator over just this page's rows: len(), never a query. Its fake `count`
+        # reaches the partial's data-result-count attribute (unread on a scroll append -- the
+        # scroller extracts cards + the X-Has-Next header alone) and any view that copies
+        # paginator.count into context (company_list's total_company_count, browse_lists'
+        # total_lists -- both rendered by full-page templates only). A partial that starts
+        # RENDERING a count must not trust it on this branch. num_pages is stamped honest-enough
+        # (this page's number, +1 when more exist) so a future pager partial's
+        # next/previous_page_number calls don't raise EmptyPage against the 1-page default.
+        paginator = Paginator(rows, page_size)
+        paginator.num_pages = page_number + (1 if has_next else 0)
+        page = _ScrollPage(rows, page_number, paginator, has_next)
+        return paginator, page, rows, True
+
+    def render_to_response(self, context, **response_kwargs):
+        # `X-Has-Next` stops the scroller one fetch EARLIER than the empty-page fallback --
+        # each saved fetch is a whole queryset execution on the windowed browse pages. Free on
+        # both branches: the scroll page carries the probe answer, the counted page derives it
+        # from the count it already paid for. XHR only; a filter swap's response is consumed by
+        # htmx, which ignores it.
+        response = super().render_to_response(context, **response_kwargs)
+        # The same URL serves two bodies (full page vs partial) keyed on this header, so any
+        # shared cache must partition on it -- the central hook is the right place to say so
+        # once for every consumer.
+        patch_vary_headers(response, ('X-Requested-With',))
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            page_obj = context.get('page_obj')
+            if page_obj is not None:
+                response['X-Has-Next'] = '1' if page_obj.has_next() else '0'
+        return response
 
 
 class BackgroundContextMixin:

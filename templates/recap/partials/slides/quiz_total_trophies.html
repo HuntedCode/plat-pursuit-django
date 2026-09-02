@@ -1,28 +1,26 @@
 {% comment %}
-Recap Slide: Quiz - Guess Total Trophies
+Recap Slide: Quiz -- guess total trophies
 Variables: correct_value, options (list of 4 numbers)
+
+The four quiz slides share one shell (.rcp-quiz) and one option treatment (.rcp-quiz__opt), so the deck's
+interaction beat feels like one recurring moment rather than four differently-styled screens. The `?` mark
+replaces the emoji this slide used to lead with.
+
+DOM contract owned by monthly-recap.js and NOT to be renamed casually: `data-quiz-correct` on the shell,
+`data-quiz-option` per choice, `data-quiz-feedback` for the verdict. State after answering arrives as
+`is-correct` / `is-wrong` / `is-dimmed`.
 {% endcomment %}
-<div class="flex items-center justify-center w-full h-full">
-    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-8 py-10 md:px-12 md:py-12 text-center max-w-md"
-         data-quiz-correct="{{ correct_value }}">
-        <!-- Question Icon -->
-        <div class="text-5xl mb-4">🤔</div>
+<div class="rcp rcp-quiz" data-quiz-correct="{{ correct_value }}">
+    <p class="rcp__kicker">Quick quiz</p>
+    <h3 class="rcp-quiz__ask">How many trophies did you earn this month?</h3>
 
-        <!-- Question -->
-        <h3 class="text-2xl md:text-3xl font-bold text-primary mb-2">Quick Quiz!</h3>
-        <p class="text-lg text-base-content/70 mb-8">How many trophies do you think you earned this month?</p>
-
-        <!-- Options Grid -->
-        <div class="grid grid-cols-2 gap-4">
+    <div class="rcp__body">
+        <div class="rcp-quiz__grid">
             {% for option in options %}
-            <button data-quiz-option="{{ option }}"
-                    class="btn btn-lg btn-outline border-2 hover:btn-primary text-xl font-bold py-6 transition-all">
-                {{ option }}
-            </button>
+            <button type="button" class="rcp-quiz__opt rcp-quiz__opt--num" data-quiz-option="{{ option }}">{{ option }}</button>
             {% endfor %}
         </div>
-
-        <!-- Feedback container (populated by JS) -->
-        <div data-quiz-feedback class="hidden"></div>
     </div>
+
+    <div class="rcp-quiz__verdict" data-quiz-feedback hidden></div>
 </div>

@@ -89,3 +89,35 @@ def update_profile_trophy_counts(profile):
     profile.avg_progress = avg_progress
 
     profile.save(update_fields=['total_trophies', 'total_unearned', 'avg_progress'])
+
+
+def trophy_snapshot(profile):
+    """The profile's trophy collection summary, for display. ZERO queries -- every value is already on
+    `Profile`.
+
+    Lives here because this module owns `update_profile_trophy_counts`, which WRITES these same
+    denormalized counters. It was `dashboard_service.provide_trophy_snapshot` until the dashboard was
+    retired; read and write of one set of columns now sit beside each other.
+
+    Two live consumers: the Home lobby's trophy card and `pursuer_card_service`.
+    """
+
+    total_earned = profile.total_trophies  # total_trophies is already the earned count
+    total_all = total_earned + profile.total_unearned
+    return {
+        'total_plats': profile.total_plats,
+        'total_golds': profile.total_golds,
+        'total_silvers': profile.total_silvers,
+        'total_bronzes': profile.total_bronzes,
+        'total_trophies': total_all,
+        'total_earned': total_earned,
+        'total_unearned': profile.total_unearned,
+        'total_games': profile.total_games,
+        'total_completes': profile.total_completes,
+        'total_hiddens': profile.total_hiddens,
+        'avg_progress': profile.avg_progress,
+        'trophy_level': profile.trophy_level,
+        'tier': profile.tier,
+        'is_plus': profile.is_plus,
+        'earn_rate': round(total_earned / total_all * 100, 1) if total_all else 0,
+    }

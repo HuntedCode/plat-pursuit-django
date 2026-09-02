@@ -15,7 +15,10 @@ from tests.factories import ConceptFactory, ProfileFactory
 
 pytestmark = pytest.mark.django_db
 
-_VALID = {'difficulty': 6, 'grindiness': 4, 'hours_to_platinum': 30, 'fun_ranking': 8, 'overall_rating': 4.0}
+# `recommendation` is required on every write path (it is in UserConceptRatingForm.Meta.fields), so a
+# "valid rating minus the blurb" carries one. These tests are about the blurb, not about that gate.
+_VALID = {'recommendation': 'worth_it', 'difficulty': 6, 'grindiness': 4, 'hours_to_platinum': 30,
+          'fun_ranking': 8, 'overall_rating': 4.0}
 
 # The rate endpoint gates on can_rate_group (linked + earned platinum). We patch that gate open so these
 # tests focus on the blurb write-path logic, not the platinum-eligibility fixture.
@@ -93,16 +96,32 @@ def test_visible_blurbs_helper_excludes_empty_and_hidden():
 
 @patch(_CAN_RATE, return_value=(True, None))
 def test_numbers_only_update_keeps_existing_blurb(_can, client):
-    """Regression: adjusting a rating without resending the blurb must NOT wipe the stored quick take."""
+    """Regression: adjusting a rating without resending the blurb must NOT wipe the stored quick take.
+
+    The RECOMMENDATION rides the same rule. It is required, so omitting it on a new rating is rejected --
+    but on an existing one the stored value stands in, which is the difference between a partial update
+    and a partial wipe. Both fields are things a hunter wrote; neither should be destroyable by a request
+    that never mentioned them."""
     profile, concept = ProfileFactory(is_linked=True, guidelines_agreed=True), ConceptFactory()
     client.force_login(profile.user)
     assert _rate(client, concept, **_VALID, blurb='Loved it, do MP first.').status_code == 200
-    # A numbers-only update omits the blurb key entirely.
+    # A numbers-only update omits the blurb key entirely -- and the recommendation with it.
     resp = _rate(client, concept, difficulty=3, grindiness=2, hours_to_platinum=10, fun_ranking=9, overall_rating=5.0)
     assert resp.status_code == 200
     r = UserConceptRating.objects.get(profile=profile, concept=concept, concept_trophy_group=None)
     assert r.blurb == 'Loved it, do MP first.'   # survived
+    assert r.recommendation == 'worth_it'        # survived
     assert r.difficulty == 3                       # numbers still applied
+
+
+@patch(_CAN_RATE, return_value=(True, None))
+def test_rate_response_echoes_stored_blurb(_can, client):
+    """The response returns the stored (sanitized/trimmed) blurb so the client's live card matches on reload."""
+    profile, concept = ProfileFactory(is_linked=True, guidelines_agreed=True), ConceptFactory()
+    client.force_login(profile.user)
+    resp = _rate(client, concept, **_VALID, blurb='  Tidy take.  ')
+    assert resp.status_code == 200
+    assert resp.json()['blurb'] == 'Tidy take.'   # trimmed stored value echoed, not the raw input
 
 
 @patch(_CAN_RATE, return_value=(True, None))

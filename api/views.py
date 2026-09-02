@@ -17,9 +17,7 @@ from django_ratelimit.decorators import ratelimit
 from datetime import timedelta
 from trophies.psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client
-from trophies.services.badge_service import initial_badge_check, sync_discord_roles
-from trophies.services.milestone_service import check_all_milestones_for_user
-from trophies.milestone_constants import ALL_CALENDAR_TYPES
+from trophies.services.discord_roles import sync_discord_roles
 import time
 import math
 import logging
@@ -129,8 +127,30 @@ class VerifyView(APIView):
 
                 if profile.verify_code(profile.about_me):
                     profile.link_discord(discord_id)
-                    initial_badge_check(profile)
-                    check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES)
+                    # Group-badge evaluation on link: `notify=True` is safe here because `awarded` is a
+                    # TRANSITION. A hunter who has already synced holds their badges, so this awards
+                    # nothing and announces nothing. It only speaks up when the link genuinely surfaces
+                    # badges for the first time, and then as ONE consolidated message.
+                    #
+                    # Guarded, like the milestone recompute below it. The Discord link has ALREADY
+                    # committed by this point, so an exception here would 500 an account that is in fact
+                    # linked -- and skip the milestone recompute and role push that follow. The legacy
+                    # `initial_badge_check` was effectively non-raising (per-badge try/except inside), so
+                    # the repoint quietly removed insulation the call site never had to provide.
+                    try:
+                        from trophies.services.badge_apply import evaluate_and_apply
+                        evaluate_and_apply(profile, notify=True)
+                    except Exception:
+                        logger.exception(f"[verify] badge evaluation failed for {psn_username}")
+                    # New milestones app: compute + grant the ladder roles they've already earned on link.
+                    # Community members (site account OR the Discord link just made) earn milestones -- see
+                    # milestones.services.member_q. Guarded so a hiccup never fails an otherwise-good link.
+                    from milestones.services import is_member, recompute_milestones
+                    if is_member(profile):
+                        try:
+                            recompute_milestones(profile, reconcile_discord=True)
+                        except Exception:
+                            logger.exception(f"[verify] milestone recompute failed for {psn_username}")
                     sync_discord_roles(profile)
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
@@ -204,8 +224,18 @@ class SyncRolesView(APIView):
         if not profile.is_discord_verified:
             return Response({'error': 'Profile is not Discord verified.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        from trophies.services.badge_service import sync_discord_roles
+        from trophies.services.discord_roles import sync_discord_roles
         role_counts = sync_discord_roles(profile)
+
+        # New milestones app roles (highest earned per ladder) -- reconcile alongside the legacy sync so
+        # /sync-roles re-pushes them too. Community members (site account OR verified Discord); idempotent +
+        # self-healing; guarded so it never fails the sync.
+        from milestones.services import is_member, reconcile_discord_roles
+        if is_member(profile):
+            try:
+                reconcile_discord_roles(profile)
+            except Exception:
+                logger.exception(f"[sync-roles] milestone reconcile failed for discord_id={discord_id}")
 
         total = sum(role_counts.values())
         return Response({
@@ -227,8 +257,6 @@ class RecheckBadgesView(APIView):
 
     @method_decorator(ratelimit(key='user', rate=bot_exempt_rate('5/m'), method='POST', block=True))
     def post(self, request):
-        from trophies.models import UserBadge, Badge
-
         discord_id = request.data.get('discord_id')
         if not discord_id:
             return Response({'error': 'discord_id required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -241,32 +269,29 @@ class RecheckBadgesView(APIView):
         if not profile.is_discord_verified:
             return Response({'error': 'Profile is not Discord verified.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        before_ids = set(
-            UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
+        from trophies.models import GroupBadge
+        from trophies.services.badge_apply import evaluate_and_apply
+
+        live_badges = list(
+            GroupBadge.objects.filter(is_live=True).select_related('series', 'platform_group')
         )
 
         try:
-            badges_checked = initial_badge_check(profile, discord_notify=False)
+            # No notify: this is a user-triggered reconcile, and the bot reports the deltas in its own
+            # reply. Announcing as well would double-message the recheck.
+            result = evaluate_and_apply(profile, group_badges=live_badges, notify=False)
         except Exception:
             logger.exception(f"Badge recheck failed for {profile.psn_username}")
             return Response({'error': 'Badge recheck failed.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        after_ids = set(
-            UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
-        )
-
-        awarded_ids = after_ids - before_ids
-        revoked_ids = before_ids - after_ids
-
-        badge_names = dict(
-            Badge.objects.filter(id__in=awarded_ids | revoked_ids).values_list('id', 'name')
-        ) if awarded_ids or revoked_ids else {}
-
+        # `evaluate_and_apply` returns the deltas directly, so the old before/after UserBadge snapshots
+        # are gone along with the two queries they cost.
+        names = {gb.id: str(gb) for gb in live_badges}
         return Response({
             'success': True,
-            'badges_checked': badges_checked,
-            'awarded': [badge_names.get(bid, f'Badge #{bid}') for bid in awarded_ids],
-            'revoked': [badge_names.get(bid, f'Badge #{bid}') for bid in revoked_ids],
+            'badges_checked': len(live_badges),
+            'awarded': [names.get(bid, f'Badge #{bid}') for bid in result['awarded']],
+            'revoked': [names.get(bid, f'Badge #{bid}') for bid in result['revoked']],
             'psn_username': profile.display_psn_username,
         })
 
@@ -519,6 +544,7 @@ class CommentListView(APIView):
                 'avatar_url': author_profile.avatar_url,
                 'flag': author_profile.flag,
                 'user_is_premium': author_profile.user_is_premium,
+                'display_mark': author_profile.display_mark,
             },
             'user_has_voted': False,
             'is_moderator': False,

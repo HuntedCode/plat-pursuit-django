@@ -52,7 +52,7 @@ These are the hard-won, battle-tested backend. **All Keep.** The rebuild does no
 - **Disposition:** **Keep** — core abstraction. *Recommendation:* add a `manage.py check` that verifies every model FK'd to Concept is handled in `absorb()` (turn the CLAUDE.md contract into an enforced check).
 
 ### IGDB Integration
-- **What:** 6-strategy matching pipeline + enrichment (developers, genres, themes, engines, franchises, time-to-beat, covers, release dates). Each Concept matches independently.
+- **What:** 10-strategy matching pipeline + enrichment (developers, genres, themes, engines, franchises, time-to-beat, covers, release dates). Each Concept matches independently.
 - **Lives in:** `trophies/services/igdb_service.py` (~3.2k lines), `IGDBMatch` + enrichment through-models, ~15 management commands.
 - **Status:** Shipped; ~89% concept coverage. CJK unlock + GameFamily IGDB-id keying + rematch sweep all live.
 - **Coupling:** Fed by sync; consumed by badges (dev badges), challenges (genre), browse, stats, covers. `absorb()` migrates enrichment only on `inherit_match`.
@@ -67,14 +67,14 @@ These are the hard-won, battle-tested backend. **All Keep.** The rebuild does no
 
 ### Badge System (internals)
 - **What:** Tiered (Bronze/Silver/Gold/Platinum) collections of Concepts via Stages; XP per completed concept + bonus per badge; 6 badge types; ConceptBundles for episodic games.
-- **Lives in:** `models.py` (Badge, Stage, UserBadge, UserBadgeProgress, ConceptBundle), `services/badge_service.py`.
+- **Lives in:** `models.py` (BadgeSeries, PlatformGroup, GroupBadge, UserGroupBadge, Stage, ConceptBundle), `services/badge_engine.py` + `badge_apply.py`. **Rebuilt 2026-08**: `badge_service.py` and the tier models' engine are deleted.
 - **Status:** Shipped, mature. O(n) eval via prefetch; prerequisite chains enforced.
 - **Coupling:** Fires in sync `_job_sync_complete`; feeds XP, leaderboards, Discord roles, titles, milestones, notifications. **The centerpiece.**
 - **Disposition:** **Keep + Adapt** — stable framework, but this is *the* surface the Pursuer/Job layer wraps. Adapt = extend (Job XP derivation), not rewrite.
 
 ### Leaderboard System
 - **What:** Redis sorted-set leaderboards (badge earners, progress, XP — per-series/global/per-country). Incremental signal updates + cron reconciliation.
-- **Lives in:** `services/redis_leaderboard_service.py` (~1k lines), `leaderboard_service.py`, `update_leaderboards` cron.
+- **Lives in:** `services/badge_leaderboards.py` (indexed Postgres reads). **Rebuilt 2026-08**: `redis_leaderboard_service.py`, `leaderboard_service.py` and the `update_leaderboards` cron are all deleted.
 - **Status:** Shipped. O(log n) lookups, 7h TTL.
 - **Coupling:** Reads ProfileGamification XP; updated on UserBadge change + sync. Surfaced on dashboard, badge detail, profiles.
 - **Disposition:** **Keep** — display layer for badges+XP. *Recommendation:* alert if last rebuild >1h stale. Gets per-Job leaderboards when Jobs ship.
@@ -90,9 +90,9 @@ These are the hard-won, battle-tested backend. **All Keep.** The rebuild does no
 
 This is the heart of the rebuild. **The foundation (Badge XP) is shipped and solid. The Pursuer layer does not exist yet.**
 
-### Badge XP system (ProfileGamification + xp_service + signals)
+### Badge XP system — REBUILT 2026-08 (standing tables, no signals)
 - **What:** Real-time XP calc/denormalization from badge progress; `total_badge_xp`, `series_badge_xp`. `bulk_gamification_update()` defers recalc during sync.
-- **Lives in:** `models.py` ProfileGamification (~2051-2085), `services/xp_service.py` (~342 lines), `signals.py` (~242-341).
+- **Lives in:** `models.py` ProfileBadgeStanding / SeriesBadgeStanding / SeriesEditionStanding / ProfileEditionStanding, `services/badge_xp.py`. **Deleted 2026-08**: `xp_service.py`, the gamification signals, and `ProfileGamification` as a live denorm (the table is retained but frozen).
 - **Status:** **Shipped, live.** Only the XP layer is real.
 - **Disposition:** **Keep** — load-bearing; the Pursuer's numeric foundation. Will gain fields (`job_xp`, `job_levels`, title slots) when Jobs ship — extend, don't replace.
 
@@ -108,7 +108,7 @@ This is the heart of the rebuild. **The foundation (Badge XP) is shipped and sol
 
 ### Milestones & Titles
 - **What:** 30+ criteria types; milestones award equippable Titles. Easter eggs are manual-type milestones.
-- **Lives in:** `models.py` (~2304-2408), `services/milestone_service.py`, `milestone_handlers.py`.
+- **Lives in:** RETIRED 2026-08 — the legacy engine was deleted (migration `0282`). Milestones now live in the `milestones` app.
 - **Status:** Shipped; evaluated on sync.
 - **Disposition:** **Keep** (adapt) — the title/milestone infra is exactly where Job-level titles ("Apprentice Driver" → "Master Driver") will plug in.
 
@@ -184,14 +184,14 @@ This is the heart of the rebuild. **The foundation (Badge XP) is shipped and sol
 - **Disposition:** **Adapt (re-anchor)** — this is the most important presentation-layer decision. The tokens are good and mostly survive, but the system needs to be re-grounded on the new center of gravity (Pursuit home + Logbook + Badge Gallery, built natively in the visual identity) rather than the Dashboard. Section 4 (Tokens) was deliberately deferred until these surfaces are designed — that's the moment to open it. **This is what the design/product charter must resolve.**
 
 ### JS Utilities (`utils.js`) + page-specific JS
-- **What:** ~1100-line shared lib (API, ToastManager, InfiniteScroller, DragReorderManager, CoachMarks, etc.) + ~40 feature JS files.
-- **Status:** utils.js shipped/stable. Feature files mixed: some modern (frame.js, welcome-tour.js, browse-filters.js), some predate the redesign; a few likely stale (navbar-search.js).
+- **What:** ~900-line shared lib (API, ToastManager, InfiniteScroller, DragReorderManager, etc.) + ~40 feature JS files.
+- **Status:** utils.js shipped/stable. Feature files mixed: some modern (frame.js, browse-filters.js), some predate the redesign.
 - **Disposition:** **Keep** utils.js (extend the namespace pattern for new primitive controllers); **Keep + Audit** feature JS — build new primitive controllers (Tally/Horizon/Pursuer Card) fresh in frame.js's style, don't extend old files; prune confirmed-dead files during conversion.
 
-### Tutorial System (3 tours)
+### Tutorial System (3 tours) — REMOVED
 - **What:** Welcome Tour (hub nav) + Game Detail + Badge Detail coach-mark tours; per-user dismissal.
-- **Status:** Shipped.
-- **Disposition:** **Keep** — add tours for new surfaces (Logbook/Pursuit home) if UX testing warrants; reuse the CoachMarks + dismissal-endpoint pattern.
+- **Status:** **Removed** in the chrome rebuild (the welcome tour's chrome clone had broken against the rebuilt navbar; all three were legacy). The `Profile.*_tour_completed_at` fields remain as orphaned columns pending a drop.
+- **Disposition:** Rebuild from scratch if/when onboarding is revisited.
 
 ### Profile Cards & Forum Signatures
 - **What:** Shareable profile PNGs (social + forum sig) via Playwright (social) / pre-rendered (sig).
@@ -227,7 +227,7 @@ The reason we built these was to inform design across the rebuild. **Frame is pr
 
 ### Binder Surface
 - **What:** Badge Gallery as a trading-card binder; 6 views + 3D page-flip; first "Surface" (composite container).
-- **Status:** **Workshop-only**, locked at `/design/binder/` + list at `/design/badge-collection/`. Full reference in `binder-surface.md`.
+- **Status:** **Design record only.** The `/design/binder/` + `/design/badge-collection/` labs were removed in the 2026-08 design-lab strip; `binder-surface.md` holds the full reference.
 - **Disposition:** **Adapt (extract)** — the implementation target for the Phase 1 Badge Gallery rebuild (current gallery predates the kit). Depends on Frame (ready).
 
 ---
@@ -282,7 +282,7 @@ Mostly **Keep** — solid HTMX-based discovery layer. Mostly orthogonal to the P
 | Company System (`/companies/`) | Shipped | **Keep** | Role tabs; shares `game_grouping_service` |
 | Franchise System (`/franchises/`) | Shipped | **Keep** | main/tie-in; shares grouping service |
 | Genre / Theme / Engine | Shipped | **Keep** (Engine maybe demote) | Normalized M2M; Genre/Theme drive challenges; Engine pages low-value |
-| Flagged Games (`/games/flagged/`) | Shipped | **Keep** | Integrity gate |
+| Flagged Games (`/games/flagged/`) | **Removed** | May re-add later | Browse page (view + templates + `flagged_games` URL + subnav) removed as low-value; the underlying game flag fields + Browse Games flag filters remain. Restore from git history if reinstated. |
 | Recently Added + Scout Accounts | Shipped | **Keep** | Content freshness; `refresh_scouts` cron |
 | Shovelware Detection | Shipped | **Keep** | Proportional blacklist + whitelist (recent); integrity-critical |
 | `game_grouping_service.py` | Shipped | **Keep** | Version-stacking — fundamental to series/DLC progress |
@@ -304,9 +304,9 @@ Mostly **Keep**. Flagged where the rebuild needs a change.
 | Monthly Recap | Shipped | **Keep** | Engagement driver; verify TZ fallback + finalized-lock |
 | Analytics & Bot Detection | Shipped | **Keep** | Bot filtering gates leaderboard/challenge eligibility |
 | Site Heartbeat / Homepage | Shipped | **Keep** | Single hourly job; old featured_* services removed |
-| Advertising (AdSense + Funding Choices CMP) | Shipped | **Keep** | CMP order critical; per-page slot IDs |
+| Advertising (AdSense + Funding Choices CMP) | **Removed 2026-08** | **Gone** | Site is ad-free permanently. Removed outright, not env-gated. Took the cookie consent prompt with it (no GA, so the CMP was ads-only) and tightened the CSP. See the Advertising row in [rebuild-playbook.md](rebuild-playbook.md). |
 | Mini-games / Arcade (Stellar Circuit) | Prototype | **Absorb** | Frontend-only Phaser prototype; needs a minimal backend (sessions/scores) before any XP wiring; **also the last ZoomScaler page** |
-| Mobile App API | Backend shipped, FE pending | **Keep + complete** | Token auth; Phase 3 push blocked on Firebase |
+| Mobile App API | **Removed 2026-08** | **Rebuild with the client** | 15 endpoints + DeviceToken deleted; a client will be a full rebuild, so the API should be designed against it. See guides/mobile-app.md |
 | API Layer (~130 endpoints) | Shipped | **Keep** | Version carefully (web + mobile clients) |
 | Management Commands & Cron (~69 cmds) | Shipped | **Keep** | Drift-correction backbone; Render-scheduled |
 | Security / Settings / Redis / SEO | Shipped | **Keep** | Solid baseline; CSP allowlist is manual |

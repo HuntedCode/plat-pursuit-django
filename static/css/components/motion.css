@@ -1,0 +1,128 @@
+/* ============================================================
+ * MOTION -- shared cross-page entrance primitives. Kept in one home so every rebuilt page opens with
+ * the same beat instead of each page hand-rolling its own (or hard-cutting in). Reduced-motion users
+ * always get the final resting state with no movement.
+ * ============================================================ */
+
+/* Page header / hero entrance: the opening beat of a rebuilt page. Put .pp-head-cascade on a header's
+ * card-body -- its DIRECT CHILDREN fade + rise (9px) in a staggered cascade (title, then stats, then the
+ * rest) for a livelier, layered entrance than moving the whole card as one block. A card-body with a
+ * single child just rises on its own. `backwards` fill holds the hidden "from" state through the delay so
+ * nothing flashes first; children past the third share the last beat so a long header never trickles in. */
+@keyframes ppHeadIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-head-cascade > * { animation: ppHeadIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-head-cascade > *:nth-child(2) { animation-delay: 0.07s; }
+    .pp-head-cascade > *:nth-child(3) { animation-delay: 0.14s; }
+    .pp-head-cascade > *:nth-child(n+4) { animation-delay: 0.2s; }
+}
+
+/* Directional view switch (Material "shared axis"): when a view/tab toggle swaps content, the incoming
+ * panel slides + fades in FROM THE SIDE IT LIVES ON -- forward in the tab order enters from the right,
+ * backward from the left -- so the switch has a sense of place. Driven by PlatPursuit.slideViewIn(), which
+ * picks the class from the tab order. Transform/opacity only. Reduced-motion users get an instant swap. */
+@keyframes ppViewInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes ppViewInLeft { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@media (prefers-reduced-motion: no-preference) {
+    /* `backwards` (not `both`): the end state == the panel's natural position, so we DON'T hold a transform
+     * after the slide -- a persistent translateX() would make the panel a containing block and break any
+     * sticky/fixed descendant. Returns cleanly to transform:none when the 0.28s slide finishes. */
+    .pp-view-in-right { animation: ppViewInRight 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .pp-view-in-left { animation: ppViewInLeft 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+}
+
+/* Tab "ignite": the segmented-switcher chip that JUST became active blooms its glow once, then settles
+ * flat back into its resting .is-active state (no fill-mode -- it hands off to the chip's own styles).
+ * Applied one-shot by PlatPursuit.igniteTab(). rgba (the brand primary cyan), never color-mix (lightningcss
+ * strips color-mix from @keyframes). Reduced-motion = no bloom. */
+@keyframes ppTabIgnite {
+    0%   { box-shadow: 0 0 4px 0 rgba(103, 209, 248, 0.3); }
+    40%  { box-shadow: 0 0 20px 3px rgba(103, 209, 248, 0.55); }
+    100% { box-shadow: 0 0 0 0 rgba(103, 209, 248, 0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .pp-tab-ignite { animation: ppTabIgnite 0.5s ease-out; }
+}
+
+/* Draw an SVG stroke IN (checkmarks, glyphs) -- the drawn shapes trace themselves from nothing. Put
+ * .pp-draw-in on the <svg> (or a wrapper); its shapes need pathLength="1" so the dash math is uniform
+ * regardless of the real path length, and multi-shape icons trace in order via the nth-child stagger.
+ * At rest / under reduced motion the stroke is simply drawn (dasharray 1 + offset 0 = solid). Generalized
+ * from the Career job-glyph draw; reuse for any "line drawing itself" beat (e.g. the badge stage check). */
+@keyframes ppDrawIn { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.pp-draw-in svg *, .pp-draw-in > * { stroke-dasharray: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-draw-in svg *, .pp-draw-in > * { animation: ppDrawIn 0.45s var(--pp-ease, ease) both; }
+    .pp-draw-in svg *:nth-child(2), .pp-draw-in > *:nth-child(2) { animation-delay: 0.12s; }
+    .pp-draw-in svg *:nth-child(3), .pp-draw-in > *:nth-child(3) { animation-delay: 0.24s; }
+    .pp-draw-in svg *:nth-child(n+4), .pp-draw-in > *:nth-child(n+4) { animation-delay: 0.36s; }
+}
+
+/* The settle-in arrival: rise + fade + a hair of scale, the shared idiom for a card landing in place.
+ *
+ * It lives HERE, not with a consumer, because it has two of them in different component files -- the
+ * Collection wall (`.pp-gallery.is-revealing`, a capped nth-child cascade) and badge detail's stage stack
+ * (`.bd-stages--armed.is-inview`). It used to be defined in collection-case.css, and when the Case view
+ * was retired that file was deleted and took the keyframe with it, leaving BOTH surfaces naming an
+ * animation that no longer existed. A CSS `animation` referencing an undefined @keyframes is silently
+ * inert -- no console error, no visual clue beyond "the entrance stopped happening" -- so it went
+ * unnoticed. A keyframe with more than one consumer belongs in the shared file; that is the fix for the
+ * cause and not just the symptom. `tests/engine/test_css_animations.py` now fails on any such dangling
+ * reference. */
+/* SECTION ARRIVAL -- the Support family's shared entrance (generalized from the roadmap's
+   scroll choreography). Mark a section `.pp-arrive` and its revealing pieces `.pp-arrive__it`
+   (optionally with a per-item `--i`); a page opts in by arming `html.pp-arm` BEFORE first
+   paint (extra_head one-liner) and calling PlatPursuit.arriveOnScroll() at boot. Three-path
+   degradation, the load-bearing part: no JS -> never armed, nothing hidden; JS without IO ->
+   the helper reveals everything immediately; reduced motion -> the hide lives INSIDE the
+   no-preference gate, so nothing is ever hidden from a reduced-motion viewer. */
+@media (prefers-reduced-motion: no-preference) {
+    html.pp-arm .pp-arrive:not(.is-in) .pp-arrive__it { opacity: 0; }
+
+    .pp-arrive.is-in .pp-arrive__it {
+        opacity: 1;
+        animation: ppRevealIn 0.5s var(--pp-ease) backwards;
+        animation-delay: calc(min(var(--i, 0), 10) * 70ms);
+    }
+}
+
+@keyframes ppRevealIn { from { opacity: 0; transform: translateY(12px) scale(0.955); } to { opacity: 1; transform: none; } }
+
+/* The supporter name flow.
+   Not a sheen. A single band travelling across text is mechanical -- it reads as a metronome, and
+   the eye locks onto the period immediately. This is a train of three light bands at irregular
+   widths and spacings, so the pattern never resolves into a beat: it reads as light moving over
+   water rather than a highlight sliding along a bar.
+
+   THE WRAP IS INVISIBLE by construction rather than by fading out. The gradient's first and last
+   thirds are flat tier colour, so the window at 0% and at 100% shows the same thing and the jump
+   cannot be seen. That is what lets this loop forever without a rest beat or a crossfade.
+
+   Only `background-position` moves. No filter, no background-size, nothing that re-rasterises the
+   gradient -- so a page with several of these repaints some glyphs and does nothing else. */
+@keyframes ppSupFlow {
+    from { background-position: 0% 50%; }
+    to   { background-position: 100% 50%; }
+}
+
+/* The support storefront's floating-star rise (see .sup-go__risestar in support.css for the
+   per-star custom props). Transform + opacity ONLY -- and no color-mix() in here ever; lightningcss
+   silently drops frames that use it. The star emerges from below the clip edge, climbs INSIDE the
+   button (the emitter clips at its bounds) with a small sideways drift and settle-rotation, and
+   dissolves before the loop point so the wrap is invisible. */
+@keyframes ppStarRise {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(0.5) rotate(0deg);
+    }
+    14% {
+        opacity: 0.85;
+    }
+    78% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--rise-x, 0px), -40px) scale(1) rotate(var(--rise-r, 15deg));
+    }
+}

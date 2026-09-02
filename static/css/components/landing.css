@@ -1,0 +1,669 @@
+/* ==========================================================================================
+   land -- the anonymous landing (2026-08 rebuild).
+
+   Mobile-first (base 375 -> md 768 -> lg 1024). One custom family for the page's own shapes;
+   buttons are pp-cta, medallions are the shared component, the showcase card is the real
+   Profile Card transform-scaled the way every card preview on the site is. The section
+   eyebrow (tick + small caps) deliberately echoes the Profile Card's own section eyebrows:
+   the front door teaches the product's grammar before you're inside.
+   ========================================================================================== */
+
+/* ── Eyebrow (shared by every section) ── */
+.land-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--pp-text-mute);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+.land-eyebrow__tick {
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--pp-primary);
+    flex-shrink: 0;
+}
+
+/* ── Hero ── */
+.land-hero {
+    padding: 3.5rem 0 3rem;
+}
+@media (min-width: 768px) { .land-hero { padding: 5.5rem 0 4rem; } }
+
+.land-hero__inner {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1.1rem;
+}
+.land-hero__inner .land-eyebrow { justify-content: center; }
+
+.land-hero__h1 {
+    font-family: var(--pp-font-display);
+    font-size: 2.1rem;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: var(--pp-text);
+    text-wrap: balance;
+}
+@media (min-width: 768px) { .land-hero__h1 { font-size: 3.1rem; } }
+
+.land-hero__sub {
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+    max-width: 56ch;
+}
+@media (min-width: 768px) { .land-hero__sub { font-size: 1.05rem; } }
+
+/* The hero's one orchestrated beat: children rise in sequence on load. Same recipe as
+   pp-head-cascade but for more children, and gated behind no-preference. */
+@media (prefers-reduced-motion: no-preference) {
+    .land-hero__inner > * { animation: ppRevealIn 0.55s var(--pp-ease) backwards; }
+    .land-hero__inner > :nth-child(1) { animation-delay: 0s; }
+    .land-hero__inner > :nth-child(2) { animation-delay: 0.07s; }
+    .land-hero__inner > :nth-child(3) { animation-delay: 0.14s; }
+    .land-hero__inner > :nth-child(4) { animation-delay: 0.22s; }
+    .land-hero__inner > :nth-child(n+5) { animation-delay: 0.3s; }
+}
+
+/* The search */
+.land-search {
+    display: flex;
+    width: 100%;
+    max-width: 520px;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+}
+.land-search__input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.7rem 1rem;
+    font-size: 1rem;
+    color: var(--pp-text);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.land-search__input:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+.land-search__input:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+.land-search__go {
+    font-size: 0.9rem;
+    padding: 0.7rem 1.15rem;
+    white-space: nowrap;
+}
+@media (max-width: 480px) {
+    .land-search { flex-direction: column; }
+}
+
+.land-search__hint {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--pp-text-mute);
+    max-width: 52ch;
+}
+
+/* The wait, staged */
+.land-search__status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-1);
+    max-width: 520px;
+    width: 100%;
+}
+.land-search__status.is-error { border-color: color-mix(in oklab, var(--pp-error) 45%, transparent); }
+.land-search__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--pp-primary);
+    flex-shrink: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-search__status.is-waiting .land-search__dot { animation: landPulse 1.6s ease-in-out infinite; }
+}
+@keyframes landPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.72); }
+}
+.land-search__status.is-error .land-search__dot { background: var(--pp-error); }
+.land-search__status.is-ready .land-search__dot { background: var(--pp-success); }
+.land-search__msg {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--pp-text-dim);
+    min-width: 0;
+}
+.land-search__visit {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--pp-primary);
+    white-space: nowrap;
+}
+.land-search__visit svg { width: 14px; height: 14px; }
+.land-search__visit:focus-visible,
+.land-hero__link:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-search__status:not([hidden]) { animation: ppRevealIn 0.4s var(--pp-ease); }
+    /* The payoff moment gets the page's one SPRING: the overshoot is celebration, and it is
+       spent here rather than on chrome because "your profile exists now" is the emotion. */
+    .land-search__visit:not([hidden]) { animation: landSpringIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+}
+@keyframes landSpringIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+.land-search__visit:hover { text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+
+.land-hero__accounts {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+}
+.land-hero__link { color: var(--pp-text-dim); font-weight: 600; transition: color 0.15s ease; }
+.land-hero__link:hover { color: var(--pp-text); }
+.land-hero__sep { color: var(--pp-text-mute); }
+
+/* ── The heartbeat band ── */
+.land-pulse {
+    padding: 1.75rem 0;
+    border-top: 1px solid var(--pp-divider);
+    border-bottom: 1px solid var(--pp-divider);
+    background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent);
+}
+.land-pulse__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem 1rem;
+    max-width: 900px;
+    margin: 0 auto;
+}
+@media (min-width: 768px) { .land-pulse__grid { grid-template-columns: repeat(4, 1fr); } }
+.land-pulse__grid--duo {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 480px;
+    margin-top: 1.5rem;
+}
+.land-pulse__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.3rem;
+}
+.land-pulse__num {
+    font-family: var(--pp-font-display);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--pp-text);
+    letter-spacing: -0.02em;
+}
+@media (min-width: 768px) { .land-pulse__num { font-size: 1.9rem; } }
+.land-pulse__lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.land-pulse__livedot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pp-primary);
+    flex-shrink: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-pulse__livedot { animation: landPulse 2.2s ease-in-out infinite; }
+}
+.land-pulse__tag {
+    margin-top: 1.25rem;
+    text-align: center;
+    font-size: 0.82rem;
+    font-style: italic;
+    color: var(--pp-text-mute);
+    padding-right: 4px;
+}
+
+/* ── Generic section ── */
+.land-sec { padding: 3.25rem 0; }
+@media (min-width: 768px) { .land-sec { padding: 4.5rem 0; } }
+.land-sec--tight { padding: 2rem 0; }
+/* Every other section sits on the heartbeat band's own faint wash (his call: the scroll should
+   announce its section changes). Hairlines close each washed band, so boundaries read as designed
+   edges rather than a colour accident. */
+.land-sec--alt {
+    background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent);
+    border-top: 1px solid var(--pp-divider);
+    border-bottom: 1px solid var(--pp-divider);
+}
+
+.land-sec__head {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.8rem;
+}
+.land-sec__head .land-eyebrow { justify-content: center; }
+.land-sec__h2 {
+    font-family: var(--pp-font-display);
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    color: var(--pp-text);
+    text-wrap: balance;
+}
+@media (min-width: 768px) { .land-sec__h2 { font-size: 2.1rem; } }
+.land-sec__h2--sm { font-size: 1.3rem; }
+@media (min-width: 768px) { .land-sec__h2--sm { font-size: 1.55rem; } }
+.land-sec__sub {
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--pp-text-dim);
+}
+.land-sec__foot { display: flex; justify-content: center; margin-top: 2rem; }
+
+/* ── Medallion shelf ── */
+.land-medals {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem 0.75rem;
+    max-width: 760px;
+    margin: 2.25rem auto 0;
+}
+@media (min-width: 768px) { .land-medals { grid-template-columns: repeat(6, 1fr); } }
+/* The .pp-med contract: intrinsic width is a FIXED --sz (default 160px) the host must set --
+   an unset slot overflowed its track and the shelf overlapped. Sized under the track (mobile
+   3-col ~106px, desktop 6-col ~117px), centered, with padding for the plate's -4% bleed. */
+.land-medals__slot {
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    padding: 6px 0;
+}
+.land-medals__slot .pp-med { --sz: 92px; }
+@media (min-width: 768px) { .land-medals__slot .pp-med { --sz: 104px; } }
+
+.land-medals__hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--pp-text-mute);
+    letter-spacing: 0.04em;
+}
+.land-medals__hint svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--pp-primary); }
+
+/* ── The showcase card ── */
+.land-card { margin-top: 2.25rem; }
+.land-card__frame {
+    position: relative;
+    width: 100%;
+    max-width: 1000px;
+    aspect-ratio: 1200 / 630;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--pp-border);
+    box-shadow: 0 18px 40px rgba(5, 8, 12, 0.45);
+}
+.land-card__scaler {
+    width: 1200px;
+    height: 630px;
+    transform-origin: top left;
+}
+.land-card__note {
+    margin-top: 0.9rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--pp-text-mute);
+}
+
+/* ── The demo rating card ── */
+/* Echoes .pp-rcard's vocabulary (left recommendation edge, stars-over-score verdict, four
+   toned stat cells, the quoted take) without its data coupling: live HTML, not a screenshot. */
+.land-rdemo { max-width: 1000px; margin: 1.9rem auto 0; touch-action: pan-y; }
+/* The stack: every SLIDE (a pair of cards) in the same grid cell (height = tallest slide, so
+   the section never jumps), crossfading on .is-active. */
+.land-rdemo__stack { display: grid; }
+.land-rdemo__stack > .land-rdemo__slide { grid-area: 1 / 1; }
+.land-rdemo__slide {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    align-items: stretch;
+}
+@media (min-width: 768px) { .land-rdemo__slide { grid-template-columns: repeat(2, 1fr); } }
+/* A lone card (the fixture, or an odd tail) centers at single-card width instead of hugging
+   half the row. */
+.land-rdemo__card:only-child { grid-column: 1 / -1; width: 100%; max-width: 560px; justify-self: center; }
+.land-rdemo__stack > .land-rdemo__slide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.land-rdemo__stack > .land-rdemo__slide.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-rdemo__stack > .land-rdemo__slide {
+        transition: opacity 0.55s var(--pp-ease), visibility 0s linear 0.55s, transform 0.55s var(--pp-ease);
+        transform: translateY(6px);
+    }
+    .land-rdemo__stack > .land-rdemo__slide.is-active {
+        transition: opacity 0.55s var(--pp-ease), visibility 0s, transform 0.55s var(--pp-ease);
+        transform: translateY(0);
+    }
+}
+
+/* The card: pp-rcard's shape -- no padding on the card (the art bleeds to its edges; the box
+   metrics live on the body), stacked on a phone, art-panel split from md:. */
+.land-rdemo__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-left: 3px solid var(--rec-c, var(--pp-primary));
+    border-radius: var(--pp-radius-md, 12px);
+    text-align: left;
+}
+@media (min-width: 768px) { .land-rdemo__card { flex-direction: row; } }
+.land-rdemo__card[data-rec="worth_it"] { --rec-c: var(--pp-success); }
+.land-rdemo__card[data-rec="good_game_bad_plat"] { --rec-c: var(--pp-warning); }
+.land-rdemo__card[data-rec="skip"] { --rec-c: var(--pp-error); }
+
+/* The art panel, copied from .pp-rcard: a wide band on a phone, a left column from md:, the
+   image absolutely positioned (the panel's height comes from the flex stretch), and one overlay
+   doing two jobs -- fading the frame into the card's surface toward the BODY (down when
+   stacked, across when split) and holding the whole image back so six screenshots don't
+   out-shout the numbers they sit beside. */
+.land-rdemo__art { position: relative; flex: none; width: 100%; height: 72px; background: var(--pp-bg-2); }
+@media (min-width: 768px) { .land-rdemo__art { width: 110px; height: auto; } }
+.land-rdemo__shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.land-rdemo__art::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to bottom,
+                color-mix(in oklab, var(--pp-bg-1) 22%, transparent) 0%,
+                color-mix(in oklab, var(--pp-bg-1) 30%, transparent) 55%,
+                var(--pp-bg-1) 100%);
+}
+@media (min-width: 768px) {
+    .land-rdemo__art::after {
+        background: linear-gradient(to right,
+                    color-mix(in oklab, var(--pp-bg-1) 22%, transparent) 0%,
+                    color-mix(in oklab, var(--pp-bg-1) 30%, transparent) 55%,
+                    var(--pp-bg-1) 100%);
+    }
+}
+
+.land-rdemo__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 1.1rem 1.25rem;
+}
+.land-rdemo__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.land-rdemo__title {
+    font-family: var(--pp-font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--pp-text);
+    line-height: 1.2;
+}
+.land-rdemo__by { font-size: 0.72rem; color: var(--pp-text-mute); margin-top: 2px; }
+.land-rdemo__verdict {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+    --star: 0.86rem;
+}
+.land-rdemo__score {
+    font-family: var(--pp-font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--pp-text);
+}
+.land-rdemo__of { font-size: 0.72em; color: var(--pp-text-mute); font-weight: 600; }
+/* pp-rcard's documented lesson, inherited with its art treatment: this card's width is the
+   PAIRING's business, not the viewport's, so the 2x2 -> 1x4 flip is a CONTAINER query (a
+   media query put four cells in a ~206px body at 768px and overflow: hidden ate the Fun cell
+   silently). The wrapper exists because an element is never its own query container. */
+.land-rdemo__statswrap { container-type: inline-size; }
+.land-rdemo__stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+    padding: 0.7rem 0;
+    border-top: 1px solid var(--pp-divider);
+    border-bottom: 1px solid var(--pp-divider);
+}
+@container (min-width: 360px) { .land-rdemo__stats { grid-template-columns: repeat(4, 1fr); } }
+.land-rdemo__stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.land-rdemo__stat[data-tone="good"] { --stat-c: var(--pp-success); }
+.land-rdemo__stat[data-tone="warn"] { --stat-c: var(--pp-warning); }
+.land-rdemo__stat[data-tone="bad"]  { --stat-c: var(--pp-error); }
+.land-rdemo__stat[data-tone="high"] { --stat-c: var(--pp-accent); }
+.land-rdemo__k {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: var(--pp-text-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.land-rdemo__n {
+    font-family: var(--pp-font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--stat-c, var(--pp-text));
+    line-height: 1;
+}
+.land-rdemo__w { font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.land-rdemo__take {
+    font-size: 0.88rem;
+    font-style: italic;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding-right: 4px;
+}
+.land-rdemo__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.land-rdemo__pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--rec-c, var(--pp-primary));
+    border: 1px solid color-mix(in oklab, var(--rec-c, var(--pp-primary)) 50%, transparent);
+    background: color-mix(in oklab, var(--rec-c, var(--pp-primary)) 10%, transparent);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.land-rdemo__note { font-size: 0.72rem; color: var(--pp-text-mute); }
+
+.land-rdemo__dots {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin-top: 0.75rem;
+}
+/* Fixed-width SLOTS holding a morphing inner pill: the row's total width never changes, so the
+   centered strip cannot jitter sideways as the pill travels -- and every slot is a real >=24px
+   target rather than an 8px speck. */
+.land-rdemo__dot {
+    width: 28px;
+    height: 24px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.land-rdemo__dot::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-text-mute) 45%, transparent);
+    transition: background 0.2s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .land-rdemo__dot::before { transition: background 0.2s ease, width 0.28s var(--pp-ease); }
+}
+.land-rdemo__dot.is-active::before {
+    background: var(--pp-primary);
+    width: 20px;
+}
+.land-rdemo__dot:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 1px;
+    border-radius: 999px;
+}
+
+/* ── The proof (share card images) ── */
+.land-proof {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    max-width: 980px;
+    margin: 2.25rem auto 0;
+}
+@media (min-width: 768px) { .land-proof { grid-template-columns: 1fr 1fr; } }
+.land-proof__img {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid var(--pp-border);
+    box-shadow: 0 14px 32px rgba(5, 8, 12, 0.4);
+}
+
+/* ── Discord ── */
+.land-discord {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 1.5rem 1.5rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md, 12px);
+    background: var(--pp-bg-1);
+}
+@media (min-width: 768px) {
+    .land-discord { flex-direction: row; align-items: center; justify-content: space-between; }
+}
+.land-discord__go { flex-shrink: 0; }
+
+/* ── The close ── */
+.land-close {
+    padding: 3.5rem 0 4.5rem;
+    border-top: 1px solid var(--pp-divider);
+}
+.land-close__inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+}
+.land-close__ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
+/* The star emitter's host recipe (fundraiser's fnd-cta--rise, on a pp-cta): the clip box, the
+   star colour, and the label riding above the stars. */
+.land-rise { position: relative; overflow: hidden; --sup-t: var(--pp-primary); }
+.land-rise__lbl { position: relative; }
+
+/* ── The no-PSN hero's three-step strip (home/_hero_no_psn.html) ─────────────
+   Stacked at 375px, 3-across at md. The warn strip follows .land-search__status's
+   tinted-border pattern in the warning hue. Opacity/transform motion only. */
+.land-steps { display: grid; grid-template-columns: 1fr; gap: 0.9rem; margin-top: 2rem; text-align: left; }
+@media (min-width: 768px) { .land-steps { grid-template-columns: repeat(3, 1fr); gap: 1.1rem; } }
+.land-steps__cell { display: flex; align-items: flex-start; gap: 0.7rem; min-width: 0; }
+.land-steps__num {
+    flex: 0 0 auto; width: 1.7rem; height: 1.7rem; border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 0.85rem;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    color: var(--pp-primary);
+}
+.land-steps__t { font-weight: 700; font-size: 0.9rem; line-height: 1.3; }
+.land-steps__c { font-size: 0.78rem; line-height: 1.5; color: var(--pp-text-dim); margin-top: 0.2rem; }
+.land-steps__warn {
+    display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 1.4rem; text-align: left;
+    padding: 0.7rem 0.9rem; border-radius: 0.6rem;
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 35%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 9%, transparent);
+}
+.land-steps__warn svg { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; margin-top: 0.1rem; color: var(--pp-warning); }
+.land-steps__warn p { font-size: 0.78rem; line-height: 1.5; opacity: 0.85; }

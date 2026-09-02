@@ -1,175 +1,230 @@
 {% extends 'base.html' %}
 {% load custom_filters humanize static seo_tags %}
 {% block title %}{{ game.title_name }} Trophies ({{ game.platforms_display }}){% endblock %}
-{% block meta_description %}Trophy list, roadmap, and community ratings for {{ game.title_name }} on {{ game.platforms_display }}. Track your PlayStation platinum progress on Platinum Pursuit.{% endblock %}
+{% comment %}meta_description flows from the view's seo_description (one system -- the
+hardcoded block here silently discarded the view's richer, truthful value, and this one still
+sold the hidden Roadmaps). rel=canonical: SELF, the bare list URL -- the slim-down gave this page
+distinct stack content (trophies, Ranks, the community snapshot; Ratings/About moved up to the
+concept Game page), which is what the slice-1 interim consolidation was waiting on. An explicit
+view-computed value, not block.super: base.html's default is request.path, which would mint
+per-viewer canonicals on the /games/<np>/<username>/ variant.{% endcomment %}
+{% block canonical_url %}{{ page_canonical_url }}{% endblock %}
+{% block og_url %}{{ page_canonical_url }}{% endblock %}
 {% block og_type %}video.other{% endblock %}
 {% block og_title %}{{ game.title_name }} Trophies{% endblock %}
-{% block og_description %}{{ game.title_name }} trophy list and platinum roadmap for {{ game.platforms_display }}. Join the hunt on Platinum Pursuit.{% endblock %}
-{% block twitter_description %}{{ game.title_name }} trophy list and platinum roadmap for {{ game.platforms_display }}.{% endblock %}
+{% block og_description %}{{ seo_description }}{% endblock %}
+{% block twitter_description %}{{ seo_description }}{% endblock %}
 {% block og_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
-{% block extra_head %}{% jsonld_game game game.concept request %}{% endblock %}
+{% comment %}No averages arg: the AggregateRating claim belongs to the ONE concept Game page
+(where ratings live); two indexable pages both claiming it for the same work would race for the
+rich result.{% endcomment %}
+{% block extra_head %}{% jsonld_game game game.concept request node_url=page_canonical_url %}{% endblock %}
 
 {% block content %}
     <div id="game-detail-container"
          data-base-url="{% if url_psn_username %}{% url 'game_detail_with_profile' np_communication_id=game.np_communication_id psn_username=url_psn_username %}{% else %}{% url 'game_detail' np_communication_id=game.np_communication_id %}{% endif %}"
          data-scroll-key="gameDetailScrollPos_{{ game.np_communication_id }}">
-        <section>
-            {% include 'partials/breadcrumb.html' with items=breadcrumb %}
-            {% include 'trophies/partials/game_detail/game_detail_header.html' %}
-        </section>
 
-    {# ── Roadmap CTA: top-level promoted card so the roadmap isn't buried inside Community ── #}
-    {% include 'trophies/partials/game_detail/roadmap_cta_card.html' %}
+        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Community: Ratings + Reviews (shared DLC tabs sync with Roadmap card above) ── #}
-    <div id="community-tabs-section" class="mt-4">
-        {% include 'trophies/partials/game_detail/community_tabs_section.html' %}
-    </div>
+        {# ── Hero: identity + your progress + the "In your Pursuit" spine band ── #}
+        {% include 'trophies/partials/game_detail/hero.html' %}
 
-    {% include 'partials/ad_unit.html' with ad_slot="4478966946" %}
+        {% comment %} Sticky minibar: persists across all four views (page-level, outside the panels), pinned by
+        StickyReveal once the real switcher scrolls under the chrome. It always re-surfaces the view switcher +
+        game identity; per-view extras (sort / count / Filters reach for Trophies) are gated by data-mb-active,
+        so each view can utilize the bar differently as its panel is rebuilt. Controls are proxied to the real
+        toolbar in JS (no duplicate form fields). {% endcomment %}
+        <div class="pp-minibar gd-minibar" data-sticky-reveal data-sticky-sentinel="#gd-minibar-sentinel" data-mb-active="trophies">
+            <div class="pp-minibar__inner container mx-auto">
+                <span class="pp-minibar__id">
+                    {# Identity icon = the active tab's own icon (CSS gates each on data-mb-active). #}
+                    <svg data-mb-only="trophies" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                    <svg data-mb-only="leaderboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg>
+                    <span class="pp-minibar__title">{{ game.title_name }}</span>
+                    {# The active board's title, shown on the Ranks tab at desktop widths (JS fills it from the panel). #}
+                    <span class="gd-lb__mbtitle" data-lb-mb-title aria-hidden="true"></span>
+                    <span class="pp-minibar__count" data-minibar-count data-mb-only="trophies" title="trophies shown">{{ trophy_shown_count|intcomma }}</span>
+                </span>
+                <div class="pp-minibar__controls">
+                    {# Jump-to-group dropdown: JS fills it from the group-nav + hides it when there's no DLC (0-1 group). #}
+                    <select data-minibar-groupjump data-mb-only="trophies" class="pp-gallery__select pp-minibar__groupjump" aria-label="Jump to trophy group" hidden></select>
+                    <select data-minibar-sort data-mb-only="trophies" class="pp-gallery__select pp-minibar__sort" aria-label="Sort trophies"></select>
+                    <button type="button" class="pp-minibar__filters" data-minibar-filters data-mb-only="trophies" aria-label="Scroll to the trophy filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="pp-minibar__flbl">Filters</span></button>
 
-    {% if trophies_syncing %}
-        <div class="mt-4">
-            <div class="alert alert-info" role="status" aria-live="polite">
-                <span class="loading loading-spinner" aria-hidden="true"></span>
-                Trophies are syncing, check back in a few moments for full details!
-            </div>
-        </div>
-    {% else %}
-        {# ── Trophy Section (wrapped in container card) ── #}
-        <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral mt-4">
-            <div class="card-body p-3 md:p-5 lg:p-7">
-                <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-3.5 h-3.5' %}
-                    Trophies
-                </h4>
-
-                {# Filter toolbar #}
-                <form id="filter-form" method="get" data-browse-form
-                      hx-get="{% if url_psn_username %}{% url 'game_detail_with_profile' np_communication_id=game.np_communication_id psn_username=url_psn_username %}{% else %}{% url 'game_detail' np_communication_id=game.np_communication_id %}{% endif %}"
-                      hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 mb-3">
-                        <div class="flex flex-col md:flex-row gap-2 md:gap-3">
-                            <select name="sort" id="id_sort"
-                                    class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
-                                {% for value, display in form.sort.field.choices %}
-                                    <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
-                                {% endfor %}
-                            </select>
-
-                            <select name="earned" id="id_earned"
-                                    class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
-                                {% for value, display in form.earned.field.choices %}
-                                    <option value="{{ value }}" {% if request.GET.earned == value %}selected{% endif %}>{{ display }}</option>
-                                {% endfor %}
-                            </select>
-
-                            <select name="dlc_filter" id="id_dlc_filter"
-                                    class="select select-bordered select-sm md:select-md w-full md:w-40">
-                                {% for value, display in form.dlc_filter.field.choices %}
-                                    <option value="{{ value }}" {% if request.GET.dlc_filter == value %}selected{% endif %}>{{ display }}</option>
-                                {% endfor %}
-                            </select>
-
-                        </div>
-
-                        {# Trophy type + rarity chips #}
-                        <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-base-content/5">
-                            <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
-                            {% for value, display in form.trophy_type.field.choices %}
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="trophy_type" value="{{ value }}"
-                                           class="sr-only peer" {% if value in selected_trophy_types %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                        {{ display }}
-                                    </span>
-                                </label>
-                            {% endfor %}
-
-                            <span class="text-xs text-base-content/40 self-center ml-2 mr-0.5">Rarity:</span>
-                            {% for value, display in form.rarity_bracket.field.choices %}
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="rarity_bracket" value="{{ value }}"
-                                           class="sr-only peer" {% if value in selected_rarity_brackets %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                        {{ display }}
-                                    </span>
-                                </label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </form>
-
-                <div id="browse-results">
-                    {% include 'trophies/partials/game_detail/trophy_browse_results.html' %}
+                    {% comment %} Leaderboard controls (shown while the Ranks tab is active). The in-place
+                    rank/hunter search is the point -- find a position without scrolling back to the toolbar.
+                    Same typeahead wiring as the toolbar field, pointed at the persistent leaderboard panel.
+                    Filters reaches the toolbar toggles. {% endcomment %}
+                    {% comment %} Your standing while scrolled: shown only when the viewer is ranked (JS
+                    fills it from the panel). The chevron points toward your rank -- down if it's below where
+                    you're scrolled, up if above -- and flips with a spring as you cross your own row; a
+                    "here" state when your row is on screen. Click jumps to it. {% endcomment %}
+                    <button type="button" class="gd-lb__mbrank" data-lb-mb-rank data-mb-only="leaderboard" data-lb-dir="down" hidden aria-label="Jump to your rank">
+                        <svg class="gd-lb__mbrank-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+                        <span class="gd-lb__mbrank-lbl">You</span>
+                        <span class="gd-lb__mbrank-n" data-lb-mb-rank-n></span>
+                    </button>
+                    <form class="gd-lb__find gd-lb__find--mb" data-mb-only="leaderboard" data-search-wrap data-lb-mb-findform role="search">
+                        <svg class="gd-lb__findicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="search" class="gd-lb__findinput" data-lb-mb-find autocomplete="off" spellcheck="false"
+                               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="gd-lb-mb-suggest"
+                               placeholder="Rank # or hunter" aria-label="Jump to a rank, or search a hunter" />
+                        <button type="button" class="pp-search-clear" data-search-clear aria-label="Clear">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+                        <span class="pp-search-spin" aria-hidden="true"></span>
+                        <div class="gd-lb__suggest" id="gd-lb-mb-suggest" data-lb-mb-suggest role="listbox" hidden></div>
+                    </form>
+                    <button type="button" class="pp-minibar__filters" data-lb-mb-filters data-mb-only="leaderboard" aria-label="Scroll to the leaderboard filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span class="pp-minibar__flbl">Filters</span></button>
                 </div>
             </div>
         </div>
-    {% endif %}
-    </div>
 
-{% if earned_trophy_id %}
-{# Share Card Modal #}
-<dialog id="share-modal" class="modal">
-    <div class="modal-box max-w-4xl bg-base-200">
-        <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
-        </form>
-        <h3 class="font-bold text-lg mb-4" id="share-modal-title">Create Share Image</h3>
-        <div id="share-modal-content">
-            <div class="flex justify-center items-center py-12">
-                <span class="loading loading-spinner loading-lg"></span>
+        {% comment %}This list's community snapshot as page CHROME (owner's placement call +
+        design audit): a .scard strip between the hero and the switcher -- the stacked-chrome
+        stat-card position, in the house stat-strip vocabulary. The four numbers are THIS
+        list's own denorms, per-list data the IA assigns to List detail.{% endcomment %}
+        {% include 'trophies/partials/game_detail/_community_snapshot.html' with snapshot_chrome=True %}
+
+        {# ── View switcher: Trophies (default) · Ranks -- Ratings/About live on the concept Game page (slim-down) ── #}
+        <div class="flex items-center justify-end mt-5 mb-4">
+            <div class="pp-switch" id="gd-switch" role="tablist" aria-label="Game detail view">
+                <button type="button" id="gd-tab-trophies" aria-controls="gd-view-trophies" class="pp-switch__chip is-active" data-view="trophies" role="tab" aria-selected="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span class="pp-switch__lbl">Trophies</span>
+                </button>
+                <button type="button" id="gd-tab-leaderboard" aria-controls="gd-view-leaderboard" class="pp-switch__chip" data-view="leaderboard" role="tab" aria-selected="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16"/><path d="M10 6h4v16h-4z"/><path d="M4 12h6v10H4z"/><path d="M14 9h6v13h-6z"/></svg><span class="pp-switch__lbl">Ranks</span>
+                </button>
+            </div>
+        </div>
+        {# Sentinel: once the real switcher scrolls under the chrome, StickyReveal pins the minibar above. #}
+        <span id="gd-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+        {# ── Panels: every view server-rendered in the DOM (SEO-safe), toggled client-side. ── #}
+        <div class="gd-view" id="gd-view-trophies" role="tabpanel" aria-labelledby="gd-tab-trophies" data-view="trophies">
+            {% include 'trophies/partials/game_detail/trophies_panel.html' %}
+        </div>
+
+        {% comment %} Deliberately EMPTY at render time -- the only panel not server-rendered. It is the
+        one whose cost scales with a game's popularity, and most visitors arrive from search for trophy
+        info and never open it, so it is fetched on first activation (game-detail.js). {% endcomment %}
+        <div class="gd-view" id="gd-view-leaderboard" role="tabpanel" aria-labelledby="gd-tab-leaderboard" data-view="leaderboard"
+             data-lb-src="{% url 'game_leaderboard' game.np_communication_id %}" hidden>
+            <div class="gd-lb__loading" data-lb-loading>
+                <span class="gd-lb__spinner" aria-hidden="true"></span>
+                <span>Counting the hunters&hellip;</span>
             </div>
         </div>
     </div>
-    <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-    </form>
+
+
+{% endblock %}
+
+{# Screenshot lightbox + spine modals — live in the shared overlay layer, outside the page content wrapper. #}
+{% block fixed_overlays %}
+{% include 'trophies/partials/game_detail/shot_lightbox.html' with shot_title=game.title_name %}
+
+{# Spine cross-link detail modals #}
+{% if badges %}
+<dialog id="gd-badges-modal" class="gd-modal gd-modal--badges" aria-label="Badges this game is in">
+    <div class="gd-modal__head">
+        <h3>{{ badges|length }} Badge{{ badges|length|pluralize }}</h3>
+        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
+    </div>
+    <div class="gd-modal__body">
+        {% comment %} Showcase: each EDITION this game is part of, as its medallion object (in that edition's
+        metal) + series name + type . edition. The card links to that edition's tab on the badge detail page
+        (?group=<key>). {% endcomment %}
+        <div class="gd-badgegrid" data-gd-badgegrid>
+            {% for badge in badges %}
+                <a href="{% if profile %}{% url 'badge_detail_with_profile' badge.series_slug profile.psn_username %}{% else %}{% url 'badge_detail' badge.series_slug %}{% endif %}?group={{ badge.group_key }}" class="gd-badgecard" title="{{ badge.name }} &middot; {{ badge.group_name }}">
+                    <span class="gd-badgecard__art">{% include 'components/badge_medallion.html' with frame=badge.frame no_id=True %}</span>
+                    <span class="gd-badgecard__name">{{ badge.name }}</span>
+                    <span class="gd-badgecard__type">{{ badge.type_display }} &middot; {{ badge.group_name }}</span>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
 </dialog>
-
-{# Color Grid Modal - for background selection #}
-{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
-
-{# Rate Before Download Modal - prompts unrated users to rate before downloading share card #}
-{% include 'partials/rate_before_download_modal.html' %}
-{% include 'partials/theme_nudge_modal.html' %}
 {% endif %}
 
+{# Versions & editions: this game on other platforms (same Concept) + related games in the same family (other Concepts). #}
+{% if other_versions or family_versions %}
+<dialog id="gd-versions-modal" class="gd-modal gd-modal--versions pp-dismissable" aria-label="Other versions and editions of {{ game.title_name }}">
+    <div class="gd-modal__head">
+        <h3>Versions &amp; editions</h3>
+        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
+    </div>
+    <div class="gd-modal__body">
+        {% include 'trophies/partials/game_detail/_version_sections.html' %}
+    </div>
+</dialog>
+{% endif %}
+
+{# Contract detail: the SHARED .rpm modal, fetched lazily via data-contract-url. Linked viewers get the real card (contract_modal); everyone else gets the anonymized preview (contract_modal_preview) -- same modal, trophies instead of progress. One shell for both; only the footer differs (Browse vs a sign-up / link-PSN CTA). #}
+{% if pursuit_contract %}
+<div class="pp-detail-modal pp-detail-modal--contract" id="gd-contract-modal" hidden>
+    <div class="pp-detail-modal__scrim" data-contract-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Contract" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-contract-close aria-label="Close contract">&times;</button>
+        <div class="pp-detail-modal__body" data-contract-body></div>
+        {% if user.is_authenticated and user.profile.is_linked %}
+            <a class="bd-ctrmodal__more" href="{% url 'career' %}?view=contracts#career-panel-contracts">Browse all Contracts
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+        {% else %}
+            {# Sign-up hook: this is the moment the Job Board sells itself, so close with the CTA. #}
+            <div class="bd-ctrmodal__cta">
+                {% if user.is_authenticated %}
+                    <p>Link your PSN to pursue this Contract, level its Jobs, and bank XP as you play.</p>
+                    <a href="{% url 'link_psn' %}" class="gd-btn gd-btn--primary">Link your PSN</a>
+                {% else %}
+                    <p>The Job Board turns trophy hunting into a career. Pursue Contracts, level Jobs, and bank XP.</p>
+                    <a href="{% url 'account_signup' %}" class="gd-btn gd-btn--primary">Start your Job Board</a>
+                    <span class="bd-ctrmodal__alt">Already a member? <a href="{% url 'account_login' %}">Sign in</a></span>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{# Ownership-aware "My Stats" modal (game-specific personal stats). Gated on target_profile so it renders for anon viewers of a shared /games/<np>/<username>/ link too. #}
+{% if target_profile %}
+<dialog id="gd-stats-modal" class="gd-modal gd-modal--stats pp-dismissable"
+        aria-label="{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s{% else %}Your{% endif %} stats for {{ game.title_name }}">
+    <div class="gd-modal__head">
+        <h3>{% if viewing_other_profile %}{{ viewing_other_profile.display_psn_username|default:viewing_other_profile.psn_username }}'s Stats{% else %}My Stats{% endif %}</h3>
+        <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
+    </div>
+    <div class="gd-modal__body">
+        {% include 'trophies/partials/game_detail/stats_modal.html' %}
+    </div>
+</dialog>
+{% endif %}
+
+{# Report-an-issue modal (linked viewers only, matching the hero's Report button + game-flag.js). #}
+{% if user.is_authenticated and user.profile and user.profile.is_linked %}
+    {% include 'trophies/partials/game_detail/report_modal.html' %}
+{% endif %}
 {% endblock %}
 
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/shot-lightbox.js' %}"></script>
+    <script src="{% static 'js/trophy-grid.js' %}"></script>
     <script src="{% static 'js/game-detail.js' %}"></script>
-    <script src="{% static 'js/game-players-modal.js' %}"></script>
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
-    {% if earned_trophy_id %}
-    <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
-    <script src="{% static 'js/share-image.js' %}"></script>
-    <script src="{% static 'js/color-grid-modal.js' %}"></script>
-    <script src="{% static 'js/shareable-manager.js' %}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const shareBtn = document.getElementById('share-card-btn');
-            if (shareBtn) {
-                shareBtn.addEventListener('click', () => openShareModal(shareBtn));
-            }
-        });
-    </script>
-    {% endif %}
     {% if user.is_authenticated and user.profile %}
-    <script src="{% static 'js/game-lists.js' %}"></script>
+    {% comment %}game-lists.js is not loaded here while the lists system is hidden: its only entry
+    point on this page was the add-to-list button, so it would download and parse ~1,200 lines to
+    bind nothing. Restore with the button.{% endcomment %}
     <script>
-        document.addEventListener('DOMContentLoaded', () => GameListQuickAdd.init());
     </script>
     {% endif %}
     {% if user.is_authenticated and user.profile and user.profile.is_linked %}
     <script src="{% static 'js/game-flag.js' %}"></script>
-    <script src="{% static 'js/game-detail-tour.js' %}"></script>
-    {% include 'trophies/partials/game_detail/game_detail_tour.html' %}
     {% endif %}
 {% endblock %}

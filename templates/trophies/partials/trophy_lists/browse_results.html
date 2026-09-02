@@ -1,0 +1,10 @@
+{% comment %}Trophy Lists browse results -- grid-only, infinite scroll, one card per LIST
+(deliberately un-condensed; the anti-Browse-Games). Returned on HTMX filter swaps AND on the
+InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard). The
+sentinel + loading live in trophy_lists.html (outside #browse-results) so only the grid swaps.
+pp-reveal is baked in on HTMX swaps only (the htmx-settle-strips-classes fix).{% endcomment %}
+{% url 'trophy_lists' as tlb_url %}
+<div id="items-grid" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+    {% include 'trophies/partials/game_list/game_cards.html' with empty_reset_url=tlb_url %}
+</div>
+{% if request.htmx %}{% include 'partials/browse/active_filters.html' with oob=True chip_base_url=tlb_url %}{% endif %}

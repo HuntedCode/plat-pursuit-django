@@ -14,6 +14,28 @@ register = template.Library()
 
 SPOILER_PATTERN = re.compile(r'\|\|(.+?)\|\|')
 
+
+@register.filter
+def horizon_band(value):
+    """Map a completion percentage (0-100) to a Horizon cool->warm band name.
+
+    Powers the `band` tone of the Horizon primitive (static/css/components/horizon.css):
+    `data-horizon-band="{{ pct|horizon_band }}"`. Cooler the further from done, warmer the
+    closer -- the locked 4-band split (visual-identity.md, The Horizon). Keep in sync with
+    bandFor() in static/js/horizon.js.
+    """
+    try:
+        pct = float(value)
+    except (TypeError, ValueError):
+        return 'cool'
+    if pct < 30:
+        return 'cool'
+    if pct < 65:
+        return 'warming'
+    if pct < 90:
+        return 'warm'
+    return 'hot'
+
 @register.filter
 def iso_naturaltime(value):
     """Parse ISO string to datetime and apply naturaltime."""
@@ -155,6 +177,100 @@ def multiply(value, arg):
         return float(value) * float(arg)
     except (TypeError, ValueError):
         return ''
+
+@register.filter
+def rating_tone(value, kind):
+    """Semantic tone suffix for a community-rating bar/value, by stat ``kind``.
+
+    Returns one of ``good`` | ``warn`` | ``bad`` | ``high`` (mapped to accent colors
+    in game-detail.css). Polarity differs by stat: a LOW difficulty/grindiness/hours
+    is ``good`` (easier/shorter); a HIGH fun/overall is ``good``. The Ratings tab's
+    live-update JS (static/js/game-detail.js) mirrors these exact thresholds -- keep
+    the two in sync.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 'good'
+    if kind in ('difficulty', 'grindiness'):
+        return 'good' if v < 4 else 'warn' if v < 8 else 'bad'
+    if kind == 'hours':
+        return 'good' if v < 25 else 'warn' if v < 75 else 'high' if v < 100 else 'bad'
+    if kind == 'overall':  # /5 scale
+        return 'bad' if v < 2 else 'warn' if v < 4 else 'good'
+    if kind == 'fun':  # /10 scale
+        return 'bad' if v < 4 else 'warn' if v < 8 else 'good'
+    return 'good'
+
+
+@register.filter
+def rating_verdict(value, kind):
+    """Plain-language verdict for a community rating, by stat ``kind`` (the Ratings tab shows the WORD, not a
+    bare number -- more human, and honest that this is a vote average). game-detail.js verdictOf mirrors these
+    exact bands -- keep in sync. Polarity matches rating_tone: low difficulty/grindiness is good, high fun/
+    overall is good. overall is /5, the rest /10.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if kind == 'difficulty':
+        return 'A breeze' if v < 2.5 else 'Fair' if v < 5 else 'Tough' if v < 7.5 else 'Brutal'
+    if kind == 'grindiness':
+        return 'Breezy' if v < 2.5 else 'Some grind' if v < 5 else 'Grindy' if v < 7.5 else 'A slog'
+    if kind == 'fun':
+        return 'A chore' if v < 2.5 else 'So-so' if v < 5 else 'Fun' if v < 7.5 else 'A blast'
+    if kind == 'overall':  # /5
+        return 'Rough' if v < 2 else 'Mixed' if v < 3 else 'Solid' if v < 4 else 'Great' if v < 4.5 else 'Beloved'
+    return ''
+
+
+@register.filter
+def rating_summary(averages):
+    """One synthesized, human sentence describing the platinum experience, from the difficulty / grindiness /
+    fun averages (the Ratings tab's headline -- what a hunter reads to 'get it' in two seconds). A serial
+    clause list with a final conjunction that flips to 'but' when the game is hard/grindy yet still fun.
+    game-detail.js summaryOf mirrors this -- keep in sync. Returns '' if the three inputs aren't all present.
+    """
+    if not averages:
+        return ''
+    try:
+        d = float(averages.get('avg_difficulty'))
+        g = float(averages.get('avg_grindiness'))
+        f = float(averages.get('avg_fun'))
+    except (TypeError, ValueError, AttributeError):
+        return ''
+    diff = 'A breeze' if d < 2.5 else 'Fairly easy' if d < 5 else 'Tough' if d < 7.5 else 'Brutally hard'
+    grind = 'not grindy' if g < 2.5 else 'a little grindy' if g < 5 else 'a real grind' if g < 7.5 else 'a serious slog'
+    fun = 'a chore' if f < 2.5 else 'just okay' if f < 5 else 'good fun' if f < 7.5 else 'a blast to platinum'
+    conj = 'but' if (f >= 5 and (d >= 5 or g >= 5)) else 'and'   # hard/grindy YET fun -> contrast
+    return f'{diff}, {grind}, {conj} {fun}.'
+
+
+@register.simple_tag
+def rating_comparison(user_rating, averages):
+    """One synthesized sentence comparing the VIEWER's own scores to the community on the three subjective
+    axes (difficulty / grindiness / fun) -- the 'Your take' layer on the Ratings card. Callers gate on
+    user_rating present + averages['count'] > 1 (a lone rater has nothing to compare against).
+    game-detail.js comparisonOf mirrors this -- keep in sync. Returns '' if the inputs aren't all present.
+    """
+    if not user_rating or not averages:
+        return ''
+    try:
+        d = float(user_rating.difficulty) - float(averages.get('avg_difficulty'))
+        g = float(user_rating.grindiness) - float(averages.get('avg_grindiness'))
+        f = float(user_rating.fun_ranking) - float(averages.get('avg_fun'))
+    except (TypeError, ValueError, AttributeError):
+        return ''
+    T = 0.8   # within ~0.8 on the 1-10 scale reads as "about the same"
+    if abs(d) < T and abs(g) < T and abs(f) < T:
+        return 'Right in line with the community.'
+    diff = 'tougher than most' if d >= T else 'easier than most' if d <= -T else 'about as tough as most'
+    grind = 'grindier' if g >= T else 'less grindy' if g <= -T else 'about as grindy'
+    fun = 'more fun' if f >= T else 'less fun' if f <= -T else 'just as fun'
+    conj = 'but' if (f >= T and (d >= T or g >= T)) else 'and'   # harder/grindier YET more fun -> contrast
+    return f'You found it {diff}, {grind}, {conj} {fun}.'
+
 
 @register.filter
 def psn_rarity(rarity_int):
@@ -300,6 +416,33 @@ def format_date(value, arg=None):
         formatted += f" ({tz_abbrev})"
 
     return formatted
+
+@register.filter
+def format_time(value):
+    """Time-of-day only, in the viewer's timezone, respecting their 12/24-hour clock preference.
+
+    Companion to format_date for surfaces that show the date and time on separate lines (e.g. a
+    leaderboard row, where the time is the visible tiebreaker under the date). Same tz + preference
+    handling as format_date so the two read consistently.
+
+    Expects a datetime. Unlike format_date it does NOT parse date strings -- a non-datetime returns ''
+    rather than being coerced. Pass the model field, not a serialized string.
+    """
+    if not isinstance(value, datetime):
+        return ''
+
+    localized_value = value.astimezone(timezone.get_current_timezone())
+
+    use_24hr = False
+    try:
+        request = get_current_request()
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            use_24hr = getattr(request.user, 'use_24hr_clock', False)
+    except AttributeError:
+        pass
+
+    return localized_value.strftime('%H:%M' if use_24hr else '%I:%M %p')
+
 
 @register.filter
 def compact_number(value):
@@ -460,3 +603,87 @@ def youtube_embed_url(url):
     if match:
         return f'https://www.youtube-nocookie.com/embed/{match.group(1)}'
     return ''
+
+
+@register.filter
+def compact_since(value):
+    """Relative time in ONE unit, for a narrow cell: "3h ago", "2d ago", "5mo ago".
+
+    `naturaltime` is the right filter for prose and the wrong one for a stat slot -- it happily returns
+    "2 days, 19 hours ago", which is three times the width of the number the cell was built around and
+    wraps or ellipsises in it. This keeps the largest unit only.
+
+    Returns '' for a missing value so a caller can decide what an empty slot says, and treats a future
+    timestamp as "Now" rather than printing a negative age (clock skew between app and database is real).
+    """
+    if not value:
+        return ''
+    try:
+        delta = timezone.now() - value
+    except TypeError:
+        return ''
+
+    seconds = delta.total_seconds()
+    if seconds < 60:
+        return 'Now'
+    # Ordered largest-first; the first threshold the age clears wins, so exactly one unit is ever shown.
+    #
+    # A year here is TWELVE OF THESE MONTHS (360d), not 365. With a 30-day month and a 365-day year the
+    # units disagree with each other, and ages of 360-364 days fall in the gap and print "12mo ago" -- a
+    # month count nobody writes when they could say a year.
+    for cutoff, unit, label in (
+        (31_104_000, 31_104_000, 'y'),      # 12 x 30d
+        (2_592_000, 2_592_000, 'mo'),       # 30d
+        (604_800, 604_800, 'w'),
+        (86_400, 86_400, 'd'),
+        (3_600, 3_600, 'h'),
+        (60, 60, 'm'),
+    ):
+        if seconds >= cutoff:
+            return f'{int(seconds // unit)}{label} ago'
+    return 'Now'
+
+
+@register.simple_tag
+def recommendation_choices(has_platinum=True):
+    """The three recommendation answers, worded for a set that does or does not end in a platinum.
+
+    A tag rather than a context variable so the shared field partial can render its own options without
+    every host having to remember to supply them -- and so the labels stay in the model, which is the one
+    place all of them are read from.
+    """
+    from trophies.models import UserConceptRating
+
+    return UserConceptRating.recommendation_choices(has_platinum)
+
+
+@register.simple_tag
+def recommendation_split_cells(averages, has_platinum=True):
+    """The three answers with their share, ALWAYS all three and always in the model's order.
+
+    Two things this exists for, both of which the raw `averages['recommendation_split']` gets wrong at a
+    surface that renders per trophy group:
+
+    Zeros when there is nothing yet. `averages` is None on a never-rated game, so looping it directly drew
+    a block with no cells -- and the live-update, which is written to only ever set values and never build
+    DOM, then un-hid an empty row the moment somebody rated it.
+
+    And the LABELS come from the group being shown, not from the cached dict. `_compute_averages` is
+    concept-wide and bakes in the platinum wording, so a DLC pack's panel read "Good game, tough plat"
+    about a set that has no platinum -- the same fact the radio the hunter clicked had already worded the
+    other way. Counts ride the cached dict; the words do not.
+    """
+    from trophies.models import UserConceptRating
+
+    split = (averages or {}).get('recommendation_split') or {}
+    counts = {o['value']: o for o in split.get('options') or []}
+
+    return [
+        {
+            'value': value,
+            'label': label,
+            'count': counts.get(value, {}).get('count', 0),
+            'pct': counts.get(value, {}).get('pct', 0),
+        }
+        for value, label in UserConceptRating.recommendation_choices(has_platinum)
+    ]

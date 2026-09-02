@@ -12,4 +12,18 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV DJANGO_SETTINGS_MODULE=plat_pursuit.settings
+
+# The worker/cron image needs the staticfiles MANIFEST, not just the source assets.
+#
+# `staticfiles/` is in .dockerignore (correctly -- it is a build artifact, not source), so it is not
+# copied in, and this image never generated one. With ManifestStaticFilesStorage and no manifest,
+# `stored_name()` raises "Missing staticfiles manifest entry" for the FIRST `static()` call whatever
+# it asks for -- which is why the hourly cron failed naming a badge backdrop that has been in the
+# repo since 2025 and is present in the web image's manifest.
+#
+# Cron commands genuinely need it: `refresh_homepage_hourly` renders the landing showcase card,
+# `generate_monthly_recaps` reaches monthly_recap_service, and trophies/models.py resolves medallion
+# art. All call `static()`.
+RUN python manage.py collectstatic --noinput
+
 CMD ["python", "manage.py", "start_token_keeper"]

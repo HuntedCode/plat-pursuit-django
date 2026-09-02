@@ -1,8 +1,11 @@
 import logging
-from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save
+from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save, pre_delete
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame
+from trophies.models import (
+    Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
+    GroupBadge, UserGroupBadge,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,177 +202,105 @@ def _track_profile_premium_transition(sender, instance, **kwargs):
     """Snapshot the old premium value so the post_save handler can detect the edge."""
     if not instance.pk:
         instance._old_user_is_premium = None
+        instance._old_country_code = None
+        instance._old_is_linked = None
         return
     try:
-        old = Profile.objects.only('user_is_premium').get(pk=instance.pk)
+        old = Profile.objects.only('user_is_premium', 'country_code', 'is_linked').get(pk=instance.pk)
         instance._old_user_is_premium = old.user_is_premium
+        instance._old_country_code = old.country_code
+        instance._old_is_linked = old.is_linked
     except Profile.DoesNotExist:
         instance._old_user_is_premium = None
+        instance._old_country_code = None
+        instance._old_is_linked = None
 
 
-@receiver(post_save, sender=Profile, dispatch_uid="handle_profile_premium_downgrade")
-def _handle_profile_premium_downgrade(sender, instance, created, **kwargs):
-    """Deactivate premium-only showcases when user_is_premium goes True -> False."""
+@receiver(post_save, sender=Profile, dispatch_uid="propagate_country_to_standings")
+def _propagate_country_to_standings(sender, instance, created, **kwargs):
+    """Keep the denormalized `country_code` on the standing stores in step with the profile.
+
+    The recompute seams (badge_xp.recompute_standing, contract_service.recompute_career_standing) already
+    stamp it on every row they write, which covers the normal case: a profile syncs, its standings are
+    rebuilt, the country travels with them. This handler covers the one path that bypasses them -- the
+    country CHANGING with no recompute behind it, which would otherwise leave a hunter ranked in the
+    country they left until their next badge evaluation.
+
+    Gated on the edge, not fired on every profile save: country changes are rare (it comes from PSN), and
+    a blind UPDATE per store on every Profile.save() would be a real cost for a value that almost never
+    moves.
+
+    EVERY store carrying a denormalized `country_code` has to be in this list. One left out does not error
+    -- it just keeps ranking that hunter in the country they left, on one board out of several, which is
+    the kind of thing only a reader who moved would ever notice.
+    """
     if created:
         return
-    old = getattr(instance, '_old_user_is_premium', None)
-    if old is True and instance.user_is_premium is False:
-        from trophies.services.showcase_service import ProfileShowcaseService
-        try:
-            ProfileShowcaseService.handle_premium_downgrade(instance)
-        except Exception:
-            logger.exception(
-                f"Failed to deactivate showcases on premium downgrade for profile {instance.pk}"
-            )
 
-@receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
-def update_badge_earned_count_on_save(sender, instance, created, **kwargs):
-    if created:
-        from trophies.models import Badge
-        Badge.objects.filter(pk=instance.badge_id).update(earned_count=F('earned_count') + 1)
+    changed = {}
+    old_country = getattr(instance, '_old_country_code', None)
+    if old_country is not None and (old_country or '') != (instance.country_code or ''):
+        changed['country_code'] = instance.country_code or ''
 
-@receiver(post_delete, sender=UserBadge, dispatch_uid='decrement_badge_earned_count')
-def decrement_badge_earned_count_on_delete(sender, instance, **kwargs):
-    from trophies.models import Badge
-    Badge.objects.filter(pk=instance.badge_id, earned_count__gt=0).update(
-        earned_count=F('earned_count') - 1
+    old_linked = getattr(instance, '_old_is_linked', None)
+    if old_linked is not None and bool(old_linked) != bool(instance.is_linked):
+        changed['is_linked'] = bool(instance.is_linked)
+
+    if not changed:
+        return
+
+    # `country_code` lives on five of the six; `is_linked` on all six. Filtering the payload per store
+    # rather than keeping two handlers means one traversal on the (rare) save where both moved at once.
+    for model in profile_mirrored_standings():
+        fields = {k: v for k, v in changed.items() if k in _mirrored_fields(model)}
+        if fields:
+            model.objects.filter(profile_id=instance.pk).update(**fields)
+
+
+def profile_mirrored_standings():
+    """Every store holding a denormalized copy of a Profile column the boards read as a PREDICATE.
+
+    Named and returned rather than inlined so a test can check it against what the models actually declare.
+    Adding a store and forgetting this list does not error -- it leaves one board ranking a hunter in the
+    country they left, or (worse, since it is a whole-population rule) keeping an unverified account on a
+    board after they verify. Neither is something a reader would think to look for.
+
+    All seven carry BOTH mirrors -- six as of migration 0310, and `SeriesEditionStanding` from birth in
+    0313, which is the point: a new standing store is expected to arrive with them rather than be
+    retrofitted. `UserGroupBadge` was the last to get `country_code`,
+    and its lateness was historical rather than principled -- it is the badge earn-lifecycle table and
+    predates the Lane B standing stores that set the pattern. `_mirrored_fields` reads each store's
+    columns off the model rather than hardcoding them, so a store that gains or loses one cannot fall out
+    of step with this handler.
+    """
+    from trophies.models import (
+        ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
+        SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge,
     )
+    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding,
+            SeriesBadgeStanding, SeriesEditionStanding, ProfileJobXP, UserGroupBadge)
 
 
+def _mirrored_fields(model):
+    """Which mirrored columns a given store actually declares. Read off the model rather than hardcoded,
+    so a store that gains or loses one cannot fall out of step with this module."""
+    names = {f.name for f in model._meta.get_fields() if hasattr(f, 'attname')}
+    return names & {'country_code', 'is_linked'}
 
-# --- Gamification Signal Handlers ---
 
-@receiver(post_save, sender=UserBadgeProgress, dispatch_uid="update_gamification_on_progress")
-def update_gamification_on_progress(sender, instance, created, **kwargs):
-    """
-    Update ProfileGamification when badge progress changes.
-
-    Triggered on:
-    - New progress record created
-    - Existing progress updated (completed_concepts changed)
-    """
-    from trophies.services.xp_service import (
-        update_profile_gamification,
-        is_bulk_update_active,
-        defer_profile_update
+@receiver(pre_delete, sender=Profile, dispatch_uid="reconcile_group_badge_earned_counts_on_profile_delete")
+def reconcile_group_badge_earned_counts_on_profile_delete(sender, instance, **kwargs):
+    """GroupBadge.earned_count is a manual denorm owned by badge_apply's award/revoke path (no signals there).
+    A Profile deletion cascade-drops the profile's UserGroupBadge holds WITHOUT going through apply, which would
+    leave earned_count inflated. Reconcile here on pre_delete -- while the holds still exist -- decrementing each
+    held group badge by one (guarded > 0 so a already-drifted count can't go negative). Fires only on profile
+    deletion, so it never double-counts the normal revoke (which deletes the hold without deleting the profile)."""
+    gb_ids = list(
+        UserGroupBadge.objects.filter(profile=instance).values_list('group_badge_id', flat=True)
     )
+    if gb_ids:
+        GroupBadge.objects.filter(pk__in=gb_ids, earned_count__gt=0).update(earned_count=F('earned_count') - 1)
 
-    # Defer update if bulk operation is active
-    if is_bulk_update_active():
-        defer_profile_update(instance.profile)
-        return
-
-    try:
-        update_profile_gamification(instance.profile)
-        logger.debug(
-            f"Updated gamification for {instance.profile.psn_username} "
-            f"after progress update on {instance.badge.name}"
-        )
-    except Exception as e:
-        logger.exception(f"Failed to update gamification after progress change: {e}")
-
-
-@receiver(post_save, sender=UserBadge, dispatch_uid="update_gamification_on_badge_earned")
-def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
-    """
-    Update ProfileGamification and earners leaderboard when a badge is earned.
-
-    Adds the 3000 XP badge completion bonus and updates sorted set leaderboard.
-    Only triggers on new badge creation, not updates.
-    """
-    if not created:
-        return
-
-    from trophies.services.xp_service import (
-        update_profile_gamification,
-        is_bulk_update_active,
-        defer_profile_update
-    )
-
-    # Defer update if bulk operation is active
-    if is_bulk_update_active():
-        defer_profile_update(instance.profile)
-        return
-
-    try:
-        update_profile_gamification(instance.profile)
-        logger.info(
-            f"Updated gamification for {instance.profile.psn_username} "
-            f"after earning {instance.badge.name}"
-        )
-    except Exception as e:
-        logger.exception(f"Failed to update gamification after badge earned: {e}")
-
-    # Update earners leaderboard sorted set
-    _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
-
-
-@receiver(post_delete, sender=UserBadge, dispatch_uid="update_gamification_on_badge_revoked")
-def update_gamification_on_badge_revoked(sender, instance, **kwargs):
-    """
-    Update ProfileGamification and earners leaderboard when a badge is revoked.
-
-    Removes the 3000 XP badge completion bonus and updates sorted set leaderboard.
-    """
-    from trophies.models import ProfileGamification
-    from trophies.services.xp_service import (
-        update_profile_gamification,
-        is_bulk_update_active,
-        defer_profile_update
-    )
-
-    # Skip if profile's gamification record was already cascade-deleted
-    # (happens when the Profile itself is being deleted)
-    if not ProfileGamification.objects.filter(profile_id=instance.profile_id).exists():
-        return
-
-    # Defer update if bulk operation is active
-    if is_bulk_update_active():
-        defer_profile_update(instance.profile)
-        return
-
-    try:
-        update_profile_gamification(instance.profile)
-        logger.info(
-            f"Updated gamification for {instance.profile.psn_username} "
-            f"after revoking {instance.badge.name}"
-        )
-    except Exception as e:
-        logger.error(
-            f"Failed to update gamification after badge revoked: {e}",
-            exc_info=True
-        )
-
-    # Update earners leaderboard sorted set
-    _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
-
-
-def _update_earner_leaderboard_on_badge_change(profile, series_slug):
-    """
-    Update the earners sorted set leaderboard after a badge is earned or revoked.
-
-    Finds the user's highest remaining tier in the series and updates their
-    sorted set entry accordingly, or removes them if no badges remain.
-    """
-    if not profile.is_linked:
-        return
-
-    try:
-        from trophies.services.redis_leaderboard_service import (
-            update_earner_entry, remove_earner_entry,
-        )
-
-        # Find the user's current highest tier badge in this series
-        highest = UserBadge.objects.filter(
-            profile=profile, badge__series_slug=series_slug
-        ).select_related('badge').order_by('-badge__tier', 'earned_at').first()
-
-        if highest:
-            update_earner_entry(series_slug, profile, highest.badge.tier, highest.earned_at)
-        else:
-            remove_earner_entry(series_slug, profile.id)
-    except Exception as e:
-        logger.error(f"Failed to update earner leaderboard for {profile.psn_username}: {e}")
 
 
 # --- Stage Icon Auto-Population ---

@@ -32,8 +32,9 @@ Variables: icons (list of {image_url, game_name}), cols, rows, width, height,
         <div style="display: flex; align-items: center; gap: 12px;">
             <img src="{% static 'images/logo.png' %}" style="width: 40px; height: 40px; display: inline-block;" />
             <div>
-                <div style="font-size: 20px; font-weight: 800; color: #f5f7fc; letter-spacing: -0.02em;">
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 20px; font-weight: 800; color: {% if mark %}{{ mark.colour }}{% else %}#f5f7fc{% endif %}; letter-spacing: -0.02em;">
                     {{ username }}
+                    {% include 'components/_mark_glyphs_inline.html' with star_px=12 svc_px=13 %}
                 </div>
                 <div style="font-size: 13px; color: #67d1f8; font-weight: 600; font-style: italic;">
                     platpursuit.com

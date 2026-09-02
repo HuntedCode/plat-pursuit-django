@@ -1,0 +1,71 @@
+{% comment %}
+Plat Cards results -- grid only. Returned on HTMX filter swaps AND on the InfiniteScroller's ?page
+fetches (X-Requested-With, via the HtmxListMixin XHR guard). The sentinel + spinner live in
+plat_cards.html, outside #browse-results, so only the grid swaps on a filter change.
+
+`pp-reveal` is baked in on HTMX swaps ONLY: htmx's settle restores server attributes on id'd elements
+after afterSwap, so a class added by JS at that point is wiped and the post-filter cards flash in
+unhidden. (rebuild-playbook gotcha.)
+
+Every row's data comes from the queryset -- cover via the select_related concept/igdb_match, variant
+from the `plat_defined` annotation -- so the grid costs one query no matter how many cards it draws.
+{% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pcard-grid{% if request.htmx %} pp-reveal{% endif %}"
+     data-result-count="{{ paginator.count }}" data-active-variant="{{ current_variant }}">
+    {% for c in completions %}
+    {% with game=c.trophy_group.game %}
+    <button type="button" class="pcard{% if c.plat_defined %} pcard--platinum{% else %} pcard--full{% endif %}"
+            data-card-open
+            data-trophy-group-id="{{ c.trophy_group_id }}"
+            data-game-name="{{ game.title_name }}"
+            aria-label="Make a card for {{ game.title_name }}">
+
+        <span class="pcard__art">
+            {% if game.has_cover_art %}
+            <img src="{{ game.display_image_url }}" alt="" loading="lazy" decoding="async" />
+            {% else %}
+            <img src="{{ game.display_image_url }}" alt="" class="pcard__art--placeholder" loading="lazy" decoding="async" />
+            {% endif %}
+
+            {# Which card this makes, readable without opening it. #}
+            <span class="pcard__mark" aria-hidden="true">
+                {% if c.plat_defined %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                {% endif %}
+            </span>
+
+            <span class="pcard__cta" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
+                Make card
+            </span>
+        </span>
+
+        <span class="pcard__body">
+            <span class="pcard__name">{{ game.title_name }}</span>
+            <span class="pcard__meta">
+                {% if c.last_trophy_at %}{{ c.last_trophy_at|date:"M j, Y" }}{% else %}Date unknown{% endif %}
+            </span>
+        </span>
+    </button>
+    {% endwith %}
+    {% empty %}
+    <div class="pcard-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M7 15h4"/></svg>
+        {% comment %}"Is a filter hiding this?" is answered by whether the hunter has ANY completions
+        at all, not by inspecting each control. Enumerating them missed `show_shovelware` -- a hunter
+        whose completions were all flagged got "No completions yet, go finish a game" directly under a
+        header reading "Platinums: 12" -- and adding it naively broke the other case, since shovelware
+        is hidden by DEFAULT. The career totals already know the answer.{% endcomment %}
+        {% if total_platinums or total_completions %}
+        <p class="pcard-empty__title">Nothing matches</p>
+        <p class="pcard-empty__hint">Try a different search, switch the card type back to All, or show shovelware.</p>
+        {% else %}
+        <p class="pcard-empty__title">No completions yet</p>
+        <p class="pcard-empty__hint">Finish a game's base trophy list and it turns up here, platinum or not.</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

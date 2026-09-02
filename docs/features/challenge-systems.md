@@ -1,5 +1,16 @@
 # Challenge Systems
 
+> **RETIRED (2026-08).** The Challenge system was removed in the Lane 2 teardown: the `Challenge`,
+> `AZChallengeSlot`, `CalendarChallengeDay`, `GenreChallengeSlot`, and `GenreBonusSlot` models, the
+> service, pages, API, templates, and JS are all gone (migration `0281_drop_challenge_system`).
+> Challenges will be **rewritten from scratch** rather than revived, so this doc is kept as a
+> DESIGN REFERENCE for that rebuild, not as a description of live code.
+>
+> **Preserved data:** every A-Z challenge's progress (per-letter game + completion) was archived into
+> the `ArchivedAZChallenge` table before the drop, keyed on `psn_username` +
+> `np_communication_id` so a rebuilt system can re-import it. Calendar and Genre progress was
+> deliberately **not** preserved.
+
 Comprehensive documentation for Platinum Pursuit's three challenge types: A-Z Platinum Challenge, Platinum Calendar Challenge, and Genre Challenge. All three share a common `Challenge` base model and follow the same lifecycle (create, fill slots, sync-driven progress, completion, Hall of Fame).
 
 ---
@@ -539,7 +550,7 @@ The calendar challenge uses 365 days with no Feb 29, even in leap years. `CALEND
 The `_get_calendar_year()` function returns `timezone.now().year`. This means the visual grid layout (which day of the week each month starts on) changes on January 1st. The data does not change, only the visual alignment.
 
 ### Timezone Sensitivity
-Calendar day matching converts platinum `earned_date_time` to the user's timezone (`profile.user.user_timezone`). A platinum earned at 11:30 PM EST on Dec 31 would fill Jan 1 for a UTC user. When a user changes their timezone, both `UpdateTimezoneAPIView` and `UpdateQuickSettingsAPIView` trigger `backfill_calendar_from_history()` which runs a full bidirectional reconciliation: old phantom days are unfilled and platinums are re-mapped to their correct (month, day) under the new timezone.
+Calendar day matching converts platinum `earned_date_time` to the user's timezone (`profile.user.user_timezone`). A platinum earned at 11:30 PM EST on Dec 31 would fill Jan 1 for a UTC user. NOTE (2026-08): the timezone endpoints do NOT trigger `backfill_calendar_from_history()` (this doc used to claim they did; no such call exists in `api/user_settings_views.py` -- timezone writes go through `users/services/timezone_service.py`, which un-finalizes recaps only). Calendar reconciliation happens on sync; a timezone change is picked up by the next sync's `_reconcile_calendar_days` pass. Challenges are hidden pending their revamp, so this is a latency quirk, not a live bug -- but the revamp should decide whether the timezone service also triggers reconciliation.
 
 ### Calendar Day Unfill Behavior
 Calendar days CAN be unfilled when the qualifying platinum set changes. This happens when games are flagged as shovelware, games are hidden by the user, or timezone changes shift a platinum to a different (month, day). The reconciliation engine (`_reconcile_calendar_days`) handles this on every sync and on timezone changes. If unfilling reverts a completed (365/365) calendar, `is_complete` is cleared. Use `python manage.py recalculate_calendars` to force a full reconciliation across all calendars. Use `python manage.py audit_calendar --username <name>` to diagnose why specific platinums are missing from a user's calendar (shows every filter check per platinum and cross-references with actual calendar day state).
@@ -566,7 +577,9 @@ duplicate key value violates unique constraint
 "trophies_genrebonusslot_challenge_id_concept_id_fff4fa07_uniq"
 ```
 
-`Concept.absorb()` collapses the pair instead (see [Concept.absorb()](#conceptabsorb) above). The doomed slot must be **deleted**, not merely skipped: `concept` is `on_delete=SET_NULL`, so a skipped duplicate survives the source concept's deletion as a bonus slot that looks assigned in the DB but renders empty. Pinned by `tests/engine/test_concept_absorb.py`.
+`Concept.absorb()` collapsed the pair instead (see [Concept.absorb()](#conceptabsorb) above). The doomed slot had to be **deleted**, not merely skipped: `concept` was `on_delete=SET_NULL`, so a skipped duplicate survived the source concept's deletion as a bonus slot that looked assigned in the DB but rendered empty.
+
+**For the rewrite:** this was a live prod failure (an admin `ConceptJoinReview` approval died on the constraint) before the teardown, and it is a decision the new system has to make deliberately rather than inherit. Either keep the concept out of the bonus slot's uniqueness key, or give `Concept.absorb()` an explicit collapse branch from day one. The `absorb()` handling and its regression pins live on `main` only; both went away here with migration `0281_drop_challenge_system`.
 
 ### Genre Merge Map
 Some PSN genre tags need normalization: `SIMULATOR` -> `SIMULATION`, `MUSIC/RHYTHM` -> `MUSIC_RHYTHM`, `PARTY` -> `FAMILY`. The assignment endpoint accepts concepts tagged with either the raw or curated key. The search endpoint handles the reverse mapping when filtering.

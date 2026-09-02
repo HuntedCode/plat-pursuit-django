@@ -1,0 +1,25 @@
+{% comment %} The list's games -- the only thing a sort change touches, so the only thing that swaps.
+
+The item card is unchanged: it was already on `display_image_url` (the single-source IGDB-first chain),
+which is why the fix for this page was in the QUERYSET rather than here -- every card was resolving that
+chain with its own two queries, 82 of them on a 40-game list.
+{% endcomment %}
+<div class="pp-lrow-stack" id="game-list-items">
+    {% for item in items %}
+    {% include 'partials/game_list_item_card.html' with item=item is_owner=is_owner is_premium=is_premium edit_mode=False %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <p class="pp-gtile-empty__title">Nothing in this list yet</p>
+        <p class="pp-gtile-empty__hint">
+            {% if is_owner %}Add a game and it will show up here.{% else %}The curator has not added anything yet.{% endif %}
+        </p>
+        {% if is_owner %}
+        <a href="{% url 'list_edit' game_list.id %}" class="btn btn-sm btn-primary mt-4 gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Add games
+        </a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

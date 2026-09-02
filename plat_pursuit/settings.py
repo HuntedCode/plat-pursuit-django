@@ -21,10 +21,6 @@ load_dotenv()
 AUTH_USER_MODEL = "users.CustomUser"
 SITE_URL = 'https://platpursuit.com'
 
-ADSENSE_PUB_ID = os.getenv('ADSENSE_PUB_ID')
-ADSENSE_ENABLED = os.getenv('ADSENSE_ENABLED', 'False') == 'True'
-ADSENSE_TEST_MODE = os.getenv('ADSENSE_TEST_MODE', 'False') == 'True'
-
 STRIPE_MODE = os.getenv('STRIPE_MODE', 'test')
 
 if STRIPE_MODE == 'live':
@@ -66,6 +62,39 @@ BOT_API_KEY = os.getenv('BOT_API_KEY')
 
 DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
 DISCORD_TEST_WEBHOOK_URL = os.getenv('DISCORD_TEST_WEBHOOK_URL')
+# The public invite. Defaulted to the real one so prod works with no env change -- this was
+# never configured anywhere, which left the welcome email's Discord CTA dead in production.
+DISCORD_INVITE_URL = os.getenv('DISCORD_INVITE_URL', 'https://discord.gg/platpursuit')
+
+# PlatPursuit 1.0 cutover instant (ISO 8601, e.g. '2026-09-01T00:00:00+00:00'). UNSET = every
+# launch-welcome feature stays fully dormant (the safe pre-launch default); it is the single
+# instant BOTH the lobby launch modal and the announcement email's audience compare against,
+# so they can never disagree about who counts as new (they cover different populations: the
+# modal needs a synced profile, the email reaches every account). A malformed value FAILS BOOT on purpose: a typo silently
+# disabling the launch greeting is the failure nobody would notice.
+# NOTE: this parses at settings-import time, so a malformed value fails boot on EVERY service
+# (web, worker, crons), not just the greeting -- and setting the var restarts them. Validate
+# before you paste: python -c "from datetime import datetime as d; print(d.fromisoformat('...'))"
+# Date-only ('2026-09-01') is accepted and means midnight UTC.
+_pp_launch_raw = os.getenv('PP_LAUNCH_DATE', '')
+if _pp_launch_raw:
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        PP_LAUNCH_DATE = _dt.fromisoformat(_pp_launch_raw)
+    except ValueError as exc:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            f"PP_LAUNCH_DATE={_pp_launch_raw!r} is not ISO 8601. Expected e.g. "
+            f"'2026-09-01T00:00:00+00:00' or '2026-09-01' (midnight UTC)."
+        ) from exc
+    if PP_LAUNCH_DATE.tzinfo is None:
+        PP_LAUNCH_DATE = PP_LAUNCH_DATE.replace(tzinfo=_tz.utc)
+else:
+    PP_LAUNCH_DATE = None
+
+# The profile whose REAL Profile Card the anon landing showcases (rendered hourly by
+# refresh_homepage_hourly, never on the request path). Unset -> the landing's literal fixture.
+LANDING_SHOWCASE_PSN = os.getenv('LANDING_SHOWCASE_PSN', '')
 PLATINUM_EMOJI_ID = os.getenv('PLATINUM_EMOJI_ID')
 PLAT_PURSUIT_EMOJI_ID = os.getenv('PLAT_PURSUIT_EMOJI_ID')
 
@@ -99,6 +128,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG') == 'True'
 
+# Beta / staging deployment flag (beta.platpursuit.com runs the rebuild branch
+# against a snapshot of prod data for staff review). Turns on the staff-only gate
+# + noindex (BetaStaffGateMiddleware) and the dummy email backend below. Unset on
+# production, so all of that is inert there.
+IS_BETA = os.getenv('BETA') == '1'
+
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS if host.strip()]
 CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000').split(',')
@@ -125,35 +160,26 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 # Pragmatic CSP: allows inline scripts/styles (needed for template <script>
 # blocks and Tailwind) while restricting sources to known-good origins.
 #
-# Google AdSense requires broad access to Google domains for scripts, images,
-# iframes, and styles. These are the minimum domains documented by Google.
+# AdSense was removed in 2026-08 (the site is ad-free), which took the whole Google ad surface out of
+# this policy: ~20 googlesyndication / doubleclick / adtrafficquality / Funding Choices origins across
+# four directives, plus 'wasm-unsafe-eval' (AdSense creatives were our only WebAssembly consumer) and
+# the http:// fonts.gstatic.com twin (AdSense creatives loaded Google Sans over http). What remains is
+# our own CDN, PSN/IGDB/S3 image hosts, YouTube embeds, and the Cloudflare analytics beacon.
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": ["'self'"],
         "script-src": [
             "'self'",
             "'unsafe-inline'",                    # Template <script> blocks
-            "'wasm-unsafe-eval'",                 # AdSense uses WebAssembly for some creative formats. Only enables WebAssembly.compile/instantiate (NOT JS eval); WASM is sandboxed from the DOM, so this is a smaller relaxation than 'unsafe-inline'.
             "https://cdn.jsdelivr.net",           # chart.js, marked, dompurify, confetti
-            "https://pagead2.googlesyndication.com",  # AdSense loader
-            "https://www.googletagservices.com",      # AdSense
-            "https://adservice.google.com",           # AdSense
-            "https://tpc.googlesyndication.com",      # AdSense
-            "https://www.google.com",                 # AdSense
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP
-            "https://ep1.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js)
-            "https://ep2.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js, backup)
             "https://static.cloudflareinsights.com",  # Cloudflare Web Analytics beacon. Omitting this is why the CF dashboard read 0 traffic: the beacon was silently CSP-blocked, so the zone looked dead while the site was in fact being hammered.
         ],
         "style-src": [
             "'self'",
             "'unsafe-inline'",                    # Tailwind + dynamic styles
-            "https://fonts.googleapis.com",
         ],
         "font-src": [
-            "'self'",
-            "https://fonts.gstatic.com",
-            "http://fonts.gstatic.com",                # AdSense creatives load Google Sans via http
+            "'self'",                                  # Fonts are self-hosted (static/fonts/, SEO Lane 3)
         ],
         "img-src": [
             "'self'",
@@ -163,24 +189,10 @@ CONTENT_SECURITY_POLICY = {
             "http://*.playstation.net",                # PSN avatars (some stored as http)
             "https://*.s3.amazonaws.com",              # S3 media uploads
             "https://*.sonyentertainmentnetwork.com",  # PSN content rating images
-            "https://pagead2.googlesyndication.com",   # AdSense ad images
-            "https://tpc.googlesyndication.com",       # AdSense
-            "https://www.google.com",                  # AdSense
-            "https://www.gstatic.com",                 # AdSense
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP UI assets
-            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR fingerprint pixel)
-            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR fingerprint pixel, backup)
             "https://images.igdb.com",                 # IGDB company logos & game covers
         ],
         "frame-src": [
             "'self'",
-            "https://pagead2.googlesyndication.com",   # AdSense iframes (some creatives served from here)
-            "https://googleads.g.doubleclick.net",     # AdSense iframes
-            "https://tpc.googlesyndication.com",       # AdSense iframes
-            "https://www.google.com",                  # AdSense iframes
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP iframe
-            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR) iframe
-            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR) iframe
             "https://www.youtube.com",                 # Roadmap video guides
             "https://www.youtube-nocookie.com",        # Roadmap video guides (privacy-enhanced)
             "https://youtube.com",                     # Roadmap video guides
@@ -189,13 +201,6 @@ CONTENT_SECURITY_POLICY = {
             "'self'",
             "data:",                                   # XHR/fetch of data: URIs (no network egress; just suppresses CSP noise)
             "https://cdn.jsdelivr.net",                # Source maps for chart.js, marked, dompurify, canvas-confetti
-            "https://pagead2.googlesyndication.com",   # AdSense reporting
-            "https://googleads.g.doubleclick.net",     # AdSense ad serving
-            "https://csi.gstatic.com",                 # AdSense performance instrumentation beacons
-            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
-            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
-            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP consent event logging
-            "https://images.igdb.com",                 # AdSense content-categorization scanner fetches cover art via XHR (same origin already trusted on img-src)
             "https://cloudflareinsights.com",          # Cloudflare Web Analytics beacon POSTs its payload here (script itself is on script-src)
         ],
         "worker-src": [
@@ -203,8 +208,8 @@ CONTENT_SECURITY_POLICY = {
             "blob:",                                 # canvas-confetti Web Worker
         ],
         "frame-ancestors": ["'none'"],
-        # Browsers POST violation reports here; viewable at /staff/csp-violations/.
-        "report-uri": ["/csp-report/"],
+        # No report-uri: the CSP violation dashboard + ingest endpoint were removed in the
+        # 2026-08 staff strip-down (violations are visible in browser DevTools when debugging).
     },
 }
 
@@ -238,6 +243,7 @@ INSTALLED_APPS = [
     'notifications.apps.NotificationsConfig',
     'fundraiser.apps.FundraiserConfig',
     'art_reveal.apps.ArtRevealConfig',
+    'milestones.apps.MilestonesConfig',
     'django_htmx',
 ]
 
@@ -269,6 +275,9 @@ MIDDLEWARE = [
     "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Team gate (staff + moderators) for the beta deployment (no-op unless IS_BETA). Runs right
+    # after auth so request.user is populated.
+    "plat_pursuit.middleware.BetaStaffGateMiddleware",
     'allauth.account.middleware.AccountMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -280,22 +289,34 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-ACCOUNT_PASSWORD_MIN_LENGTH = 8
+# (ACCOUNT_PASSWORD_MIN_LENGTH was removed in allauth 65.x -- the minimum comes from
+# AUTH_PASSWORD_VALIDATORS' MinimumLengthValidator below, whose default of 8 matches
+# what the removed setting used to say.)
 ACCOUNT_RATE_LIMITS = {
-    'reset_password': '5/m',
-    'confirm_email': '5/m',
+    # Scoped per-IP (the bare '5/m' this used to be was a single GLOBAL bucket: five reset
+    # requests a minute across the whole site, so any burst of forgetful hunters -- or one
+    # abuser -- locked the door for everyone).
+    'reset_password': '5/m/ip',
+    # confirm_email deliberately NOT overridden: allauth's default is a 1-per-3-minutes
+    # per-key resend cooldown, which the old '5/m' override quietly loosened 15x.
     'login_failed': '10/m/ip,5/300s/key',  # 10/min per IP + 5 per 5min per email
     # Tighter than allauth default (20/m/ip). Blunts botnet mass-signup that
     # weaponizes the verification-email send as third-party email bombing.
     'signup': '5/m/ip',
 }
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
+# THE live setting in allauth 65.x (verified in app_settings.py; the *_AUTO_LOGIN spelling this
+# project also carried for a while does not exist there and reads as nothing). A fresh signup
+# clicking their confirmation link is logged in and lands on home rather than being asked to
+# re-type the password they chose a minute ago. Pinned by test_auth_pages.
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
-ACCOUNT_EMAIL_CONFIRMATION_AUTO_LOGIN = True
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[Plat Pursuit] '
 DEFAULT_FROM_EMAIL = 'Plat Pursuit <no-reply@platpursuit.com>'
-ACCOUNT_LOGOUT_REDIRECT_URL = '/accounts/login'
+# NOTE: ACCOUNT_LOGOUT_REDIRECT_URL was deleted 2026-08-23 -- allauth's LogoutView is shadowed
+# (its URL bounces home), so nothing read it. Django's LOGOUT_REDIRECT_URL is deliberately
+# UNSET: that is what makes POST /logout/ render the "Signed Out" page instead of redirecting.
+# Setting it later would silently kill that page.
 ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 ACCOUNT_FORMS = {'signup': 'users.forms.CustomUserCreationForm'}
 
@@ -306,6 +327,11 @@ else:
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
     SENDGRID_SANDBOX_MODE_IN_DEBUG = False
     EMAIL_HOST_USER = 'apikey'
+
+# Beta runs with DEBUG=False (to mirror prod) but must NEVER send real mail via
+# SendGrid. Force the dummy backend so any accidental send is silently discarded.
+if IS_BETA:
+    EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
 
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = 'home'
@@ -323,14 +349,13 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "plat_pursuit.context_processors.ads",
-                "plat_pursuit.context_processors.moderation",
-                "plat_pursuit.context_processors.premium_theme_background",
+                "plat_pursuit.context_processors.site_links",
                 "plat_pursuit.context_processors.high_sync_volume",
                 "plat_pursuit.context_processors.psn_outage",
                 "plat_pursuit.context_processors.active_fundraiser",
                 "art_reveal.context_processors.art_reveal_banner",
                 "plat_pursuit.context_processors.hub_subnav",
+                "plat_pursuit.context_processors.navsync",
             ],
         },
     },
@@ -462,6 +487,34 @@ CACHES = {
 # Notification System Feature Flags
 NOTIFICATION_CACHE_ENABLED = os.getenv('NOTIFICATION_CACHE_ENABLED', 'True') == 'True'
 
+# Monthly Recap: the monthly send (email AND the in-app notification, which is dispatched from inside the
+# same loop) is OFF while the recap is rebuilt -- nothing should go out carrying the old design. The Render
+# cron should be paused too; this flag exists so the command fails safe if it fires anyway.
+# Flip to True via the environment when the rebuilt email ships.
+MONTHLY_RECAP_SEND_ENABLED = os.getenv('MONTHLY_RECAP_SEND_ENABLED', 'False') == 'True'
+
+# Weekly digest: OFF with the rest of the non-vital emails (2026-08) pending the email-system
+# rebuild. Only vital account emails (auth), billing, fundraiser, and the membership welcome
+# still send. Same fail-safe pattern as the recap flag above; pause the Render cron too.
+WEEKLY_DIGEST_SEND_ENABLED = os.getenv('WEEKLY_DIGEST_SEND_ENABLED', 'False') == 'True'
+
+# The one-time "PlatPursuit 1.0 is here" announcement: DEFAULT OFF, the house pattern for
+# side-effecting sends. There is no service-level gate in EmailService (the 2026-08 parking was
+# four unrelated mechanisms), so this flag IS the gate for the only user-facing blast we send.
+# Flip it via the environment a few days after launch, run the command (dry-run first), unset.
+LAUNCH_ANNOUNCEMENT_SEND_ENABLED = os.getenv('LAUNCH_ANNOUNCEMENT_SEND_ENABLED', 'False') == 'True'
+
+# Where the weekly subscription-audit cron mails its run report (an OPERATOR email, outside the
+# email parking -- that covered user-facing sends). Empty = no email, which keeps dev runs quiet.
+# NOTE: IS_BETA forces the dummy email backend, so a beta run with this set still sends nothing.
+AUDIT_REPORT_EMAIL = os.getenv('AUDIT_REPORT_EMAIL', '')
+
+# The webhook self-heal (cancel an orphaned subscription at the processor when its activation
+# resolves to a deleted user) is DEFAULT OFF, house pattern for side-effecting background
+# behaviour: any environment receiving real webhooks against an incomplete users table (a
+# staging clone, a restored DB) must not be able to cancel real subscriptions. Prod enables.
+PAYMENT_SELF_HEAL_ENABLED = os.getenv('PAYMENT_SELF_HEAL_ENABLED', 'False') == 'True'
+
 # PSN metadata capture (trophies/services/psn_metadata_service.py). Writes a multi-KB payload per
 # newly-resolved title from inside the sync worker. Off-switch so "capture is eating disk" is an
 # env-var flip and a worker restart rather than a deploy.
@@ -509,7 +562,13 @@ STORAGES = {
         } if not DEBUG else {},
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+        # Manifest variant (SEO closing audit): content-hashed names are what let WhiteNoise
+        # emit far-future immutable Cache-Control. Without it EVERY asset -- output.css, the
+        # self-hosted fonts -- revalidated at max-age=60 on the critical path. Unhashed
+        # originals still collect + serve (short cache), so literal /static/ paths in JS and
+        # cached badge layer data keep resolving. Tests override to plain storage. See
+        # plat_pursuit/storage.py for why the forgiving subclass exists.
+        "BACKEND": "plat_pursuit.storage.ForgivingManifestStaticFilesStorage",
     },
 }
 
@@ -567,9 +626,15 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'milestones': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 
 # Notification settings
 NOTIFICATION_RETENTION_DAYS = 90
 NOTIFICATION_SSE_HEARTBEAT_INTERVAL = 30
+

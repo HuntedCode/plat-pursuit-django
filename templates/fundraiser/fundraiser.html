@@ -2,197 +2,165 @@
 {% load static %}
 
 {% block title %}{{ fundraiser.name }}{% endblock %}
+{% block meta_description %}{{ fundraiser.name }} on Platinum Pursuit: back the fundraiser, claim a badge, and put your name on the supporter wall.{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 lg:py-8 space-y-8">
+<div class="fnd">
 
-    {# ─── Staff Preview Banner ─────────────────────────────────────────── #}
+    {% comment %} The site renders Django messages only inside the breadcrumb partial, which this
+    page does not carry -- without this block the success redirect's "Thank you for your donation"
+    and the processing fallbacks are silently swallowed. {% endcomment %}
+    {% include 'partials/_messages.html' %}
+
+    {% comment %} ============================================== staff preview ============= {% endcomment %}
     {% if is_staff_preview %}
-        <div class="alert alert-warning text-center font-bold text-sm py-2" role="alert">
+        <div class="fnd-staffnote" role="note">
             {% if is_upcoming %}
-                STAFF PREVIEW: This fundraiser opens on {{ fundraiser.start_date|date:"F j, Y g:i A" }}
+                STAFF PREVIEW: this fundraiser opens on {{ fundraiser.start_date|date:"F j, Y g:i A" }}
             {% elif is_ended %}
-                STAFF VIEW: This fundraiser ended on {{ fundraiser.end_date|date:"F j, Y g:i A" }}
+                STAFF VIEW: this fundraiser ended on {{ fundraiser.end_date|date:"F j, Y g:i A" }}
             {% endif %}
         </div>
     {% endif %}
 
-    {# ─── Ended Celebration Banner ────────────────────────────────────── #}
+    {% comment %} ============================================== ended celebration ========= {% endcomment %}
     {% if is_ended and not is_staff_preview %}
-        <div class="card bg-base-100 border-2 border-success shadow-success/20 shadow-lg">
-            <div class="card-body text-center space-y-2 py-5">
-                <h2 class="text-2xl lg:text-3xl font-bold italic text-success">Mission Accomplished!</h2>
-                <p class="text-base-content/70 italic text-sm lg:text-base max-w-2xl mx-auto">
-                    This fundraiser has wrapped up. Here's what the community achieved together.
-                </p>
-                <div class="flex justify-center gap-6 mt-2">
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-success">${{ total_raised|floatformat:0 }}</div>
-                        <div class="text-xs text-base-content/50">Raised</div>
+        <section aria-label="Campaign results" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-success shadow-lg shadow-neutral">
+            <div class="card-body p-4 md:p-6 pp-head-cascade">
+                <h2 class="fnd__h2 text-success">Mission accomplished!</h2>
+                <p class="fnd__sub">This fundraiser has wrapped up. Here's what the community achieved together.</p>
+                <div class="grid {% if badge_tracker %}grid-cols-3{% else %}grid-cols-2{% endif %} gap-2 md:gap-3 mt-2 max-w-md">
+                    <div class="scard">
+                        <div class="scard__label">Raised</div>
+                        <div class="scard__value pp-tally text-success" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</div>
                     </div>
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-primary">{{ donor_count }}</div>
-                        <div class="text-xs text-base-content/50">Donors</div>
+                    <div class="scard">
+                        <div class="scard__label">Donors</div>
+                        <div class="scard__value pp-tally text-primary" data-countup="{{ donor_count }}">{{ donor_count }}</div>
                     </div>
                     {% if badge_tracker %}
-                    <div class="text-center">
-                        <div class="text-xl font-bold text-primary">{{ badge_tracker.completed }}</div>
-                        <div class="text-xs text-base-content/50">Artworks</div>
+                    <div class="scard">
+                        <div class="scard__label">Artworks</div>
+                        <div class="scard__value pp-tally text-primary" data-countup="{{ badge_tracker.completed }}">{{ badge_tracker.completed }}</div>
                     </div>
                     {% endif %}
                 </div>
-                <p class="text-xs text-base-content/40 italic mt-1">The hunt never ends, but this chapter is complete. Thank you!</p>
+                <p class="fnd__flavour">The hunt never ends, but this chapter is complete. Thank you.</p>
             </div>
-        </div>
+        </section>
     {% endif %}
 
-    {# ─── Hero Section ────────────────────────────────────────────────── #}
-    <section class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-primary hover:shadow-primary">
-        <div class="card-body text-center py-6 lg:py-8">
-            <div class="max-w-3xl mx-auto space-y-3">
-                <h1 class="text-xl md:text-3xl lg:text-5xl font-bold italic pr-1">
-                    {{ fundraiser.name }}
-                </h1>
-                <p class="text-base-content/60 italic text-sm lg:text-base">
-                    Every badge tells a story. Help us bring them to life.
-                </p>
-                {% if fundraiser.description %}
-                    <p class="text-base-content/70 text-sm lg:text-base max-w-2xl mx-auto">
-                        {{ fundraiser.description }}
-                    </p>
-                {% endif %}
-                {% if is_live and user.is_authenticated %}
-                    <div class="pt-2">
-                        <button type="button" id="hero-donate-cta" class="btn btn-primary btn-sm md:btn-md lg:btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                            Support the Cause
-                        </button>
-                    </div>
-                {% elif is_live and not user.is_authenticated %}
-                    <div class="pt-2">
-                        <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-primary btn-sm md:btn-md lg:btn-lg shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                            Join the Hunt
-                        </a>
-                    </div>
-                {% endif %}
-            </div>
+    {% comment %} ============================================== header card =============== {% endcomment %}
+    <section aria-label="Campaign" class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral">
+        <div class="card-body p-5 md:p-7 pp-head-cascade">
+            <p class="fnd__eyebrow">Support &middot; Fundraiser</p>
+            <h1 class="fnd__h1">{{ fundraiser.name }}</h1>
+            <p class="fnd__lede">Every badge tells a story. Help us bring them to life.</p>
+            {% if fundraiser.description %}
+                <p class="fnd__desc">{{ fundraiser.description }}</p>
+            {% endif %}
+            {% if is_live and user.is_authenticated %}
+                <p class="mt-1"><button type="button" id="hero-donate-cta" class="fnd-cta">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    Support the cause
+                </button></p>
+            {% elif is_live %}
+                <p class="mt-1"><a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    Join the hunt
+                </a></p>
+            {% endif %}
         </div>
     </section>
 
-    {# ─── Campaign Stats (social proof) ───────────────────────────────── #}
-    <div class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
-        <div class="stats stats-vertical md:stats-horizontal w-full">
-            <div class="stat place-items-center">
-                <div class="stat-figure text-success">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                </div>
-                <div class="stat-title text-xs">Total Raised</div>
-                <div class="stat-value text-success text-lg lg:text-3xl">${{ total_raised|floatformat:0 }}</div>
-                <div class="stat-desc italic text-xs">and counting!</div>
-            </div>
-            <div class="stat place-items-center">
-                <div class="stat-figure text-primary">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <div class="stat-title text-xs">Donors</div>
-                <div class="stat-value text-primary text-lg lg:text-3xl">{{ donor_count }}</div>
-                <div class="stat-desc italic text-xs">trophy hunters strong</div>
-            </div>
-            {% if badge_tracker %}
-            <div class="stat place-items-center">
-                <div class="stat-figure text-secondary">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                </div>
-                <div class="stat-title text-xs">Badges Claimed</div>
-                <div class="stat-value text-secondary text-lg lg:text-3xl">{{ badge_tracker.claimed }}</div>
-                <div class="stat-desc italic text-xs">series adopted</div>
-            </div>
-            <div class="stat place-items-center">
-                <div class="stat-figure text-warning">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                </div>
-                <div class="stat-title text-xs">Artworks Complete</div>
-                <div class="stat-value text-warning text-lg lg:text-3xl">{{ badge_tracker.completed }}</div>
-                <div class="stat-desc italic text-xs">masterpieces live</div>
-            </div>
-            {% else %}
-            <div class="stat place-items-center">
-                <div class="stat-figure text-error">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                </div>
-                <div class="stat-title text-xs">Thank You!</div>
-                <div class="stat-value text-lg lg:text-3xl">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                </div>
-                <div class="stat-desc italic text-xs">for your support</div>
-            </div>
-            {% endif %}
+    {% comment %} ============================================== campaign stats ============
+    Free content: item-level scards, no outer card (the storefront's paid band is the model). {% endcomment %}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        <div class="scard">
+            <div class="scard__label">Total Raised</div>
+            <div class="scard__value pp-tally text-success" data-countup="{{ total_raised|floatformat:0 }}" data-countup-prefix="$">${{ total_raised|floatformat:0 }}</div>
+            <div class="scard__sub">and counting</div>
         </div>
+        <div class="scard">
+            <div class="scard__label">Donors</div>
+            <div class="scard__value pp-tally text-primary" data-countup="{{ donor_count }}">{{ donor_count }}</div>
+            <div class="scard__sub">trophy hunters strong</div>
+        </div>
+        {% if badge_tracker %}
+        <div class="scard">
+            <div class="scard__label">Badges Claimed</div>
+            <div class="scard__value pp-tally text-secondary" data-countup="{{ badge_tracker.claimed }}">{{ badge_tracker.claimed }}</div>
+            <div class="scard__sub">series adopted</div>
+        </div>
+        <div class="scard">
+            <div class="scard__label">Artworks Complete</div>
+            <div class="scard__value pp-tally text-warning" data-countup="{{ badge_tracker.completed }}">{{ badge_tracker.completed }}</div>
+            <div class="scard__sub">masterpieces live</div>
+        </div>
+        {% else %}
+        <div class="scard col-span-2">
+            <div class="scard__label">Thank You</div>
+            <div class="scard__value text-error">&hearts;</div>
+            <div class="scard__sub">for your support</div>
+        </div>
+        {% endif %}
     </div>
 
-    {# ─── Badge Completion Tracker ────────────────────────────────────── #}
+    {% comment %} ============================================== badge tracker ============= {% endcomment %}
     {% if fundraiser.campaign_type == 'badge_artwork' and badge_tracker %}
         {% include 'fundraiser/partials/badge_tracker.html' %}
     {% endif %}
 
-    {# ─── My Contributions (for authenticated users) ──────────────────── #}
+    {% comment %} ============================================== my contributions ========== {% endcomment %}
     {% if has_contributions %}
-        <section class="card bg-base-100 border-2 border-primary/30 shadow-lg shadow-neutral"
+        <section aria-label="My contributions" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral"
                  data-donation-ids="{{ donation_ids_with_picks }}">
-            <div class="card-body space-y-4">
+            <div class="card-body p-4 md:p-6 space-y-4">
                 <div class="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                        <h2 class="card-title text-xl lg:text-2xl italic">My Contributions</h2>
-                        <p class="text-base-content/50 italic text-xs">Your trophy hunting generosity at a glance.</p>
+                        <h2 class="fnd__h2">My contributions</h2>
+                        <p class="fnd__sub">Your trophy hunting generosity at a glance.</p>
                     </div>
-                    <span class="badge badge-primary badge-lg font-bold">${{ total_donated|floatformat:0 }} donated</span>
+                    <span class="fnd-pill">${{ total_donated|floatformat:0 }} donated</span>
                 </div>
 
-                {# ── Donation Summary ────────────────────────────── #}
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                        <div class="text-lg font-bold text-success">${{ total_donated|floatformat:0 }}</div>
-                        <div class="text-xs text-base-content/50">Total Donated</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3">
+                    <div class="scard">
+                        <div class="scard__label">Total Donated</div>
+                        <div class="scard__value pp-tally text-success">${{ total_donated|floatformat:0 }}</div>
                     </div>
-                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                        <div class="text-lg font-bold">{{ user_donations|length }}</div>
-                        <div class="text-xs text-base-content/50">Donation{{ user_donations|length|pluralize }}</div>
+                    <div class="scard">
+                        <div class="scard__label">Donation{{ user_donations|length|pluralize }}</div>
+                        <div class="scard__value pp-tally">{{ user_donations|length }}</div>
                     </div>
                     {% if fundraiser.campaign_type == 'badge_artwork' %}
-                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                        <div class="text-lg font-bold text-primary">{{ total_picks_remaining }}</div>
-                        <div class="text-xs text-base-content/50">Pick{{ total_picks_remaining|pluralize }} Remaining</div>
+                    <div class="scard">
+                        <div class="scard__label">Pick{{ total_picks_remaining|pluralize }} Remaining</div>
+                        <div class="scard__value pp-tally text-primary">{{ total_picks_remaining }}</div>
                     </div>
                     {% else %}
-                    <div class="bg-base-200/80 rounded-lg p-3 text-center space-y-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mx-auto text-error" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                        <div class="text-lg font-bold text-error">Thank You!</div>
-                        <div class="text-xs text-base-content/50">For your support</div>
+                    <div class="scard">
+                        <div class="scard__label">Thank You</div>
+                        <div class="scard__value text-error">&hearts;</div>
                     </div>
                     {% endif %}
                 </div>
 
-                {# ── Badge Claiming (live only, picks > 0) ────────── #}
                 {% if fundraiser.campaign_type == 'badge_artwork' %}
                     {% if is_live and total_picks_remaining > 0 %}
-                        <div class="bg-base-200/60 rounded-lg p-3">
+                        <div class="fnd-panel">
                             <div class="flex items-center justify-between flex-wrap gap-2">
-                                <p class="text-sm text-base-content/70">
-                                    You have <span class="font-bold text-accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }} to use.
+                                <p class="fnd__sub">
+                                    You have <span class="fnd__accent">{{ total_picks_remaining }}</span> badge pick{{ total_picks_remaining|pluralize }} to use.
                                 </p>
-                                <button type="button" id="open-badge-picker-btn" class="btn btn-primary btn-sm shadow-primary/30 shadow-md hover:shadow-primary/50 hover:shadow-lg transition-all duration-300">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.6 5H8.4a2 2 0 0 0-1.9 1.3L5 10 3 8"/><path d="m7 14 .4-1a1 1 0 0 1 .9-.6h7.4a1 1 0 0 1 .9.6l.4 1"/><path d="M19 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2Z"/></svg>
-                                    Browse Available Badges
+                                <button type="button" id="open-badge-picker-btn" class="fnd-cta fnd-cta--sm">
+                                    Browse available badges
                                 </button>
                             </div>
                         </div>
                     {% elif total_picks_remaining > 0 %}
-                        <div class="bg-base-200/60 rounded-lg p-3">
-                            <p class="text-sm text-base-content/50">
+                        <div class="fnd-panel">
+                            <p class="fnd__flavour">
                                 You have {{ total_picks_remaining }} badge pick{{ total_picks_remaining|pluralize }} remaining.
                                 {% if is_ended %}Badge claiming is no longer available for this fundraiser.{% endif %}
                             </p>
@@ -200,145 +168,133 @@
                     {% endif %}
                 {% endif %}
 
-                {# ── Claimed Badges ───────────────────────────────── #}
                 {% if user_claims %}
                     <div>
-                        <h3 class="font-semibold text-sm mb-2 italic">Your Claimed Badges</h3>
+                        <h3 class="fnd__h3">Your claimed badges</h3>
                         <div class="flex flex-wrap gap-2">
                             {% for claim in user_claims %}
                                 <a href="{% url 'badge_detail' claim.series_slug %}"
-                                   class="flex items-center gap-2 bg-base-200/80 rounded-lg px-3 py-2 hover:bg-base-300 transition-colors
-                                          border-l-4 {% if claim.status == 'completed' %}border-success{% elif claim.status == 'in_progress' %}border-warning{% else %}border-base-content/20{% endif %}">
-                                    <span class="font-medium text-sm">{{ claim.series_name }}</span>
-                                    <span class="badge badge-xs
-                                        {% if claim.status == 'completed' %}badge-success
-                                        {% elif claim.status == 'in_progress' %}badge-warning
-                                        {% else %}badge-ghost{% endif %}">
-                                        {{ claim.get_status_display }}
-                                    </span>
+                                   class="fnd-chip {% if claim.status == 'completed' %}fnd-chip--done{% elif claim.status == 'in_progress' %}fnd-chip--working{% endif %}">
+                                    <span class="fnd-chip__name">{{ claim.series_name }}</span>
+                                    <span class="fnd-chip__state">{{ claim.get_status_display }}</span>
                                 </a>
                             {% endfor %}
                         </div>
                     </div>
                 {% endif %}
 
-                {# ── Donation History (collapsible) ───────────────── #}
-                <details class="collapse collapse-arrow bg-base-200/50 rounded-lg">
-                    <summary class="collapse-title text-sm font-semibold italic py-2 min-h-0">
-                        Donation History
-                    </summary>
-                    <div class="collapse-content">
-                        <div class="space-y-1 pt-1">
-                            {% for donation in user_donations %}
-                                <div class="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-base-300/30 transition-colors">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-bold text-success">${{ donation.amount|floatformat:0 }}</span>
-                                        <span class="badge badge-xs {% if donation.provider == 'stripe' %}badge-primary{% else %}badge-info{% endif %}">
-                                            {{ donation.provider|title }}
-                                        </span>
-                                        {% if donation.badge_picks_earned > 0 %}
-                                            <span class="text-xs text-base-content/50">
-                                                ({{ donation.badge_picks_earned }} pick{{ donation.badge_picks_earned|pluralize }})
-                                            </span>
-                                        {% endif %}
-                                    </div>
-                                    <span class="text-xs text-base-content/40">{{ donation.completed_at|date:"M j, Y" }}</span>
+                <details class="fnd-history">
+                    <summary class="fnd-history__summary">Donation history</summary>
+                    <div class="space-y-1 pt-2">
+                        {% for donation in user_donations %}
+                            <div class="fnd-history__row">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-success">${{ donation.amount|floatformat:0 }}</span>
+                                    <span class="fnd-history__provider">{% if donation.provider == 'paypal' %}PayPal{% else %}Stripe{% endif %}</span>
+                                    {% if donation.badge_picks_earned > 0 %}
+                                        <span class="text-xs text-base-content/50">({{ donation.badge_picks_earned }} pick{{ donation.badge_picks_earned|pluralize }})</span>
+                                    {% endif %}
                                 </div>
-                            {% endfor %}
-                        </div>
+                                <span class="text-xs text-base-content/40">{{ donation.completed_at|date:"M j, Y" }}</span>
+                            </div>
+                        {% endfor %}
                     </div>
                 </details>
             </div>
         </section>
     {% elif is_live and user.is_authenticated and user.profile %}
-        {# ── Gentle prompt for users who haven't donated yet ────────── #}
-        <section class="card bg-base-100 border-2 border-base-300">
-            <div class="card-body py-4 text-center">
-                <p class="text-sm text-base-content/60 italic">
+        <section aria-label="My contributions" class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body p-4">
+                <p class="fnd__sub">
                     Your contributions will appear here after your first donation.
-                    Every dollar helps bring our badges to life!
+                    Every dollar helps bring our badges to life.
                 </p>
             </div>
         </section>
     {% endif %}
 
-    {# ─── Available Artworks (live & upcoming, badge artwork campaigns) ──── #}
+    {% comment %} ============================================== available artworks ========
+    FREE content (stacked-page rule): a heading over the tile grid, no outer card. The on-page
+    grid is a bounded PREVIEW; the picker modal alone carries the full list (this page used to
+    render every tile twice). {% endcomment %}
     {% if fundraiser.campaign_type == 'badge_artwork' and not is_ended %}
-        <section class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
-            <div class="card-body space-y-4">
-                <div>
-                    <h2 class="card-title text-xl lg:text-2xl italic">
-                        Artworks Awaiting a Patron
-                        {% if available_badges %}
-                            <span class="text-base-content/50 font-normal text-base lg:text-lg ml-1">({{ available_badges|length }})</span>
-                        {% endif %}
-                    </h2>
-                    <p class="text-base-content/60 italic text-sm mt-1">
-                        {% if available_badges %}
-                            These badge series are still waiting for a hunter to bring them to life.
-                            {% if user.is_authenticated and user.profile and total_picks_remaining %}
-                                Tap any badge to claim it.
-                            {% elif user.is_authenticated %}
-                                Donate ${{ badge_pick_divisor }} or more to earn a pick.
-                            {% else %}
-                                Join the hunt and donate ${{ badge_pick_divisor }}+ to claim one.
-                            {% endif %}
+        <section aria-label="Badge series awaiting a patron" class="fnd-free">
+            <div>
+                <h2 class="fnd__h2">
+                    Artworks awaiting a patron
+                    {% if available_badges_count %}<span class="fnd__count">({{ available_badges_count }})</span>{% endif %}
+                </h2>
+                <p class="fnd__sub">
+                    {% if available_badges_count %}
+                        These badge series are still waiting for a hunter to bring them to life.
+                        {% if user.is_authenticated and user.profile and total_picks_remaining %}
+                            Tap any badge to claim it.
+                        {% elif user.is_authenticated %}
+                            Donate ${{ badge_pick_divisor }} or more to earn a pick.
                         {% else %}
-                            Every current badge series has a patron. Donate to help commission the next wave!
+                            Join the hunt and donate ${{ badge_pick_divisor }}+ to claim one.
                         {% endif %}
-                    </p>
-                </div>
-
-                {% if available_badges %}
-                    <div id="available-badges-grid"
-                         role="region"
-                         aria-label="Badge series awaiting a patron"
-                         class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-[32rem] overflow-y-auto pr-1 rounded-lg bg-base-200/40 p-2"
-                         data-has-picks="{% if user.is_authenticated and user.profile and total_picks_remaining %}1{% else %}0{% endif %}">
-                        {% for badge in available_badges %}
-                            {% include 'fundraiser/partials/_badge_tile.html' with badge=badge %}
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="bg-primary/5 border-2 border-primary/30 rounded-lg p-6 text-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                        </svg>
-                        <p class="mt-2 text-primary font-semibold italic">Every current badge series has a patron!</p>
-                        <p class="text-base-content/50 text-xs italic">More artworks will open up as the campaign grows. Keep the momentum going.</p>
-                    </div>
-                {% endif %}
+                    {% else %}
+                        Every current badge series has a patron. Donate to help commission the next wave.
+                    {% endif %}
+                </p>
             </div>
+
+            {% if available_badges_count %}
+                <div id="available-badges-grid"
+                     role="region"
+                     aria-label="Badge series awaiting a patron"
+                     class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2"
+                     data-has-picks="{% if user.is_authenticated and user.profile and total_picks_remaining %}1{% else %}0{% endif %}">
+                    {% for badge in available_badges_preview %}
+                        {% include 'fundraiser/partials/_badge_tile.html' with badge=badge index=forloop.counter0 %}
+                    {% endfor %}
+                </div>
+                {% if available_badges_count > 18 and is_live and user.is_authenticated and total_picks_remaining %}
+                    <p><button type="button" id="browse-all-badges-btn" class="fnd-cta fnd-cta--sm" data-picker-open>
+                        Browse all {{ available_badges_count }}
+                    </button></p>
+                {% elif available_badges_count > 18 %}
+                    <p class="fnd__flavour">Plus more series waiting beyond these first 18.</p>
+                {% endif %}
+            {% else %}
+                <div class="fnd-empty">
+                    <svg class="w-10 h-10 mx-auto text-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                    <p class="mt-2 text-primary font-semibold">Every current badge series has a patron.</p>
+                    <p class="fnd__flavour">More artworks will open up as the campaign grows. Keep the momentum going.</p>
+                </div>
+            {% endif %}
         </section>
     {% endif %}
 
-    {# ─── Donation Form ───────────────────────────────────────────────── #}
+    {% comment %} ============================================== donation form ============= {% endcomment %}
     {% if is_live and user.is_authenticated %}
-        <section class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral">
-            <div class="card-body space-y-6">
+        <section aria-label="Make a donation" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-4 md:p-6 space-y-5">
                 <div>
-                    <h2 class="card-title text-xl lg:text-2xl italic">Make a Donation</h2>
-                    <p class="text-base-content/60 italic text-sm mt-1">
-                        Every dollar brings a badge to life. Pick your amount and let's go!
+                    <h2 class="fnd__h2">Make a donation</h2>
+                    <p class="fnd__sub">
+                        Every dollar brings a badge to life. Pick your amount and off we go.
                         {% if fundraiser.campaign_type == 'badge_artwork' %}
                             Donate ${{ badge_pick_divisor }} or more to claim a badge series for custom artwork.
                         {% endif %}
                     </p>
                 </div>
 
-                <div id="donation-form" class="space-y-5" data-slug="{{ fundraiser.slug }}" data-min="{{ fundraiser.minimum_donation }}" data-pick-divisor="{{ badge_pick_divisor }}" data-prior-remainder="{{ prior_remainder|default:"0" }}">
-                    {# Amount Selection #}
-                    <div class="bg-base-200/60 rounded-xl p-4 space-y-4">
-                        <label class="text-sm font-semibold">Donation Amount (USD)</label>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="5">$5</button>
-                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="10">$10</button>
-                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="25">$25</button>
-                            <button type="button" class="btn btn-outline btn-md md:btn-lg amount-preset transition-all duration-200" data-amount="50">$50</button>
+                <div id="donation-form" class="space-y-4" data-slug="{{ fundraiser.slug }}" data-min="{{ fundraiser.minimum_donation }}" data-pick-divisor="{{ badge_pick_divisor }}" data-prior-remainder="{{ prior_remainder|default:"0" }}">
+                    <div class="fnd-panel space-y-3">
+                        <label class="fnd__label">Donation Amount (USD)</label>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                            <button type="button" class="fnd-preset amount-preset" data-amount="5">$5</button>
+                            <button type="button" class="fnd-preset amount-preset" data-amount="10">$10</button>
+                            <button type="button" class="fnd-preset amount-preset" data-amount="25">$25</button>
+                            <button type="button" class="fnd-preset amount-preset" data-amount="50">$50</button>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-lg font-bold">$</span>
-                            <input type="number" id="donation-amount" class="input input-bordered w-full focus:ring-2 focus:ring-primary"
+                            <input type="number" id="donation-amount" class="fnd-input w-full"
                                    placeholder="Custom amount" min="{{ fundraiser.minimum_donation }}" step="1">
                         </div>
                         <div id="min-amount-warning" class="hidden text-xs text-error font-medium">
@@ -349,130 +305,118 @@
                         {% endif %}
                     </div>
 
-                    {# Provider Selection #}
                     {% if paypal_available %}
-                    <div class="bg-base-200/60 rounded-xl p-4 space-y-3">
-                        <label class="text-sm font-semibold">Payment Method</label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <label class="provider-option cursor-pointer rounded-lg border-2 border-primary p-4 flex items-center justify-center gap-2 transition-all duration-200 hover:border-primary/50 selected-provider"
-                                   data-provider="stripe">
+                    <div class="fnd-panel space-y-3">
+                        <label class="fnd__label">Payment Method</label>
+                        <div class="grid grid-cols-2 gap-2 md:gap-3">
+                            <label class="provider-option fnd-provider is-active" data-provider="stripe">
                                 <input type="radio" name="provider" value="stripe" class="hidden" checked>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
                                 <span class="font-medium text-sm">Card / Stripe</span>
                             </label>
-                            <label class="provider-option cursor-pointer rounded-lg border-2 border-base-300 p-4 flex items-center justify-center gap-2 transition-all duration-200 hover:border-info/50"
-                                   data-provider="paypal">
+                            <label class="provider-option fnd-provider" data-provider="paypal">
                                 <input type="radio" name="provider" value="paypal" class="hidden">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11l1-9h8c4 0 5 3 4 6s-3 4-6 4h-3l-1 6H7z"/></svg>
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11l1-9h8c4 0 5 3 4 6s-3 4-6 4h-3l-1 6H7z"/></svg>
                                 <span class="font-medium text-sm">PayPal</span>
                             </label>
                         </div>
                     </div>
                     {% endif %}
 
-                    {# Options #}
-                    <div class="bg-base-200/60 rounded-xl p-4 space-y-3">
+                    <div class="fnd-panel space-y-3">
                         <label class="flex items-center gap-3 cursor-pointer">
-                            <input type="checkbox" id="donation-anonymous" class="checkbox checkbox-sm">
+                            <input type="checkbox" id="donation-anonymous" class="checkbox checkbox-primary checkbox-sm">
                             <span class="text-sm">Donate anonymously (hide from donor wall)</span>
                         </label>
                         <div>
-                            <label class="text-sm font-semibold" for="donation-message">Message (optional)</label>
-                            <input type="text" id="donation-message" class="input input-bordered w-full mt-1"
+                            <label class="fnd__label" for="donation-message">Message (optional)</label>
+                            <input type="text" id="donation-message" class="fnd-input w-full mt-1"
                                    placeholder="Leave a message for the donor wall..." maxlength="200">
                         </div>
                     </div>
 
-                    {# Submit #}
-                    <button type="button" id="donate-btn" class="btn btn-primary btn-md md:btn-lg btn-block hover:shadow-primary/30 hover:shadow-lg transition-all duration-300" disabled>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                        <span id="donate-btn-text">Donate</span>
+                    {% comment %} The star emitter is the Support family's signature on money
+                    moments (the storefront's buy button, the roadmap and membership CTAs); this
+                    page's one is the donate button. {% endcomment %}
+                    <button type="button" id="donate-btn" class="fnd-cta fnd-cta--wide fnd-cta--rise" disabled>
+                        <span class="sup-go__rise" aria-hidden="true">
+                            {% for _ in "12345" %}<svg class="sup-go__risestar" viewBox="0 0 24 24"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>{% endfor %}
+                        </span>
+                        <span class="fnd-cta__lbl"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span id="donate-btn-text">Donate</span></span>
                     </button>
                 </div>
             </div>
         </section>
-    {% elif is_live and not user.is_authenticated %}
-        {# ── Unauthenticated CTA ──────────────────────────────────────── #}
-        <section class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
-            <div class="card-body text-center space-y-3">
-                <h2 class="card-title text-xl lg:text-2xl justify-center italic">Join the Hunt</h2>
-                <p class="text-base-content/70 text-sm">Create a PlatPursuit account to donate and claim badge artwork.</p>
-                <p class="text-sm italic text-base-content/40">Your support keeps the pursuit alive.</p>
-                <div class="flex gap-3 justify-center mt-2">
-                    <a href="{% url 'account_login' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-primary">Log In</a>
-                    <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="btn btn-outline">Sign Up</a>
+    {% elif is_live %}
+        <section aria-label="Join the hunt" class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body p-4 md:p-6 space-y-2">
+                <h2 class="fnd__h2">Join the hunt</h2>
+                <p class="fnd__sub">Create a PlatPursuit account to donate and claim badge artwork. Your support keeps the pursuit alive.</p>
+                <div class="flex gap-3 mt-2">
+                    <a href="{% url 'account_login' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta">Log In</a>
+                    <a href="{% url 'account_signup' %}?next={% url 'fundraiser' fundraiser.slug %}" class="fnd-cta fnd-cta--ghost">Sign Up</a>
                 </div>
             </div>
         </section>
     {% endif %}
 
-    {# ─── Claimed Badges Gallery (split: completed vs queued) ─────────── #}
+    {% comment %} ============================================== claimed galleries ========
+    Free content, as before: headings over tile grids. {% endcomment %}
     {% if fundraiser.campaign_type == 'badge_artwork' %}
     {% if completed_claims or pending_claims %}
-        <section class="space-y-6">
+        <section aria-label="Claimed badges" class="fnd-free">
             <div>
-                <h2 class="text-xl lg:text-2xl font-bold italic">Claimed Badges</h2>
-                <p class="text-base-content/60 italic text-sm mt-1">Badges adopted by the community for custom artwork.</p>
+                <h2 class="fnd__h2">Claimed badges</h2>
+                <p class="fnd__sub">Badges adopted by the community for custom artwork.</p>
             </div>
 
-            {# ── Artwork Complete ──────────────────────────────── #}
             {% if completed_claims %}
-                <div class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                        <h3 class="font-bold italic text-success">Artwork Complete</h3>
-                    </div>
-                    <p class="text-base-content/50 italic text-xs">Brought to life by the community.</p>
-                    <div class="grid grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="space-y-2">
+                    <h3 class="fnd__h3 text-success">Artwork complete</h3>
+                    <p class="fnd__flavour">Brought to life by the community.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
                         {% for claim in completed_claims %}
                             <a href="{% url 'badge_detail' claim.series_slug %}"
-                               class="card bg-base-100 border-2 border-success/30 hover:border-success hover:shadow-success/20 hover:shadow-md transition-all duration-300">
-                                <div class="card-body p-3 items-center text-center gap-1">
-                                    <figure class="w-16 h-16 shrink-0">
-                                        {% if claim.badge_layers %}
-                                            {% include 'partials/badge.html' with layers=claim.badge_layers %}
-                                        {% endif %}
-                                    </figure>
-                                    <span class="font-semibold text-sm line-clamp-1 pr-1">{{ claim.series_name }}</span>
-                                    {% if claim.profile %}
-                                        <span class="text-xs text-accent italic">Funded by {{ claim.profile.display_psn_username }}</span>
+                               class="fnd-claim fnd-claim--done" style="--i: {{ forloop.counter0 }}">
+                                <figure class="w-16 h-16 shrink-0 mx-auto">
+                                    {% if claim.medallion %}
+                                        {% include 'components/badge_medallion.html' with frame=claim.medallion no_id=True %}
                                     {% endif %}
-                                </div>
+                                </figure>
+                                <span class="fnd-claim__name">{{ claim.series_name }}</span>
+                                {% comment %} STATIC marked name, the credits wall's treatment,
+                                not name_mark: this is a GRID of names, and a grid of phase-locked
+                                flowing names is the pulsing wall that treatment is banned from.
+                                The caption also drops text-accent -- the mod's amber mark sat
+                                invisible inside an accent-coloured caption. {% endcomment %}
+                                {% if claim.profile %}
+                                    <span class="fnd-claim__by">Funded by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
+                                {% endif %}
                             </a>
                         {% endfor %}
                     </div>
                 </div>
             {% endif %}
 
-            {# ── In the Queue ─────────────────────────────────── #}
             {% if pending_claims %}
-                <div class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <h3 class="font-bold italic text-warning">In the Queue</h3>
-                    </div>
-                    <p class="text-base-content/50 italic text-xs">Claimed and waiting for their glow-up.</p>
-                    <div class="grid grid-cols-3 lg:grid-cols-4 gap-3">
+                <div class="space-y-2">
+                    <h3 class="fnd__h3 text-warning">In the queue</h3>
+                    <p class="fnd__flavour">Claimed and waiting for their glow-up.</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
                         {% for claim in pending_claims %}
                             <a href="{% url 'badge_detail' claim.series_slug %}"
-                               class="card bg-base-100 border-2 border-base-300 hover:border-warning/50 hover:shadow-md transition-all duration-300">
-                                <div class="card-body p-3 items-center text-center gap-1">
-                                    <div class="relative w-14 h-14">
-                                        <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}"
-                                             alt="Badge icon" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
-                                        <img src="{% static 'images/badges/default.png' %}"
-                                             alt="{{ claim.series_name }}" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
-                                    </div>
-                                    <span class="font-semibold text-sm line-clamp-1 pr-1">{{ claim.series_name }}</span>
-                                    {% if claim.profile %}
-                                        <span class="text-xs text-base-content/50">Claimed by {{ claim.profile.display_psn_username }}</span>
-                                    {% endif %}
-                                    <span class="badge badge-xs
-                                        {% if claim.status == 'in_progress' %}badge-warning
-                                        {% else %}badge-ghost{% endif %}">
-                                        {{ claim.get_status_display }}
-                                    </span>
+                               class="fnd-claim" style="--i: {{ forloop.counter0 }}">
+                                <div class="relative w-14 h-14 mx-auto">
+                                    <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}"
+                                         alt="" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
+                                    <img src="{% static 'images/badges/default.png' %}"
+                                         alt="{{ claim.series_name }}" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
                                 </div>
+                                <span class="fnd-claim__name">{{ claim.series_name }}</span>
+                                {% if claim.profile %}
+                                    <span class="fnd-claim__by">Claimed by <span class="fnd-claim__wearer"{% if claim.mark %} style="color: {{ claim.mark.colour }}"{% endif %}>{{ claim.profile.display_psn_username|default:claim.profile.psn_username }}</span>{% if claim.mark %}<span class="fnd-claim__glyphs" aria-hidden="true">{% include 'components/_mark_glyphs_inline.html' with mark=claim.mark star_px=10 svc_px=11 %}</span>{% endif %}</span>
+                                {% endif %}
+                                <span class="fnd-chip__state{% if claim.status == 'in_progress' %} text-warning{% endif %}">{{ claim.get_status_display }}</span>
                             </a>
                         {% endfor %}
                     </div>
@@ -482,14 +426,14 @@
     {% endif %}
     {% endif %}
 
-    {# ─── Donor Wall ──────────────────────────────────────────────────── #}
+    {% comment %} ============================================== donor wall ================ {% endcomment %}
     {% include 'fundraiser/partials/donor_wall.html' %}
 
 </div>
 {% endblock %}
 
 {% block fixed_overlays %}
-{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' %}
+{% if is_live and user.is_authenticated and fundraiser.campaign_type == 'badge_artwork' and total_picks_remaining %}
     {% include 'fundraiser/partials/badge_picker_modal.html' %}
 {% endif %}
 {% endblock %}
@@ -497,8 +441,11 @@
 {% block js_scripts %}
 <script src="{% static 'js/fundraiser.js' %}"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    PlatPursuit.onPageReady(function () {
         PlatPursuit.FundraiserPage.init();
+        document.querySelectorAll('.pp-tally[data-countup]').forEach(function (el) {
+            PlatPursuit.countUp(el);
+        });
     });
 </script>
 {% endblock %}

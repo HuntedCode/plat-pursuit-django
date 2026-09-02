@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% load static seo_tags %}
+{% block title %}{{ page_title }} Trophies{% endblock %}
+{% block og_title %}{{ page_title }} Trophies{% endblock %}
+{% block og_description %}{{ seo_description }}{% endblock %}
+{% block twitter_description %}{{ seo_description }}{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+{% comment %}Canonical is the BARE page URL: ?list= and ?view= states are views of this one
+document, so six stack-states collapse to one indexed page. concept.game_page_url is the same
+helper the sitemap and search use, so the three can never disagree.{% endcomment %}
+{% block canonical_url %}{{ page_canonical_url }}{% endblock %}
+{% block og_url %}{{ page_canonical_url }}{% endblock %}
+{% block og_image %}{% if host_game.display_image_url %}{{ host_game.display_image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
+
+{% block extra_head %}{% jsonld_game host_game concept request base_rating_averages node_url=page_canonical_url %}{% endblock %}
+
+{% block content %}
+    {% comment %}No width wrapper of its own: base.html's `container mx-auto px-4` main governs
+    the page width, exactly as on List detail -- the two pages share the trophy grid and the
+    ratings/About partials, so they must share a width or the same components render differently
+    per page. (An earlier cut added max-w-5xl here for no recorded reason; Jeffrey caught it.){% endcomment %}
+    <div id="game-page-container">
+        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+        {% include 'trophies/partials/game_page/header.html' %}
+
+        {% comment %}Sticky minibar (List detail's pattern, Jeffrey's call): pinned by StickyReveal
+        once the tabs row scrolls under the chrome. Identity icon follows the active tab
+        (data-mb-active, kept current by game-page.js showView; server-seeded from initial_view);
+        the jump-to-pack select is filled by JS from the grid's group nav and shown on the Lists
+        view only. The gd-minibar class carries the shared data-mb-only gating CSS.{% endcomment %}
+        <div class="pp-minibar gd-minibar" data-sticky-reveal data-sticky-sentinel="#gp-minibar-sentinel" data-mb-active="{{ initial_view }}">
+            <div class="pp-minibar__inner container mx-auto">
+                <span class="pp-minibar__id">
+                    <svg data-mb-only="lists" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                    <svg data-mb-only="ratings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg>
+                    <svg data-mb-only="about" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    <span class="pp-minibar__title">{{ page_title }}</span>
+                    {% comment %}List switch (Jeffrey's call): swap lists without scrolling back
+                    up, seated by the identity per his placement. Server-rendered options from
+                    switcher_entries (the same source as the real chips); JS proxies a selection
+                    to a CLICK on the matching chip, so the swap runs the one htmx path. Hidden
+                    entirely for single-list games -- a one-option select is dead chrome.{% endcomment %}
+                    {% if switcher_entries|length > 1 %}
+                    <select data-minibar-listswitch data-mb-only="lists" class="pp-gallery__select pp-minibar__listswitch" aria-label="Switch trophy list">
+                        {% for entry in switcher_entries %}
+                        <option value="{{ entry.game.np_communication_id }}"{% if entry.is_selected %} selected{% endif %}>{{ entry.name }}{% if entry.game.title_platform or entry.game.is_regional and entry.game.region %} ({% if entry.game.title_platform %}{{ entry.game.title_platform|join:"/" }}{% endif %}{% if entry.game.is_regional and entry.game.region %}{% if entry.game.title_platform %} &middot; {% endif %}{{ entry.game.region|join:"/" }}{% endif %}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </span>
+                <div class="pp-minibar__controls">
+                    {# Jump-to-pack dropdown: JS fills it from the grid's group nav + hides it when there's 0-1 group. #}
+                    <select data-minibar-groupjump data-mb-only="lists" class="pp-gallery__select pp-minibar__groupjump" aria-label="Jump to trophy pack" hidden></select>
+                </div>
+            </div>
+        </div>
+
+        {# ── Concept tabs: one segmented switcher, site standard. Lists is the default view. ── #}
+        <div class="flex items-center justify-end mt-5 mb-4" id="gp-tabs-row">
+            <div class="pp-switch" id="gp-switch" role="tablist" aria-label="Game view">
+                <button type="button" id="gp-tab-lists" aria-controls="gp-view-lists" class="pp-switch__chip{% if initial_view == 'lists' %} is-active{% endif %}" data-view="lists" role="tab" aria-selected="{% if initial_view == 'lists' %}true{% else %}false{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span class="pp-switch__lbl">Trophy Lists</span>
+                </button>
+                <button type="button" id="gp-tab-ratings" aria-controls="gp-view-ratings" class="pp-switch__chip{% if initial_view == 'ratings' %} is-active{% endif %}" data-view="ratings" role="tab" aria-selected="{% if initial_view == 'ratings' %}true{% else %}false{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.79 21.35a.53.53 0 0 1-.771-.56l.882-5.139a2.12 2.12 0 0 0-.611-1.879L2.554 10.135a.53.53 0 0 1 .294-.904l5.166-.756a2.12 2.12 0 0 0 1.596-1.16z"/></svg><span class="pp-switch__lbl">Ratings</span>
+                </button>
+                <button type="button" id="gp-tab-about" aria-controls="gp-view-about" class="pp-switch__chip{% if initial_view == 'about' %} is-active{% endif %}" data-view="about" role="tab" aria-selected="{% if initial_view == 'about' %}true{% else %}false{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span class="pp-switch__lbl">About</span>
+                </button>
+            </div>
+        </div>
+        {# Sentinel: once the tabs row scrolls under the chrome, StickyReveal pins the minibar above. #}
+        <span id="gp-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+        {# ── Panels: server-rendered, toggled client-side (SEO-safe), free content per the stacked-chrome rule. ── #}
+        <div class="gd-view" id="gp-view-lists" role="tabpanel" aria-labelledby="gp-tab-lists" data-view="lists"{% if initial_view != 'lists' %} hidden{% endif %}>
+            {% include 'trophies/partials/game_page/list_switcher.html' %}
+            {% comment %} PERSISTENT swap target (hx-swap="innerHTML"): settle classes are added to
+            this node by JS and must survive the swap. The ?list= param is scoped to the switcher
+            chips and can't leak elsewhere -- this page has no filter form in slice 1; when filters
+            arrive, carry the scope on a data attribute (browse-filters.js Lucky-button trick), not
+            a hidden input. {% endcomment %}
+            <div id="gp-viewport" role="tabpanel" aria-label="Selected trophy list" data-default-np="{{ default_list_np }}">
+                {% include 'trophies/partials/game_page/list_viewport.html' %}
+            </div>
+        </div>
+
+        <div class="gd-view" id="gp-view-ratings" role="tabpanel" aria-labelledby="gp-tab-ratings" data-view="ratings"{% if initial_view != 'ratings' %} hidden{% endif %}>
+            {% include 'trophies/partials/game_detail/ratings_panel.html' %}
+        </div>
+
+        <div class="gd-view" id="gp-view-about" role="tabpanel" aria-labelledby="gp-tab-about" data-view="about"{% if initial_view != 'about' %} hidden{% endif %}>
+            {% include 'trophies/partials/game_detail/game_about_card.html' %}
+        </div>
+    </div>
+{% endblock %}
+
+{% comment %}js_scripts, NOT scripts: base.html has no `scripts` block and Django silently
+discards a child block with no parent counterpart -- the audit found the page's entire JS layer
+dead because of that one word. The source-guard test now pins this tag.{% endcomment %}
+{# The screenshot lightbox + the report modal live in the shared overlay layer, outside the page content wrapper. #}
+{% block fixed_overlays %}
+{% include 'trophies/partials/game_detail/shot_lightbox.html' with shot_title=page_title %}
+{% comment %}Report-an-issue modal (linked viewers only, same gate as List detail): the About
+tab's empty-state "tell us what's missing" CTA opens it via game-flag.js -- shipped here since
+the slim-down made this page the About host.{% endcomment %}
+{% if user.is_authenticated and user.profile and user.profile.is_linked %}
+    {% include 'trophies/partials/game_detail/report_modal.html' %}
+{% endif %}
+{% endblock %}
+
+{% comment %}Load order matters twice: quick-rate.js (the shared form controller) must precede
+ratings-tab.js (its consumer -- the hygiene test pins the pair), and both precede game-page.js
+(which calls RatingsTab.reveal).{% endcomment %}
+{% block js_scripts %}
+    <script src="{% static 'js/shot-lightbox.js' %}"></script>
+    <script src="{% static 'js/trophy-grid.js' %}"></script>
+    <script src="{% static 'js/quick-rate.js' %}"></script>
+    <script src="{% static 'js/ratings-tab.js' %}"></script>
+    <script src="{% static 'js/game-page.js' %}"></script>
+    {% if user.is_authenticated and user.profile and user.profile.is_linked %}
+    <script src="{% static 'js/game-flag.js' %}"></script>
+    {% endif %}
+{% endblock %}

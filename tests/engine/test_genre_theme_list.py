@@ -1,0 +1,414 @@
+"""Tests for the rebuilt Genres & Themes list page (GenreThemeListView, /genres/).
+
+Covers the data/behavior contract the from-scratch rebuild preserved and added: the combined page's
+Genres/Themes switcher (`?tab=`), the category-tile grid rendering name + game count + the materialized
+representative-cover FK (recompute_tag_covers), the game_count>0 gate, search + sort, the tab-whitelist
+fallback, the HtmxListMixin partial/XHR guard, and a bounded query count.
+"""
+
+import itertools
+
+import pytest
+from django.core.management import call_command
+from django.urls import reverse
+
+from tests.factories import (
+    GenreFactory,
+    ConceptGenreFactory,
+    GameFactory,
+    IGDBMatchFactory,
+    ProfileFactory,
+    ProfileGameFactory,
+)
+
+pytestmark = pytest.mark.django_db
+
+@pytest.fixture
+def client(client):
+    """Browse reads the DENORM columns (recompute_tag_covers fills game/version/player counts,
+    2026-08-31): fixtures build links, so recount right before each page hit -- every test
+    exercises the real pipeline instead of hand-set columns."""
+    from django.core.management import call_command
+    orig = client.get
+
+    def get(*args, **kwargs):
+        call_command('recompute_tag_covers', verbosity=0)
+        return orig(*args, **kwargs)
+
+    client.get = get
+    return client
+
+
+GRID_PARTIAL = 'trophies/partials/genre_theme_list/browse_results.html'
+FULL_PAGE = 'trophies/genre_theme_list.html'
+
+_theme_seq = itertools.count(9000)
+
+
+def _genre_with_games(name, n=1, **game_kwargs):
+    genre = GenreFactory(name=name, slug=name.lower().replace(' ', '-'))
+    for _ in range(n):
+        game = GameFactory(**game_kwargs)
+        ConceptGenreFactory(concept=game.concept, genre=genre)
+    return genre
+
+
+def _theme_with_games(name, n=1, **game_kwargs):
+    from trophies.models import Theme, ConceptTheme
+    theme = Theme.objects.create(
+        igdb_id=next(_theme_seq), name=name, slug=name.lower().replace(' ', '-'),
+    )
+    for _ in range(n):
+        game = GameFactory(**game_kwargs)
+        ConceptTheme.objects.create(concept=game.concept, theme=theme)
+    return theme
+
+
+# ── Rendering + switcher ──────────────────────────────────────────────────────────────────────────────────
+
+def test_genres_tab_renders_tiles(client):
+    """The default (Genres) tab renders `.pp-gtile` cards with the genre name + game count + the switcher,
+    and no raw template syntax leaks."""
+    _genre_with_games('Shooter', n=2)
+
+    resp = client.get(reverse('genres_list'))
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert 'pp-gtile' in content
+    assert 'Shooter' in content
+    assert '2 games' in content
+    assert 'pp-switch' in content
+    assert '{#' not in content and '{%' not in content
+
+
+def test_themes_tab_renders_tiles(client):
+    """`?tab=themes` renders theme tiles from the Theme/ConceptTheme path."""
+    _theme_with_games('Horror', n=1)
+
+    content = client.get(reverse('genres_list'), {'tab': 'themes'}).content.decode()
+
+    assert 'pp-gtile' in content
+    assert 'Horror' in content
+    assert '1 game' in content
+
+
+def test_switcher_marks_active_tab(client):
+    _genre_with_games('Puzzle')
+
+    genres = client.get(reverse('genres_list'), {'tab': 'genres'}).content.decode()
+    assert 'data-tab="genres" aria-controls="gt-view" aria-selected="true"' in genres
+    assert 'data-tab="themes" aria-controls="gt-view" aria-selected="false"' in genres
+
+    themes = client.get(reverse('genres_list'), {'tab': 'themes'}).content.decode()
+    assert 'data-tab="themes" aria-controls="gt-view" aria-selected="true"' in themes
+
+
+def test_unknown_tab_falls_back_to_genres(client):
+    _genre_with_games('Platformer')
+
+    content = client.get(reverse('genres_list'), {'tab': 'bogus'}).content.decode()
+
+    assert 'Platformer' in content
+    assert 'data-tab="genres" aria-controls="gt-view" aria-selected="true"' in content
+
+
+# ── game_count gate + cover ───────────────────────────────────────────────────────────────────────────────
+
+def test_only_tags_with_games_are_shown(client):
+    """A genre with zero games is filtered out (game_count > 0)."""
+    _genre_with_games('Has Games')
+    GenreFactory(name='Empty Genre', slug='empty-genre')   # no ConceptGenre -> no games
+
+    content = client.get(reverse('genres_list')).content.decode()
+
+    assert 'Has Games' in content
+    assert 'Empty Genre' not in content
+
+
+def test_tile_renders_materialized_cover(client):
+    """After recompute_tag_covers materializes a tag's representative_game, its tile shows that game's
+    display_image_url (here the title_image), not the empty placeholder."""
+    _genre_with_games('Racing', title_image='https://example.com/cover.jpg')
+    call_command('recompute_tag_covers')
+
+    content = client.get(reverse('genres_list')).content.decode()
+
+    assert 'pp-gtile__art' in content
+    assert 'https://example.com/cover.jpg' in content
+    assert 'pp-gtile__art--empty' not in content
+
+
+def test_unrecomputed_tag_is_hidden_until_the_cron():
+    """A brand-new tag (denorm game_count still 0) is HIDDEN until recompute_tag_covers runs --
+    the same wait-for-the-cron contract as the materialized cover. Uses an UNWRAPPED client
+    (this module's client fixture recounts on every GET, which is exactly what this test must
+    not do for its first half)."""
+    from django.test import Client
+
+    _genre_with_games('Fresh', title_image='https://example.com/x.jpg')
+    raw = Client()
+
+    before = raw.get(reverse('genres_list')).content.decode()
+    assert 'Fresh' not in before
+
+    call_command('recompute_tag_covers', verbosity=0)
+    after = raw.get(reverse('genres_list')).content.decode()
+    assert 'Fresh' in after
+
+
+# ── recompute_tag_covers: contract preference / fallback / stability ──────────────────────────────────────
+
+def _contract_game_in(genre, igdb_id, **game_kwargs):
+    """A genre member game whose concept keys a live Contract (so it's a 'contract game')."""
+    from trophies.models import Contract
+    game = GameFactory(**game_kwargs)
+    IGDBMatchFactory(concept=game.concept, igdb_id=igdb_id)
+    Contract.objects.create(name=f'Contract {igdb_id}', slug=f'contract-{igdb_id}', igdb_id=igdb_id, is_live=True)
+    ConceptGenreFactory(concept=game.concept, genre=genre)
+    return game
+
+
+def test_recompute_prefers_contract_game(client):
+    """A contract game wins the cover even when a non-contract member exists."""
+    genre = GenreFactory(name='Shooter', slug='shooter')
+    plain = GameFactory(title_image='https://example.com/plain.jpg')
+    ConceptGenreFactory(concept=plain.concept, genre=genre)
+    contract_game = _contract_game_in(genre, igdb_id=55501, title_image='https://example.com/contract.jpg')
+
+    call_command('recompute_tag_covers')
+    genre.refresh_from_db()
+
+    assert genre.representative_game_id == contract_game.id
+
+
+def test_recompute_falls_back_to_member_without_contract(client):
+    """A tag with no contract games still gets a cover (the most-recent member with art)."""
+    genre = _genre_with_games('Puzzle', title_image='https://example.com/p.jpg')
+
+    call_command('recompute_tag_covers')
+    genre.refresh_from_db()
+
+    assert genre.representative_game_id is not None
+
+
+def test_recompute_is_stable_across_runs(client):
+    """Re-running the recompute does not reshuffle a tag's cover (stable per-tag pick = premium, not random)."""
+    genre = GenreFactory(name='Action', slug='action')
+    _contract_game_in(genre, igdb_id=55601, title_image='https://example.com/a.jpg')
+    _contract_game_in(genre, igdb_id=55602, title_image='https://example.com/b.jpg')
+
+    call_command('recompute_tag_covers')
+    genre.refresh_from_db()
+    first = genre.representative_game_id
+
+    call_command('recompute_tag_covers')
+    genre.refresh_from_db()
+
+    assert genre.representative_game_id == first
+
+
+# ── Search + sort ─────────────────────────────────────────────────────────────────────────────────────────
+
+def test_search_narrows(client):
+    _genre_with_games('Adventure')
+    _genre_with_games('Strategy')
+
+    content = client.get(reverse('genres_list'), {'query': 'Adv'}).content.decode()
+
+    assert 'Adventure' in content
+    assert 'Strategy' not in content
+
+
+def test_sort_by_games_orders_desc(client):
+    _genre_with_games('Small', n=1)
+    _genre_with_games('Big', n=3)
+
+    content = client.get(reverse('genres_list'), {'sort': 'games'}).content.decode()
+
+    assert content.index('Big') < content.index('Small')
+
+
+def test_stat_players_counts_unique_profiles(client):
+    """The 'Most Players' stat counts distinct PROFILES, not ProfileGame rows -- one hunter owning two games
+    in the genre is one player, not two."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.test import RequestFactory
+    from trophies.views.genre_views import GenreThemeListView
+
+    genre = GenreFactory(name='Co-op', slug='co-op')
+    g1, g2 = GameFactory(), GameFactory()
+    ConceptGenreFactory(concept=g1.concept, genre=genre)
+    ConceptGenreFactory(concept=g2.concept, genre=genre)
+    player = ProfileFactory()
+    ProfileGameFactory(profile=player, game=g1)
+    ProfileGameFactory(profile=player, game=g2)   # same player owns BOTH games in the genre
+    call_command('recompute_tag_covers', verbosity=0)   # player_count is the DENORM column now
+
+    req = RequestFactory().get(reverse('genres_list'), {'tab': 'genres', 'sort': 'players'})
+    req.user = AnonymousUser()
+    view = GenreThemeListView()
+    view.request = req
+    view.kwargs = {}
+    item = view.get_queryset().get(pk=genre.pk)
+
+    assert item.stat_players == 1
+
+
+# ── HtmxListMixin partial / XHR guard ─────────────────────────────────────────────────────────────────────
+
+VIEW_PARTIAL = 'trophies/partials/genre_theme_list/view.html'
+
+
+def test_xhr_returns_rows_partial(client):
+    _genre_with_games('Fighting')
+
+    resp = client.get(reverse('genres_list'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    templates = {t.name for t in resp.templates if t.name}
+
+    assert resp.status_code == 200
+    assert GRID_PARTIAL in templates
+    assert FULL_PAGE not in templates
+    assert 'data-result-count' in resp.content.decode()
+
+
+def test_switcher_swap_returns_view_island(client):
+    """The Genres/Themes switcher HTMX-swaps the #gt-view island (toolbar + grid), not the full page --
+    dynamic tab switch, no reload. (django-htmx reads HX-Request + HX-Target.)"""
+    _theme_with_games('Stealth')
+
+    resp = client.get(
+        reverse('genres_list'), {'tab': 'themes'},
+        HTTP_HX_REQUEST='true', HTTP_HX_TARGET='gt-view',
+    )
+    templates = {t.name for t in resp.templates if t.name}
+    content = resp.content.decode()
+
+    assert resp.status_code == 200
+    assert VIEW_PARTIAL in templates
+    assert FULL_PAGE not in templates
+    assert 'gtl-form' in content          # the toolbar re-rendered inside the island
+    assert 'Stealth' in content           # the new tab's grid
+
+
+def test_filter_swap_returns_grid_only(client):
+    """A search/sort change HTMX-swaps only the inner #browse-results grid, not the toolbar island."""
+    _genre_with_games('Rhythm')
+
+    resp = client.get(
+        reverse('genres_list'), {'sort': 'games'},
+        HTTP_HX_REQUEST='true', HTTP_HX_TARGET='browse-results',
+    )
+    templates = {t.name for t in resp.templates if t.name}
+
+    assert resp.status_code == 200
+    assert GRID_PARTIAL in templates
+    assert VIEW_PARTIAL not in templates
+    assert FULL_PAGE not in templates
+
+
+# ── Bounded query count ───────────────────────────────────────────────────────────────────────────────────
+
+def test_query_count_is_bounded(client, django_assert_max_num_queries):
+    """Rendering the whole tab (with per-tag cover + count subqueries) stays a small fixed number of queries
+    regardless of how many genres there are -- the subqueries ride the single list query, not per-card."""
+    for i in range(15):
+        _genre_with_games(f'Genre {i}')
+
+    from django.test import Client
+    call_command('recompute_tag_covers', verbosity=0)
+    raw = Client()   # unwrapped: the module's client fixture recounts INSIDE the capture
+    with django_assert_max_num_queries(12):
+        resp = raw.get(reverse('genres_list'))
+    assert resp.status_code == 200
+
+
+# ── The plats sort reads a denorm, not the join ───────────────────────────────────────────────────
+
+def test_plats_sort_matches_what_the_live_join_counted(client):
+    """`Game.plats_earned_count` is `Count(ProfileGame, filter=has_plat)` per game, so summing it over
+    a tag's games is exactly what the old live aggregate counted -- same population, same grain. This
+    pins that equivalence, because the denorm is refreshed by a nightly cron and a drift in its
+    definition would silently reorder this page.
+
+    Deliberately also covers the SIBLING trap: the neighbouring 'players' sort counts DISTINCT
+    profiles, so it can NOT be swapped the same way -- a hunter owning several games in a tag would be
+    counted once per game.
+    """
+    from django.core.management import call_command
+    from trophies.models import Game, ProfileGame
+
+    genre = GenreFactory(name='Soulslike', slug='soulslike')
+    hunter, other = ProfileFactory(), ProfileFactory()
+    for i in range(2):
+        game = GameFactory(defined_trophies={'platinum': 1})
+        ConceptGenreFactory(concept=game.concept, genre=genre)
+        # The same hunter plats BOTH games; `other` plats one.
+        ProfileGame.objects.create(profile=hunter, game=game, has_plat=True, progress=100)
+        if i == 0:
+            ProfileGame.objects.create(profile=other, game=game, has_plat=True, progress=100)
+
+    # What the live join used to produce, computed here as the reference.
+    live = ProfileGame.objects.filter(
+        game__concept__concept_genres__genre=genre, has_plat=True,
+    ).count()
+
+    call_command('recalc_earn_rates', verbosity=0)
+
+    denormed = sum(Game.objects.filter(concept__concept_genres__genre=genre)
+                   .values_list('plats_earned_count', flat=True))
+
+    assert denormed == live == 3, f'denorm {denormed} != live {live}'
+    # ...and the distinct-profile count is genuinely different, which is why 'players' stays a join.
+    distinct_players = ProfileGame.objects.filter(
+        game__concept__concept_genres__genre=genre,
+    ).values('profile').distinct().count()
+    assert distinct_players == 2 != denormed
+
+
+def test_index_header_counts_ride_the_heartbeat(client):
+    """The Genres/Themes with-games counts come from the hourly site heartbeat (2026-08
+    consolidation) -- they were two hot DISTINCT joins on EVERY request and swap. Warm cache:
+    the scard grid + tab captions render the cached values; cold cache: both are gated off
+    entirely (a rendered 0 would be a lie), and no distinct-join query runs either way."""
+    from django.core.cache import cache
+    from django.test.utils import CaptureQueriesContext
+    from django.db import connection
+    from django.urls import reverse
+    from django.utils import timezone
+
+    from django.test import Client
+    raw = Client()   # unwrapped: the module's client fixture recounts, which queries theme tables
+
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    cache.set(key, {'expanded': {
+        'genres_with_games': {'value': 23}, 'themes_with_games': {'value': 21},
+        'games_tagged': {'value': 5400}, 'tags_applied': {'value': 9800},
+    }}, 120)
+    try:
+        with CaptureQueriesContext(connection) as ctx:
+            warm_resp = raw.get(reverse('genres_list'))
+    finally:
+        cache.delete(key)
+    warm = warm_resp.content.decode()
+
+    assert 'with games' in warm
+    # Context assertions, not substring scans: bare '23'/'21' also live in navbar/footer SVG
+    # path data, which made the rendered-value pin vacuous (the audit's catch).
+    assert warm_resp.context['genre_count'] == 23
+    assert warm_resp.context['theme_count'] == 21
+    assert '>23<' in warm and '>21<' in warm   # the scard value elements render the cached numbers
+    # The coverage pair (four-stat fill-out, 2026-08-31) -- individually gated, so a payload
+    # carrying them renders them:
+    assert 'Games tagged' in warm and '5,400' in warm and '9,800' in warm
+    # On the genres tab the ONLY thing that ever queried trophies_theme was the header's
+    # with-games count -- zero theme queries proves the header compute left the request path
+    # (the genre tile grid legitimately joins trophies_genre, so that side can't be pinned).
+    theme_queries = [q for q in ctx.captured_queries if 'trophies_theme' in q['sql']]
+    assert not theme_queries, 'the with-games count must never run on the request path'
+
+    cold = raw.get(reverse('genres_list'))
+    assert cold.status_code == 200
+    assert cold.context['genre_count'] is None
+    assert 'with games' not in cold.content.decode()

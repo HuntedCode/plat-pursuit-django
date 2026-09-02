@@ -1,118 +1,70 @@
-{% extends "emails/base_email.html" %}
+{% extends 'emails/base_email_v2.html' %}
+{% comment %}
+The renewal receipt, sent by subscription_service._send_payment_succeeded_email.
 
-{% block extra_styles %}
-    <style>
-        /* Success box */
-        .success-box {
-            background-color: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 12px;
-            padding: 25px;
-            margin: 25px 0;
-            text-align: center;
-        }
+Both detail rows are GUARDED and must stay that way: `amount` is absent on PayPal renewals and
+admin resends (no invoice in hand), and `next_billing_date` is absent on those same two paths.
+An unguarded row renders "Next billing date: None" to a paying customer.
 
-        .success-box .success-icon {
-            font-size: 36px;
-            margin-bottom: 8px;
-            display: block;
-        }
-
-        .success-box h2 {
-            margin: 0 0 8px 0;
-            font-size: 20px;
-            font-weight: 700;
-            color: #166534;
-        }
-
-        .success-box p {
-            margin: 0;
-            font-size: 14px;
-            color: #15803d;
-            line-height: 1.6;
-        }
-
-        /* Details row */
-        .payment-details {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 16px 20px;
-            margin: 20px 0;
-        }
-
-        .payment-details .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            font-size: 14px;
-            color: #555555;
-        }
-
-        .payment-details .detail-row .label {
-            color: #777777;
-        }
-
-        .payment-details .detail-row .value {
-            font-weight: 600;
-            color: #333333;
-        }
-
-        /* Flavor text */
-        .flavor-text {
-            text-align: center;
-            font-style: italic;
-            color: #777777;
-            font-size: 15px;
-            margin: 30px 0 10px 0;
-            line-height: 1.6;
-        }
-    </style>
-{% endblock %}
+The rows were `display:flex` label/value pairs, which Outlook's Word engine ignores outright, so
+they collapsed there. They are a real two-column table now.
+{% endcomment %}
 
 {% block title %}Payment Confirmed{% endblock %}
 
+{% block preheader %}Your {{ tier_name }} subscription renewed. No action needed.{% endblock %}
+
 {% block header_content %}
-    <h1>Payment Confirmed</h1>
-    <p>Your {{ tier_name }} subscription is all set</p>
+    <div style="margin-top: 18px;">
+        <h1 class="pp-h1" style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 800; color: #F0F6FD;">Payment confirmed</h1>
+        <p class="pp-sub" style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #9FB3C8;">Your {{ tier_name }} subscription is all set.</p>
+    </div>
 {% endblock %}
 
 {% block content %}
-    <p class="greeting">Hey {{ username }},</p>
+    <p class="pp-lede">Hey <strong>{{ username }}</strong>, your {{ tier_name }} subscription renewed successfully. Every premium feature stays active.</p>
 
-    <div class="success-box">
-        <span class="success-icon">&#9989;</span>
-        <h2>Payment processed successfully</h2>
-        <p>Your {{ tier_name }} subscription has been renewed. All premium features remain active.</p>
-    </div>
+    {% comment %} Success green: the one place a non-brand colour carries meaning here. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px;">
+        <tr>
+            <td width="4" bgcolor="#2E9E6B" style="background-color: #2E9E6B; border-radius: 8px 0 0 8px;">&nbsp;</td>
+            <td style="padding: 14px 16px; background-color: #F2FAF6; border-radius: 0 8px 8px 0;">
+                <p class="pp-card-t" style="margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #10151C;">Payment processed successfully</p>
+                <p class="pp-card-c" style="margin: 0; font-size: 14px; line-height: 1.55; color: #4A5768;">Nothing needs doing on your end.</p>
+            </td>
+        </tr>
+    </table>
 
-    <div class="payment-details">
-        <div class="detail-row">
-            <span class="label">Subscription</span>
-            <span class="value">{{ tier_name }}</span>
-        </div>
-        {% if next_billing_date %}
-        <div class="detail-row">
-            <span class="label">Next billing date</span>
-            <span class="value">{{ next_billing_date }}</span>
-        </div>
+    {% comment %} The receipt proper. A real table, so the label/value pairs survive Outlook. {% endcomment %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 20px; background-color: #F5F8FC; border-radius: 8px;">
+        <tr>
+            <td style="padding: 14px 16px 6px; font-size: 14px; line-height: 1.5; color: #4A5768;">Subscription</td>
+            <td align="right" style="padding: 14px 16px 6px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ tier_name }}</td>
+        </tr>
+        {% if amount %}
+        <tr>
+            <td style="padding: 6px 16px; font-size: 14px; line-height: 1.5; color: #4A5768;">Amount charged</td>
+            <td align="right" style="padding: 6px 16px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ amount }}</td>
+        </tr>
         {% endif %}
-    </div>
+        {% if next_billing_date %}
+        <tr>
+            <td style="padding: 6px 16px 14px; font-size: 14px; line-height: 1.5; color: #4A5768;">Next billing date</td>
+            <td align="right" style="padding: 6px 16px 14px; font-size: 14px; line-height: 1.5; font-weight: 700; color: #10151C;">{{ next_billing_date }}</td>
+        </tr>
+        {% endif %}
+    </table>
 
-    <p class="intro">
-        No action needed on your end. Your premium features are active and your next payment
-        will be processed automatically. You can manage your subscription anytime.
-    </p>
+    <p class="pp-p">Your next payment will be taken automatically. You can review or change your subscription whenever you like.</p>
 
-    <div class="cta-container">
-        <a href="{{ manage_url }}" class="cta-button">View Subscription</a>
-    </div>
+    {% include 'emails/_cta_button.html' with url=manage_url label="View subscription" %}
 
-    <p class="flavor-text">
-        Happy hunting, trophy hunter!
-    </p>
+    <p class="pp-small" style="margin: 12px 0 0; text-align: center;">Or paste this into your browser: {{ manage_url }}</p>
+
+    <p class="pp-p" style="margin: 22px 0 0; text-align: center; font-style: italic; color: #627488;">Happy hunting.</p>
 {% endblock %}
 
 {% block footer_note %}
-    You're receiving this because your PlatPursuit subscription payment was processed.<br>
-    <a href="{{ preference_url }}" style="color: #999999; text-decoration: underline;">Manage your email preferences</a>.
+    You're receiving this because your PlatPursuit subscription payment was processed.
+    Manage your account settings from the link above.
 {% endblock %}

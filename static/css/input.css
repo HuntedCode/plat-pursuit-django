@@ -1,5 +1,169 @@
 @import "tailwindcss";
+@import "./components/chips.css";
+@import "./components/buttons.css";
+@import "./components/chrome.css";
+@import "./components/motion.css";
+@import "./components/switcher.css";
+/* Before every surface that grades something -- it declares the --rar-* scale they all read from. */
+@import "./components/rarity.css";
 @import "./components/frame.css";
+@import "./components/badge-medallion.css";
+@import "./components/tally.css";
+@import "./components/horizon.css";
+@import "./components/badge-detail.css";
+@import "./components/elements.css";
+@import "./components/pursuer-card.css";
+@import "./components/pursuer-card-forge.css";
+@import "./components/collection-gallery.css";
+@import "./components/badge-inspect.css";
+@import "./components/browse-gallery.css";
+@import "./components/game-browse.css";
+@import "./components/game-card.css";
+@import "./components/grouping-tile.css";
+@import "./components/group-card.css";
+@import "./components/milestone-cards.css";
+@import "./components/tag-detail.css";
+@import "./components/leaderboards.css";
+@import "./components/jobs.css";
+@import "./components/series-list.css";
+@import "./components/collection-list.css";
+@import "./components/milestones.css";
+@import "./components/titles.css";
+@import "./components/home.css";
+@import "./components/claim-ceremony.css";
+/* Before game-detail.css and profile-hero.css: both host `.pp-stars` and size it with `--star`. */
+@import "./components/stars.css";
+@import "./components/recommendation.css";
+@import "./components/game-detail.css";
+@import "./components/game-page.css";
+@import "./components/download-button.css";
+@import "./components/plat-cards.css";
+/* After game-detail.css: the wizard hosts the shared .gd-qr__* rating fields inside its own layout. */
+@import "./components/rate-wizard.css";
+@import "./components/profile-browse.css";
+@import "./components/profile-hero.css";
+@import "./components/recap-archive.css";
+@import "./components/recap-deck.css";
+@import "./components/recap-stage.css";
+@import "./components/supporter.css";
+@import "./components/support.css";
+@import "./components/support-roadmap.css";
+@import "./components/support-manage.css";
+@import "./components/support-welcome.css";
+@import "./components/fundraiser.css";
+@import "./components/cta.css";
+@import "./components/settings-page.css";
+@import "./components/profile-card-tab.css";
+@import "./components/landing.css";
+@import "./components/syncing.css";
+
+/* ------------------------------------------------------------------ */
+/* Self-hosted fonts (SEO Lane 3). Formerly Google Fonts CDN: cache
+   partitioning ended cross-site font reuse, so the third-party CSS +
+   font origin were two extra connections on every first visit for no
+   benefit. Files live in static/fonts/ (url is relative to output.css,
+   which sits alongside this file in static/css/). unicode-range keeps
+   latin-ext lazy; Poppins is only ever used by the Stellar Circuit
+   loading screen + canvas, so its faces stay dormant everywhere else. */
+
+/* Bricolage Grotesque: variable (wght 200-800, wdth 75-100%, opsz) */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  src: url('../fonts/bricolage-grotesque-var-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  src: url('../fonts/bricolage-grotesque-var-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Inter: variable (full wght axis; the file carries 100-900) */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/inter-var-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/inter-var-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Poppins 400 (latin) */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/poppins-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Poppins 400 (latin-ext) */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/poppins-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Poppins 600 (latin) */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/poppins-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Poppins 600 (latin-ext) */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/poppins-600-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Poppins 700 (latin) */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/poppins-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Poppins 700 (latin-ext) */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/poppins-700-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @plugin "daisyui";
 
 @theme {
@@ -18,7 +182,12 @@
   default: true;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(0.28 0.016 252.4);
+  /* Re-pointed to the bespoke dark substrate (--pp-bg-0) so the page background
+     matches the rebuild. Stays theme-aware: light mode keeps its own base-100.
+     Depth pass: deepened 0.17 -> 0.13 so the base-200 cards separate harder off
+     the substrate (the gap, not the darkness, was what read flat). Kept in sync
+     with --pp-bg-0 below. */
+  --color-base-100: oklch(0.13 0.012 254);
   --color-base-200: oklch(23.26% 0.014 253.1);
   --color-base-300: oklch(21.15% 0.012 254.09);
   --color-base-content: oklch(97.807% 0.029 256.847);
@@ -48,48 +217,102 @@
   --noise: 0;
 }
 
-@plugin "daisyui/theme" {
-  name: "plat-pursuit-light";
-  color-scheme: "light";
-  --color-base-100: oklch(98% 0.01 252);
-  --color-base-200: oklch(94% 0.012 253);
-  --color-base-300: oklch(90% 0.014 254);
-  --color-base-content: oklch(25% 0.02 256);
-  --color-primary: oklch(55% 0.2 206);
-  --color-primary-content: oklch(98% 0.01 206);
-  --color-secondary: oklch(50% 0.25 277);
-  --color-secondary-content: oklch(98% 0.01 277);
-  --color-accent: oklch(55% 0.2 35);
-  --color-accent-content: oklch(98% 0.01 35);
-  --color-neutral: oklch(30% 0.01 286);
-  --color-neutral-content: oklch(95% 0.005 286);
-  --color-info: oklch(50% 0.25 257);
-  --color-info-content: oklch(98% 0.01 257);
-  --color-success: oklch(55% 0.2 166);
-  --color-success-content: oklch(98% 0.01 166);
-  --color-warning: oklch(65% 0.2 95);
-  --color-warning-content: oklch(20% 0.02 95);
-  --color-error: oklch(55% 0.25 19);
-  --color-error-content: oklch(98% 0.01 19);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.25rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 2px;
-  --depth: 1;
-  --noise: 0;
+/* ===== PlatPursuit bespoke design tokens (the rebuild's owned foundation) =====
+   Plain CSS variables (NOT @theme: v4 tree-shakes unused @theme vars). Always
+   emitted, usable everywhere via var(--pp-*) in bespoke component CSS and in
+   Tailwind arbitrary values, e.g. bg-[var(--pp-bg-1)]. Surfaces are dark-default.
+   Source of truth: docs/design/visual-identity.md §4 + /design/style-guide/. */
+:root {
+  /* Surfaces */
+  --pp-bg-0: oklch(0.13 0.012 254);   /* substrate, deepened from 0.17 in sync with --color-base-100 */
+  --pp-bg-1: oklch(0.23 0.014 253);
+  --pp-bg-2: oklch(0.28 0.016 252);
+  --pp-bg-3: oklch(0.33 0.018 252);
+  /* Text */
+  --pp-text: oklch(0.97 0.012 256);
+  --pp-text-dim: oklch(0.72 0.02 256);
+  --pp-text-mute: oklch(0.66 0.02 256);   /* raised 0.55 -> 0.66 for WCAG AA (~4.5:1 on bg-2) site-wide */
+  /* Lines */
+  --pp-border: oklch(0.40 0.02 254 / 0.55);
+  --pp-divider: oklch(0.40 0.02 254 / 0.30);
+  /* Brand */
+  --pp-primary: oklch(0.86 0.142 206);
+  --pp-secondary: oklch(0.74 0.21 285);
+  --pp-accent: oklch(0.80 0.18 45);
+  /* Semantic */
+  --pp-success: oklch(0.80 0.16 162);
+  --pp-warning: oklch(0.86 0.17 90);
+  --pp-error: oklch(0.70 0.21 22);
+  --pp-info: oklch(0.74 0.16 245);
+  /* MEDALLION METALS -- the display metals: badge plates, tier rails, podium ranks. Bright enough to read
+     as precious ON a dark surface, which is what makes them display colours.
+
+     NOT to be confused with `--color-trophy-*` (bronze #8d4d2a / silver #5f5f5f / gold #927143 / platinum
+     #67d1f8), which are the MUTED trophy-chip metals -- deliberately dark, for small chips on light-ish
+     chrome. Reaching for those on a dark row inverts the intended effect: silver and bronze both land
+     BELOW --pp-text-mute (oklch 0.66), so a podium painted with them renders dimmer than an ordinary rank,
+     and "platinum" reads as the cyan primary. That is exactly what the leaderboard podium was doing, with
+     the correct values sitting right there as unreachable var() fallbacks.
+     These four literals were already triplicated across badge-detail.css and browse-gallery.css. */
+  --pp-metal-bronze: #cf9160;
+  --pp-metal-silver: #b9c6d6;
+  --pp-metal-gold: #e7c25c;
+  --pp-metal-platinum: #8fd2ea;
+  /* Badge rarity (shared by the Frame primitive + the badge-detail community band, so a recolor stays in one
+     place). Mirrors the frame.css scale: common dim -> mythic glow. */
+  /* Rarity: neutral -> teal -> indigo -> magenta. HUE does the separating (~90 degrees per step) while
+     chroma and glow climb with it, so the ramp still escalates monotonically.
+
+     Two earlier sets failed, in opposite directions. Four unrelated hues (white / pale green / gold /
+     near-white) INVERTED at the top -- mythic sat at 94% lightness, back where common lives, so the
+     loudest grade on the site was rare. Replacing it with one mint->emerald ramp fixed the inversion but
+     separated grades by LIGHTNESS ALONE, which collapses at chip size: on a dense wall uncommon and
+     mythic both read as "greenish", and because mythic was the darkest step it read QUIETER than the
+     second-commonest grade. Verified by rendering 32 mixed cells, not by reading values.
+
+     Every hue here clears the four tier metals -- gold (90), platinum's pale cyan, bronze's tan, silver's
+     grey -- because rarity sits ON cards that already colour themselves by tier. It also gets rarity off
+     --pp-success (162), so green can go back to meaning "done/yours" alone. Rare deliberately lands on
+     --pp-secondary's hue: a house colour, not an invention.
+
+     Colour is never the only channel: the grade is always spelled out and each wears its own glyph
+     (dot / diamond / sparkle), which is what carries the scale under colour blindness.
+
+     Paired with the material ladder in components/rarity.css: hue gives the fast cold read, finish gives
+     the premium one. */
+  --pp-rarity-common: oklch(0.70 0.015 256);     /* neutral -- the baseline must not announce itself */
+  --pp-rarity-uncommon: oklch(0.82 0.100 195);   /* teal */
+  --pp-rarity-rare: oklch(0.75 0.190 285);       /* indigo (--pp-secondary's hue) */
+  --pp-rarity-rare-glow: oklch(0.75 0.190 285 / 0.48);
+  --pp-rarity-mythic: oklch(0.72 0.240 350);     /* magenta */
+  --pp-rarity-mythic-glow: oklch(0.72 0.240 350 / 0.70);
+  /* Rating star: the bright, inviting yellow-gold for USER-RATING stars (game-card, game-detail score +
+     quick-take cards) -- distinct from the muted metallic --color-trophy-gold used for gold TROPHIES. */
+  --pp-rating-star: oklch(0.86 0.17 90);
+  /* Maintenance (held-but-lapsed badge): the site-wide "needs re-earning" red -- Gallery "M", Case niche,
+     Series tile + badge-detail rungs all key off this so the signal reads the same everywhere. */
+  --pp-maint: #e23026;
+  /* Type (Bricolage display reserved for hero + numbers; Inter body) */
+  --pp-font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --pp-font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Motion */
+  --pp-dur-fast: 140ms;
+  --pp-dur: 240ms;
+  --pp-dur-slow: 520ms;
+  --pp-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* Shape */
+  --pp-border-w: 2px;
+    /* The Horizon band ramp's cool stop, tokenised (it was a copy-pasted rgb in two files;
+       a Horizon recolour would have silently desynced the roadmap's temperature chips). */
+    --pp-horizon-cool: rgb(110, 200, 230);
+  --pp-radius-sm: 0.25rem;
+  --pp-radius-md: 0.375rem;
+  --pp-radius-lg: 0.5rem;
 }
 
 @layer base {
   body {
     font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  }
-  [data-theme="plat-pursuit-light"] body {
-    background-color: oklch(75% 0.01 252) !important;
-  }
-  [data-theme="plat-pursuit-light"] .grayscale {
-    filter: grayscale(100%) brightness(0.7) !important;
   }
   h1,
   h2,
@@ -106,52 +329,8 @@
     @apply shadow-lg shadow-base-300 border-2 border-base-300;
   }
 
-  /* Zoom Scaling System - Uniform sub-768px scaling via transform: scale()
-     Activated per-page by adding .zoom-active to #zoom-container via JS (PlatPursuit.ZoomScaler.init())
-     See CLAUDE.md "Responsive Design Standards" for full documentation */
-  @media (max-width: 767px) {
-    #zoom-container.zoom-active {
-      overflow: hidden;
-    }
-    #zoom-container.zoom-active #zoom-wrapper {
-      transform-origin: top left;
-    }
-  }
-  @media (max-width: 359px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.42); width: calc(100% / 0.42); }
-  }
-  @media (min-width: 360px) and (max-width: 389px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.47); width: calc(100% / 0.47); }
-  }
-  @media (min-width: 390px) and (max-width: 419px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.51); width: calc(100% / 0.51); }
-  }
-  @media (min-width: 420px) and (max-width: 479px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.55); width: calc(100% / 0.55); }
-  }
-  @media (min-width: 480px) and (max-width: 539px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.63); width: calc(100% / 0.63); }
-  }
-  @media (min-width: 540px) and (max-width: 599px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.70); width: calc(100% / 0.70); }
-  }
-  @media (min-width: 600px) and (max-width: 639px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.78); width: calc(100% / 0.78); }
-  }
-  @media (min-width: 640px) and (max-width: 719px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.83); width: calc(100% / 0.83); }
-  }
-  @media (min-width: 720px) and (max-width: 767px) {
-    #zoom-container.zoom-active #zoom-wrapper { transform: scale(0.94); width: calc(100% / 0.94); }
-  }
-  /* Prevent Tailwind container margin jump in the 640px-768px range when scaling is active */
-  @media (min-width: 640px) and (max-width: 767px) {
-    #zoom-container.zoom-active .container {
-      max-width: 100% !important;
-      padding-left: 1rem !important;
-      padding-right: 1rem !important;
-    }
-  }
+  /* (The legacy ZoomScaler sub-768px transform-scale system was removed -- it had no callers.
+     #zoom-container / #zoom-wrapper remain as the modal/ceremony recede host, see #page-recede.) */
 
   .card-img-container {
     @apply border-2 border-base-300 group-hover:scale-105 group-focus-within:scale-105 hover:animate-pulse;
@@ -177,37 +356,10 @@
     @apply bg-base-200 rounded-lg shadow-md border-2 border-base-300;
   }
 
-  /* Hotbar loading state - prevents flash of unstyled content */
-  .hotbar-loading {
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-  }
-
-  /* Hotbar toggle pulse when collapsed */
-  .hotbar-toggle-pulse {
-    animation: hotbar-pulse 2.5s ease-in-out infinite;
-  }
-  @keyframes hotbar-pulse {
-    0%, 100% {
-      box-shadow: 0 4px 6px -1px color-mix(in oklch, var(--color-primary) 15%, transparent);
-    }
-    50% {
-      box-shadow: 0 4px 14px -1px color-mix(in oklch, var(--color-primary) 35%, transparent);
-    }
-  }
-
-  /* Expanding-ring pulse for the navbar sync search button on first load.
-     Runs until the user clicks the button or dismisses the hint bubble. */
-  .navbar-search-pulse {
-    animation: navbar-search-pulse-anim 2s ease-in-out infinite;
-  }
-  @keyframes navbar-search-pulse-anim {
-    0%, 100% {
-      box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 45%, transparent);
-    }
-    50% {
-      box-shadow: 0 0 0 6px color-mix(in oklch, var(--color-primary) 0%, transparent);
-    }
+  /* Toolbar card - filter/sort/search bars (Career Contracts, Collection gallery, badge Series + Gallery).
+     The header card's surface (bg-base-200/90 + border-2 base-300) with a lighter shadow and no accent bar. */
+  .pp-toolbar-card {
+    @apply bg-base-200/90 rounded-2xl shadow-md shadow-neutral border-2 border-base-300;
   }
 
   /* Interactive card with standard hover effect */
@@ -323,14 +475,6 @@
         border-color: var(--color-primary);
       }
   }
-  .progress-pulse {
-    animation: progress-pulse 2s ease-in-out infinite;
-  }
-  @keyframes progress-pulse {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 1; }
-  }
-
   .shake {
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   }
@@ -341,38 +485,16 @@
     40%, 60% { transform: translate3d(4px, 0, 0); }
   }
 
-  /* ===== Mobile Bottom Tab Bar ===== */
-  .mobile-tabbar {
-    @apply fixed bottom-0 left-0 right-0 z-40 bg-base-200 border-t-2 border-base-300 shadow-lg;
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
-  .mobile-tabbar-inner {
-    @apply flex items-center justify-around h-14;
-  }
-  .mobile-tabbar-item {
-    @apply flex flex-col items-center justify-center gap-0.5 text-xs text-base-content/60 bg-transparent border-none cursor-pointer transition-colors duration-200 px-2 py-1 min-w-0;
-  }
-  .mobile-tabbar-item:hover,
-  .mobile-tabbar-item.active {
-    @apply text-primary;
-  }
-  .mobile-tabbar-item svg {
-    @apply w-5 h-5;
-  }
+  /* (The mobile bottom tab bar was rebuilt to the --pp-* house style in components/chrome.css.)
+     (The hub sub-nav's mobile collapse moved to the rebuilt .pp-sub__sheet in components/chrome.css.) */
 
   /* ===== Toast Container (clear mobile tabbar) ===== */
   #toast-container {
     bottom: 5rem;
   }
-  .has-mobile-ad #toast-container {
-    bottom: 8.5rem;
-  }
-  /* ===== Back-to-Top Button (clear mobile tabbar + ad) ===== */
+  /* ===== Back-to-Top Button (clear mobile tabbar) ===== */
   #back-to-top {
     bottom: 6rem;
-  }
-  .has-mobile-ad #back-to-top {
-    bottom: 9.5rem;
   }
   @media (min-width: 1024px) {
     #toast-container {
@@ -387,9 +509,6 @@
   @media (max-width: 1023px) {
     #zoom-wrapper {
       padding-bottom: 3.5rem;
-    }
-    .has-mobile-ad #zoom-wrapper {
-      padding-bottom: 7rem;
     }
   }
 }
@@ -422,11 +541,8 @@
   transform: none;
 }
 
-/* ===== Modal Backdrop Blur ===== */
-.modal[open] {
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
-}
+/* Legacy DaisyUI modals dim via their own .modal-backdrop; NO backdrop-filter blur here -- a live blur over
+   the page re-samples on every repaint behind it (jank). See docs/reference/motion-patterns.md. */
 
 /* ===== Global modal mobile sizing ===== */
 /* DaisyUI 5 modal-box defaults to padding: 1.5rem and no max-height cap.
@@ -441,813 +557,20 @@
   }
 }
 
-/* ===== Welcome Tour ===== */
 
-/* Modal entrance: scale up from 95% */
-.tour-modal-box {
-  position: relative;
-  animation: tour-entrance 0.3s ease-out;
-}
-
-/* All step content sits above the particles. The close button is excluded
-   because it uses position:absolute (right-3 top-3) and overriding that
-   with relative would break its placement. */
-.tour-modal-box > .tour-step,
-.tour-modal-box > .border-t {
-  position: relative;
-  z-index: 1;
-}
-
-/* Min-height for step content so shorter steps don't shrink the modal.
-   Taller steps can still grow naturally without scrollbars. */
-.tour-modal-box > .tour-step > div {
-  min-height: 380px;
-}
-
-@keyframes tour-entrance {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Hub icon glow container */
-.tour-icon-glow {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in oklab, var(--glow-color), transparent 90%);
-  border: 2px solid color-mix(in oklab, var(--glow-color), transparent 70%);
-  animation: tour-glow-pulse 2.5s ease-in-out infinite;
-}
-
-@keyframes tour-glow-pulse {
-  0%, 100% {
-    box-shadow: 0 0 15px color-mix(in oklab, var(--glow-color), transparent 80%);
-  }
-  50% {
-    box-shadow: 0 0 25px color-mix(in oklab, var(--glow-color), transparent 60%);
-  }
-}
-
-.tour-icon-glow svg {
-  color: var(--glow-color);
-}
-
-/* Feature preview cards */
-.tour-feature-card {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  text-align: left;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.tour-feature-card:hover {
-  border-color: color-mix(in oklab, var(--card-accent), transparent 70%);
-  box-shadow: 0 0 8px color-mix(in oklab, var(--card-accent), transparent 85%);
-}
-
-.tour-feature-icon {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: 0.375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in oklab, var(--card-accent), transparent 85%);
-  border: 1px solid color-mix(in oklab, var(--card-accent), transparent 70%);
-}
-
-.tour-feature-icon svg {
-  color: var(--card-accent);
-}
-
-/* Navigation path container: hidden on all viewports (replaced by real
-   navbar/tab-bar clones highlighted per step). Kept in the DOM for
-   backwards compatibility but never displayed. */
-.tour-nav-path {
-  display: none;
-}
-
-/* Navbar mockup (the 4 hub buttons) — nowrap + scroll as fallback */
-.tour-navbar-mockup {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.375rem;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.tour-navbar-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.35);
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-/* At lg+, match the real navbar's daisyUI btn-sm sizing so the mockup
-   reads as a faithful miniature of the live chrome. */
-@media (min-width: 1024px) {
-  .tour-navbar-btn {
-    padding: 0.5rem 0.875rem;
-    font-size: 0.875rem;
-  }
-}
-
-.tour-navbar-btn.active {
-  background: var(--path-accent, var(--color-primary));
-  color: var(--color-base-100, #1a1d23);
-  box-shadow: 0 0 12px color-mix(in oklab, var(--path-accent, var(--color-primary)), transparent 60%);
-}
-
-/* Mini sub-nav preview strip — nowrap + scroll so it never wraps on
-   narrow viewports (hidden on <lg anyway, but protects tablet sizes). */
-.tour-subnav-preview {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0.375rem;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.tour-subnav-item {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.625rem;
-  border: 1px solid transparent;
-  border-radius: 0.375rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.4);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-/* At lg+, match the real hub_subnav.html pill (px-3 py-1 text-sm). */
-@media (min-width: 1024px) {
-  .tour-subnav-item {
-    padding: 0.25rem 0.75rem;
-    font-size: 0.875rem;
-  }
-}
-
-.tour-subnav-item.active {
-  background: color-mix(in oklab, var(--nav-accent), transparent 85%);
-  border-color: color-mix(in oklab, var(--nav-accent), transparent 70%);
-  color: var(--nav-accent);
-  font-weight: 600;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-}
-
-/* Progress dots with connected bar */
-.tour-progress-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-  padding: 0.25rem 0;
-}
-
-.tour-progress-bar {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 2px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 9999px;
-  pointer-events: none;
-}
-
-.tour-progress-bar::after {
-  content: '';
-  position: absolute;
-  top: -1px;
-  left: 0;
-  height: 4px;
-  border-radius: 9999px;
-  width: var(--progress-fill, 0%);
-  background: var(--dot-color, var(--color-primary));
-  box-shadow: 0 0 8px color-mix(in oklab, var(--dot-color, var(--color-primary)), transparent 50%);
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease;
-}
-
-.tour-dot {
-  position: relative;
-  z-index: 1;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  padding: 0;
-  cursor: pointer;
-  background: transparent;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.tour-dot:hover {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.tour-dot.active {
-  width: 10px;
-  height: 10px;
-  background: var(--dot-color, var(--color-primary));
-  border-color: var(--dot-color, var(--color-primary));
-  box-shadow: 0 0 8px color-mix(in oklab, var(--dot-color, var(--color-primary)), transparent 40%);
-  transform: none;
-}
-
-/* ===== Post-Tour Completion Celebration ===== */
-
-.tour-completion-overlay {
-  position: fixed;
-  inset: 0;
-  background: radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.92) 100%);
-  z-index: 9999;
-  opacity: 0;
-  transition: opacity 0.5s ease;
-  cursor: pointer;
-}
-.tour-completion-overlay.visible {
-  opacity: 1;
-}
-
-.tour-completion-card {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.85);
-  z-index: 10000;
-  text-align: center;
-  opacity: 0;
-  transition: opacity 0.6s ease 0.2s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
-  pointer-events: none;
-}
-.tour-completion-card.visible {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-}
-
-/* Full-screen rising ember/cinder particles */
-.tour-completion-embers {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  overflow: hidden;
-  opacity: 0;
-  transition: opacity 0.5s ease;
-}
-.tour-completion-embers.visible {
-  opacity: 1;
-}
-.tour-ember {
-  position: absolute;
-  bottom: -10px;
-  left: var(--e-x, 50%);
-  width: var(--e-size, 4px);
-  height: var(--e-size, 4px);
-  border-radius: 50%;
-  background: #f59e0b;
-  box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.6),
-              0 0 14px 4px rgba(239, 68, 68, 0.3);
-  animation: tour-ember-rise var(--e-dur, 3s) ease-out var(--e-delay, 0s) infinite;
-}
-.tour-ember:nth-child(odd) {
-  background: #ef4444;
-  box-shadow: 0 0 6px 2px rgba(239, 68, 68, 0.6),
-              0 0 14px 4px rgba(245, 158, 11, 0.3);
-}
-.tour-ember:nth-child(3n) {
-  background: #fb923c;
-  box-shadow: 0 0 6px 2px rgba(251, 146, 60, 0.6),
-              0 0 12px 3px rgba(245, 158, 11, 0.3);
-}
-@keyframes tour-ember-rise {
-  0% {
-    transform: translateY(0) translateX(0) scale(1);
-    opacity: 0;
-  }
-  5% {
-    opacity: 0.9;
-  }
-  25% {
-    opacity: 0.7;
-    transform: translateY(-25vh) translateX(var(--e-drift, 10px)) scale(0.85);
-  }
-  55% {
-    opacity: 0.35;
-    transform: translateY(-55vh) translateX(calc(var(--e-drift, 10px) * -0.6)) scale(0.5);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-100vh) translateX(var(--e-drift, 10px)) scale(0.15);
-  }
-}
-
-/* Logo with glow pulse */
-.tour-completion-logo {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  margin: 0 auto 1.5rem;
-  position: relative;
-  z-index: 1;
-  animation: tour-logo-glow 2.5s ease-in-out infinite;
-}
-@keyframes tour-logo-glow {
-  0%, 100% {
-    box-shadow: 0 0 20px color-mix(in oklab, var(--color-primary), transparent 50%),
-                0 0 60px color-mix(in oklab, var(--color-primary), transparent 80%);
-  }
-  50% {
-    box-shadow: 0 0 30px color-mix(in oklab, var(--color-primary), transparent 30%),
-                0 0 80px color-mix(in oklab, var(--color-primary), transparent 60%);
-  }
-}
-
-.tour-completion-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1.3;
-}
-
-.tour-completion-username {
-  font-size: 2.25rem;
-  font-weight: 800;
-  color: var(--color-primary);
-  margin-top: 0.25rem;
-  animation: tour-username-glow 2.5s ease-in-out infinite;
-}
-@keyframes tour-username-glow {
-  0%, 100% { text-shadow: 0 0 20px color-mix(in oklab, var(--color-primary), transparent 50%); }
-  50% { text-shadow: 0 0 50px color-mix(in oklab, var(--color-primary), transparent 20%); }
-}
-
-.tour-completion-subtitle {
-  font-size: 0.9375rem;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 1.25rem;
-  font-weight: 500;
-  font-style: italic;
-}
-
-/* Scale up the celebration on larger screens */
-@media (min-width: 768px) {
-  .tour-completion-logo {
-    width: 100px;
-    height: 100px;
-    margin-bottom: 2rem;
-  }
-  .tour-completion-title {
-    font-size: 2rem;
-  }
-  .tour-completion-username {
-    font-size: 3rem;
-  }
-  .tour-completion-subtitle {
-    font-size: 1.125rem;
-    margin-top: 1.5rem;
-  }
-}
-@media (min-width: 1024px) {
-  .tour-completion-logo {
-    width: 120px;
-    height: 120px;
-    margin-bottom: 2.5rem;
-  }
-  .tour-completion-title {
-    font-size: 2.5rem;
-  }
-  .tour-completion-username {
-    font-size: 4rem;
-  }
-  .tour-completion-subtitle {
-    font-size: 1.25rem;
-    margin-top: 2rem;
-  }
-}
-
-/* Light theme adjustments */
-[data-theme="plat-pursuit-light"] .tour-feature-card,
-[data-theme="plat-pursuit-light"] .tour-nav-path,
-[data-theme="plat-pursuit-light"] .tour-navbar-mockup,
-[data-theme="plat-pursuit-light"] .tour-subnav-preview {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="plat-pursuit-light"] .tour-subnav-item,
-[data-theme="plat-pursuit-light"] .tour-navbar-btn {
-  color: rgba(0, 0, 0, 0.4);
-}
-
-[data-theme="plat-pursuit-light"] .tour-navbar-btn.active {
-  color: var(--color-base-100, #fff);
-}
-
-[data-theme="plat-pursuit-light"] .tour-dot {
-  border-color: rgba(0, 0, 0, 0.12);
-  background: transparent;
-}
-
-[data-theme="plat-pursuit-light"] .tour-dot:hover {
-  border-color: rgba(0, 0, 0, 0.3);
-  background: rgba(0, 0, 0, 0.05);
-}
-
-[data-theme="plat-pursuit-light"] .tour-progress-bar {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-/* Welcome Tour mobile: tighten spacing so all content fits within the
-   85vh-capped modal on small phones. JS highlights the actual mobile tab
-   bar and sub-nav for each step (same approach is now used on desktop
-   too, with the real navbar cloned into the modal). */
-@media (max-width: 1023px) {
-  .tour-modal-box .tour-step > div {
-    padding: 1rem;
-    min-height: 280px;
-  }
-  .tour-icon-glow {
-    width: 56px;
-    height: 56px;
-  }
-  .tour-icon-glow svg {
-    width: 28px;
-    height: 28px;
-  }
-  /* Hide description paragraphs on mobile to keep cards compact */
-  .tour-step-description {
-    display: none;
-  }
-  .tour-modal-box .border-t {
-    padding: 0.75rem 1rem;
-  }
-  .tour-modal-box .tour-dot {
-    width: 6px;
-    height: 6px;
-  }
-  .tour-modal-box .tour-dot.active {
-    width: 8px;
-    height: 8px;
-  }
-}
-
-/* Tour tab bar clone: lives inside the modal's stacking context so it
-   renders above the backdrop blur. Positioned fixed at the bottom to
-   overlap the real tab bar exactly. Hidden by default, shown by JS. */
-.tour-tabbar-clone {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1;
-  padding-bottom: env(safe-area-inset-bottom, 0);
-}
-.tour-tabbar-clone.visible {
-  display: block;
-}
-
-/* Tour sub-nav clone: same approach, positioned fixed at the top to
-   overlap the real sub-nav. Rebuilt per step with that hub's items.
-   Includes a pulsing highlight ring and a tooltip popover. */
-.tour-subnav-clone {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1;
-}
-.tour-subnav-clone.visible {
-  display: block;
-}
-
-/* Chrome popovers: small labels pointing at the tab bar or sub-nav clones.
-   Shown on step 2 (navigation intro) to explain the chrome elements. */
-.tour-chrome-popover {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  animation: tour-popover-in 0.3s ease-out 0.15s both;
-}
-.tour-chrome-popover-body {
-  background: var(--color-base-200);
-  border: 2px solid var(--popover-color, var(--color-primary));
-  border-radius: 0.5rem;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--popover-color, var(--color-primary));
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-.tour-chrome-popover-arrow {
-  display: block;
-}
-.tour-chrome-popover-arrow.down {
-  margin-top: -1px;
-}
-.tour-chrome-popover-arrow.up {
-  margin-bottom: -1px;
-}
-@keyframes tour-popover-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Highlight ring on the real mobile tab bar item during the tour */
-.mobile-tabbar-item.tour-highlight {
-  color: var(--tour-tab-color, var(--color-primary));
-  position: relative;
-}
-.mobile-tabbar-item.tour-highlight::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: 0.5rem;
-  border: 2px solid var(--tour-tab-color, var(--color-primary));
-  animation: tour-tab-pulse 1.5s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes tour-tab-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-
-/* ===== Desktop Navbar Clone ===== */
-
-/* Positioned fixed at viewport top inside the dialog's stacking context.
-   Mirrors the real navbar exactly but with tour highlights instead of
-   active states. Hidden by default, shown by JS on steps 2+. */
-.tour-navbar-clone {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1;
-}
-.tour-navbar-clone.visible {
-  display: flex;
-}
-
-/* Hub button highlight in the cloned navbar (pulsing ring) */
-.tour-hub-highlight {
-  position: relative;
-}
-.tour-hub-highlight::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: 0.5rem;
-  border: 2px solid var(--tour-highlight-color, var(--color-primary));
-  box-shadow: 0 0 12px color-mix(in oklab, var(--tour-highlight-color, var(--color-primary)), transparent 60%);
-  animation: tour-tab-pulse 1.5s ease-in-out infinite;
-  pointer-events: none;
-}
-
-/* Avatar button highlight in the cloned navbar (pulsing ring) */
-.tour-avatar-highlight {
-  position: relative;
-}
-.tour-avatar-highlight::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 2px solid var(--color-info);
-  box-shadow: 0 0 12px color-mix(in oklab, var(--color-info), transparent 60%);
-  animation: tour-tab-pulse 1.5s ease-in-out infinite;
-  pointer-events: none;
-}
-
-/* ===== Ambient Particle Drift ===== */
-
-.tour-particles {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-.tour-particle {
-  position: absolute;
-  bottom: -10px;
-  left: var(--p-x, 50%);
-  width: var(--p-size, 5px);
-  height: var(--p-size, 5px);
-  border-radius: 50%;
-  background: var(--color-primary);
-  opacity: 0;
-  animation: tour-particle-drift var(--p-duration, 8s) ease-in-out var(--p-delay, 0s) infinite;
-}
-@keyframes tour-particle-drift {
-  0% {
-    transform: translateY(0) translateX(0) scale(0.5);
-    opacity: 0;
-  }
-  8% {
-    opacity: 0.35;
-    transform: translateY(-5vh) translateX(3px) scale(1);
-  }
-  40% {
-    opacity: 0.25;
-    transform: translateY(-35vh) translateX(18px) scale(0.9);
-  }
-  70% {
-    opacity: 0.15;
-    transform: translateY(-55vh) translateX(-8px) scale(0.7);
-  }
-  100% {
-    transform: translateY(-80vh) translateX(-15px) scale(0.3);
-    opacity: 0;
-  }
-}
-
-[data-theme="plat-pursuit-light"] .tour-particle {
-  background: var(--color-primary);
-}
-
-/* Light theme progress bar override is in the main dot section above */
-
-/* ===== Game Detail Coach Marks ===== */
-
-/* Spotlight overlay: a transparent "window" element positioned over the
-   target, with a massive box-shadow that darkens everything else. This
-   avoids clip-path rendering quirks across browsers. The overlay itself
-   is transparent (the cutout), and the box-shadow covers the rest. */
-.coach-overlay {
-  position: fixed;
-  z-index: 9998;
-  pointer-events: auto;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease, top 0.35s ease, left 0.35s ease, width 0.35s ease, height 0.35s ease;
-}
-
-.coach-overlay.visible {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Pulsing ring around the coach mark cutout for visual emphasis */
-.coach-overlay.visible::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 12px;
-  border: 2px solid var(--color-primary);
-  box-shadow: 0 0 12px color-mix(in oklab, var(--color-primary), transparent 60%);
-  animation: coach-ring-pulse 1.5s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes coach-ring-pulse {
-  0%, 100% {
-    opacity: 0.4;
-    box-shadow: 0 0 8px color-mix(in oklab, var(--color-primary), transparent 70%);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 20px color-mix(in oklab, var(--color-primary), transparent 40%);
-  }
-}
-
-/* Tooltip positioned by JS next to the highlighted target */
-.coach-tooltip {
-  position: fixed;
-  z-index: 9999;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease 0.1s;
-  pointer-events: auto;
-  max-width: 340px;
-  width: calc(100vw - 24px);
-}
-
-/* Smooth repositioning between steps (added by JS after first position) */
-.coach-tooltip.positioned {
-  transition: opacity 0.3s ease 0.1s, top 0.35s ease, left 0.35s ease;
-}
-
-.coach-tooltip.visible {
-  opacity: 1;
-  visibility: visible;
-}
-
-.coach-tooltip-inner {
-  padding: 0.875rem;
-  border-radius: 0.75rem;
-  background: var(--color-base-200, #1e2127);
-  border: 2px solid var(--color-primary);
-  box-shadow:
-    0 0 20px color-mix(in oklab, var(--color-primary), transparent 70%),
-    0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.coach-tooltip-icon {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  border-radius: 0.375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in oklab, var(--color-primary), transparent 85%);
-  border: 1px solid color-mix(in oklab, var(--color-primary), transparent 70%);
-}
-
-.coach-tooltip-icon svg {
-  color: var(--color-primary);
-}
-
-/* Glow ring on the highlighted target element */
-.coach-target-highlight {
-  position: relative;
-  z-index: 9998;
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary), transparent 50%),
-              0 0 20px color-mix(in oklab, var(--color-primary), transparent 60%);
-  border-radius: inherit;
-  transition: box-shadow 0.3s ease;
-}
-
-/* Light theme */
-[data-theme="plat-pursuit-light"] .coach-tooltip-inner {
-  background: var(--color-base-100, #f8f9fa);
-}
-
-.legendary-title {
-  font-family: 'Montserrat', sans-serif; /* e.g., Montserrat for epic feel */
-  font-weight: 700;
-  background: linear-gradient(
-    90deg,
-    #ff4500 0%,
-    #ffd700 25%,
-    #ff4500 50%,
-    #ffd700 75%,
-    #ff4500 100%
-  );
-  background-size: var(--shimmer-size) 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  text-shadow:
-    0 0 1px rgba(255, 255, 255, 0.4),
-    0 0 2px #ff3,
-    0 0 4px #f90,
-    0 0 6px #c33;
-}
 
 /* Equip glow animation for My Titles page.
    daisyUI 5 stores the full `oklch(...)` value in `--color-secondary`, so
    the legacy `oklch(var(--s) / X)` alpha syntax doesn't work — we use
    `color-mix(in oklab, ..., transparent X%)` instead. */
 @keyframes title-equip-glow {
-  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-secondary), transparent 40%); }
-  50% { box-shadow: 0 0 20px 4px color-mix(in oklab, var(--color-secondary), transparent 70%); }
+  0% { box-shadow: var(--teg-a); }
+  50% { box-shadow: var(--teg-b); }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 .title-equip-glow {
+  --teg-a: 0 0 0 0 color-mix(in oklab, var(--color-secondary), transparent 40%);
+  --teg-b: 0 0 20px 4px color-mix(in oklab, var(--color-secondary), transparent 70%);
   animation: title-equip-glow 0.6s ease-out;
 }
 
@@ -1257,17 +580,6 @@
 }
 #equipped-title-name.title-fade-out {
   opacity: 0;
-}
-
-/* Premium-locked month button hover effect for recap calendar */
-.premium-locked:hover {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.premium-locked.btn-ghost {
-  background-color: rgba(255, 193, 7, 0.1);
-  border: 1px dashed rgba(255, 193, 7, 0.5);
 }
 
 /* Extend DaisyUI text-rotate to support 7-10 items */
@@ -1406,6 +718,10 @@
 /* Smooth Scrolling */
 html {
   scroll-behavior: smooth;
+  /* Reserve the scrollbar gutter permanently so opening a modal (which sets
+     body { overflow: hidden }) doesn't remove the scrollbar and shift the whole
+     page + fixed chrome sideways. No-op on mobile overlay scrollbars. */
+  scrollbar-gutter: stable;
   /*
    * Reserve room at the top of the viewport for the sticky navbar + hub
    * sub-nav so anchor jumps and Element.scrollIntoView() don't drop the
@@ -1415,6 +731,14 @@ html {
    */
   scroll-padding-top: calc(var(--chrome-height, 5rem) + 1.5rem);
 }
+/*
+ * Universal nav search sits INSIDE the sticky nav, pinned within the scroll-padding-top
+ * zone above. The browser's "keep the focused caret below scroll-padding-top" logic can
+ * never be satisfied for a sticky-pinned input, so it creeps the page toward the top on
+ * every keystroke (smoothly, via scroll-behavior above). Drop the offset to zero while the
+ * search is focused: no anchor navigation happens mid-search, so this is side-effect free.
+ */
+html:has(.pp-navsearch__input:focus) { scroll-padding-top: 0; }
 
 /* ===== <details> open/close animation =================================
    `<details>` doesn't animate natively — content snaps when the open
@@ -1530,20 +854,23 @@ details[open]::details-content {
 }
 
 @keyframes spinner-winner-pulse {
-  0%, 100% { box-shadow: 0 0 12px color-mix(in oklch, var(--color-primary) 30%, transparent); }
-  50% { box-shadow: 0 0 24px color-mix(in oklch, var(--color-primary) 60%, transparent); }
+  0%, 100% { box-shadow: var(--swp-a); }
+  50% { box-shadow: var(--swp-b); }
 }
 
 .spinner-winner-glow {
+  --swp-a: 0 0 12px color-mix(in oklch, var(--color-primary) 30%, transparent);
+  --swp-b: 0 0 24px color-mix(in oklch, var(--color-primary) 60%, transparent);
   animation: spinner-winner-pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes spinner-grid-pulse {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 16px 4px color-mix(in oklch, var(--color-secondary) 50%, transparent); }
+  50% { box-shadow: var(--sgp-b); }
 }
 
 .spinner-grid-highlight {
+  --sgp-b: 0 0 16px 4px color-mix(in oklch, var(--color-secondary) 50%, transparent);
   animation: spinner-grid-pulse 0.8s ease-in-out 3;
 }
 
@@ -1559,12 +886,14 @@ details[open]::details-content {
 /* ─── Knife Easter Egg ───────────────────────────────────────────────────── */
 
 @keyframes spinner-knife-shimmer {
-  0%, 100% { box-shadow: 0 0 8px color-mix(in oklch, var(--color-warning) 40%, transparent); }
-  50% { box-shadow: 0 0 16px color-mix(in oklch, var(--color-warning) 70%, transparent); }
+  0%, 100% { box-shadow: var(--sks-a); }
+  50% { box-shadow: var(--sks-b); }
 }
 
 .spinner-tile-knife {
   border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
+  --sks-a: 0 0 8px color-mix(in oklch, var(--color-warning) 40%, transparent);
+  --sks-b: 0 0 16px color-mix(in oklch, var(--color-warning) 70%, transparent);
   animation: spinner-knife-shimmer 1.2s ease-in-out infinite;
 }
 
@@ -1696,10 +1025,12 @@ details[open]::details-content {
 
 /* Screenshot frame glow */
 @keyframes screenshot-glow {
-  0%, 100% { box-shadow: 0 0 30px color-mix(in oklch, var(--color-primary) 15%, transparent); }
-  50% { box-shadow: 0 0 50px color-mix(in oklch, var(--color-primary) 30%, transparent); }
+  0%, 100% { box-shadow: var(--ssg-a); }
+  50% { box-shadow: var(--ssg-b); }
 }
 .screenshot-glow {
+  --ssg-a: 0 0 30px color-mix(in oklch, var(--color-primary) 15%, transparent);
+  --ssg-b: 0 0 50px color-mix(in oklch, var(--color-primary) 30%, transparent);
   animation: screenshot-glow 4s ease-in-out infinite;
 }
 
@@ -2798,6 +2129,11 @@ details[open]::details-content {
     animation: none;
     display: none;
   }
+  /* (Sub-nav sheet RM handling now lives with .pp-sub__sheet in components/chrome.css.) */
+  /* Community "live" heartbeat dot: no perpetual ping for reduced-motion users (the dot stays). */
+  .animate-ping {
+    animation: none;
+  }
 }
 
 /* ── Dual-range slider thumbs ─────────────────────────────────────────── */
@@ -2808,28 +2144,47 @@ details[open]::details-content {
   cursor: grab;
   -webkit-appearance: none;
   appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 9999px;
-  background: oklch(0.75 0.15 250);
-  border: 1.5px solid oklch(0.55 0.15 250);
+  background: var(--pp-primary);
+  border: 1.5px solid color-mix(in oklab, var(--pp-primary) 55%, #000);
   position: relative;
   z-index: 2;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
 }
 .dual-range-input::-moz-range-thumb {
   pointer-events: auto;
   cursor: grab;
   appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 9999px;
-  background: oklch(0.75 0.15 250);
-  border: 1.5px solid oklch(0.55 0.15 250);
+  background: var(--pp-primary);
+  border: 1.5px solid color-mix(in oklab, var(--pp-primary) 55%, #000);
   position: relative;
   z-index: 2;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+/* Hover / keyboard-focus: enlarge + a soft primary glow ring (the thumb glow is the focus indicator). */
+.dual-range-input:hover::-webkit-slider-thumb,
+.dual-range-input:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.28);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+.dual-range-input:hover::-moz-range-thumb,
+.dual-range-input:focus-visible::-moz-range-thumb {
+  transform: scale(1.28);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--pp-primary) 22%, transparent);
 }
 .dual-range-input:active::-webkit-slider-thumb { cursor: grabbing; }
 .dual-range-input:active::-moz-range-thumb { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) {
+  .dual-range-input::-webkit-slider-thumb, .dual-range-input::-moz-range-thumb { transition: none; }
+}
+/* Track + fill on house tokens (was daisyUI bg-base-300 / bg-primary in the partials). */
+.dual-range-track { background: color-mix(in oklab, var(--pp-text) 12%, transparent); }
+.dual-range-fill { background: var(--pp-primary); }
 /* Hide native track so only our custom fill/track shows */
 .dual-range-input::-webkit-slider-runnable-track { background: transparent; }
 .dual-range-input::-moz-range-track { background: transparent; }

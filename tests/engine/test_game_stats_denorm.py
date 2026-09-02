@@ -1,13 +1,16 @@
-"""The game-detail community stats row must be pure denorm reads.
+"""The game's community stats must come from denormed columns, never live aggregates.
 
-`_build_game_stats_context` used to run five live per-game aggregates behind an hourly
-cache. `total_earns` counted EarnedTrophy across every trophy in the game (players x
-trophies rows), which on a cold cache could outlast the gunicorn worker timeout on a
-popular title -- and the hourly cache key meant the whole catalogue went cold on the
-hour, so a crawler walking distinct games missed by construction.
+These stats used to be computed per request behind an hourly cache. `total_earns`
+counted EarnedTrophy across every trophy in the game (players x trophies rows), which on
+a cold cache could outlast the gunicorn worker timeout on a popular title -- and the
+hourly cache key meant the whole catalogue went cold on the hour, so a crawler walking
+distinct games missed by construction.
 
-The query-count test is the load-bearing one: it fails the moment somebody reintroduces
-a live aggregate here, which is exactly how this regressed the first time.
+The rebuilt hero and ratings panel now read the Game columns directly, so the
+`_build_game_stats_context` wrapper (and its zero-query test) is gone on this branch; it
+survives on `main` only until the pre-rebuild header partial is retired. What remains
+worth pinning is that `recalc_earn_rates` actually populates the columns those templates
+read, and that a budget-capped run resumes instead of leaving the tail at 0 forever.
 """
 import pytest
 from django.core.management import call_command
@@ -15,35 +18,9 @@ from django.utils import timezone
 from datetime import timedelta
 
 from tests.factories import (
-    EarnedTrophyFactory, GameFactory, ProfileGameFactory, TrophyFactory,
+    EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory, TrophyFactory,
 )
-from trophies.views.game_views import GameDetailView
-
 pytestmark = pytest.mark.django_db
-
-
-def test_game_stats_context_issues_no_queries(django_assert_num_queries):
-    """Every value reads off the already-loaded Game instance."""
-    game = GameFactory(
-        played_count=1200,
-        monthly_players_count=90,
-        plats_earned_count=300,
-        total_earns_count=45000,
-        full_completion_count=250,
-        avg_completion=61.4,
-    )
-
-    with django_assert_num_queries(0):
-        stats = GameDetailView()._build_game_stats_context(game)
-
-    assert stats == {
-        'total_players': 1200,
-        'monthly_players': 90,
-        'plats_earned': 300,
-        'total_earns': 45000,
-        'completes': 250,
-        'avg_progress': 61.4,
-    }
 
 
 def test_recalc_populates_total_earns_across_all_trophies():
@@ -212,3 +189,61 @@ def test_dry_run_does_not_advance_the_cursor(monkeypatch):
     call_command('recalc_earn_rates', dry_run=True)
 
     assert stored['v'] == 999
+
+
+# ── monthly_earners_count: the Trending signal ────────────────────────────────────────────────────
+
+def test_monthly_earners_counts_trophy_activity_not_launches():
+    """The reason this is a SEPARATE column from monthly_players_count.
+
+    `monthly_players_count` counts owners who LAUNCHED the game in the window; this counts owners who
+    EARNED A TROPHY in it. On a trophy site those differ -- booting a game and bouncing is not trending
+    activity -- so reading the wrong one would quietly redefine the Trending sort.
+    """
+    from trophies.models import ProfileGame
+
+    game = GameFactory()
+    recent = timezone.now() - timedelta(days=3)
+    stale = timezone.now() - timedelta(days=90)
+
+    # Played recently AND earned recently -> counts for both.
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game,
+                               last_played_date_time=recent, most_recent_trophy_date=recent)
+    # Launched recently but hasn't earned anything in months -> a player, NOT an earner.
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game,
+                               last_played_date_time=recent, most_recent_trophy_date=stale)
+    # Dormant on both counts.
+    ProfileGame.objects.create(profile=ProfileFactory(), game=game,
+                               last_played_date_time=stale, most_recent_trophy_date=stale)
+
+    call_command('recalc_earn_rates', verbosity=0)
+    game.refresh_from_db()
+
+    assert game.monthly_players_count == 2
+    assert game.monthly_earners_count == 1, 'the bouncer must not count as trending activity'
+
+
+def test_monthly_earners_matches_what_trending_used_to_compute():
+    """Pins the swap: Trending ordered by a live Count over ProfileGame filtered on
+    most_recent_trophy_date, and now orders by this column. If the denorm's predicate ever drifts, the
+    browse page reorders silently."""
+    from django.db.models import Count, Q
+    from trophies.models import Game, ProfileGame
+
+    since = timezone.now() - timedelta(days=30)
+    game = GameFactory()
+    for days in (1, 10, 29, 31, 400):
+        ProfileGame.objects.create(
+            profile=ProfileFactory(), game=game,
+            most_recent_trophy_date=timezone.now() - timedelta(days=days),
+        )
+
+    live = (
+        Game.objects.filter(pk=game.pk)
+        .annotate(c=Count('played_by', filter=Q(played_by__most_recent_trophy_date__gte=since)))
+        .values_list('c', flat=True).first()
+    )
+    call_command('recalc_earn_rates', verbosity=0)
+    game.refresh_from_db()
+
+    assert game.monthly_earners_count == live == 3

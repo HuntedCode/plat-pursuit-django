@@ -1,8 +1,13 @@
-"""Tests for the Badge Art Reveal engine: the badge-tied platinum counter and
-the reveal reconciliation (count -> released set + art pushed onto the badge).
+"""Tests for the Badge Art Reveal engine: the badge-tied platinum counter and the reveal reconciliation
+(count -> released set + art pushed onto the SERIES).
 
-The counter is community-wide and must count each qualifying platinum exactly
-once. Reconciliation must be idempotent and cap at the number of items.
+The counter is community-wide and must count each qualifying platinum exactly once. Reconciliation must
+be idempotent and cap at the number of items.
+
+Repointed off the legacy tier `Badge` in 2026-08. Two behaviours changed and both are pinned below:
+released artwork now lands on `BadgeSeries.badge_image` (which every edition inherits through
+`GroupBadge.art_layers()`), and donor credit lands on `BadgeSeries.funded_by` -- the field
+`GroupBadge.effective_funded_by` actually resolves. The old code wrote tier rows nothing renders.
 """
 
 from datetime import timedelta
@@ -15,8 +20,8 @@ from django.utils import timezone
 from art_reveal.models import ArtRevealEvent, ArtRevealItem
 from art_reveal.services import compute_badge_platinum_count, reconcile_event
 from tests.factories import (
-    BadgeFactory, ConceptFactory, EarnedTrophyFactory, GameFactory,
-    ProfileFactory, StageFactory, TrophyFactory,
+    BadgeSeriesFactory, ConceptBundleFactory, ConceptFactory, EarnedTrophyFactory, GameFactory,
+    GroupBadgeFactory, PlatformGroupFactory, ProfileFactory, StageFactory, TrophyFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -31,10 +36,10 @@ def media_root(settings, tmp_path):
 
 
 def _badge_platinum_trophy(series='s', shovelware='clean'):
-    """A platinum trophy on a game whose concept is covered by a badge (Badge and
-    Stage are joined by series_slug)."""
+    """A platinum trophy on a game whose concept is covered by a badge series (BadgeSeries and Stage are
+    joined by series_slug, not an FK)."""
     concept = ConceptFactory()
-    BadgeFactory(series_slug=series, tier=1)
+    BadgeSeriesFactory(series_slug=series)
     StageFactory(series_slug=series).concepts.add(concept)
     game = GameFactory(concept=concept, shovelware_status=shovelware)
     return TrophyFactory(game=game, trophy_type='platinum')
@@ -68,7 +73,7 @@ def test_concept_in_multiple_badges_counted_once():
     """A concept covered by two badge series must not double-count its platinum."""
     start = timezone.now() - timedelta(days=1)
     plat = _badge_platinum_trophy(series='s')
-    BadgeFactory(series_slug='s2', tier=1)
+    BadgeSeriesFactory(series_slug='s2')
     StageFactory(series_slug='s2').concepts.add(plat.game.concept)
 
     EarnedTrophyFactory(trophy=plat)
@@ -93,7 +98,7 @@ def _event_with_items(n=4, per=5):
     )
     for i in range(1, n + 1):
         ArtRevealItem.objects.create(
-            event=event, badge=BadgeFactory(series_slug=f'evt-{i}', tier=1), order=i,
+            event=event, series=BadgeSeriesFactory(series_slug=f'evt-{i}'), order=i,
             artwork=SimpleUploadedFile(f'{i}.png', PNG, content_type='image/png'),
         )
     return event
@@ -138,20 +143,21 @@ def test_reconcile_advances_and_caps_at_total(media_root, monkeypatch):
     assert event.items.filter(released=True).count() == 4
 
 
-def test_release_pushes_art_onto_badge(media_root, monkeypatch):
+def test_release_pushes_art_onto_the_series(media_root, monkeypatch):
     event = _event_with_items(n=1, per=5)
     monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
                         lambda *, since: 5)
     item = event.items.first()
-    assert not item.badge.badge_image
+    assert not item.series.badge_image
 
     reconcile_event(event)
 
     item.refresh_from_db()
     assert item.released is True
     assert item.released_at is not None
-    item.badge.refresh_from_db()
-    assert bool(item.badge.badge_image) is True  # art is now live on the badge
+    item.series.refresh_from_db()
+    # Live on the SERIES default, which every edition inherits via GroupBadge.art_layers().
+    assert bool(item.series.badge_image) is True
 
 
 # --- progress math -----------------------------------------------------------
@@ -184,7 +190,7 @@ def test_banner_payload_is_cached(media_root, monkeypatch, django_assert_num_que
     first = get_active_banner()  # warms the cache
     assert first['name'] == event.name
     assert first['progress']['revealed'] == 1
-    assert first['latest']['series_slug'] == event.items.get(order=1).badge.series_slug
+    assert first['latest']['series_slug'] == event.items.get(order=1).series.series_slug
 
     with django_assert_num_queries(0):  # warm cache => no per-request DB work
         cached = get_active_banner()
@@ -204,23 +210,23 @@ def test_progress_complete_state():
 # --- funder claim completion on reveal ---------------------------------------
 
 
-def _make_claim(badge, profile, status='in_progress'):
+def _make_claim(series, profile, status='in_progress'):
     from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
     fr = Fundraiser.objects.create(
-        name='F', slug='fr-' + badge.series_slug, description='',
+        name='F', slug='fr-' + series.series_slug, description='',
         start_date=timezone.now(),
     )
     don = Donation.objects.create(
         fundraiser=fr, amount=10, provider='stripe',
-        provider_transaction_id='tx-' + badge.series_slug, status='completed',
+        provider_transaction_id='tx-' + series.series_slug, status='completed',
     )
     return DonationBadgeClaim.objects.create(
-        donation=don, profile=profile, badge=badge,
-        series_slug=badge.series_slug, series_name=badge.name, status=status,
+        donation=don, profile=profile, series=series,
+        series_slug=series.series_slug, series_name=series.name, status=status,
     )
 
 
-def test_complete_badge_claim_credits_all_tiers_and_notifies(monkeypatch):
+def test_complete_badge_claim_credits_the_series_where_the_medallion_reads_it(monkeypatch):
     from fundraiser.services.donation_service import DonationService
 
     # Verify delegation to the senders without depending on email/template infra.
@@ -231,21 +237,26 @@ def test_complete_badge_claim_credits_all_tiers_and_notifies(monkeypatch):
                         staticmethod(lambda c: calls.append('notif')))
 
     profile = ProfileFactory()
-    t1 = BadgeFactory(series_slug='claim-s', tier=1)
-    t2 = BadgeFactory(series_slug='claim-s', tier=2)
-    claim = _make_claim(t1, profile)
+    series = BadgeSeriesFactory(series_slug='claim-s')
+    edition = GroupBadgeFactory(series=series, platform_group=PlatformGroupFactory(), is_live=True)
+    claim = _make_claim(series, profile)
 
     assert DonationService.complete_badge_claim(claim) is True
 
     claim.refresh_from_db()
     assert claim.status == 'completed'
     assert claim.completed_at is not None
-    t1.refresh_from_db()
-    t2.refresh_from_db()
-    assert t1.funded_by_id == profile.id
-    assert t2.funded_by_id == profile.id  # every tier credited
-    assert calls == ['email', 'notif']    # email + notification fired
 
+    series.refresh_from_db()
+    assert series.funded_by_id == profile.id
+
+    # THE POINT. Writing the credit is only half of it -- the medallion renders
+    # `GroupBadge.effective_funded_by`, and the pre-2026-08 code wrote a legacy tier row that this
+    # property does not consult, so donors were credited somewhere invisible. Assert the READ.
+    edition.refresh_from_db()
+    assert edition.effective_funded_by == profile
+
+    assert calls == ['email', 'notif']    # email + notification fired
     assert DonationService.complete_badge_claim(claim) is False  # idempotent
 
 
@@ -253,7 +264,7 @@ def test_reveal_completes_funder_claim(media_root, monkeypatch):
     event = _event_with_items(n=1, per=5)
     item = event.items.first()
     profile = ProfileFactory()
-    claim = _make_claim(item.badge, profile)
+    claim = _make_claim(item.series, profile)
     monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
                         lambda *, since: 5)
 
@@ -261,8 +272,8 @@ def test_reveal_completes_funder_claim(media_root, monkeypatch):
 
     claim.refresh_from_db()
     assert claim.status == 'completed'
-    item.badge.refresh_from_db()
-    assert item.badge.funded_by_id == profile.id
+    item.series.refresh_from_db()
+    assert item.series.funded_by_id == profile.id
 
 
 def test_reveal_without_a_claim_is_a_noop(media_root, monkeypatch):
@@ -281,7 +292,7 @@ def test_reveal_does_not_recomplete_an_already_completed_claim(media_root, monke
 
     event = _event_with_items(n=1, per=5)
     item = event.items.first()
-    _make_claim(item.badge, ProfileFactory(), status='completed')
+    _make_claim(item.series, ProfileFactory(), status='completed')
 
     calls = []
     monkeypatch.setattr(DonationService, 'send_artwork_complete_email',
@@ -294,3 +305,36 @@ def test_reveal_does_not_recomplete_an_already_completed_claim(media_root, monke
     reconcile_event(event)
 
     assert calls == []  # already-completed claim is not re-completed / re-notified
+
+
+def test_a_bundled_game_counts_toward_the_community_platinum_total():
+    """The ConceptBundle path in `_badge_concept_ids`, which had an unused factory import and no test.
+
+    A concept is in EITHER `Stage.concepts` OR a `ConceptBundle` on that stage, never both. The pre-2026-08
+    version matched only the first, so every episodic game was missing from the count that this event's
+    entire progress bar is built on -- a reveal that never advances, for a reason nothing surfaces.
+    Mutation-checked: removing the bundle arm makes this fail.
+    """
+    start = timezone.now() - timedelta(days=1)
+    concept = ConceptFactory()
+    BadgeSeriesFactory(series_slug='episodic')
+    stage = StageFactory(series_slug='episodic')
+    ConceptBundleFactory(stage=stage).concepts.add(concept)     # bundle member, NOT in stage.concepts
+    game = GameFactory(concept=concept, shovelware_status='clean')
+    EarnedTrophyFactory(trophy=TrophyFactory(game=game, trophy_type='platinum'))
+
+    assert compute_badge_platinum_count(since=start) == 1
+
+
+def test_release_never_overwrites_existing_series_art():
+    """A curator who has already set the series art beats an automated reveal. Documented in `release()`
+    and previously untested, which is how a documented guarantee quietly stops being true."""
+    event = _event_with_items(n=1, per=5)
+    item = event.items.first()
+    item.series.badge_image = 'badges/series/curator-chose-this.png'
+    item.series.save(update_fields=['badge_image'])
+
+    assert item.release() is True                     # the item still releases
+
+    item.series.refresh_from_db()
+    assert item.series.badge_image.name == 'badges/series/curator-chose-this.png'

@@ -1,0 +1,23 @@
+{% comment %} Swappable results for the Browse Gallery: the medallion grid. Rendered inside #browse-results
+on a full page load, and returned ALONE for an InfiniteScroller ?page=N XHR fetch (see BadgeListView
+.get_template_names) -- the scroller extracts the .pp-bgal__card nodes and appends them. No page-number
+pager: infinite scroll (the sentinel + loader live in gallery.html) owns pagination. {% endcomment %}
+{# Total for this filter -- read off the swapped content to tick the header count old->new (see badge_list.html). #}
+<span hidden data-result-count="{{ paginator.count }}"></span>
+{% if gallery_cards %}
+<div class="pp-bgal__grid" id="items-grid" data-bgal-grid>
+    {% for card in gallery_cards %}
+    {% include 'trophies/partials/badge_list/gallery_card.html' with card=card %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="pp-bgal__empty">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+    <p class="pp-bgal__empty-title">No badges match these filters</p>
+    <p class="text-sm mt-1">Try widening your platform or type filters.</p>
+    {% comment %} The one place near the wall worth a teaching link: a stopped reader is already
+    looking, and an empty result is where "am I misunderstanding this?" actually occurs. It costs
+    nothing when the wall has results, which is why it is here and not on the cards. {% endcomment %}
+    <p class="text-sm mt-2"><a class="pp-howto__more" href="{% url 'badge_how_it_works' %}">How badges work &rarr;</a></p>
+</div>
+{% endif %}

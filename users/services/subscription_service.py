@@ -10,11 +10,12 @@ This service manages:
 """
 import logging
 import stripe
-from typing import Optional, Dict, Tuple
-from datetime import datetime, timedelta
+from typing import NamedTuple, Optional, Dict, Tuple
+from datetime import datetime, timedelta, timezone as dt_timezone
+from django.urls import reverse
 from django.utils import timezone
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from djstripe.models import Subscription, Customer, Price
 from users.constants import (
     STRIPE_PRODUCTS,
@@ -23,11 +24,51 @@ from users.constants import (
     PREMIUM_DISCORD_ROLE_TIERS,
     SUPPORTER_DISCORD_ROLE_TIERS,
     ACTIVE_PREMIUM_TIERS,
+    PREMIUM_PERKS,
 )
 from trophies.discord_utils.discord_notifications import send_subscription_notification
-from trophies.services.badge_service import notify_bot_role_earned
+from trophies.services.discord_roles import notify_bot_role_earned
 
 logger = logging.getLogger('users.services.subscription')
+
+#: Currencies Stripe reports in MAJOR units rather than minor ones. Dividing one of these by 100
+#: understates the charge by 100x on a receipt, which is the worst direction for that error.
+ZERO_DECIMAL_CURRENCIES = frozenset({
+    'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA',
+    'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+})
+
+
+def format_charge(amount_minor, currency: str = 'usd') -> Optional[str]:
+    """Render a Stripe invoice amount for a receipt, or None when it is not a number.
+
+    Every price this account mints is USD (bootstrap_support_skus), so the dollar sign is
+    attached to the one currency it is known to fit and omitted for anything else: a EUR invoice
+    reading "$4.99 EUR" gives the reader two contradictory currencies to pick from.
+    """
+    code = (currency or 'usd').upper()
+    try:
+        if code in ZERO_DECIMAL_CURRENCIES:
+            major = f"{int(amount_minor):d}"
+        else:
+            major = f"{amount_minor / 100:.2f}"
+    except (TypeError, ValueError):
+        return None
+    return f"${major} USD" if code == 'USD' else f"{major} {code}"
+
+
+class MembershipStatus(NamedTuple):
+    """The membership page's read of a user's standing -- richer than the boolean
+    `has_active_subscription` (which deliberately says (False, None) during Stripe grace so the
+    double-subscribe guard lets a cancelled member re-subscribe).
+
+    state: 'active' | 'past_due' | 'grace' | 'none'
+    """
+    state: str
+    provider: Optional[str] = None
+    grace_until: Optional[datetime] = None   # set when state == 'grace'
+    cancels_at: Optional[datetime] = None    # set when active but a cancel is scheduled
+    stripe_sub: Optional[Subscription] = None  # the djstripe row the state was read from
 
 
 class SubscriptionService:
@@ -43,7 +84,7 @@ class SubscriptionService:
             is_live: Whether to check live or test products. If None, checks both.
 
         Returns:
-            str: Premium tier name ('ad_free', 'premium_monthly', etc.) or None if not found
+            str: Premium tier name ('premium_monthly', 'supporter', etc.) or None if not found
         """
         if is_live is None:
             # Check both modes if not specified
@@ -61,7 +102,7 @@ class SubscriptionService:
         """Helper to find tier in a specific mode."""
         products = STRIPE_PRODUCTS.get(mode, {})
         for tier, pid in products.items():
-            if pid == product_id:
+            if pid and pid == product_id:
                 return tier
         return None
 
@@ -83,8 +124,9 @@ class SubscriptionService:
         """
         Check if a tier grants premium features.
 
-        Note: 'ad_free' tier exists but doesn't grant premium features,
-        only removes ads.
+        Every live tier currently does, but this stays a distinct check rather than a truthiness
+        test on ``premium_tier``: the retired 'ad_free' tier was a paid tier that granted none, and
+        a future non-feature tier would be too.
 
         Args:
             tier: Premium tier name
@@ -97,6 +139,72 @@ class SubscriptionService:
     # ── Provider-agnostic subscription lifecycle ──────────────────────────
 
     @staticmethod
+    def reconcile_premium(user, *, provider_hint: str = None) -> bool:
+        """THE one premium truth-writer. Activation and deactivation both converge here instead
+        of each carrying its own copy of "what makes this user premium" -- so a second premium
+        source, if one ever exists again, gets added to the truth expression below and nowhere
+        else. (Gift grants briefly were that second source; they were cut in Aug 2026 because a
+        giftable supporter mark dilutes what every paying supporter's mark means.)
+
+        Truth: a feature-granting `premium_tier`.
+
+        Periods: with a `provider_hint`, a source just activated for that provider -- ensure an open
+        period exists, reopening one closed within 14 days for the SAME provider (Stripe's retry
+        window; the reopen keeps milestone tenure honest across payment recovery). With no hint and
+        no premium, close everything open. With no hint and premium still true, TOUCH NOTHING --
+        that is what protects the surviving source's period.
+
+        Must run inside the caller's transaction. Returns the computed truth.
+
+        NOTE the one deliberate exception: the `past_due` path in `update_user_subscription` keeps
+        premium while closing the period (tenure pauses during failed payment). Reconcile would
+        refuse to close a premium user's period, so that path stays direct -- see the comment there.
+        """
+        is_premium = (
+            user.premium_tier is not None and SubscriptionService.is_tier_premium(user.premium_tier)
+        )
+
+        if hasattr(user, 'profile'):
+            user.profile.update_profile_premium(is_premium)
+            # update_profile_premium refreshes the worn mark itself (users/services/marks.py);
+            # nothing further to write here -- the denorm has exactly two writers, this path
+            # (through the profile) and CustomUser.save on role changes.
+
+        from users.models import SubscriptionPeriod
+        if provider_hint is not None and is_premium:
+            open_period = SubscriptionPeriod.objects.filter(
+                user=user, ended_at__isnull=True
+            ).exists()
+            if not open_period:
+                recent_threshold = timezone.now() - timedelta(days=14)
+                recent_closed = SubscriptionPeriod.objects.filter(
+                    user=user, provider=provider_hint, ended_at__isnull=False,
+                    ended_at__gte=recent_threshold,
+                ).order_by('-ended_at').first()
+                if recent_closed:
+                    recent_closed.ended_at = None
+                    recent_closed.save(update_fields=['ended_at'])
+                else:
+                    try:
+                        SubscriptionPeriod.objects.create(
+                            user=user,
+                            started_at=timezone.now(),
+                            provider=provider_hint,
+                        )
+                    except IntegrityError:
+                        # Concurrent webhook won the race against `one_open_period_per_user`
+                        # between our exists() and this insert. A period is open, which is all
+                        # this branch wanted -- not worth a 500 and a provider retry.
+                        logger.info(f"Open period already created concurrently for {user.email}")
+        elif provider_hint is None and not is_premium:
+            SubscriptionPeriod.objects.filter(
+                user=user, ended_at__isnull=True
+            ).update(ended_at=timezone.now())
+        # provider_hint None + still premium: deliberately nothing.
+
+        return is_premium
+
+    @staticmethod
     def activate_subscription(user, tier: str, provider: str, event_type: str = None) -> bool:
         """
         Activate a subscription for a user, regardless of payment provider.
@@ -107,7 +215,7 @@ class SubscriptionService:
 
         Args:
             user: CustomUser instance
-            tier: Subscription tier name ('ad_free', 'premium_monthly', etc.)
+            tier: Subscription tier name ('premium_monthly', 'supporter', etc.)
             provider: 'stripe' or 'paypal'
             event_type: Original webhook event type (for Discord notification logic)
 
@@ -122,41 +230,22 @@ class SubscriptionService:
         if provider == 'paypal':
             user.paypal_cancel_at = None  # Clear any previous cancellation
             update_fields += ['paypal_cancel_at', 'paypal_subscription_id']
+        elif user.paypal_subscription_id or user.paypal_cancel_at:
+            # Switching TO another provider: drop the stale PayPal identifiers, so the dead
+            # sub's later webhooks cannot even find this user (the handler's provider guard is
+            # the belt; this is the braces).
+            user.paypal_subscription_id = None
+            user.paypal_cancel_at = None
+            update_fields += ['paypal_subscription_id', 'paypal_cancel_at']
 
         with transaction.atomic():
             user.save(update_fields=update_fields)
-            if hasattr(user, 'profile'):
-                user.profile.update_profile_premium(is_premium)
-
-            # Ensure a SubscriptionPeriod is open (inside transaction to prevent
-            # duplicate periods from concurrent webhooks; DB partial unique
-            # constraint is the ultimate guard).
-            # On payment recovery (past_due -> active), re-open the most recently
-            # closed period rather than creating a new one.
-            if is_premium:
-                from users.models import SubscriptionPeriod
-                open_period = SubscriptionPeriod.objects.filter(
-                    user=user, ended_at__isnull=True
-                ).exists()
-                if not open_period:
-                    # Try to re-open the most recently closed period (payment recovery).
-                    # Only reopen if closed within last 14 days (covers Stripe's retry
-                    # window). Older periods get a fresh start to keep milestone
-                    # calculations accurate.
-                    recent_threshold = timezone.now() - timedelta(days=14)
-                    recent_closed = SubscriptionPeriod.objects.filter(
-                        user=user, provider=provider, ended_at__isnull=False,
-                        ended_at__gte=recent_threshold,
-                    ).order_by('-ended_at').first()
-                    if recent_closed:
-                        recent_closed.ended_at = None
-                        recent_closed.save(update_fields=['ended_at'])
-                    else:
-                        SubscriptionPeriod.objects.create(
-                            user=user,
-                            started_at=timezone.now(),
-                            provider=provider,
-                        )
+            # Denorm + period management converge on the one truth-writer. The hint is only passed
+            # when this tier actually grants features -- a non-feature tier activating must not
+            # open a period, and reconcile's no-hint path handles the denorm either way.
+            SubscriptionService.reconcile_premium(
+                user, provider_hint=provider if is_premium else None
+            )
 
         # Discord notification embed for new subscriptions only (side effects after commit)
         activation_events = [
@@ -183,13 +272,9 @@ class SubscriptionService:
             tier_name = SubscriptionService.get_tier_display_name(tier)
             SubscriptionService._send_subscription_welcome_email(user, tier_name)
 
-        # Check is_premium and subscription_months milestones
-        if is_premium and hasattr(user, 'profile'):
-            from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(
-                user.profile,
-                criteria_types=['is_premium', 'subscription_months'],
-            )
+        # (Premium tenure recognition now lives in the milestones app's premium_months ladder,
+        # recomputed by its nightly sweep -- the legacy is_premium/subscription_months milestones
+        # retired with the legacy engine.)
 
         return is_premium
 
@@ -219,24 +304,17 @@ class SubscriptionService:
 
         with transaction.atomic():
             user.save(update_fields=update_fields)
-            if hasattr(user, 'profile'):
-                # A post_save signal on Profile handles cascading side effects
-                # of the premium transition (deactivates premium-only showcases).
-                user.profile.update_profile_premium(False)
-
-            # Close any open SubscriptionPeriod (inside transaction so
-            # deactivation and period close are atomic)
-            from users.models import SubscriptionPeriod
-            SubscriptionPeriod.objects.filter(
-                user=user, ended_at__isnull=True
-            ).update(ended_at=timezone.now())
+            # The truth-writer, not an unconditional flip. (A post_save signal on Profile handles
+            # cascading side effects of a real premium transition, e.g. deactivating premium-only
+            # showcases.)
+            SubscriptionService.reconcile_premium(user)
 
         logger.info(f"Deactivated {provider} subscription for user {user.email} ({event_type})")
 
         # Side effects after commit: Discord role removal (only the role matching the user's tier)
         # Deferred via on_commit to avoid blocking the webhook response with HTTP calls.
         if hasattr(user, 'profile') and user.profile.is_discord_verified and user.profile.discord_id:
-            from trophies.services.badge_service import notify_bot_role_removed
+            from trophies.services.discord_roles import notify_bot_role_removed
             profile = user.profile
             if original_tier in PREMIUM_DISCORD_ROLE_TIERS and settings.DISCORD_PREMIUM_ROLE:
                 role_id = settings.DISCORD_PREMIUM_ROLE
@@ -264,7 +342,7 @@ class SubscriptionService:
                     notification_type='subscription_updated',
                     title="Your subscription has ended",
                     message="Your premium subscription has expired. Thank you for your support! You can resubscribe anytime.",
-                    action_url='/users/subscribe/',
+                    action_url='/support/',
                     action_text='Resubscribe',
                     priority='normal',
                     metadata={'previous_tier': original_tier},
@@ -302,19 +380,153 @@ class SubscriptionService:
         if user.stripe_customer_id:
             active_stripe = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
-                stripe_data__status__in=['active', 'past_due']
+                stripe_data__status__in=['active', 'trialing', 'past_due']
             ).exists()
             if active_stripe:
                 return (True, 'stripe')
 
         # Check PayPal (trust our stored state, set by webhooks).
-        # Must mirror is_premium() logic: respect paypal_cancel_at expiry.
+        # A CANCELLED sub -- even one with paid time left -- reports False here, mirroring how a
+        # canceled Stripe row falls through the status list above: this helper answers "is there
+        # a subscription that will renew", and its False during grace is what lets a cancelled
+        # member re-subscribe (the storefront and checkout guard both read it). The page's grace
+        # display comes from membership_status, which reads the cancel date itself.
         if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
-            if user.paypal_cancel_at and user.paypal_cancel_at < timezone.now():
+            if user.paypal_cancel_at:
                 return (False, None)
             return (True, 'paypal')
 
         return (False, None)
+
+    @staticmethod
+    def membership_status(user) -> MembershipStatus:
+        """The membership page's state read: active / past_due / grace / none, read-only.
+
+        Mirrors `update_user_subscription`'s truth without writing anything. The crucial extra
+        over `has_active_subscription` is GRACE: a cancelled Stripe sub with paid time left keeps
+        premium (see the canceled branch there), but the boolean helper reports (False, None) --
+        correct for the double-subscribe guard, wrong for a page that would tell a paying member
+        they have "no active subscription".
+        """
+        if user.stripe_customer_id:
+            sub = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id,
+                stripe_data__status__in=['active', 'trialing'],
+            ).first()
+            if sub:
+                data = sub.stripe_data or {}
+                cancels_at = None
+                if data.get('cancel_at_period_end') or data.get('cancel_at'):
+                    # Portal cancels leave the sub 'active' with cancel_at_period_end; a cancel
+                    # scheduled for a specific date sets cancel_at ALONE. Either way the end date
+                    # is real information. `dt_timezone.utc`, never django.utils.timezone.utc
+                    # (removed in Django 5.0).
+                    end_ts = data.get('cancel_at') or data.get('current_period_end')
+                    if end_ts:
+                        cancels_at = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
+                return MembershipStatus('active', 'stripe', cancels_at=cancels_at, stripe_sub=sub)
+
+        # The PayPal-subscriber guard, same reasoning as update_user_subscription's: for a
+        # provider='paypal' user, STALE Stripe rows (the past_due/canceled sub they left behind
+        # before re-subscribing via PayPal) must never claim the page. Only an ACTIVE Stripe sub
+        # (checked above) outranks the PayPal read.
+        if user.paypal_subscription_id and user.premium_tier and user.subscription_provider == 'paypal':
+            if user.paypal_cancel_at:
+                if user.paypal_cancel_at > timezone.now():
+                    return MembershipStatus('grace', 'paypal', grace_until=user.paypal_cancel_at)
+                return MembershipStatus('none')
+            return MembershipStatus('active', 'paypal')
+
+        if user.stripe_customer_id:
+            past_due = Subscription.objects.filter(
+                customer__id=user.stripe_customer_id, stripe_data__status='past_due'
+            ).first()
+            if past_due:
+                return MembershipStatus('past_due', 'stripe', stripe_sub=past_due)
+
+            if user.premium_tier and SubscriptionService.is_tier_premium(user.premium_tier):
+                canceled = Subscription.objects.filter(
+                    customer__id=user.stripe_customer_id, stripe_data__status='canceled'
+                ).first()
+                if canceled:
+                    end_ts = (canceled.stripe_data or {}).get('current_period_end')
+                    if end_ts:
+                        until = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
+                        if until > timezone.now():
+                            return MembershipStatus('grace', 'stripe', grace_until=until,
+                                                    stripe_sub=canceled)
+
+        return MembershipStatus('none')
+
+    @staticmethod
+    def premium_tenure(user) -> Dict:
+        """Member-since and total supported time, from SubscriptionPeriod (the only tenure data on
+        the site). One values_list pass; bounded per user (a handful of periods). The milestones
+        metric `premium_months` delegates here -- one implementation, pinned by a parity test."""
+        from users.models import SubscriptionPeriod
+
+        now = timezone.now()
+        member_since = None
+        current_started = None
+        total_days = 0
+        for started, ended in SubscriptionPeriod.objects.filter(user=user).values_list(
+                'started_at', 'ended_at'):
+            if not started:
+                continue
+            total_days += max(((ended or now) - started).days, 0)
+            if member_since is None or started < member_since:
+                member_since = started
+            if ended is None:
+                current_started = started
+        return {
+            'member_since': member_since,
+            'current_started': current_started,
+            'total_days': total_days,
+            'total_months': int(total_days // 30),
+        }
+
+    @staticmethod
+    def describe_billing(user, membership: MembershipStatus) -> Dict:
+        """What the member pays and how often: {'amount': int|None dollars, 'cycle':
+        'month'|'year'|None}. Best-effort display data -- never guessed, omitted when unknown.
+        """
+        amount = None
+        cycle = None
+
+        if membership.provider == 'stripe' and membership.stripe_sub is not None:
+            plan = (membership.stripe_sub.stripe_data or {}).get('plan') or {}
+            if plan.get('amount'):
+                # Legacy Stripe prices are not whole-dollar-guaranteed; never floor a member's
+                # real price ($4.99 must not read as $4).
+                cents = plan['amount']
+                amount = cents // 100 if cents % 100 == 0 else f"{cents / 100:.2f}"
+            cycle = plan.get('interval') or None
+
+        elif membership.provider == 'paypal':
+            from users.services.paypal_service import PayPalService
+            from users.constants import PAYPAL_LADDER_PLANS, SUPPORT_TIERS
+
+            snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
+            plan_id = (snapshot or {}).get('plan_id')
+            if plan_id:
+                mode = 'live' if settings.PAYPAL_MODE == 'live' else 'sandbox'
+                for slug, intervals in PAYPAL_LADDER_PLANS.get(mode, {}).items():
+                    for interval, pid in intervals.items():
+                        if pid == plan_id:
+                            cycle = 'month' if interval == 'monthly' else 'year'
+                            tier = next((t for t in SUPPORT_TIERS if t['slug'] == slug), None)
+                            if tier:
+                                amount = tier['monthly'] if cycle == 'month' else tier['yearly']
+                            break
+                    if cycle:
+                        break
+            if cycle is None:
+                # Legacy PayPal tiers: the cycle is knowable from the tier, the dollar figure
+                # lives only on the processor -- never guess it.
+                cycle = {'premium_monthly': 'month', 'premium_yearly': 'year',
+                         'supporter': 'month'}.get(user.premium_tier)
+
+        return {'amount': amount, 'cycle': cycle}
 
     # ── Stripe-specific methods ──────────────────────────────────────────
 
@@ -336,14 +548,29 @@ class SubscriptionService:
         Returns:
             bool: True if user has active premium subscription
         """
+        # A Stripe event must never end a PAYPAL subscriber's premium. `stripe_customer_id` is
+        # kept forever, so somebody who once paid via Stripe and now pays via PayPal still routes
+        # here on a late event for the long-dead Stripe subscription -- and every fall-through
+        # below is a deactivation. Only proceed for such a user when an ACTIVE Stripe sub exists
+        # (a genuine provider switch); otherwise the event is stale by definition.
+        if user.subscription_provider == 'paypal' and user.paypal_subscription_id:
+            stripe_active = user.stripe_customer_id and Subscription.objects.filter(
+                customer__id=user.stripe_customer_id, stripe_data__status='active'
+            ).exists()
+            if not stripe_active:
+                logger.info(f"Stripe event {event_type} ignored for PayPal subscriber {user.email}")
+                return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
+
         if not user.stripe_customer_id:
             SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
             return False
 
-        # Find active subscription
+        # Find a premium-granting subscription. `trialing` counts: Stripe grants access during a
+        # trial, and before this it fell through EVERY branch below into deactivate_subscription
+        # -- the audit command's repoint arm handed trialing rescues straight to that cliff.
         active_sub = Subscription.objects.filter(
             customer__id=user.stripe_customer_id,
-            stripe_data__status='active'
+            stripe_data__status__in=['active', 'trialing']
         ).first()
 
         if active_sub:
@@ -352,6 +579,13 @@ class SubscriptionService:
             plan = stripe_data.get('plan', {})
             product_id = plan.get('product')
             tier = SubscriptionService.get_tier_from_product_id(product_id)
+
+            if not tier:
+                # Belt for the product-map gap: the subscription is demonstrably live, so before
+                # the revoke arm, try recovering the tier from the PRICE id against the ladder
+                # maps. This is what saves a paying subscriber when a bootstrap paste missed the
+                # STRIPE_PRODUCTS block (it happened: the first paste block only printed prices).
+                tier = SubscriptionService.resolve_tier_from_ladder_price(plan.get('id'))
 
             if tier:
                 return SubscriptionService.activate_subscription(user, tier, 'stripe', event_type)
@@ -363,6 +597,9 @@ class SubscriptionService:
             # Check for past_due (payment failing, Stripe still retrying).
             # Keep premium features active but close SubscriptionPeriod
             # to stop milestone time accumulation during unpaid window.
+            # DELIBERATELY DIRECT, not through reconcile_premium: this is the one state where
+            # premium stays TRUE while the period closes (tenure pauses during failed payment),
+            # and reconcile refuses to close a premium user's period by design.
             past_due_sub = Subscription.objects.filter(
                 customer__id=user.stripe_customer_id,
                 stripe_data__status='past_due'
@@ -396,12 +633,43 @@ class SubscriptionService:
             if canceled_sub:
                 canceled_data = canceled_sub.stripe_data or {}
                 period_end_ts = canceled_data.get('current_period_end')
-                if period_end_ts and datetime.fromtimestamp(period_end_ts, tz=timezone.utc) > timezone.now():
+                # dt_timezone.utc, NOT timezone.utc: `timezone` is django.utils.timezone, whose
+                # `utc` alias was removed in Django 5.0 -- this line raised AttributeError for
+                # every grace-period check since the 5.x upgrade (same bug class as the one fixed
+                # on the management page view).
+                if period_end_ts and datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc) > timezone.now():
                     # Still in grace period, keep premium active
                     return SubscriptionService.is_tier_premium(user.premium_tier) if user.premium_tier else False
 
             SubscriptionService.deactivate_subscription(user, 'stripe', event_type)
             return False
+
+    @staticmethod
+    def resolve_tier_from_ladder_price(price_id):
+        """Reverse of `resolve_ladder_price_id`: a Stripe PRICE id back to its ladder slug, both
+        modes. The webhook fallback when product-id recovery misses -- an active subscription on a
+        ladder price is a paying supporter regardless of what the product map knows."""
+        if not price_id:
+            return None
+        from users.constants import STRIPE_LADDER_PRICES
+        for mode_map in STRIPE_LADDER_PRICES.values():
+            for slug, intervals in mode_map.items():
+                if price_id in (intervals.get('monthly'), intervals.get('yearly')):
+                    return slug
+        return None
+
+    @staticmethod
+    def resolve_ladder_price_id(tier: str, interval: str, is_live: bool):
+        """Ladder (slug, interval) -> Stripe price id, or None when unconfigured.
+
+        Deliberately SEPARATE from `get_price_ids`/`get_prices_from_stripe`: those raise on one
+        missing id and their caller degrades EVERYTHING on a miss, which is the right shape for the
+        three legacy tiers that must all exist together and the wrong shape for a ladder that fills
+        in one bootstrap run at a time.
+        """
+        from users.constants import STRIPE_LADDER_PRICES
+        mode = 'live' if is_live else 'test'
+        return (STRIPE_LADDER_PRICES.get(mode, {}).get(tier) or {}).get(interval) or None
 
     @staticmethod
     def get_price_ids(is_live: bool) -> Dict[str, str]:
@@ -440,13 +708,14 @@ class SubscriptionService:
         return prices
 
     @staticmethod
-    def create_checkout_session(user, tier: str, success_url: str, cancel_url: str) -> str:
+    def create_checkout_session(user, tier: str, success_url: str, cancel_url: str,
+                                interval: str = 'monthly') -> str:
         """
         Create a Stripe checkout session for a subscription.
 
         Args:
             user: CustomUser instance
-            tier: Subscription tier ('ad_free', 'premium_monthly', etc.)
+            tier: Subscription tier ('premium_monthly', 'supporter', etc.)
             success_url: URL to redirect to after successful payment
             cancel_url: URL to redirect to if payment is canceled
 
@@ -458,12 +727,20 @@ class SubscriptionService:
             stripe.error.StripeError: If Stripe API call fails
         """
         is_live = settings.STRIPE_MODE == 'live'
-        prices = SubscriptionService.get_prices_from_stripe(is_live)
 
-        if tier not in prices:
-            raise ValueError(f"Invalid tier: {tier}")
-
-        price = prices[tier]
+        from users.constants import LADDER_SLUGS
+        if tier in LADDER_SLUGS:
+            # Ladder branch: (slug, interval) -> its own price. The legacy branch below is untouched
+            # so the three grandfathered tiers keep renewing forever; they simply are not offered.
+            price_id = SubscriptionService.resolve_ladder_price_id(tier, interval, is_live)
+            if not price_id:
+                raise ValueError(f"Ladder tier not configured: {tier}/{interval}")
+            price = Price.objects.get(id=price_id)
+        else:
+            prices = SubscriptionService.get_prices_from_stripe(is_live)
+            if tier not in prices:
+                raise ValueError(f"Invalid tier: {tier}")
+            price = prices[tier]
 
         # Get or create Stripe customer
         customer, created = Customer.get_or_create(subscriber=user)
@@ -483,7 +760,7 @@ class SubscriptionService:
             mode='subscription',
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={'tier': tier},
+            metadata={'tier': tier, 'interval': interval},
         )
 
         return session.url
@@ -519,12 +796,12 @@ class SubscriptionService:
             return False
 
         # Generate billing portal URL for Stripe users, fallback to management page
-        portal_url = f"{settings.SITE_URL}/users/subscription-management/"
+        portal_url = f"{settings.SITE_URL}{reverse('subscription_management')}"
         if user.stripe_customer_id:
             try:
                 portal_session = stripe.billing_portal.Session.create(
                     customer=user.stripe_customer_id,
-                    return_url=f"{settings.SITE_URL}/users/subscription-management/",
+                    return_url=f"{settings.SITE_URL}{reverse('subscription_management')}",
                 )
                 portal_url = portal_session.url
             except stripe.error.StripeError:
@@ -533,15 +810,15 @@ class SubscriptionService:
         tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
 
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
-
         context = {
             'username': username,
             'is_final_warning': is_final_warning,
             'portal_url': portal_url,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            # From the shared constant: the hand-written what-you-lose list threatened retired
+            # perks (themes, premium checklists) on a dunning email.
+            'premium_perks': PREMIUM_PERKS,
         }
 
         try:
@@ -600,7 +877,7 @@ class SubscriptionService:
                 notification_type='payment_failed',
                 title=title,
                 message=message,
-                action_url='/users/subscription-management/',
+                action_url=reverse('subscription_management'),
                 action_text='Manage Subscription',
                 icon='💳',
                 priority=priority,
@@ -638,14 +915,13 @@ class SubscriptionService:
             return False
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         context = {
             'username': username,
             'tier_name': tier_name,
-            'subscribe_url': f"{settings.SITE_URL}/users/subscribe/",
+            'subscribe_url': f"{settings.SITE_URL}{reverse('support_hub')}",
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            'premium_perks': PREMIUM_PERKS,
         }
 
         try:
@@ -715,7 +991,7 @@ class SubscriptionService:
         invoice_url = invoice_data.get('hosted_invoice_url', '')
         if not invoice_url:
             logger.warning(f"No hosted_invoice_url in payment_action_required event for {user.email}")
-            invoice_url = f"{settings.SITE_URL}/users/subscription-management/"
+            invoice_url = f"{settings.SITE_URL}{reverse('subscription_management')}"
 
         logger.info(f"Payment action required for {user.email}: invoice_url={invoice_url}")
 
@@ -746,7 +1022,7 @@ class SubscriptionService:
                     "your latest subscription payment. This usually takes less "
                     "than a minute."
                 ),
-                action_url='/users/subscription-management/',
+                action_url=reverse('subscription_management'),
                 action_text='Manage Subscription',
                 icon='\U0001f510',
                 priority='normal',
@@ -785,14 +1061,12 @@ class SubscriptionService:
 
         tier_name = SubscriptionService.get_tier_display_name(user.premium_tier) if user.premium_tier else 'Premium'
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         context = {
             'username': username,
             'invoice_url': invoice_url,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }
 
         try:
@@ -814,6 +1088,41 @@ class SubscriptionService:
             return False
 
     # ── Positive lifecycle emails ─────────────────────────────────────────
+
+    @staticmethod
+    def _welcome_supporter_mark(user):
+        """The supporter mark to SHOW in the welcome email, or None to skip the panel.
+
+        Two decisions, each made where the site already makes it:
+
+        GATE on the `display_mark` denorm, so the panel appears only when the site will really
+        draw stars beside this name. Service marks outrank the ladder in `resolve_display_mark`,
+        so a staff or mod subscriber keeps wearing the wrench or the shield, and showing them
+        stars would promise a mark no page will ever draw.
+
+        Ordering, and it is NOT universal: `activate_subscription` runs `reconcile_premium` (which
+        refreshes the denorm) inside its transaction and sends this email after, so both webhook
+        paths are correct. The admin resend in `api/subscription_admin_views.py` runs no reconcile,
+        so if a tier was set by hand without the premium flag following, `display_mark` is still ''
+        and the panel is skipped. That errs the right way -- the site draws no mark for that member
+        either, so a missing panel is the truth -- but do not read this as "the denorm is always
+        fresh".
+
+        DISPLAY from `worn_level_dict`, the shape every other level-tinted surface consumes, so
+        the legacy naming rule comes along for free: a grandfathered tier wears the price-nearest
+        level's colour and stars but keeps the name it BOUGHT. Deriving the name from the worn
+        slug instead would tell a `supporter` subscriber they are a "Sponsor", a tier they never
+        bought and whose price they never paid.
+        """
+        from users.services.marks import mark_style, worn_level_dict
+
+        profile = getattr(user, 'profile', None)
+        if profile is None:
+            return None
+        mark = mark_style(profile.display_mark)
+        if not mark or mark.get('kind') != 'supporter':
+            return None
+        return worn_level_dict(user.premium_tier)
 
     @staticmethod
     def _send_subscription_welcome_email(user, tier_name: str, triggered_by: str = 'webhook') -> bool:
@@ -838,15 +1147,28 @@ class SubscriptionService:
             EmailService.log_suppressed('subscription_welcome', user, subject, triggered_by)
             return False
 
-        username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
+        profile = getattr(user, 'profile', None)
+        # Display casing, not the lowercased column: this email now SHOWS the name wearing its
+        # mark, and a mark is the name as you earned it plus a glyph.
+        username = (
+            (profile.display_psn_username or profile.psn_username) if profile
+            else user.email.split('@')[0]
+        )
 
         context = {
             'username': username,
             'tier_name': tier_name,
             'site_url': settings.SITE_URL,
-            'profile_url': f"{settings.SITE_URL}/profiles/{user.profile.psn_username}/" if hasattr(user, 'profile') else settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
+            'profile_url': f"{settings.SITE_URL}{reverse('profile_detail', args=[user.profile.psn_username])}" if profile else settings.SITE_URL,
+            # The perk list renders from the shared constant (the hand-written copy sold four
+            # retired perks on the first email a member ever read).
+            'premium_perks': PREMIUM_PERKS,
+            # The email sold the Discord perk with no way to get there.
+            'discord_url': getattr(settings, 'DISCORD_INVITE_URL', ''),
+            # The "Site-wide marker" perk, shown rather than described. None for a staff or mod
+            # subscriber: service marks take precedence over the ladder, so what they WEAR is
+            # still the wrench or the shield, and showing them stars would be a lie.
+            'mark': SubscriptionService._welcome_supporter_mark(user),
         }
 
         try:
@@ -867,7 +1189,8 @@ class SubscriptionService:
             return False
 
     @staticmethod
-    def _send_payment_succeeded_email(user, tier_name: str, next_billing_date=None, triggered_by: str = 'webhook') -> bool:
+    def _send_payment_succeeded_email(user, tier_name: str, next_billing_date=None,
+                                      triggered_by: str = 'webhook', amount=None) -> bool:
         """
         Send payment confirmation email on successful renewal.
 
@@ -876,6 +1199,9 @@ class SubscriptionService:
             tier_name: Display name of the subscription tier
             next_billing_date: Formatted date string for next billing (or None)
             triggered_by: Origin of the send (webhook, admin_manual, etc.)
+            amount: Formatted charge string, e.g. '$4.99 USD' (or None). Absent on PayPal
+                renewals and admin resends, which have no invoice in hand -- the template
+                guards the row, the same way it guards next_billing_date.
 
         Returns:
             bool: True if email was sent successfully
@@ -891,15 +1217,14 @@ class SubscriptionService:
             return False
 
         username = user.profile.psn_username if hasattr(user, 'profile') else user.email.split('@')[0]
-        preference_token = EmailPreferenceService.generate_preference_token(user.id)
 
         context = {
             'username': username,
             'tier_name': tier_name,
             'next_billing_date': next_billing_date,
-            'manage_url': f"{settings.SITE_URL}/users/subscription-management/",
+            'amount': amount,
+            'manage_url': f"{settings.SITE_URL}{reverse('subscription_management')}",
             'site_url': settings.SITE_URL,
-            'preference_url': f"{settings.SITE_URL}/users/email-preferences/?token={preference_token}",
         }
 
         try:
@@ -955,7 +1280,12 @@ class SubscriptionService:
                 except (ValueError, OSError):
                     pass
 
-        SubscriptionService._send_payment_succeeded_email(user, tier_name, next_billing_date)
+        # The charge itself: a renewal receipt that states no amount is the kind of thing that
+        # generates support mail. Returns None on the PayPal path, where there is no invoice.
+        amount = format_charge(amount_paid, invoice_data.get('currency'))
+
+        SubscriptionService._send_payment_succeeded_email(
+            user, tier_name, next_billing_date, amount=amount)
 
     # ── Stripe webhook handling ───────────────────────────────────────────
 
@@ -1042,3 +1372,64 @@ class SubscriptionService:
                 logger.info(f"Updated subscription for user {user.email} from webhook {event_type}")
             except CustomUser.DoesNotExist:
                 logger.warning(f"No user found with stripe_customer_id {customer_id}")
+                SubscriptionService._self_heal_orphaned_stripe_sub(event_type, event_data, customer_id)
+
+    @staticmethod
+    def _self_heal_orphaned_stripe_sub(event_type: str, event_data: dict, customer_id: str) -> None:
+        """Cancel a LIVE subscription whose user no longer exists (the account-deletion race:
+        checkout approved seconds before deletion, activation webhook landed after). Left alone
+        it would bill forever with no site-side cancel path.
+
+        Deliberately narrow -- every guard here is protecting a PAYING member from a wrongful
+        cancellation, and the whole thing sits behind a default-off flag (house pattern for
+        side-effecting background behaviour; a staging clone receiving real webhooks against an
+        incomplete users table must not cancel real subscriptions):
+        - Only subscription lifecycle events, whose payload IS the subscription (id + status).
+          checkout.session.completed is skipped: its subscription.created follows and heals.
+        - Only when the event's own status is non-terminal (nothing to cancel otherwise, and
+          cancelling a canceled sub raises). `incomplete` is deliberately absent: that is the
+          status a brand-new checkout occupies during SCA, it self-expires in 23 hours, and
+          cancelling it buys nothing.
+        - POSITIVE evidence only: the local Customer row must EXIST with subscriber NULL. Our
+          checkout creates the row synchronously with subscriber set, and account deletion
+          SET_NULLs it -- so exists-with-null is the deletion race's exact fingerprint. A row
+          with a subscriber is the duplicate-customer [MISMATCH] the audit repoints (a PAYING
+          member), and a MISSING row is a customer we know nothing about (dashboard-created,
+          imported, a mirror gap) -- absence of knowledge is not proof of orphanhood, so both
+          cases log and leave it to the weekly sweep.
+        The initial invoice is already paid in this race, so the log line carries
+        latest_invoice for a by-hand refund. The weekly audit's orphan sweep backstops any
+        failure here.
+        """
+        if not getattr(settings, 'PAYMENT_SELF_HEAL_ENABLED', False):
+            logger.warning(
+                f"Self-heal disabled: sub {event_data.get('id')} under unknown customer "
+                f"{customer_id} left for the weekly audit's orphan sweep")
+            return
+        if event_type not in ('customer.subscription.created', 'customer.subscription.updated'):
+            return
+        sub_id = event_data.get('id')
+        status = event_data.get('status')
+        if not sub_id or status not in ('active', 'trialing', 'past_due', 'unpaid'):
+            return
+        known = Customer.objects.filter(id=customer_id).values_list('subscriber_id', flat=True).first()
+        if known is None and not Customer.objects.filter(id=customer_id).exists():
+            logger.error(
+                f"Sub {sub_id} under customer {customer_id} which the mirror does not know at "
+                f"all; NOT cancelling (no positive orphan evidence) -- weekly sweep will list it")
+            return
+        if known is not None:
+            logger.warning(
+                f"Sub {sub_id} under unknown customer {customer_id} has a djstripe subscriber; "
+                f"leaving it for the audit's repoint (duplicate-customer case, NOT an orphan)")
+            return
+        try:
+            stripe.Subscription.cancel(sub_id)
+            logger.error(
+                f"SELF-HEAL: cancelled orphaned Stripe sub {sub_id} (customer {customer_id}, "
+                f"status {status}, latest_invoice {event_data.get('latest_invoice')}) -- its "
+                f"user no longer exists (account-deletion race); refund the invoice by hand")
+        except Exception:
+            logger.exception(
+                f"SELF-HEAL FAILED for orphaned Stripe sub {sub_id}; the weekly audit's orphan "
+                f"sweep will surface it for a hand-cancel")

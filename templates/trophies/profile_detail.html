@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 {% load custom_filters humanize static seo_tags %}
-{% block title %}{{ profile.display_psn_username }}{% endblock %}
+{% block title %}{{ profile.display_psn_username }} PSN Profile &amp; Trophies{% endblock %}
+{% comment %}A private-history profile renders a header-only page: indexing it with a
+description of the data it refuses to show was both a thin-page liability and a small
+privacy leak (SEO Lane 0). The sitemap's quality floor agrees with this stamp.{% endcomment %}
+{% block robots %}{% if profile.psn_history_public %}index, follow{% else %}noindex, follow{% endif %}{% endblock %}
 {% block og_image %}{% if profile.avatar_url %}{{ profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block twitter_image %}{% if profile.avatar_url %}{{ profile.avatar_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
 {% block og_type %}profile{% endblock %}
@@ -11,67 +15,49 @@
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 
-    {% include 'trophies/partials/profile_detail/profile_showcases_section.html' %}
-
-    {% if is_own_profile and profile.user_is_premium %}
-        {% include 'trophies/partials/profile_detail/banner_editor_modal.html' %}
-    {% endif %}
-
-    {% include 'partials/ad_unit.html' with ad_slot="1939843878" %}
 
     {% if profile.psn_history_public %}
-        {# Tab bar (stays in place during HTMX swaps) #}
+        {% comment %}Tab bar. The site-wide segmented switcher, right-aligned, one chip per section --
+        replacing a DaisyUI `tabs tabs-boxed` strip. Chips are <a> elements that HTMX-swap the panel, with
+        the href kept as the no-JS degrade.
+
+        LISTS is deliberately absent. Game Lists is parked pending a revamp and every route into it
+        redirects home, so the tab rendered cards whose links bounced the visitor to the homepage -- a
+        door into a system with nothing behind it. The builder and its template are left intact (hidden,
+        not deleted, as the rest of that system is); only the door is closed.{% endcomment %}
         {% with profile_url=profile.psn_username %}
-        <div class="tabs tabs-boxed mt-4 bg-base-300/60" role="tablist" aria-label="Profile sections" id="profile-tab-bar">
-            <a href="?tab=games" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=games" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
-               id="games-tab" class="tab {% if current_tab == 'games' %}tab-active{% endif %}" role="tab" data-tab="games">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="var(--color-accent)" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/>
-                    <path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773-.245-.232-.496-.526-.739-.808-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335l-.028-.079z"/>
-                </svg>
-                <span class="text-xs md:text-sm">Games</span>
-            </a>
-            <a href="?tab=trophies" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=trophies" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
-               id="trophies-tab" class="tab {% if current_tab == 'trophies' %}tab-active{% endif %}" role="tab" data-tab="trophies">
-                {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-4 h-4 md:w-5 md:h-5' extra_class='mr-1 md:mr-2' %}
-                <span class="text-xs md:text-sm">Trophies</span>
-            </a>
-            <a href="?tab=badges" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=badges" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
-               id="badges-tab" class="tab {% if current_tab == 'badges' %}tab-active{% endif %}" role="tab" data-tab="badges">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="var(--color-error)" viewBox="0 0 24 24" stroke="none" aria-hidden="true">
-                    <circle cx="12" cy="8" r="7" fill="none" stroke="var(--color-error)" stroke-width="2"></circle>
-                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="none" stroke="var(--color-error)" stroke-width="2"></polyline>
-                </svg>
-                <span class="text-xs md:text-sm">Badges</span>
-            </a>
-            <a href="?tab=lists" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=lists" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
-               id="lists-tab" class="tab {% if current_tab == 'lists' %}tab-active{% endif %}" role="tab" data-tab="lists">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line>
-                    <line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
-                </svg>
-                <span class="text-xs md:text-sm">Lists{% if profile_lists_count %} <span class="badge badge-xs badge-ghost">{{ profile_lists_count }}</span>{% endif %}</span>
-            </a>
-            <a href="?tab=challenges" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=challenges" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
-               id="challenges-tab" class="tab {% if current_tab == 'challenges' %}tab-active{% endif %}" role="tab" data-tab="challenges">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-                    <line x1="4" y1="22" x2="4" y2="15"></line>
-                </svg>
-                <span class="text-xs md:text-sm">Challenges{% if profile_challenge_count %} <span class="badge badge-xs badge-ghost">{{ profile_challenge_count }}</span>{% endif %}</span>
-            </a>
+        <div class="flex items-center justify-end mt-3 md:mt-4 mb-3">
+            <div class="pp-switch" role="tablist" aria-label="Profile sections" id="profile-tab-bar">
+                {% for slug, label in profile_tabs %}
+                <a href="?tab={{ slug }}"
+                   hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab={{ slug }}"
+                   hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true"
+                   role="tab" data-tab="{{ slug }}" aria-controls="tab-content"
+                   aria-selected="{% if current_tab == slug %}true{% else %}false{% endif %}"
+                   class="pp-switch__chip {% if current_tab == slug %}is-active{% endif %}">
+                    {% include 'trophies/partials/profile_detail/_tab_icon.html' with slug=slug %}
+                    <span class="pp-switch__lbl">{{ label }}</span>
+                </a>
+                {% endfor %}
+            </div>
         </div>
         {% endwith %}
 
         {# Tab content panel (swapped by HTMX on tab click and filter change) #}
-        <div id="tab-content" class="bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4 rounded-b-2xl">
+        {% comment %}No outer card: site-wide rule is STACKED chrome, FREE content. These panels hold
+        paginated, infinite-scrolling grids, and a bordered box around them grows forever.{% endcomment %}
+        <div id="tab-content">
             {% include tab_template %}
         </div>
     {% endif %}
 {% endblock %}
 
 {% block js_scripts %}
+{% comment %}Collapsing a game inside the day modal. Presentational -- its trophies are already in
+the HTML -- and document-delegated, so it also covers the standalone day page.{% endcomment %}
+<script src="{% static 'js/activity-collapse.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/profile-card-tab.js' %}"></script>
     <script>
     (function() {
         'use strict';
@@ -79,39 +65,397 @@
         function getTabFromUrl() {
             return new URLSearchParams(window.location.search).get('tab') || 'games';
         }
+        function getSetFromUrl() {
+            return new URLSearchParams(window.location.search).get('set') || 'games';
+        }
+
+        // ── Directional slide on a view change ────────────────────────────────────────────────────
+        // The shared `slideViewIn`, the same motion every other rebuilt segmented switcher uses: the
+        // incoming panel arrives from the side implied by the move, so a switch reads as travel rather
+        // than as a redraw. Both switchers on this page feed it -- the tab strip and the Ratings tab's
+        // Games/DLC control -- because they swap the same panel and animating one but not the other
+        // would read as a bug in whichever missed out.
+        //
+        // Direction is captured on CLICK, not derived after the swap. `hx-push-url` rewrites the URL as
+        // part of the swap, so reading "where were we" in afterSwap races the very thing being compared
+        // against -- by then the URL already says where we ARE.
+        //
+        // The order comes from the rendered chips rather than a hardcoded list, so it cannot fall out of
+        // step with the tabs the view actually offers.
+        var pendingSlide = null;
+
+        function slideOrder(chips, key) {
+            return Array.prototype.map.call(chips, function (c) { return c.dataset[key]; });
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var tabChip = e.target.closest('#profile-tab-bar [data-tab]');
+            if (tabChip) {
+                pendingSlide = {
+                    from: getTabFromUrl(), to: tabChip.dataset.tab,
+                    order: slideOrder(document.querySelectorAll('#profile-tab-bar [data-tab]'), 'tab'),
+                };
+                return;
+            }
+            var setChip = e.target.closest('#tab-content [data-set]');
+            if (setChip) {
+                pendingSlide = {
+                    from: getSetFromUrl(), to: setChip.dataset.set,
+                    order: slideOrder(document.querySelectorAll('#tab-content [data-set]'), 'set'),
+                };
+            }
+        });
+
+        // ── Re-anchor to the switcher on a view change ────────────────────────────────────────────
+        // Nothing SCROLLS you here -- the page gets shorter under you. Swap a 1200px wall in while you
+        // are 3000px down a 4000px one and the browser has nowhere to put you: it clamps scrollY to the
+        // new document height, which is the bottom of the incoming wall. That is why it only happens
+        // past a certain depth, and why it always lands at the bottom.
+        //
+        // A wall that is LONGER has the mirror problem: you keep your depth and arrive halfway down
+        // content you have not seen. Either way the honest answer to "show me the other view" is to show
+        // it from its start.
+        function keepPanelInView() {
+            var bar = document.getElementById('profile-tab-bar');
+            // Only once the switcher has actually scrolled off the top. Someone still reading the hero
+            // asked for a different tab, not for the page to jump.
+            if (!bar || bar.getBoundingClientRect().top >= 0) { return; }
+            // `block: 'start'` honours the site's `scroll-padding-top`, so this lands below the sticky
+            // nav rather than under it. Instant, not smooth: the panel is already sliding in, and two
+            // motions at once reads as a lurch.
+            bar.scrollIntoView({ block: 'start', behavior: 'auto' });
+        }
+
+        function playPendingSlide() {
+            var move = pendingSlide;
+            pendingSlide = null;
+            if (!move || !window.PlatPursuit || !PlatPursuit.slideViewIn) { return; }
+            // `slideViewIn` no-ops when from === to, so re-clicking the active chip stays still.
+            PlatPursuit.slideViewIn(document.getElementById('tab-content'), move.from, move.to, move.order);
+        }
+
+        // The live scroller and the Games tab's filter drawer, so each re-init can take the previous one
+        // down. Both are rebuilt per tab swap; see their call sites below.
+        var scroller = null;
+        var panelHandle = null;
+        // The toggle node the drawer was wired to, so a re-init can tell a REPLACED toolbar from a
+        // surviving one. See the rebuild guard below.
+        var panelToggle = null;
+        var revealHandle = null;
 
         function initTabContent() {
             var tab = getTabFromUrl();
 
-            // InfiniteScroller for paginated tabs
-            var gridEl = document.getElementById(tab + '-grid');
-            var sentinelEl = document.getElementById(tab + '-sentinel');
-            if (gridEl && sentinelEl) {
-                PlatPursuit.InfiniteScroller.create({
-                    gridId: tab + '-grid',
-                    sentinelId: tab + '-sentinel',
-                    loadingId: tab + '-loading',
-                    paginateBy: 50,
-                    formSelector: '#' + tab + '-form',
-                    scrollKey: 'profileScrollPos'
+            // Activity: a day tile opens its day in the shared detail modal. HTMX fetches `profile_day`
+            // into the mount; this reveals the dialog it brings and remembers the tile, so focus can return
+            // where it came from. The tile stays a real <a> to that URL -- without JS it is simply a page.
+            //
+            // Games in a day ARE collapsible (activity-collapse.js, loaded above) -- but open by default,
+            // so the click tidies rather than gates. What was removed is the collapsed POSTER state and the
+            // morph between it and the row: inside a dialog the posters were small and the extra click
+            // bought nothing.
+            var panel = document.getElementById('tab-content');
+            if (panel && !panel.dataset.actWired) {
+                panel.dataset.actWired = '1';
+
+                function closeDay() {
+                    var modal = panel.querySelector('[data-act-modal]');
+                    if (!modal || modal.hidden) { return; }
+                    modal.hidden = true;
+                    var opener = panel.querySelector('[data-act-day][data-act-opened]');
+                    if (opener) { opener.removeAttribute('data-act-opened'); opener.focus(); }
+                }
+
+                panel.addEventListener('htmx:afterSwap', function (e) {
+                    if (e.target.id !== 'act-day-modal') { return; }
+                    var modal = e.target.querySelector('[data-act-modal]');
+                    if (!modal) { return; }
+                    modal.hidden = false;
+                    var dialog = modal.querySelector('.pp-detail-modal__dialog');
+                    if (dialog) { dialog.focus(); }
+
+                    // Swipe down to close, the same gesture every other sheet on the site offers -- the
+                    // badge peeks, the contract modal, the plat-card share sheet. This one had been the
+                    // odd one out, closable only by the X or the scrim.
+                    //
+                    // Wired HERE rather than once at init: `#act-day-modal` is HTMX-swapped per day, so
+                    // the dialog is a fresh node every time and a single wiring would bind a node that is
+                    // already gone. Adding `.pp-dismissable` is also what surfaces the grabber pill, so a
+                    // sheet never advertises a gesture it does not honour.
+                    //
+                    // The dialog is its own scroll container (`max-height: 88vh; overflow-y: auto`), which
+                    // the helper already accounts for: it walks up from the touch target and refuses to
+                    // arm if anything on the way is scrolled, so reading a long day scrolls rather than
+                    // dragging the sheet off.
+                    if (dialog && PlatPursuit.dismissableSheet) {
+                        PlatPursuit.dismissableSheet(dialog, {
+                            scrim: modal.querySelector('.pp-detail-modal__scrim'),
+                            onClose: closeDay,
+                        });
+                    }
+                });
+
+                panel.addEventListener('click', function (e) {
+                    var tile = e.target.closest('[data-act-day]');
+                    if (tile) { tile.setAttribute('data-act-opened', '1'); }
+                    if (e.target.closest('[data-act-close]')) { e.preventDefault(); closeDay(); }
+                });
+
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') { closeDay(); }
                 });
             }
 
-            // Dual-range sliders (visual init)
+
+            // InfiniteScroller for paginated tabs.
+            //
+            // The previous one comes down FIRST, and unconditionally -- before the grid check, because an
+            // empty results wall renders no grid at all and would otherwise leave the last scroller live.
+            // The toolbars (`#ratings-form` and the rest) sit OUTSIDE `#tab-results`, so a form survives
+            // every sort swap while the grid under it does not; without this each swap stacks another
+            // submit listener on that same form, each closing over a detached grid.
+            if (scroller) { scroller.destroy(); scroller = null; }
+
+            // Which SHAPE the trophies tab is in, read off what the SERVER actually rendered rather than
+            // re-derived from the URL.
+            //
+            // Deriving it here has been wrong twice. First against `?view=`, the removed Activity/Log
+            // switcher's param, which nothing sets any more -- so the check was unconditionally true and
+            // search results got the day wall's page size and selector. Then against `?q`/`?tier` raw,
+            // which looks right but is a SECOND definition of "is this a search": the view drops unknown
+            // tier values (`?tier=diamond` from a stale link renders the day wall), so the two disagreed
+            // and the JS handed a wall of `.pp-gtile`s the search card's selector -- silently skipping the
+            // reveal and killing infinite scroll after page one.
+            //
+            // Read the CHILDREN, not the grid's own class. Both shapes use `id="trophies-grid"`, and htmx
+            // settle re-applies the OUTGOING node's attributes to the incoming one for the settle window --
+            // which is still open when `afterSwap` fires and this runs. So the grid is briefly wearing the
+            // PREVIOUS shape's class, and reading it inverts the answer on every swap.
+            //
+            // That failed asymmetrically, which is why it looked like a day-wall bug: going days -> log
+            // picked `.pp-gtile` wrongly but the log has no `.pp-reveal` hide rule, so its cards showed
+            // anyway. Coming back, log -> days picked `.pp-actt__card` against a wall of tiles, so
+            // `staggerReveal` bailed with nothing matching and `.pp-reveal .pp-gtile { opacity: 0 }` hid
+            // every day with nothing left to un-hide it.
+            //
+            // The cards are the swapped-in content itself, so no attribute restoration can misreport them.
+            // Scoped to the GRID's own children, not the panel. The day modal renders a `.pp-actt__card`
+            // per trophy and mounts inside `#tab-content`, and closing it only sets `hidden` -- so those
+            // cards outlive the modal. An unscoped query would then read "search" while looking at the day
+            // wall. It is unreachable today only by coincidence (both re-init triggers are ancestors of
+            // the modal mount, so the swap that re-runs this is the swap that destroys it), and that is
+            // too thin a margin for the bug it would recreate.
+            var isActivity = !(tab === 'trophies'
+                               && document.querySelector('#trophies-grid > .pp-actt__card'));
+
+            // TWO selectors, because the scroller and the reveal are asking different questions, and on
+            // one view the answers differ.
+            //
+            //   cardSel   -- the scroller's APPEND UNIT. What gets moved out of a fetched page and into
+            //                the grid. A wrong value here does not degrade, it silently stops the scroll
+            //                after page one (which is what had happened to Games when its card was
+            //                rebuilt onto `.pp-gcard` while this still said `.card`).
+            //   revealSel -- the element the reveal ANIMATES, which must have a box and must be what the
+            //                `.pp-reveal` CSS hides.
+            //
+            // They are the same element everywhere except the Activity day wall, where the append unit is
+            // `.pp-act__cell` -- a `display: contents` wrapper that exists so a month header travels with
+            // its tile as one appendable thing. Having no box, it cannot be animated and cannot carry
+            // `.is-revealed`; pointed at it, the reveal left every `.pp-gtile` hidden by
+            // `.pp-reveal .pp-gtile { opacity: 0 }` with its space still reserved. Collapsing these two
+            // into one selector is exactly the bug.
+            var cardSel = '.card', revealSel = '.card';
+            if (tab === 'games') { cardSel = revealSel = '.pp-gcard'; }
+            else if (tab === 'ratings') { cardSel = revealSel = '.pp-rcard'; }
+            else if (tab === 'badges') { cardSel = revealSel = '.pp-gallery__card'; }
+            else if (tab === 'trophies') {
+                cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card';
+                revealSel = isActivity ? '.pp-gtile' : '.pp-actt__card';
+            }
+
+            var gridEl = document.getElementById(tab + '-grid');
+            var sentinelEl = document.getElementById(tab + '-sentinel');
+            if (gridEl && sentinelEl) {
+                // Activity appends day TILES, every other grid appends cards -- so both the page size and
+                // the card selector differ. Getting either wrong fails silently rather than loudly: the
+                // scroller gates its first fetch on `grid.children.length >= paginateBy` and counts
+                // existing cards with `cardSelector` to resume, so a 28-tile grid told it had 50 per page
+                // simply never observes its sentinel, and a selector that matches nothing re-fetches page
+                // 2 after an HTMX history restore. The selector is the CELL, not the tile: the scroller
+                // appends only what matches it and discards the rest, so selecting the tile alone dropped
+                // every month header from every appended page.
+                scroller = PlatPursuit.InfiniteScroller.create({
+                    gridId: tab + '-grid',
+                    sentinelId: tab + '-sentinel',
+                    loadingId: tab + '-loading',
+                    {% comment %}Every paginated tab sets this. It used to be `trophies_per_page`, which only
+                    the Trophies tab ever set -- so Games measured a server page of 50 against the default of
+                    30 and its resume arithmetic was wrong by that gap.{% endcomment %}
+                    paginateBy: {{ scroll_per_page|default:30 }},
+                    cardSelector: cardSel,
+                    // Appended pages reveal as they SCROLL into view rather than all at once, which is the
+                    // observer half of staggerReveal. The appended NODE is not always the animated
+                    // element -- Activity appends `display: contents` cells wrapping the tiles -- so hand
+                    // the reveal what it actually animates, or appended days stay hidden by the same
+                    // `.pp-reveal .pp-gtile` rule with nothing ever un-hiding them.
+                    onAppend: function (nodes) {
+                        if (!revealHandle) { return; }
+                        var targets = [];
+                        Array.prototype.forEach.call(nodes, function (nd) {
+                            if (nd.matches && nd.matches(revealSel)) { targets.push(nd); }
+                            else if (nd.querySelectorAll) {
+                                Array.prototype.push.apply(targets, nd.querySelectorAll(revealSel));
+                            }
+                        });
+                        revealHandle.observe(targets);
+                    },
+                    formSelector: '#' + tab + '-form'
+                    {% comment %}NO `scrollKey`, and it is a bug fix rather than an omission.
+
+                    That option persists `window.scrollY` to localStorage under one global key when a
+                    filter form submits, and the NEXT scroller created anywhere reads it back and
+                    smooth-scrolls there. It was written for a page that full-reloads on filter, where the
+                    position genuinely is lost. This page swaps through HTMX end to end, so it is never
+                    lost -- which leaves the restore able to do only one thing: move you somewhere you did
+                    not ask to go.
+
+                    Which is what it did. `create()` bails early when its grid is absent (an empty results
+                    wall renders no grid at all), so the saved value survived unconsumed until some later
+                    scroller picked it up -- typically the one built when you switched tabs, teleporting
+                    you to a scroll position that belonged to a different, longer wall.{% endcomment %}
+                });
+            }
+
+            // Every figure on the page counts up, once. Guarded by a MARKER rather than by which swap
+            // called us: this runs again on every filter/sort swap, and some figures (the Ratings tab's
+            // taste summary) sit outside the swapped results -- so an unguarded pass would replay their
+            // animation each time the wall re-sorted, drawing the eye to the one thing that did not change.
+            //
+            // Deliberately NOT scoped to `#tab-content`, which is where it started. The profile HERO is
+            // outside that panel, so every figure in it -- the level, all four stat cards -- carried a
+            // `data-countup` that nothing ever read, and the page had been quietly missing the opening
+            // beat every other rebuilt surface has. The marker is what makes widening it safe.
+            if (window.PlatPursuit && PlatPursuit.countUp) {
+                document.querySelectorAll('[data-countup]:not([data-counted])').forEach(function (el) {
+                    el.setAttribute('data-counted', '1');
+                    PlatPursuit.countUp(el, 850);
+                });
+            }
+
+            // ── The wall lands ────────────────────────────────────────────────────────────────────────
+            // Every other card wall on the site does this -- Browse Games, the badge gallery, companies,
+            // franchises, genres, milestones, plat cards, recently-added, tag detail, and the hunter wall
+            // this page is reached FROM. All four profile tabs were the only ones that just appeared, so
+            // clicking a hunter made the cards stop landing.
+            //
+            // The interesting half is not the fade: it is that each card's own MEASURE fills as it lands,
+            // 150ms behind the card so it reads as a consequence of arriving rather than a second
+            // simultaneous animation. Games fills its completion bar; Ratings sweeps its star bar. Those
+            // are the one figure each of those cards exists for. Trophies and Badges take the land alone --
+            // a day tile and a medallion have no single measure that wants drawing.
+            //
+            // `staggerReveal` handles reduced-motion (returns null), the flash-to-black ordering, and
+            // idempotency when a swap re-selects a card. Reveal-on-append is wired through the scroller.
+            if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+            var revealGrid = gridEl || document.querySelector('#tab-content [data-badge-wall]');
+            if (revealGrid && PlatPursuit.staggerReveal) {
+                var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+                var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+                revealHandle = PlatPursuit.staggerReveal({
+                    grid: revealGrid, cardSelector: revealSel, step: 22,
+                    reveal: function (el, delayMs) {
+                        if (!el.animate) { return; }
+                        el.animate([{ opacity: 0 }, { opacity: 1 }],
+                                   { duration: 420, delay: delayMs, easing: fadeEase, fill: 'backwards' });
+                        el.animate([{ transform: 'translateY(14px) scale(0.965)' }, { transform: 'none' }],
+                                   { duration: 500, delay: delayMs, easing: springEase, fill: 'backwards' });
+
+                        // Games: the completion bar. A solid bar, so it scales -- GPU-cheap and no distortion.
+                        var bar = el.querySelector('.pp-gcard__barfill');
+                        if (bar) {
+                            bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
+                                        { duration: 540, delay: delayMs + 150, easing: fadeEase, fill: 'backwards' });
+                        }
+                        // Ratings: the star bar. WIDTH, not scaleX -- the overlay is five star GLYPHS, and
+                        // scaling those horizontally stretches them into something that is not a star. The
+                        // usual "transform/opacity only" rule is about layout cost, and this element is
+                        // absolutely positioned, so its width change lays out itself and nothing else.
+                        el.querySelectorAll('.pp-stars__on').forEach(function (on) {
+                            var to = on.parentElement && on.parentElement.style.getPropertyValue('--fill');
+                            if (!to) { return; }
+                            on.animate([{ width: '0%' }, { width: to.trim() }],
+                                       { duration: 560, delay: delayMs + 150, easing: fadeEase, fill: 'backwards' });
+                        });
+                    },
+                });
+            }
+
+            // The Games bar was the page's only dual-range user (completion + time-to-beat); both ranges
+            // went with the 2026-08 filter reduction, and no other tab form has one, so the init call went
+            // with them. `form` is still needed below.
             var form = document.getElementById(tab + '-form');
-            if (form && PlatPursuit.initDualRangeSliders) {
-                PlatPursuit.initDualRangeSliders(form);
+
+            // The Games tab no longer has a filter DRAWER. It was reduced from ten controls to four in
+            // 2026-08 (search / status / sort / platform) once we accepted the tab is a record of what
+            // somebody played rather than a browse page, and four controls are a toolbar, not a collapse.
+            // So `#pgames-filters-toggle` and `#pgames-advanced` are gone from the markup and
+            // `PlatPursuit.filterPanel` is no longer wired here -- the helper still serves the five genuine
+            // browse surfaces (Browse Games, the badge gallery, companies, recently-added, tag detail).
+            //
+            // The teardown below still has to run: a hunter can arrive on Games from a session that DID
+            // build a panel (a cached page, a back-nav into an older markup, or simply a previous tab), and
+            // an orphaned handle keeps listeners bound to a form node that no longer exists.
+            //
+            // What survives without any JS here: `data-browse-form` + `data-live-search` on the form give
+            // auto-apply, debounced live search, the spinner, Escape-to-clear, the clear button and the
+            // global `/` shortcut, all from browse-filters.js and all opted into by MARKUP.
+            if (panelHandle && panelHandle.destroy) {
+                panelHandle.destroy();
+            }
+            panelHandle = null;
+            panelToggle = null;
+
+            // The CHANGE-time half of the filter/sort settle, which `filterPanel`'s `dimTarget` used to
+            // provide. It does not come free from browse-filters.js: that file hard-codes
+            // `#browse-results` on both the add and the remove, so this tab's results div was only ever
+            // dimmed because filterPanel was told to aim at it. Dropping the drawer without this would
+            // retire the settle on Games alone and leave `#tab-results.is-swapping` (browse-gallery.css)
+            // with nothing to apply it.
+            //
+            // Only this half needs JS. The REQUEST-time dim already works from `hx-indicator="#tab-results"`
+            // on the form, which htmx answers with `.htmx-request` -- and that selector is styled alongside
+            // `.is-swapping`. What the request alone cannot cover is the 250ms live-search debounce BEFORE
+            // it fires, which is most of the felt latency: without this the stale grid sits undimmed
+            // through the pause and then flashes.
+            //
+            // Deliberately NOT reduced-motion gated, matching filterPanel and the note in browse-gallery.css:
+            // the dim is a STATE ("working"), not motion. Only the opacity transition is motion, and that is
+            // gated in CSS.
+            if (tab === 'games' && form && !form.dataset.settleBound) {
+                form.dataset.settleBound = '1';   // the toolbar outlives result swaps; bind once per node
+                form.addEventListener('change', markSwapping);
+                form.addEventListener('input', function (e) {
+                    if (e.target && e.target.hasAttribute('data-page-search')) { markSwapping(); }
+                });
             }
         }
 
+        function markSwapping() {
+            var results = document.getElementById('tab-results');
+            if (results) { results.classList.add('is-swapping'); }
+        }
+
+        // The switcher lives OUTSIDE the swapped panel, so its active state is ours to maintain --
+        // htmx replaces the content, not the chips. `aria-selected` moves with the class: the chip is a
+        // tab, and a sighted-only active state would leave assistive tech on the previous section.
         function updateActiveTab() {
             var tab = getTabFromUrl();
-            document.querySelectorAll('#profile-tab-bar .tab').forEach(function(el) {
-                if (el.dataset.tab === tab) {
-                    el.classList.add('tab-active');
-                } else {
-                    el.classList.remove('tab-active');
-                }
+            document.querySelectorAll('#profile-tab-bar .pp-switch__chip').forEach(function (el) {
+                var on = el.dataset.tab === tab;
+                el.classList.toggle('is-active', on);
+                el.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on && window.PlatPursuit && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(el); }
             });
         }
 
@@ -125,22 +469,22 @@
             if (e.detail.target.id === 'tab-content') {
                 updateActiveTab();
                 initTabContent();
+                // Anchor first, then animate: scrolling a panel that is mid-slide fights its own
+                // transform, and the browser's clamp has already happened by now either way.
+                keepPanelInView();
+                // After initTabContent, so the panel is fully built before it travels -- animating first
+                // and then mutating what is inside it is what makes a slide look like it stutters.
+                playPendingSlide();
             } else if (e.detail.target.id === 'tab-results') {
                 initTabContent();
             }
+            // Clear the in-flight settle. `filterPanel` adds `is-swapping` the instant a filter changes so
+            // the dim spans the debounce, and browse-filters.js only ever clears it off `#browse-results`
+            // -- so on this page nothing did, and the class accumulated permanently once a rule existed to
+            // make it visible.
+            var results = document.getElementById('tab-results');
+            if (results) { results.classList.remove('is-swapping'); }
         });
     })();
     </script>
-    {% if is_own_profile and profile.user_is_premium %}
-    <script src="{% static 'js/game-background-picker.js' %}"></script>
-    <script src="{% static 'js/profile-banner-editor.js' %}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            new ProfileBannerEditor({
-                initialPosition: {% if profile_banner_position is not None %}{{ profile_banner_position }}{% else %}50{% endif %},
-                initialData: {% if profile_banner_data_json %}{{ profile_banner_data_json|safe }}{% else %}null{% endif %}
-            });
-        });
-    </script>
-    {% endif %}
 {% endblock %}

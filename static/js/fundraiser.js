@@ -53,10 +53,8 @@ const FundraiserPage = {
         // Preset buttons
         presets.forEach(btn => {
             btn.addEventListener('click', () => {
-                presets.forEach(b => {
-                    b.classList.remove('btn-primary', 'scale-105');
-                });
-                btn.classList.add('btn-primary', 'scale-105');
+                presets.forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
                 amountInput.value = btn.dataset.amount;
                 this._state.selectedAmount = parseFloat(btn.dataset.amount);
                 this._updateDonateButton();
@@ -66,9 +64,7 @@ const FundraiserPage = {
 
         // Custom amount input
         amountInput.addEventListener('input', () => {
-            presets.forEach(b => {
-                b.classList.remove('btn-primary', 'scale-105');
-            });
+            presets.forEach(b => b.classList.remove('is-active'));
             const val = parseFloat(amountInput.value);
             this._state.selectedAmount = isNaN(val) ? null : val;
 
@@ -76,7 +72,7 @@ const FundraiserPage = {
             if (this._state.selectedAmount) {
                 presets.forEach(b => {
                     if (parseFloat(b.dataset.amount) === this._state.selectedAmount) {
-                        b.classList.add('btn-primary', 'scale-105');
+                        b.classList.add('is-active');
                     }
                 });
             }
@@ -135,7 +131,7 @@ const FundraiserPage = {
             return;
         }
 
-        hint.innerHTML = `<span class="badge badge-primary badge-sm font-semibold">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!${carryNote}</span>`;
+        hint.innerHTML = `<span class="fnd-pill">This earns ${picks} badge artwork pick${picks !== 1 ? 's' : ''}!${carryNote}</span>`;
     },
 
     // ── Provider Toggle ──────────────────────────────────────────────────
@@ -144,15 +140,10 @@ const FundraiserPage = {
         const options = document.querySelectorAll('.provider-option');
         if (!options.length) return;
 
-        const borderColors = { stripe: 'border-primary', paypal: 'border-info' };
-
         options.forEach(option => {
             option.addEventListener('click', () => {
-                options.forEach(o => {
-                    o.classList.remove('selected-provider', 'border-primary', 'border-info');
-                });
-                const color = borderColors[option.dataset.provider] || 'border-primary';
-                option.classList.add('selected-provider', color);
+                options.forEach(o => o.classList.remove('is-active'));
+                option.classList.add('is-active');
                 option.querySelector('input[type="radio"]').checked = true;
                 this._state.selectedProvider = option.dataset.provider;
             });
@@ -207,13 +198,24 @@ const FundraiserPage = {
     // ── Badge Picker ─────────────────────────────────────────────────────
 
     _initBadgePicker() {
-        const openBtn = document.getElementById('open-badge-picker-btn');
         const modal = document.getElementById('badge-picker-modal');
-        if (!openBtn || !modal) return;
+        if (!modal) return;
 
-        openBtn.addEventListener('click', () => {
+        // Two doorways: the pick prompt's button and the on-page grid's "Browse all" (the
+        // on-page grid is a bounded preview; the modal alone carries the full list).
+        const openers = document.querySelectorAll('#open-badge-picker-btn, [data-picker-open]');
+        if (!openers.length) return;
+        openers.forEach(btn => btn.addEventListener('click', () => {
             this._resetPickerState();
             modal.showModal();
+        }));
+
+        // The Support family's dialog closes: the shared X and click-on-backdrop (the dialog
+        // element itself is the backdrop hit target); Escape is native.
+        modal.querySelectorAll('[data-picker-close]').forEach(btn =>
+            btn.addEventListener('click', () => modal.close()));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.close();
         });
 
         // Search/filter
@@ -267,18 +269,13 @@ const FundraiserPage = {
     },
 
     _selectBadge(option) {
-        // Deselect previous
+        // Deselect previous; the selected state is a colour + glow change (.is-picked in
+        // fundraiser.css), never a border-width jump.
         const grid = document.getElementById('badge-picker-grid');
-        grid.querySelectorAll('.badge-pick-option').forEach(o => {
-            o.classList.remove('border-primary', 'border-4', 'bg-primary/5');
-            o.classList.add('border-base-300', 'border-2');
-        });
+        grid.querySelectorAll('.badge-pick-option').forEach(o => o.classList.remove('is-picked'));
+        option.classList.add('is-picked');
 
-        // Select new
-        option.classList.remove('border-base-300', 'border-2');
-        option.classList.add('border-primary', 'border-4', 'bg-primary/5');
-
-        this._state.selectedBadgeId = option.dataset.badgeId;
+        this._state.selectedBadgeId = option.dataset.seriesId;
         this._state.selectedBadgeName = option.dataset.badgeName;
 
         // Show confirm area
@@ -299,10 +296,7 @@ const FundraiserPage = {
 
         const grid = document.getElementById('badge-picker-grid');
         if (grid) {
-            grid.querySelectorAll('.badge-pick-option').forEach(o => {
-                o.classList.remove('border-primary', 'border-4', 'bg-primary/5');
-                o.classList.add('border-base-300', 'border-2');
-            });
+            grid.querySelectorAll('.badge-pick-option').forEach(o => o.classList.remove('is-picked'));
         }
 
         const searchInput = document.getElementById('badge-picker-search');
@@ -328,14 +322,14 @@ const FundraiserPage = {
             Toast.show('No badge picks remaining.', 'error');
             if (confirmBtn) {
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = 'Confirm Claim';
+                confirmBtn.textContent = 'Confirm claim';
             }
             return;
         }
 
         try {
             const data = await API.post('/api/v1/fundraiser/claim/', {
-                badge_id: parseInt(badgeId),
+                series_id: parseInt(badgeId),
                 donation_id: donationId,
             });
 
@@ -362,7 +356,7 @@ const FundraiserPage = {
         } finally {
             if (confirmBtn) {
                 confirmBtn.disabled = false;
-                confirmBtn.textContent = 'Confirm Claim';
+                confirmBtn.textContent = 'Confirm claim';
             }
         }
     },
@@ -383,9 +377,9 @@ const FundraiserPage = {
             if (hasPicks && modal) {
                 this._resetPickerState();
                 modal.showModal();
-                const badgeId = tile.dataset.badgeId;
+                const badgeId = tile.dataset.seriesId;
                 const modalTile = document.querySelector(
-                    `#badge-picker-grid .badge-pick-option[data-badge-id="${badgeId}"]`
+                    `#badge-picker-grid .badge-pick-option[data-series-id="${badgeId}"]`
                 );
                 if (modalTile) {
                     this._selectBadge(modalTile);
@@ -446,24 +440,24 @@ const FundraiserAdmin = {
     // ── Tab Switching ────────────────────────────────────────────────────
 
     _initTabs() {
+        // The shared segmented switcher (.pp-switch + wireTablist): roving tabindex,
+        // Arrow/Home/End, one treatment site-wide instead of a hand-rolled tablist.
         const tabContainer = document.getElementById('fundraiser-admin-tabs');
         if (!tabContainer) return;
 
-        tabContainer.addEventListener('click', (e) => {
-            const tab = e.target.closest('.tab');
-            if (!tab) return;
-
-            // Update active tab
-            tabContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
-            tab.classList.add('tab-active');
-
-            // Show corresponding panel
-            const panels = document.querySelectorAll('.admin-panel');
-            panels.forEach(p => p.classList.add('hidden'));
-
-            const panelId = `panel-${tab.dataset.tab}`;
-            const panel = document.getElementById(panelId);
-            if (panel) panel.classList.remove('hidden');
+        const chips = Array.from(tabContainer.querySelectorAll('.pp-switch__chip'));
+        if (!chips.length) return;
+        const tablist = PlatPursuit.wireTablist(chips, {
+            onSelect: (chip) => {
+                chips.forEach(c => {
+                    c.classList.toggle('is-active', c === chip);
+                    c.setAttribute('aria-selected', c === chip ? 'true' : 'false');
+                });
+                document.querySelectorAll('.admin-panel').forEach(p => p.classList.add('hidden'));
+                const panel = document.getElementById(`panel-${chip.dataset.tab}`);
+                if (panel) panel.classList.remove('hidden');
+                tablist.syncTabindex();
+            },
         });
     },
 

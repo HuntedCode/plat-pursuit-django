@@ -1,78 +1,42 @@
-from django.urls import path, include
+from django.urls import path
 from .views import (
     SummaryView, GenerateCodeView, VerifyView, UnlinkView, CheckLinkedView,
-    RefreshView, SyncRolesView, RecheckBadgesView, TrophyCaseView, CommentListView,
-    CommentCreateView, CommentDetailView, CommentVoteView, CommentReportView,
+    RefreshView, SyncRolesView, RecheckBadgesView, TrophyCaseView,
+    CommentDetailView, CommentVoteView, CommentReportView,
     AgreeToGuidelinesView
 )
 # Checklist API views removed during roadmap migration (DB tables retained)
-from .notification_views import (
-    NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
-    AdminSendNotificationView, NotificationBulkDeleteView,
-    NotificationDeleteView, NotificationRatingView,
-    AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
+# Nine of the ten notification views are no longer imported: their paths are withdrawn while the system
+# is hidden, and an import with no route is just a name to trip over later. They are untouched in
+# api/notification_views.py -- restoring the system restores this import alongside the paths.
+#
+# The tenth (AdminUserSearchView) was the exception, left routed because the staff badge-creation form
+# used it as a user picker. That form authored LEGACY tier badges and was deleted in badge cutover 5b,
+# so the picker went with it: there is no routed exception here any more.
+from .shareable_views import (
+    PlatCardHTMLView, PlatCardPNGView, ProfileCardPNGView,
+    LegacyPlatinumCardHTMLView, LegacyPlatinumCardPNGView,
 )
-from .shareable_views import ShareableImageHTMLView, ShareableImagePNGView
-from .platinum_grid_views import PlatinumGridHTMLView, PlatinumGridPNGView
+# Platinum Grid is RETIRED (2026-08); api/platinum_grid_views.py is parked unrouted.
 from .recap_views import (
     RecapAvailableView, RecapDetailView, RecapRegenerateView, RecapShareImageHTMLView,
-    RecapShareImagePNGView, RecapSlidePartialView
+    RecapShareImagePNGView, RecapSlidePartialView, RecapDeckView
 )
 from .tracking_views import TrackSiteEventView
-from .easter_egg_views import RollEasterEggView, ClaimEasterEggView
+from .easter_egg_views import RollEasterEggView
 from .share_temp_views import serve_share_temp_image
-from .game_list_views import (
-    GameListCreateView, GameListDetailView, GameListUpdateView, GameListDeleteView,
-    GameListAddItemView, GameListRemoveItemView, GameListUpdateItemView, GameListReorderView,
-    GameListLikeView, GameListQuickAddView, UserGameListsView, GameListCopyView,
-    GameSearchView,
-)
-from .az_challenge_views import (
-    AZChallengeCreateAPIView, AZChallengeDetailAPIView, AZChallengeUpdateAPIView,
-    AZChallengeDeleteAPIView, AZSlotAssignAPIView, AZSlotClearAPIView,
-    AZGameSearchAPIView,
-)
-from .az_challenge_share_views import AZChallengeShareHTMLView, AZChallengeSharePNGView
-from .calendar_challenge_views import (
-    CalendarChallengeCreateAPIView, CalendarChallengeDetailAPIView,
-    CalendarChallengeUpdateAPIView, CalendarChallengeDeleteAPIView,
-    CalendarDayDetailAPIView,
-)
-from .calendar_challenge_share_views import (
-    CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView,
-    GameBackgroundSearchView, ConceptBannerImagesView,
-)
-from .genre_challenge_views import (
-    GenreChallengeCreateAPIView, GenreChallengeDetailAPIView,
-    GenreChallengeUpdateAPIView, GenreChallengeDeleteAPIView,
-    GenreSlotAssignAPIView, GenreSlotClearAPIView,
-    GenreConceptSearchAPIView,
-    GenreBonusAddAPIView, GenreBonusClearAPIView,
-    GenreMoveAPIView, GenreSwapTargetsAPIView,
-)
-from .genre_challenge_share_views import GenreChallengeShareHTMLView, GenreChallengeSharePNGView
-from .game_family_views import (
-    GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
-    GameFamilyAddConceptView, GameFamilyRemoveConceptView,
-    ConceptSearchView as GameFamilyConceptSearchView,
-)
+# The twelve list views are no longer imported: their paths are withdrawn while the lists system is
+# hidden, and an import with no route is just a name to trip over later. They are untouched in
+# api/game_list_views.py -- restoring the system restores this import alongside the paths.
+# GameSearchView stays: it is a general game-search endpoint that happens to live in this module.
+from .game_list_views import GameSearchView
+from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
-from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, StatsPageDataView
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
-from .tutorial_views import WelcomeTourDismissAPIView, GameDetailTourDismissAPIView, BadgeDetailTourDismissAPIView
 from .game_player_views import GamePlayersAPIView
 from .game_flag_views import GameFlagView
-from .mobile_profile_views import MobileProfileView, MobileMyProfileView
-from .mobile_psn_views import MobilePSNGenerateCodeView, MobilePSNVerifyView, MobilePSNStatusView
-from .mobile_sync_views import MobileSyncStatusView, MobileTriggerSyncView
-from .device_token_views import DeviceTokenRegisterView, DeviceTokenDeleteView
-from .mobile_badge_views import (
-    MobileBadgeListView, MobileBadgeSeriesDetailView,
-    MobileUserBadgesView, MobileProfileBadgesView,
-)
-from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
 from .rating_views import GroupRatingView, WizardQueueView, TrophyListView, BlurbReportView
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
@@ -87,52 +51,16 @@ from .roadmap_note_views import (
     RoadmapNoteListCreateView, RoadmapNoteDetailView,
     RoadmapNoteResolveView, RoadmapNoteMarkReadView,
 )
-from .profile_card_views import (
-    ProfileCardHTMLView, ProfileCardPNGView,
-    ProfileCardSettingsView, ProfileCardRegenerateTokenView,
-    SetDisplayedBadgeView, ToggleShowcaseBadgeView, ReorderShowcaseBadgesView,
-)
-from .profile_showcase_views import (
-    AddShowcaseView, RemoveShowcaseView, ReorderShowcasesView, UpdateShowcaseConfigView,
-)
 from .community_stats_views import (
     CommunityStatsDayView, CommunityStatsTodayView, CommunityStatsRecordsView,
 )
 from .youtube_views import YouTubeAttributionLookupView
+from .contract_views import AcceptContractView
+from .pursuer_card_views import PursuerCardRefreshView
 
 app_name = 'api'
 
 urlpatterns = [
-    # Mobile auth endpoints
-    path('auth/', include('api.mobile_auth_urls')),
-
-    # Mobile profile endpoints
-    path('mobile/me/', MobileMyProfileView.as_view(), name='mobile-my-profile'),
-    path('mobile/profiles/<str:psn_username>/', MobileProfileView.as_view(), name='mobile-profile'),
-
-    # Mobile PSN linking endpoints
-    path('mobile/psn/generate-code/', MobilePSNGenerateCodeView.as_view(), name='mobile-psn-generate-code'),
-    path('mobile/psn/verify/', MobilePSNVerifyView.as_view(), name='mobile-psn-verify'),
-    path('mobile/psn/status/', MobilePSNStatusView.as_view(), name='mobile-psn-status'),
-
-    # Mobile sync endpoints
-    path('mobile/sync/status/', MobileSyncStatusView.as_view(), name='mobile-sync-status'),
-    path('mobile/sync/trigger/', MobileTriggerSyncView.as_view(), name='mobile-sync-trigger'),
-
-    # Push notification device token endpoints
-    path('device-tokens/', DeviceTokenRegisterView.as_view(), name='device-token-register'),
-    path('device-tokens/<str:token>/', DeviceTokenDeleteView.as_view(), name='device-token-delete'),
-
-    # Mobile badge endpoints
-    path('mobile/badges/', MobileBadgeListView.as_view(), name='mobile-badge-list'),
-    path('mobile/badges/<slug:series_slug>/', MobileBadgeSeriesDetailView.as_view(), name='mobile-badge-series-detail'),
-    path('mobile/user/badges/', MobileUserBadgesView.as_view(), name='mobile-user-badges'),
-    path('mobile/profiles/<str:psn_username>/badges/', MobileProfileBadgesView.as_view(), name='mobile-profile-badges'),
-
-    # Mobile game endpoints
-    path('mobile/profiles/<str:psn_username>/games/', MobileProfileGamesView.as_view(), name='mobile-profile-games'),
-    path('mobile/games/<int:game_id>/trophies/', MobileGameTrophiesView.as_view(), name='mobile-game-trophies'),
-
     path('generate-code/', GenerateCodeView.as_view(), name='generate-code'),
     path('verify/', VerifyView.as_view(), name='verify'),
     path('check-linked/', CheckLinkedView.as_view(), name='check-linked'),
@@ -151,29 +79,27 @@ urlpatterns = [
     # Community guidelines
     path('guidelines/agree/', AgreeToGuidelinesView.as_view(), name='guidelines-agree'),
 
-    # Notification endpoints
-    path('notifications/', NotificationListView.as_view(), name='notification-list'),
-    path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notification-mark-all-read'),
-    path('notifications/bulk-delete/', NotificationBulkDeleteView.as_view(), name='notification-bulk-delete'),
-    path('admin/notifications/send/', AdminSendNotificationView.as_view(), name='admin-send-notification'),
-    path('admin/notifications/preview/', AdminNotificationPreviewView.as_view(), name='admin-notification-preview'),
-    path('admin/notifications/target-count/', AdminTargetCountView.as_view(), name='admin-notification-target-count'),
-    path('admin/notifications/user-search/', AdminUserSearchView.as_view(), name='admin-notification-user-search'),
+    # ── Notifications: WITHDRAWN while the system is hidden (2026-08) ───────────────────────────────
+    # Nine routes gone -- list, mark-read, mark-all-read, bulk-delete, delete, the rating endpoint, and
+    # the three admin compose endpoints. Nothing can read or write into a system with no door, which is
+    # what the rebuild would otherwise have to reconcile. The views are parked in
+    # api/notification_views.py; the models and every producer are untouched.
+    #
+    # `notification-rating` went with them, which also removes the SECOND server-side writer of
+    # UserConceptRating -- `GroupRatingView` is now the only one.
+    #
+    # The user-search endpoint is the deliberate exception (see the import note above).
 
-    # Notification rating endpoint (for platinum notifications)
-    path('notifications/<int:pk>/rating/', NotificationRatingView.as_view(), name='notification-rating'),
-
-    # Generic notification detail routes (must be after more specific routes)
-    path('notifications/<int:pk>/read/', NotificationMarkReadView.as_view(), name='notification-mark-read'),
-    path('notifications/<int:pk>/', NotificationDeleteView.as_view(), name='notification-delete'),
-
-    # Shareable image endpoints (EarnedTrophy-based, for My Shareables page)
-    path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
-    path('shareables/platinum/<int:earned_trophy_id>/png/', ShareableImagePNGView.as_view(), name='shareable-platinum-png'),
-
-    # Platinum Grid share image endpoints
-    path('shareables/platinum-grid/html/', PlatinumGridHTMLView.as_view(), name='platinum-grid-html'),
-    path('shareables/platinum-grid/png/', PlatinumGridPNGView.as_view(), name='platinum-grid-png'),
+    # Plat cards. Keyed on the game's default TrophyGroup -- a card is earned by completing that group,
+    # platinum or not (see core/services/completion_card_service.py).
+    path('shareables/completion/<int:trophy_group_id>/html/', PlatCardHTMLView.as_view(), name='plat-card-html'),
+    path('shareables/completion/<int:trophy_group_id>/png/', PlatCardPNGView.as_view(), name='plat-card-png'),
+    # Pre-2026-08 EarnedTrophy-keyed alias. Platinum notifications already sent deep-link this way, and
+    # these carry TokenAuthentication, so assume external consumers too. Same card.
+    path('shareables/platinum/<int:earned_trophy_id>/html/', LegacyPlatinumCardHTMLView.as_view(), name='shareable-platinum-html'),
+    path('shareables/platinum/<int:earned_trophy_id>/png/', LegacyPlatinumCardPNGView.as_view(), name='shareable-platinum-png'),
+    # Profile Card. No key: always the caller's own profile (ownership is structural).
+    path('shareables/profile/png/', ProfileCardPNGView.as_view(), name='profile-card-png'),
 
     # Monthly recap endpoints
     path('recap/available/', RecapAvailableView.as_view(), name='recap-available'),
@@ -181,31 +107,29 @@ urlpatterns = [
     path('recap/<int:year>/<int:month>/regenerate/', RecapRegenerateView.as_view(), name='recap-regenerate'),
     path('recap/<int:year>/<int:month>/html/', RecapShareImageHTMLView.as_view(), name='recap-share-html'),
     path('recap/<int:year>/<int:month>/png/', RecapShareImagePNGView.as_view(), name='recap-share-png'),
+    path('recap/<int:year>/<int:month>/deck/', RecapDeckView.as_view(), name='recap-deck'),
     path('recap/<int:year>/<int:month>/slide/<str:slide_type>/', RecapSlidePartialView.as_view(), name='recap-slide-partial'),
 
     # Tracking endpoints
     path('tracking/site-event/', TrackSiteEventView.as_view(), name='tracking-site-event'),
 
+    # Project (Contract) acceptance gate -- banks XP for claimable Projects
+    path('projects/accept/', AcceptContractView.as_view(), name='project-accept'),
+
     # Easter egg endpoints
     path('easter-eggs/roll/', RollEasterEggView.as_view(), name='easter-egg-roll'),
-    path('easter-eggs/claim/', ClaimEasterEggView.as_view(), name='easter-egg-claim'),
 
     # Temp share image serving
     path('share-temp/<str:filename>', serve_share_temp_image, name='share-temp-image'),
 
-    # Game list endpoints
-    path('lists/', GameListCreateView.as_view(), name='game-list-create'),
-    path('lists/my/', UserGameListsView.as_view(), name='game-list-my'),
-    path('lists/quick-add/', GameListQuickAddView.as_view(), name='game-list-quick-add'),
-    path('lists/<int:list_id>/', GameListDetailView.as_view(), name='game-list-detail'),
-    path('lists/<int:list_id>/update/', GameListUpdateView.as_view(), name='game-list-update'),
-    path('lists/<int:list_id>/delete/', GameListDeleteView.as_view(), name='game-list-delete'),
-    path('lists/<int:list_id>/items/', GameListAddItemView.as_view(), name='game-list-add-item'),
-    path('lists/<int:list_id>/items/<int:item_id>/', GameListRemoveItemView.as_view(), name='game-list-remove-item'),
-    path('lists/<int:list_id>/items/<int:item_id>/update/', GameListUpdateItemView.as_view(), name='game-list-update-item'),
-    path('lists/<int:list_id>/items/reorder/', GameListReorderView.as_view(), name='game-list-reorder'),
-    path('lists/<int:list_id>/like/', GameListLikeView.as_view(), name='game-list-like'),
-    path('lists/<int:list_id>/copy/', GameListCopyView.as_view(), name='game-list-copy'),
+    # Game list endpoints -- WITHDRAWN while the lists system is hidden.
+    #
+    # Unrouted rather than left answering: the only caller was the add-to-list button on game cards,
+    # which is gone with the rest of the entry points, and an endpoint that still accepts writes into a
+    # system nobody can open collects data the revamp then has to reconcile. Checked before pulling
+    # them: PlatBot does not call `/api/v1/lists/` (its only "lists" matches are in vendored packages).
+    #
+    # The views are untouched in api/game_list_views.py; restoring the system is restoring these paths.
 
     # Game search (for list typeahead)
     path('games/search/', GameSearchView.as_view(), name='game-search'),
@@ -216,52 +140,12 @@ urlpatterns = [
     # Game flags (community data quality reports)
     path('games/<int:game_id>/flag/', GameFlagView.as_view(), name='game-flag'),
 
-    # A-Z Challenge endpoints (static paths before <int:> to avoid URL conflicts)
-    path('challenges/az/', AZChallengeCreateAPIView.as_view(), name='az-challenge-create'),
-    path('challenges/az/game-search/', AZGameSearchAPIView.as_view(), name='az-game-search'),
-    path('challenges/az/<int:challenge_id>/', AZChallengeDetailAPIView.as_view(), name='az-challenge-detail'),
-    path('challenges/az/<int:challenge_id>/update/', AZChallengeUpdateAPIView.as_view(), name='az-challenge-update'),
-    path('challenges/az/<int:challenge_id>/delete/', AZChallengeDeleteAPIView.as_view(), name='az-challenge-delete'),
-    path('challenges/az/<int:challenge_id>/slots/<str:letter>/assign/', AZSlotAssignAPIView.as_view(), name='az-slot-assign'),
-    path('challenges/az/<int:challenge_id>/slots/<str:letter>/clear/', AZSlotClearAPIView.as_view(), name='az-slot-clear'),
-    path('challenges/az/<int:challenge_id>/share/html/', AZChallengeShareHTMLView.as_view(), name='az-challenge-share-html'),
-    path('challenges/az/<int:challenge_id>/share/png/', AZChallengeSharePNGView.as_view(), name='az-challenge-share-png'),
-
     # Game background search (shared by share card + banner picker)
     path('game-backgrounds/', GameBackgroundSearchView.as_view(), name='game-background-search'),
     path('game-backgrounds/<int:concept_id>/images/', ConceptBannerImagesView.as_view(), name='concept-banner-images'),
 
-    # Platinum Calendar Challenge endpoints
-    path('challenges/calendar/', CalendarChallengeCreateAPIView.as_view(), name='calendar-challenge-create'),
-    path('challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailAPIView.as_view(), name='calendar-challenge-detail'),
-    path('challenges/calendar/<int:challenge_id>/update/', CalendarChallengeUpdateAPIView.as_view(), name='calendar-challenge-update'),
-    path('challenges/calendar/<int:challenge_id>/delete/', CalendarChallengeDeleteAPIView.as_view(), name='calendar-challenge-delete'),
-    path('challenges/calendar/<int:challenge_id>/day/<int:month>/<int:day>/', CalendarDayDetailAPIView.as_view(), name='calendar-day-detail'),
-    path('challenges/calendar/<int:challenge_id>/share/html/', CalendarChallengeShareHTMLView.as_view(), name='calendar-challenge-share-html'),
-    path('challenges/calendar/<int:challenge_id>/share/png/', CalendarChallengeSharePNGView.as_view(), name='calendar-challenge-share-png'),
-
-    # Genre Challenge endpoints (static paths before <int:> to avoid URL conflicts)
-    path('challenges/genre/', GenreChallengeCreateAPIView.as_view(), name='genre-challenge-create'),
-    path('challenges/genre/concept-search/', GenreConceptSearchAPIView.as_view(), name='genre-concept-search'),
-    path('challenges/genre/<int:challenge_id>/', GenreChallengeDetailAPIView.as_view(), name='genre-challenge-detail'),
-    path('challenges/genre/<int:challenge_id>/update/', GenreChallengeUpdateAPIView.as_view(), name='genre-challenge-update'),
-    path('challenges/genre/<int:challenge_id>/delete/', GenreChallengeDeleteAPIView.as_view(), name='genre-challenge-delete'),
-    path('challenges/genre/<int:challenge_id>/slots/<str:genre>/assign/', GenreSlotAssignAPIView.as_view(), name='genre-slot-assign'),
-    path('challenges/genre/<int:challenge_id>/slots/<str:genre>/clear/', GenreSlotClearAPIView.as_view(), name='genre-slot-clear'),
-    path('challenges/genre/<int:challenge_id>/bonus/add/', GenreBonusAddAPIView.as_view(), name='genre-bonus-add'),
-    path('challenges/genre/<int:challenge_id>/bonus/<int:bonus_slot_id>/clear/', GenreBonusClearAPIView.as_view(), name='genre-bonus-clear'),
-    path('challenges/genre/<int:challenge_id>/move/', GenreMoveAPIView.as_view(), name='genre-move'),
-    path('challenges/genre/<int:challenge_id>/move-targets/', GenreSwapTargetsAPIView.as_view(), name='genre-move-targets'),
-    path('challenges/genre/<int:challenge_id>/share/html/', GenreChallengeShareHTMLView.as_view(), name='genre-challenge-share-html'),
-    path('challenges/genre/<int:challenge_id>/share/png/', GenreChallengeSharePNGView.as_view(), name='genre-challenge-share-png'),
-
-    # Game Family endpoints (staff-only)
-    path('game-families/', GameFamilyCreateView.as_view(), name='game-family-create'),
-    path('game-families/<int:family_id>/', GameFamilyUpdateView.as_view(), name='game-family-update'),
-    path('game-families/<int:family_id>/delete/', GameFamilyDeleteView.as_view(), name='game-family-delete'),
-    path('game-families/<int:family_id>/add-concept/', GameFamilyAddConceptView.as_view(), name='game-family-add-concept'),
-    path('game-families/<int:family_id>/remove-concept/', GameFamilyRemoveConceptView.as_view(), name='game-family-remove-concept'),
-    path('game-families/search-concepts/', GameFamilyConceptSearchView.as_view(), name='game-family-search-concepts'),
+    # Game Family staff endpoints were REMOVED with the game-family management page in the 2026-08
+    # staff strip-down (the IGDB pipeline still creates families; Django admin covers overrides).
 
     # Subscription admin endpoints (staff-only)
     path('admin/subscriptions/action/', SubscriptionAdminActionView.as_view(), name='subscription-admin-action'),
@@ -273,41 +157,32 @@ urlpatterns = [
     path('admin/fundraiser/claim-status/', UpdateClaimStatusView.as_view(), name='fundraiser-claim-status'),
 
     # Dashboard endpoints
-    path('dashboard/module/<str:slug>/', DashboardModuleDataView.as_view(), name='dashboard-module-data'),
-    path('dashboard/config/', DashboardConfigUpdateView.as_view(), name='dashboard-config-update'),
-    path('dashboard/reorder/', DashboardModuleReorderView.as_view(), name='dashboard-reorder'),
 
     # Stats page endpoints
-    path('stats/premium/', StatsPageDataView.as_view(), name='stats-premium-data'),
 
     # Title endpoints
     path('equip-title/', EquipTitleAPIView.as_view(), name='equip-title'),
+
+    # Pursuer Card (fresh re-fetch for the post-sync forge)
+    path('pursuer-card/', PursuerCardRefreshView.as_view(), name='pursuer-card'),
 
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
     path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
 
-    # Tutorial endpoints
-    path('tutorial/welcome/dismiss/', WelcomeTourDismissAPIView.as_view(), name='tutorial-welcome-dismiss'),
-    path('tutorial/game-detail/dismiss/', GameDetailTourDismissAPIView.as_view(), name='tutorial-game-detail-dismiss'),
-    path('tutorial/badge-detail/dismiss/', BadgeDetailTourDismissAPIView.as_view(), name='tutorial-badge-detail-dismiss'),
-
     # Profile Card endpoints
-    path('profile-card/html/', ProfileCardHTMLView.as_view(), name='profile-card-html'),
-    path('profile-card/png/', ProfileCardPNGView.as_view(), name='profile-card-png'),
-    path('profile-card/settings/', ProfileCardSettingsView.as_view(), name='profile-card-settings'),
-    path('profile-card/regenerate-token/', ProfileCardRegenerateTokenView.as_view(), name='profile-card-regenerate-token'),
 
     # Badge display selection
-    path('badges/displayed/', SetDisplayedBadgeView.as_view(), name='set-displayed-badge'),
-    path('badges/showcase/', ToggleShowcaseBadgeView.as_view(), name='toggle-showcase-badge'),
-    path('badges/showcase/reorder/', ReorderShowcaseBadgesView.as_view(), name='reorder-showcase-badges'),
 
-    # Profile Showcase endpoints
-    path('profile/showcases/', AddShowcaseView.as_view(), name='add-showcase'),
-    path('profile/showcases/reorder/', ReorderShowcasesView.as_view(), name='reorder-showcases'),
-    path('profile/showcases/<slug:slug>/', RemoveShowcaseView.as_view(), name='remove-showcase'),
-    path('profile/showcases/<slug:slug>/config/', UpdateShowcaseConfigView.as_view(), name='update-showcase-config'),
+    # Profile Showcase endpoints: WITHDRAWN 2026-08 with the rest of the customization surface. The views
+    # are parked in api/profile_showcase_views.py -- restoring them is putting these four lines and the
+    # import back. Withdrawn rather than redirected because these are WRITES: an endpoint left answering
+    # would let anything still holding a reference file rows into a system with no door, which the rebuild
+    # would then have to reconcile.
+    #
+    # /badges/showcase/ and /badges/showcase/reorder/ above are NOT part of this. Despite the name they
+    # belong to the dashboard's badge-showcase module (dashboard.js), and withdrawing them is the
+    # dashboard sunset's job, not this one.
 
     # Rating endpoints (standalone — independent of the archived review system)
     path('ratings/wizard/queue/', WizardQueueView.as_view(), name='rating-wizard-queue'),

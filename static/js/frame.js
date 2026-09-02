@@ -77,7 +77,8 @@
                 initialSnapshot: null,
                 maintTimers: [],
                 maintResolve: null,
-                maintSnapshot: null
+                maintSnapshot: null,
+                gleam: null
             };
             FRAME_STATE.set(target, s);
         }
@@ -111,6 +112,7 @@
         var snapshot = {
             wasBlueprint:  target.classList.contains('pp-frame--blueprint'),
             wasUnearned:   target.classList.contains('pp-frame--unearned'),
+            wasGhost:      target.classList.contains('pp-frame--ghost'),
             wasBackStaged: target.classList.contains('pp-earn-back-staged'),
             wasFlipped:    target.classList.contains('is-flipped'),
             ppBuild:       target.style.getPropertyValue('--pp-build')
@@ -130,6 +132,7 @@
         if (!snapshot) return;
         target.classList.toggle('pp-frame--blueprint',  snapshot.wasBlueprint);
         target.classList.toggle('pp-frame--unearned',   snapshot.wasUnearned);
+        target.classList.toggle('pp-frame--ghost',      snapshot.wasGhost);
         target.classList.toggle('pp-earn-back-staged',  snapshot.wasBackStaged);
         target.classList.toggle('is-flipped',           snapshot.wasFlipped);
         if (snapshot.ppBuild) {
@@ -171,6 +174,9 @@
             if (e.target.closest('a, button, input, select, textarea, [role="button"]')) return;
             // Blueprint cards aren't flippable (the badge isn't earned yet).
             if (target.classList.contains('pp-frame--blueprint')) return;
+            // Compact cards (the binder's flipbook spread) don't flip -- the back
+            // face isn't designed for the small size. View full backs in Single mode.
+            if (target.classList.contains('pp-frame--compact')) return;
             // Distinguish tap from scroll-drag.
             var dx = Math.abs(e.clientX - downX);
             var dy = Math.abs(e.clientY - downY);
@@ -182,7 +188,119 @@
 
     function flip(target) {
         if (!target || !target.classList.contains('pp-frame--flippable')) return;
+        if (target.classList.contains('pp-frame--compact')) return;  // compact cards don't flip
         target.classList.toggle('is-flipped');
+    }
+
+
+    /* --------------------------------------------------------
+     * Hover sheen loop
+     *
+     * The front-face gleam sweeps once on a hover, then repeats
+     * every GLEAM_INTERVAL (start-to-start) for as long as the
+     * card stays hovered. Driven entirely from JS so we can:
+     *   - loop while hovered (CSS :hover fires only once)
+     *   - reset on mouse-out (next hover sweeps from the top
+     *     immediately, not from wherever the loop left off)
+     *   - guarantee a sweep ALWAYS finishes: a fresh sweep only
+     *     starts when none is in flight, so a quick hover/un-hover
+     *     can't restart it mid-animation or stack two sweeps.
+     *
+     * GLEAM_DURATION must match the pp-gleam-hover-sweep keyframe
+     * length in frame.css.
+     * -------------------------------------------------------- */
+    var GLEAM_DURATION = 900;    // one sweep (ms) — keep in sync with frame.css
+    var GLEAM_INTERVAL = 5000;   // start-to-start cadence while hovered (ms)
+
+    // States that never show a hover sheen (CSS suppresses it too).
+    // NOTE: flipped is deliberately NOT gated here — the loop tracks
+    // HOVER, not facing. A flip is a click with the mouse still on the
+    // card, so the loop keeps running: an in-flight sweep finishes
+    // (invisibly, behind the rotated-away front face) and the cadence
+    // ticks on, so flipping back rejoins the loop already in progress.
+    function canGleam(target) {
+        if (reducedMotion) return false;
+        if (target.classList.contains('pp-frame--blueprint')) return false;
+        if (target.classList.contains('pp-frame--unearned')) return false;
+        if (target.classList.contains('pp-frame--maintenance')) return false;
+        return true;
+    }
+
+    function wireGleam(target) {
+        if (!target.classList.contains('pp-hover-a')) return;
+
+        var g = {
+            hovering: false,
+            sweeping: false,
+            loopTimer: null,   // pending NEXT sweep (cancelled on mouse-out)
+            endTimer: null,    // clears `sweeping` when the current sweep ends
+            sweepOnce: null     // exposed one-off sweep (arrival flourish, etc.)
+        };
+        getState(target).gleam = g;
+
+        // One guarded sweep. The finish-guard (g.sweeping) means it always runs
+        // to completion and never stacks; canGleam keeps it off suppressed /
+        // reduced-motion states. onEnd fires when the sweep finishes (the hover
+        // loop uses it to reschedule).
+        function beginSweep(onEnd) {
+            if (g.sweeping || !canGleam(target)) return;
+            g.sweeping = true;
+            // Re-arm the keyframe from 0% (reflow between remove/add).
+            target.classList.remove('pp-gleam-sweeping');
+            void target.offsetWidth;
+            target.classList.add('pp-gleam-sweeping');
+            g.endTimer = window.setTimeout(function () {
+                g.endTimer = null;
+                g.sweeping = false;
+                target.classList.remove('pp-gleam-sweeping');
+                if (onEnd) onEnd();
+            }, GLEAM_DURATION);
+        }
+
+        function startSweep() {
+            if (!g.hovering) return;
+            beginSweep(function () {
+                // Loop only while still hovered; schedule start-to-start.
+                if (g.hovering && canGleam(target)) {
+                    g.loopTimer = window.setTimeout(startSweep, GLEAM_INTERVAL - GLEAM_DURATION);
+                }
+            });
+        }
+
+        // A single sweep with no hover dependency and no loop — for callers like
+        // the badge-detail hero that want one flourish as the Frame arrives.
+        g.sweepOnce = function () { beginSweep(null); };
+
+        target.addEventListener('mouseenter', function () {
+            g.hovering = true;
+            startSweep();  // immediate from the top (guard no-ops if mid-sweep)
+        });
+        target.addEventListener('mouseleave', function () {
+            g.hovering = false;
+            // Cancel a pending NEXT sweep so the loop stops. An in-flight
+            // sweep is left alone — it finishes cleanly and won't reschedule
+            // (hovering is now false), so the next hover starts fresh.
+            if (g.loopTimer) { window.clearTimeout(g.loopTimer); g.loopTimer = null; }
+        });
+    }
+
+    // Fire a single arrival-flourish sweep on a wired frame. No-ops cleanly if
+    // the frame isn't wired, isn't gleam-capable, or a sweep is already running.
+    function triggerGleam(target) {
+        if (!target) return;
+        var state = FRAME_STATE.get(target);
+        if (state && state.gleam && state.gleam.sweepOnce) state.gleam.sweepOnce();
+    }
+
+    function teardownGleam(target) {
+        var state = FRAME_STATE.get(target);
+        var g = state && state.gleam;
+        if (!g) return;
+        if (g.loopTimer) { window.clearTimeout(g.loopTimer); g.loopTimer = null; }
+        if (g.endTimer) { window.clearTimeout(g.endTimer); g.endTimer = null; }
+        g.sweeping = false;
+        g.hovering = false;
+        target.classList.remove('pp-gleam-sweeping');
     }
 
 
@@ -391,7 +509,7 @@
             // Reduced-motion fast path: skip choreography, apply
             // end-state classes in a single tick.
             if (reducedMotion) {
-                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
+                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned', 'pp-frame--ghost');
                 target.style.setProperty('--pp-build', '100%');
                 if (engraving && engraving.classList.contains('pp-frame__engraving--placeholder')) {
                     engraving.classList.remove('pp-frame__engraving--placeholder');
@@ -413,8 +531,10 @@
             var t = function (ms) { return Math.round(ms * dScale); };
             target.style.setProperty('--earn-scale', dScale);
 
-            // Stage the card in pre-play state (blueprint, build at 90%).
+            // Stage the card in pre-play state (blueprint, build at 90%). A ghost
+            // (not-yet-started) card sheds its ghost treatment as it enters the weld.
             target.classList.add('pp-frame--blueprint', 'pp-frame--unearned', 'pp-earn-back-staged');
+            target.classList.remove('pp-frame--ghost');
             target.style.setProperty('--pp-build', '90%');
 
             // Force reflow so the build transition fires from 90%, not snaps.
@@ -642,7 +762,7 @@
             // Strip blueprint + searing at sear end.
             state.earnTimers.push(window.setTimeout(function () {
                 target.classList.remove('pp-earn-searing');
-                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
+                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned', 'pp-frame--ghost');
             }, t(10000)));
 
             // PHASE 7: Completion sheen sweep.
@@ -1111,6 +1231,7 @@
         if (!target) return;
         cancelEarnMoment(target);
         cancelMaintenanceMoment(target);
+        teardownGleam(target);
         var state = FRAME_STATE.get(target);
         if (state) {
             if (state.resizeObserver) {
@@ -1126,6 +1247,7 @@
         if (WIRED.has(target)) return;
         WIRED.add(target);
         wireFlip(target);
+        wireGleam(target);
         wireTitleScroll(target);
         // No per-card JS init for the maintenance state -- the ambient
         // sheen sweep on the maintenance band is pure CSS, scoped to
@@ -1150,6 +1272,7 @@
         cancelEarnMoment: cancelEarnMoment,
         triggerMaintenanceMoment: triggerMaintenanceMoment,
         cancelMaintenanceMoment: cancelMaintenanceMoment,
+        triggerGleam: triggerGleam,
         refreshTitleScroll: refreshTitleScroll,
         destroy: destroy
     };
