@@ -1719,6 +1719,24 @@ class UserConceptRating(models.Model):
         ('good_game_bad_plat', 'Good game, tough trophies'),
         ('skip', 'Skip it'),
     ]
+    #: The same three again, worded for a PILL rather than a form option. The middle answer is the only
+    #: one that was ever long, and its full phrasing exists because the form is asking a question --
+    #: "Good game, tough plat" is an answer you pick. On a share card it is a label you read at a glance
+    #: beside four "N/10" figures, where the phrase forced the verdict onto its own line and, on a card
+    #: that also carried a quick take and a badge band, pushed the game's title clean off the top.
+    #:
+    #: A third list rather than truncation, for the reason the two above are lists: the wording of an
+    #: answer stays a literal you can read and grep, instead of a phrase the renderer happens to cut.
+    RECOMMENDATIONS_SHORT = [
+        ('worth_it', 'Do it'),
+        ('good_game_bad_plat', 'Tough Plat'),
+        ('skip', 'Skip it'),
+    ]
+    RECOMMENDATIONS_SHORT_NO_PLAT = [
+        ('worth_it', 'Do it'),
+        ('good_game_bad_plat', 'Tough 100%'),
+        ('skip', 'Skip it'),
+    ]
 
     @classmethod
     def recommendation_choices(cls, has_platinum=True):
@@ -1733,6 +1751,16 @@ class UserConceptRating(models.Model):
         know, so it always says "platinum", which is wrong on a DLC pack.
         """
         return dict(self.recommendation_choices(has_platinum)).get(self.recommendation, '')
+
+    def recommendation_short_label(self, has_platinum=True):
+        """This rating's answer worded for a PILL -- what the share card renders.
+
+        Same values, shorter words. Only the middle answer differs from `recommendation_label`; "Do
+        it" and "Skip it" are already as short as they get, which is why the card can sit them in a
+        row of numbers without the row noticing.
+        """
+        choices = self.RECOMMENDATIONS_SHORT if has_platinum else self.RECOMMENDATIONS_SHORT_NO_PLAT
+        return dict(choices).get(self.recommendation, '')
 
     @classmethod
     def recommendation_copy(cls, has_platinum=True):

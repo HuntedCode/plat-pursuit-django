@@ -1086,3 +1086,91 @@ def test_the_card_holds_up_with_no_blurb(client):
     html = client.get(f'/api/v1/shareables/completion/{group.id}/html/').json()['html']
 
     assert '&ldquo;' not in html and 'Grind' in html
+
+
+# ── the verdict pill moved into the numbers row (2026-09) ────────────────────────────────────────
+
+def test_the_verdict_pill_uses_the_SHORT_wording():
+    """The form's full phrasing is an answer you pick from a list; the card's is a tag you read at a
+    glance beside four "N/10" figures. Both are kept -- `recommendation_label` for prose,
+    `recommendation_short_label` for the pill -- because the long one is what forced the verdict onto
+    its own line, and that line was not spare."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=True)
+    UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=None,
+        recommendation='good_game_bad_plat', difficulty=8, grindiness=9,
+        hours_to_platinum=62, fun_ranking=2, overall_rating=4.5,
+    )
+
+    rating = cards.get_card_data(profile, standing)['user_rating']
+
+    assert rating['recommendation_short_label'] == 'Tough Plat'
+    assert rating['recommendation_label'] == 'Good game, tough plat', 'the long form is still carried'
+
+
+def test_a_100_percent_card_says_tough_100_not_tough_plat():
+    """Same rule the long label already follows: a set with no platinum must not name one."""
+    from trophies.models import UserConceptRating
+
+    profile = ProfileFactory()
+    game, _, standing = _completed_game(profile, with_platinum=False)
+    UserConceptRating.objects.create(
+        profile=profile, concept=game.concept, concept_trophy_group=None,
+        recommendation='good_game_bad_plat', difficulty=8, grindiness=9,
+        hours_to_platinum=40, fun_ranking=2, overall_rating=4.5,
+    )
+
+    rating = cards.get_card_data(profile, standing)['user_rating']
+
+    assert rating['recommendation_short_label'] == 'Tough 100%'
+    assert 'plat' not in rating['recommendation_short_label'].lower()
+
+
+def test_the_two_short_answers_that_were_already_short_are_unchanged():
+    """"Do it" and "Skip it" are as short as they get, which is why the row does not notice them."""
+    from trophies.models import UserConceptRating
+
+    for value, expected in (('worth_it', 'Do it'), ('skip', 'Skip it')):
+        profile = ProfileFactory()
+        game, _, standing = _completed_game(profile, with_platinum=True)
+        UserConceptRating.objects.create(
+            profile=profile, concept=game.concept, concept_trophy_group=None,
+            recommendation=value, difficulty=3, grindiness=3, hours_to_platinum=20,
+            fun_ranking=8, overall_rating=4.0,
+        )
+        rating = cards.get_card_data(profile, standing)['user_rating']
+        assert rating['recommendation_short_label'] == expected
+        assert rating['recommendation_label'] == expected, 'these two never differed'
+
+
+def test_the_verdict_pill_renders_inside_the_numbers_row():
+    """THE layout fix. On its own line, a card carrying a quick take AND a badge band overflowed the
+    fixed canvas and clipped the GAME'S TITLE off the top -- the one element the card exists to name.
+    Read out of the source: the pill must sit between the numbers row's opening and its close, not
+    after it."""
+    import pathlib
+
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / 'templates' / 'shareables' / 'plat_card.html').read_text(encoding='utf-8')
+
+    row = src[src.index('{# The numbers. #}'):src.index('{% if user_rating.blurb %}')]
+
+    assert '_plat_card_verdict.html' in row, 'the verdict left the numbers row again'
+    assert row.count('<div') == row.count('</div>'), 'the numbers row is unbalanced'
+
+
+def test_the_pill_cannot_wrap_or_stretch():
+    """Two properties the row depends on. Without `nowrap` a two-word label breaks across lines and
+    puts the row back over the height this reclaimed; without `align-self: center` the pill stretches
+    to the full cell height and reads as a fourth statistic rather than the conclusion."""
+    import pathlib
+
+    src = (pathlib.Path(__file__).resolve().parents[2] / 'templates' / 'shareables' / 'partials'
+           / '_plat_card_verdict.html').read_text(encoding='utf-8')
+
+    assert 'white-space: nowrap' in src
+    assert 'align-self: center' in src
+    assert 'margin-top' not in src, 'a top margin would push the whole numbers row down'

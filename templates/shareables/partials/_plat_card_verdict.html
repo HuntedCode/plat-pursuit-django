@@ -10,9 +10,21 @@ Expects `rec_c` (a literal hex) and `user_rating` (with `recommendation` + `reco
 `color` is set on the pill so the shared glyph's `stroke="currentColor"` picks the same hue up, which is
 the whole reason that partial does not colour itself.
 {% endcomment %}
-<div style="display: flex; margin-top: 18px;">
-    <div style="display: inline-flex; align-items: center; gap: 10px; padding: 9px 17px 9px 14px; border-radius: 999px; color: {{ rec_c }}; background: {{ rec_c }}1f; border: 1px solid {{ rec_c }}59;">
-        {% include 'partials/_recommendation_icon.html' with value=user_rating.recommendation size=22 %}
-        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: -0.01em;">{{ user_rating.recommendation_label }}</span>
+{% comment %} Sits as a CELL in the numbers row, not a block under it.
+
+`align-self: center` rather than the row's default stretch: the numeric cells are a 34px figure over a
+13px caption, and a pill stretched to that height would read as a fourth statistic instead of the
+conclusion drawn from the other three. Centred, it sits on the figures' optical line.
+
+`white-space: nowrap` because the row is `display: flex` with no wrapping -- "Tough Plat" breaking
+across two lines would put the row back over the height this change exists to reclaim.
+
+The label is the SHORT one (`recommendation_short_label`): the form's full phrasing, "Good game, tough
+plat", is an answer you pick from a list, and it is what forced this pill onto its own line.
+{% endcomment %}
+<div style="display: flex; align-self: center; flex-shrink: 0;">
+    <div style="display: inline-flex; align-items: center; gap: 9px; padding: 8px 15px 8px 12px; border-radius: 999px; color: {{ rec_c }}; background: {{ rec_c }}1f; border: 1px solid {{ rec_c }}59; white-space: nowrap;">
+        {% include 'partials/_recommendation_icon.html' with value=user_rating.recommendation size=20 %}
+        <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 20px; font-weight: 700; line-height: 1; letter-spacing: -0.01em;">{{ user_rating.recommendation_short_label }}</span>
     </div>
 </div>

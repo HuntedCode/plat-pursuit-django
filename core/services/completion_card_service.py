@@ -467,6 +467,13 @@ def _user_rating(profile, concept, has_platinum=True):
         # for THIS card: a 100% card has no platinum, so "tough plat" would name a trophy the set
         # never had.
         'recommendation_label': rating.recommendation_label(has_platinum),
+        # The PILL wording, which is what the card actually draws. The full label above stays for
+        # anything reading this payload as prose. Two entries rather than one, because the form's
+        # phrasing and the card's are answering differently shaped questions: "Good game, tough plat"
+        # is an option you pick from a list, "Tough Plat" is a tag you read at a glance in a row of
+        # figures. The long one on the card is what pushed the verdict onto its own line and, on a
+        # card that also carried a quick take and a badge band, clipped the game's title off the top.
+        'recommendation_short_label': rating.recommendation_short_label(has_platinum),
         # The hunter's own words about the game -- 140 chars, already auto-filtered on submit,
         # reportable, and staff-soft-hideable via `blurb_hidden`, which is why it's safe to render on
         # an image that leaves the site. Optional, so the card must look right without it.

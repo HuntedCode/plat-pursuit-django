@@ -157,8 +157,19 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     {% endif %}
                 </div>
 
-                {# The game: the single dominant statement. #}
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
+                {% comment %}The game: the single dominant statement.
+
+                `flex-shrink: 0` because this column is a fixed 630px with `overflow: hidden`, so when
+                the content runs long SOMETHING gets silently cut -- and by default the flex algorithm
+                takes it out of whichever box has room to give, which was this one. A card with a quick
+                take and a badge band shrank the title from its 56px line box to 36px and sliced
+                through the middle of the glyphs.
+
+                Pinning it moves the loss somewhere survivable: the blurb below is already
+                `-webkit-line-clamp`ed, so it drops a line and still reads. The game's name is the one
+                element on this card that has to be legible -- it is what the card is FOR -- so it is
+                the one element that must never be the thing that gives.{% endcomment %}
+                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; flex-shrink: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
                 {% if platform_label or completed_at or user_rating.overall_rating %}
                 <div style="display: flex; align-items: center; gap: 16px; margin-top: 11px;">
@@ -255,29 +266,31 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                     </div>
                     {% endwith %}
                     {% endif %}
+
+                    {% comment %}The verdict, IN the numbers row rather than under it. It used to have
+                    its own line, on the argument that a phrase among "N/10" cells would either truncate
+                    or widen every cell to fit "Good game, tough plat" -- true of that phrasing, and the
+                    reason the pill now uses `recommendation_short_label` ("Tough Plat" / "Tough 100%").
+                    Short enough, it costs the row nothing and gives back a whole line.
+
+                    That line was not spare. A card carrying a quick take AND a badge band overflowed the
+                    fixed canvas, and what fell off the top was the GAME'S TITLE -- clipped mid-glyph, on
+                    the one element the card exists to name.
+
+                    Colours are the card's own tone hexes -- the same green/amber/red the numbers use --
+                    so the row and the pill agree, and the glyph is the shared one every other surface
+                    draws. Sized explicitly: there is no stylesheet here, and an unsized SVG renders at
+                    300x150.
+
+                    Absent on ratings written before the field existed; the Rate My Games wizard is asking
+                    for those, so a card made today may gain one tomorrow.{% endcomment %}
+                    {% if user_rating.recommendation %}
+                    {% if user_rating.recommendation == 'worth_it' %}{% with rec_c='#3add9e' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                    {% elif user_rating.recommendation == 'skip' %}{% with rec_c='#ff5860' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                    {% else %}{% with rec_c='#fcca21' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
+                    {% endif %}
+                    {% endif %}
                 </div>
-
-                {% comment %}The verdict -- the one thing on this card that is ADVICE rather than a
-                record. Everything above says what the platinum was; this says whether to go after it,
-                which is the question anyone reading someone else's plat card is actually asking.
-
-                Its own row rather than a fourth cell in the numbers: those are all "N/10" and this is a
-                phrase, so it would either be truncated or force every cell to the width of "Good game,
-                tough plat". A pill also reads as a conclusion drawn from the row above it, which is
-                what it is.
-
-                Colours are the card's own tone hexes -- the same green/amber/red the numbers use -- so
-                the row and the pill agree, and the glyph is the shared one every other surface draws.
-                Sized explicitly: there is no stylesheet here, and an unsized SVG renders at 300x150.
-
-                Absent on ratings written before the field existed; the Rate My Games wizard is asking for
-                those, so a card made today may gain one tomorrow.{% endcomment %}
-                {% if user_rating.recommendation %}
-                {% if user_rating.recommendation == 'worth_it' %}{% with rec_c='#3add9e' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
-                {% elif user_rating.recommendation == 'skip' %}{% with rec_c='#ff5860' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
-                {% else %}{% with rec_c='#fcca21' %}{% include 'shareables/partials/_plat_card_verdict.html' %}{% endwith %}
-                {% endif %}
-                {% endif %}
 
                 {% comment %}Their own take, in their own words -- the one thing on the card that no
                 other hunter's card can have, and the reason this space is worth filling with a
