@@ -256,7 +256,7 @@ class ConceptContextMixin:
             gbs = [
                 gb for gb in (
                     GroupBadge.objects.filter(series__series_slug__in=Subquery(series_slugs), is_live=True)
-                    .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+                    .select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer',
                                     'series__submitted_by', 'platform_group')
                     .order_by('series__name', 'platform_group__sort_order', 'id')
                 )
