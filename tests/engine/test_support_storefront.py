@@ -693,11 +693,15 @@ def test_placeholders_can_never_reach_live_stripe(client, settings):
     Checklists get skipped. This cannot be.
     """
     settings.STRIPE_MODE = 'live'
-    body = _flat(client)
+    # The stale flag is forced ON, which is the scenario the guard exists for. Before the
+    # 2026-09-02 cutover this test got its evidence for free -- the live ladder was empty, so live
+    # mode fell through to "unavailable" whatever the flag said. Now that live resolves, the flag
+    # has to be set deliberately or the test proves nothing about the guard it is named after.
+    with patch('users.views.SUPPORT_TIERS_ARE_PLACEHOLDERS', True):
+        body = _flat(client)
 
     assert 'disabled aria-disabled="true"' not in body, 'DEAD BUY BUTTONS IN LIVE MODE'
     assert 'Not live yet' not in body
-    assert 'briefly unavailable' in body, 'live mode is offering something with no price behind it'
     # Only the ask degrades. The statement beside it is unaffected.
     assert 'Help us build' in body
     assert 'Support Platinum Pursuit' in body

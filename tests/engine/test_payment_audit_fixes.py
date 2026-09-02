@@ -36,8 +36,13 @@ def test_the_post_refuses_placeholders_in_live_mode_like_the_get_does(client, se
     user = UserFactory()
     client.force_login(user)
 
+    # The tier is made unconfigured EXPLICITLY. It used to be unconfigured for free, because the
+    # live ladder stayed empty until the 2026-09-02 cutover -- so after the paste this test would
+    # have quietly started asserting that a fully configured tier goes through, which is the
+    # opposite of what its name promises.
     with patch('users.views.SubscriptionService.has_active_subscription',
                return_value=(False, None)), \
+            patch('users.views.SubscriptionService.resolve_ladder_price_id', return_value=None), \
             patch('users.views.SubscriptionService.create_checkout_session') as checkout:
         response = client.post(reverse('support_hub'),
                                {'tier': 'patron', 'provider': 'stripe', 'sup-cycle': 'monthly'})

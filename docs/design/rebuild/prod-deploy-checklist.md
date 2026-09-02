@@ -36,6 +36,29 @@
 
 ### Cron / scheduling
 
+> **SEQUENCING (2026-09-02): every cron change happens AFTER the deploy, never before.** An
+> earlier draft called this a pre-deploy prerequisite. It is not, and doing it early breaks things
+> in both directions:
+>
+> - **Removing an entry early degrades the LIVE site.** Until the deploy lands, prod is running
+>   pre-rebuild code where `update_leaderboards` still exists and still does its job. Delete its
+>   entry the day before and leaderboards simply stop updating for that gap.
+> - **Adding an entry early fails.** `nightly` is a rebuild command. Scheduled before the deploy,
+>   it fires against old code and dies with `Unknown command`.
+>
+> The order that works, once the deploy is verified:
+>
+> 1. **ADD `nightly` (04:00 UTC) FIRST.** It runs five steps in dependency order: `evaluate_badges
+>    --all` -> `detect_dlc_and_refresh` -> `process_contracts --all --incremental` ->
+>    `recompute_milestones` -> `audit_badge_coverage`.
+> 2. **THEN delete the four standalone entries** for the commands it now owns. Add-before-delete,
+>    so there is never a window with neither. Deleting them first would stop all five jobs at once,
+>    silently -- a cron that does not exist raises nothing.
+> 3. **THEN delete `update_leaderboards`**, whose command no longer exists.
+>
+> Prefer PAUSE over DELETE while the deploy is still settling: pausing is one click to undo.
+
+
 | # | Task | When | Done |
 |---|------|------|------|
 | 1 | **Register `recompute_tag_covers` cron** — new daily Render Cron Job (`python manage.py recompute_tag_covers`, 03:45 UTC) keeping the genre/theme tile covers fresh as games sync. Documented in [cron-jobs.md](../../guides/cron-jobs.md). The one-time backfill is task #4 above; this is the ongoing schedule. | Launch (Render dashboard) | ☐ |
@@ -125,6 +148,11 @@ These are already on the `main`/production path and can/should happen before cut
 ---
 
 ## Post-deploy verification (milestone teardown)
+
+| # | Task | When | Done |
+|---|------|------|------|
+| V0 | **Full cron review, once the deploy has settled** (owner request, 2026-09-02). The cutover only touches the entries it must; this is the pass that reconciles the WHOLE Render list against [cron-jobs.md](../../guides/cron-jobs.md) with the site actually running. Check three things per entry: (a) the command still exists (the rebuild deleted several), (b) it is not also a step of `nightly` (a standalone duplicate runs it a second time, concurrently, over every profile), (c) the schedule still makes sense against its stated dependencies -- several slots are load-bearing, e.g. `evaluate_contract_candidates` at 04:45 MUST follow `update_shovelware` at 04:00, because the shovelware override reads the flags that job writes. Also confirm anything paused for the window is either un-paused or deliberately left off. | A few days after deploy, once nothing is on fire | ☐ |
+
 
 `0282` deleted ladder titles by `source_id`, which misses rows with a NULL or already-dangling `source_id`
 (they'd linger as bogus "Special" titles — this actually happened on dev). `0283` cleans those up by title

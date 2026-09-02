@@ -213,12 +213,15 @@ STRIPE_PRODUCTS = {
         'premium_monthly': 'prod_ThsI3EuCssYlTT',
         'premium_yearly': 'prod_ThsIi3Xd8fY2Hk',
         'supporter': 'prod_ThtYQAPoY5pSCN',
-        'backer': '',
-        'contributor': '',
-        'patron': '',
-        'sponsor': '',
-        'benefactor': '',
-        'cornerstone': '',
+        # Ladder products, filled at cutover (2026-09-02). These are what webhook tier recovery
+        # resolves a ladder purchase through -- missing them DEACTIVATES the buyer, which is why
+        # the products block is pasted alongside the prices rather than treated as optional.
+        'backer': 'prod_VBXPWkb3Jskd2F',
+        'contributor': 'prod_VBXPFeg5C4v2TG',
+        'patron': 'prod_VBXPpiOcSMFvxJ',
+        'sponsor': 'prod_VBXPWQ9PVmpRpN',
+        'benefactor': 'prod_VBXPUM3D2h0Vp9',
+        'cornerstone': 'prod_VBXPD7KWDyF4j9',
     }
 }
 
@@ -251,10 +254,16 @@ STRIPE_LADDER_PRICES = {
         'benefactor': {'monthly': 'price_1U6ozlR5jhcbjB320zizoLjt', 'yearly': 'price_1U6ozlR5jhcbjB32b9FE2O1Q'},
         'cornerstone': {'monthly': 'price_1U6ozlR5jhcbjB32MBfED7X1', 'yearly': 'price_1U6ozlR5jhcbjB32RimP8LHD'},
     },
-    # LIVE stays empty until rebuild cutover -- see the fan-out hazard note above and
-    # docs/guides/support-skus.md. bootstrap_support_skus --live-ok fills it, nothing else.
-    'live': {slug: {'monthly': '', 'yearly': ''} for slug in
-             ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+    # FILLED AT CUTOVER (2026-09-02) by `bootstrap_support_skus --live-ok`, which is the only thing
+    # that should ever write these. Hand-editing an id here points real money at the wrong object.
+    'live': {
+        'backer': {'monthly': 'price_1UBAL0R5jhcbjB32tKqJIp8w', 'yearly': 'price_1UBAL1R5jhcbjB32ammgbNyH'},
+        'contributor': {'monthly': 'price_1UBAL1R5jhcbjB32s8Rbs5wl', 'yearly': 'price_1UBAL1R5jhcbjB326SnCPZOe'},
+        'patron': {'monthly': 'price_1UBAL2R5jhcbjB32BADg5nCR', 'yearly': 'price_1UBAL2R5jhcbjB32SYcdjZWN'},
+        'sponsor': {'monthly': 'price_1UBAL2R5jhcbjB328euUrX4G', 'yearly': 'price_1UBAL2R5jhcbjB32MoTNGPtu'},
+        'benefactor': {'monthly': 'price_1UBAL3R5jhcbjB32eRguoNfp', 'yearly': 'price_1UBAL3R5jhcbjB327XHYJ18h'},
+        'cornerstone': {'monthly': 'price_1UBAL3R5jhcbjB32ykZ2MAqf', 'yearly': 'price_1UBAL3R5jhcbjB32NgUdYsN0'},
+    },
 }
 
 # The ladder's twelve PayPal plans, same shape (PayPal plans are per-interval, so twelve of them;
@@ -268,8 +277,15 @@ PAYPAL_LADDER_PLANS = {
         'benefactor': {'monthly': 'P-7AF02996PT9535847NKEB36Q', 'yearly': 'P-28D98899V0798471PNKEB36Y'},
         'cornerstone': {'monthly': 'P-6MD3335322577564ANKEB37I', 'yearly': 'P-3KL63947BR196261BNKEB37I'},
     },
-    'live': {slug: {'monthly': '', 'yearly': ''} for slug in
-             ('backer', 'contributor', 'patron', 'sponsor', 'benefactor', 'cornerstone')},
+    # Filled at cutover (2026-09-02) by `bootstrap_support_skus --live-ok`; see the Stripe note above.
+    'live': {
+        'backer': {'monthly': 'P-8H849335AC587393SNKL6UTQ', 'yearly': 'P-0N192164730908354NKL6UTY'},
+        'contributor': {'monthly': 'P-79793714JS1782452NKL6UTY', 'yearly': 'P-7BW44869YY853705ANKL6UTY'},
+        'patron': {'monthly': 'P-9TT507136J929662XNKL6UUA', 'yearly': 'P-8Y801341YS687403DNKL6UUA'},
+        'sponsor': {'monthly': 'P-5FC21940S9486525BNKL6UUI', 'yearly': 'P-492507783T101823PNKL6UUI'},
+        'benefactor': {'monthly': 'P-9CC069124F889550YNKL6UUQ', 'yearly': 'P-5UB067845F649605KNKL6UUQ'},
+        'cornerstone': {'monthly': 'P-4DA13021Y8446910KNKL6UUY', 'yearly': 'P-8N393792NR614104PNKL6UUY'},
+    },
 }
 
 # Premium tiers that grant Discord roles. All six ladder levels grant the PREMIUM role (decided
