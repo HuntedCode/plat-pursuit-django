@@ -371,6 +371,20 @@ class DonationService:
                 if series.badge_image:
                     raise ValueError("This badge series already has custom artwork.")
 
+                # The series BORROWS its artwork, so there is nothing to commission -- it already
+                # displays the lender's image. Checked HERE and not only in `series_needing_artwork`:
+                # the picker is a list, this is the thing that takes the money, and the endpoint reads
+                # `series_id` straight from the POST body without intersecting the two. A stale page,
+                # a cached id, or a guess would otherwise buy a second drawing of a subject that has
+                # one -- and worse, `complete_badge_claim` would then write `funded_by` onto a series
+                # whose displayed art resolves to the LENDER, crediting the wrong donor on the badge
+                # and the paying one nowhere.
+                if series.artwork_source_id:
+                    raise ValueError(
+                        "This badge series shares another series' artwork, so it cannot be claimed. "
+                        "Claim the series it borrows from and both badges get the art."
+                    )
+
                 if series.badge_type == 'user':
                     raise ValueError("User-submitted badges are not eligible for artwork claims.")
 

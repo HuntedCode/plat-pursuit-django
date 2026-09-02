@@ -58,7 +58,7 @@ class CollectionBadgeModalView(LoginRequiredMixin, View):
             return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
         gb = (
             GroupBadge.objects
-            .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+            .select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer',
                             'series__funded_by', 'platform_group')
             .filter(id=badge_id, is_live=True).first()
         )

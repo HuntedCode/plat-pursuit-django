@@ -168,7 +168,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         group_badges = list(
             GroupBadge.objects.filter(is_live=True, series__series_slug__in=engaged)
             .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
-                            'series__submitted_by', 'platform_group')
+                            'series__submitted_by', 'series__artwork_source', 'platform_group')
             .order_by('series__name', 'platform_group__sort_order', 'id')
         )
         if not group_badges:

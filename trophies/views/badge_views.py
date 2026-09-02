@@ -97,7 +97,7 @@ def badge_forge_medallions():
 
     subject, name, source_id, is_avatar = None, 'Platinum Pursuit', None, False
     for cand in (GroupBadge.objects.filter(is_live=True)
-                 .select_related('series', 'series__submitted_by', 'platform_group')
+                 .select_related('series', 'series__artwork_source', 'series__submitted_by', 'platform_group')
                  .order_by('-earned_count', 'id')[:12]):
         art = cand.art_layers()
         if art.get('has_custom_image'):      # a real subject (override / series / avatar), not default.png
@@ -141,7 +141,7 @@ def badge_subject_art(limit=4):
     """
     seen, out = set(), []
     for cand in (GroupBadge.objects.filter(is_live=True)
-                 .select_related('series', 'series__submitted_by', 'platform_group')
+                 .select_related('series', 'series__artwork_source', 'series__submitted_by', 'platform_group')
                  .order_by('-earned_count', 'id')[:60]):
         if cand.series_id in seen:
             continue
@@ -278,8 +278,7 @@ class BadgeListView(ListView):
         platform_group FKs the batched card builder (badge_list_service) reads, so it issues no per-card FK
         queries. Personal state is a binary hold Exists (earned / not) -- whale-safe; per-badge in-progress is
         engine-derived and lives on the detail page."""
-        qs = GroupBadge.objects.filter(is_live=True).select_related(
-            'series', 'series__franchise', 'series__collection', 'series__developer', 'platform_group',
+        qs = GroupBadge.objects.filter(is_live=True).select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer', 'platform_group',
         )
         g = self.request.GET
 
@@ -470,7 +469,7 @@ class GroupBadgeInspectView(View):
     def get(self, request, group_badge_id, psn_username=None):
         gb = (
             GroupBadge.objects
-            .select_related('series', 'series__franchise', 'series__collection', 'series__developer',
+            .select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer',
                             'series__funded_by', 'funded_by_override', 'platform_group')
             .filter(id=group_badge_id, is_live=True).first()
         )

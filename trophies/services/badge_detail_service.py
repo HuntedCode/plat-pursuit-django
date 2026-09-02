@@ -361,7 +361,7 @@ def get_badge_detail(series, target_profile) -> BadgeDetail:
     """Build the detail context for `series` (a BadgeSeries) as seen by `target_profile` (or None for anon)."""
     group_badges = list(
         series.group_badges.filter(is_live=True)
-        .select_related('series', 'platform_group').order_by('platform_group__sort_order', 'id')
+        .select_related('series', 'series__artwork_source', 'platform_group').order_by('platform_group__sort_order', 'id')
     )
 
     # Build the catalog even for anon -- the hero stats + stage journey need it.

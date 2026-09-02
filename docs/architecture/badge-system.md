@@ -101,7 +101,9 @@ the franchise and "God of War" the series. `BadgeSeries.artwork_source` (self-FK
 |---|---|
 | Resolution | per-edition override -> the series' own art -> `artwork_source`'s art -> user-badge avatar -> static default |
 | Funder credit | **travels with the image.** `GroupBadge._artwork_origin()` decides once which series the art comes from, and `art_layers()`, `effective_holo_image` and `effective_funded_by` all read it |
-| Claiming | a series with `artwork_source` set is **excluded** from `DonationService.series_needing_artwork()`. A donor who wants that subject drawn claims the SOURCE, and both badges light up |
+| Claiming | refused in BOTH places: excluded from `series_needing_artwork()` (the picker) AND rejected by `claim_badge()` (the thing that takes the money, which reads `series_id` straight from the POST). A donor who wants that subject drawn claims the SOURCE, and both light up |
+| Other write paths | `ArtRevealItem.release()` skips a borrowing series -- writing there would end the borrow silently and credit the art to nobody. `clean()` refuses a link while an OPEN claim exists, which would otherwise strand the donor and push the fundraiser bar past 100% |
+| Partial art | resolution keys on the MAIN image at both levels, never `main OR holo`. Partial art is the norm (`ArtRevealItem.release()` writes `badge_image` alone), so an OR let a holo-only edition override wipe a borrowed main image back to the placeholder |
 | Depth | ONE hop, enforced in `clean()`: no self-reference, the source may not itself borrow, and a series others borrow from may not start borrowing |
 
 **Why not derive it from the shared `franchise` FK**, which looks free:
