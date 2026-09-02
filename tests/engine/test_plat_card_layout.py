@@ -16,7 +16,33 @@ import pytest
 
 pytest.importorskip('playwright.sync_api')
 
-pytestmark = pytest.mark.django_db
+
+def _browser_missing():
+    """Playwright ships in requirements (the renderer needs it), but the BROWSER is a separate
+    download. A developer who has not run `playwright install` should get a skip with a reason, not
+    a launch error in the middle of an unrelated run.
+
+    This never skips in CI: `.github/workflows/tests.yml` installs chromium explicitly, and if that
+    step ever breaks it fails there, loudly, rather than quietly turning this file into a no-op.
+    """
+    from playwright.sync_api import sync_playwright
+
+    try:
+        with sync_playwright() as p:
+            p.chromium.launch().close()
+        return None
+    except Exception as exc:  # noqa: BLE001 -- any launch failure means we cannot measure
+        return f'playwright chromium unavailable ({type(exc).__name__}); run `playwright install chromium`'
+
+
+#: Resolved ONCE at import. Calling the probe inside both skipif arguments would launch a browser
+#: twice on every collection of this file, for an answer that cannot change mid-run.
+_SKIP_REASON = _browser_missing()
+
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.skipif(_SKIP_REASON is not None, reason=_SKIP_REASON or ''),
+]
 
 #: The shape that overflowed: every optional block present at once.
 FULL_CARD = {

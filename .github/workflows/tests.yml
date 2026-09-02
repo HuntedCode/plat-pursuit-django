@@ -57,5 +57,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      # The share-card layout tests measure a real render in a real browser, because that class of
+      # bug (a fixed-canvas card silently clipping its own title) cannot be caught by asserting on
+      # markup -- it is a question about pixels. The pip package ships with requirements; the browser
+      # binary does not, so without this the tests fail on a missing executable.
+      #
+      # Cached on the pinned playwright version, so this downloads once per version bump rather than
+      # once per run.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-1.51.0
+
+      - name: Install Playwright chromium
+        run: python -m playwright install --with-deps chromium
+
       - name: Run tests
         run: pytest
