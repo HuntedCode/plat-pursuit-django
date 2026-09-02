@@ -444,22 +444,30 @@ Migrations `fundraiser.0006_claim_series_fk` and `art_reveal.0004_item_series_fk
 
 ### Pre-flight for the repoint migrations (run BEFORE taking the window)
 
-> **ORDERING CORRECTION (2026-09-01).** The instruction below to run
-> `convert_series_to_groups --all` "FIRST" **cannot be followed before the deploy**: the command
-> is REBUILD-ONLY (prod is on `fundraiser.0005` / `art_reveal.0003` and has no such command), and
-> it arrives in the same deploy as the migrations that need its output. The SQL in this section,
-> however, DOES run on prod today (every table it touches already exists there), so the real
-> sequence is:
+> **SUPERSEDED (2026-09-02): the interleave is no longer necessary.** The correction below was
+> written when `convert_series_to_groups` was rebuild-only, so the command and the migrations
+> needing its output would have arrived in the same deploy. **PR #68 put the command on `main`**
+> precisely to break that circle, so the conversion can now run on prod BEFORE the rebuild ships.
 >
-> 1. **Now, on prod:** run the three queries below. If all three return zero rows, no conversion
->    is needed at all and the deploy is clean.
-> 2. **If any row comes back:** the deploy must interleave. Deploy the rebuild code with `migrate`
->    HELD BACK (confirm whether Render's release command runs it automatically), then from a shell
->    on the new code run `convert_series_to_groups --all`, hand-create anything it skips via
->    `/staff/badge-create/`, and only then `migrate`.
-> 3. If `migrate` does run automatically and trips, the failure is CLEAN: `fundraiser.0006` builds
->    its mapping and raises before writing, so earlier migrations stay applied and nothing is
->    corrupted. Recover by shelling in, converting, and re-running `migrate`.
+> The sequence is now:
+>
+> 1. **Confirm prod is running a `main` that includes #68** (merged 2026-09-01). If not, deploy
+>    `main` first -- it is a small, self-contained change and carries no rebuild migrations.
+> 2. **Run the three queries below on prod.** All zero rows -> nothing to convert, deploy is clean.
+> 3. **If any row comes back:** run `convert_series_to_groups --all` on prod NOW, hand-create
+>    anything it skips via `/staff/badge-create/`, and re-run the queries until they are empty.
+>    Do this on a normal day, not in the deploy window.
+> 4. **Then the rebuild deploy is a plain deploy + migrate.** No held-back migrate, no shelling in
+>    mid-window, no interleave.
+>
+> `predict_conversion` (below) answers step 3 in advance: it reports how many slugs the sweep will
+> create and which ones need hand-creation, without writing anything.
+>
+> **The old interleave, kept only as the fallback** if step 1-3 are skipped: deploy with `migrate`
+> HELD BACK, convert from a shell on the new code, then `migrate`. If `migrate` runs automatically
+> and trips, the failure is CLEAN -- `fundraiser.0006` builds its mapping and raises before
+> writing, so earlier migrations stay applied and nothing is corrupted. Recover by shelling in,
+> converting, and re-running `migrate`.
 >
 > Note also that the legacy `Badge` table is NOT dropped by the rebuild, and must not be: the
 > `art_reveal.0004` mapping READS it (item -> legacy badge -> slug -> BadgeSeries).
