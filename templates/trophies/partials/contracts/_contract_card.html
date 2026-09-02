@@ -136,11 +136,17 @@ The map branch stays the default and is what Career renders, untouched.
                     </svg>
                     {% comment %} The centre reads the SHARE on job detail and the job COUNT on Career.
                     Same figure either way -- N jobs means a 1/N share -- but a reader on one job wants the
-                    number they will bank, not the arithmetic to get there. {% endcomment %}
+                    number they will bank, not the arithmetic to get there.
+
+                    The caption is the number's UNIT in both branches. It held `job.name` on this one,
+                    which named something the number is not -- and overflowed the 58px ring on the longer
+                    jobs (Cartographer, Infiltrator, Survivalist). It was also the THIRD printing of that
+                    name in one view: the page header, the job tile beside this ring, and here. The tight
+                    spot on the card was being spent on the one fact the reader already had twice. {% endcomment %}
                     <div class="rp-ring__xp">
                         {% if job %}
                         <span class="pp-tally">+{{ p.xp_each|intcomma }}</span>
-                        <span class="rp-ring__xp-cap">{{ job.name }}</span>
+                        <span class="rp-ring__xp-cap">XP</span>
                         {% else %}
                         <span class="pp-tally">{{ p.elements|length }}</span>
                         <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>

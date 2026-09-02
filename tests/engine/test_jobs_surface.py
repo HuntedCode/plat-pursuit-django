@@ -826,17 +826,30 @@ def test_hovering_a_job_tile_can_light_its_arc_in_the_ring(client):
     assert 'ringHoverLink(grid' in body and "itemSelector: '.rp-jobtile'" in body
 
 
-def test_the_ring_caption_names_the_job_without_a_preposition(client):
-    """"+1,000" over "Archivist" -- the figure and what it feeds. The "to" read as a sentence fragment in
-    a two-line ring centre where there is no room for one."""
+def test_the_ring_caption_is_the_numbers_unit_and_nothing_longer(client):
+    """The ring centre is 58px (66 at md) with a 7px tracked caption, and it has now been squeezed
+    TWICE for the same reason. First the caption read "to Archivist" and the preposition went, as a
+    sentence fragment with no room to be one. Then the bare job name still overflowed on the long
+    ones -- Cartographer, Infiltrator, Survivalist.
+
+    The rule that settles it: the caption is the NUMBER'S UNIT, which is what Career's branch has
+    always done (a job count captioned "jobs"). Here the number is XP. The job name was never the
+    unit of it, and it is already printed twice in this view -- the page header and the job tile
+    beside this ring -- so the card's tightest space was going to a third copy."""
     _solo()
-    job = _job('archivist', 'Archivist')
+    job = _job('cartographer', 'Cartographer')
     _contract('One', [job])
 
-    body = client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'}).content.decode()
+    body = client.get(reverse('job_detail', args=['cartographer']),
+                      {'tab': 'contracts'}).content.decode()
     cap = body[body.index('rp-ring__xp-cap'):]
     cap = cap[:cap.index('</span>')]
-    assert 'Archivist' in cap and '>to ' not in cap
+
+    assert 'XP' in cap
+    assert 'Cartographer' not in cap, 'a long job name back in the ring will overflow it'
+    assert '>to ' not in cap, 'no preposition: there is no room for a sentence fragment here'
+    # Still named where there IS room for it, so nothing is lost by taking it out of the ring.
+    assert 'Cartographer' in body.split('rp-jobtile__name', 1)[1].split('</span>', 1)[0]
 
 
 def test_the_hover_link_is_shared_with_career_not_copied():
