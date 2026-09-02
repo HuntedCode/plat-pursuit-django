@@ -51,28 +51,79 @@ def test_ladder_price_resolution_is_isolated_from_the_legacy_path():
     """`resolve_ladder_price_id` returns None for an unconfigured pair rather than raising -- the
     legacy resolver raises on ONE miss and its caller degrades everything, which is the right shape
     for three tiers that exist together and the wrong one for a ladder that fills in per bootstrap
-    run. Since the 2026-08-21 test-mode bootstrap, TEST resolves and LIVE is the unconfigured
-    side (empty until rebuild cutover, deliberately)."""
+    run. Since the 2026-09-02 cutover BOTH modes resolve, so the unconfigured cases are an unknown
+    slug and an unknown interval -- the better test anyway, since it exercises the None-not-raise
+    contract directly instead of depending on a whole mode happening to be empty."""
     from users.services.subscription_service import SubscriptionService
 
     # Test mode: configured by the bootstrap paste.
     assert SubscriptionService.resolve_ladder_price_id('patron', 'monthly', False) ==         STRIPE_LADDER_PRICES['test']['patron']['monthly']
-    # Unconfigured -> None, never an exception. Live emptiness IS the pre-cutover safety state.
-    assert SubscriptionService.resolve_ladder_price_id('patron', 'monthly', True) is None
+    # Live resolves too, as of the cutover paste.
+    assert SubscriptionService.resolve_ladder_price_id('patron', 'monthly', True) == \
+        STRIPE_LADDER_PRICES['live']['patron']['monthly']
+    # Unconfigured -> None, never an exception.
     assert SubscriptionService.resolve_ladder_price_id('nonsense', 'monthly', False) is None
     assert SubscriptionService.resolve_ladder_price_id('patron', 'weekly', False) is None
 
 
-def test_live_ids_stay_empty_until_cutover():
-    """THE fan-out hazard pin: live SKU ids existing before prod runs ladder-aware code would
-    have prod deactivating the subscribers who buy them. When the cutover paste lands, this test
-    is UPDATED deliberately -- it failing is the point."""
-    for slug, intervals in STRIPE_LADDER_PRICES['live'].items():
-        assert not any(intervals.values()), f'live Stripe id for {slug} before cutover'
-    for slug, intervals in PAYPAL_LADDER_PLANS['live'].items():
-        assert not any(intervals.values()), f'live PayPal id for {slug} before cutover'
+def test_the_live_ladder_is_completely_filled():
+    """FLIPPED AT CUTOVER (2026-09-02). This test used to assert the live ids were EMPTY -- the
+    fan-out hazard being that ids existing before prod ran ladder-aware code would have prod
+    deactivating the subscribers who bought them. Prod is ladder-aware now, so that hazard is
+    spent and the opposite one is live: a PARTIALLY filled ladder.
+
+    Partial is worse than empty, because empty fails loudly (the storefront shows its
+    "unavailable" state) while partial fails per-row and silently:
+
+      - a tier missing ONE interval is filtered out of the storefront entirely, because the view
+        requires BOTH before it will offer a level;
+      - a tier missing its PRODUCT id takes payment and then deactivates the buyer, since webhook
+        tier recovery resolves a ladder purchase through STRIPE_PRODUCTS.
+
+    Filled only by `bootstrap_support_skus --live-ok`. Hand-editing an id here points real money
+    at the wrong object, which is why the distinctness and no-overlap checks are here too.
+    """
     for slug in LADDER_SLUGS:
-        assert not STRIPE_PRODUCTS['live'][slug], f'live product id for {slug} before cutover'
+        stripe = STRIPE_LADDER_PRICES['live'][slug]
+        assert stripe['monthly'] and stripe['yearly'], (
+            f'{slug} is missing a live Stripe interval -- the storefront will not offer it at all'
+        )
+        paypal = PAYPAL_LADDER_PLANS['live'][slug]
+        assert paypal['monthly'] and paypal['yearly'], (
+            f'{slug} is missing a live PayPal interval'
+        )
+        assert STRIPE_PRODUCTS['live'][slug], (
+            f'{slug} has no live product id -- a purchase would DEACTIVATE the buyer'
+        )
+
+
+def test_no_live_id_is_reused_from_test_mode():
+    """A paste that carried a test id into the live block would charge against the wrong object
+    and recognise the wrong tier on the way back. Cheap to check, invisible to spot by eye across
+    24 near-identical strings."""
+    def ids(mapping, mode):
+        return {v for tier in mapping[mode].values() for v in tier.values() if v}
+
+    assert not (ids(STRIPE_LADDER_PRICES, 'live') & ids(STRIPE_LADDER_PRICES, 'test'))
+    assert not (ids(PAYPAL_LADDER_PLANS, 'live') & ids(PAYPAL_LADDER_PLANS, 'sandbox'))
+
+    live_products = {STRIPE_PRODUCTS['live'][s] for s in LADDER_SLUGS}
+    test_products = {STRIPE_PRODUCTS['test'][s] for s in LADDER_SLUGS}
+    assert not (live_products & test_products)
+
+
+def test_every_live_id_is_distinct():
+    """Two tiers sharing an id means one of them charges the other's price. The bootstrap cannot
+    produce this; a hand-edit can."""
+    for mapping, mode, label in (
+        (STRIPE_LADDER_PRICES, 'live', 'Stripe price'),
+        (PAYPAL_LADDER_PLANS, 'live', 'PayPal plan'),
+    ):
+        found = [v for tier in mapping[mode].values() for v in tier.values()]
+        assert len(found) == len(set(found)), f'duplicate live {label} id across tiers'
+
+    products = [STRIPE_PRODUCTS['live'][s] for s in LADDER_SLUGS]
+    assert len(products) == len(set(products)), 'duplicate live product id across tiers'
 
 
 def test_discord_roles_ladder_gets_premium_and_plus_stays_legacy():
