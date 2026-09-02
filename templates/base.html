@@ -59,9 +59,13 @@
     {% include 'partials/fundraiser_banner.html' %}
     {% include 'partials/art_reveal_banner.html' %}
     {% include 'partials/anon_profile_banner.html' %}
-    {% if user.is_authenticated and not user.premium_tier %}
-        {% include 'partials/premium_upsell_banner.html' %}
-    {% endif %}
+    {% comment %} The premium upsell strip lived here and was REMOVED (2026-09). It was the only
+    banner in this block with no flag, no date window and no campaign behind it: a full-width bar on
+    every page for every non-member, forever, with a 7-day localStorage dismissal as the only relief.
+    Support already has four standing entry points (the navbar hub link, the navbar Premium pill, the
+    footer Support column, the mobile tabbar) and its own storefront at /support/, so the strip was a
+    fifth ask that ran permanently. Membership here is a dial, not a door -- a permanent nag is the
+    shape of a door. {% endcomment %}
     {% endblock global_banners %}
 
     {% block main_layout %}

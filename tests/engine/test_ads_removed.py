@@ -242,24 +242,25 @@ def test_paypal_reverse_lookup_cannot_yield_ad_free():
 def test_every_purchasable_tier_currently_grants_premium():
     """Equality, not subset -- and the strictness is the point.
 
-    Three templates read `user.premium_tier` for TRUTHINESS and treat it as "is premium":
-    `base.html` and `navbar.html` gate the upsell banner on it, and `navbar.html` shows the "My
-    Premium" link on it. Python never does this; it goes through `profile.user_is_premium` /
+    TWO places in `navbar.html` read `user.premium_tier` for TRUTHINESS and treat it as "is
+    premium": the Premium pill is shown when it is falsy, the Membership link when it is truthy.
+    (A third reader, `base.html`'s gate on the site-wide upsell banner, went with that banner in
+    2026-09.) Python never does this; it goes through `profile.user_is_premium` /
     `is_tier_premium()`, which consult ACTIVE_PREMIUM_TIERS.
 
     That divergence was REAL until 2026-08: `ad_free` was a purchasable tier that granted nothing, so
-    those three templates hid the upsell from, and offered a premium link to, people who were not
+    those templates hid the upsell from, and offered a premium link to, people who were not
     premium. Removing the tier closed the gap by accident rather than by design.
 
     So the lists now coincide, and the templates are correct *because of that coincidence*. Adding
-    another non-feature tier would silently break all three the same way. This asserts the coincidence
+    another non-feature tier would silently break both the same way. This asserts the coincidence
     holds; if it ever must not, the fix is to give those templates a real is-premium flag FIRST.
     """
     from users.constants import ACTIVE_PREMIUM_TIERS
     purchasable = set(dict(PREMIUM_TIER_CHOICES))
     assert set(ACTIVE_PREMIUM_TIERS) == purchasable, (
-        'A purchasable tier no longer grants premium. Before changing this assertion, fix the three '
-        'templates that read premium_tier truthiness as "is premium" (base.html, navbar.html x2).'
+        'A purchasable tier no longer grants premium. Before changing this assertion, fix the two '
+        'places that read premium_tier truthiness as "is premium" (navbar.html x2).'
     )
 
 
@@ -305,3 +306,32 @@ def test_a_rendered_page_carries_no_ad_markup(client):
     body = client.get(reverse('privacy')).content.decode()
     for marker in ('adsbygoogle', 'googlesyndication', 'data-ad-slot', 'mobile-ad-banner'):
         assert marker not in body, f'{marker!r} rendered into the page'
+
+
+@pytest.mark.django_db
+def test_the_site_wide_premium_upsell_strip_stays_gone(client):
+    """Removed 2026-09. It was the only banner in `global_banners` with no flag, no date window and
+    no campaign behind it -- a full-width bar on every page for every non-member, permanently, with
+    a 7-day localStorage dismissal as the only relief.
+
+    Support keeps four standing entry points (navbar hub link, navbar Premium pill, footer Support
+    column, mobile tabbar) plus its own storefront, so nothing was lost but the nag. Pinned because
+    a persistent site-wide ask is the shape of a door, and membership here is a dial."""
+    import pathlib
+
+    from tests.factories import ProfileFactory
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    assert not (root / 'templates' / 'partials' / 'premium_upsell_banner.html').exists()
+    assert 'premium_upsell' not in (root / 'templates' / 'base.html').read_text(encoding='utf-8')
+
+    profile = ProfileFactory(is_linked=True)
+    assert not profile.user.premium_tier, 'fixture must be the non-member this banner targeted'
+    client.force_login(profile.user)
+
+    body = client.get('/career/').content.decode()
+
+    assert 'premium-upsell-banner' not in body
+    assert 'Explore PP Premium' not in body
+    # The deliberate survivor: the navbar pill is the standing entry point, not a strip.
+    assert 'pp-navpremium' in body, 'removing the strip must not take the navbar entry point with it'
