@@ -327,6 +327,13 @@ class DonationService:
             .filter(group_badges__is_live=True)
             .filter(Q(badge_image__isnull=True) | Q(badge_image=''))
             .exclude(badge_type='user')
+            # A series that BORROWS its artwork is not commissionable -- it already displays the
+            # lender's image, so funding it would buy a second piece of art for a subject that has
+            # one. Keyed on the LINK, not on the lender having an image yet: keying on "the lender
+            # has art" would leave this claimable in the window before the art lands, which is
+            # exactly when a donor would claim it and create the duplicate. Someone who wants this
+            # subject drawn claims the SOURCE, and both badges light up.
+            .exclude(artwork_source__isnull=False)
         )
         if not include_claimed:
             qs = qs.exclude(artwork_claim__isnull=False)

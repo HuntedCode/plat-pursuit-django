@@ -3240,6 +3240,15 @@ class BadgeSeries(models.Model):
     badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default subject artwork for the series (sits on the group background).")
     holo_badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default upgraded subject artwork shown when a badge is holo.")
     funded_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_badge_series', help_text="Donor credited for the default artwork.")
+    artwork_source = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='artwork_dependents',
+        help_text=(
+            "Borrow this OTHER series' artwork instead of holding your own -- the franchise/series "
+            "sister case, where one subject deserves one piece of art. The funder credit travels with "
+            "it, so the donor is credited on both. A series pointing here cannot be claimed for "
+            "artwork commissioning; claim the SOURCE and both light up."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -3253,6 +3262,40 @@ class BadgeSeries(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_badge_type_display()})"
+
+    def clean(self):
+        """Keep `artwork_source` ONE HOP deep and acyclic.
+
+        A chain (A borrows from B borrows from C) turns "where does this badge's art come from" into a
+        traversal, and every reader would have to agree on the depth cap and the cycle guard or they
+        would disagree about what a badge looks like. A pointer that always names the series actually
+        holding the image needs neither.
+        """
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+        if self.artwork_source_id is None:
+            return
+        if self.artwork_source_id == self.pk:
+            raise ValidationError({'artwork_source': "A series cannot borrow its own artwork."})
+        if BadgeSeries.objects.filter(pk=self.artwork_source_id,
+                                      artwork_source__isnull=False).exists():
+            raise ValidationError({'artwork_source': (
+                "That series borrows its artwork from somewhere else. Point at the series that "
+                "actually holds the image, so the art is one hop away rather than a chain."
+            )})
+        if self.pk and self.artwork_dependents.exists():
+            raise ValidationError({'artwork_source': (
+                "Other series borrow their artwork from this one, so it cannot borrow in turn -- "
+                "that would make it the middle of a chain."
+            )})
+
+    @property
+    def resolved_artwork_series(self):
+        """The series whose artwork this one actually displays: the source if it borrows, else itself.
+        Everything that resolves art or its funder credit goes through here, so the image and the
+        person credited for it cannot come from different places."""
+        return self.artwork_source or self
 
     @property
     def representative_group_badge(self):
@@ -3316,15 +3359,44 @@ class GroupBadge(models.Model):
     def __str__(self):
         return f"{self.series.name} - {self.platform_group.name}"
 
+    def _artwork_origin(self):
+        """(series_holding_the_art, is_borrowed) -- the ONE decision the three properties below share.
+
+        Resolution order is per-group override, then this series, then the series it borrows from.
+        Split across three properties, that order was written out three times and the artwork_source
+        hop would have had to be added to each; the first one anybody forgot would put a borrowed
+        image next to the wrong funder's name, or a local main image next to a borrowed holo. Deciding
+        once removes the chance.
+
+        The override case returns THIS series: an edition carrying its own art is not borrowing, and
+        its credit is `funded_by_override or series.funded_by` -- never the lender's.
+        """
+        if self.badge_image_override or self.holo_badge_image_override:
+            return self.series, False
+        if self.series.badge_image or self.series.holo_badge_image:
+            return self.series, False
+        source = self.series.artwork_source
+        if source is not None:
+            return source, True
+        return self.series, False
+
     @property
     def effective_funded_by(self):
-        """Art funder credited on the badge page: per-group override, else the series default."""
-        return self.funded_by_override or self.series.funded_by
+        """Art funder credited on the badge page: per-group override, else whoever funded the art this
+        badge actually displays -- which is the LENDER when the series borrows. Crediting the borrower's
+        own (empty) funder would put someone else's paid-for artwork on a badge crediting nobody."""
+        if self.funded_by_override:
+            return self.funded_by_override
+        origin, _ = self._artwork_origin()
+        return origin.funded_by
 
     @property
     def effective_holo_image(self):
-        """Holo subject artwork: per-group override, else series default (an ImageField or None)."""
-        return self.holo_badge_image_override or self.series.holo_badge_image
+        """Holo subject artwork: per-group override, else the series' own, else the borrowed one."""
+        if self.holo_badge_image_override:
+            return self.holo_badge_image_override
+        origin, _ = self._artwork_origin()
+        return origin.holo_badge_image
 
     def art_layers(self):
         """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
@@ -3333,10 +3405,11 @@ class GroupBadge(models.Model):
         from trophies.util_modules.assets import safe_static
         grp = self.platform_group
         main_url, is_avatar = None, False
+        origin, _borrowed = self._artwork_origin()
         if self.badge_image_override:
             main_url = self.badge_image_override.url
-        elif self.series.badge_image:
-            main_url = self.series.badge_image.url
+        elif origin.badge_image:
+            main_url = origin.badge_image.url
         elif self.series.badge_type == 'user':
             submitter = self.series.submitted_by
             if submitter and submitter.avatar_url:
