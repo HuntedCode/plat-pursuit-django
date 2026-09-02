@@ -144,7 +144,7 @@ def build_series_items(series_list, profile) -> list:
     slugs = [s.series_slug for s in series_list]
     gbs = list(
         GroupBadge.objects.filter(is_live=True, series__series_slug__in=slugs)
-        .select_related('series', 'series__franchise', 'series__collection', 'series__developer', 'platform_group')
+        .select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer', 'platform_group')
         .order_by('platform_group__sort_order', 'id')
     )
     by_series = defaultdict(list)

@@ -4862,8 +4862,30 @@ class BadgeSeriesAdmin(admin.ModelAdmin):
         ('Series defaults (inherited by every group badge unless it overrides them)', {
             'fields': ['title', 'badge_image', 'holo_badge_image', 'funded_by'],
         }),
+        ('Shared artwork', {
+            'fields': ['artwork_source'],
+            'description': (
+                "Borrow another series' artwork instead of commissioning a second piece for the same "
+                "subject -- the franchise/series sister case. The funder credit travels with the image, "
+                "so the donor is credited on both badges. A series set here disappears from the "
+                "fundraiser's claimable list: a donor who wants this subject drawn claims the SOURCE, "
+                "and both light up. Leave blank unless this series genuinely shares a subject."
+            ),
+        }),
         ('Meta', {'fields': ['created_at']}),
     ]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Keep the picker to series that actually HOLD art. Offering a borrower here would let a
+        curator build the chain `clean()` then refuses to save -- a validation error is a worse way to
+        learn the rule than simply not being shown the option."""
+        if db_field.name == 'artwork_source':
+            qs = BadgeSeries.objects.filter(artwork_source__isnull=True).order_by('name')
+            object_id = request.resolver_match.kwargs.get('object_id') if request.resolver_match else None
+            if object_id:
+                qs = qs.exclude(pk=object_id)   # a series cannot borrow from itself
+            kwargs['queryset'] = qs
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='Groups')
     def group_count(self, obj):

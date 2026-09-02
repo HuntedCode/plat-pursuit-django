@@ -166,12 +166,16 @@ class ArtRevealItem(models.Model):
         the series. The pre-2026-08 version wrote the legacy `Badge.badge_image`, which nothing renders.
 
         Idempotent: returns False if already released. Existing series art is never overwritten -- a
-        curator who has already set art beats an automated reveal.
+        curator who has already set art beats an automated reveal. A series that BORROWS its artwork
+        (`BadgeSeries.artwork_source`) is skipped for the same reason and one more: writing here would
+        end the borrow silently, so the badge would stop matching its sister -- the exact divergence
+        the borrow exists to prevent -- and would do it with `funded_by` still empty, crediting the
+        reveal art to nobody. The event still marks the item released; only the write is skipped.
         """
         if self.released:
             return False
         now = now or timezone.now()
-        if self.artwork and not self.series.badge_image:
+        if self.artwork and not self.series.badge_image and not self.series.artwork_source_id:
             with self.artwork.open('rb') as f:
                 self.series.badge_image.save(basename(self.artwork.name), f, save=True)
         self.released = True

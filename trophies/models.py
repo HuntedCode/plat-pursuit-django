@@ -3240,6 +3240,15 @@ class BadgeSeries(models.Model):
     badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default subject artwork for the series (sits on the group background).")
     holo_badge_image = models.ImageField(upload_to='badges/series/', null=True, blank=True, help_text="Default upgraded subject artwork shown when a badge is holo.")
     funded_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='funded_badge_series', help_text="Donor credited for the default artwork.")
+    artwork_source = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='artwork_dependents',
+        help_text=(
+            "Borrow this OTHER series' artwork instead of holding your own -- the franchise/series "
+            "sister case, where one subject deserves one piece of art. The funder credit travels with "
+            "it, so the donor is credited on both. A series pointing here is refused by BOTH the "
+            "fundraiser's picker and its claim endpoint; claim the SOURCE and both badges light up."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -3250,9 +3259,76 @@ class BadgeSeries(models.Model):
             models.Index(fields=['series_slug'], name='badgeseries_slug_idx'),
             models.Index(fields=['badge_type'], name='badgeseries_type_idx'),
         ]
+        constraints = [
+            # `clean()` is only run by ModelForms, so the ORM, a data migration, `loaddata` or a
+            # `queryset.update()` can all write a self-reference straight past it. That row is not
+            # loud: it does not recurse, it just renders the placeholder forever AND drops the
+            # series out of the claimable pool forever, so no donor can ever cause it to be drawn.
+            # Silent and permanent is worth six lines of constraint. The one-hop/cycle rule needs a
+            # subquery and cannot live here -- `clean()` plus the admin picker cover that.
+            models.CheckConstraint(
+                condition=~models.Q(artwork_source=models.F('id')),
+                name='badgeseries_no_self_artwork_source',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.get_badge_type_display()})"
+
+    def clean(self):
+        """Keep `artwork_source` ONE HOP deep and acyclic.
+
+        A chain (A borrows from B borrows from C) turns "where does this badge's art come from" into a
+        traversal, and every reader would have to agree on the depth cap and the cycle guard or they
+        would disagree about what a badge looks like. A pointer that always names the series actually
+        holding the image needs neither.
+        """
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+        if self.artwork_source_id is None:
+            return
+        if self.artwork_source_id == self.pk:
+            raise ValidationError({'artwork_source': "A series cannot borrow its own artwork."})
+        if BadgeSeries.objects.filter(pk=self.artwork_source_id,
+                                      artwork_source__isnull=False).exists():
+            raise ValidationError({'artwork_source': (
+                "That series borrows its artwork from somewhere else. Point at the series that "
+                "actually holds the image, so the art is one hop away rather than a chain."
+            )})
+        if self.pk and self.artwork_dependents.exists():
+            raise ValidationError({'artwork_source': (
+                "Other series borrow their artwork from this one, so it cannot borrow in turn -- "
+                "that would make it the middle of a chain."
+            )})
+        # An OPEN claim means a donor has paid for this series to be drawn. Linking it now would
+        # strand them: the claim stays pending forever because the whole point of the link is that
+        # nobody will draw it, and there is no completion path or notification for that. It also
+        # walks the fundraiser tracker's denominator -- `total_needing_art` would stop counting the
+        # series while `pending_count` kept counting its claim, pushing the progress bar past 100%.
+        # This is the ordinary curator workflow, not an exotic race: a donor claims the franchise
+        # badge, and a curator later notices it duplicates the series badge.
+        claim = getattr(self, 'artwork_claim', None) if self.pk else None
+        if claim is not None:
+            if claim.status != 'completed':
+                raise ValidationError({'artwork_source': (
+                    "A donor has an open artwork claim on this series. Complete or release that "
+                    "claim first -- linking it now would leave them waiting for art nobody is "
+                    "going to draw."
+                )})
+
+    # A `resolved_artwork_series` property lived here and was DELETED before this feature shipped.
+    # It returned `self.artwork_source or self`, had no callers, and its docstring claimed to be the
+    # thing "everything that resolves art or its funder credit goes through" -- which was false, and
+    # false in a way that would have cost someone real money. The three properties go through
+    # `GroupBadge._artwork_origin()`, which gives a series' OWN art precedence over its source; this
+    # one did not, so for a series holding both, the two disagreed about whose artwork was on the
+    # badge. The next person to build an art or credit surface would have reached for the helper
+    # whose docstring promised it was authoritative and credited the wrong donor.
+    #
+    # Resolution lives on GroupBadge because it starts with the per-edition override. A series-level
+    # helper cannot see that, so it can never be the whole answer -- which is why this shape was
+    # wrong rather than merely unused.
 
     @property
     def representative_group_badge(self):
@@ -3316,15 +3392,62 @@ class GroupBadge(models.Model):
     def __str__(self):
         return f"{self.series.name} - {self.platform_group.name}"
 
+    def _artwork_origin(self):
+        """(series_holding_the_art, is_borrowed) for the MAIN subject image, shared by the properties
+        below so the image and the funder credited for it cannot come from different places.
+
+        Keyed on the MAIN image only, at both levels. An earlier version tested
+        `badge_image_override OR holo_badge_image_override`, and `badge_image OR holo_badge_image`,
+        which reads naturally and is wrong twice over -- because partial art is a real state, not a
+        theoretical one. `ArtRevealItem.release()` writes `badge_image` alone, and the fundraiser
+        keys claimability on `badge_image` alone, so main-without-holo is the norm and the model has
+        no opinion that the two travel together.
+
+        Under the OR, a curator uploading a HOLO-only override to a borrowing edition flipped its
+        origin to itself, whose main image is empty -- so a badge that wore real art yesterday fell
+        back to the grey placeholder today, and lost its credit line with it. The curator's action
+        was "add art". Same shape one level up: a series holding only a holo would refuse to borrow
+        a main image it plainly needs.
+
+        The holo resolves on its own axis in `effective_holo_image`, which deliberately does NOT
+        borrow: composing your own main with someone else's holo would make the badge change subject
+        when a hunter masters it. Refusing is the right half-measure there.
+        """
+        if self.badge_image_override:
+            return self.series, False
+        if self.series.badge_image:
+            return self.series, False
+        source = self.series.artwork_source
+        if source is not None:
+            return source, True
+        return self.series, False
+
     @property
     def effective_funded_by(self):
-        """Art funder credited on the badge page: per-group override, else the series default."""
-        return self.funded_by_override or self.series.funded_by
+        """Art funder credited on the badge page: per-group override, else whoever funded the art this
+        badge actually displays -- which is the LENDER when the series borrows. Crediting the borrower's
+        own (empty) funder would put someone else's paid-for artwork on a badge crediting nobody."""
+        if self.funded_by_override:
+            return self.funded_by_override
+        origin, _ = self._artwork_origin()
+        return origin.funded_by
 
     @property
     def effective_holo_image(self):
-        """Holo subject artwork: per-group override, else series default (an ImageField or None)."""
-        return self.holo_badge_image_override or self.series.holo_badge_image
+        """Holo subject artwork: per-edition override, else the holo belonging to whichever series
+        supplied the MAIN image.
+
+        Following the main's origin is what keeps the two halves of one drawing together, and it
+        gets both cases right for the same reason. A badge that borrows its main image borrows the
+        lender's holo too -- that holo IS the upgraded version of the picture it is already wearing.
+        A badge showing its OWN main image takes its own holo or none, and never the lender's:
+        composing one drawing's main with another's holo would make the medallion visibly change
+        subject the moment a hunter masters it.
+        """
+        if self.holo_badge_image_override:
+            return self.holo_badge_image_override
+        origin, _ = self._artwork_origin()
+        return origin.holo_badge_image
 
     def art_layers(self):
         """Single source of truth for the medallion's art composition (group backdrop/backing/shape + the
@@ -3333,10 +3456,11 @@ class GroupBadge(models.Model):
         from trophies.util_modules.assets import safe_static
         grp = self.platform_group
         main_url, is_avatar = None, False
+        origin, _borrowed = self._artwork_origin()
         if self.badge_image_override:
             main_url = self.badge_image_override.url
-        elif self.series.badge_image:
-            main_url = self.series.badge_image.url
+        elif origin.badge_image:
+            main_url = origin.badge_image.url
         elif self.series.badge_type == 'user':
             submitter = self.series.submitted_by
             if submitter and submitter.avatar_url:

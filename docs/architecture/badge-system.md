@@ -91,6 +91,35 @@ only ever asked for the furthest-along edition's. It backs badge detail's per-ed
 Calibrated to the "1,000,000 Club": over a projected mature catalog (~400 group badges, ~5 gating stages
 each) a completionist lands ~1.24M. See `test_million_club_calibration`.
 
+## Shared artwork between sister series
+
+A franchise badge and a series badge are often the same subject wearing two labels -- "God of War"
+the franchise and "God of War" the series. `BadgeSeries.artwork_source` (self-FK, `SET_NULL`) says
+*display that series' art instead of holding your own*.
+
+| | |
+|---|---|
+| Resolution | per-edition override -> the series' own art -> `artwork_source`'s art -> user-badge avatar -> static default |
+| Funder credit | **travels with the image.** `GroupBadge._artwork_origin()` decides once which series the art comes from, and `art_layers()`, `effective_holo_image` and `effective_funded_by` all read it |
+| Claiming | refused in BOTH places: excluded from `series_needing_artwork()` (the picker) AND rejected by `claim_badge()` (the thing that takes the money, which reads `series_id` straight from the POST). A donor who wants that subject drawn claims the SOURCE, and both light up |
+| Other write paths | `ArtRevealItem.release()` skips a borrowing series -- writing there would end the borrow silently and credit the art to nobody. `clean()` refuses a link while an OPEN claim exists, which would otherwise strand the donor and push the fundraiser bar past 100% |
+| Partial art | resolution keys on the MAIN image at both levels, never `main OR holo`. Partial art is the norm (`ArtRevealItem.release()` writes `badge_image` alone), so an OR let a holo-only edition override wipe a borrowed main image back to the placeholder |
+| Depth | ONE hop, enforced in `clean()`: no self-reference, the source may not itself borrow, and a series others borrow from may not start borrowing |
+
+**Why not derive it from the shared `franchise` FK**, which looks free:
+
+1. A franchise has SEVERAL sister series (God of War 2018 and Ragnarok are separate series badges),
+   so derivation has no deterministic answer for whose art wins -- it would silently pick one and
+   change its mind when rows are added.
+2. `BadgeSeries.franchise` already means something load-bearing and different. `audit_badge_coverage`
+   reads it as *"this series is expected to cover every non-excluded game in that franchise"*, so
+   setting it on a series badge to express sisterhood would flag every other franchise game as a
+   coverage gap -- by email, daily. **Two facts, two fields.**
+
+The claim guard keys on the LINK, not on the lender having art yet. Keying on "the lender has an
+image" would leave the borrower claimable in precisely the window a donor would claim it: before the
+art lands.
+
 ## Gotchas and Pitfalls
 
 **Two live features still write the legacy `Badge` table, and one of them is a payment flow.**
