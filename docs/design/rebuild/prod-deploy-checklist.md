@@ -460,8 +460,12 @@ Migrations `fundraiser.0006_claim_series_fk` and `art_reveal.0004_item_series_fk
 > 4. **Then the rebuild deploy is a plain deploy + migrate.** No held-back migrate, no shelling in
 >    mid-window, no interleave.
 >
-> `predict_conversion` (below) answers step 3 in advance: it reports how many slugs the sweep will
-> create and which ones need hand-creation, without writing anything.
+> **`convert_series_to_groups --all --dry-run` answers step 3 in advance** and is already on prod
+> (#68). It writes nothing and prints, per slug, whether it would create or reuse a BadgeSeries,
+> which platform groups it spans, and -- the line that matters -- why it would SKIP one:
+> `skip (no legacy Badge and no BadgeSeries)` or `skip (no games map to any platform group)`.
+> Every skipped slug that the queries above also list is one you must hand-create at
+> `/staff/badge-create/` before the deploy, because the migrations refuse to map it.
 >
 > **The old interleave, kept only as the fallback** if step 1-3 are skipped: deploy with `migrate`
 > HELD BACK, convert from a shell on the new code, then `migrate`. If `migrate` runs automatically
