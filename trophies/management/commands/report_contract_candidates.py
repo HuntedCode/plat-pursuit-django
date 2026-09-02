@@ -1,59 +1,32 @@
-"""Calibrate the media-density contract rule (2026-08-31, Jeffrey's design) BEFORE wiring it in.
+"""The media-density contract rule's read-only calibration report. The rule itself lives in
+trophies/services/contract_candidates.py (shared with the nightly evaluate_contract_candidates
+pipeline); this command dry-runs it and prints the calibration read-outs:
 
-The rule under test (v2, after the first prod calibration run), over anchored + trusted-matched
-concepts whose IGDB id holds no contract:
-  Tier A (auto-contract): trailer/video AND a sane trophy pyramid AND not flagged shovelware.
-          The pyramid guard keeps the trailer-making easy-plat publishers (the
-          eastasiasoft/Ratalaika class) out; the SHOVELWARE OVERRIDE (v2, Jeffrey's rule) means
-          a flagged game can NEVER auto-accept -- a would-be Tier A shovelware game is demoted
-          to review and marked as blocked.
-  Tier B (review): video but a degenerate pyramid, no video but >= --min-shots screenshots,
-          a shovelware-blocked would-be A, or a FRANCHISE RESCUE (v2): a would-be Tier C game
-          whose concept belongs to an IGDB franchise/collection -- the fix for the first run's
-          finding that AAA back-catalog titles (old, static IGDB pages with thin media) landed
-          in snooze beside the junk.
-  Tier C (snooze): under --min-shots screenshots, no video, no franchise membership.
+- per-tier counts + samples (highest played_count first -- the demand ranking the queues use)
+- the precision ladder: no guard -> pyramid guard -> shovelware override
+- the franchise rescue's haul (and its shovelware honesty check)
+- recall vs existing contracts (run in the environment that HOLDS the contract catalog)
 
-Queues are ranked by OUR OWN demand signal: samples print highest played_count first
-(contracts exist to give players XP -- work top-down by impact), and --min-players applies an
-optional demand floor to the whole population.
-
-Calibration read-outs: per-tier counts/samples, the shovelware-admitted precision ladder
-(no guard -> pyramid guard -> shovelware override), the franchise rescue's haul (and how much
-flagged shovelware it pulls up -- the honesty check), and recall vs existing contracts
-(staff-curated ground truth; run in the environment that HOLDS the contract catalog).
-
-Read-only. Tune the knobs here; Phase 2 (the ContractCandidate pipeline) hardcodes the winners.
+Calibrated on prod 2026-08-31: Tier A 0% flagged shovelware; recall vs 942 staff-curated
+contracts = 100% surfaced (78% A / 22% B / 0% C). Tune --min-shots / --min-earnable here;
+the pipeline shares the same defaults.
 """
 from collections import Counter
 
 from django.core.management.base import BaseCommand
 
-from trophies.models import ConceptFranchise, Contract, Game, IGDBMatch
-
-
-# Degenerate-pyramid signature v1 (calibrate here, then promote): the classic easy-plat stack
-# is gold-heavy and tiny (1 plat + ~11 gold + little else). A designed game is bronze-heavy
-# with a real earnable count.
-def pyramid_is_degenerate(defined, min_earnable=15):
-    """`defined` is a Game.defined_trophies dict. True when the list reads easy-plat product:
-    gold outnumbers bronze, or the whole earnable list (excl. platinum) is tiny."""
-    bronze = defined.get('bronze') or 0
-    silver = defined.get('silver') or 0
-    gold = defined.get('gold') or 0
-    earnable = bronze + silver + gold
-    if earnable < min_earnable:
-        return True
-    return gold > bronze
+from trophies.services.contract_candidates import (   # noqa: F401  (pyramid re-export for tests)
+    DEFAULT_MIN_EARNABLE, DEFAULT_MIN_SHOTS, CatalogScanner, pyramid_is_degenerate,
+)
 
 
 class Command(BaseCommand):
     help = "Dry-run the media-density contract rule over the trusted catalogue (read-only calibration)."
 
     def add_arguments(self, parser):
-        parser.add_argument('--min-shots', type=int, default=4,
+        parser.add_argument('--min-shots', type=int, default=DEFAULT_MIN_SHOTS,
                             help='Screenshot threshold for Tier B without a video (default 4).')
-        parser.add_argument('--min-earnable', type=int, default=15,
+        parser.add_argument('--min-earnable', type=int, default=DEFAULT_MIN_EARNABLE,
                             help='Pyramid guard: an earnable list smaller than this is degenerate (default 15).')
         parser.add_argument('--min-players', type=int, default=0,
                             help='Demand floor: skip games with fewer tracked players than this (default 0 = off).')
@@ -62,64 +35,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         min_shots = opts['min_shots']
-        min_earnable = opts['min_earnable']
         min_players = opts['min_players']
         sample_n = opts['sample']
         w = self.stdout.write
         head = self.style.MIGRATE_HEADING
 
-        contracted_igdb = set(Contract.objects.filter(
-            igdb_id__isnull=False).values_list('igdb_id', flat=True))
-
-        # Franchise rescue set: concepts with any non-excluded franchise/collection link.
-        # Spin-off links still count -- membership proves real IP context either way.
-        franchise_concepts = set(ConceptFranchise.objects.filter(
-            is_excluded=False).values_list('concept_id', flat=True))
-
-        # One pass over trusted, anchored matches: media counts off the match, the pyramid off
-        # the concept's biggest trophy list, shovelware off any flagged game row, demand off
-        # the concept's most-played list.
-        matches = (
-            IGDBMatch.objects.filter(
-                status__in=IGDBMatch.TRUSTED_STATUSES,
-                igdb_id__isnull=False,
-                concept__anchor_migration_completed_at__isnull=False,
-            )
-            .values('concept_id', 'igdb_id', 'igdb_name',
-                    'igdb_video_youtube_ids', 'igdb_screenshot_image_ids')
-        )
-
-        games = Game.objects.filter(
-            concept__anchor_migration_completed_at__isnull=False,
-        ).values('concept_id', 'defined_trophies', 'shovelware_status', 'played_count')
-        biggest = {}        # concept_id -> defined_trophies of the largest list
-        shovelware = set()  # concept_ids with any flagged game
-        played = {}         # concept_id -> max played_count across its lists
-        for g in games:
-            defined = g['defined_trophies'] or {}
-            size = sum(v or 0 for v in defined.values())
-            if size >= sum(v or 0 for v in (biggest.get(g['concept_id']) or {}).values()):
-                biggest[g['concept_id']] = defined
-            if g['shovelware_status'] in ('auto_flagged', 'manually_flagged'):
-                shovelware.add(g['concept_id'])
-            played[g['concept_id']] = max(played.get(g['concept_id'], 0), g['played_count'] or 0)
-
-        def bucket(m):
-            """Returns (tier, reason): reason is 'blocked' (shovelware override out of A),
-            'rescued' (franchise promotion out of C), or None."""
-            cid = m['concept_id']
-            has_video = bool(m['igdb_video_youtube_ids'])
-            shots = len(m['igdb_screenshot_image_ids'] or [])
-            degenerate = pyramid_is_degenerate(biggest.get(cid) or {}, min_earnable)
-            if has_video and not degenerate:
-                if cid in shovelware:
-                    return 'B', 'blocked'    # flagged shovelware NEVER auto-accepts
-                return 'A', None
-            if has_video or shots >= min_shots:
-                return 'B', None
-            if cid in franchise_concepts:
-                return 'B', 'rescued'        # real IP with a thin old IGDB page
-            return 'C', None
+        scanner = CatalogScanner(min_shots=min_shots, min_earnable=opts['min_earnable'])
 
         pop = Counter()
         pop_shovel = Counter()
@@ -134,34 +55,31 @@ class Command(BaseCommand):
         seen_igdb_pop = set()
 
         n_total = 0
-        for m in matches.iterator(chunk_size=2000):
+        for row in scanner.iter_matches():
             n_total += 1
-            t, reason = bucket(m)
-            if m['igdb_id'] in contracted_igdb:
-                recall[t] += 1
+            if row['contracted']:
+                recall[row['tier']] += 1
                 continue
-            if m['igdb_id'] in seen_igdb_pop:
+            if row['igdb_id'] in seen_igdb_pop:
                 continue   # sibling concepts share the IGDB page: one vote per game
-            seen_igdb_pop.add(m['igdb_id'])
-            p = played.get(m['concept_id'], 0)
-            if p < min_players:
+            seen_igdb_pop.add(row['igdb_id'])
+            if row['players'] < min_players:
                 below_floor += 1
                 continue
-            name = m['igdb_name'] or f"igdb:{m['igdb_id']}"
+            t = row['tier']
             pop[t] += 1
-            is_shovel = m['concept_id'] in shovelware
-            if is_shovel:
+            if row['is_shovelware']:
                 pop_shovel[t] += 1
-            if m['igdb_video_youtube_ids']:
+            if row['has_video']:
                 raw_video += 1
-                if is_shovel:
+                if row['is_shovelware']:
                     raw_video_shovel += 1
-            if reason:
-                reasons[reason] += 1
-                if is_shovel:
-                    reason_shovel[reason] += 1
-                reason_samples[reason].append((p, name))
-            samples[t].append((p, name))
+            if row['reason']:
+                reasons[row['reason']] += 1
+                if row['is_shovelware']:
+                    reason_shovel[row['reason']] += 1
+                reason_samples[row['reason']].append((row['players'], row['name']))
+            samples[t].append((row['players'], row['name']))
 
         if not n_total:
             self.stdout.write(self.style.WARNING('No trusted, anchored matches found.'))
@@ -176,7 +94,8 @@ class Command(BaseCommand):
             'C': f'Tier C  snooze (< {min_shots} shots, no video, no franchise)',
         }
         w(head(f'Media-density contract rule v2 -- calibration '
-               f'(--min-shots {min_shots}, --min-earnable {min_earnable}, --min-players {min_players})'))
+               f'(--min-shots {min_shots}, --min-earnable {opts["min_earnable"]}, '
+               f'--min-players {min_players})'))
         floor_note = f', {below_floor} below the demand floor' if min_players else ''
         w(f'Population: {sum(pop.values())} uncontracted IGDB games '
           f'({n_total} trusted anchored matches scanned{floor_note})\n')

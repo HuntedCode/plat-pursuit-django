@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from trophies.models import (
     Badge,
+    BadgeSeries,
     Comment,
     Company,
     Concept,
@@ -23,6 +24,7 @@ from trophies.models import (
     ConceptTrophyGroup,
     EarnedTrophy,
     Game,
+    GroupBadge,
     Genre,
     IGDBMatch,
     Profile,

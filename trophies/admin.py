@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate
 
 
 # Register your models here.
@@ -4572,6 +4572,56 @@ class ContractAdminForm(forms.ModelForm):
                 f"remove {len(jobs) - MAX_CONTRACT_JOBS}."
             )
         return jobs
+
+
+@admin.register(ContractCandidate)
+class ContractCandidateAdmin(admin.ModelAdmin):
+    """The contract-candidate queue (evaluate_contract_candidates maintains it nightly).
+    Work top-down by players: review B-tier rows (blocked = shovelware-override demotions,
+    rescued = franchise promotions out of snooze); stage/dismiss from the actions. `dismissed`
+    is sticky -- the rule never overrides it."""
+    list_display = ('name', 'igdb_id', 'tier', 'reason', 'status', 'players',
+                    'contract', 'evaluated_at')
+    list_filter = ('status', 'tier', 'reason')
+    search_fields = ('name', 'igdb_id')
+    ordering = ('-players',)
+    list_select_related = ('contract',)
+    raw_id_fields = ('contract',)
+    readonly_fields = ('igdb_id', 'name', 'tier', 'reason', 'players', 'evaluated_at',
+                       'created_at', 'updated_at')
+    actions = ['stage_contracts', 'dismiss']
+
+    @admin.action(description='Stage contracts (create is_live=False, auto-suggest jobs)')
+    def stage_contracts(self, request, queryset):
+        from trophies.management.commands.evaluate_contract_candidates import Command as _Ev
+        stager = _Ev()
+        n = 0
+        for cand in queryset.exclude(status__in=(ContractCandidate.STATUS_STAGED,
+                                                 ContractCandidate.STATUS_DONE)):
+            if Contract.objects.filter(igdb_id=cand.igdb_id).exists():
+                cand.status = ContractCandidate.STATUS_DONE
+                cand.save(update_fields=['status'])
+                continue
+            cand.contract = stager._stage_contract(cand)
+            cand.status = ContractCandidate.STATUS_STAGED
+            cand.save(update_fields=['contract', 'status'])
+            n += 1
+        self.message_user(request, f'Staged {n} contract(s) (is_live=False -- publish from the Contract admin).')
+
+    @admin.action(description='Dismiss (sticky: the rule never re-queues these)')
+    def dismiss(self, request, queryset):
+        # Review/snoozed rows only: a STAGED row has a real contract behind it -- to reject
+        # one, delete its staged Contract in the Contract admin (the nightly run then returns
+        # the candidate to review, where it can be dismissed).
+        n = queryset.filter(status__in=(ContractCandidate.STATUS_REVIEW,
+                                        ContractCandidate.STATUS_SNOOZED)).update(
+            status=ContractCandidate.STATUS_DISMISSED)
+        skipped = queryset.count() - n
+        msg = f'Dismissed {n} candidate(s).'
+        if skipped:
+            msg += (f' Skipped {skipped} staged/done row(s) -- reject a staged candidate by '
+                    f'deleting its Contract first.')
+        self.message_user(request, msg)
 
 
 @admin.register(Contract)
