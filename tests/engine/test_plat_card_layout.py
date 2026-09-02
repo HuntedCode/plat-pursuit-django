@@ -10,6 +10,8 @@ MEASURED IN A REAL BROWSER, WITH THE REAL FONTS. `render_to_string` alone produc
 Grotesque -- and the layout then measures fine because it is not the layout that ships. Three
 attempts at this test said "no bug" for exactly that reason before `_build_font_faces()` went in.
 """
+import pathlib
+
 import pytest
 
 pytest.importorskip('playwright.sync_api')
@@ -45,17 +47,39 @@ FULL_CARD = {
 }
 
 
-def _measure(tmp_path, context):
+def _font_faces(monkeypatch):
+    """The renderer's own @font-face block, sourced from wherever the TTFs actually are.
+
+    `playwright_renderer.FONTS_DIR` is `STATIC_ROOT / 'fonts'` -- the COLLECTED directory, which is
+    right for the renderer (prod runs collectstatic on every deploy) and empty in CI, which never
+    does. The nine TTFs are tracked in `static/fonts/`, so that is the copy always on disk.
+
+    Repointed rather than skipped. A layout guard that quietly skips wherever the fonts are missing
+    would skip in exactly the place it is supposed to run, and this test exists because a fallback
+    typeface makes a clipping card measure clean.
+    """
+    from django.conf import settings
+
+    import core.services.playwright_renderer as renderer
+
+    collected = renderer.FONTS_DIR
+    source = pathlib.Path(settings.BASE_DIR) / 'static' / 'fonts'
+    chosen = collected if (collected / 'BricolageGrotesque-Bold.ttf').exists() else source
+
+    monkeypatch.setattr(renderer, 'FONTS_DIR', chosen)
+    monkeypatch.setattr(renderer, '_cached_font_faces', None)   # restored at teardown
+    return renderer._build_font_faces()
+
+
+def _measure(tmp_path, monkeypatch, context):
     """Render the card with the shipping fonts and report the title box against its line box."""
     from django.template.loader import render_to_string
     from playwright.sync_api import sync_playwright
 
-    from core.services.playwright_renderer import _build_font_faces
-
-    faces = _build_font_faces()
+    faces = _font_faces(monkeypatch)
     assert 'Bricolage' in faces, (
-        'the renderer found no fonts, so this would measure a fallback typeface and pass on a card '
-        'that clips in production'
+        'no fonts were found in either static/fonts or STATIC_ROOT/fonts, so this would measure a '
+        'fallback typeface and pass on a card that clips in production'
     )
     path = tmp_path / 'card.html'
     path.write_text(f'<style>{faces}</style>' + render_to_string('shareables/plat_card.html', context),
@@ -77,14 +101,14 @@ def _measure(tmp_path, context):
     return box
 
 
-def test_the_title_is_not_clipped_on_a_fully_loaded_card(tmp_path):
+def test_the_title_is_not_clipped_on_a_fully_loaded_card(tmp_path, monkeypatch):
     """THE regression. Before the verdict pill moved into the numbers row, this exact shape shrank
     the title box to 36px against a 56px line box -- 20px of the game's name cut off, on the one
     element the card exists to name.
 
     The tolerance is 6px, not 0: a `-webkit-line-clamp` box reports a scrollHeight a few pixels over
     its clientHeight from line-box rounding even when nothing is visibly cut. 20px is glyphs."""
-    box = _measure(tmp_path, dict(FULL_CARD))
+    box = _measure(tmp_path, monkeypatch, dict(FULL_CARD))
 
     clipped = box['scrollH'] - box['clientH']
     assert clipped <= 6, (
@@ -94,12 +118,12 @@ def test_the_title_is_not_clipped_on_a_fully_loaded_card(tmp_path):
     )
 
 
-def test_the_title_survives_a_two_line_game_name(tmp_path):
+def test_the_title_survives_a_two_line_game_name(tmp_path, monkeypatch):
     """The title is `-webkit-line-clamp: 2`, so a long name legitimately takes both lines. That is
     the tightest the column ever gets, and it must still not eat into the glyphs."""
     ctx = dict(FULL_CARD)
     ctx['game_name'] = "Marvel's Spider-Man: Miles Morales Ultimate Edition"
 
-    box = _measure(tmp_path, ctx)
+    box = _measure(tmp_path, monkeypatch, ctx)
 
     assert box['scrollH'] - box['clientH'] <= 6, 'a two-line title clips on a fully loaded card'
