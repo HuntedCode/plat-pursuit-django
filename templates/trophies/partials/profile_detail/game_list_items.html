@@ -45,15 +45,29 @@ is not on the view's join re-opens the N+1.
     ratio: an aspect ratio scales with the card, so at 4 columns a 16/9 band stood 206px tall and was
     as dominant as the poster it replaced.
 
-    No landscape art means NO BAND rather than a fallback: with the cover now on the card, falling the
-    band back to the same cover would print one image twice. ~5% of cards lose their strip and sit a
-    little shorter, which a grid row absorbs.{% endcomment %}
+    THE BAND ALWAYS RENDERS. It used to be omitted when a concept had no landscape art, on the
+    reasoning that falling back to the cover would print one image twice -- and the ~5% of cards that
+    lost their strip were expected to sit a little shorter and be absorbed by the grid row. In
+    practice a short card among tall ones does not read as "this game has less art", it reads as
+    broken, and it is the games with the thinnest media (older, obscure, regional) that get it.
+
+    So there are three fills, in order:
+      1. landscape art, when the concept has it (~95%) -- unchanged;
+      2. otherwise the COVER, blurred and scaled into a colour wash. The duplication objection was
+         about printing the same picture twice, and a wash is not a second picture: it is the
+         game's own palette under the same gradient overlay the landscape band already sits beneath;
+      3. otherwise nothing but that overlay, for a game with no real art at all -- blowing up a
+         generic PlayStation placeholder into a wash would be noise pretending to be content.
+    Every card is the same height in all three cases, which is the point.{% endcomment %}
     {% with shot=game.concept.landscape_url %}
-    {% if shot %}
     <div class="pp-gcard__cover">
+        {% if shot %}
         <img class="pp-gcard__art" src="{{ shot }}" alt="" loading="lazy" decoding="async">
+        {% elif game.has_cover_art %}
+        <img class="pp-gcard__art pp-gcard__art--wash" src="{{ game.display_image_url }}"
+             alt="" loading="lazy" decoding="async">
+        {% endif %}
     </div>
-    {% endif %}
     {% endwith %}
 
     <div class="pp-gcard__body">

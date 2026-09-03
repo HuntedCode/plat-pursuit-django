@@ -668,17 +668,20 @@ def test_the_card_carries_both_a_backdrop_band_and_the_cover(client):
     at a glance -- two shooters' screenshots look alike in a way their box art never does, so a landscape
     strip alone answers "which game is this" worse than the poster it replaced.
 
-    A concept with no landscape art gets NO band rather than a fallback: with the cover on the card,
-    falling the band back to that same cover would print one image twice.
+    THE BAND ALWAYS RENDERS (2026-09, reversing the original rule). It used to be omitted when a
+    concept had no landscape art, so as not to print the cover twice -- and the ~5% of cards that lost
+    it were expected to sit shorter and be absorbed by the grid. Reported from prod: a short card
+    among tall ones reads as broken, not as "less art", and it lands on the thinnest-media games.
+    The fallback is a blurred WASH of the cover, which is the game's palette rather than its picture,
+    so the duplication objection no longer applies. See the wash tests below.
     """
     profile = ProfileFactory(is_linked=True)
     _library(profile, name='NoLandscape', progress=50)
 
     body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
 
-    # This fixture's concept has no IGDB imagery, so it exercises the bandless path.
     assert 'pp-pgcard__cover' in body, 'the card lost the cover art'
-    assert 'pp-gcard__cover' not in body, 'a band rendered with no landscape art to put in it'
+    assert 'pp-gcard__cover' in body, 'the band must render even with no landscape art'
 
 
 def test_the_band_is_a_fixed_height_strip_not_an_aspect_ratio():
@@ -1141,3 +1144,73 @@ def test_the_browse_card_still_shows_every_fact_on_a_phone(client):
     _css, rules = _facts_phone_rules()
     for _sels, body in rules:
         assert 'display: none' not in body, 'a fact is hidden on phones instead of wrapped'
+
+
+# ── the backdrop band always renders (2026-09) ───────────────────────────────────────────────────
+
+def _card_band(body):
+    """The band markup for the first library card."""
+    start = body.index('pp-gcard pp-gcard--lib')
+    return body[start:body.index('pp-gcard__body', start)]
+
+
+def test_a_game_with_no_landscape_art_still_gets_a_band(client):
+    """His report. The band used to be omitted entirely when a concept had no landscape art, so the
+    card sat shorter than its neighbours. A short card among tall ones does not read as "this game
+    has less art", it reads as broken -- and it is the thinnest-media games (older, obscure,
+    regional) that were getting it, which is the worst possible distribution for looking broken."""
+    profile = _profile_with_games(1)
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+    band = _card_band(body)
+
+    assert 'pp-gcard__cover' in band, 'no band at all -- the card is short again'
+
+
+def test_the_fallback_band_is_a_wash_not_a_second_copy_of_the_cover(client):
+    """The original objection to falling back to the cover was that it would print one image twice,
+    and that is right about a legible copy. The wash class is what makes it not one: blurred,
+    over-scaled and held at low opacity, it is the game's palette rather than its picture."""
+    profile = ProfileFactory(is_linked=True)
+    game = _library(profile, name='CoverButNoLandscape', progress=50)
+    # Cover art WITHOUT landscape art -- the case the wash exists for. The fixture concept carries no
+    # IGDB imagery, so `title_image` is what makes `has_cover_art` true.
+    game.title_image = 'https://example.test/cover.png'
+    game.save(update_fields=['title_image'])
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+    band = _card_band(body)
+
+    assert 'pp-gcard__art--wash' in band, 'the fallback band is not marked as a wash'
+
+
+def test_the_wash_is_actually_blurred_in_the_built_css(client):
+    """Markup alone cannot say the wash reads as a wash -- the class has to carry the blur, and the
+    class only exists in the COMPILED sheet the site serves. A rule that is in the source but never
+    rebuilt is invisible in exactly the way this project has been caught by before."""
+    import pathlib
+
+    css = (pathlib.Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
+
+    i = css.index('pp-gcard__art--wash')
+    rule = css[i:css.index('}', i)]
+    assert 'blur(' in rule, 'the wash is not blurred, so it prints as a second copy of the cover'
+    assert 'opacity' in rule
+
+
+def test_a_game_with_no_art_at_all_gets_the_band_without_an_image(client):
+    """Third case: blowing a generic PlayStation placeholder up into a colour wash would be noise
+    pretending to be content. The band still renders, so the card keeps its height -- it just holds
+    the gradient overlay and nothing else."""
+    profile = ProfileFactory(is_linked=True)
+    game, _, _ = _completed_game(profile, with_platinum=True)
+    game.force_title_icon = True          # the flag that makes has_cover_art False
+    game.title_icon_url = ''
+    game.save(update_fields=['force_title_icon', 'title_icon_url'])
+
+    body = client.get(f'/hunters/{profile.psn_username}/?tab=games', **CF).content.decode()
+    band = _card_band(body)
+
+    assert 'pp-gcard__cover' in band, 'the band must still render to keep the card height'
+    assert 'pp-gcard__art--wash' not in band, 'a placeholder icon must not be blown up into a wash'
