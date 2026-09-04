@@ -13,6 +13,14 @@ this never auto-accepts.
     python manage.py process_contracts --user <psn_username>   # one account
     python manage.py process_contracts --all                   # every eligible account
     python manage.py process_contracts --all --dry-run         # preview, write nothing
+    python manage.py process_contracts --contract <slug>       # one Contract, every candidate
+
+`--contract` is the targeted additive counterpart to `reconcile_contracts --contract`, and
+exists because the engine was asymmetric without it: credit could be REMOVED for one named
+Contract immediately, but handing it back waited for the nightly sweep -- so hunters whose
+credit was revoked in a re-key sat with their XP dipped for up to a day. It is also what you
+want the moment a new Contract is published: without it, nobody's back-catalogue completions
+are recognised until the nightly runs. Combines with `--user` for a precise spot-check.
 
 `--all` is whale-safe: for each live Contract it first finds only the profiles that have
 actually completed a member game (a couple of bounded DB queries), then runs the real
@@ -22,8 +30,7 @@ whole userbase per Contract.
 import logging
 from datetime import timedelta
 
-from django.core.management.base import BaseCommand
-from django.db.models import Q
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -46,11 +53,15 @@ FULL_WATERMARK_KEY = 'contract_detection:last_full_run'
 
 
 class Command(BaseCommand):
-    help = "Backfill Contract reach-detection from existing completion data (--user <psn_username> or --all)."
+    help = ("Backfill Contract reach-detection from existing completion data "
+            "(--user <psn_username>, --all, or --contract <slug>).")
 
     def add_arguments(self, parser):
         parser.add_argument('--user', type=str, help='psn_username of a single profile to process.')
         parser.add_argument('--all', action='store_true', dest='all_profiles', help='Process every eligible profile.')
+        parser.add_argument('--contract', type=str,
+                            help='Slug of ONE live Contract to sweep (every candidate profile, or '
+                                 'just --user). The targeted counterpart to reconcile_contracts.')
         parser.add_argument('--dry-run', action='store_true', help='Report what would change; write nothing.')
         parser.add_argument(
             '--incremental', action='store_true',
@@ -68,8 +79,38 @@ class Command(BaseCommand):
         # member_concept_ids() resolves them per contract. Only the episodic bundles prefetch.
         live = Contract.objects.filter(is_live=True).prefetch_related('bundles__concepts').order_by('name')
 
+        slug = options.get('contract')
+        if slug is not None:
+            live = live.filter(slug=slug)
+            if not live.exists():
+                # Distinguish the two failures: "no such contract" and "it exists but is a draft"
+                # are different mistakes with different fixes, and collapsing them into one message
+                # sends a curator hunting for a typo that is not there.
+                exists = Contract.objects.filter(slug=slug).first()
+                if exists is None:
+                    raise CommandError(f"No Contract with slug '{slug}'.")
+                raise CommandError(
+                    f"Contract '{slug}' is not live. Detection is deliberately live-only: stamping a "
+                    f"draft reached would make it claimable before curation is finished, and the "
+                    f"reached stamp is not something a later un-publish takes back. Publish it "
+                    f"first, then re-run. (reconcile_contracts is the opposite -- it ignores "
+                    f"is_live, because un-publishing a misbehaving Contract is a sensible first "
+                    f"move while you fix it.)"
+                )
+
         full_sweep = True
-        if options.get('incremental') and options.get('all_profiles') and not username:
+        # `not slug` is load-bearing, not tidiness. Incremental narrowing (`updated_at__gt`) runs on
+        # the SAME queryset the slug filter just narrowed, and it is not re-validated -- so
+        # `--contract X --all --incremental` on a Contract that had not changed since the last run
+        # emptied the list AFTER the "is it live?" guard had already passed, and reported the
+        # nightly's own "No Contracts changed since the last run" with exit 0. The operator named a
+        # live Contract and silently got nothing.
+        #
+        # Worse, that is the headline case for this flag: a Contract's `updated_at` does NOT move
+        # when its MEMBERSHIP changes (members are igdb-derived), so a concept anchored today joins
+        # an untouched Contract, and the incremental filter is exactly what hides it. Naming a
+        # Contract explicitly must therefore OVERRIDE "has it changed", not be subject to it.
+        if options.get('incremental') and options.get('all_profiles') and not username and not slug:
             watermark = self._get_watermark()
             full_sweep = watermark is None or (timezone.now() - watermark) >= FULL_SWEEP_INTERVAL
             if not full_sweep:
@@ -77,14 +118,20 @@ class Command(BaseCommand):
 
         contracts = list(live)
         if not contracts:
+            # Genuinely unreachable for --contract now that incremental narrowing is skipped for a
+            # targeted run: the slug guard above has already raised for a missing or draft slug, so
+            # the messages here stay about the two modes that can legitimately find nothing.
             # Not an error in incremental mode: no Contract changed since the last run is the normal
             # nightly outcome, and the whole point of the mode.
-            msg = "No Contracts changed since the last run."
             if full_sweep:
                 self.stderr.write(self.style.ERROR("No live Contracts to process."))
             else:
-                self.stdout.write(msg)
-                self._set_watermark(timezone.now(), full=False)
+                self.stdout.write("No Contracts changed since the last run.")
+                # `not dry_run` for the same reason the sibling write below carries it: --dry-run
+                # promises "write nothing", and a watermark is a write. Stamping it here let a
+                # preview run advance the nightly's cursor past contracts it never processed.
+                if not dry_run:
+                    self._set_watermark(timezone.now(), full=False)
             return
 
         if username:
@@ -93,18 +140,33 @@ class Command(BaseCommand):
             except Profile.DoesNotExist:
                 self.stderr.write(self.style.ERROR(f"No profile with psn_username '{username}'."))
                 return
+            if slug:
+                # Echo WHICH Contract. Without this a spot-check reports "across 1 live Project(s)",
+                # which reads as "there is 1 live Contract in the system" rather than "1 targeted".
+                self.stdout.write(self.style.MIGRATE_HEADING(
+                    f"Contract reach detection: targeted: {contracts[0].name} / {profile.psn_username}"))
             self._process_single(profile, contracts, dry_run)
             return
 
-        if options.get('all_profiles'):
-            scope = 'FULL sweep' if full_sweep else f'incremental ({len(contracts)} changed)'
+        if options.get('all_profiles') or slug:
+            if slug:
+                # NO WATERMARK WRITE on this path, and the guard is `slug` rather than the
+                # `incremental` flag alone: a targeted sweep has covered ONE Contract, so letting it
+                # stamp the nightly's watermark would tell the incremental mode it had swept the
+                # whole catalogue. Everything published since the last real full pass would then be
+                # skipped until the weekly FULL_SWEEP_INTERVAL forced one -- silently, because a
+                # too-recent watermark looks exactly like a clean run.
+                scope = f"targeted: {contracts[0].name}"
+            else:
+                scope = 'FULL sweep' if full_sweep else f'incremental ({len(contracts)} changed)'
             self.stdout.write(self.style.MIGRATE_HEADING(f"Contract reach detection: {scope}"))
             self._process_all(contracts, dry_run)
-            if options.get('incremental') and not dry_run:
+            if options.get('incremental') and not dry_run and not slug:
                 self._set_watermark(timezone.now(), full=full_sweep)
             return
 
-        self.stderr.write(self.style.ERROR("Provide --user <psn_username> or --all."))
+        self.stderr.write(self.style.ERROR(
+            "Provide --user <psn_username>, --all, or --contract <slug>."))
 
     # -- one account: evaluate every live Contract directly (cheap for a single profile) --
 
