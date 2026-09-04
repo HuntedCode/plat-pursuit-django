@@ -162,7 +162,7 @@ def _active_fundraiser_or_none(request=None):
 
 
 def moderation_alert(request):
-    """The Mod Centre entry in the avatar menu, and whether it needs attention.
+    """The Mod Center entry in the avatar menu, and whether it needs attention.
 
     Everyone who is not a moderator returns an empty dict before anything else happens: no cache
     read, no query, nothing. That gate is the whole cost of this processor for ~every visitor.
@@ -177,12 +177,12 @@ def moderation_alert(request):
         return {}
     try:
         from trophies.services import moderation_service
-        return {'show_mod_centre': True, 'mod_open_count': moderation_service.open_report_count()}
+        return {'show_mod_center': True, 'mod_open_count': moderation_service.open_report_count()}
     except Exception:
         # The menu entry still renders. Losing the count costs a moderator a marker; letting this
         # raise would cost every moderator every page on the site.
         logger.debug("Failed to resolve the moderation attention count", exc_info=True)
-        return {'show_mod_centre': True}
+        return {'show_mod_center': True}
 
 
 def navsync(request):

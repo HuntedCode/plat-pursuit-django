@@ -28,9 +28,14 @@ column + filter). `create_superuser` sets `role='admin'` at the source. Existing
 backfilled as admin; moderators are demoted by hand in the Django admin. Narrow saves whose
 `update_fields` cannot move the mark (e.g. login's `last_login`) skip the profile refresh.
 
-Moderators currently unlock ONE gate beyond the mark: unpublished badge preview
-(`trophies/views/badge_views.py`). Everything else (analytics, beta site, staff mixins) stays
-admin-only deliberately -- the wider mod toolset is a planned rebuild.
+Moderators unlock two gates beyond the mark: unpublished badge preview
+(`trophies/views/badge_views.py`), and the [Moderation Center](moderation-center.md) at `/mod/`
+(2026-09) -- the report queues, read through `is_mod_or_admin()` / `ModeratorRequiredMixin`.
+Everything else (analytics, beta site, staff mixins) stays admin-only deliberately.
+
+The gate reads `is_staff` rather than `role == 'admin'` for the admin half, because the lockstep
+above guarantees they agree AND `is_staff` additionally covers superusers, who have no role set at
+all and would otherwise be locked out of the tools they are most likely to be asked to fix.
 
 ## Rendering
 

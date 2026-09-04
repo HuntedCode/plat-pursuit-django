@@ -1,4 +1,4 @@
-"""The Mod Centre: the two report queues, and the actions on them.
+"""The Mod Center: the two report queues, and the actions on them.
 
 Views are deliberately thin. Every decision goes through `moderation_service`, which applies the
 change and writes the audit entry in one transaction and refuses an action whose target somebody has
@@ -50,15 +50,15 @@ def queue_summaries():
 
 def _breadcrumb(*tail):
     items = [{'text': 'Home', 'url': reverse_lazy('home')},
-             {'text': 'Mod Centre', 'url': reverse_lazy('mod_centre')}]
+             {'text': 'Mod Center', 'url': reverse_lazy('mod_center')}]
     items.extend(tail)
     items[-1].pop('url', None)      # the last crumb is where you are
     return items
 
 
-class ModCentreView(ModeratorRequiredMixin, TemplateView):
+class ModCenterView(ModeratorRequiredMixin, TemplateView):
     """The landing: what is waiting, and what has just been decided."""
-    template_name = 'moderation/mod_centre.html'
+    template_name = 'moderation/mod_center.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -68,8 +68,8 @@ class ModCentreView(ModeratorRequiredMixin, TemplateView):
         # `actor_label` is only the fallback for a deleted account.
         context['recent'] = (ModerationAction.objects.select_related('actor')
                              .prefetch_related('reversed_by_action')[:12])
-        context['breadcrumb'] = _breadcrumb({'text': 'Mod Centre'})
-        context['seo_title'] = 'Mod Centre - Platinum Pursuit'
+        context['breadcrumb'] = _breadcrumb({'text': 'Mod Center'})
+        context['seo_title'] = 'Mod Center - Platinum Pursuit'
         return context
 
 
@@ -118,7 +118,7 @@ class _QueueView(ModeratorRequiredMixin, TemplateView):
         # three waiting" is the reason to make that move.
         context['other_queues'] = [q for q in queue_summaries() if q['slug'] != self.queue_slug]
         context['breadcrumb'] = _breadcrumb({'text': self.queue_name})
-        context['seo_title'] = f'{self.queue_name} - Mod Centre'
+        context['seo_title'] = f'{self.queue_name} - Mod Center'
         return context
 
 
@@ -189,7 +189,7 @@ class _ActionView(ModeratorRequiredMixin, View):
         return self.default_redirect()
 
     def default_redirect(self):
-        return reverse_lazy('mod_centre')
+        return reverse_lazy('mod_center')
 
 
 class HideBlurbView(_ActionView):

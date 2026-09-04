@@ -241,10 +241,17 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `mod:pending_reports_count` | 60s | Pending CommentReport count (staff navbar) |
+| `moderation:open_total` | 5m | Total pending across both mod queues; the navbar attention marker's number |
+| ~~`mod:pending_reports_count`~~ | — | Gone with the 2026-08 staff strip-down (its navbar link went first). Superseded by `moderation:open_total`. |
 | ~~`mod:pending_proposals_count`~~ | — | Removed in Phase 2.6 alongside the `GameFamilyProposal` model. |
 
-**Files**: `plat_pursuit/context_processors.py`
+**Files**: `plat_pursuit/context_processors.py`, `trophies/services/moderation_service.py`
+
+`moderation:open_total`'s staleness is deliberately asymmetric: a NEW report may take the full TTL to
+raise the marker, but a DECISION drops the key on commit (`moderation_service._log`). A marker still
+claiming work after a moderator emptied the queue is the staleness they would notice, and the one
+that teaches them to stop believing it. It is also in conftest's cache-leak list, since LocMem lives
+for a whole test run. See [Moderation Center](../features/moderation-center.md).
 
 ### Fundraiser
 

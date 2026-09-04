@@ -72,6 +72,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |
 | [Onboarding](features/onboarding.md) | The syncing hero, the enter moment, and the Career first-visit explainer |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
+| [Moderation Center](features/moderation-center.md) | Moderator tools at `/mod/`: the quick-take and game-flag queues, the `ModerationAction` audit log, the gate, and the avatar-menu entry |
 | [My Pursuit Hub](features/my-pursuit-hub.md) | Personal-progression hub at `/my-pursuit/`: badges, milestones, titles (forward-compatible with gamification) |
 | [Navigation & Site Organization](features/navigation.md) | Navbar, footer, sub-nav, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |

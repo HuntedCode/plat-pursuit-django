@@ -306,7 +306,7 @@ OPEN_COUNT_CACHE_TTL = 300
 def queue_counts():
     """Per queue: how much is waiting, and how much there has ever been. Live, uncached.
 
-    Here rather than in the view because the navbar marker and the Mod Centre have to agree on what
+    Here rather than in the view because the navbar marker and the Mod Center have to agree on what
     "waiting" means -- a marker that counts differently from the page it points at is worse than no
     marker. Two grouped aggregates, not one query per status per queue: this must not grow a query
     per queue as queues are added.

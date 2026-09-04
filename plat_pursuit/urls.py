@@ -42,7 +42,7 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
-from trophies.views import (ModCentreView, QuickTakeQueueView, GameFlagQueueView,
+from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,
                             HideBlurbView, DismissBlurbReportView, ApproveGameFlagView,
                             DismissGameFlagView)
 from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
@@ -499,12 +499,12 @@ urlpatterns = [
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.
-    # ── Mod Centre ───────────────────────────────────────────────────────────────────────────────
+    # ── Mod Center ───────────────────────────────────────────────────────────────────────────────
     # `/mod/`, not `/staff/`: moderators are not staff. The role split (2026-08) exists so
     # `is_staff` can mean exactly "Django admin access", and hanging the mod tools off /staff/ would
     # put the two back in one word. Every route is gated by ModeratorRequiredMixin -- admins reach
     # them too, via `is_staff`.
-    path('mod/', ModCentreView.as_view(), name='mod_centre'),
+    path('mod/', ModCenterView.as_view(), name='mod_center'),
     path('mod/quick-takes/', QuickTakeQueueView.as_view(), name='mod_quick_takes'),
     path('mod/game-flags/', GameFlagQueueView.as_view(), name='mod_game_flags'),
     # Actions are POST-only (the views enforce it by defining no `get`): each mutates live data, and

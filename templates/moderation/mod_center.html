@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 {% load humanize %}
 
-{% block title %}Mod Centre{% endblock %}
+{% block title %}Mod Center{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% comment %}
-The Mod Centre landing: what is waiting, and what was just decided.
+The Mod Center landing: what is waiting, and what was just decided.
 
 Two jobs, in that order. A moderator arriving here wants to know whether there is work before they
 want anything else, so the queue cards lead and carry the only number that means "work": the OPEN
@@ -23,7 +23,7 @@ which is the whole reason the actions are logged with a reason attached.
     {# ── Header ─────────────────────────────────────────────────────────────────────────── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6 pp-head-cascade">
-            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-base-content">Mod Centre</h1>
+            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-base-content">Mod Center</h1>
             <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-prose">
                 {% if open_total %}
                 {{ open_total }} report{{ open_total|pluralize }} waiting. Every decision is recorded with

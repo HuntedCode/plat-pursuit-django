@@ -1,4 +1,4 @@
-"""The Mod Centre surface: the gate, the queues, and acting on a row.
+"""The Mod Center surface: the gate, the queues, and acting on a row.
 
 `test_moderation_service` covers what a decision DOES. This covers reaching it: that the pages are
 closed to everyone but moderators and admins, that a queue does not query per row, that an action is
@@ -18,7 +18,7 @@ from trophies.services import moderation_service
 
 pytestmark = pytest.mark.django_db
 
-PAGES = ['mod_centre', 'mod_quick_takes', 'mod_game_flags']
+PAGES = ['mod_center', 'mod_quick_takes', 'mod_game_flags']
 
 
 def _user(role=''):
@@ -362,7 +362,7 @@ def test_a_queue_has_a_real_way_back_not_only_a_breadcrumb(client, name):
     body = client.get(reverse(name)).content.decode()
     header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
 
-    assert reverse('mod_centre') in header, 'no way back to the Mod Centre from the queue header'
+    assert reverse('mod_center') in header, 'no way back to the Mod Center from the queue header'
 
 
 def test_a_queue_links_straight_to_the_other_queue(client):
@@ -407,14 +407,14 @@ def test_the_queue_registry_has_one_definition(client):
     assert slugs == {'quick-takes', 'game-flags'}
 
     client.force_login(_user('moderator'))
-    landing = client.get(reverse('mod_centre')).content.decode()
+    landing = client.get(reverse('mod_center')).content.decode()
     for queue in queue_summaries():
         assert str(queue['url']) in landing
 
 # ── the way IN: the avatar menu entry and its marker ─────────────────────────────────────────────
 #
 # The queues are only useful if a moderator knows there is something in them. These cover the one
-# route to the Mod Centre that is not a bookmark, and the marker that says it is worth taking.
+# route to the Mod Center that is not a bookmark, and the marker that says it is worth taking.
 
 CHROME_PAGE = 'home'          # any page: the navbar is site-wide chrome, which is the point
 
@@ -424,19 +424,19 @@ def _chrome(client):
 
 
 @pytest.mark.parametrize('role', ['moderator', 'admin'])
-def test_a_moderator_is_offered_the_mod_centre_in_the_avatar_menu(client, role):
+def test_a_moderator_is_offered_the_mod_center_in_the_avatar_menu(client, role):
     client.force_login(_user(role))
-    assert reverse('mod_centre') in _chrome(client)
+    assert reverse('mod_center') in _chrome(client)
 
 
 def test_an_ordinary_hunter_is_not(client):
     """The menu reads the same for every hunter, minus this one entry."""
     client.force_login(_user())
-    assert reverse('mod_centre') not in _chrome(client)
+    assert reverse('mod_center') not in _chrome(client)
 
 
 def test_a_signed_out_visitor_is_not(client):
-    assert reverse('mod_centre') not in _chrome(client)
+    assert reverse('mod_center') not in _chrome(client)
 
 
 def test_the_entry_is_there_when_the_queues_are_empty(client):
@@ -446,7 +446,7 @@ def test_the_entry_is_there_when_the_queues_are_empty(client):
 
     body = _chrome(client)
 
-    assert reverse('mod_centre') in body
+    assert reverse('mod_center') in body
     assert 'pp-av__queue' not in body, 'a marker with nothing behind it'
 
 
@@ -529,7 +529,7 @@ def test_clearing_the_queue_clears_the_marker(client, django_capture_on_commit_c
     assert 'pp-av__queue' not in _chrome(client)
 
 
-def test_the_marker_and_the_mod_centre_agree(client):
+def test_the_marker_and_the_mod_center_agree(client):
     """Two surfaces, one definition of "waiting". A marker that counts differently from the page it
     points at is worse than no marker."""
     _report()
@@ -537,6 +537,66 @@ def test_the_marker_and_the_mod_centre_agree(client):
     _flag()
     client.force_login(_user('moderator'))
 
-    landing = client.get(reverse('mod_centre'))
+    landing = client.get(reverse('mod_center'))
 
     assert moderation_service.open_report_count() == landing.context['open_total'] == 3
+
+# ── the gate, enumerated from the URL conf rather than by hand ───────────────────────────────────
+
+def _every_mod_url():
+    """Every route under `/mod/`, read off the URL conf.
+
+    Enumerated rather than listed, because a hand-written list is what somebody forgets. The tests
+    above name the pages they exercise; this one asks the resolver, so an eighth route added without
+    the mixin fails here on the day it is added rather than the day it is found.
+    """
+    from plat_pursuit import urls as root_urls
+
+    found = []
+    for pattern in root_urls.urlpatterns:
+        route = getattr(getattr(pattern, 'pattern', None), '_route', '')
+        if not route.startswith('mod/'):
+            continue
+        found.append('/' + route.replace('<int:pk>', '1'))
+    return found
+
+
+def test_the_url_conf_still_has_the_mod_urls_this_file_thinks_it_does():
+    """A guard on the guard: if the routes move or are renamed, the sweep below would quietly
+    exercise nothing and stay green."""
+    urls = _every_mod_url()
+    assert len(urls) == 7, f'expected 7 /mod/ routes, found {urls}'
+
+
+def test_nobody_but_a_moderator_can_reach_anything_under_mod(client):
+    """The question asked out loud: can a hunter, or a stranger, see any of this?
+
+    Every route, both audiences, no exceptions carved out. These URLs write live game data -- one of
+    them sets `shovelware_lock`, which permanently overrides the automated classifier.
+    """
+    urls = _every_mod_url()
+
+    for url in urls:                                   # signed out
+        resp = client.get(url)
+        assert resp.status_code == 302, f'{url} answered a stranger with {resp.status_code}'
+        assert '/login' in resp.url.lower(), f'{url} did not send a stranger to login'
+
+    client.force_login(_user())                        # signed in, ordinary hunter
+    for url in urls:
+        resp = client.get(url)
+        assert resp.status_code == 302, f'{url} answered a hunter with {resp.status_code}'
+        assert resp.url == '/', f'{url} told a hunter it exists'
+
+
+def test_a_moderator_who_loses_the_role_loses_the_link_and_the_pages(client):
+    """Revoking is the moment this has to work, and it is the one nobody tests."""
+    moderator = _user('moderator')
+    client.force_login(moderator)
+    assert reverse('mod_center') in _chrome(client)
+
+    moderator.role = ''
+    moderator.is_staff = False
+    moderator.save()
+
+    assert reverse('mod_center') not in _chrome(client)
+    assert client.get(reverse('mod_center')).url == '/'
