@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Mod Centre{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% comment %}
+The Mod Centre landing: what is waiting, and what was just decided.
+
+Two jobs, in that order. A moderator arriving here wants to know whether there is work before they
+want anything else, so the queue cards lead and carry the only number that means "work": the OPEN
+count. The total is beside it in small type because "4 of procedure 812" is a different, calmer fact.
+
+The recent-decisions rail is second and is not decoration. It is how a moderator sees that a
+colleague already handled something, and how anyone notices a pattern in one person's decisions --
+which is the whole reason the actions are logged with a reason attached.
+{% endcomment %}
+
+{% block content %}
+<div class="mx-auto max-w-5xl px-3 md:px-5 lg:px-0 py-4 md:py-6">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Header ─────────────────────────────────────────────────────────────────────────── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4 md:mb-6">
+        <div class="card-body p-4 md:p-6 pp-head-cascade">
+            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-base-content">Mod Centre</h1>
+            <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-prose">
+                {% if open_total %}
+                {{ open_total }} report{{ open_total|pluralize }} waiting. Every decision is recorded with
+                your name and your reason.
+                {% else %}
+                Nothing waiting. Every decision is recorded with your name and your reason.
+                {% endif %}
+            </p>
+        </div>
+    </section>
+
+    {# ── The queues ─────────────────────────────────────────────────────────────────────── #}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-5 md:mb-7">
+        {% for queue in queues %}
+        <a href="{{ queue.url }}" class="scard hover:border-primary/50 transition-colors block">
+            <div class="flex items-baseline justify-between gap-3">
+                <span class="scard__label">{{ queue.name }}</span>
+                {% if queue.open %}
+                <span class="badge badge-sm badge-warning font-bold">{{ queue.open }} open</span>
+                {% endif %}
+            </div>
+            <div class="scard__value pp-tally">{{ queue.open|intcomma }}</div>
+            <div class="scard__sub">
+                {% if queue.open %}waiting{% else %}all clear{% endif %}
+                &middot; {{ queue.total|intcomma }} all time
+            </div>
+            <p class="text-xs text-base-content/60 mt-2 leading-snug">{{ queue.blurb }}</p>
+        </a>
+        {% endfor %}
+    </div>
+
+    {# ── Recent decisions ───────────────────────────────────────────────────────────────── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-4 md:p-6">
+            <h2 class="text-lg font-bold text-base-content mb-1">Recent decisions</h2>
+            <p class="text-xs text-base-content/60 mb-3">
+                The last dozen, newest first. A reversal appears as its own entry rather than
+                replacing the decision it undid.
+            </p>
+
+            {% if recent %}
+            <ul class="flex flex-col divide-y divide-base-300/70">
+                {% for entry in recent %}
+                <li class="py-2.5 flex flex-col gap-1">
+                    <div class="flex items-baseline flex-wrap gap-x-2 gap-y-0.5">
+                        <span class="text-sm font-bold text-base-content">{{ entry.get_action_display }}</span>
+                        {% if entry.reverses_id %}<span class="badge badge-xs badge-info">reversal</span>{% endif %}
+                        {% if entry.is_reversed %}<span class="badge badge-xs badge-ghost">reversed</span>{% endif %}
+                        <span class="text-xs text-base-content/60">
+                            by {{ entry.actor_label|default:"a deleted account" }}
+                            &middot; {{ entry.created_at|naturaltime }}
+                        </span>
+                    </div>
+                    <div class="text-xs text-base-content/70">{{ entry.target_label }}</div>
+                    {% comment %}The reason is shown, not tucked behind a hover. It is the part that
+                    makes the log worth keeping, and a colleague reading down this list is exactly
+                    who it was written for.{% endcomment %}
+                    <div class="text-xs text-base-content/55 italic pr-1">&ldquo;{{ entry.reason }}&rdquo;</div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-sm text-base-content/60 py-6 text-center">No decisions recorded yet.</p>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}
