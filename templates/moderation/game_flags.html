@@ -16,9 +16,9 @@ human should act" -- so the row says that rather than implying a change is comin
 {% endcomment %}
 
 {% block queue_blurb %}
-Reported problems with a game. Approving APPLIES the change to live game data straight away -- the
-row says which field before you press it. Every decision is recorded with your name and reason, and
-an admin can reverse it.
+Reported problems with a game. Approving APPLIES the change to live game data straight away, and
+the row says which field before you press it. Every decision is recorded with your name and your
+reason, and an admin can reverse it.
 {% endblock %}
 
 {% block row %}
@@ -30,13 +30,13 @@ an admin can reverse it.
 {# What approving actually writes. #}
 <div class="text-xs">
     {% if row.flag_type == 'is_shovelware' or row.flag_type == 'not_shovelware' %}
-    <span class="font-bold text-error">Approving sets the shovelware LOCK</span>
+    <span class="font-bold text-error">Approving sets the shovelware LOCK.</span>
     <span class="text-base-content/70">
-        &mdash; this overrides the automated classifier permanently, for this game, until an admin clears it.
+        This overrides the automated classifier permanently, for this game, until an admin clears it.
     </span>
     {% elif row.flag_type == 'missing_vr' or row.flag_type == 'region_incorrect' %}
     <span class="text-base-content/70">
-        Approving records that this is <em>confirmed</em>. It changes no field &mdash; a human follows up.
+        Approving records that this is <em>confirmed</em>. It changes no field, so a human follows up.
     </span>
     {% else %}
     <span class="text-base-content/70">Approving updates this game's flags directly.</span>

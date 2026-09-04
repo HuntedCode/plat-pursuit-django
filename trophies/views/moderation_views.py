@@ -52,7 +52,7 @@ class ModCentreView(ModeratorRequiredMixin, TemplateView):
         context['queues'] = [
             {'slug': 'quick-takes', 'name': 'Quick Takes',
              'url': reverse_lazy('mod_quick_takes'),
-             'blurb': 'Reported quick takes -- the only free text a hunter can write on the site.',
+             'blurb': 'Reported quick takes, the only free text a hunter can write on the site.',
              'open': blurbs['open'] or 0, 'total': blurbs['total'] or 0},
             {'slug': 'game-flags', 'name': 'Game Flags',
              'url': reverse_lazy('mod_game_flags'),

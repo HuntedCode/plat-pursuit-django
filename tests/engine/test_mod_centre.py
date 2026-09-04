@@ -303,3 +303,50 @@ def test_the_status_filter_narrows_and_survives_a_bad_value(client):
     junk = client.get(reverse('mod_quick_takes') + '?status=nonsense')
     assert junk.status_code == 200
     assert 'still waiting' in junk.content.decode(), 'a bad filter should fall back to pending'
+
+# ── copy and component discipline ────────────────────────────────────────────────────────────────
+
+def _rendered_text(body):
+    """The page's visible text: markup, script and style stripped out.
+
+    Asserted against the RENDER rather than the template source, because a template comment is not
+    copy and a `{% comment %}` block may say whatever it likes.
+    """
+    import re
+
+    body = re.sub(r'(?is)<(script|style).*?</>', ' ', body)
+    return re.sub(r'(?s)<[^>]+>', ' ', body)
+
+
+@pytest.mark.parametrize('name', PAGES)
+def test_no_em_dashes_in_what_a_moderator_reads(client, name):
+    """House style, and it is about the RENDERED page, not the source. Both spellings count: a
+    literal em dash and the `&mdash;` entity land on screen identically, and a double hyphen reads
+    as the same punctuation the rule exists to avoid."""
+    client.force_login(_user('moderator'))
+    _report()
+    _flag('is_shovelware')
+
+    text = _rendered_text(client.get(reverse(name)).content.decode())
+
+    assert '—' not in text, 'an em dash reached the page'
+    assert '–' not in text, 'an en dash reached the page'
+    assert ' -- ' not in text, 'a double hyphen is reading as an em dash on the page'
+
+
+@pytest.mark.parametrize('name', ['mod_quick_takes', 'mod_game_flags'])
+def test_the_status_filter_uses_the_site_wide_switcher(client, name):
+    """`pp-switch__chip` is the ONE tab treatment site-wide (components/switcher.css). An invented
+    class name has no CSS behind it and fails SILENTLY -- the filters render as bare inline links
+    with nothing separating them, which is how this shipped and what the owner reported."""
+    import pathlib as _pathlib
+
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse(name)).content.decode()
+    assert 'pp-switch__chip' in body, 'the filter is not using the shared switcher'
+
+    # And the class has to actually exist in the compiled sheet the site serves.
+    css = (_pathlib.Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
+    assert '.pp-switch__chip' in css, 'the switcher class is missing from the built CSS'

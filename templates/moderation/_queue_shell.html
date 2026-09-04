@@ -32,12 +32,15 @@ so acting on a report returns you to the list you were reading rather than to th
     </section>
 
     {# ── Status filter ──────────────────────────────────────────────────────────────────── #}
+    {% comment %}The site-wide segmented switcher (components/switcher.css). The class is
+    `pp-switch__chip` -- an invented `__opt` has no CSS behind it, so the filters rendered as bare
+    inline links with nothing separating them, which is how this shipped the first time.
+    Anchors rather than buttons because this is a real navigation: the filter belongs in the URL so
+    a moderator can link a colleague to a queue state and Back works.{% endcomment %}
     <div class="pp-switch mb-4" role="group" aria-label="Filter by status">
         {% for value in status_filters %}
-        <a class="pp-switch__opt{% if value == status %} is-active{% endif %}"
-           href="?status={{ value }}"{% if value == status %} aria-current="true"{% endif %}>
-            {{ value|capfirst }}
-        </a>
+        <a class="pp-switch__chip{% if value == status %} is-active{% endif %}"
+           href="?status={{ value }}"{% if value == status %} aria-current="true"{% endif %}>{{ value|capfirst }}</a>
         {% endfor %}
     </div>
 
