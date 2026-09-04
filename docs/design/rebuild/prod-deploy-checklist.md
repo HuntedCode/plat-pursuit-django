@@ -1108,3 +1108,91 @@ payloads already in hand. Nothing on any page reads it yet.
 - [ ] Company detail now paginates its grouped list (24 groups/fetch, infinite scroll): verify
       a Sony-sized publisher page loads light and scrolls, and that role/sort swaps reset to
       page 1.
+
+## 2026-09-04 — Myst split: reconcile the orphaned Contract credit
+
+The 2020 remake and the 2025 port of the original shared one Concept, so hunters who completed the
+ORIGINAL were credited (and in some cases paid) the REMAKE's Contract. The Concepts and the badge are
+already fixed; this is the credit half. New: `reconcile_contracts` (see
+[job-board-contracts.md](job-board-contracts.md#reconciliation--when-membership-changes-under-a-hunter)).
+
+- [ ] **ORDER MATTERS — reconcile BEFORE publishing the original's Contract.** Create it with
+      `is_live=False` first. Publishing it live while the stale remake credit still stands is the
+      double-pay this whole lane exists to prevent.
+- [ ] Run the preview and READ IT before writing:
+      `python manage.py reconcile_contracts --contract <myst-remake-slug>`. It lists every affected
+      hunter, which tiers they hold, whether the XP was accepted, and the total at stake. Expect a
+      small number; a large one means the split did not land the way we think it did — stop and look.
+- [ ] Spot-check ONE hunter first: `... --contract <myst-remake-slug> --user <psn> --apply`, then
+      look at their Career page before doing the rest.
+- [ ] Apply: `... --contract <myst-remake-slug> --apply`. Hunters who completed BOTH versions are
+      left untouched automatically (the same detector the sync uses decides).
+- [ ] **If it refuses with "resolves to ZERO members", do NOT reach for `--force-empty`.** That is
+      the guard working: the remake's concept should still key the contract after the split. A zero
+      resolve means the anchor stamp or the IGDBMatch is not where we think (`pending_review`
+      mid-rematch is the usual cause). Fix the concept, re-run the preview.
+- [ ] Publish the original's Contract (`is_live=True`). `went_live_at` stamps on the transition, so
+      it gets the New badge and the Discord announce — which is the behaviour we want here.
+- [ ] `python manage.py process_contracts --user <psn>` for a spot-check, then let the nightly
+      `--all` sweep pick up the rest. Revoked hunters become claimable again through the CORRECT
+      Contract and re-earn with the claim ceremony.
+- [ ] Their XP dips between the revoke and their next claim. Accepted and expected — no
+      announcement planned; revisit only if the affected count comes back larger than expected.
+- [ ] `ProgressionMilestone` rows are deliberately NOT rewound, so a revoked hunter can briefly show
+      a journey rung above their current XP. Decided 2026-09-04: a deleted rung can never be
+      re-logged (unique constraints), so un-earning one is the bigger wrong. Not a bug report.
+- [ ] Generalises past Myst: any future Concept split / re-anchor / lost trusted match leaves the
+      same orphaned credit. `verify_profile_sync` now reports it as *"contracts credited but no
+      longer qualifying"*, and the fix is this command against the named Contract. It is deliberately
+      NOT on the nightly chain — a catalogue-wide sweep would destroy real XP during PSN flux or a
+      mid-rematch `pending_review`.
+
+## 2026-09-04 - Pursuer Level: one definition for the board and the page
+
+Found while auditing the Myst reconcile lane. `recompute_career_standing` stored
+`Sum(ProfileJobXP.level)` over the rows that existed, while `job_render.build_profile_jobs` (the
+Career page, home, both share cards) floors every untouched job at level 1 across the whole
+~25-job catalogue. Same hunter, two numbers, and the Career XP board labels its second column
+**"level"** -- so a hunter with three jobs at 5/3/2 read **32** on their own page and **10** beside
+their name on the leaderboard. `PURSUER_RANKS` is calibrated on the floored scale
+("Pursuer Level ~= 25 floor + 2 per game"), so the stored figure was the wrong one.
+
+- [ ] **BACKFILL REQUIRED, and the board is wrong until it runs**: `python manage.py
+      recompute_job_xp --all`. `ProfileCareerStanding.pursuer_level` is materialized, so every row
+      written before this deploy carries the old definition. Nothing errors; the numbers are just
+      quietly too low.
+- [ ] `--all` was widened in the same commit to sweep profiles with grants **OR** a standing row.
+      A grants-only sweep skipped hunters whose grants had been revoked (they keep a zeroed
+      standing with no ledger behind it) -- i.e. exactly the population a repair run is chasing.
+- [ ] Ordering vs the Myst lane: **either order works, neither is load-bearing.** Both go through
+      `recompute_profile_job_xp`, both are recompute-from-scratch. Running the reconcile last just
+      saves re-touching those hunters.
+- [ ] **Board ORDER does not change** -- the Career board sorts on `total_xp` and only displays
+      `pursuer_level`, so this moves a displayed figure, not anyone's rank. Nobody overtakes anyone.
+- [ ] Expect every displayed level to RISE by (25 - jobs the hunter has touched). A brand-new
+      hunter's standing now reads 25, not 0; that is correct (level 1 in all 25 jobs) and is why
+      the board's membership rule keys on `total_xp > 0`, never on the level.
+
+### Follow-ups found by the second audit pass (same deploy)
+
+- [ ] **The Pursuer Ascent milestone was measuring the OLD (unfloored) rule** and is fixed in the
+      same commit. `milestones/metrics.py` now delegates to `contract_service._pursuer_level`, so
+      `/milestones/` finally agrees with `/career/` and the leaderboard. Existing
+      `UserMilestone.current_value` rows are stale until the next `recompute_milestones` (nightly
+      step, or `recompute_on_sync` for anyone who syncs) -- no manual backfill needed, but the
+      numbers move UP for everyone on first recompute.
+- [ ] **RUNG CALIBRATION IS NOW AN OPEN QUESTION, and it is Jeffrey's call.** The Ascent tiers
+      (first rung 40) were authored against the floored scale on purpose -- `seed_milestones` says
+      "a fresh linked account already sits at ~25 ... the first rung MUST clear the baseline". With
+      the metric corrected, that is exactly what happens: a brand-new linked hunter reads 25/40, so
+      Pursuer Ascent becomes the "nearest milestone" spotlight for accounts that have done nothing.
+      The rung is not auto-earned (which is what the comment was guarding), but 62% of it is free.
+      **DECIDED 2026-09-04 (Jeffrey): accept it, leave the rungs as they are.** Not a bug report;
+      revisit only alongside the wider PLACEHOLDER calibration against the real level distribution.
+- [ ] `recompute_job_xp --all` remains an UNLOCKED read-then-write per profile. `revoke_contract`
+      takes the engine's locks; this command does not, and the pursuer-level backfill runs it across
+      the whole population. A hunter claiming at the exact moment their row is rebuilt can have that
+      claim's XP overwritten. Prefer a quiet window. The complete fix is a per-profile advisory lock
+      on BOTH `recompute_profile_job_xp` and `grant_job_xp_bulk` (the pattern
+      `badge_xp.recompute_standing` already uses) -- deliberately NOT done here, because it touches
+      the accept hot path and that wants its own branch and a differential test.

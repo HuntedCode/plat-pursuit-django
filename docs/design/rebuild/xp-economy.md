@@ -20,6 +20,8 @@
 
 The one identity that drives everything: **Pursuer Level ≈ (6,000 / K) × contracts completed** → at K=3,000, **a contract is worth ~2 Pursuer Levels.**
 
+> **Pursuer Level is floored at the catalogue, not the rows.** Every job sits at level 1 from the start, so Pursuer Level = `Sum(per-job level) + (jobs with no ProfileJobXP row yet)`. The rank thresholds below assume that ~25 floor. The single definition is `contract_service.pursuer_level_from`; the materialized copy on `ProfileCareerStanding.pursuer_level` goes through it too, and changing the rule needs a `recompute_job_xp --all` backfill.
+
 ## Why flat + cap-less (not a RuneScape curve)
 
 An Element isn't a *bounded skill you master*; it's **"how much of this genre have you completed"** — open-ended by nature, like the trophy count itself. So:
