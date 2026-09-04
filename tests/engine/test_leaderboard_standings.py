@@ -55,6 +55,16 @@ def _earn(profile, game, tier, n=1):
 # ---------------------------------------------------------------- career standing -----------------------
 
 def test_career_standing_rolls_up_job_xp_and_levels():
+    """Pursuer Level is the sum of per-job levels ACROSS THE WHOLE CATALOGUE, with untouched jobs
+    at their level-1 floor -- not a sum of the rows that happen to exist.
+
+    This test used to assert the bare row sum (8), which is a DIFFERENT definition from the one
+    `build_profile_jobs` uses for the Career page and `PURSUER_RANKS` is calibrated against
+    ("Pursuer Level ~= 25 floor + 2 per game"). The board labels this column "level", so the two
+    definitions meant a hunter read one number on their profile and a smaller one beside their
+    name on the leaderboard."""
+    from trophies.models import Job
+
     profile = ProfileFactory(is_linked=True)
     ProfileJobXP.objects.create(profile=profile, job=_job(), total_xp=300, level=3)
     ProfileJobXP.objects.create(profile=profile, job=_job(), total_xp=700, level=5)
@@ -63,7 +73,13 @@ def test_career_standing_rolls_up_job_xp_and_levels():
 
     standing = ProfileCareerStanding.objects.get(profile=profile)
     assert standing.total_xp == 1000
-    assert standing.pursuer_level == 8, 'Pursuer Level is the SUM of per-job levels'
+    # 3 + 5 for the two touched jobs, plus the level-1 floor for every job with no row yet.
+    # Derived from the live catalogue rather than hardcoded: `_job()` mints jobs of its own, so a
+    # literal would silently re-pin the wrong rule the moment a test above it adds one.
+    untouched = Job.objects.count() - 2
+    assert standing.pursuer_level == 8 + untouched, (
+        'Pursuer Level floors every untouched job at level 1'
+    )
 
 
 def test_career_standing_recompute_is_idempotent_and_self_healing():
@@ -80,16 +96,52 @@ def test_career_standing_recompute_is_idempotent_and_self_healing():
     ProfileCareerStanding.objects.filter(profile=profile).update(total_xp=999999, pursuer_level=42)
     recompute_career_standing(profile)
 
+    from trophies.models import Job
     standing = ProfileCareerStanding.objects.get(profile=profile)
-    assert standing.total_xp == 250 and standing.pursuer_level == 2, 'a drifted row was not corrected'
+    expected_level = 2 + (Job.objects.count() - 1)      # the one touched job, plus every floor
+    assert standing.total_xp == 250 and standing.pursuer_level == expected_level, (
+        'a drifted row was not corrected'
+    )
 
 
 def test_a_profile_with_no_job_xp_gets_a_zeroed_standing_not_a_crash():
+    """Zero XP, but NOT level zero. A brand-new hunter already holds level 1 in all ~25 jobs, which
+    is the floor `PURSUER_RANKS` measures from -- `newbie` starts at 0 and `recruit` at 35, so a
+    stored 0 would put an established hunter a full rank below where their own page shows them.
+    The row still has to exist and still has to be kept off the board, which is what the
+    `total_xp > 0` membership rule (not the level) is for."""
+    from trophies.models import Job
+
     profile = ProfileFactory(is_linked=True)
     recompute_career_standing(profile)
 
     standing = ProfileCareerStanding.objects.get(profile=profile)
-    assert standing.total_xp == 0 and standing.pursuer_level == 0
+    assert standing.total_xp == 0
+    assert standing.pursuer_level == Job.objects.count()
+
+
+def test_the_board_and_the_career_page_report_the_SAME_pursuer_level():
+    """THE REGRESSION THIS PINS. Two writers computed Pursuer Level from the same rows under
+    different rules: `recompute_career_standing` summed the ProfileJobXP rows that existed, while
+    `build_profile_jobs` (the Career page, home, the share cards) floored across the whole job
+    catalogue. Same hunter, two numbers, both labelled "level" -- the leaderboard's column and the
+    hunter's own hero.
+
+    Asserting the three against each other rather than against a literal: the point is that they
+    AGREE, and a literal would let them drift together into a new wrong answer."""
+    from trophies.services import contract_service
+    from trophies.services.job_render import build_profile_jobs
+
+    profile = ProfileFactory(is_linked=True)
+    ProfileJobXP.objects.create(profile=profile, job=_job(), total_xp=6000, level=3)
+    ProfileJobXP.objects.create(profile=profile, job=_job(), total_xp=3000, level=2)
+    recompute_career_standing(profile)
+
+    stored = ProfileCareerStanding.objects.get(profile=profile).pursuer_level   # the leaderboard
+    displayed = build_profile_jobs(profile)['total_level']                      # the Career page
+    live = contract_service._pursuer_level(profile)                             # milestone logging
+
+    assert stored == displayed == live
 
 
 def test_granting_job_xp_updates_the_career_board_immediately():
@@ -697,3 +749,30 @@ def test_verifying_an_account_propagates_to_every_store():
     for row in rows:
         row.refresh_from_db()
         assert row.is_linked is True, f'{type(row).__name__} was not reached by the propagation'
+
+
+def test_recompute_job_xp_all_reaches_grantless_profiles():
+    """`recompute_job_xp --all` is the MANDATED backfill after any change to how Pursuer Level is
+    defined, and it had no test at all -- the `.union()` in its queryset was the only new SQL shape
+    in that change.
+
+    The half that matters: a hunter whose grants were all removed (`reconcile_contracts`, or
+    `reset_claim` in dev) keeps a ProfileCareerStanding with no ledger behind it. A grants-only
+    sweep skips exactly the rows a repair run is chasing."""
+    from io import StringIO
+    from django.core.management import call_command
+
+    grantless = ProfileFactory(psn_username='standing-only', is_linked=True)
+    ProfileCareerStanding.objects.create(profile=grantless, total_xp=999, pursuer_level=42,
+                                         is_linked=True)
+
+    call_command('recompute_job_xp', '--all', stdout=StringIO(), stderr=StringIO())
+
+    standing = ProfileCareerStanding.objects.get(profile=grantless)
+    assert standing.total_xp == 0, 'a standing with no ledger behind it was not repaired'
+    assert standing.pursuer_level == contract_service_catalogue_count()
+
+
+def contract_service_catalogue_count():
+    from trophies.services.contract_service import catalogue_job_count
+    return catalogue_job_count()

@@ -201,7 +201,7 @@ ceilings deliberately and space the intermediate rungs to reach 10.
 | **Trophy Collector** | `lifetime_trophies` *(fixed 60k)* | 100, 500, 1000, 2500, 5000, 10000, 20000, 35000, 50000, **60000** |
 | **Completionist** | `full_completions` (100%) | 1, 5, 10, 25, 50, 100, 250, 500, 750, **1000** |
 | **Badge Collector** | `total_badges_earned` | 1, 5, 10, 25, 50, 100, 150, 250, 375, **500** ⚠ tune vs badge catalogue |
-| **Pursuer Ascent** | `pursuer_level` = `Sum(ProfileJobXP.level)` | ⚠ calibrate (cap-less curve; nonzero baseline) |
+| **Pursuer Ascent** | `pursuer_level` = `contract_service._pursuer_level` (per-job levels **plus the level-1 floor for untouched jobs**) | ⚠ calibrate (cap-less curve; the ~25 baseline is REAL, not nonzero-by-accident) |
 | **Time Invested** | `playtime_hours` *(fixed 20k)* | 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, **20000** |
 
 **Metrics needed** (all single-aggregate / whale-safe):
@@ -209,7 +209,7 @@ ceilings deliberately and space the intermediate rungs to reach 10.
 - `lifetime_trophies` — denorm `profile.total_trophies`
 - `full_completions` — denorm `profile.total_completes`
 - `total_badges_earned` — `UserGroupBadge.filter(profile=…).count()` (held group badges in the new subsystem, the same surface the Collection reads; NOT the legacy `ProfileGamification.total_badges_earned` tier count)
-- `pursuer_level` — `ProfileJobXP.filter(profile=…).aggregate(Sum('level'))`
+- `pursuer_level` — delegates to `contract_service._pursuer_level`. **Not** a bare `aggregate(Sum('level'))`: a ProfileJobXP row only exists once a job is paid, so summing rows drops the level-1 floor every untouched job carries, and the Ascent rungs are calibrated on the floored scale. It was written unfloored, which made every rung ~25 levels too expensive and put this card at a different number from the Career page it links to.
 - `playtime_hours` — `Sum(ProfileGame.play_duration)` → hours
 
 **Two ladders to calibrate against real data before locking thresholds:**

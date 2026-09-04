@@ -156,3 +156,42 @@ def _no_writes(execute, sql, params, many, context):
         if stripped.startswith(verb):
             raise AssertionError(f'verify_profile_sync issued a write: {sql[:120]}')
     return execute(sql, params, many, context)
+
+
+def test_it_writes_nothing_while_checking_ORPHANED_credit():
+    """The read-only pin above uses a profile with no EarnedContract rows, so the orphan pass --
+    including its second query for contracts the live sweep did not cover -- never executed under
+    the no-writes wrapper. The guard did not actually cover the code it was extended with.
+
+    Contract credit is the one thing this command inspects that has a WRITE-capable repair sitting
+    next to it (`reconcile_contracts`), so "reports but never fixes" matters most precisely here.
+    """
+    from django.db import connection
+    from django.utils import timezone
+
+    from trophies.models import Contract, IGDBMatch, Job
+    from trophies.services import contract_service
+    from tests.factories import ConceptFactory, IGDBMatchFactory
+
+    profile = ProfileFactory()
+    contract = Contract.objects.create(name='Orphaned', slug='vps-orphan', is_live=True,
+                                       igdb_id=770001)
+    contract.jobs.set(Job.objects.filter(slug='gunslinger'))
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id)
+    game = GameFactory(concept=concept)
+    plat = TrophyFactory(game=game, trophy_type='platinum')
+    EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
+    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
+    contract_service.mark_contract_reached(profile, contract)
+    contract_service.accept_contract(profile, contract)
+
+    # Orphan the credit AND unpublish the contract, so BOTH orphan passes have work to do.
+    match = IGDBMatch.objects.get(concept=concept)
+    match.igdb_id = 770002
+    match.save(update_fields=['igdb_id'])
+    Contract.objects.filter(pk=contract.pk).update(is_live=False)
+
+    with connection.execute_wrapper(_no_writes):
+        with pytest.raises(CommandError):        # it must REPORT the orphan (non-zero exit)
+            _run(profile)

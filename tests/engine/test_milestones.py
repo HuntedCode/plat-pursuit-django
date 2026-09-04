@@ -56,13 +56,21 @@ def test_metric_total_badges_earned():
 
 
 def test_metric_pursuer_level():
+    """Floored across the whole job catalogue, matching the Career page, the leaderboard and the
+    rung calibration -- NOT a bare sum of the rows that happen to exist.
+
+    This asserted the row sum (15) while `seed_milestones` sized the first rung to "clear the ~25
+    baseline (every job floored at level 1)". Measured unfloored, every Pursuer Ascent rung cost
+    ~25 levels more than intended, and EarnedMilestoneTier rows are never deleted, so nothing
+    would have corrected it retroactively."""
     from trophies.models import Job, ProfileJobXP
+    from trophies.services.contract_service import catalogue_job_count
     p = ProfileFactory()
     j1 = Job.objects.create(slug=f'job-{next(_job_seq)}', name='J1', discipline='combat')
     j2 = Job.objects.create(slug=f'job-{next(_job_seq)}', name='J2', discipline='mind')
     ProfileJobXP.objects.create(profile=p, job=j1, level=5)
     ProfileJobXP.objects.create(profile=p, job=j2, level=10)
-    assert metric_value('pursuer_level', p) == 15
+    assert metric_value('pursuer_level', p) == 15 + (catalogue_job_count() - 2)
 
 
 def test_metric_playtime_hours():
@@ -348,7 +356,10 @@ def test_metric_playtime_handles_null_durations():
 
 
 def test_metric_pursuer_level_zero_jobs():
-    assert metric_value('pursuer_level', ProfileFactory()) == 0
+    """A hunter who has never been paid still holds level 1 in every job, so the metric is the
+    catalogue size -- not 0. `PURSUER_RANKS` and the Ascent rungs both measure from that floor."""
+    from trophies.services.contract_service import catalogue_job_count
+    assert metric_value('pursuer_level', ProfileFactory()) == catalogue_job_count()
 
 
 def test_recompute_milestone_with_no_tiers():
@@ -521,10 +532,17 @@ def test_build_context_for_linked_profile():
     assert ph['action_url'] and ph['action_url'].endswith(f'/{p.psn_username}/')   # card deep-links to the profile
     assert ph['earned_count'] == 3
 
-    # Spotlights: only Platinum Hunter has progress, so it's the closest; a rarest feat exists (earned tiers).
-    assert ctx['ms_nearest']['slug'] == 'platinum-hunter'
-    assert ctx['ms_nearest']['remaining'] == 13   # 25 (next rung) - 12
-    assert ctx['ms_nearest']['action_url'] == ph['action_url']
+    # Spotlights. This used to read "only Platinum Hunter has progress, so it's the closest" -- true
+    # only while the pursuer_level metric was measured UNFLOORED (0 for a fresh account). Corrected
+    # to the floored definition every other surface uses, a linked hunter starts at the ~25-job floor,
+    # which is 25/40 of the first Pursuer Ascent rung before they have done anything. That is the
+    # calibration `seed_milestones` describes ("the first rung MUST clear the baseline"), so the rung
+    # is cleared-able rather than auto-earned -- but it does make Ascent the nearest milestone for a
+    # new account. Flagged as a rung-calibration question; the tiers are marked PLACEHOLDER.
+    pa = next(c for c in ctx['milestone_cards'] if c['slug'] == 'pursuer-ascent')
+    assert pa['value'] == 25 and pa['earned_count'] == 0
+    assert ctx['ms_nearest']['slug'] == 'pursuer-ascent'
+    assert ctx['ms_nearest']['remaining'] == 15   # 40 (first rung) - 25 (the floor)
     assert ctx['ms_rarest'] is not None and ctx['ms_rarest']['rarity_pct'] is not None
     assert ph['total_tiers'] == 10
     assert ph['maxed'] is False

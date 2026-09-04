@@ -3,7 +3,8 @@
 FLAT, CAP-LESS curve: every level costs the same `JOB_XP_PER_LEVEL`, and there is no cap --
 the level number climbs forever (the open-ended endgame). 1-based: every job starts at
 level 1 with 0 XP (the floor, so a fresh Pursuer already "is" all 24 jobs rather than a
-wall of locked ones). Pursuer Level = sum of all of a profile's per-job levels.
+wall of locked ones). Pursuer Level = sum of a profile's per-job levels ACROSS THE WHOLE catalogue (untouched jobs
+count at their level-1 floor; see contract_service.pursuer_level_from).
 
 Why flat: XP is fully fungible, so any modifier behaves consistently at every level -- a
 double-XP event always doubles levels gained, a quest's +N XP is always worth the same

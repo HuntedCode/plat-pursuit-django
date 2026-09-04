@@ -62,7 +62,7 @@ class Command(BaseCommand):
         checks += self._trophy_counters(profile)
         checks += self._library_totals(profile)
         checks += self._badge_standings(profile)
-        checks += self._contract_reach(profile)
+        checks += self._contract_drift(profile)
 
         drifted = [c for c in checks if not c.ok]
         for c in checks:
@@ -170,21 +170,42 @@ class Command(BaseCommand):
             ),
         ]
 
-    def _contract_reach(self, profile):
-        """Contracts are stamped reached by sync for TOUCHED games only, and by `process_contracts`
-        (nightly step 3) for everything else. A contract whose games are complete but which is not
-        stamped is the drift-net gap this command was written to make visible."""
-        from trophies.models import Contract, EarnedContract
-        from trophies.services.contract_service import _detect_tiers
+    def _contract_drift(self, profile):
+        """Contracts drift in BOTH directions, and each is checked over the scope that can actually
+        contain it.
 
-        stale = 0
+        MISSING (over the LIVE catalogue): sync stamps reached only for the games TOUCHED by that
+        sync, and `process_contracts` (nightly step 3) covers the rest. A contract whose games are
+        complete but which is not stamped is a claimable reward the hunter cannot see. This is the
+        gap the command was originally written to make visible. Live-only is right here -- a draft
+        contract must not become claimable before curation finishes.
+
+        ORPHANED (over the hunter's OWN EarnedContract rows): membership is DERIVED live from the
+        anchored IGDB id, so a concept split, a re-anchor, or a match falling out of
+        TRUSTED_STATUSES silently drops games out of a contract. Every write path in the engine is
+        forward-only, so credit -- and any XP banked on it -- outlives the qualification with
+        nothing to notice. Fixed per contract with `reconcile_contracts`.
+
+        THE ORPHAN PASS MUST NOT BE LIVE-ONLY. Unpublishing a contract that is paying the wrong
+        hunters is the obvious first staff move, and scoping this to `is_live` would then report
+        CLEAN for every hunter still holding the credit -- the reporter and the fixer disagreeing
+        about scope, on exactly the contract someone is mid-way through fixing. Scanning the
+        hunter's own rows is also the cheaper shape (bounded by what they hold, not the catalogue)
+        and is complete by construction: an EarnedContract only exists where credit was stamped.
+        """
+        from trophies.models import Contract, EarnedContract
+        from trophies.services.contract_service import _detect_tiers, credit_is_orphaned
+
+        missing = orphaned = 0
         earned = {
             ec.contract_id: ec
             for ec in EarnedContract.objects.filter(profile=profile)
         }
         # Same two calls `mark_contract_reached` makes, minus the write: detection is pure, so
         # running it here tells us what the stamped state SHOULD be without changing anything.
-        for contract in Contract.objects.filter(is_live=True).prefetch_related('bundles__concepts'):
+        live = list(Contract.objects.filter(is_live=True).prefetch_related('bundles__concepts'))
+        seen = set()
+        for contract in live:
             # Roughly 3 queries per LIVE CONTRACT: one for the members, two EXISTS in _detect_tiers,
             # plus a couple per bundle. Linear in the contract catalogue and FLAT in profile size,
             # which is the property that matters -- a 250,000-trophy hunter costs the same here as a
@@ -192,20 +213,46 @@ class Command(BaseCommand):
             # count, a fixed set of 25 role categories. Contracts are one per curated GAME and grow
             # with the badge catalogue, so the real number is far larger and climbing. If it reaches
             # the low thousands this wants batching by igdb_id.)
+            seen.add(contract.id)
             member_ids = contract.member_concept_ids()
+            ec = earned.get(contract.id)
             platinum_reached, full_reached = _detect_tiers(profile, contract, member_ids)
+            if ec is not None and credit_is_orphaned(ec, platinum_reached, full_reached):
+                orphaned += 1
             if not (platinum_reached or full_reached):
                 continue
             # ONE per contract, not per tier: the check is labelled "contracts", and a contract with
             # both tiers unstamped is one thing to fix, not two.
-            ec = earned.get(contract.id)
             missing_platinum = platinum_reached and not (ec and ec.platinum_reached_at)
             missing_full = full_reached and not (ec and ec.full_reached_at)
             if missing_platinum or missing_full:
-                stale += 1
+                missing += 1
 
-        return [Check(
-            'contracts complete but not marked reachable', stale, 0,
-            'These are claimable rewards the hunter cannot see. `process_contracts --all` is '
-            'nightly step 3; run it directly to fix.',
-        )]
+        # The hunter's credit on contracts the live pass did not cover -- unpublished ones, and any
+        # whose Contract row is no longer live for whatever reason.
+        unseen = [cid for cid in earned if cid not in seen]
+        if unseen:
+            for contract in (Contract.objects.filter(id__in=unseen)
+                             .prefetch_related('bundles__concepts')):
+                ec = earned[contract.id]
+                platinum_reached, full_reached = _detect_tiers(
+                    profile, contract, contract.member_concept_ids())
+                if credit_is_orphaned(ec, platinum_reached, full_reached):
+                    orphaned += 1
+
+        return [
+            Check(
+                'contracts complete but not marked reachable', missing, 0,
+                'These are claimable rewards the hunter cannot see. `process_contracts --all` is '
+                'nightly step 3; run it directly to fix.',
+            ),
+            Check(
+                'contracts credited but no longer qualifying', orphaned, 0,
+                'Credit (and any XP banked on it) for a game that has left this Contract, usually '
+                'after a concept split or re-anchor. Fix with '
+                '`reconcile_contracts --contract <slug> --apply`. CHECK THE CAUSE FIRST: a title '
+                'that has temporarily dropped out of the hunter library during PSN flux, or a '
+                'match sitting at pending_review mid-rematch, reads identically here and must NOT '
+                'be revoked -- it resolves itself.',
+            ),
+        ]
