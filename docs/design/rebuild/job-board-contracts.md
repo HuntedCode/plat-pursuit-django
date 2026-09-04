@@ -111,7 +111,7 @@ Existence + tier timestamps make grants idempotent (we never pay the same tier t
 | `base_t`, `multiplier` | the inputs at grant time (e.g. 2× weekend) |
 | `granted_at` | timestamp |
 
-One row per (job × tier) per earn. **Never recompute history** — value changes and double-XP
+One row per (job × tier) per earn. **Never recompute history** (a reconciliation revoke DELETES rows; nothing ever *rewrites* one) — value changes and double-XP
 weekends are captured here permanently, and a reversal subtracts the *recorded* amount.
 
 ### `ProfileJobXP` — the read cache
@@ -144,6 +144,82 @@ by (profile, job) — **DB aggregation, never Python iteration**. Mirrors the ex
 - Each game → at most one home Contract (unique `Contract.igdb_id`).
 - Each (profile, Contract, tier) granted **at most once**.
 - Every Contract is worth the same total `T` (split among its ≤6 jobs) unless overridden.
+
+## Reconciliation — when membership changes under a hunter
+
+Everything above is **forward-only**: detection stamps, acceptance grants, and nothing subtracts.
+That is correct while membership is stable — but membership is **derived**, so it is not. A Concept
+**split**, a re-anchor onto a different IGDB id, a match falling out of `TRUSTED_STATUSES`, or a
+staff edit to `Contract.igdb_id` all silently change who qualifies, and the credit already stamped
+(plus any XP banked on it) survives the change with nothing in the engine to notice.
+
+**The case that found it (Myst, 2026-09):** the 2020 remake and the 2025 port of the original were
+grouped under ONE Concept, so hunters who completed the *original* were paid the *remake's*
+Contract. Splitting them into their proper Concepts fixed the catalogue and the badge, but left that
+credit stranded on a game those hunters never played — and would have double-paid them once the
+original got the Contract it deserved.
+
+```
+python manage.py reconcile_contracts --contract <slug>                        # preview (the default)
+python manage.py reconcile_contracts --contract <slug> --user <psn>           # one hunter
+python manage.py reconcile_contracts --contract <slug> --apply                # write
+python manage.py reconcile_contracts --contract <slug> --apply --force-empty  # zero-member override
+```
+
+The additive counterpart is `process_contracts --contract <slug>`, which sweeps one live
+Contract across every candidate profile. Reach for it whenever a Contract is published or a
+re-key has just revoked credit: without it, detection for that Contract waits for the nightly
+sweep, so hunters sit with their XP dipped (or their back catalogue unrecognised) for up to a
+day. The two are mirrored in SHAPE -- one named Contract, staff-run, immediate -- but deliberately
+asymmetric where it counts: `process_contracts` REFUSES a draft Contract (the reached stamp makes
+it claimable and un-publishing does not take that back) whereas `reconcile_contracts` ignores
+`is_live` (un-publishing a misbehaving Contract is a sensible first move while you fix it); and
+`process_contracts` writes by default whereas `reconcile_contracts` previews by default and needs
+`--apply`. Additive and subtractive earn different defaults.
+
+Per orphaned hunter it deletes the `EarnedContract` (its `ContractXPGrant` rows cascade) and
+rebuilds `ProfileJobXP` + `ProfileCareerStanding` from the surviving ledger, so per-job levels, the
+Pursuer Level and every board follow. `verify_profile_sync` reports the same condition read-only, as
+*"contracts credited but no longer qualifying"*.
+
+**The zero-member refusal.** When membership resolves to nothing, EVERY earner reads as orphaned --
+and membership resolves to nothing in several states that are mistakes rather than splits: `igdb_id`
+cleared or mistyped, every member's match sitting at `pending_review` mid-rematch, an anchor stamp
+cleared. `--apply` therefore REFUSES on a contract with no members and no bundles unless
+`--force-empty` is passed. The guard lives in the write path, not in the preview, because preview and
+apply are separate invocations that each re-resolve membership -- a clean preview does not bind the
+apply. `--user <psn>` exists to check the fix on one hunter before committing to the population.
+
+**Four rules it is built on, all load-bearing:**
+
+- **All-or-nothing, never per-tier.** A row is orphaned only when NEITHER tier currently detects.
+  Per-tier revoking would strip fairly-earned 100% XP every time `detect_dlc_and_refresh` adds a DLC
+  and knocks a hunter's `ProfileGame` off 100 — a legitimate progress regression that has nothing to
+  do with membership. If the platinum still detects, the hunter owns the game and the row stays.
+- **Staff-triggered, one named Contract, never on cron.** A catalogue-wide sweep would destroy real
+  XP the moment a match went `pending_review` mid-rematch or PSN flux dropped a title out of a
+  library. Preview is the default and writing takes `--apply` — the inverse of `process_contracts
+  --dry-run`, because that command only ever adds and this one deletes banked XP.
+- **Re-checked under the lock, not trusted from the scan.** The sweep finds candidates in one pass
+  and revokes in a second; on a popular Contract those are minutes apart, long enough for a sync to
+  land a qualifying platinum. `mark_contract_reached` leaves an existing stamp alone, so nothing else
+  would notice, and an unconditional revoke would delete credit just earned for real. `revoke_contract`
+  re-detects inside its transaction and declines. It also takes the SAME ordered locks as
+  `accept_contracts_bulk` (EarnedContract, then ProfileJobXP by `job_id`): without them
+  `recompute_profile_job_xp` is a read-then-write, and a claim committing in the gap gets overwritten
+  by the stale total, silently breaking `ProfileJobXP = Sum(all grants)` in a way that cannot
+  self-heal. Locking in the opposite order would trade that race for a deadlock, so keep the two paths
+  in step.
+- **Revoke and re-earn, not re-point.** Grants are per-JOB, and a re-keyed game's new Contract
+  derives its own job profile from its own IGDB genres/themes — re-pointing grants would credit jobs
+  the new Contract does not have. Hunters dip, then re-earn honestly through the correct Contract
+  (and get the claim ceremony for it). `ProgressionMilestone` rows are deliberately left intact: a
+  deleted rung can never be re-logged, so a journey entry sitting ahead of current XP is the far
+  smaller wrong.
+
+**The row is DELETED, not blanked.** `has_platinum` was frozen at first reach against membership
+that has since changed, so a nulled row would keep a stale flag and mis-size the tiers if the hunter
+later completes the game for real. A deleted row is re-created correctly by `mark_contract_reached`.
 
 ## Board vs History (Career display)
 
@@ -294,6 +370,10 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   Contract that changes its jobs or `T` later must not retroactively rewrite past grants.
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,
   so a game's completion reaches exactly one home Contract.
+- **Derived membership means credit can outlive qualification.** Splitting a Concept (or
+  re-anchoring one) drops games out of a Contract, and every write path here is forward-only — so
+  the stamped credit and banked XP stay behind. The catalogue fix is only half the job; run
+  `reconcile_contracts --contract <slug>` for the other half. See **Reconciliation** above.
 - **Episodic bundles are the documented exception** — they satisfy a Contract without sharing its
   IGDB id (and don't need anchoring), which is why `ContractBundle` still exists. **Known gap
   (see Deferred):** the board readers currently derive member games/tiers from the igdb key only,

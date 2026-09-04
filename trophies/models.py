@@ -3050,7 +3050,9 @@ class ProfileJobXP(models.Model):
     incrementally on each ContractXPGrant; fully rebuildable from
     Sum(ContractXPGrant.amount) grouped by (profile, job) via
     contract_service.recompute_profile_job_xp. The read side for the Lab + leaderboards.
-    Pursuer Level = sum of all of a profile's ProfileJobXP.level."""
+    Pursuer Level = sum of per-job levels across the whole job catalogue -- untouched jobs count
+    at their level-1 floor, so it is NOT a bare Sum() of these rows. One definition:
+    contract_service.pursuer_level_from."""
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='job_xp')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='profile_xp')
     total_xp = models.PositiveIntegerField(default=0)
@@ -3879,7 +3881,10 @@ class ProfileCareerStanding(models.Model):
     ~24 rows per user across the whole population on every read."""
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='career_standing')
     total_xp = models.PositiveIntegerField(default=0, db_index=True)      # Career XP board sort key
-    pursuer_level = models.PositiveIntegerField(default=0, db_index=True)  # sum of per-job levels
+    # Sum of per-job levels WITH the level-1 floor for untouched jobs (contract_service.
+    # pursuer_level_from) -- the same figure the Career page shows. Materialized, so a change
+    # to that definition needs a `recompute_job_xp --all` backfill.
+    pursuer_level = models.PositiveIntegerField(default=0, db_index=True)
     # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies. A denormalized
     # column narrower than its source turns any over-long value into a DataError on the propagating
     # UPDATE -- i.e. a 500 on profile save -- for data the source column happily accepts.

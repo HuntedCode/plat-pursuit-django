@@ -12,11 +12,17 @@ cheerful-snacking-wozniak.md):
      100% together = full XP, one click), writing the immutable ContractXPGrant ledger
      and bumping the ProfileJobXP cache.
 
+A third path, RECONCILIATION (`credit_is_orphaned` / `revoke_contract`), is the engine's only
+subtractive one. Membership is derived live from the anchored IGDB id and can change under a
+hunter's feet (a concept split, a re-anchor, a lost trusted match), which the forward-only gates
+above cannot see. Staff-triggered per Contract via `manage.py reconcile_contracts`; never on cron.
+
 Every Contract pays the same global total T (override via Contract.xp_total_override),
 split evenly among its jobs, across the Platinum (bulk) and 100% (bonus) tiers. Games
 with no platinum pay the FULL T at 100%. The recorded grant amount is permanent (never
 recomputed from current config). Per-job totals always aggregate in the DB (whale-OOM rule).
 """
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
@@ -32,6 +38,9 @@ from trophies.util_modules.leveling import (
     frac_into_level, level_for_xp, next_rank_floor, pursuer_rank_for_level, pursuer_rank_ladder,
     ranks_crossed, tier_for_level, tier_rank, tiers_crossed,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -81,12 +90,48 @@ def _has_any_job_xp(profile):
     return ProfileJobXP.objects.filter(profile=profile, total_xp__gt=0).exists()
 
 
+def catalogue_job_count():
+    """How many jobs a Pursuer Level spans.
+
+    Scoped to the five real disciplines, matching `job_render.DISCIPLINE_LABELS`, which is what the
+    DISPLAY iterates: `build_profile_jobs` walks the discipline buckets, so a Job whose discipline
+    is not one of the five is invisible there. `Job.discipline` has `choices` but no DB constraint,
+    so a badly-seeded row is possible -- and a bare `Job.objects.count()` here would then re-split
+    the definition (display counting 25, the stored figure counting 26) with nothing raising. Read
+    off `Job.DISCIPLINES` rather than importing job_render's dict, so the model stays the source.
+    """
+    return Job.objects.filter(discipline__in=[key for key, _label in Job.DISCIPLINES]).count()
+
+
+def pursuer_level_from(level_sum, row_count, n_jobs):
+    """Pursuer Level from a (Sum(level), Count(rows)) pair over a profile's ProfileJobXP.
+
+    THE FLOOR IS THE WHOLE POINT, and it is why this is a shared function rather than an inlined
+    `Sum('level')`. A hunter has a level in every one of the ~25 jobs from the moment they exist --
+    an untouched job sits at level 1, not level 0 -- but ProfileJobXP only materializes a row once
+    a job is actually paid. So `Sum(level)` alone counts only the jobs they have touched, and the
+    missing rows have to be added back at their level-1 floor.
+
+    This is not cosmetic. `PURSUER_RANKS` is explicitly calibrated against the floored scale
+    ("Pursuer Level ~= 25 floor + 2 per game"), so an unfloored figure lands a hunter one or two
+    ranks below where they actually are. It drifted exactly once: `recompute_career_standing`
+    summed the rows it had while `build_profile_jobs` floored across the catalogue, so the Career
+    XP leaderboard's "level" column and the hunter's own Career page showed different numbers for
+    the same hunter. Both now come through here.
+
+    `max(..., 0)` guards nothing reachable today (Job is CASCADE, so a deleted Job takes its rows
+    with it) but keeps a catalogue edit mid-flight from producing a negative level.
+    """
+    return (level_sum or 0) + max(n_jobs - (row_count or 0), 0)
+
+
 def _pursuer_level(profile):
-    """Pursuer Level = sum of every job's level (level-1 floor for untouched jobs), matching
-    job_render.build_profile_jobs' total_level so a logged rank crossing lines up with the display."""
-    n_jobs = Job.objects.count()
+    """Pursuer Level for a profile, read live from ProfileJobXP (2 queries).
+
+    The same figure `ProfileCareerStanding.pursuer_level` materializes and `build_profile_jobs`
+    computes for display -- see `pursuer_level_from` for the floor rule they all share."""
     agg = ProfileJobXP.objects.filter(profile=profile).aggregate(s=Sum('level'), c=Count('id'))
-    return (agg['s'] or 0) + (n_jobs - (agg['c'] or 0))
+    return pursuer_level_from(agg['s'], agg['c'], catalogue_job_count())
 
 
 def _log_rank_milestones(profile, old_level, new_level, first_claim):
@@ -709,12 +754,22 @@ def recompute_career_standing(profile):
 
     Without it, a global Career XP board would aggregate ~24 rows per user across the whole population on
     every read; with it, the board is an indexed ORDER BY.
+
+    `pursuer_level` is the FLOORED figure (`pursuer_level_from`), the same one the Career page and the
+    share cards show. Storing a bare `Sum('level')` here was a real bug: the board labels that column
+    "level", so a hunter read one number on their own page and a smaller one next to their name on the
+    leaderboard. Changing this REQUIRES a backfill (`recompute_job_xp --all`) -- every row written
+    before it carries the old definition.
     """
-    from django.db.models import Sum
+    from django.db.models import Count, Sum
     from trophies.models import ProfileCareerStanding, ProfileJobXP
 
+    # `rows` rides the aggregate that was already being issued, so the floor costs no extra query
+    # beyond the catalogue count. It used to store a bare `Sum('level')`, which is the SAME figure
+    # under a different definition of Pursuer Level than every other surface uses -- see
+    # `pursuer_level_from`.
     totals = ProfileJobXP.objects.filter(profile=profile).aggregate(
-        xp=Sum('total_xp'), lvl=Sum('level'),
+        xp=Sum('total_xp'), lvl=Sum('level'), rows=Count('id'),
     )
     country = getattr(profile, 'country_code', '') or ''
     is_linked = bool(getattr(profile, 'is_linked', False))
@@ -722,7 +777,7 @@ def recompute_career_standing(profile):
         profile=profile,
         defaults={
             'total_xp': totals['xp'] or 0,
-            'pursuer_level': totals['lvl'] or 0,
+            'pursuer_level': pursuer_level_from(totals['lvl'], totals['rows'], catalogue_job_count()),
             'country_code': country,
             'is_linked': is_linked,
         },
@@ -734,3 +789,126 @@ def recompute_career_standing(profile):
     ProfileJobXP.objects.filter(profile=profile).exclude(
         country_code=country, is_linked=is_linked,
     ).update(country_code=country, is_linked=is_linked)
+
+
+# --- reconciliation: membership drift --------------------------------------
+
+def credit_is_orphaned(ec, platinum_reached, full_reached):
+    """True when `ec`'s stamped credit is not supported by the detection result passed in.
+
+    A PURE PREDICATE over tiers the caller has already detected -- it issues no queries and does
+    not re-run `_detect_tiers`. That shape is the point: both callers necessarily compute the
+    tiers themselves (the command to find candidates, `verify_profile_sync` to check the other
+    drift direction), so a version that re-detected internally duplicated their work AND left the
+    rule half-stated at the call site. The rule lives here, once.
+
+    Contract membership is DERIVED: `Contract.member_concept_ids` resolves it live from the
+    anchored + trusted IGDB id, so a concept SPLIT, a re-anchor, an IGDBMatch falling out of
+    TRUSTED_STATUSES, or a staff edit to `Contract.igdb_id` all silently change who qualifies.
+    Detection (gate 1) is forward-only and never notices, so credit -- and, once accepted, banked
+    XP -- survives for a game the hunter does not own.
+
+    DELIBERATELY ALL-OR-NOTHING: orphaned only when NEITHER tier detects. A per-tier version would
+    strip fairly-earned 100% XP the moment `detect_dlc_and_refresh` adds a DLC and knocks a
+    hunter's ProfileGame off 100 -- a legitimate progress regression with nothing to do with
+    membership drift. If the platinum still detects, the hunter plainly owns the game and the row
+    stays. Forgiving in the one direction that cannot destroy earned XP.
+    """
+    if ec.platinum_reached_at is None and ec.full_reached_at is None:
+        return False        # nothing stamped, so there is no credit to orphan
+    return not (platinum_reached or full_reached)
+
+
+@transaction.atomic
+def revoke_contract(profile, contract):
+    """Remove a profile's ENTIRE credit for one Contract and rebuild their job XP from what is
+    left. Returns (revoked, xp_removed) -- `revoked` False means it declined and wrote nothing.
+
+    The inverse of accept, and the ONLY subtractive path in the engine. The ContractXPGrant ledger
+    is immutable in the sense that a row is never RECOMPUTED -- config changes must not rewrite
+    history -- but a grant for a game the hunter never completed was never history to begin with,
+    and deleting it is the only honest reversal. `recompute_profile_job_xp` then rebuilds
+    ProfileJobXP and ProfileCareerStanding from the surviving ledger, so per-job levels, the
+    Pursuer Level, and every board that sorts on them follow automatically.
+
+    RE-CHECKS ORPHAN-NESS UNDER THE LOCK rather than trusting the caller. (The igdb-derived member
+    set is re-resolved; a caller-prefetched `contract.bundles` cache is NOT, so for an episodic
+    contract the bundle half of qualification is as fresh as the caller made it. Bundle membership
+    is staff-edited and does not move mid-sweep, unlike a hunter's completion.) A sweep finds its
+    candidates in one pass and revokes in a second, and on a popular Contract those passes are
+    minutes apart -- long enough for a hunter to legitimately re-qualify (a sync lands a platinum
+    on a concept that IS still a member). `mark_contract_reached` would leave their existing stamp
+    untouched, so nothing else would notice, and an unconditional revoke would delete credit the
+    hunter had just earned for real. This also makes the function safe to call directly from a
+    shell, which it otherwise would not be.
+
+    LOCKS IN THE SAME ORDER AS `accept_contracts_bulk`: the EarnedContract row first, then the
+    profile's ProfileJobXP rows by job_id. Both are load-bearing. Without the ProfileJobXP lock,
+    `recompute_profile_job_xp` is a read-then-write -- it snapshots Sum(ledger), and a claim that
+    commits in the gap is then overwritten by the stale total, silently breaking the
+    `ProfileJobXP = Sum(all grants)` invariant the whole economy rests on (and it cannot
+    self-heal, because `grant_job_xp_bulk` increments from the cached value). Locking in the
+    OPPOSITE order to the accept path would trade that race for a deadlock, so the order is copied
+    from it deliberately -- keep the two in step.
+
+    DELETES THE ROW rather than nulling the stamps, because `has_platinum` was frozen at first
+    reach against the membership that has since changed. A nulled row would keep that stale flag
+    and mis-size the tiers if the hunter later completes the game for real; a deleted one is
+    re-created by `mark_contract_reached` with the flag frozen correctly.
+
+    ProgressionMilestone rows are LEFT ALONE by design. They record a moment that genuinely
+    happened, their unique constraints mean a deleted rung can never be re-logged, and a journey
+    entry sitting slightly ahead of current XP is a far smaller wrong than un-earning a rung the
+    hunter watched themselves cross.
+    """
+    ec = (EarnedContract.objects.select_for_update()
+          .filter(profile=profile, contract=contract).first())
+    if ec is None:
+        return False, 0
+    member_ids = contract.member_concept_ids()
+    platinum_reached, full_reached = _detect_tiers(profile, contract, member_ids)
+    if not credit_is_orphaned(ec, platinum_reached, full_reached):
+        return False, 0        # re-qualified since the caller looked, or never orphaned
+
+    # MATERIALIZE THE WHOLE CATALOGUE BEFORE LOCKING. `SELECT ... FOR UPDATE` is not a predicate
+    # lock, and `grant_job_xp_bulk` bulk_creates a ProfileJobXP row for any job the hunter has never
+    # been paid -- an INSERT that passes straight through a lock on the rows that already exist,
+    # which is most of the catalogue for most hunters (one row out of ~25 after a first claim).
+    # Without this, a claim paying a NEW job could commit between `recompute_profile_job_xp`'s two
+    # reads, and its floor loop would then zero the XP that claim had just banked. Creating the rows
+    # first means the concurrent claim finds them present and blocks on our lock instead.
+    #
+    # This invents nothing: every job is level 1 from birth, a row at (0 XP, level 1) is that exact
+    # state, and `pursuer_level_from` counts a missing row and a floored row identically. (A Job
+    # added to the catalogue between this INSERT and the concurrent claim would still escape. The
+    # catalogue is seeded and static, so that is a migration-shaped event, not a request-shaped one.)
+    ProfileJobXP.objects.bulk_create(
+        [ProfileJobXP(profile=profile, job_id=job_id,
+                      country_code=getattr(profile, 'country_code', '') or '',
+                      is_linked=bool(getattr(profile, 'is_linked', False)))
+         for job_id in Job.objects.values_list('pk', flat=True)],
+        ignore_conflicts=True,
+    )
+    # Ordered by job_id, matching grant_job_xp_bulk's lock order. Taken BEFORE the ledger is read
+    # below, which is what closes the lost-update window.
+    list(ProfileJobXP.objects.select_for_update()
+         .filter(profile=profile).order_by('job_id'))
+
+    # Read while the rows still exist: after the delete, this ledger IS the only record that the
+    # hunter was ever paid. Per-job, not just the total -- grants are per-job and permanent, so a
+    # bare total identifies who was affected but cannot restore them.
+    grants = list(ContractXPGrant.objects.filter(earned_contract=ec)
+                  .values_list('job_id', 'tier', 'amount'))
+    removed = sum(amount for _job, _tier, amount in grants)
+    ec.delete()             # ContractXPGrant.earned_contract is CASCADE; the grants go with it
+    recompute_profile_job_xp(profile)
+    # LOGGED LAST, after every write this function makes has succeeded. Logging is not
+    # transactional: emitted before the writes, a line claiming XP was taken would survive the
+    # rollback of a revoke that actually failed, and the audit trail would disagree with the
+    # command's own FAILED count. Only the COMMIT can still fail from here.
+    logger.info(
+        "revoke_contract: profile=%s (%s) contract=%s xp_removed=%s grants=%s",
+        profile.pk, profile.psn_username, contract.slug, removed,
+        ';'.join(f'{job}:{tier}:{amount}' for job, tier, amount in grants) or 'none',
+    )
+    return True, removed

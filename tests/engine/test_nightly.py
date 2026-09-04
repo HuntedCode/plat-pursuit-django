@@ -135,3 +135,24 @@ def test_every_step_names_a_real_command():
     known = get_commands()
     missing = [cmd for _label, cmd, _kw in STEPS if cmd not in known]
     assert not missing, f'nightly references commands that do not exist: {missing}'
+
+
+def test_reconcile_contracts_is_NOT_scheduled():
+    """The inverse of the drift-net test above, and every bit as load-bearing.
+
+    `reconcile_contracts` is the only subtractive path in the Contract engine: it DELETES banked XP.
+    "Staff-triggered, never on cron" is asserted in its module docstring, in
+    `contract_service.revoke_contract`, in job-board-contracts.md and in management-commands.md --
+    and until this test, enforced nowhere. Scheduling it would strip real XP the moment a match went
+    `pending_review` mid-rematch or PSN flux dropped a title out of a hunter's library, on a nightly
+    cadence, with nobody reading the output.
+
+    If you are here because you added it to STEPS: don't. Run it by hand against the one Contract you
+    just re-keyed, read the preview, then `--apply`.
+    """
+    from core.management.commands.nightly import STEPS
+
+    commands = [cmd for _label, cmd, _kw in STEPS]
+    assert 'reconcile_contracts' not in commands, (
+        'reconcile_contracts deletes banked XP and must never run unattended'
+    )
