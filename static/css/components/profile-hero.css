@@ -289,6 +289,28 @@
 .pp-gcard--lib .pp-gcard__cover { aspect-ratio: auto; height: 72px; flex: none; }
 .pp-gcard--lib .pp-gcard__art { object-position: center; }
 
+/* THE WASH: the fallback fill for a concept with no landscape art. The band always renders now --
+   a short card among tall ones reads as broken rather than as "this game has less art", and it is
+   the thinnest-media games (older, obscure, regional) that were getting it.
+   Blurred and over-scaled on purpose. The objection to falling back to the cover was that it would
+   print one image twice, and that is true of a legible copy; a wash is not a second picture but the
+   game's own palette. `scale` because blur samples past an element's edges and would otherwise show
+   a soft transparent border; `saturate` because blurring averages colour toward grey and the point
+   of the wash is that it carries the game's hue.
+   A static filter, never a transitioned one -- and only on the ~5% of cards without landscape art,
+   so this never becomes a wall of fifty blurred layers on one page. */
+.pp-gcard--lib .pp-gcard__art--wash {
+    object-fit: cover;
+    object-position: center;
+    transform: scale(1.35);
+    filter: blur(18px) saturate(1.25);
+    opacity: 0.55;
+}
+/* No hover zoom on a wash: the band's hover scale is a response to a picture you are looking AT,
+   and nudging an out-of-focus colour field just makes the card twitch. */
+.pp-gcard--lib:hover .pp-gcard__art--wash { transform: scale(1.35); }
+@media (prefers-reduced-motion: reduce) { .pp-gcard--lib .pp-gcard__art--wash { transition: none; } }
+
 /* The band dissolves into the card instead of ending at a hard horizontal seam. Same overlay, and the
    same two jobs, as `.pp-rcard__art::after` on the Ratings card: fade the image into the surface, and
    hold the whole thing back a little so a wall of fifty screenshots does not out-shout the numbers the

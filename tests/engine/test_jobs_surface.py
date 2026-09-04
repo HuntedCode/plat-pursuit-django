@@ -25,6 +25,27 @@ from tests.factories import ProfileFactory
 pytestmark = pytest.mark.django_db
 
 
+
+def _warm_chrome_caches():
+    """Warm the art-reveal banner's cached pks before a query-count capture.
+
+    `base.html` renders that banner on every page, and its pks are cached for 60 SECONDS. So a test
+    that captures two renders and compares their query counts is measuring the cache as much as the
+    page: cold on the first capture and warm on the second gives a difference of exactly ONE, and
+    whether that happens depends on how long the suite has been running rather than on anything the
+    test is about. It is intermittent, order-dependent, and looks precisely like a real regression --
+    a +1 that is not the +N-per-row a genuine N+1 would produce.
+
+    `test_landing.py` already warms this key for the same reason. Called before EVERY capture here,
+    not once at the top, because a 60s TTL can expire BETWEEN two captures in a slow run.
+    """
+    from django.core.cache import cache
+
+    from art_reveal.services import _ACTIVE_CACHE_KEY, _BANNER_CACHE_KEY
+
+    cache.set(_ACTIVE_CACHE_KEY, 0, 60)      # 0 = the "no live event" sentinel
+    cache.set(_BANNER_CACHE_KEY, None, 60)
+
 def _job(slug, name, discipline='combat', **kw):
     return Job.objects.create(slug=slug, name=name, discipline=discipline, **kw)
 
@@ -89,6 +110,7 @@ def test_the_catalogue_counts_are_grouped_not_per_card(client):
     for j in jobs:
         _xp(j, f'H{j.slug}', 100)
         _contract(f'C {j.slug}', [j])
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as small:
         client.get(reverse('jobs_browse'))
 
@@ -96,6 +118,7 @@ def test_the_catalogue_counts_are_grouped_not_per_card(client):
     for j in more:
         _xp(j, f'H{j.slug}', 100)
         _contract(f'C {j.slug}', [j])
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as large:
         client.get(reverse('jobs_browse'))
 
@@ -311,6 +334,7 @@ def test_the_second_figure_costs_no_extra_query(client):
     for j in jobs:
         _contract(f'C {j.slug}', [j])
 
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as ctx:
         resp = client.get(reverse('jobs_browse'))
     assert resp.status_code == 200
@@ -1087,6 +1111,7 @@ def test_the_contracts_tab_does_no_work_its_own_settings_discard(client):
     for i in range(4):
         _contract(f'C{i}', [job])
 
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as ctx:
         resp = client.get(reverse('job_contracts', args=['archivist']))
     assert resp.status_code == 200
@@ -1284,11 +1309,13 @@ def test_the_contract_state_lookup_is_batched_for_the_page(client):
     # cache-clearing neighbor in the full suite) the first render pays warmup queries the
     # second doesn't, and the equal-counts comparison breaks on noise it never meant to pin.
     client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as small:
         client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
 
     for i in range(12):
         EarnedContract.objects.create(profile=profile, contract=_contract(f'Many {i}', [job]))
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as large:
         client.get(reverse('job_detail', args=['archivist']), {'tab': 'contracts'})
 
@@ -1332,6 +1359,7 @@ def test_the_page_never_builds_the_board(client):
     for i in range(3):
         _contract(f'Con {i}', [job])
 
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as page:
         client.get(reverse('job_detail', args=['archivist']))
     sql = ' '.join(q['sql'] for q in page.captured_queries)
@@ -1348,6 +1376,7 @@ def test_the_page_never_builds_the_board(client):
     assert board_read not in sql, 'the page built the board rows despite shipping an empty Ranks panel'
 
     # And the panel, asked for directly, does build them.
+    _warm_chrome_caches()
     with CaptureQueriesContext(connection) as panel:
         client.get(reverse('job_ranks_panel', args=['archivist']))
     assert board_read in ' '.join(q['sql'] for q in panel.captured_queries)

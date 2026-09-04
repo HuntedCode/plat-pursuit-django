@@ -42,6 +42,25 @@ def _at(days_ago, hour=12):
     return timezone.now().replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=days_ago)
 
 
+
+def _anchor_with_room(span, hour=12):
+    """A past datetime with at least `span` days of headroom before its month begins.
+
+    `_at()` counts back from TODAY, so "six consecutive days" is only one calendar month for most of
+    the month -- run it on the 4th and the window reaches back into the previous one. A test that
+    then asserts something about month HEADERS is asserting the date it happens to run on. This
+    fails on the 1st through 6th and passes the rest of the time, which reads as flakiness and is
+    not: it is a calendar.
+
+    The sibling test just above sidesteps the same hazard by loosening its assertion
+    (`len(marked) <= 2`). This one cannot -- its whole point is that the second page does NOT open a
+    month -- so it needs a window that genuinely sits inside one.
+    """
+    now = timezone.now().replace(hour=hour, minute=0, second=0, microsecond=0)
+    if now.day > span:
+        return now
+    return now.replace(day=1) - timedelta(days=1)   # last day of the previous month
+
 def test_one_session_per_game_per_day():
     """The unit. Twelve trophies from one afternoon on one game are ONE thing that happened."""
     profile = ProfileFactory(is_linked=True)
@@ -451,8 +470,12 @@ def test_a_month_running_across_a_page_boundary_is_not_re_announced():
     """The reason this is decided in the service. An appended page cannot see what is already on screen, so
     marking the first day of every page would repeat the header whenever a break lands mid-month."""
     profile = ProfileFactory(is_linked=True)
+    # Anchored rather than counted back from today: six days ending on the 4th of a month reach into
+    # the previous one, and the second page would then open a genuinely new month -- failing this
+    # test for a reason it is not about. See `_anchor_with_room`.
+    base = _anchor_with_room(6)
     for d in range(1, 7):
-        _earn(profile, GameFactory(), _at(d))   # six consecutive days, one month
+        _earn(profile, GameFactory(), base - timedelta(days=d))   # six consecutive days, ONE month
 
     second = build_activity_page(profile, page=2, per_page=3)['activity_days']
 
