@@ -25,6 +25,13 @@ def _moderator():
     return user
 
 
+def _admin():
+    user = UserFactory()
+    user.role = 'admin'
+    user.save()
+    return user
+
+
 def _reported_take(blurb='some words', reason='spam'):
     author = ProfileFactory(is_linked=True)
     reporter = ProfileFactory(is_linked=True)
@@ -117,7 +124,8 @@ def test_the_hidden_text_is_kept_in_the_log():
 
     action = mod.hide_blurb(report, _moderator(), 'Inappropriate.')
 
-    assert 'the offending words' in action.changed['blurb']
+    assert action.evidence['blurb'] == 'the offending words'
+    assert 'blurb' not in action.changed, 'the blurb was not written, so it is not a diff row'
 
 
 def test_dismissing_a_report_leaves_the_take_alone():
@@ -165,21 +173,6 @@ def test_an_approval_that_changes_nothing_is_still_a_real_outcome():
 
     assert action.changed == {}
     assert action.action == 'game_flag_approved'
-
-
-def test_the_watched_field_list_is_derived_from_the_service_that_writes_them():
-    """Hand-listing them is how the log goes quietly wrong: a misremembered field name does not
-    raise, it just never appears in `changed`, so an approval that changed something logs as
-    "changed nothing". Every derived name must be a real Game field."""
-    from trophies.models import Game
-    from trophies.services.moderation_service import _WATCHED_GAME_FIELDS
-
-    real = {f.name for f in Game._meta.get_fields()}
-    assert _WATCHED_GAME_FIELDS, 'the derivation found no fields at all'
-    assert not [f for f in _WATCHED_GAME_FIELDS if f not in real]
-    # The two the flag map actually keys on most heavily.
-    assert 'shovelware_lock' in _WATCHED_GAME_FIELDS
-    assert 'is_delisted' in _WATCHED_GAME_FIELDS
 
 
 # ── reversal ─────────────────────────────────────────────────────────────────────────────────────
@@ -237,8 +230,7 @@ def test_the_entry_still_reads_after_the_report_is_deleted():
     assert action.blurb_report is None
     assert 'Hollow Knight' in action.target_label, 'the entry lost what it was about'
     assert action.reason == 'Inappropriate.'
-    assert 'the log entry' not in str(action)   # __str__ must not raise on a null target
-    assert str(action)
+    assert str(action), '__str__ must not raise on a null target'
 
 
 def test_the_entry_still_names_the_actor_after_the_account_is_deleted():
@@ -280,3 +272,213 @@ def test_a_superuser_is_admitted_even_with_no_role():
     root.save()
 
     assert is_mod_or_admin(root) is True
+
+
+# ── the log must say what ACTUALLY happened ──────────────────────────────────────────────────────
+# Applying the change and logging it atomically is not enough on its own. Without a status
+# precondition, a second moderator succeeds and writes an entry claiming a change they did not make
+# -- which for an appeal record is worse than no entry, because it is misleading evidence.
+
+def test_a_second_moderator_cannot_action_a_handled_report():
+    report = _reported_take()
+    first = _moderator()
+    mod.hide_blurb(report, first, 'Harassment.')
+
+    second = _moderator()
+    with pytest.raises(mod.ModerationError, match='Already handled'):
+        mod.hide_blurb(report, second, 'Also harassment.')
+
+    report.refresh_from_db()
+    assert report.reviewed_by == first, 'the second moderator overwrote who decided'
+    assert ModerationAction.objects.count() == 1, 'a second, false entry was written'
+
+
+def test_a_handled_report_cannot_then_be_dismissed():
+    report = _reported_take()
+    mod.hide_blurb(report, _moderator(), 'Harassment.')
+
+    with pytest.raises(mod.ModerationError, match='Already handled'):
+        mod.dismiss_blurb_report(report, _moderator(), 'Actually fine.')
+
+    report.rating.refresh_from_db()
+    assert report.rating.blurb_hidden is True, 'the take was un-hidden by a refused dismissal'
+
+
+def test_a_handled_flag_cannot_be_actioned_twice():
+    """Two mods approving `delisted` and `not_delisted` on one game would otherwise both log that
+    they made the change, and one of them would be lying."""
+    flag = _flag('delisted')
+    mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+
+    with pytest.raises(mod.ModerationError, match='Already handled'):
+        mod.dismiss_game_flag(flag, _moderator(), 'Not confirmed.')
+
+    assert ModerationAction.objects.count() == 1
+
+
+def test_a_dismissal_records_the_status_it_actually_came_from():
+    """The first cut hardcoded the pair without reading the row, so a report already in another
+    state logged a transition that never occurred."""
+    report = _reported_take()
+
+    action = mod.dismiss_blurb_report(report, _moderator(), 'Report is baseless.')
+
+    assert action.changed['status'] == ['pending', 'dismissed']
+
+
+# ── the anti-drift guard, in the direction that actually fails ───────────────────────────────────
+
+@pytest.mark.parametrize('flag_type', [c[0] for c in GameFlag.FLAG_TYPES])
+def test_every_flag_type_lands_in_the_log(flag_type):
+    """THE replacement for deriving the field list by regex over another function's source.
+
+    Approves every flag type, compares the Game row before and after by real inspection, and fails
+    when a field the database actually changed is missing from `changed`. That is the direction
+    that matters: a missing field is silent (the approval logs "changed nothing"), an extra one is
+    loud. The old test only checked that derived names were real Game fields -- the harmless
+    direction -- so shrinking the derivation left the whole suite green.
+    """
+    from trophies.models import Game
+
+    flag = _flag(flag_type)
+    tracked = [f.name for f in Game._meta.get_fields()
+               if not f.is_relation and f.name not in ('id', 'updated_at', 'shovelware_updated_at')]
+    before = {f: getattr(flag.game, f) for f in tracked}
+
+    action = mod.approve_game_flag(flag, _moderator(), 'Confirmed ' + flag_type + '.')
+
+    flag.game.refresh_from_db()
+    really_changed = {f for f in tracked if getattr(flag.game, f) != before[f]}
+    missing = really_changed - set(action.changed)
+    assert not missing, (
+        flag_type + ' changed ' + str(sorted(missing)) + ' on the Game and the log does not '
+        'mention it -- GameFlagService.WATCHED_FIELDS is out of step with what approve_flag writes'
+    )
+
+
+# ── the log survives the database round trip ─────────────────────────────────────────────────────
+
+def test_the_diff_survives_being_written_and_read_back():
+    """Every other assertion here reads the in-memory object the service returned. A value JSONField
+    cannot round-trip would pass all of them and still be wrong in the table."""
+    flag = _flag('is_shovelware')
+    action = mod.approve_game_flag(flag, _moderator(), 'Asset flip.')
+
+    reloaded = ModerationAction.objects.get(pk=action.pk)
+
+    assert reloaded.changed == action.changed
+    assert reloaded.changed['shovelware_lock'] == [False, True]
+    assert isinstance(reloaded.changed['shovelware_status'][1], str)
+
+
+def test_the_target_id_outlives_the_label():
+    """`target_label` is truncated at 255 and two long-titled games can collide, so the PK is the
+    only durable identification once the report is purged."""
+    report = _reported_take()
+    rating_id = report.rating_id
+    action = mod.hide_blurb(report, _moderator(), 'Inappropriate.')
+
+    report.delete()
+
+    action.refresh_from_db()
+    assert action.blurb_report is None
+    assert action.target_id == rating_id
+
+
+# ── reversal reads the log rather than guessing ──────────────────────────────────────────────────
+
+def test_reversal_restores_what_the_log_recorded_not_a_hardcoded_default():
+    """`changed` is documented as the thing that makes reversal possible without guessing. The first
+    cut hardcoded False anyway -- which for a take that was ALREADY hidden when actioned would have
+    un-hidden it and called that a restoration."""
+    report = _reported_take()
+    action = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    # Rewrite the log to describe a take that was already hidden before the action.
+    action.changed = {'blurb_hidden': [True, True]}
+    action.save(update_fields=['changed'])
+
+    mod.reverse_action(action, _moderator(), 'Undo.')
+
+    report.rating.refresh_from_db()
+    assert report.rating.blurb_hidden is True, 'the reversal invented a previous state of False'
+
+
+def test_reversing_hands_the_standing_decision_to_whoever_reversed_it():
+    """Leaving `reviewed_by` on the overturned moderator credits the report to a decision that no
+    longer stands."""
+    report = _reported_take()
+    first = _moderator()
+    action = mod.hide_blurb(report, first, 'Hidden.')
+
+    admin = _admin()
+    mod.reverse_action(action, admin, 'Overturned on review.')
+
+    report.refresh_from_db()
+    assert report.reviewed_by == admin
+
+
+def test_a_reversal_whose_report_is_gone_says_so_honestly():
+    report = _reported_take()
+    action = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    report.delete()
+    action.refresh_from_db()
+
+    with pytest.raises(mod.ModerationError, match='deleted'):
+        mod.reverse_action(action, _moderator(), 'Undo.')
+
+
+def test_only_one_reversal_can_exist_per_decision_even_without_the_service():
+    """The service takes a row lock; this is the DATABASE backstop, which is what holds if anything
+    ever inserts without going through it."""
+    from django.db import IntegrityError, transaction as db_transaction
+
+    report = _reported_take()
+    original = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    mod.reverse_action(original, _moderator(), 'Undo.')
+
+    with pytest.raises(IntegrityError):
+        with db_transaction.atomic():
+            ModerationAction.objects.create(
+                actor=_moderator(), action='blurb_restored', reason='second reversal',
+                reverses=original)
+
+
+# ── the mixin itself, not just the function ──────────────────────────────────────────────────────
+
+def test_the_mixin_gates_the_url_it_is_put_on(rf):
+    """The FUNCTION is tested above; this is the thing that will actually guard a URL that mutates
+    `shovelware_lock`. Exercised through a real view rather than by reading the source."""
+    from django.contrib.auth.models import AnonymousUser
+    from django.http import HttpResponse
+    from django.views.generic import View
+
+    from trophies.mixins import ModeratorRequiredMixin
+
+    class _Guarded(ModeratorRequiredMixin, View):
+        def get(self, request, *args, **kwargs):
+            return HttpResponse('ok')
+
+    view = _Guarded.as_view()
+
+    anon = rf.get('/mod/')
+    anon.user = AnonymousUser()
+    assert view(anon).status_code == 302, 'anonymous must be sent to login'
+
+    plain = rf.get('/mod/')
+    plain.user = UserFactory()
+    resp = view(plain)
+    assert resp.status_code == 302 and resp.url == '/', 'a hunter must be redirected home'
+
+    for user in (_moderator(), _admin()):
+        req = rf.get('/mod/')
+        req.user = user
+        assert view(req).status_code == 200, 'a ' + user.role + ' was refused'
+
+
+def test_a_deactivated_moderator_loses_access():
+    """Revoking access is precisely the moment the gate must not still say yes."""
+    moderator = _moderator()
+    moderator.is_active = False
+    moderator.save()
+
+    assert is_mod_or_admin(moderator) is False

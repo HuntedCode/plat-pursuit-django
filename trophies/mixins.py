@@ -53,7 +53,15 @@ def is_mod_or_admin(user):
     return bool(
         user
         and user.is_authenticated
-        and (user.is_staff or getattr(user, 'is_moderator', False))
+        # `is_active` because this is called directly from templates and services too, not only
+        # behind the auth backend. In a request the backend already turns a deactivated user into
+        # AnonymousUser -- but a direct call with a stale user object would otherwise still say yes,
+        # and revoking access is precisely the moment that must not happen.
+        and user.is_active
+        # Direct attribute, not getattr-with-default: `is_moderator` is a property on CustomUser
+        # that cannot raise, so the default only ever masked a rename -- silently locking out every
+        # moderator with no error anywhere. If the property goes, this should break loudly.
+        and (user.is_staff or user.is_moderator)
     )
 
 

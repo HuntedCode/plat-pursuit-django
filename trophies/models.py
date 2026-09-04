@@ -5,6 +5,7 @@ from django.utils import timezone
 from users.models import CustomUser
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
+from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
 from django.db.models import F, IntegerField, Max, Min, Q
@@ -7753,13 +7754,13 @@ class ModerationAction(models.Model):
         max_length=150, blank=True,
         help_text="The actor's name at the time, so the entry still reads after the account is gone.",
     )
-    action = models.CharField(max_length=32, choices=ACTIONS, db_index=True)
+    action = models.CharField(max_length=32, choices=ACTIONS)   # indexed via the composite below
     reason = models.TextField(
         help_text='REQUIRED, and required by the service rather than by a form the next caller might '
                   'not use. A log of timestamps with no reasons answers "what happened" and not "why", '
                   'and only the second one is any use in an appeal.',
     )
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)        # indexed via the composites below
 
     blurb_report = models.ForeignKey(
         'BlurbReport', on_delete=models.SET_NULL, null=True, blank=True,
@@ -7769,14 +7770,30 @@ class ModerationAction(models.Model):
         'GameFlag', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='moderation_actions',
     )
+    target_id = models.IntegerField(
+        null=True, blank=True,
+        help_text='PK of the object acted on (the rating, the game), captured at the time. The '
+                  'label alone is not identification: it is truncated at 255 and two long-titled '
+                  'games can produce the same one, and once the report is purged the label is all '
+                  'that is left. Mirrors ModerationLog.comment_id_snapshot, which learned this.',
+    )
     target_label = models.CharField(
         max_length=255, blank=True,
         help_text='Human-readable identification of what was acted on, captured at the time.',
     )
     changed = models.JSONField(
-        default=dict, blank=True,
-        help_text="{field: [before, after]} for whatever the action actually wrote. This is what "
-                  "makes a reversal possible without guessing at the previous state.",
+        default=dict, blank=True, encoder=DjangoJSONEncoder,
+        help_text="{field: [before, after]} for whatever the action actually WROTE -- read from the "
+                  "object, never assumed. This is what makes a reversal possible without guessing "
+                  "at the previous state, and `reverse_action` reads it rather than hardcoding. "
+                  "DjangoJSONEncoder so a date or Decimal field added to a flag action later cannot "
+                  "raise mid-transaction.",
+    )
+    evidence = models.JSONField(
+        default=dict, blank=True, encoder=DjangoJSONEncoder,
+        help_text="What the action was ABOUT but did not change -- the hidden blurb's text, most of "
+                  "all. Separate from `changed` because an appeal needs the words while a diff view "
+                  "must not render them as a field that was modified.",
     )
 
     reverses = models.ForeignKey(
@@ -7788,11 +7805,22 @@ class ModerationAction(models.Model):
     )
 
     class Meta:
-        ordering = ['-created_at']
+        # `-id` breaks ties: created_at is auto_now_add, so a bulk write can produce identical
+        # timestamps and leave paging through the log non-deterministic across page boundaries.
+        ordering = ['-created_at', '-id']
         indexes = [
             models.Index(fields=['-created_at'], name='modaction_recent_idx'),
             models.Index(fields=['actor', '-created_at'], name='modaction_actor_idx'),
             models.Index(fields=['action', '-created_at'], name='modaction_action_idx'),
+        ]
+        constraints = [
+            # One reversal per decision, enforced by the DATABASE. `is_reversed` is a plain read, so
+            # two admins reversing the same entry both see False and both insert; the service takes
+            # a row lock, and this is what holds if anything ever writes without one.
+            models.UniqueConstraint(
+                fields=['reverses'], condition=Q(reverses__isnull=False),
+                name='modaction_one_reversal_per_action',
+            ),
         ]
 
     def __str__(self):
