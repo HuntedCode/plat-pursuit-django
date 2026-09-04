@@ -166,6 +166,17 @@ python manage.py reconcile_contracts --contract <slug> --apply                # 
 python manage.py reconcile_contracts --contract <slug> --apply --force-empty  # zero-member override
 ```
 
+The additive counterpart is `process_contracts --contract <slug>`, which sweeps one live
+Contract across every candidate profile. Reach for it whenever a Contract is published or a
+re-key has just revoked credit: without it, detection for that Contract waits for the nightly
+sweep, so hunters sit with their XP dipped (or their back catalogue unrecognised) for up to a
+day. The two are mirrored in SHAPE -- one named Contract, staff-run, immediate -- but deliberately
+asymmetric where it counts: `process_contracts` REFUSES a draft Contract (the reached stamp makes
+it claimable and un-publishing does not take that back) whereas `reconcile_contracts` ignores
+`is_live` (un-publishing a misbehaving Contract is a sensible first move while you fix it); and
+`process_contracts` writes by default whereas `reconcile_contracts` previews by default and needs
+`--apply`. Additive and subtractive earn different defaults.
+
 Per orphaned hunter it deletes the `EarnedContract` (its `ContractXPGrant` rows cascade) and
 rebuilds `ProfileJobXP` + `ProfileCareerStanding` from the surviving ledger, so per-job levels, the
 Pursuer Level and every board follow. `verify_profile_sync` reports the same condition read-only, as

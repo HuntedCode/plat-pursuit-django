@@ -17,7 +17,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
-| 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all` -> `recompute_milestones` -> `audit_badge_coverage`. The middle two are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. |
+| 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all --incremental` -> `recompute_milestones` -> `audit_badge_coverage`. The middle two are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 06:00 UTC daily | `announce_contracts` | Daily | After `nightly` (04:00) finishes, so a wave published by a curator during the day and one made claimable overnight land in ONE post. Silent when nothing is new, which is most days. **Run `announce_contracts --baseline` by hand once before registering this**, or the first run tries to announce everything already live. |
 | Tue 14:00 UTC | `djstripe_sync_models Subscription && audit_subscription_status --fix` (ONE entry, `&&`) | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no USER emails. Also sweeps for ORPHANED subscriptions (live sub, no user -- the account-deletion race; report-only, cancel by hand) and mails the full run report to `AUDIT_REPORT_EMAIL` (operator email, topline counts in the subject; empty setting = no email, `--no-email` skips) |
@@ -165,10 +165,10 @@ replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refres
 - **Failure impact**: Badge series with new DLC stay un-refreshed until the next run, so a few earners may show a stale (still-earned) badge tier they've technically lapsed. Per-series failures are caught and logged without blocking the others.
 - **Lapse behavior**: holds are binary in the current engine -- a revoke DELETES the `UserGroupBadge` row. There is no maintenance state.
 
-### process_contracts --all
+### process_contracts --all --incremental
 
 - **Schedule**: Runs as step 3 of `nightly`. **No standalone Render entry.**
-- **Command**: `python manage.py process_contracts --all`
+- **Command**: `python manage.py process_contracts --all --incremental` (see `core/management/commands/nightly.py` STEPS -- it passes `incremental`, which sweeps only Contracts changed since the last run plus a forced FULL pass weekly)
 - **What it does**: Re-runs Contract reach-detection against every eligible profile's CURRENT
   `ProfileGame` / `EarnedTrophy` state and stamps `EarnedContract.*_reached_at`, making the reward
   claimable. Detection only: it grants NO XP, because banking a reward stays a deliberate user action.
@@ -177,6 +177,11 @@ replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refres
   already completed its game is never detected by any automatic path. This is that path.
 - **Ordering**: after `detect_dlc_and_refresh`, which rewrites `ProfileGame.progress` for games that
   gained DLC. Running it first would stamp reaches the DLC sweep immediately invalidates.
+- **Not the only way in**: `process_contracts --contract <slug>` sweeps ONE live Contract across every
+  candidate immediately, for the moment a Contract is published or a re-key has just revoked credit.
+  It deliberately IGNORES the incremental filter (a Contract's `updated_at` does not move when its
+  igdb-derived membership changes, so that filter would hide exactly the case you ran it for) and
+  never writes the watermark. Staff-run; do NOT add it to the nightly -- `--all` already covers it.
 - **Whale-safety**: for each live Contract it first narrows to the profiles that actually completed a
   member game (a couple of bounded queries), then runs detection for just those candidates. It never
   scans the whole userbase per Contract.

@@ -1133,9 +1133,11 @@ already fixed; this is the credit half. New: `reconcile_contracts` (see
       mid-rematch is the usual cause). Fix the concept, re-run the preview.
 - [ ] Publish the original's Contract (`is_live=True`). `went_live_at` stamps on the transition, so
       it gets the New badge and the Discord announce — which is the behaviour we want here.
-- [ ] `python manage.py process_contracts --user <psn>` for a spot-check, then let the nightly
-      `--all` sweep pick up the rest. Revoked hunters become claimable again through the CORRECT
-      Contract and re-earn with the claim ceremony.
+- [ ] `python manage.py process_contracts --contract <myst-original-slug> --user <psn>` for a
+      spot-check, then `--contract <myst-original-slug>` to sweep every candidate immediately.
+      **Do not leave this to the nightly**: the reconcile above deliberately removed these hunters'
+      XP, and waiting leaves them dipped for up to a day. Revoked hunters become claimable again
+      through the CORRECT Contract and re-earn with the claim ceremony.
 - [ ] Their XP dips between the revoke and their next claim. Accepted and expected — no
       announcement planned; revisit only if the affected count comes back larger than expected.
 - [ ] `ProgressionMilestone` rows are deliberately NOT rewound, so a revoked hunter can briefly show
