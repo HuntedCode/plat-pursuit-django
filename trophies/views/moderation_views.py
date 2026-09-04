@@ -9,7 +9,6 @@ Gated by `ModeratorRequiredMixin` (moderators AND admins). The gate REDIRECTS ra
 hunter who guesses a URL gets the home page rather than confirmation that something is here.
 """
 from django.contrib import messages
-from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse_lazy
@@ -29,25 +28,24 @@ STATUS_FILTERS = ['pending', 'actioned', 'dismissed', 'all']
 
 
 def queue_summaries():
-    """Every queue, with how much is waiting in it. ONE definition, read by the landing and by each
-    queue's own header.
+    """Every queue, named and linked, with how much is waiting in it. ONE definition, read by the
+    landing and by each queue's own header.
 
-    Two grouped counts rather than a count per status per queue. These are small curated tables, but
-    the shape matters: this must not grow a query per queue as queues are added.
+    The COUNTS come from `moderation_service.queue_counts()` rather than being aggregated here: the
+    navbar's attention marker reads the same function, and a marker that counts differently from the
+    page it points at is worse than no marker at all. This function owns only the presentation --
+    what each queue is called and where it lives.
     """
-    blurbs = BlurbReport.objects.aggregate(
-        open=Count('id', filter=Q(status='pending')), total=Count('id'))
-    flags = GameFlag.objects.aggregate(
-        open=Count('id', filter=Q(status='pending')), total=Count('id'))
+    counts = moderation_service.queue_counts()
     return [
         {'slug': 'quick-takes', 'name': 'Quick Takes',
          'url': reverse_lazy('mod_quick_takes'),
          'blurb': 'Reported quick takes, the only free text a hunter can write on the site.',
-         'open': blurbs['open'] or 0, 'total': blurbs['total'] or 0},
+         **counts['quick-takes']},
         {'slug': 'game-flags', 'name': 'Game Flags',
          'url': reverse_lazy('mod_game_flags'),
          'blurb': 'Reported problems with a game: delisted, unobtainable, shovelware, buggy.',
-         'open': flags['open'] or 0, 'total': flags['total'] or 0},
+         **counts['game-flags']},
     ]
 
 def _breadcrumb(*tail):

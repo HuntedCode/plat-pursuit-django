@@ -91,12 +91,18 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
         {# ── Status-aware avatar + unified panel (absorbs the hotbar) ── #}
         {% if user.is_authenticated %}
         <div class="dropdown dropdown-end" id="nav-account">
-            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}" aria-haspopup="true" aria-expanded="false">
+            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}{% if mod_open_count %}, {{ mod_open_count }} report{{ mod_open_count|pluralize }} waiting to be moderated{% endif %}" aria-haspopup="true" aria-expanded="false">
                 <span class="pp-av__img">
                     {% if user.profile %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
                     {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{% endif %}
                 </span>
                 {% if navsync %}<span class="pp-av__dot"></span>{% endif %}
+                {% comment %}Top-right, because bottom-right is the sync LED and the two say different
+                things: the ring and dot are about YOUR account, this is about the site's queue. It
+                carries the number rather than being a bare dot, since "how much" is the whole
+                question, and it is aria-hidden because the avatar's own label already says it in
+                words.{% endcomment %}
+                {% if mod_open_count %}<span class="pp-av__queue" aria-hidden="true">{% if mod_open_count > 9 %}9+{% else %}{{ mod_open_count }}{% endif %}</span>{% endif %}
             </div>
             <div tabindex="0" class="dropdown-content pp-avpanel mt-2 z-[100] max-md:fixed max-md:top-16 max-md:right-2" id="nav-sync"
                  {% if navsync %}data-url-sync="{% url 'profile_sync_status' %}" data-url-trigger="{% url 'trigger_sync' %}" data-status="{{ navsync.sync_status }}" data-seconds="{{ navsync.seconds_to_next_sync|default:0 }}"{% endif %}>
@@ -140,9 +146,17 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                         <a href="{% url 'link_psn' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Link PSN</a>
                     {% endif %}
                     <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
-                    {% comment %} No staff links in the avatar menu since the 2026-08 strip-down:
-                    the staff pages are bookmark-reached (fundraiser admin cross-links its
-                    siblings), and the menu stays identical for every signed-in hunter. {% endcomment %}
+                    {% comment %} The 2026-08 strip-down took staff links OUT of this menu: staff
+                    pages are bookmark-reached (fundraiser admin cross-links its siblings), and the
+                    menu reads the same for every signed-in hunter. The Mod Centre is the one
+                    deliberate exception, and the marker is the reason. Moderation is the only staff
+                    surface with a QUEUE, so it has something to say without being visited, and a
+                    bookmark cannot tell anyone that three reports came in overnight. Everything else
+                    stays bookmark-reached; if the admin dashboard wants a place here it needs its
+                    own reason, not this precedent. {% endcomment %}
+                    {% if show_mod_centre %}
+                    <a href="{% url 'mod_centre' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Mod Centre{% if mod_open_count %}<span class="pp-avmenu__count">{{ mod_open_count }} waiting</span>{% endif %}</a>
+                    {% endif %}
                     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="pp-avmenu__danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></form>
                 </div>
             </div>

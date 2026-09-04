@@ -14,6 +14,7 @@ from django.urls import reverse
 
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from trophies.models import BlurbReport, GameFlag, ModerationAction, UserConceptRating
+from trophies.services import moderation_service
 
 pytestmark = pytest.mark.django_db
 
@@ -409,3 +410,133 @@ def test_the_queue_registry_has_one_definition(client):
     landing = client.get(reverse('mod_centre')).content.decode()
     for queue in queue_summaries():
         assert str(queue['url']) in landing
+
+# ── the way IN: the avatar menu entry and its marker ─────────────────────────────────────────────
+#
+# The queues are only useful if a moderator knows there is something in them. These cover the one
+# route to the Mod Centre that is not a bookmark, and the marker that says it is worth taking.
+
+CHROME_PAGE = 'home'          # any page: the navbar is site-wide chrome, which is the point
+
+
+def _chrome(client):
+    return client.get(reverse(CHROME_PAGE)).content.decode()
+
+
+@pytest.mark.parametrize('role', ['moderator', 'admin'])
+def test_a_moderator_is_offered_the_mod_centre_in_the_avatar_menu(client, role):
+    client.force_login(_user(role))
+    assert reverse('mod_centre') in _chrome(client)
+
+
+def test_an_ordinary_hunter_is_not(client):
+    """The menu reads the same for every hunter, minus this one entry."""
+    client.force_login(_user())
+    assert reverse('mod_centre') not in _chrome(client)
+
+
+def test_a_signed_out_visitor_is_not(client):
+    assert reverse('mod_centre') not in _chrome(client)
+
+
+def test_the_entry_is_there_when_the_queues_are_empty(client):
+    """A link that appears only when there is work is a link nobody can find when they go looking
+    for it. The marker is what is conditional, not the entry."""
+    client.force_login(_user('moderator'))
+
+    body = _chrome(client)
+
+    assert reverse('mod_centre') in body
+    assert 'pp-av__queue' not in body, 'a marker with nothing behind it'
+
+
+def test_open_reports_put_a_marker_on_the_avatar(client):
+    _report()
+    _flag()
+    client.force_login(_user('moderator'))
+
+    body = _chrome(client)
+
+    assert 'pp-av__queue' in body
+    assert '>2<' in body, 'the marker does not carry how much is waiting'
+    assert '2 waiting' in body, 'the menu entry does not carry the count'
+
+
+def test_the_marker_says_its_number_out_loud(client):
+    """The marker itself is aria-hidden, so the avatar's own label has to carry it."""
+    _report()
+    client.force_login(_user('moderator'))
+
+    assert '1 report waiting to be moderated' in _chrome(client)
+
+
+def test_a_crowded_queue_does_not_stretch_the_marker(client):
+    """Ten reports is still "go and look". A three-digit pill on a 38px avatar is not."""
+    for _ in range(11):
+        _flag()
+    client.force_login(_user('moderator'))
+
+    body = _chrome(client)
+
+    assert '>9+<' in body
+    assert '>11<' not in body
+    assert '11 waiting' in body, 'the exact number still belongs in the menu, where there is room'
+
+
+def test_an_ordinary_hunters_page_does_not_count_anything(client):
+    """The gate has to come BEFORE the work. This rides every page render on the site, and almost
+    nobody who triggers it is a moderator."""
+    client.force_login(_user())
+    _report()
+
+    with CaptureQueriesContext(connection) as captured:
+        client.get(reverse(CHROME_PAGE))
+
+    moderation = [q['sql'] for q in captured.captured_queries
+                  if 'blurbreport' in q['sql'].lower() or 'gameflag' in q['sql'].lower()]
+    assert moderation == [], f'counted the queues for a non-moderator: {moderation}'
+
+
+def test_the_count_is_counted_once_and_then_remembered(client):
+    """Two aggregates on the first render, none on the next. It is the same number for every
+    moderator, so it is cached globally rather than per viewer."""
+    _report()
+    client.force_login(_user('moderator'))
+
+    def _counting_queries():
+        with CaptureQueriesContext(connection) as captured:
+            client.get(reverse(CHROME_PAGE))
+        return [q['sql'] for q in captured.captured_queries
+                if 'count(' in q['sql'].lower()
+                and ('blurbreport' in q['sql'].lower() or 'gameflag' in q['sql'].lower())]
+
+    assert len(_counting_queries()) == 2, 'expected one aggregate per queue on a cold cache'
+    assert _counting_queries() == [], 'the count was not cached'
+
+
+def test_clearing_the_queue_clears_the_marker(client, django_capture_on_commit_callbacks):
+    """The staleness that matters. A new report may take up to the TTL to raise the marker, which is
+    fine -- but a marker still claiming work after a moderator emptied the queue is the one they
+    would notice, and the one that would teach them to stop believing it."""
+    report = _report()
+    moderator = _user('moderator')
+    client.force_login(moderator)
+    assert 'pp-av__queue' in _chrome(client)          # warms the cache at 1
+
+    with django_capture_on_commit_callbacks(execute=True):
+        moderation_service.dismiss_blurb_report(report, moderator, 'not a problem')
+
+    assert 'pp-av__queue' not in _chrome(client)
+
+
+def test_the_marker_and_the_mod_centre_agree(client):
+    """Two surfaces, one definition of "waiting". A marker that counts differently from the page it
+    points at is worse than no marker."""
+    _report()
+    _flag()
+    _flag()
+    client.force_login(_user('moderator'))
+
+    landing = client.get(reverse('mod_centre'))
+
+    assert moderation_service.open_report_count() == landing.context['open_total'] == 3

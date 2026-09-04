@@ -257,6 +257,14 @@
     background: radial-gradient(circle at 34% 30%, color-mix(in oklab, var(--ring, var(--pp-border)) 45%, white), var(--ring, var(--pp-border)) 70%);
     box-shadow: 0 0 5px -1px var(--ring, var(--pp-border)), inset 0 -1px 1.5px rgba(0, 0, 0, 0.28);
     transition: background 0.4s var(--pp-ease), box-shadow 0.4s var(--pp-ease); }
+/* Moderation queue marker: the site's work, not the viewer's account -- so it sits at the OPPOSITE corner
+   from the sync LED and is a numeric pill rather than a second light. Two lights of different colours on
+   one 38px avatar is a puzzle; a number is a fact. It never animates: it is present from first paint and
+   an entrance would draw the eye on every single page load. */
+.pp-av__queue { position: absolute; right: -5px; top: -5px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 999px; border: 2px solid var(--pp-bg-1); background: var(--pp-error); color: #fff;
+    font-size: 0.6rem; font-weight: 800; line-height: 12px; text-align: center; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; box-shadow: 0 0 6px -1px var(--pp-error); pointer-events: none; }
 /* Sync-complete flourish: one satisfying green pulse when syncing -> synced (navsync.js adds the class,
    removes it after). Settles into the resting synced halo. */
 /* color-mix() is HOISTED to custom props (lightningcss silently drops color-mix used INSIDE @keyframes). */
@@ -358,6 +366,8 @@
 .pp-avmenu svg { width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; transition: color var(--pp-dur-fast) var(--pp-ease); }
 .pp-avmenu__danger:hover { color: var(--pp-error) !important; }
 @media (prefers-reduced-motion: reduce) { .pp-av:active, .pp-avmenu a:hover { transform: none; } }
+/* Right-aligned count on a menu row. Written for a feature that never shipped and sat unused until the
+   Mod Centre entry; kept rather than re-invented under a new name. */
 .pp-avmenu__count { margin-left: auto; font-size: 0.7rem; font-weight: 800; color: var(--pp-error); }
 
 /* ── Sub-nav: the hub wayfinding rail (grouped, house style) ──────────────── */

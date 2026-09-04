@@ -20,8 +20,10 @@ Two rules the audit of the first cut made explicit, both worth stating because n
 """
 import logging
 
+from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from trophies.models import BlurbReport, GameFlag, ModerationAction
@@ -78,6 +80,21 @@ def _lock_report(report):
     return fresh
 
 
+def _log(**fields):
+    """Write the audit entry, and drop the cached "how much is waiting" count.
+
+    ONE place, because every decision changes that count, and the sixth queue action added later
+    will copy its neighbour rather than remember a separate second step.
+
+    `on_commit` rather than an inline delete: a concurrent request that repopulated the cache from a
+    transaction that has not committed would put the stale number straight back, and the bust would
+    have run before the change it describes was visible to anyone.
+    """
+    action = ModerationAction.objects.create(**fields)
+    transaction.on_commit(forget_open_count)
+    return action
+
+
 def _lock_flag(flag):
     try:
         fresh = GameFlag.objects.select_for_update().select_related('game').get(pk=flag.pk)
@@ -111,7 +128,7 @@ def hide_blurb(report, moderator, reason):
     report.reviewed_at = timezone.now()
     report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
 
-    action = ModerationAction.objects.create(
+    action = _log(
         actor=moderator, actor_label=_label(moderator), action='blurb_hidden', reason=reason,
         blurb_report=report, target_id=rating.pk,
         target_label=f'Quick take on {rating.concept.unified_title}'[:255],
@@ -139,7 +156,7 @@ def dismiss_blurb_report(report, moderator, reason):
     report.reviewed_at = timezone.now()
     report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
 
-    action = ModerationAction.objects.create(
+    action = _log(
         actor=moderator, actor_label=_label(moderator), action='blurb_report_dismissed',
         reason=reason, blurb_report=report, target_id=report.rating_id,
         target_label=f'Quick take on {report.rating.concept.unified_title}'[:255],
@@ -175,7 +192,7 @@ def approve_game_flag(flag, moderator, reason):
     after = {f: getattr(game, f) for f in WATCHED_GAME_FIELDS}
     changed = {f: [before[f], after[f]] for f in before if before[f] != after[f]}
 
-    action = ModerationAction.objects.create(
+    action = _log(
         actor=moderator, actor_label=_label(moderator), action='game_flag_approved', reason=reason,
         game_flag=flag, target_id=game.pk,
         target_label=f'{flag.get_flag_type_display()} on {game.title_name}'[:255],
@@ -197,7 +214,7 @@ def dismiss_game_flag(flag, moderator, reason):
 
     GameFlagService.dismiss_flag(flag, moderator)
 
-    action = ModerationAction.objects.create(
+    action = _log(
         actor=moderator, actor_label=_label(moderator), action='game_flag_dismissed', reason=reason,
         game_flag=flag, target_id=flag.game_id,
         target_label=f'{flag.get_flag_type_display()} on {flag.game.title_name}'[:255],
@@ -263,7 +280,7 @@ def reverse_action(action, moderator, reason):
 
     report, changed = undo(locked, moderator, reason)
 
-    reversal = ModerationAction.objects.create(
+    reversal = _log(
         actor=moderator, actor_label=_label(moderator), action='blurb_restored', reason=reason,
         blurb_report=report, reverses=locked,
         target_id=locked.target_id, target_label=locked.target_label,
@@ -271,3 +288,48 @@ def reverse_action(action, moderator, reason):
     )
     logger.info('Moderation: action %s reversed by=%s', locked.pk, getattr(moderator, 'pk', None))
     return reversal
+
+
+# ── how much is waiting ──────────────────────────────────────────────────────────────────────────
+
+#: The navbar's attention marker rides EVERY page render for a moderator, so its number is cached
+#: rather than counted per request.
+#:
+#: The staleness is deliberately ASYMMETRIC. A NEW report may take up to the TTL to raise the marker,
+#: which is the lag the owner explicitly allowed. A DECISION clears the key outright (`_log`), because
+#: a marker still claiming work after a moderator emptied the queue is the one staleness they would
+#: actually notice, and the one that teaches them to stop believing it.
+OPEN_COUNT_CACHE_KEY = 'moderation:open_total'
+OPEN_COUNT_CACHE_TTL = 300
+
+
+def queue_counts():
+    """Per queue: how much is waiting, and how much there has ever been. Live, uncached.
+
+    Here rather than in the view because the navbar marker and the Mod Centre have to agree on what
+    "waiting" means -- a marker that counts differently from the page it points at is worse than no
+    marker. Two grouped aggregates, not one query per status per queue: this must not grow a query
+    per queue as queues are added.
+    """
+    blurbs = BlurbReport.objects.aggregate(
+        open=Count('id', filter=Q(status='pending')), total=Count('id'))
+    flags = GameFlag.objects.aggregate(
+        open=Count('id', filter=Q(status='pending')), total=Count('id'))
+    return {
+        'quick-takes': {'open': blurbs['open'] or 0, 'total': blurbs['total'] or 0},
+        'game-flags': {'open': flags['open'] or 0, 'total': flags['total'] or 0},
+    }
+
+
+def open_report_count():
+    """Total waiting across every queue. Cached; this is what the navbar marker reads."""
+    total = cache.get(OPEN_COUNT_CACHE_KEY)
+    if total is None:
+        total = sum(counts['open'] for counts in queue_counts().values())
+        cache.set(OPEN_COUNT_CACHE_KEY, total, OPEN_COUNT_CACHE_TTL)
+    return total
+
+
+def forget_open_count():
+    """Drop the cached count so the next render counts again."""
+    cache.delete(OPEN_COUNT_CACHE_KEY)

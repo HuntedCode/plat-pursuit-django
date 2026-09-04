@@ -161,6 +161,30 @@ def _active_fundraiser_or_none(request=None):
         return None
 
 
+def moderation_alert(request):
+    """The Mod Centre entry in the avatar menu, and whether it needs attention.
+
+    Everyone who is not a moderator returns an empty dict before anything else happens: no cache
+    read, no query, nothing. That gate is the whole cost of this processor for ~every visitor.
+
+    The FLAG is separate from the COUNT on purpose. The entry has to appear for a moderator whose
+    queues are empty -- a link that materialises only when there is work is a link nobody can find
+    when they go looking for it. The count only decides whether it is wearing a marker.
+    """
+    from trophies.mixins import is_mod_or_admin
+
+    if not is_mod_or_admin(getattr(request, 'user', None)):
+        return {}
+    try:
+        from trophies.services import moderation_service
+        return {'show_mod_centre': True, 'mod_open_count': moderation_service.open_report_count()}
+    except Exception:
+        # The menu entry still renders. Losing the count costs a moderator a marker; letting this
+        # raise would cost every moderator every page on the site.
+        logger.debug("Failed to resolve the moderation attention count", exc_info=True)
+        return {'show_mod_centre': True}
+
+
 def navsync(request):
     """Global profile sync state for the navbar's status-aware avatar + panel.
 
