@@ -39,6 +39,38 @@ class StaffRequiredMixin(LoginRequiredMixin):
         return redirect('home')
 
 
+def is_mod_or_admin(user):
+    """The moderation gate, as ONE expression.
+
+    `is_staff` rather than `role == 'admin'` on the admin half: `CustomUser.save()` keeps the two in
+    lockstep, and `is_staff` additionally covers superusers, who have no role set at all and would
+    otherwise be locked out of the tools they are most likely to be asked to fix.
+
+    A function as well as a mixin because the same question is asked from templates and from a
+    context processor, and three hand-written copies of `is_staff or is_moderator` is how one of them
+    ends up subtly different from the others.
+    """
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.is_staff or getattr(user, 'is_moderator', False))
+    )
+
+
+class ModeratorRequiredMixin(LoginRequiredMixin):
+    """Mod Center access: moderators AND admins.
+
+    Redirects rather than 403s, matching StaffRequiredMixin above -- a hunter who finds a mod URL
+    gets the home page, not confirmation that something is there.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if is_mod_or_admin(request.user):
+            return super().dispatch(request, *args, **kwargs)
+        return redirect('home')
+
+
 class LoginRequiredAPIMixin:
     """
     Mixin for non-DRF API views that require authentication.
