@@ -600,3 +600,116 @@ def test_a_moderator_who_loses_the_role_loses_the_link_and_the_pages(client):
 
     assert reverse('mod_center') not in _chrome(client)
     assert client.get(reverse('mod_center')).url == '/'
+
+# ── writes, specifically ─────────────────────────────────────────────────────────────────────────
+#
+# The sweep above proves the pages are unreachable. These prove the same for the calls that actually
+# change something -- by asserting on the DATABASE afterwards, not on the status code. A gate that
+# redirects but writes first would pass a status-code test.
+
+def test_a_stranger_posting_to_every_action_writes_nothing(client):
+    """Signed out, straight at the URLs, with a well-formed body."""
+    report, flag = _report(), _flag()
+
+    for name, pk in (('mod_hide_blurb', report.pk), ('mod_dismiss_blurb', report.pk),
+                     ('mod_approve_flag', flag.pk), ('mod_dismiss_flag', flag.pk)):
+        resp = client.post(reverse(name, args=[pk]), {'reason': 'let me in'})
+        assert resp.status_code == 302 and '/login' in resp.url.lower(), name
+
+    report.refresh_from_db()
+    report.rating.refresh_from_db()
+    flag.refresh_from_db()
+    flag.game.refresh_from_db()
+    assert report.status == 'pending' and report.rating.blurb_hidden is False
+    assert flag.status == 'pending' and flag.game.is_delisted is False
+    assert ModerationAction.objects.count() == 0
+
+
+def test_a_deactivated_moderator_posting_to_every_action_writes_nothing(client):
+    """Revoking access is the moment the gate has to hold, and a live session is what survives it."""
+    moderator = _user('moderator')
+    client.force_login(moderator)
+    report, flag = _report(), _flag()
+
+    moderator.is_active = False
+    moderator.save()
+
+    for name, pk in (('mod_hide_blurb', report.pk), ('mod_approve_flag', flag.pk)):
+        client.post(reverse(name, args=[pk]), {'reason': 'still here'})
+
+    report.rating.refresh_from_db()
+    flag.game.refresh_from_db()
+    assert report.rating.blurb_hidden is False
+    assert flag.game.is_delisted is False
+    assert ModerationAction.objects.count() == 0
+
+
+def test_a_forged_cross_site_post_is_refused(client):
+    """"Guessing the link" includes a page that makes a logged-in MODERATOR's browser post for it.
+    The session alone must not be enough; the form's CSRF token is the second half."""
+    from django.test import Client
+
+    strict = Client(enforce_csrf_checks=True)
+    strict.force_login(_user('moderator'))
+    flag = _flag()
+
+    resp = strict.post(reverse('mod_approve_flag', args=[flag.pk]), {'reason': 'forged'})
+
+    assert resp.status_code == 403
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+    assert ModerationAction.objects.count() == 0
+
+
+def test_a_hunter_cannot_submit_a_flag_that_is_already_approved(client):
+    """The reporting API is open to every hunter by design. The escalation to check is whether the
+    body can carry `status` through to the row -- it decides its own status, and only 'pending' is
+    reachable from outside."""
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    game = GameFactory()
+
+    resp = client.post(
+        f'/api/v1/games/{game.pk}/flag/',
+        {'flag_type': 'delisted', 'details': 'x', 'status': 'approved', 'reviewed_by': profile.pk},
+        content_type='application/json')
+
+    assert resp.status_code == 200
+    flag = GameFlag.objects.get(game=game)
+    assert flag.status == 'pending', 'a reporter set their own flag to approved'
+    assert flag.reviewed_by is None
+    game.refresh_from_db()
+    assert game.is_delisted is False, 'submitting a flag applied it'
+
+
+def test_a_hunter_cannot_report_a_take_straight_into_action_taken(client):
+    reporter = ProfileFactory(is_linked=True)
+    report = _report()
+    rating = report.rating
+    client.force_login(reporter.user)
+
+    resp = client.post(
+        f'/api/v1/ratings/blurb/{rating.pk}/report/',
+        {'reason': 'spam', 'status': 'action_taken'}, content_type='application/json')
+
+    assert resp.status_code == 200
+    filed = BlurbReport.objects.get(rating=rating, reporter=reporter)
+    assert filed.status == 'pending'
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is False
+
+
+def test_the_django_admin_bulk_actions_stay_out_of_a_moderators_reach(client):
+    """The admin can approve flags and hide blurbs too, and it does NOT go through
+    `moderation_service` -- so it writes no reason and no audit entry. That is acceptable for an
+    admin doing a sweep and is not something a moderator should have: their route is the queue,
+    which records why. `is_staff` is False for a moderator by the role lockstep, and this is what
+    holds the two apart."""
+    moderator = _user('moderator')
+    assert moderator.is_staff is False, 'the role lockstep changed; the admin is now open to mods'
+    client.force_login(moderator)
+
+    for url in ('/admin/trophies/gameflag/', '/admin/trophies/blurbreport/'):
+        resp = client.get(url)
+        assert resp.status_code == 302, f'{url} let a moderator in'
+        assert '/admin/login' in resp.url, url
