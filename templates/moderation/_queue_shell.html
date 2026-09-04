@@ -26,6 +26,25 @@ so acting on a report returns you to the list you were reading rather than to th
 
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
         <div class="card-body p-4 md:p-6 pp-head-cascade">
+            {% comment %}A real way back, and a real way sideways. The breadcrumb above is the
+            smallest target on the page and was the ONLY route out; moving between the two queues
+            went via the landing, which is two clicks for something a moderator does constantly. The
+            sibling carries its open count because that is the reason to go there.{% endcomment %}
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+                <a href="{% url 'mod_centre' %}" class="btn btn-xs btn-ghost gap-1 px-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" aria-hidden="true">
+                        <path d="m15 18-6-6 6-6"/>
+                    </svg>
+                    Mod Centre
+                </a>
+                {% for other in other_queues %}
+                <a href="{{ other.url }}" class="btn btn-xs btn-ghost gap-1.5 px-2">
+                    {{ other.name }}
+                    {% if other.open %}<span class="badge badge-xs badge-warning font-bold">{{ other.open }}</span>{% endif %}
+                </a>
+                {% endfor %}
+            </div>
             <h1 class="text-2xl md:text-3xl font-black tracking-tight text-base-content">{{ queue_name }}</h1>
             <p class="text-sm text-base-content/70 mt-1 max-w-prose">{% block queue_blurb %}{% endblock %}</p>
         </div>

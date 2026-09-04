@@ -27,6 +27,29 @@ PER_PAGE = 25
 STATUS_FILTERS = ['pending', 'actioned', 'dismissed', 'all']
 
 
+
+def queue_summaries():
+    """Every queue, with how much is waiting in it. ONE definition, read by the landing and by each
+    queue's own header.
+
+    Two grouped counts rather than a count per status per queue. These are small curated tables, but
+    the shape matters: this must not grow a query per queue as queues are added.
+    """
+    blurbs = BlurbReport.objects.aggregate(
+        open=Count('id', filter=Q(status='pending')), total=Count('id'))
+    flags = GameFlag.objects.aggregate(
+        open=Count('id', filter=Q(status='pending')), total=Count('id'))
+    return [
+        {'slug': 'quick-takes', 'name': 'Quick Takes',
+         'url': reverse_lazy('mod_quick_takes'),
+         'blurb': 'Reported quick takes, the only free text a hunter can write on the site.',
+         'open': blurbs['open'] or 0, 'total': blurbs['total'] or 0},
+        {'slug': 'game-flags', 'name': 'Game Flags',
+         'url': reverse_lazy('mod_game_flags'),
+         'blurb': 'Reported problems with a game: delisted, unobtainable, shovelware, buggy.',
+         'open': flags['open'] or 0, 'total': flags['total'] or 0},
+    ]
+
 def _breadcrumb(*tail):
     items = [{'text': 'Home', 'url': reverse_lazy('home')},
              {'text': 'Mod Centre', 'url': reverse_lazy('mod_centre')}]
@@ -41,24 +64,7 @@ class ModCentreView(ModeratorRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Two grouped counts rather than a count per status per queue. These are small curated
-        # tables, but the shape matters: the landing must not grow a query per card as queues are
-        # added to it.
-        blurbs = BlurbReport.objects.aggregate(
-            open=Count('id', filter=Q(status='pending')), total=Count('id'))
-        flags = GameFlag.objects.aggregate(
-            open=Count('id', filter=Q(status='pending')), total=Count('id'))
-
-        context['queues'] = [
-            {'slug': 'quick-takes', 'name': 'Quick Takes',
-             'url': reverse_lazy('mod_quick_takes'),
-             'blurb': 'Reported quick takes, the only free text a hunter can write on the site.',
-             'open': blurbs['open'] or 0, 'total': blurbs['total'] or 0},
-            {'slug': 'game-flags', 'name': 'Game Flags',
-             'url': reverse_lazy('mod_game_flags'),
-             'blurb': 'Reported problems with a game: delisted, unobtainable, shovelware, buggy.',
-             'open': flags['open'] or 0, 'total': flags['total'] or 0},
-        ]
+        context['queues'] = queue_summaries()
         context['open_total'] = sum(q['open'] for q in context['queues'])
         # `select_related('actor')` because the list renders the actor on every row, and
         # `actor_label` is only the fallback for a deleted account.
@@ -108,6 +114,11 @@ class _QueueView(ModeratorRequiredMixin, TemplateView):
         context['queue_name'] = self.queue_name
         context['queue_slug'] = self.queue_slug
         context['reasons'] = getattr(self, 'reasons', [])
+        # The OTHER queues, with their open counts. A breadcrumb is the smallest target on the page
+        # and the only way back, and hopping between two queues went via the landing -- two clicks
+        # for a move a moderator makes constantly. The count comes along because "the other queue has
+        # three waiting" is the reason to make that move.
+        context['other_queues'] = [q for q in queue_summaries() if q['slug'] != self.queue_slug]
         context['breadcrumb'] = _breadcrumb({'text': self.queue_name})
         context['seo_title'] = f'{self.queue_name} - Mod Centre'
         return context

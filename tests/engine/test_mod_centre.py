@@ -350,3 +350,62 @@ def test_the_status_filter_uses_the_site_wide_switcher(client, name):
     css = (_pathlib.Path(__file__).resolve().parents[2]
            / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
     assert '.pp-switch__chip' in css, 'the switcher class is missing from the built CSS'
+
+# ── getting out, and getting sideways ────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('name', ['mod_quick_takes', 'mod_game_flags'])
+def test_a_queue_has_a_real_way_back_not_only_a_breadcrumb(client, name):
+    """The breadcrumb is the smallest target on the page, and it was the only route out."""
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse(name)).content.decode()
+    header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
+
+    assert reverse('mod_centre') in header, 'no way back to the Mod Centre from the queue header'
+
+
+def test_a_queue_links_straight_to_the_other_queue(client):
+    """Moving between the two went via the landing: two clicks for a move a moderator makes
+    constantly."""
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse('mod_quick_takes')).content.decode()
+
+    assert reverse('mod_game_flags') in body, 'no direct link to the sibling queue'
+    assert 'Game Flags' in body
+
+
+def test_the_sibling_link_carries_its_open_count(client):
+    """The count is the reason to go there. Without it the link is just another word."""
+    _flag()
+    _flag()
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse('mod_quick_takes')).content.decode()
+    header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
+
+    assert '>2<' in header, 'the sibling queue does not show how much is waiting in it'
+
+
+def test_a_quiet_sibling_shows_no_count_badge(client):
+    """A zero badge is noise: it draws the eye to a queue with nothing in it."""
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse('mod_quick_takes')).content.decode()
+    header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
+
+    assert 'badge-warning' not in header
+
+
+def test_the_queue_registry_has_one_definition(client):
+    """The landing and both queue headers read the same list, so adding a third queue touches one
+    place rather than three that can disagree about what exists."""
+    from trophies.views.moderation_views import queue_summaries
+
+    slugs = {q['slug'] for q in queue_summaries()}
+    assert slugs == {'quick-takes', 'game-flags'}
+
+    client.force_login(_user('moderator'))
+    landing = client.get(reverse('mod_centre')).content.decode()
+    for queue in queue_summaries():
+        assert str(queue['url']) in landing
