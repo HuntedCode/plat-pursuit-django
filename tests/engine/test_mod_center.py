@@ -896,15 +896,44 @@ def test_the_navbar_classes_exist_in_the_served_css(css_class):
     assert f'.{css_class}' in _built_css(), f'{css_class} has no CSS behind it in the built sheet'
 
 
-def test_the_queue_marker_is_not_wearing_a_sync_colour():
-    """Sync owns success, warning and error between them. On the first cut the marker was --pp-error
-    -- the same red as a failed sync's ring and the LED that ring colours -- so a moderator with a
-    broken sync got a red ring, a red halo, a red dot and a red pill, and "your account is broken"
-    became indistinguishable from "the site has work"."""
+def test_the_queue_marker_stays_readable_against_the_avatar_ring():
+    """The marker is error red, which is ALSO the errored-sync ring and the LED that ring colours.
+
+    That overlap is a decided trade, not an oversight: red is materially easier to notice, and being
+    noticed is this element's whole job. It was briefly --pp-primary to avoid the clash and the owner
+    asked for red back.
+
+    So what separates the marker from the ring is no longer colour, and these two properties are
+    carrying that load instead of being cosmetic:
+
+      - the BORDER in the navbar's own background punches the pill out of the ring it overlaps, so
+        the two reds never actually touch;
+      - the Z-INDEX keeps the ring from painting over the number. `.pp-av::after` is generated
+        content, so it paints after every real child no matter the source order -- which is exactly
+        what shipped first, and what the owner caught in a browser rather than in this suite.
+
+    If the two ever do get confused in practice, change the sync LED: sync has three colours to pick
+    between and this has one job.
+    """
     css = (ROOT / 'static' / 'css' / 'components' / 'chrome.css').read_text(encoding='utf-8')
 
     rule = css[css.index('.pp-av__queue {'):]
     rule = rule[:rule.index('}')]
 
-    for sync_colour in ('--pp-error', '--pp-warning', '--pp-success'):
-        assert sync_colour not in rule, f'the marker is wearing {sync_colour}, a sync state'
+    assert 'z-index' in rule, 'the ring will paint over the marker'
+    assert 'border: 2px solid var(--pp-bg-1)' in rule, (
+        'without the punch-out border the marker bleeds into the ring it overlaps')
+
+
+def test_the_marker_and_its_menu_row_agree_on_a_colour():
+    """One fact, one colour. The avatar marker and the menu row's count are the same number seen
+    twice, and they drifted apart once already when only one of them was recoloured."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'chrome.css').read_text(encoding='utf-8')
+
+    marker = css[css.index('.pp-av__queue {'):]
+    marker = marker[:marker.index('}')]
+    menu_row = css[css.index('.pp-avmenu__count {'):]
+    menu_row = menu_row[:menu_row.index('}')]
+
+    assert '--pp-error' in marker
+    assert '--pp-error' in menu_row, 'the menu count is a different colour from the marker'

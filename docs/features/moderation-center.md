@@ -172,12 +172,24 @@ The marker sits at the opposite corner from the sync LED (`.pp-av__queue` vs `.p
 and dot are about *your account*, the marker is about *the site's work*. It clamps at `9+`; the exact
 figure stays in the menu row, where there is room.
 
-It is `--pp-primary`, and that is not a free choice. Sync owns success, warning and error between
-them, so a marker in any of those reads as a fourth sync state: the first cut was `--pp-error`, which
-gave a moderator with a failed sync a red ring, a red halo, a red LED and a red pill, making "your
-account is broken" and "the site has work" the same signal. Primary is the one accent sync never
-uses. It also carries `z-index: 1`, because `.pp-av::after` (the ring) is generated content and
-otherwise paints straight over it.
+It is **error red**, and that is a decided trade rather than an accident. Red is also the
+errored-sync ring and the LED that ring colours, so a moderator with a failed sync sees red in
+several places at once. It was briefly `--pp-primary` to dodge that, and the owner asked for red
+back (2026-09): red is materially easier to notice, and being noticed is this element's whole job. A
+marker nobody catches is worth less than one sharing a hue with a rarer state.
+
+What separates them in that state is **shape, not colour**: a bordered pill carrying a NUMBER at the
+top corner, against a bare 12px dot at the bottom one. Two properties carry that load and are not
+cosmetic:
+
+- the `2px solid var(--pp-bg-1)` **border** punches the pill out of the ring it overlaps, so the two
+  reds never touch;
+- **`z-index: 1`**, because `.pp-av::after` (the ring) is generated content and paints after every
+  real child regardless of source order. Without it the ring draws over the number, which is what
+  shipped first and what the owner caught in a browser rather than in the suite.
+
+If the two ever are confused in practice, change the sync LED: sync has three colours to choose
+between and this has one job.
 
 ## Cache Keys
 
