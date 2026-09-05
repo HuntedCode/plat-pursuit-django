@@ -219,7 +219,10 @@ DATA_UPLOAD_MAX_NUMBER_FIELDS = 50000
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # NOT "django.contrib.admin": this config swaps in a site whose `has_permission` requires
+    # `is_superuser`, so Django admin is the owner's, and the admin TEAM uses /staff/ where every
+    # action is logged with a name and a reason. See core/admin_site.py.
+    "core.admin_apps.SuperuserOnlyAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

@@ -121,9 +121,15 @@ record of what has been done. Every action here is logged with your name and you
         <span class="scard__label">Badge reveal</span>
         <p class="text-xs text-base-content/60 mt-1 leading-snug">The spinner for revealing commissioned artwork.</p>
     </a>
+    {% comment %}Superusers only, matching the gate rather than merely echoing it. Django admin is
+    the owner's: ~90 bulk actions that mutate live data, most writing no audit entry. Showing the
+    card to an Administrator who would be turned away is worse than not showing it -- it advertises
+    a door, and being refused at one reads as a fault rather than a boundary.{% endcomment %}
+    {% if user.is_superuser %}
     <a href="/admin/" class="scard hover:border-primary/50 transition-colors block">
         <span class="scard__label">Django admin</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Everything else. Most of it writes no audit entry, so prefer a tool above where one exists.</p>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">Everything else, and the sharpest edges. Most of it writes no audit entry, so prefer a tool above where one exists.</p>
     </a>
+    {% endif %}
 </div>
 {% endblock %}

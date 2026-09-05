@@ -20,8 +20,8 @@ premium truth-writer) and `CustomUser.save` on role changes. Both call `refresh_
 
 ## The role split
 
-`CustomUser.role`: `admin` / `moderator` / empty. `is_staff` means exactly "can log into the
-Django admin" again -- `save()` keeps it in lockstep (`role == 'admin'` or superuser), and the
+`CustomUser.role`: `admin` / `moderator` / empty. `is_staff` means "reaches the admin tools at
+`/staff/`" -- `save()` keeps it in lockstep (`role == 'admin'` or superuser), and the
 lockstep is symmetric: un-ticking "staff status" on an Administrator demotes the role too, so the
 two fields never disagree. `role` is editable in the Django admin (Permissions fieldset, list
 column + filter). `create_superuser` sets `role='admin'` at the source. Existing staff were
@@ -44,6 +44,37 @@ else admin-only including the beta site" until 2026-09, which contradicted both 
 The gate reads `is_staff` rather than `role == 'admin'` for the admin half, because the lockstep
 above guarantees they agree AND `is_staff` additionally covers superusers, who have no role set at
 all and would otherwise be locked out of the tools they are most likely to be asked to fix.
+
+### Django admin is superusers only (2026-09)
+
+`is_staff` used to mean exactly "can log into the Django admin", which is Django's own default gate.
+It no longer does, and this is the one place that sentence changed.
+
+**`/admin/` now requires `is_superuser`.** `core/admin_site.py` overrides `AdminSite.has_permission`,
+wired in through `core.admin_apps.SuperuserOnlyAdminConfig` replacing `django.contrib.admin` in
+`INSTALLED_APPS` — so `admin.site` *is* the narrowed site and every one of the ~140 `@admin.register`
+calls lands on it, including any a future dependency adds.
+
+The reason is the asymmetry in what the two surfaces cost if misused. `/staff/` actions go through a
+service that requires a reason and writes an audit entry. Django admin is ~90 bulk actions that
+mutate live data, most of which write nothing, plus raw edit access to every model. Owner's call: the
+admin *team* gets the Admin Hub; Django admin is the owner's.
+
+| Flag | Means |
+|------|-------|
+| `is_moderator` | `/mod/`, plus the four rows above |
+| `is_staff` | `/mod/` **and** the Admin Hub at `/staff/` |
+| `is_superuser` | all of the above **and** Django admin |
+
+`is_superuser` rather than a hardcoded username or id: Django-native, grantable and revocable from
+the admin itself, and it does not rot when an email changes.
+
+Two consequences worth knowing. The Admin Hub hides its Django-admin card from anyone who would be
+turned away — advertising a door somebody cannot open reads as a fault rather than a boundary. And
+Django's per-model permission system is no longer what keeps an Administrator out of a changelist:
+`tests/engine/test_django_admin_is_the_owners.py` grants its Administrator **every** permission
+deliberately, because a permission-less fixture would be refused by machinery that was always there,
+and every test in that file would then pass with this gate removed.
 
 ## Rendering
 

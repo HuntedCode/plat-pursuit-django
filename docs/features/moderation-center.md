@@ -243,7 +243,8 @@ read.
 
 - [Community Flags](community-flags.md): where `GameFlag` rows come from, and what each type means
 - [Game Ratings Tab](game-ratings.md): where quick takes and `BlurbReport` rows come from
-- [Marks & Roles](marks-and-roles.md): the moderator/admin role split this gate reads
+- [Marks & Roles](marks-and-roles.md): the moderator/admin role split this gate reads, and what
+  `is_staff` means since Django admin was narrowed to superusers (2026-09)
 - [Navigation](navigation.md): the avatar menu the entry lives in
 - [Shovelware Detection](../reference/shovelware-detection.md): what `shovelware_lock` overrides
 
