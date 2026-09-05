@@ -71,6 +71,29 @@ quick take does not write the blurb. Filing the text under `evidence` keeps a ge
 rendering a misleading "blurb: unchanged" row, and means "did this action modify field X" never
 answers yes for the blurb.
 
+### Naming a moderator
+
+Anywhere this system names a person it uses **`CustomUser.display_name`**: the PSN handle
+(`display_psn_username`, then `psn_username`), with the email address only as the fallback for an
+account with no linked profile.
+
+Two reasons, privacy first. An email address is personal data, and a staff page is still a page. It
+is also simply worse information: a colleague's PSN handle identifies them at a glance, and an
+address nobody recognises does not.
+
+`display_psn_username` leads because `Profile.save()` lowercases `psn_username` -- that field is the
+lookup key, not the spelling.
+
+`moderation_service._label()` freezes the same property onto `ModerationAction.actor_label` at write
+time, so the landing rail and the queue rows never name one person two ways, and the name survives
+the account being deleted. One rule, two readers.
+
+**Any queryset that renders it needs the profile joined.** `display_name` reaches through to
+`profile`, so a queue of handled rows is one extra query per row without
+`select_related('reviewed_by__profile')`. `test_naming_the_moderator_does_not_cost_a_query_per_handled_row`
+pins it: the general per-row guard cannot, because every row it builds is pending, and a pending row
+has no moderator to name.
+
 ### What the queues read
 
 | Queue | Model | "Waiting" means |

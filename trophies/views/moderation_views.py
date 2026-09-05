@@ -68,9 +68,10 @@ class ModCenterView(ModeratorRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context['queues'] = queue_summaries()
         context['open_total'] = sum(q['open'] for q in context['queues'])
-        # `select_related('actor')` because the list renders the actor on every row, and
-        # `actor_label` is only the fallback for a deleted account.
-        context['recent'] = (ModerationAction.objects.select_related('actor')
+        # No `select_related('actor')`: the rail renders `actor_label`, the name frozen at write
+        # time, and never touches the FK. Joining `actor` fetched a row nothing read -- and the
+        # frozen label is the point, since it stays readable after the account is deleted.
+        context['recent'] = (ModerationAction.objects
                              .prefetch_related('reversed_by_action')[:12])
         context['breadcrumb'] = _breadcrumb({'text': 'Mod Center'})
         context['seo_title'] = 'Mod Center - Platinum Pursuit'
@@ -138,7 +139,11 @@ class QuickTakeQueueView(_QueueView):
         # report -> rating -> concept and report -> reporter per row, which is four queries a row
         # on a page of 25 -- the N+1 shape this project has a documented history with.
         return (BlurbReport.objects
-                .select_related('rating__concept', 'rating__profile', 'reporter', 'reviewed_by')
+                .select_related('rating__concept', 'rating__profile', 'reporter',
+                                # `reviewed_by__profile`, not just `reviewed_by`: a handled row
+                                # names the moderator via `display_name`, which reaches through to
+                                # their profile. Without this it is one extra query per handled row.
+                                'reviewed_by', 'reviewed_by__profile')
                 # The row links to the concept's game. Prefetched, so `.games.all|first` in the
                 # template is served from cache instead of a query per row.
                 .prefetch_related('rating__concept__games')
@@ -153,7 +158,7 @@ class GameFlagQueueView(_QueueView):
 
     def get_queryset(self):
         return (GameFlag.objects
-                .select_related('game__concept', 'reporter', 'reviewed_by')
+                .select_related('game__concept', 'reporter', 'reviewed_by', 'reviewed_by__profile')
                 .order_by('status', '-created_at'))
 
     def get_context_data(self, **kwargs):

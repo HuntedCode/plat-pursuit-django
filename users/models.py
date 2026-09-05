@@ -126,6 +126,30 @@ class CustomUser(AbstractUser):
     def is_moderator(self):
         return self.role == 'moderator'
 
+    @property
+    def display_name(self):
+        """Who this account is, for anywhere a person gets NAMED in the UI.
+
+        PSN handle first, email only when there is no linked profile. Two reasons, and the privacy
+        one is the bigger:
+
+        - An email address is personal data, and putting one on a page shows it to everyone who can
+          see that page. A staff surface is still a page.
+        - It is also just better information. A moderator reading "Hunted47" knows who acted; an
+          address they have never seen tells them almost nothing, and two colleagues with similar
+          addresses tell them worse than nothing.
+
+        `getattr(..., None)` rather than `hasattr` + attribute: Django's reverse one-to-one raises
+        `RelatedObjectDoesNotExist`, which subclasses AttributeError precisely so this works, and a
+        user with no linked PSN account is an ordinary case here rather than an error.
+
+        Accessing this in a loop touches `profile`, so any queryset that renders it needs
+        `select_related('<user path>__profile')` or it is one query per row.
+        """
+        profile = getattr(self, 'profile', None)
+        return (getattr(profile, 'display_psn_username', '') or getattr(profile, 'psn_username', '')
+                or self.email)
+
     def save(self, *args, **kwargs):
         # The lockstep enforces exactly two directions: an admin role guarantees Django-admin
         # access, and a demotion to moderator cannot leave admin access behind by accident.
