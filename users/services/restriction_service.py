@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from core.models import AdminAction
 from core.services import audit
-from users.models import UserRestriction
+from users.models import CustomUser, UserRestriction
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,17 @@ logger = logging.getLogger(__name__)
 SCOPE_COVERS = {
     'quick_takes': {'quick_takes', 'all_ugc'},
     'reports': {'reports', 'all_ugc'},
+    # `all_ugc` asked about directly is a fair question and used to be a KeyError -- which, inside a
+    # DRF view's broad `except`, becomes a 500 rather than a refusal. A landmine for the next gate
+    # author, who would reasonably write it.
+    'all_ugc': {'all_ugc'},
 }
+
+#: The longest a restriction can run and still be a date rather than a joke. `timedelta` raises
+#: OverflowError past roughly 2.9 million days, and `OverflowError` is not a `ValueError`, so an
+#: unbounded `days` was a 500 from a form field. Ten years is past any plausible sanction; longer
+#: than that, an admin means indefinite and should say so.
+MAX_RESTRICTION_DAYS = 3650
 
 
 class RestrictionError(Exception):
@@ -37,35 +47,58 @@ def _require_reason(reason):
     return audit.require_reason(reason, error=RestrictionError)
 
 
-def active_scopes(user_id):
-    """The scopes this account is currently restricted from. One query, no Python filtering.
+def _live(queryset):
+    """Not lifted, and not expired -- evaluated in the DATABASE against `now`.
 
-    Live means not lifted AND not expired, evaluated in the DATABASE against `now`. Doing the expiry
-    check in Python would mean loading every restriction the account has ever had onto a hunter's
-    write path -- and would be wrong for anything cached across a request boundary, because expiry
-    happens by the clock rather than by anybody writing a row.
+    Doing the expiry check in Python would load every restriction an account has ever had onto a
+    hunter's write path, and would be wrong for anything held across a request boundary, because
+    expiry happens by the clock rather than by anybody writing a row.
     """
+    return (queryset.filter(lifted_at__isnull=True)
+            .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())))
+
+
+def active_scopes_for(profile):
+    """The scopes this hunter is currently restricted from. One query.
+
+    Matches on the account OR the profile, because a restriction remembers both and either half can
+    be null: the account is gone after a self-service deletion, the profile is absent for an account
+    that never linked PSN. Asking for only one of them is how somebody walks away from a sanction.
+    """
+    user_id = getattr(profile, 'user_id', None)
+    match = Q(profile=profile)
+    if user_id:
+        match |= Q(user_id=user_id)
+    return set(_live(UserRestriction.objects.filter(match)).values_list('scope', flat=True))
+
+
+def active_scopes(user_id):
+    """The scopes one ACCOUNT is restricted from. Kept for callers that hold a user and no profile."""
     if not user_id:
         return set()
-    return set(
-        UserRestriction.objects
-        .filter(user_id=user_id, lifted_at__isnull=True)
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
-        .values_list('scope', flat=True)
-    )
+    return set(_live(UserRestriction.objects.filter(user_id=user_id))
+               .values_list('scope', flat=True))
 
 
 def is_restricted_from(profile, scope):
-    """Whether the account behind this profile may not do `scope` right now.
+    """Whether the hunter behind this profile may not do `scope` right now.
 
     Takes a PROFILE because that is what every caller has -- the UGC gates all run inside code that
-    already loaded one. The restriction hangs off the user, so this is where the hop happens, once,
-    rather than at five call sites.
+    already loaded one.
+
+    FAILS CLOSED on the wrong kind of object. `getattr(profile, 'user_id', None)` returned None for a
+    `CustomUser` -- which has no `user_id` -- and None meant "not restricted", so handing this the
+    wrong type silently granted permission. A gate whose default is permissive is not a gate.
     """
-    user_id = getattr(profile, 'user_id', None)
-    if not user_id:
+    from trophies.models import Profile
+
+    if profile is None:
         return False
-    return bool(active_scopes(user_id) & SCOPE_COVERS[scope])
+    if not isinstance(profile, Profile):
+        raise TypeError(
+            f'is_restricted_from() takes a Profile, not {type(profile).__name__}. Guessing here '
+            f'would fail open.')
+    return bool(active_scopes_for(profile) & SCOPE_COVERS[scope])
 
 
 @transaction.atomic
@@ -82,14 +115,27 @@ def apply_restriction(user, scope, admin, reason, expires_at=None):
     reason = _require_reason(reason)
     if scope not in dict(UserRestriction.SCOPES):
         raise RestrictionError(f'{scope!r} is not a restriction scope.')
+    if expires_at is not None and expires_at <= timezone.now():
+        # A restriction born already over. The service accepted it, the log recorded it, and the
+        # admin was told "Restriction applied" -- while `expires_at__gt=now` never matched, so it
+        # restricted nobody. It showed up only under "ended", as something that lapsed before it
+        # existed.
+        raise RestrictionError('That restriction would already have expired. Pick a length.')
 
-    live = list(
-        UserRestriction.objects.select_for_update()
-        .filter(user=user, lifted_at__isnull=True)
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))
-    )
-    covering = {'all_ugc', scope}
-    clash = next((row for row in live if row.scope in covering), None)
+    # The lock goes on the USER row, not on the restrictions. `SELECT ... FOR UPDATE` locks rows
+    # that EXIST, so locking a filtered restriction queryset locks nothing at all in the common case
+    # -- a hunter with no live restriction -- and two admins acting at once both saw zero rows and
+    # both inserted. That is the phantom-insert the docstring claimed to prevent, prevented only in
+    # the case where an unlocked read would have caught it too. The account always exists.
+    CustomUser.objects.select_for_update().filter(pk=user.pk).first()
+
+    live = list(_live(UserRestriction.objects.filter(user=user)))
+    # Coverage OVERLAP, not membership. `covering = {'all_ugc', scope}` refused broad-then-narrow and
+    # waved narrow-then-broad straight through, so `quick_takes` followed by `all_ugc` produced two
+    # live rows -- and lifting the one an admin could see left the hunter still barred, with no page
+    # saying so. That is the exact state the model docstring says cannot happen.
+    clash = next((row for row in live
+                  if row.scope == scope or 'all_ugc' in (row.scope, scope)), None)
     if clash is not None:
         until = f' until {clash.expires_at:%d %b %Y}' if clash.expires_at else ', indefinitely'
         raise RestrictionError(
@@ -97,7 +143,8 @@ def apply_restriction(user, scope, admin, reason, expires_at=None):
             f'Lift that one first if you mean to change it.')
 
     restriction = UserRestriction.objects.create(
-        user=user, scope=scope, reason=reason, expires_at=expires_at,
+        user=user, profile=getattr(user, 'profile', None),
+        scope=scope, reason=reason, expires_at=expires_at,
         created_by=admin, created_by_label=audit.frozen_label(admin),
     )
     AdminAction.objects.create(

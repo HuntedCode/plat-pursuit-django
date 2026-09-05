@@ -247,6 +247,13 @@ class CommentService:
         if comment.is_deleted:
             return False, "Cannot edit a deleted comment."
 
+        # `toggle_vote` and `report_comment` both call `can_interact`; this one called nothing, so
+        # editing was the one comment write a restriction did not cover. Replacing a body outright
+        # is writing.
+        can_edit, refusal = CommentService.can_interact(profile, action='edit a comment')
+        if not can_edit:
+            return False, refusal
+
         # Sanitize the new body text
         new_body = CommentService.sanitize_text(new_body)
 

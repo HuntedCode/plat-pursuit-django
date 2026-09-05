@@ -332,8 +332,8 @@ def _flag_behind(action):
             'The flag behind this decision has been deleted, so it cannot be undone here.')
 
 
-def _refuse_duplicate_reopen(flag):
-    """Refuse to reopen a flag when an identical one is already waiting.
+def _has_duplicate_pending(flag):
+    """Whether an identical flag from the same hunter is already waiting in the queue.
 
     `GameFlagService.submit_flag` dedups on `status='pending'` and deliberately lets a reporter file
     again once a prior flag is decided -- so reopening an old one can put two identical pending rows
@@ -343,11 +343,16 @@ def _refuse_duplicate_reopen(flag):
     Refusing beats merging: the newer flag carries the reporter's newer words, and silently folding
     two reports into one loses that.
     """
-    duplicate = (GameFlag.objects
-                 .filter(game_id=flag.game_id, reporter_id=flag.reporter_id,
-                         flag_type=flag.flag_type, status='pending')
-                 .exclude(pk=flag.pk).exists())
-    if duplicate:
+    return (GameFlag.objects
+            .filter(game_id=flag.game_id, reporter_id=flag.reporter_id,
+                    flag_type=flag.flag_type, status='pending')
+            .exclude(pk=flag.pk).exists())
+
+
+def _refuse_duplicate_reopen(flag):
+    """For the undo whose ONLY job is reopening. Refusing is right there and wrong for an approval,
+    whose job is putting the game back."""
+    if _has_duplicate_pending(flag):
         raise ModerationError(
             'The same hunter has already filed this flag again, and it is waiting in the queue. '
             'Decide that one instead.')
@@ -361,14 +366,22 @@ def _rating_behind(action, report=None):
     is the same "traceable to nobody" failure `subject_user` was added to fix, left in place on the
     reversal path. `_undo_blurb_hidden_proactive` already proved `target_id` resolves a rating
     perfectly well; there was never a reason for the two paths to differ.
+
+    LOCKED ON BOTH PATHS. The first version took the lock only on the fallback, so the ORDINARY
+    reversal -- the frequent one -- did its compare-and-write against an unlocked row: exactly the
+    window this was meant to close for games, left open for takes. It is also what makes the
+    standing-decision check below safe, since two admins reversing the two hides on one take now
+    serialise on this row instead of each seeing the other as standing and both refusing, which
+    stranded the take hidden with no entry left that could unhide it.
     """
-    if report is not None:
+    LOCKED = UserConceptRating.objects.select_for_update()
+    if report is not None and report.rating_id:
         try:
-            return report.rating
+            return LOCKED.get(pk=report.rating_id)
         except ObjectDoesNotExist:
             pass
     try:
-        return UserConceptRating.objects.select_for_update().get(pk=action.target_id)
+        return LOCKED.get(pk=action.target_id)
     except (UserConceptRating.DoesNotExist, ValueError, TypeError):
         raise ModerationError('The quick take behind this decision no longer exists.')
 
@@ -418,7 +431,11 @@ def _undo_blurb_hidden(action, moderator):
     # restoration.
     changed, evidence = _restore_hidden(action, rating)
 
-    if report is not None:
+    # Only when the take actually came back. Flipping the report to `reviewed` after a REFUSED
+    # restore put a still-hidden take into the queue's dismissed bucket and credited the standing
+    # decision to whoever tried to reverse it -- a call they did not make. Before the restore could
+    # refuse, this was always accurate; it stopped being so the moment it could.
+    if report is not None and changed:
         report.status = 'reviewed'
         report.reviewed_by = moderator      # the standing decision is now this person's
         report.reviewed_at = timezone.now()
@@ -469,10 +486,9 @@ def _undo_game_flag_approved(action, moderator):
     a reversal that quietly did three quarters of its job is worse than one that says so.
     """
     flag = _flag_behind(action)
-    _refuse_duplicate_reopen(flag)
-    # The game, locked, and re-read INSIDE the lock. Comparing against a row fetched before the
-    # lock would compare against a value that may already be stale.
-    game = Game.objects.select_for_update().get(pk=flag.game_id)
+    # `flag.game` is already the locked row: `_flag_behind`'s `select_for_update` joins Game with no
+    # `OF` clause, so Postgres locks both and returns the post-lock version.
+    game = flag.game
     restored, skipped = {}, {}
 
     for field, (before, after) in (action.changed or {}).items():
@@ -486,14 +502,26 @@ def _undo_game_flag_approved(action, moderator):
     if restored:
         game.save(update_fields=list(restored))
 
-    was = flag.status
-    flag.status = 'pending'
-    flag.reviewed_by = None
-    flag.reviewed_at = None
-    flag.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+    changed, evidence = dict(restored), {}
+    if skipped:
+        evidence['not_restored'] = skipped
 
-    changed = {**restored, 'status': [was, 'pending']}
-    evidence = {'not_restored': skipped} if skipped else {}
+    # The REOPEN is refused when an identical flag is already waiting; the RESTORE above is not.
+    # Refusing the whole reversal was the first cut and it was wrong: putting the game field back is
+    # this undo's primary job, and a re-filed flag -- which `submit_flag` deliberately allows once
+    # the original is decided -- left `is_delisted` set with a message telling the admin to go and
+    # decide an unrelated flag, which would not have restored it either.
+    if _has_duplicate_pending(flag):
+        evidence['not_reopened'] = {
+            'why': 'the same hunter has already filed this flag again, and it is waiting'}
+    else:
+        was = flag.status
+        flag.status = 'pending'
+        flag.reviewed_by = None
+        flag.reviewed_at = None
+        flag.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+        changed['status'] = [was, 'pending']
+
     return {'game_flag': flag}, changed, evidence
 
 

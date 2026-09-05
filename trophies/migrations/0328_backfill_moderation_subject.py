@@ -58,9 +58,10 @@ def backfill(apps, schema_editor):
             profile = entry.blurb_report.reporter
         elif entry.action in ('game_flag_approved', 'game_flag_dismissed') and entry.game_flag_id:
             profile = entry.game_flag.reporter
-        elif entry.action == 'blurb_restored' and entry.reverses_id:
-            # A reversal inherits its original's subject. Resolved from the in-memory map because the
-            # original may not have been visited yet.
+        elif entry.reverses_id:
+            # ANY reversal, matched on `reverses_id` rather than on one action name. The first
+            # version matched `blurb_restored` alone, so the three other reversal kinds got no
+            # subject at all -- and a name is the wrong thing to key on when the FK says it exactly.
             original = by_pk.get(entry.reverses_id)
             if original is not None and original.subject_user_id:
                 entry.subject_user_id = original.subject_user_id
@@ -90,7 +91,9 @@ def unbackfill(apps, schema_editor):
     per-person history this branch exists to build, destroyed by a rollback of the migration that
     populated it.
 
-    Rolling back to 0327 drops the columns anyway, so there is nothing this needs to undo.
+    There is nothing to undo: rolling back to 0327 un-applies THIS migration only, and 0327 is
+    what adds the columns, so they stay. (An earlier draft of this note said the columns went
+    with it -- they do not; that needs 0326.)
     """
 
 

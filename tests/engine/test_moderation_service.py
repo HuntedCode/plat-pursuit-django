@@ -886,10 +886,81 @@ def test_the_flag_undo_locks_the_row_it_compares():
     `not_restored` warning -- the exact failure the guard exists to prevent."""
     import inspect
 
-    source = inspect.getsource(mod._flag_behind) + inspect.getsource(mod._undo_game_flag_approved)
+    # `_flag_behind` alone, because its ONE `select_for_update` locks both rows: the join to Game
+    # carries no `OF` clause, so Postgres locks the game too and returns the post-lock version. The
+    # previous version of this test counted two calls across two functions, which meant deleting the
+    # now-redundant second one would have failed it for no reason.
+    source = inspect.getsource(mod._flag_behind)
 
-    # `.select_for_update()` with the call parens, not the bare name: both functions DISCUSS the lock
-    # in their docstrings, so counting the word found two of them with the lock itself removed.
-    assert source.count('.select_for_update()') >= 2, (
-        'the flag undo compares and writes without locking both the flag and the game')
+    assert '.select_for_update()' in source, (
+        'the flag undo compares and writes against rows nothing is holding still')
+
+
+# ── what the RE-audit of those fixes found ───────────────────────────────────────────────────────
+
+def test_reversing_an_approval_restores_the_game_even_if_the_flag_was_refiled():
+    """The first fix for the duplicate-queue problem refused the WHOLE reversal, which was the wrong
+    half. Putting the game field back is this undo's primary job, and `submit_flag` deliberately
+    lets a hunter re-file once the original is decided -- so an ordinary re-file left `is_delisted`
+    set, with a message telling the admin to go and decide an unrelated flag, which would not have
+    restored it either."""
+    flag = _flag('delisted')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed delisted.')
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is True
+    GameFlagService.submit_flag(flag.game, flag.reporter, 'delisted', 'still gone')
+
+    reversal = mod.reverse_action(approval, _admin(), 'Store listing is live again.')
+
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is False, 'the game data was never put back'
+    assert reversal.changed['is_delisted'] == [True, False]
+    flag.refresh_from_db()
+    assert flag.status == 'approved', 'the old flag was reopened beside the new one'
+    assert reversal.evidence['not_reopened'], 'the log does not say the flag was left alone'
+
+
+def test_reopening_a_dismissed_flag_still_refuses_on_a_duplicate():
+    """The refusal is right for THIS undo, whose only job is the reopen."""
+    flag = _flag('delisted')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Looks fine.')
+    GameFlagService.submit_flag(flag.game, flag.reporter, 'delisted', 'again')
+
+    with pytest.raises(mod.ModerationError, match='already filed this flag again'):
+        mod.reverse_action(dismissal, _admin(), 'They were right.')
+
+
+def test_a_refused_restore_does_not_mark_the_report_reviewed():
+    """It flipped the report to `reviewed` and credited the standing decision to whoever tried to
+    reverse it -- a call they did not make -- putting a still-hidden take in the queue's dismissed
+    bucket. Accurate while the restore could not refuse; wrong the moment it could."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory()
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=None, blurb='words',
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0)
+    mod.hide_blurb_without_a_report(rating, _admin(), 'Went looking.')
+    report = BlurbReport.objects.create(
+        rating=rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+    queue_hide = mod.hide_blurb(report, _moderator(), 'Reported too.')
+
+    mod.reverse_action(queue_hide, _admin(), 'My call was wrong.')
+
+    report.refresh_from_db()
+    assert report.status == 'action_taken', 'a refused restore moved the report to dismissed'
+    assert report.reviewed_by is not None
+
+
+def test_the_ordinary_reversal_locks_the_take_it_compares():
+    """The lock was taken only on the fallback path, so the FREQUENT reversal compared and wrote
+    against an unlocked row -- the window this was meant to close for games, left open for takes.
+    It is also what stops two admins reversing two hides on one take from each seeing the other as
+    standing, both refusing, and stranding it hidden with no entry left that could unhide it."""
+    import inspect
+
+    source = inspect.getsource(mod._rating_behind)
+
+    assert source.count('select_for_update') >= 1
+    assert 'return report.rating' not in source, (
+        'the common path returns an unlocked related object')
 

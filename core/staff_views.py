@@ -193,8 +193,19 @@ class ReverseDecisionView(StaffRequiredMixin, PostActionMixin, View):
     success_message = 'Decision reversed.'
 
     def act(self, pk, user, reason):
-        moderation_service.reverse_action(
+        return moderation_service.reverse_action(
             get_object_or_404(ModerationAction, pk=pk), user, reason)
+
+    def report(self, outcome):
+        """A reversal can log itself and still change nothing -- when the value moved on since, or
+        when another decision to hide the same take has not been reversed. Saying "Decision
+        reversed." there tells the admin the opposite of what the page beneath it shows."""
+        from django.contrib import messages
+
+        if outcome is not None and not outcome.changed:
+            return messages.WARNING, (
+                'Recorded, but nothing was put back. See the entry for what was left alone and why.')
+        return messages.SUCCESS, self.success_message
 
     def default_redirect(self):
         return reverse_lazy('admin_decisions')
@@ -382,9 +393,18 @@ class RestrictView(StaffRequiredMixin, PostActionMixin, View):
         expires_at = None
         if days:
             try:
-                expires_at = timezone.now() + timedelta(days=int(days))
+                length = int(days)
             except (TypeError, ValueError):
                 raise restriction_service.RestrictionError('That is not a length of time.')
+            # BOUNDED, because `timedelta` raises OverflowError past ~2.9 million days and
+            # `OverflowError` is not a `ValueError` -- so the except above missed it and a form
+            # field became a 500. Ten years is past any plausible sanction; beyond that an admin
+            # means indefinite, and should say so rather than typing a big number.
+            if not 1 <= length <= restriction_service.MAX_RESTRICTION_DAYS:
+                raise restriction_service.RestrictionError(
+                    f'Pick between 1 and {restriction_service.MAX_RESTRICTION_DAYS} days, or '
+                    f'choose indefinite.')
+            expires_at = timezone.now() + timedelta(days=length)
 
         restriction_service.apply_restriction(person, scope, user, reason, expires_at=expires_at)
 

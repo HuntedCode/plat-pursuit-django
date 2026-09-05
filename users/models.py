@@ -300,9 +300,23 @@ class UserRestriction(models.Model):
     ]
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='restrictions',
-        help_text='The account restricted. CASCADE: a deleted account has nothing left to restrict, '
-                  'and the AdminAction that applied it keeps the frozen name for the record.',
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='restrictions',
+        help_text='The account restricted. SET_NULL, not CASCADE -- see `profile` below.',
+    )
+    profile = models.ForeignKey(
+        'trophies.Profile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='restrictions',
+        help_text='The PSN profile behind the account, and the half that actually survives.\n\n'
+                  'Both, because neither alone is durable. The FIRST cut keyed on the user only, '
+                  'reasoning that a restriction is an account fact and that hanging it off the '
+                  'profile would make unlinking PSN an escape hatch. True, and it missed the bigger '
+                  'hatch: Settings has a self-service DELETE ACCOUNT, `Profile.user` is SET_NULL, '
+                  'and `link_profile_to_user` reattaches THE SAME profile row to a new account. So '
+                  'delete, re-register, re-verify the same PSN account, and a CASCADE took every '
+                  'restriction with it -- while the trophies, badges, ranking and handle all came '
+                  'back. The profile is what persists across that, so the profile is what a '
+                  'restriction has to remember.',
     )
     scope = models.CharField(max_length=16, choices=SCOPES)
     reason = models.TextField(help_text='REQUIRED by the service, like every other audited action.')
@@ -333,6 +347,9 @@ class UserRestriction(models.Model):
             # The gate's query: every live restriction for one account. It runs on UGC writes, so it
             # reads off this index rather than scanning.
             models.Index(fields=['user', 'lifted_at', 'expires_at'], name='restriction_live_idx'),
+            # The same shape for the profile half, because the gate asks about both in one query.
+            models.Index(fields=['profile', 'lifted_at', 'expires_at'],
+                         name='restriction_live_prof_idx'),
             models.Index(fields=['-created_at', '-id'], name='restriction_recent_idx'),
         ]
         # NO unique constraint on (user, scope). A partial unique on `lifted_at IS NULL` would also

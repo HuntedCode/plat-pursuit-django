@@ -337,12 +337,17 @@ def test_a_quick_takes_restriction_does_not_stop_reporting(client):
 
 
 def test_a_full_restriction_blocks_every_way_of_writing(client):
-    """THE test for this phase. Every UGC write endpoint, one restricted hunter, and the assertion is
-    on the DATABASE -- a gate that redirects after writing passes a status-code test, and the whole
-    failure mode here is silent.
+    """THE test for this phase. One restricted hunter, every routed way of writing user-authored
+    content, asserted on the DATABASE -- a gate that redirects after writing passes a status-code
+    test, and the whole failure mode here is silent.
 
-    When a new UGC endpoint is added, it belongs in this sweep. That is the point of one test rather
-    than five: there is a single place that answers "did we cover everything".
+    THIS CLAIM WAS FALSE WHEN FIRST WRITTEN. It said "every UGC endpoint" and posted at three, which
+    happened to be the three that had gates. An audit enumerating the routed writers found four more
+    -- roadmap notes (create and edit), roadmap merge/publish, comment edit, and the donor-wall
+    message -- none of which this would have caught. A sweep that only visits the doors you
+    remembered to lock proves nothing about the building.
+
+    The list below is the answer to "did we cover everything", so a new UGC endpoint belongs in it.
     """
     hunter, author = _hunter(), _hunter(psn='someoneelse')
     concept = ConceptFactory()
@@ -526,4 +531,172 @@ def test_the_person_page_offers_the_restrict_form(client):
     assert reverse('admin_restrict', args=[hunter.user.pk]) in body
     assert 'Stops new words only' in body, (
         'the page does not say what a restriction does NOT do, which is the likely mistake')
+
+
+# ── what the audit of P3 found ───────────────────────────────────────────────────────────────────
+
+def test_a_restriction_survives_deleting_the_account_and_relinking_psn():
+    """THE escape hatch, and the one the original design claimed to have closed.
+
+    The first cut keyed on `CustomUser` alone, reasoning that hanging it off the profile would make
+    unlinking PSN a way out. True, and it missed the bigger way out: Settings offers a self-service
+    account deletion, `Profile.user` is SET_NULL, and `link_profile_to_user` reattaches THE SAME
+    profile row to a new account. Delete, re-register, re-verify the same PSN account -- and a
+    CASCADE took every restriction with it while the trophies, badges, ranking and handle all came
+    back.
+    """
+    from trophies.services.verification_service import VerificationService
+
+    hunter = _hunter()
+    profile, old_user = hunter, hunter.user
+    _restrict(hunter, 'all_ugc')
+
+    profile.unlink_user()
+    old_user.delete()
+    profile.refresh_from_db()
+    assert profile.user is None, 'the profile did not survive the deletion'
+    assert UserRestriction.objects.count() == 1, 'the restriction was cascaded away'
+
+    new_user = UserFactory()
+    VerificationService.link_profile_to_user(profile, new_user)
+    profile.refresh_from_db()
+
+    assert restriction_service.is_restricted_from(profile, 'quick_takes') is True, (
+        'a new account on the same PSN profile walked away from the sanction')
+
+
+def test_restricting_broadly_after_narrowly_is_refused():
+    """The clash check was asymmetric: `covering = {'all_ugc', scope}` caught broad-then-narrow and
+    waved narrow-then-broad through, leaving two live rows. Lifting the one an admin could see then
+    left the hunter still barred, with no page saying so -- the exact state the model docstring says
+    cannot happen."""
+    hunter = _hunter()
+    _restrict(hunter, 'quick_takes')
+
+    with pytest.raises(restriction_service.RestrictionError):
+        _restrict(hunter, 'all_ugc')
+
+    assert UserRestriction.objects.count() == 1
+
+
+def test_lifting_the_only_visible_restriction_actually_frees_them():
+    """The consequence the asymmetry produced, asserted directly rather than through the count."""
+    hunter = _hunter()
+    first = _restrict(hunter, 'quick_takes')
+
+    restriction_service.lift_restriction(first, _admin(), 'appealed')
+
+    assert restriction_service.active_scopes_for(hunter) == set(), (
+        'a lift left the hunter half-restricted with nothing on screen saying so')
+
+
+def test_the_service_refuses_a_restriction_that_would_already_be_over():
+    """At the SERVICE, not only at the view. The view now bounds `days` to 1..3650, so it rejects
+    this before the service is asked -- which left the service's own guard untested and a direct
+    caller (a shell, a command, the next view) free to write one. A restriction born already over is
+    accepted, logged, reported as applied, and restricts nobody."""
+    hunter = _hunter()
+
+    with pytest.raises(restriction_service.RestrictionError, match='already have expired'):
+        restriction_service.apply_restriction(
+            hunter.user, 'all_ugc', _admin(), 'a real reason',
+            expires_at=timezone.now() - timedelta(days=1))
+
+    assert UserRestriction.objects.count() == 0
+    assert AdminAction.objects.count() == 0
+
+
+@pytest.mark.parametrize('days', ['-30', '0'])
+def test_a_restriction_cannot_be_born_already_expired(client, days):
+    """It was accepted, logged, and reported as "Restriction applied" while restricting nobody --
+    appearing only under "ended", as something that lapsed before it existed."""
+    hunter = _hunter()
+    client.force_login(_admin())
+
+    client.post(reverse('admin_restrict', args=[hunter.user.pk]),
+                {'scope': 'all_ugc', 'days': days, 'reason': 'a real reason'})
+
+    assert UserRestriction.objects.count() == 0
+    assert restriction_service.is_restricted_from(hunter, 'quick_takes') is False
+
+
+def test_an_absurd_duration_is_refused_rather_than_500ing(client):
+    """`timedelta` raises OverflowError past ~2.9 million days, and OverflowError is not a
+    ValueError -- so the view's `except` missed it and a form field became a 500."""
+    hunter = _hunter()
+    client.force_login(_admin())
+
+    resp = client.post(reverse('admin_restrict', args=[hunter.user.pk]),
+                       {'scope': 'all_ugc', 'days': '999999999', 'reason': 'a real reason'})
+
+    assert resp.status_code == 302, 'an absurd duration was a 500 rather than a refusal'
+    assert UserRestriction.objects.count() == 0
+
+
+def test_asking_about_all_ugc_directly_is_a_fair_question():
+    """`SCOPE_COVERS` had no key for it, so this raised KeyError -- which inside a DRF view's broad
+    `except` is a 500. A landmine for the next gate author, who would reasonably write it."""
+    hunter = _hunter()
+    _restrict(hunter, 'all_ugc')
+
+    assert restriction_service.is_restricted_from(hunter, 'all_ugc') is True
+
+
+def test_the_gate_refuses_the_wrong_kind_of_object_rather_than_failing_open():
+    """It read `getattr(profile, 'user_id', None)`, so handing it a CustomUser -- which has no such
+    attribute -- returned None and therefore "not restricted". A gate whose default is permissive is
+    not a gate."""
+    hunter = _hunter()
+    _restrict(hunter, 'all_ugc')
+
+    with pytest.raises(TypeError):
+        restriction_service.is_restricted_from(hunter.user, 'quick_takes')
+
+
+# ── the writers the sweep had never visited ──────────────────────────────────────────────────────
+
+def test_a_restricted_hunter_cannot_post_a_roadmap_note():
+    """Missed by the first cut because the permission on it is `IsRoadmapAuthor`, independent of
+    staff status and open to per-roadmap trial writers -- so it LOOKED like a staff surface and is
+    not one. It is 5000 characters of prose that pushes @mentions to other hunters."""
+    from trophies.services import roadmap_note_service
+
+    hunter = _hunter()
+    _restrict(hunter, 'all_ugc')
+
+    with pytest.raises(roadmap_note_service.NoteError, match='restricted'):
+        roadmap_note_service._refuse_if_restricted(hunter)
+
+
+def test_a_restricted_hunter_cannot_edit_a_comment():
+    """`toggle_vote` and `report_comment` both called `can_interact`; editing called nothing, so
+    replacing a body outright was the one comment write a restriction did not cover."""
+    from trophies.models import Comment
+    from trophies.services.comment_service import CommentService
+
+    hunter = _hunter()
+    comment = Comment.objects.create(profile=hunter, concept=ConceptFactory(),
+                                     body='original words')
+    _restrict(hunter, 'all_ugc')
+
+    ok, refusal = CommentService.edit_comment(comment, hunter, 'replaced words')
+
+    assert ok is False
+    assert 'restricted' in refusal
+    comment.refresh_from_db()
+    assert comment.body == 'original words'
+
+
+def test_an_unrestricted_hunter_can_still_edit_their_comment():
+    """The other half. A gate that blocks everybody is not a gate either."""
+    from trophies.models import Comment
+    from trophies.services.comment_service import CommentService
+
+    hunter = _hunter()
+    comment = Comment.objects.create(profile=hunter, concept=ConceptFactory(),
+                                     body='original words')
+
+    ok, _refusal = CommentService.edit_comment(comment, hunter, 'replaced words')
+
+    assert ok is True
 

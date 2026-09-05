@@ -356,12 +356,21 @@ class PostActionMixin:
     def post(self, request, pk):
         reason = (request.POST.get('reason') or '').strip()
         try:
-            self.act(pk, request.user, reason)
+            outcome = self.act(pk, request.user, reason)
         except self.error_class as exc:
             messages.error(request, str(exc))
         else:
-            messages.success(request, self.success_message)
+            # `report(outcome)`, not a flat success. An action can now succeed at the level of "no
+            # exception" while having deliberately done nothing -- a reversal that refused to
+            # restore because somebody else's decision still stands -- and telling the admin
+            # "Decision reversed." there is a lie the page then contradicts.
+            level, text = self.report(outcome)
+            messages.add_message(request, level, text)
         return redirect(self._safe_next(request))
+
+    def report(self, outcome):
+        """(level, message) for what actually happened. Overridden where "it worked" is not binary."""
+        return messages.SUCCESS, self.success_message
 
     def _safe_next(self, request):
         """Where to send them back to, refusing anything that is not our own path.
