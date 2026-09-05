@@ -937,3 +937,107 @@ def test_the_marker_and_its_menu_row_agree_on_a_colour():
 
     assert '--pp-error' in marker
     assert '--pp-error' in menu_row, 'the menu count is a different colour from the marker'
+
+
+# -- naming a moderator -------------------------------------------------------------------------
+#
+# A handled row says who handled it. That used to be their EMAIL ADDRESS, which is personal data on
+# a page, and worse information besides: a colleague's PSN handle identifies them instantly and an
+# address they have never seen does not.
+
+def _handled_flag(moderator):
+    flag = _flag()
+    moderation_service.approve_game_flag(flag, moderator, 'confirmed, delisted last month')
+    return flag
+
+
+def test_a_handled_row_names_the_moderator_by_their_psn_handle(client):
+    """`psn_username` is lowercased by `Profile.save()` -- it is the lookup key, not the spelling.
+    Which is exactly why `display_name` prefers `display_psn_username`; see the test below."""
+    moderator = _user('moderator')
+    ProfileFactory(user=moderator, psn_username='hunted47', is_linked=True)
+    _handled_flag(moderator)
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse('mod_game_flags') + '?status=actioned').content.decode()
+
+    assert 'hunted47' in body
+    assert moderator.email not in body, 'a moderator email address reached the page'
+
+
+def test_a_moderator_with_no_psn_account_still_gets_named(client):
+    """The fallback has to be a name, not a blank. Some staff accounts have no PSN at all."""
+    moderator = _user('moderator')
+    _handled_flag(moderator)
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse('mod_game_flags') + '?status=actioned').content.decode()
+
+    assert moderator.email in body, 'nobody is named at all when there is no PSN account'
+
+
+def test_a_chosen_display_name_beats_the_raw_psn_username(client):
+    """`display_psn_username` is the cased/chosen spelling; `psn_username` is the lookup key."""
+    moderator = _user('moderator')
+    ProfileFactory(user=moderator, psn_username='hunted47',
+                   display_psn_username='Hunted47', is_linked=True)
+    _handled_flag(moderator)
+    client.force_login(_user('moderator'))
+
+    body = client.get(reverse('mod_game_flags') + '?status=actioned').content.decode()
+
+    assert 'Hunted47' in body
+
+
+def test_naming_the_moderator_does_not_cost_a_query_per_handled_row(client):
+    """`display_name` reaches through to `profile`, so a handled queue is exactly where this turns
+    into an N+1. The existing per-row guard cannot catch it: every row it makes is PENDING, and a
+    pending row has no moderator to name."""
+    moderator = _user('moderator')
+    ProfileFactory(user=moderator, psn_username='Hunted47', is_linked=True)
+    client.force_login(_user('moderator'))
+    url = reverse('mod_game_flags') + '?status=actioned'
+
+    _handled_flag(moderator)
+    with CaptureQueriesContext(connection) as few:
+        client.get(url)
+
+    for _ in range(6):
+        _handled_flag(moderator)
+    with CaptureQueriesContext(connection) as many:
+        client.get(url)
+
+    assert len(many.captured_queries) <= len(few.captured_queries) + 2, (
+        f'{len(few.captured_queries)} queries for 1 handled row, '
+        f'{len(many.captured_queries)} for 7 -- naming the moderator queries per row')
+
+
+def test_the_log_freezes_the_same_name_the_page_shows(client):
+    """`actor_label` and the row both have to answer "who did this" the same way, or the landing and
+    the queue name one person two ways."""
+    moderator = _user('moderator')
+    ProfileFactory(user=moderator, psn_username='hunted47',
+                   display_psn_username='Hunted47', is_linked=True)
+
+    action = moderation_service.approve_game_flag(_flag(), moderator, 'confirmed')
+
+    assert action.actor_label == 'Hunted47'
+    assert action.actor_label == moderator.display_name, 'the log and the model disagree'
+
+
+def test_the_frozen_label_outlives_the_account(client):
+    """The whole reason the label is frozen rather than read live: `actor` is SET_NULL, so a deleted
+    staff account leaves the entry pointing at nobody."""
+    moderator = _user('moderator')
+    ProfileFactory(user=moderator, psn_username='hunted47',
+                   display_psn_username='Hunted47', is_linked=True)
+    action = moderation_service.approve_game_flag(_flag(), moderator, 'confirmed')
+
+    moderator.delete()
+    action.refresh_from_db()
+
+    assert action.actor is None
+    assert action.actor_label == 'Hunted47'
+
+    client.force_login(_user('moderator'))
+    assert 'Hunted47' in client.get(reverse('mod_center')).content.decode()

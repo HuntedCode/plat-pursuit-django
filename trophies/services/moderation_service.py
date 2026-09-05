@@ -54,13 +54,16 @@ def _require_reason(reason):
 
 
 def _label(user):
-    """The actor's display name, captured now. `actor` is SET_NULL, so this is what keeps the entry
-    readable once a staff account is gone."""
+    """The actor's display name, captured NOW. `actor` is SET_NULL, so this is what keeps an entry
+    readable once a staff account is gone.
+
+    `CustomUser.display_name` owns the PSN-then-email order; this only freezes it. The rule used to
+    be written out here as well as on the model, which is two places to disagree about whether a
+    moderator is a handle or an email address.
+    """
     if user is None:
         return ''
-    profile = getattr(user, 'profile', None)
-    return (getattr(profile, 'display_psn_username', None) or getattr(profile, 'psn_username', None)
-            or user.email or '')[:150]
+    return (user.display_name or '')[:150]
 
 
 def _lock_report(report):
