@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
@@ -273,3 +274,87 @@ class SubscriptionPeriod(models.Model):
             return 0
         end = self.ended_at or timezone.now()
         return (end - self.started_at).days
+
+
+class UserRestriction(models.Model):
+    """A hunter barred from writing something, for a while or indefinitely.
+
+    FK to `CustomUser`, NOT `Profile`. A restriction is an ACCOUNT fact: hanging it off the profile
+    would make unlinking and relinking a PSN account a way to shed it, and the gates that read this
+    all have a profile in hand and can reach the user through it.
+
+    WHAT IT IS NOT. It is not `is_active=False`, which kills login and every read; this is a targeted
+    write ban that leaves their trophies, badges and leaderboard positions exactly as they were. And
+    it hides nothing already published -- an existing quick take stays up unless somebody hides it.
+    Both of those are said on the page too, because an admin reaching for "restrict" when they meant
+    "hide" is the likely mistake.
+
+    LIFTING NEVER EDITS THIS ROW'S HISTORY. It stamps the lift fields and writes an `AdminAction`
+    pointing at the entry that applied it -- the same grammar as reversing a moderation decision, so
+    "who lifted this, and why" has an answer.
+    """
+    SCOPES = [
+        ('quick_takes', 'Writing quick takes'),
+        ('reports', 'Filing reports and flags'),
+        ('all_ugc', 'All user-submitted content'),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='restrictions',
+        help_text='The account restricted. CASCADE: a deleted account has nothing left to restrict, '
+                  'and the AdminAction that applied it keeps the frozen name for the record.',
+    )
+    scope = models.CharField(max_length=16, choices=SCOPES)
+    reason = models.TextField(help_text='REQUIRED by the service, like every other audited action.')
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name='restrictions_applied')
+    created_by_label = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    expires_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='NULL means indefinite. ONE field rather than a boolean plus a duration, because '
+                  'two fields describing one fact are two fields that can disagree -- and the '
+                  'disagreement would be silent, since nothing reads them together.',
+    )
+
+    lifted_at = models.DateTimeField(null=True, blank=True)
+    lifted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='restrictions_lifted')
+    lifted_by_label = models.CharField(max_length=150, blank=True)
+    lift_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            # The gate's query: every live restriction for one account. It runs on UGC writes, so it
+            # reads off this index rather than scanning.
+            models.Index(fields=['user', 'lifted_at', 'expires_at'], name='restriction_live_idx'),
+            models.Index(fields=['-created_at', '-id'], name='restriction_recent_idx'),
+        ]
+        # NO unique constraint on (user, scope). A partial unique on `lifted_at IS NULL` would also
+        # cover EXPIRED rows -- which are not lifted, merely lapsed -- and so would refuse to
+        # re-restrict somebody who had served a previous one. The service takes a row lock and
+        # checks for a LIVE restriction instead, which is the same shape as `_lock_report`.
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(reason__regex=r'\S'),
+                name='restriction_reason_is_not_blank',
+            ),
+        ]
+
+    def __str__(self):
+        until = f' until {self.expires_at:%Y-%m-%d}' if self.expires_at else ' indefinitely'
+        return f'{self.get_scope_display()}{until} ({self.created_by_label or "unknown"})'
+
+    @property
+    def is_live(self):
+        """Derived, never stored. A cached boolean would be wrong the moment `expires_at` passed,
+        with nothing to notice: expiry happens by the clock, not by anybody writing a row."""
+        if self.lifted_at is not None:
+            return False
+        return self.expires_at is None or self.expires_at > timezone.now()
+

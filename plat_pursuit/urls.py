@@ -22,8 +22,9 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, PeopleSearchView,
-                              PersonView, ReverseDecisionView)
+from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
+                              PeopleSearchView, PersonView, RestrictionListView, RestrictView,
+                              ReverseDecisionView)
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
@@ -520,6 +521,11 @@ urlpatterns = [
     # Hiding a take nobody reported: admin-only, since it is acting on your own judgement
     # rather than on a hunter's objection.
     path('staff/quick-takes/<int:pk>/hide/', HideTakeView.as_view(), name='admin_hide_take'),
+    # Restrictions: the one admin power that changes what an ordinary hunter can do.
+    path('staff/restrictions/', RestrictionListView.as_view(), name='admin_restrictions'),
+    path('staff/people/<int:pk>/restrict/', RestrictView.as_view(), name='admin_restrict'),
+    path('staff/restrictions/<int:pk>/lift/', LiftRestrictionView.as_view(),
+         name='admin_lift_restriction'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.

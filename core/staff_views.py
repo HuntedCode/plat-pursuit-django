@@ -12,15 +12,18 @@ THE LANDING IS NOT A LINK FARM. It leads with the numbers that mean work, becaus
 admin arrives with is "is there anything for me", and only then offers the doors.
 """
 import logging
+from datetime import timedelta
 
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
 from core.models import AdminAction
 from fundraiser.models import DonationBadgeClaim
-from users.models import CustomUser
+from users.models import CustomUser, UserRestriction
+from users.services import restriction_service
 from trophies.mixins import PostActionMixin, StaffRequiredMixin
 from trophies.models import ModerationAction, UserConceptRating
 from trophies.services import moderation_service
@@ -31,6 +34,10 @@ logger = logging.getLogger(__name__)
 
 #: How many entries the landing's activity rail shows, per log and after merging.
 RECENT_LIMIT = 12
+
+#: One page of the restriction list. It grows slowly -- a restriction is a rare thing -- but it
+#: still grows, and a staff page that renders every row ever written stops loading eventually.
+RESTRICTION_PAGE = 100
 
 #: How much of one person's history the person page shows, per list. Bounded because a prolific
 #: reporter can accrue hundreds of entries and this page is a judgement aid, not an archive -- the
@@ -272,6 +279,13 @@ class PersonView(StaffRequiredMixin, TemplateView):
             .select_related('concept')
             .order_by('-id')[:HISTORY_LIMIT]) if profile else []
 
+        # Live first, then the ended ones: an admin deciding whether to restrict somebody again
+        # needs to know both that nothing is in force AND that three things have been.
+        context['restrictions'] = list(
+            UserRestriction.objects.filter(user=person)[:HISTORY_LIMIT])
+        context['scopes'] = UserRestriction.SCOPES
+        context['durations'] = RESTRICTION_DURATIONS
+
         context['page_name'] = person.display_name
         context['breadcrumb'] = [{'text': 'Home', 'url': reverse_lazy('home')},
                                  {'text': 'Admin', 'url': reverse_lazy('admin_hub')},
@@ -298,4 +312,91 @@ class HideTakeView(StaffRequiredMixin, PostActionMixin, View):
 
     def default_redirect(self):
         return reverse_lazy('admin_people')
+
+
+# ── restrictions ─────────────────────────────────────────────────────────────────────────────────
+
+#: How long a restriction runs when an admin picks a length rather than "indefinite". Offered as a
+#: short list rather than a date picker: the choice being made is "how serious is this", and three
+#: named durations answer it faster and more consistently than a calendar.
+RESTRICTION_DURATIONS = [
+    ('7', '7 days'),
+    ('30', '30 days'),
+    ('90', '90 days'),
+    ('', 'Indefinite'),
+]
+
+#: What the restriction list can show. `live` leads because it is the only one that means anything is
+#: currently in force -- the same reasoning that puts `pending` first on a queue.
+RESTRICTION_FILTERS = ['live', 'ended', 'all']
+
+
+class RestrictionListView(StaffRequiredMixin, TemplateView):
+    """Every restriction, live and ended.
+
+    "Ended" covers both LAPSED and LIFTED, and the rows say which. They are different facts about the
+    same account -- one served its time, one was cut short by a person with a reason -- and an admin
+    judging a repeat needs to tell them apart.
+    """
+    template_name = 'staff/restrictions.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        requested = self.request.GET.get('show', 'live')
+        show = requested if requested in RESTRICTION_FILTERS else 'live'
+
+        rows = UserRestriction.objects.select_related('user', 'user__profile')
+        now = timezone.now()
+        if show == 'live':
+            rows = rows.filter(lifted_at__isnull=True).filter(
+                Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        elif show == 'ended':
+            rows = rows.filter(Q(lifted_at__isnull=False) | Q(expires_at__lte=now))
+
+        context['rows'] = list(rows[:RESTRICTION_PAGE])
+        context['show'] = show
+        context['show_filters'] = RESTRICTION_FILTERS
+        context['page_name'] = 'Restrictions'
+        context['breadcrumb'] = [{'text': 'Home', 'url': reverse_lazy('home')},
+                                 {'text': 'Admin', 'url': reverse_lazy('admin_hub')},
+                                 {'text': 'Restrictions'}]
+        context['seo_title'] = 'Restrictions - Admin'
+        return context
+
+
+class RestrictView(StaffRequiredMixin, PostActionMixin, View):
+    """Bar somebody from writing. Admin-only, reason required, logged."""
+    error_class = restriction_service.RestrictionError
+    success_message = 'Restriction applied.'
+
+    def act(self, pk, user, reason):
+        person = get_object_or_404(CustomUser, pk=pk)
+        scope = self.request.POST.get('scope') or ''
+        days = (self.request.POST.get('days') or '').strip()
+
+        expires_at = None
+        if days:
+            try:
+                expires_at = timezone.now() + timedelta(days=int(days))
+            except (TypeError, ValueError):
+                raise restriction_service.RestrictionError('That is not a length of time.')
+
+        restriction_service.apply_restriction(person, scope, user, reason, expires_at=expires_at)
+
+    def default_redirect(self):
+        return reverse_lazy('admin_restrictions')
+
+
+class LiftRestrictionView(StaffRequiredMixin, PostActionMixin, View):
+    """End a restriction early. A new logged entry, never an edit to the one that applied it."""
+    error_class = restriction_service.RestrictionError
+    success_message = 'Restriction lifted.'
+
+    def act(self, pk, user, reason):
+        restriction_service.lift_restriction(
+            get_object_or_404(UserRestriction, pk=pk), user, reason)
+
+    def default_redirect(self):
+        return reverse_lazy('admin_restrictions')
 

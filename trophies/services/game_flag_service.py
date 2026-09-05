@@ -63,6 +63,14 @@ class GameFlagService:
         if flag_type not in GameFlagService.VALID_FLAG_TYPES:
             return None, 'Invalid flag type.'
 
+        # Also in the SERVICE, not only at the view. This is the single writer of GameFlag rows, so
+        # a second caller -- a management command, a shell, a future endpoint -- cannot route around
+        # a restriction by not knowing about it.
+        from users.services import restriction_service
+
+        if restriction_service.is_restricted_from(reporter, 'reports'):
+            return None, 'Your account is currently restricted from filing reports.'
+
         existing = GameFlag.objects.filter(
             game=game, reporter=reporter, flag_type=flag_type, status='pending'
         ).first()

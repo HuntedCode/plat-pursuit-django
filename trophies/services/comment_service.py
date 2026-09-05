@@ -108,20 +108,33 @@ class CommentService:
         return False, None
 
     @staticmethod
-    def can_interact(profile):
+    def can_interact(profile, action='interact with comments'):
         """
-        Check if profile has permission to interact (vote, report).
+        Whether this profile may take part: linked, and not restricted from it.
+
+        `action` names what the caller was actually doing, and exists because the messages here all
+        said "interact with comments" while this is called from the quick-take report endpoint and
+        (since 2026-09) the game-flag one. A hunter told they cannot "interact with comments" after
+        pressing Report on a game goes looking for a comment they never wrote.
 
         Args:
             profile: Profile instance
+            action: what the caller is doing, e.g. 'flag a game', 'report a quick take'
 
         Returns:
             tuple: (bool can_interact, str reason)
         """
+        from users.services import restriction_service
+
         if not profile:
-            return False, "You must be logged in to interact with comments."
+            return False, f"You must be logged in to {action}."
         if not profile.is_linked:
-            return False, "You must link a PSN profile to interact with comments."
+            return False, f"You must link a PSN profile to {action}."
+        # The restriction check goes HERE rather than at each caller: this function is already the
+        # shared gate for votes, comment reports, review writes and blurb reports, so one check
+        # covers all of them and cannot be forgotten by the next one added.
+        if restriction_service.is_restricted_from(profile, 'reports'):
+            return False, f"Your account is currently restricted from this. You cannot {action}."
         return True, None
 
     @staticmethod

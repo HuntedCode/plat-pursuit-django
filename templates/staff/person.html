@@ -100,6 +100,65 @@ logged the same as hiding one from the queue.
 </ul>
 {% endif %}
 
+{# ── Restrictions ────────────────────────────────────────────────────────────────────────── #}
+{% comment %}The form lives HERE rather than on the restriction list, because the decision needs
+what is above it: what this hunter has written and what has already been decided about them.
+Restricting from a list of names is restricting without looking.{% endcomment %}
+<h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Restrictions</h2>
+
+{% if restrictions %}
+<ul class="flex flex-col divide-y divide-base-300/70 mb-3 card bg-base-200/90 border-2 border-base-300 px-4">
+    {% for row in restrictions %}
+    <li class="py-2.5 flex flex-col gap-1">
+        <div class="flex items-baseline flex-wrap gap-x-2 gap-y-0.5">
+            <span class="badge badge-sm {% if row.is_live %}badge-error{% else %}badge-ghost{% endif %} font-bold">{{ row.get_scope_display }}</span>
+            {% if row.is_live %}
+                {% if row.expires_at %}<span class="text-xs text-base-content/70">until {{ row.expires_at|naturaltime }}</span>
+                {% else %}<span class="text-xs text-warning">indefinite</span>{% endif %}
+            {% elif row.lifted_at %}<span class="text-xs text-base-content/60">lifted {{ row.lifted_at|naturaltime }}</span>
+            {% else %}<span class="text-xs text-base-content/60">lapsed</span>{% endif %}
+            <span class="text-xs text-base-content/60">by {{ row.created_by_label|default:"a deleted account" }}</span>
+        </div>
+        <div class="text-xs text-base-content/55 italic pr-1">&ldquo;{{ row.reason }}&rdquo;</div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="text-sm text-base-content/60 mb-3">This hunter has never been restricted.</p>
+{% endif %}
+
+<form method="post" action="{% url 'admin_restrict' person.pk %}"
+      class="card bg-base-200/90 border-2 border-base-300 mb-5">
+    <div class="card-body p-4 gap-3">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="flex flex-col gap-1">
+                <span class="text-xs font-bold text-base-content/70">Restrict from</span>
+                <select name="scope" class="select select-sm select-bordered" required>
+                    {% for value, label in scopes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+            </label>
+            <label class="flex flex-col gap-1">
+                <span class="text-xs font-bold text-base-content/70">For how long</span>
+                <select name="days" class="select select-sm select-bordered">
+                    {% for value, label in durations %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+            </label>
+        </div>
+        <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered"
+               placeholder="Why? (recorded against your name, and shown on appeal)"
+               aria-label="Reason for restricting this hunter">
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="submit" class="btn btn-sm btn-error">Restrict</button>
+            <span class="text-xs text-base-content/60">
+                Stops new words only. Nothing already published is hidden, and their trophies,
+                badges and ranking are untouched.
+            </span>
+        </div>
+    </div>
+</form>
+
 {# ── What they wrote ─────────────────────────────────────────────────────────────────────── #}
 <h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Their quick takes</h2>
 {% if takes %}

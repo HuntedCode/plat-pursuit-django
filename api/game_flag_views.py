@@ -32,11 +32,14 @@ class GameFlagView(APIView):
                     {'error': 'Profile not found.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            if not profile.is_linked:
-                return Response(
-                    {'error': 'You must have a linked PSN profile to flag games.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # The SHARED gate, not an inline `is_linked`. This endpoint had its own copy, which is
+            # why it was the one UGC write a restriction would not have covered -- and why its
+            # refusal message could never mention flagging.
+            from trophies.services.comment_service import CommentService
+
+            can_flag, refusal = CommentService.can_interact(profile, action='flag a game')
+            if not can_flag:
+                return Response({'error': refusal}, status=status.HTTP_403_FORBIDDEN)
 
             try:
                 game = Game.objects.get(pk=game_id)

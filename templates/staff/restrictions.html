@@ -1,0 +1,109 @@
+{% extends 'staff/_staff_shell.html' %}
+{% load humanize %}
+
+{% comment %}
+Restrictions, live and ended.
+
+"Ended" covers LAPSED and LIFTED, and every row says which. They are different facts about the same
+account -- one served its time, one was cut short by a person with a reason -- and an admin judging
+whether to restrict somebody again needs to tell them apart at a glance.
+
+`live` leads, for the same reason `pending` leads a queue: it is the only value that means something
+is currently in force.
+{% endcomment %}
+
+{% block staff_blurb %}
+Who is currently barred from writing, and who has been. A restriction stops new words only: it hides
+nothing already published, and it never touches an account's trophies, badges or ranking.
+{% endblock %}
+
+{% block staff_body %}
+
+<div class="pp-switch mb-4" role="group" aria-label="Filter restrictions">
+    {% for value in show_filters %}
+    <a class="pp-switch__chip{% if value == show %} is-active{% endif %}"
+       href="?show={{ value }}"{% if value == show %} aria-current="true"{% endif %}>{{ value|capfirst }}</a>
+    {% endfor %}
+</div>
+
+{% if messages %}
+<div class="flex flex-col gap-2 mb-4">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} py-2 text-sm">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="flex flex-col gap-3">
+    {% for row in rows %}
+    <article class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body p-4 gap-2">
+
+            <div class="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+                <a class="text-base font-bold link link-hover" href="{% url 'admin_person' row.user_id %}">{{ row.user.display_name }}</a>
+                <span class="badge badge-sm badge-error font-bold">{{ row.get_scope_display }}</span>
+                {% if row.is_live %}
+                    {% if row.expires_at %}
+                    <span class="text-xs text-base-content/70">until {{ row.expires_at|naturaltime }}</span>
+                    {% else %}
+                    <span class="badge badge-sm badge-warning">indefinite</span>
+                    {% endif %}
+                {% elif row.lifted_at %}
+                <span class="badge badge-sm badge-ghost">lifted {{ row.lifted_at|naturaltime }}</span>
+                {% else %}
+                <span class="badge badge-sm badge-ghost">lapsed</span>
+                {% endif %}
+            </div>
+
+            <div class="text-xs text-base-content/60">
+                by {{ row.created_by_label|default:"a deleted account" }} &middot; {{ row.created_at|naturaltime }}
+            </div>
+            <div class="text-sm text-base-content/60 italic pr-1">&ldquo;{{ row.reason }}&rdquo;</div>
+
+            {% if row.lifted_at %}
+            <div class="text-xs text-base-content/60 border-t border-base-300/70 pt-2">
+                Lifted by {{ row.lifted_by_label|default:"a deleted account" }}:
+                <span class="italic pr-1">&ldquo;{{ row.lift_reason }}&rdquo;</span>
+            </div>
+            {% endif %}
+
+            {% comment %}Only a LIVE restriction can be lifted. A lapsed one is already over, and
+            offering the button would invite an entry claiming somebody freed a hunter who was
+            free.{% endcomment %}
+            {% if row.is_live %}
+            <form method="post" action="{% url 'admin_lift_restriction' row.pk %}"
+                  class="flex flex-col sm:flex-row gap-2 pt-1">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}?show={{ show }}">
+                <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
+                       placeholder="Why lift this? (recorded against your name)"
+                       aria-label="Reason for lifting this restriction">
+                <button type="submit" class="btn btn-sm btn-ghost border border-base-300">Lift</button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
+    <div class="card-body items-center text-center py-10">
+        <p class="text-base font-bold text-base-content">
+            {% if show == 'live' %}Nobody is restricted{% else %}Nothing here{% endif %}
+        </p>
+        <p class="text-sm text-base-content/60 max-w-prose">
+            {% if show == 'live' %}
+            Restrictions are applied from a hunter's own page, where you can see what they have
+            written first.
+            {% else %}
+            No restrictions match this filter.
+            <a class="link link-primary" href="?show=live">Show what is in force</a>.
+            {% endif %}
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
