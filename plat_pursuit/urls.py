@@ -511,7 +511,7 @@ urlpatterns = [
     # Keeps the pre-cutover route name: any staff bookmark still resolves.
     # ── Mod Center ───────────────────────────────────────────────────────────────────────────────
     # `/mod/`, not `/staff/`: moderators are not staff. The role split (2026-08) exists so
-    # `is_staff` can mean exactly "Django admin access", and hanging the mod tools off /staff/ would
+    # `is_staff` can mean exactly "the admin tools" (Django admin itself is superusers only), and hanging the mod tools off /staff/ would
     # put the two back in one word. Every route is gated by ModeratorRequiredMixin -- admins reach
     # them too, via `is_staff`.
     path('mod/', ModCenterView.as_view(), name='mod_center'),

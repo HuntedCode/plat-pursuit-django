@@ -8,13 +8,11 @@ cannot produce a second, false record.
 Gated by `ModeratorRequiredMixin` (moderators AND admins). The gate REDIRECTS rather than 403s, so a
 hunter who guesses a URL gets the home page rather than confirmation that something is here.
 """
-from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
-from django.utils.http import url_has_allowed_host_and_scheme
+from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
-from trophies.mixins import ModeratorRequiredMixin
+from trophies.mixins import ModeratorRequiredMixin, PostActionMixin
 from trophies.models import BlurbReport, GameFlag, ModerationAction
 from trophies.services import moderation_service
 from trophies.services.game_flag_service import GameFlagService
@@ -172,40 +170,16 @@ class GameFlagQueueView(_QueueView):
         return context
 
 
-class _ActionView(ModeratorRequiredMixin, View):
+class _ActionView(ModeratorRequiredMixin, PostActionMixin, View):
     """POST-only. A moderation decision is never a GET: it mutates live data, and a GET would be
-    followed by a crawler, a prefetcher, or a bookmark."""
+    followed by a crawler, a prefetcher, or a bookmark.
 
-    def post(self, request, pk):
-        reason = (request.POST.get('reason') or '').strip()
-        try:
-            self.act(pk, request.user, reason)
-        except moderation_service.ModerationError as exc:
-            # The service's messages are written to be read by a moderator -- "already handled by
-            # someone else", not a traceback -- so they are shown rather than swallowed.
-            messages.error(request, str(exc))
-        else:
-            messages.success(request, self.success_message)
-        return redirect(self._safe_next(request))
-
-    def _safe_next(self, request):
-        """Where to send the moderator back to, refusing anything that is not our own path.
-
-        `next` arrives in the POST body so the mod lands back on the list they were reading rather
-        than the top of `pending`. Unvalidated that is an open redirect -- a crafted form could
-        bounce a signed-in moderator to another origin. `url_has_allowed_host_and_scheme` is
-        Django's own check and is what `LoginView` uses for exactly this.
-        """
-        candidate = request.POST.get('next') or ''
-        # Must look like a path. `url_has_allowed_host_and_scheme` accepts a bare querystring as
-        # "relative", but `redirect()` treats a string with no slash as a VIEW NAME and raises
-        # NoReverseMatch -- so the leading slash is both a correctness check and the safety one.
-        if not candidate.startswith('/'):
-            return self.default_redirect()
-        if url_has_allowed_host_and_scheme(
-                candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
-            return candidate
-        return self.default_redirect()
+    The body of this lives in `PostActionMixin`, shared with the admin actions under /staff/. The
+    part that must not be copy-pasted is `_safe_next`: `next` arrives in the POST body, and
+    unvalidated that is an open redirect. One implementation, two families, and the same tests run
+    over both.
+    """
+    error_class = moderation_service.ModerationError
 
     def default_redirect(self):
         return reverse_lazy('mod_center')

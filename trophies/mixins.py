@@ -1,8 +1,10 @@
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Page, Paginator
 from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
 from django.utils.cache import patch_vary_headers
+from django.utils.http import url_has_allowed_host_and_scheme
 
 
 class PremiumRequiredMixin(LoginRequiredMixin):
@@ -318,3 +320,55 @@ class BackgroundContextMixin:
         if landscape:
             return {'bg_url': landscape}
         return {}
+
+
+class PostActionMixin:
+    """POST-only, act, tell the user, go back where they came from.
+
+    Shared by the moderation actions and the admin ones. It carries NO GATE of its own on purpose --
+    each family pairs it with theirs (`ModeratorRequiredMixin` for /mod/, `StaffRequiredMixin` for
+    /staff/), and a mixin that silently supplied one would make the gate invisible at the point where
+    it is chosen.
+
+    Hoisted rather than copied because of `_safe_next`. `next` arrives in the POST body so somebody
+    lands back on the list they were reading; unvalidated that is an OPEN REDIRECT, and an
+    open-redirect guard is precisely the code that must not exist in two places where one can be
+    fixed and the other forgotten.
+
+    Subclasses provide `act(pk, user, reason)`, `success_message`, `error_class`, and optionally
+    `default_redirect()`.
+    """
+    #: The exception this family raises for a refusable action. Its message is shown to the user, so
+    #: it must be one written to be read -- "already handled by somebody else", not a traceback.
+    error_class = Exception
+
+    def post(self, request, pk):
+        reason = (request.POST.get('reason') or '').strip()
+        try:
+            self.act(pk, request.user, reason)
+        except self.error_class as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, self.success_message)
+        return redirect(self._safe_next(request))
+
+    def _safe_next(self, request):
+        """Where to send them back to, refusing anything that is not our own path.
+
+        Unvalidated, `next` is an open redirect: a crafted form could bounce a signed-in moderator
+        or admin to another origin. `url_has_allowed_host_and_scheme` is Django's own check and is
+        what `LoginView` uses for exactly this.
+        """
+        candidate = request.POST.get('next') or ''
+        # Must look like a path. `url_has_allowed_host_and_scheme` accepts a bare querystring as
+        # "relative", but `redirect()` treats a string with no slash as a VIEW NAME and raises
+        # NoReverseMatch -- so the leading slash is both a correctness check and the safety one.
+        if not candidate.startswith('/'):
+            return self.default_redirect()
+        if url_has_allowed_host_and_scheme(
+                candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+            return candidate
+        return self.default_redirect()
+
+    def default_redirect(self):
+        raise NotImplementedError

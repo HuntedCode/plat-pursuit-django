@@ -94,6 +94,22 @@ def _lock_flag(flag):
     return fresh
 
 
+def _subject(profile):
+    """The `subject_user` / `subject_label` pair for the hunter an entry is evidence ABOUT.
+
+    Takes a `Profile` and returns kwargs for the `CustomUser` behind it, because every hunter-shaped
+    thing in this service (a rating's author, a report's reporter) is a Profile while the log points
+    at accounts. A restriction or a ban is an ACCOUNT fact, and pointing the history at profiles
+    would make unlinking and relinking PSN a way to shed it.
+
+    WHO counts as the subject is a rule with exactly one right answer per action, written down on
+    the field: hiding a take is evidence about its AUTHOR, dismissing a report is evidence about the
+    REPORTER. Left to each call site it would quietly become two rules.
+    """
+    user = getattr(profile, 'user', None)
+    return {'subject_user': user, 'subject_label': audit.frozen_label(user)}
+
+
 # ── quick takes ──────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
@@ -118,6 +134,8 @@ def hide_blurb(report, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='blurb_hidden', reason=reason,
+        # The AUTHOR: hiding somebody's words is evidence about the person who wrote them.
+        **_subject(rating.profile),
         blurb_report=report, target_id=rating.pk,
         target_label=f'Quick take on {rating.concept.unified_title}'[:255],
         changed={'blurb_hidden': [was_hidden, True]},
@@ -146,7 +164,11 @@ def dismiss_blurb_report(report, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='blurb_report_dismissed',
-        reason=reason, blurb_report=report, target_id=report.rating_id,
+        reason=reason,
+        # The REPORTER, not the author. A dismissal says the report was wrong, which is evidence
+        # about the person who filed it and none at all about the person they filed it against.
+        **_subject(report.reporter),
+        blurb_report=report, target_id=report.rating_id,
         target_label=f'Quick take on {report.rating.concept.unified_title}'[:255],
         changed={'status': [was, 'dismissed']},   # READ, never assumed to have been 'pending'
     )
@@ -182,6 +204,9 @@ def approve_game_flag(flag, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='game_flag_approved', reason=reason,
+        # The reporter. A game has no hunter behind it, so the only person this is evidence about is
+        # the one who raised it -- and "who reports well" is exactly what this history is for.
+        **_subject(flag.reporter),
         game_flag=flag, target_id=game.pk,
         target_label=f'{flag.get_flag_type_display()} on {game.title_name}'[:255],
         # An approval that changed NOTHING is a real outcome, not a bug: missing_vr and
@@ -204,6 +229,7 @@ def dismiss_game_flag(flag, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='game_flag_dismissed', reason=reason,
+        **_subject(flag.reporter),
         game_flag=flag, target_id=flag.game_id,
         target_label=f'{flag.get_flag_type_display()} on {flag.game.title_name}'[:255],
         changed={'status': [was, 'dismissed']},
@@ -271,6 +297,10 @@ def reverse_action(action, moderator, reason):
     reversal = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='blurb_restored', reason=reason,
         blurb_report=report, reverses=locked,
+        # Copied from the entry being undone rather than re-derived: a reversal is evidence about the
+        # same hunter, and re-deriving it could disagree with the original if the report has since
+        # been purged.
+        subject_user=locked.subject_user, subject_label=locked.subject_label,
         target_id=locked.target_id, target_label=locked.target_label,
         changed=changed,
     )

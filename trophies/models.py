@@ -7779,6 +7779,21 @@ class ModerationAction(models.Model):
         'GameFlag', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='moderation_actions',
     )
+    subject_user = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True, db_index=False,
+        related_name='moderation_decisions_received',
+        help_text='The hunter whose BEHAVIOUR this entry is evidence about -- which is not always '
+                  'the owner of the thing acted on. Hiding a take: its author. Dismissing a report: '
+                  'the REPORTER, because a dismissal is evidence about them. Approving or dismissing '
+                  'a flag: the reporter. Without one settled rule this column means two things.\n\n'
+                  'It exists because the report FKs are SET_NULL: once a BlurbReport is purged, an '
+                  'entry could no longer be traced to a person at all -- losing exactly the old '
+                  'history an appeal is about.',
+    )
+    subject_label = models.CharField(
+        max_length=150, blank=True,
+        help_text="The subject's name at the time. Same reason as `actor_label`.",
+    )
     target_id = models.IntegerField(
         null=True, blank=True,
         help_text='PK of the object acted on (the rating, the game), captured at the time. The '
@@ -7824,6 +7839,9 @@ class ModerationAction(models.Model):
             models.Index(fields=['-created_at', '-id'], name='modaction_recent_idx'),
             models.Index(fields=['actor', '-created_at', '-id'], name='modaction_actor_idx'),
             models.Index(fields=['action', '-created_at', '-id'], name='modaction_action_idx'),
+            # "Everything ever decided about this hunter", in one indexed read. The per-person
+            # history page is the whole reason `subject_user` exists.
+            models.Index(fields=['subject_user', '-created_at', '-id'], name='modaction_subject_idx'),
         ]
         constraints = [
             # One reversal per decision, enforced by the DATABASE. `is_reversed` is a plain read, so

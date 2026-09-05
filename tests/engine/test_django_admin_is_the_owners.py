@@ -21,6 +21,24 @@ pytestmark = pytest.mark.django_db
 ADMIN_URLS = ['/admin/', '/admin/trophies/gameflag/', '/admin/users/customuser/add/']
 
 
+def _assert_bounced_out_of_the_admin(resp, url):
+    """Turned away means LEFT the admin, not "did not see one particular heading".
+
+    The first cut asserted `'Site administration' not in body`, which is a string that appears only
+    on the index and a changelist -- so the add-form parameter could not fail however open the gate
+    was. It only appeared to fail under mutation because that view raises a 500 for unrelated
+    reasons. Landing outside `/admin/` is true of every admin URL and false of every open one.
+    """
+    assert resp.redirect_chain, f'{url} answered directly instead of turning anyone away'
+    final = resp.redirect_chain[-1][0]
+    assert not final.startswith('/admin/'), f'{url} left them inside the admin, at {final}'
+
+    body = resp.content.decode()
+    for marker in ('Site administration', 'Select game flag to change', 'id="user-tools"'):
+        assert marker not in body, f'{url} rendered the admin shell ({marker})'
+
+
+
 def _admin_user(with_permissions=True):
     """An Administrator: `role='admin'`, which the lockstep turns into `is_staff`. NOT a superuser.
 
@@ -59,11 +77,7 @@ def test_an_administrator_is_turned_away_from_django_admin(client, url):
 
     resp = client.get(url, follow=True)
 
-    body = resp.content.decode()
-    assert 'Site administration' not in body, 'an Administrator reached the Django admin index'
-    assert 'Select game flag to change' not in body, 'an Administrator reached a changelist'
-    # Django hands an unauthorised-but-authenticated visitor its login page rather than a 403.
-    assert 'admin/login' in resp.redirect_chain[-1][0] if resp.redirect_chain else True
+    _assert_bounced_out_of_the_admin(resp, url)
 
 
 @pytest.mark.parametrize('url', ADMIN_URLS)
@@ -78,7 +92,7 @@ def test_a_moderator_is_turned_away(client, url):
 
     resp = client.get(url, follow=True)
 
-    assert 'Site administration' not in resp.content.decode()
+    _assert_bounced_out_of_the_admin(resp, url)
 
 
 @pytest.mark.parametrize('url', ADMIN_URLS)
@@ -87,14 +101,16 @@ def test_an_ordinary_hunter_is_turned_away(client, url):
 
     resp = client.get(url, follow=True)
 
-    assert 'Site administration' not in resp.content.decode()
+    _assert_bounced_out_of_the_admin(resp, url)
 
 
 @pytest.mark.parametrize('url', ADMIN_URLS)
 def test_a_signed_out_visitor_is_turned_away(client, url):
     resp = client.get(url, follow=True)
 
-    assert 'Site administration' not in resp.content.decode()
+    assert not resp.content.decode().count('id="user-tools"')
+    assert '/accounts/login' in resp.redirect_chain[-1][0], (
+        'a stranger should reach the site login, not an admin one')
 
 
 def test_an_administrator_cannot_POST_a_bulk_action(client):
@@ -123,7 +139,101 @@ def test_a_deactivated_superuser_is_turned_away(client):
 
     resp = client.get('/admin/', follow=True)
 
-    assert 'Site administration' not in resp.content.decode()
+    _assert_bounced_out_of_the_admin(resp, '/admin/')
+
+
+def test_the_gate_itself_refuses_a_deactivated_superuser():
+    """Directly, because the request path cannot reach it: `ModelBackend.get_user` turns a
+    deactivated account into AnonymousUser before `has_permission` is ever consulted, so the test
+    above passes with the `is_active` clause deleted. This is the one that exercises it."""
+    from django.contrib import admin
+
+    class _Deactivated:
+        is_active, is_staff, is_superuser = False, True, True
+
+    class _Request:
+        user = _Deactivated()
+
+    assert admin.site.has_permission(_Request()) is False
+
+
+def test_the_gate_refuses_a_superuser_who_is_not_staff():
+    """The corner where code, login form and docs used to disagree: Django's admin login form
+    refuses a non-staff account outright, so admitting one here meant letting somebody in through a
+    door the front of which would not open."""
+    from django.contrib import admin
+
+    class _NotStaff:
+        is_active, is_staff, is_superuser = True, False, True
+
+    class _Request:
+        user = _NotStaff()
+
+    assert admin.site.has_permission(_Request()) is False
+
+
+# ── there is no admin login form ─────────────────────────────────────────────────────────────────
+#
+# `login/` is the ONE entry in `AdminSite.get_urls()` not wrapped in `admin_view`, so narrowing
+# `has_permission` did nothing to it. Left rendering, it is a second credential endpoint that
+# `ACCOUNT_RATE_LIMITS` does not throttle and Cloudflare does not front.
+
+def test_the_admin_login_form_does_not_exist(client):
+    resp = client.get('/admin/login/')
+
+    assert resp.status_code == 302
+    assert '/accounts/login' in resp.url, 'the admin still has a login form of its own'
+
+
+def test_the_admin_login_form_cannot_be_used_to_guess_passwords(client):
+    """A POST used to authenticate anybody who knew a real password, unthrottled, minting the same
+    session cookie the rest of the site uses. It now redirects without reading the credentials."""
+    owner = _owner()
+    owner.set_password('correct-horse-battery')
+    owner.save()
+
+    resp = client.post('/admin/login/',
+                       {'username': owner.email, 'password': 'correct-horse-battery'})
+
+    assert resp.status_code == 302
+    assert '_auth_user_id' not in client.session, 'the admin login form authenticated somebody'
+
+
+def test_the_admin_login_no_longer_answers_whether_an_account_is_staff(client):
+    """It answered a 302 for a privileged GET and a 200 otherwise -- enough to confirm "this address
+    is staff" in one unauthenticated request."""
+    signed_out = client.get('/admin/login/')
+
+    client.force_login(_admin_user())
+    as_admin = client.get('/admin/login/')
+
+    assert signed_out.status_code == as_admin.status_code == 302
+
+
+def test_an_authenticated_visitor_is_not_bounced_in_a_loop(client):
+    """Sending a signed-in visitor to a login page with `next=/admin/` loops: the form redirects an
+    already-authenticated user straight back to `next`. Signing in again cannot grant a permission
+    they do not have."""
+    client.force_login(_admin_user())
+
+    resp = client.get('/admin/', follow=True)      # raises RedirectCycleError if it loops
+
+    assert resp.redirect_chain[-1][0] == reverse('admin_hub'), (
+        'an Administrator should land on the tools that ARE theirs')
+
+
+def test_a_hunter_who_wanders_into_the_admin_is_sent_home(client):
+    client.force_login(UserFactory())
+
+    resp = client.get('/admin/', follow=True)
+
+    assert resp.redirect_chain[-1][0] == '/'
+
+
+def test_the_admin_login_next_cannot_bounce_somebody_offsite(client):
+    resp = client.get('/admin/login/?next=https://evil.example.com/')
+
+    assert 'evil.example.com' not in resp.url
 
 
 # ── who gets in ──────────────────────────────────────────────────────────────────────────────────
@@ -166,18 +276,35 @@ def test_the_admin_hub_still_offers_it_to_the_owner(client):
 
 
 def test_nothing_else_on_the_site_links_to_django_admin():
-    """A link in a shared template would reach every Administrator regardless of the gate."""
+    """A link in shared chrome would reach every Administrator regardless of the gate.
+
+    Every spelling, not just the one I happened to write. `{% url 'admin:index' %}` is the IDIOMATIC
+    way somebody would add this link, and the first cut of this guard did not look for it -- nor for
+    single quotes, nor for JS. Exempted by PATH, not by filename: matching `admin_hub.html` anywhere
+    would exempt a future copy of it in another directory.
+    """
     import pathlib
+    import re
 
-    root = pathlib.Path(__file__).resolve().parents[2] / 'templates'
+    root = pathlib.Path(__file__).resolve().parents[2]
+    allowed = {'templates/staff/admin_hub.html'}
+    patterns = [re.compile(p) for p in (
+        r'href=["\']/admin/',
+        r'{%\s*url\s+["\']admin:',
+        r'["\']/admin/["\']',
+    )]
+
     offenders = []
-    for template in root.rglob('*.html'):
-        text = template.read_text(encoding='utf-8', errors='ignore')
-        if 'href="/admin/' in text and template.name != 'admin_hub.html':
-            offenders.append(str(template.relative_to(root)))
+    for folder, suffix in (('templates', '*.html'), ('static/js', '*.js')):
+        for path in (root / folder).rglob(suffix):
+            relative = path.relative_to(root).as_posix()
+            if relative in allowed:
+                continue
+            text = path.read_text(encoding='utf-8', errors='ignore')
+            if any(pattern.search(text) for pattern in patterns):
+                offenders.append(relative)
 
-    assert not offenders, f'templates linking to Django admin: {offenders}'
-
+    assert not offenders, f'linking to Django admin: {offenders}'
 
 # ── the gate is on the SITE, not on individual models ────────────────────────────────────────────
 

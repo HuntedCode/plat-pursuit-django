@@ -482,3 +482,107 @@ def test_a_deactivated_moderator_loses_access():
     moderator.save()
 
     assert is_mod_or_admin(moderator) is False
+
+
+# ── who an entry is evidence ABOUT ───────────────────────────────────────────────────────────────
+#
+# `subject_user` is not "the owner of the thing acted on". It is the hunter whose BEHAVIOUR the entry
+# is evidence about, and those differ for half the actions. One settled rule, or the column means two
+# things and the per-person history is wrong for both.
+
+def test_hiding_a_take_records_its_author_as_the_subject():
+    report = _reported_take()
+    author = report.rating.profile
+
+    action = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    assert action.subject_user == author.user
+    assert action.subject_label == author.user.display_name
+
+
+def test_dismissing_a_report_records_the_REPORTER_not_the_author():
+    """The one most likely to be got wrong. A dismissal says the report was wrong: that is evidence
+    about the person who filed it, and none at all about the person they filed it against."""
+    report = _reported_take()
+    author, reporter = report.rating.profile, report.reporter
+    assert author.user != reporter.user
+
+    action = mod.dismiss_blurb_report(report, _moderator(), 'nothing wrong with it')
+
+    assert action.subject_user == reporter.user
+    assert action.subject_user != author.user, 'a dismissal was filed against the author'
+
+
+@pytest.mark.parametrize('decide,expected', [
+    (mod.approve_game_flag, 'game_flag_approved'),
+    (mod.dismiss_game_flag, 'game_flag_dismissed'),
+])
+def test_a_flag_decision_records_the_reporter(decide, expected):
+    """A game has no hunter behind it, so the only person a flag decision is evidence about is the
+    one who raised it -- and "who reports well" is what the history is for."""
+    flag = _flag()
+
+    action = decide(flag, _moderator(), 'checked, correct')
+
+    assert action.action == expected
+    assert action.subject_user == flag.reporter.user
+
+
+def test_a_reversal_is_evidence_about_the_same_person():
+    report = _reported_take()
+    author = report.rating.profile
+    original = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    reversal = mod.reverse_action(original, _moderator(), 'on appeal, it was fine')
+
+    assert reversal.subject_user == original.subject_user == author.user
+    assert reversal.subject_label == original.subject_label
+
+
+def test_the_history_survives_the_report_being_purged():
+    """THE reason this column exists. `blurb_report` is SET_NULL, so before it, purging a report
+    left an entry that could not be traced to anybody -- losing exactly the old history an appeal is
+    about."""
+    report = _reported_take()
+    author = report.rating.profile
+    action = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    report.delete()
+    action.refresh_from_db()
+
+    assert action.blurb_report is None, 'the report did not actually go'
+    assert action.subject_user == author.user, 'the entry lost the person it was about'
+    assert action.subject_label
+
+
+def test_one_query_answers_everything_about_one_hunter():
+    """The claim that made a real FK worth having over anything cleverer."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from trophies.models import ModerationAction
+
+    report = _reported_take()
+    author = report.rating.profile
+    mod.hide_blurb(report, _moderator(), 'a slur')
+    mod.dismiss_game_flag(_flag(), _moderator(), 'not delisted')
+
+    with CaptureQueriesContext(connection) as captured:
+        theirs = list(ModerationAction.objects.filter(subject_user=author.user))
+
+    assert len(theirs) == 1
+    assert len(captured.captured_queries) == 1
+
+
+def test_a_subject_with_no_account_behind_the_profile_is_left_null():
+    """Honest rather than clever. A profile with no user has nobody to name, and inventing a label
+    would put a name on an entry that never had one."""
+    report = _reported_take()
+    report.rating.profile.user = None
+    report.rating.profile.save(update_fields=['user'])
+    report.rating.profile.refresh_from_db()
+
+    action = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    assert action.subject_user is None
+    assert action.subject_label == ''
