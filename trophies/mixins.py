@@ -338,9 +338,20 @@ class PostActionMixin:
     Subclasses provide `act(pk, user, reason)`, `success_message`, `error_class`, and optionally
     `default_redirect()`.
     """
-    #: The exception this family raises for a refusable action. Its message is shown to the user, so
+    #: The exception this family raises for a refusable action. Its message is SHOWN to the user, so
     #: it must be one written to be read -- "already handled by somebody else", not a traceback.
-    error_class = Exception
+    #:
+    #: No default. It was `Exception`, which would have caught AttributeError, KeyError and every
+    #: other programming mistake in a subclass that forgot to set it, and rendered the traceback text
+    #: to an admin as though it were an explanation. Same treatment as `default_redirect`: a subclass
+    #: that does not answer this does not work.
+    error_class = None
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.error_class is None:
+            raise NotImplementedError(
+                f'{type(self).__name__} must set `error_class` to the exception its service raises.')
+        return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, pk):
         reason = (request.POST.get('reason') or '').strip()

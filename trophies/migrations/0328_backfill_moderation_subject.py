@@ -34,11 +34,18 @@ def _label(user):
 def backfill(apps, schema_editor):
     ModerationAction = apps.get_model('trophies', 'ModerationAction')
 
+    # OLDEST FIRST, and that ordering is the whole correctness of the reversal branch below.
+    # `Meta.ordering` is newest-first, and a reversal is by construction newer than what it
+    # reverses -- so under the default order every reversal was visited BEFORE its original, found
+    # `subject_user_id` still NULL (the column having been added one migration earlier), and was
+    # skipped. The one branch written to handle out-of-order resolution was the one branch that
+    # could never fire.
     entries = list(
         ModerationAction.objects
-        .select_related('blurb_report__reporter__user', 'blurb_report__rating__profile__user',
-                        'game_flag__reporter__user', 'reverses')
-        .all()
+        .select_related('blurb_report__reporter__user__profile',
+                        'blurb_report__rating__profile__user__profile',
+                        'game_flag__reporter__user__profile', 'reverses')
+        .order_by('created_at', 'id')
     )
     by_pk = {entry.pk: entry for entry in entries}
     updated = []
@@ -74,13 +81,18 @@ def backfill(apps, schema_editor):
 
 
 def unbackfill(apps, schema_editor):
-    """Reversible, and deliberately blunt: it clears the columns the forward pass filled.
+    """A NO-OP, on purpose.
 
-    The forward pass is the only writer of these two columns for pre-existing rows, and the field was
-    added in the migration immediately before this one -- so anything set here came from here.
+    The first version cleared both columns on every row, justified by "the forward pass is the only
+    writer of these for pre-existing rows". True, and irrelevant: the `.update()` was not scoped to
+    pre-existing rows, so `migrate trophies 0327` -- an ordinary ops action -- would have wiped
+    `subject_user` from every entry the service has written SINCE, which is all of them. That is the
+    per-person history this branch exists to build, destroyed by a rollback of the migration that
+    populated it.
+
+    Rolling back to 0327 drops the columns anyway, so there is nothing this needs to undo.
     """
-    ModerationAction = apps.get_model('trophies', 'ModerationAction')
-    ModerationAction.objects.update(subject_user=None, subject_label='')
+
 
 
 class Migration(migrations.Migration):

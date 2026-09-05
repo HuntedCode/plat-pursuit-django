@@ -103,6 +103,10 @@ class _QueueView(ModeratorRequiredMixin, TemplateView):
             page = max(1, int(self.request.GET.get('page', 1)))
         except (TypeError, ValueError):
             page = 1
+        # Clamped, because the guard above catches the wrong thing. `?page=99999999999999999999`
+        # parses as an int perfectly well and then dies in Postgres with "bigint out of range" --
+        # a 500 from a querystring. The cap is arbitrary but the failure it prevents is not.
+        page = min(page, 1_000_000)
         start = (page - 1) * PER_PAGE
         # One row past the page, so "is there a next page" needs no COUNT over a table that only
         # grows. Same probe the browse walls use.

@@ -14,6 +14,7 @@ from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFac
 from trophies.mixins import is_mod_or_admin
 from trophies.models import BlurbReport, GameFlag, ModerationAction, UserConceptRating
 from trophies.services import moderation_service as mod
+from trophies.services.game_flag_service import GameFlagService
 
 pytestmark = pytest.mark.django_db
 
@@ -444,14 +445,42 @@ def test_reversing_hands_the_standing_decision_to_whoever_reversed_it():
     assert report.reviewed_by == admin
 
 
-def test_a_reversal_whose_report_is_gone_says_so_honestly():
+def test_a_hide_can_be_reversed_after_its_report_is_purged():
+    """REVERSES an earlier decision of this file's, which pinned the opposite.
+
+    It used to assert that a purged report made the reversal refuse, and called that honest. It was
+    not: `blurb_report` is SET_NULL precisely so an entry outlives its report, and refusing left the
+    take hidden with no way back through the log -- the same "traceable to nobody" failure
+    `subject_user` was added to fix, still sitting on the reversal path.
+
+    `target_id` has held the rating's pk since the log was built, and the proactive undo already
+    resolved a rating through it. There was never a reason for the two paths to differ.
+    """
     report = _reported_take()
     action = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    rating = report.rating
     report.delete()
     action.refresh_from_db()
+    assert action.blurb_report is None, 'the report did not actually go'
 
-    with pytest.raises(mod.ModerationError, match='deleted'):
-        mod.reverse_action(action, _moderator(), 'Undo.')
+    mod.reverse_action(action, _admin(), 'On appeal.')
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is False, 'the take stayed hidden with no route back'
+
+
+def test_a_reversal_whose_take_is_gone_too_says_so_honestly():
+    """The genuinely unrecoverable case: nothing left to put back, and saying so beats a traceback
+    or a silent no-op."""
+    report = _reported_take()
+    action = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    rating_pk = report.rating.pk
+    report.delete()
+    UserConceptRating.objects.filter(pk=rating_pk).delete()
+    action.refresh_from_db()
+
+    with pytest.raises(mod.ModerationError, match='no longer exists'):
+        mod.reverse_action(action, _admin(), 'Undo.')
 
 
 def test_only_one_reversal_can_exist_per_decision_even_without_the_service():
@@ -774,3 +803,93 @@ def test_every_decision_the_service_makes_can_be_reversed():
                  'game_flag_dismissed'}
 
     assert decisions <= set(mod._UNDO), f'no undo for {decisions - set(mod._UNDO)}'
+
+
+# ── what the audit of P2 found ───────────────────────────────────────────────────────────────────
+
+def test_a_second_report_on_an_already_hidden_take_claims_no_change():
+    """`_lock_report` preconditions on the REPORT's status, which says nothing about the take. So a
+    second report against a take that is already hidden used to log `blurb_hidden: [True, True]` --
+    an entry claiming a change that did not happen, which this module calls affirmatively misleading
+    evidence and which `_lock_rating` was written to prevent on the other path only."""
+    report = _reported_take()
+    mod.hide_blurb(report, _moderator(), 'First.')
+    second = BlurbReport.objects.create(
+        rating=report.rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+
+    action = mod.hide_blurb(second, _moderator(), 'Second report, same take.')
+
+    assert action.changed == {}, 'the log claimed a write that did not happen'
+    assert action.evidence.get('already_hidden') is True, 'the log does not say why it wrote nothing'
+    report.rating.refresh_from_db()
+    assert report.rating.blurb_hidden is True
+
+
+def test_reversing_only_your_own_hide_does_not_undo_somebody_elses():
+    """The current-value rule, applied to the blurb undos as well as the flag one. Two decisions can
+    land on one take; reversing yours must not quietly lift theirs."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory()
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=None, blurb='words',
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0)
+    proactive = mod.hide_blurb_without_a_report(rating, _admin(), 'Went looking.')
+    queue_report = BlurbReport.objects.create(
+        rating=rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+    mod.hide_blurb(queue_report, _moderator(), 'And a hunter reported it too.')
+
+    reversal = mod.reverse_action(proactive, _admin(), 'My call was wrong.')
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is True, "reversing one entry lifted somebody else's decision"
+    assert reversal.changed == {}
+    assert 'blurb_hidden' in reversal.evidence['not_restored']
+
+
+def test_reopening_a_flag_refuses_when_the_same_one_is_already_waiting():
+    """`submit_flag` dedups on `status='pending'` and lets a reporter file again once a flag is
+    decided -- so reopening the old one puts two identical pending rows in the queue, which no DB
+    constraint catches. A moderator then sees the same complaint twice."""
+    flag = _flag('delisted')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Looks fine.')
+    refiled, error = GameFlagService.submit_flag(flag.game, flag.reporter, 'delisted', 'again')
+    assert error is None and refiled.pk != flag.pk
+
+    with pytest.raises(mod.ModerationError, match='already filed this flag again'):
+        mod.reverse_action(dismissal, _admin(), 'Actually they were right.')
+
+    assert GameFlag.objects.filter(status='pending').count() == 1, 'the queue has a duplicate'
+
+
+def test_reopening_is_allowed_when_nothing_duplicate_is_waiting():
+    flag = _flag('delisted')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Looks fine.')
+
+    mod.reverse_action(dismissal, _admin(), 'Actually they were right.')
+
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+
+
+def test_the_two_hides_reverse_to_different_names():
+    """Both reversing to `blurb_restored` re-created the ambiguity `blurb_hidden_proactive` exists to
+    remove: a restored row with a null report would be indistinguishable between "undid a proactive
+    hide" and "undid a queue hide whose report was purged"."""
+    names = {decided: reversal for decided, (_undo, reversal) in mod._UNDO.items()}
+
+    assert names['blurb_hidden'] != names['blurb_hidden_proactive']
+
+
+def test_the_flag_undo_locks_the_row_it_compares():
+    """A guard that is not serialised is a guard with a window in it: the undo read the game,
+    compared, and blind-wrote, so a sync writing in between was silently overwritten with no
+    `not_restored` warning -- the exact failure the guard exists to prevent."""
+    import inspect
+
+    source = inspect.getsource(mod._flag_behind) + inspect.getsource(mod._undo_game_flag_approved)
+
+    # `.select_for_update()` with the call parens, not the bare name: both functions DISCUSS the lock
+    # in their docstrings, so counting the word found two of them with the lock itself removed.
+    assert source.count('.select_for_update()') >= 2, (
+        'the flag undo compares and writes without locking both the flag and the game')
+

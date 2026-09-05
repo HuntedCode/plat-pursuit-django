@@ -458,10 +458,16 @@ def test_the_reversible_filter_shows_only_what_can_be_undone(client):
     moderation_service.reverse_action(already, _user('admin'), 'undone')
     client.force_login(_user('admin'))
 
-    body = client.get(reverse('admin_decisions') + '?show=reversible').content.decode()
+    resp = client.get(reverse('admin_decisions') + '?show=reversible')
 
-    assert reverse('admin_reverse_decision', args=[undoable.pk]) in body
-    assert 'undone' not in body, 'a reversed decision showed up under `reversible`'
+    # On the VIEW's rows, not the rendered body. Two layers exclude a reversed decision here -- the
+    # queryset filter and the template's own `not row.is_reversed` -- so asserting a URL is absent
+    # from the HTML passes with the filter clause deleted. The first cut asserted on a reason string
+    # that belonged to the reversal rather than to the decision, and tested neither.
+    shown = {row.pk for row in resp.context['rows']}
+
+    assert undoable.pk in shown
+    assert already.pk not in shown, 'a reversed decision was listed under `reversible`'
 
 
 def test_a_bad_filter_falls_back_rather_than_500ing(client):
@@ -652,8 +658,12 @@ def test_the_person_page_shows_hidden_takes_and_marks_them(client):
 
     body = client.get(reverse('admin_person', args=[person.pk])).content.decode()
 
+    # The BADGE, matched precisely. `'hidden' in body` was true forty times over on this page --
+    # `aria-hidden`, `lg:hidden`, `<input type="hidden">`, and the decision row's own "Quick take
+    # hidden (no report)" -- so deleting the badge entirely left the test green.
     assert 'the offending words' in body
-    assert 'hidden' in body
+    assert 'badge-xs badge-warning font-bold">hidden' in body, (
+        'the take is shown without being marked as hidden, which misrepresents what is live')
 
 
 def test_an_admin_can_hide_a_take_nobody_reported(client):

@@ -7750,6 +7750,7 @@ class ModerationAction(models.Model):
         # reported this, a moderator went looking" is what an appeal turns on.
         ('blurb_hidden_proactive', 'Quick take hidden (no report)'),
         ('blurb_restored', 'Quick take restored'),
+        ('blurb_restored_proactive', 'Quick take restored (was hidden without a report)'),
         ('blurb_report_dismissed', 'Quick take report dismissed'),
         ('blurb_report_reopened', 'Quick take report reopened'),
         ('game_flag_approved', 'Game flag approved'),
