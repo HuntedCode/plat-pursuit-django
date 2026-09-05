@@ -39,6 +39,46 @@ class StaffRequiredMixin(LoginRequiredMixin):
         return redirect('home')
 
 
+def is_mod_or_admin(user):
+    """The moderation gate, as ONE expression.
+
+    `is_staff` rather than `role == 'admin'` on the admin half: `CustomUser.save()` keeps the two in
+    lockstep, and `is_staff` additionally covers superusers, who have no role set at all and would
+    otherwise be locked out of the tools they are most likely to be asked to fix.
+
+    A function as well as a mixin because the same question is asked from templates and from a
+    context processor, and three hand-written copies of `is_staff or is_moderator` is how one of them
+    ends up subtly different from the others.
+    """
+    return bool(
+        user
+        and user.is_authenticated
+        # `is_active` because this is called directly from templates and services too, not only
+        # behind the auth backend. In a request the backend already turns a deactivated user into
+        # AnonymousUser -- but a direct call with a stale user object would otherwise still say yes,
+        # and revoking access is precisely the moment that must not happen.
+        and user.is_active
+        # Direct attribute, not getattr-with-default: `is_moderator` is a property on CustomUser
+        # that cannot raise, so the default only ever masked a rename -- silently locking out every
+        # moderator with no error anywhere. If the property goes, this should break loudly.
+        and (user.is_staff or user.is_moderator)
+    )
+
+
+class ModeratorRequiredMixin(LoginRequiredMixin):
+    """Mod Center access: moderators AND admins.
+
+    Redirects rather than 403s, matching StaffRequiredMixin above -- a hunter who finds a mod URL
+    gets the home page, not confirmation that something is there.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if is_mod_or_admin(request.user):
+            return super().dispatch(request, *args, **kwargs)
+        return redirect('home')
+
+
 class LoginRequiredAPIMixin:
     """
     Mixin for non-DRF API views that require authentication.

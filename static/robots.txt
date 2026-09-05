@@ -59,6 +59,11 @@ Disallow: /api/
 Disallow: /staff/
 Disallow: /monitoring/
 Disallow: /design/
+# The Mod Center. Belt and braces: every route under it already redirects an
+# anonymous visitor to login, so a crawler can never render one. Safe as a prefix
+# because nothing else on the site lives under /mod/ (the recap is /monthly-recap/,
+# which this does not match -- the trailing slash is what keeps it exact).
+Disallow: /mod/
 
 # Guides (temporarily hidden during redesign)
 Disallow: /guides/

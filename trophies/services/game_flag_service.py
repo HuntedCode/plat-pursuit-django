@@ -13,6 +13,40 @@ class GameFlagService:
 
     VALID_FLAG_TYPES = [choice[0] for choice in GameFlag.FLAG_TYPES]
 
+    #: flag_type -> (Game field, value) for the flags that map straight onto one boolean. Hoisted out
+    #: of `approve_flag` so callers can ask WHAT a flag writes without running it -- the moderation
+    #: log needs the field set to snapshot before/after, and deriving that by reading this function's
+    #: source text (which is what it did first) breaks silently on a reformat.
+    FIELD_ACTIONS = {
+        'delisted':                ('is_delisted', True),
+        'not_delisted':            ('is_delisted', False),
+        'unobtainable':            ('is_obtainable', False),
+        'obtainable':              ('is_obtainable', True),
+        'has_online_trophies':     ('has_online_trophies', True),
+        'no_online_trophies':      ('has_online_trophies', False),
+        'has_buggy_trophies':      ('has_buggy_trophies', True),
+        'buggy_trophies_resolved': ('has_buggy_trophies', False),
+    }
+
+    #: The shovelware flags do not fit the one-field shape -- they set a STATUS and a LOCK that
+    #: overrides the automated classifier permanently.
+    SHOVELWARE_FLAG_TYPES = ('is_shovelware', 'not_shovelware')
+    SHOVELWARE_FIELDS = ('shovelware_status', 'shovelware_lock')
+
+    #: Flag types an approval writes NOTHING for. Approving one means "confirmed, a human should act".
+    #:
+    #: DERIVED from the two maps above rather than listed, because the list was the bug: the queue
+    #: template and two code comments each hand-named `missing_vr` and `region_incorrect` and each
+    #: missed `other`, so an `other` row told a moderator "approving updates this game's flags
+    #: directly" for a flag that updates nothing. A thirteenth flag type added tomorrow joins this
+    #: set automatically unless it is given a field to write.
+    NO_OP_FLAG_TYPES = sorted(
+        set(VALID_FLAG_TYPES) - set(FIELD_ACTIONS) - set(SHOVELWARE_FLAG_TYPES))
+
+    #: Every Game field an approval can write. THE contract for anything auditing a flag approval.
+    #: Built from the map above rather than typed out again, so adding a flag type cannot forget it.
+    WATCHED_FIELDS = sorted({f for f, _ in FIELD_ACTIONS.values()} | set(SHOVELWARE_FIELDS))
+
     @staticmethod
     @transaction.atomic
     def submit_flag(game, reporter, flag_type, details=''):
@@ -54,16 +88,7 @@ class GameFlagService:
         game = flag.game
         update_fields = []
 
-        actions = {
-            'delisted':               ('is_delisted', True),
-            'not_delisted':           ('is_delisted', False),
-            'unobtainable':           ('is_obtainable', False),
-            'obtainable':             ('is_obtainable', True),
-            'has_online_trophies':    ('has_online_trophies', True),
-            'no_online_trophies':     ('has_online_trophies', False),
-            'has_buggy_trophies':     ('has_buggy_trophies', True),
-            'buggy_trophies_resolved':('has_buggy_trophies', False),
-        }
+        actions = GameFlagService.FIELD_ACTIONS
 
         if flag.flag_type in actions:
             field, value = actions[flag.flag_type]
@@ -77,7 +102,8 @@ class GameFlagService:
             game.shovelware_status = 'manually_cleared'
             game.shovelware_lock = True
             update_fields = ['shovelware_status', 'shovelware_lock']
-        # missing_vr and region_incorrect: no automated change, staff handles manually
+        # Everything in NO_OP_FLAG_TYPES (missing_vr, region_incorrect, other) falls through here:
+        # no automated change, a human follows up. Do not hand-list them again anywhere.
 
         if update_fields:
             game.save(update_fields=update_fields)

@@ -878,8 +878,13 @@ def test_the_card_is_refitted_when_the_ending_hands_it_the_stage(js):
     )
     # And nothing may clear the path to it. The resize listener is fair game; the fit itself is not.
     # `this._fitCard = null` (the debounced resize handler) is fine and contains this as a substring,
-    # so match the method itself rather than the tail of the private field's name.
-    assert not re.search(r'(?<!_)fitCard\s*=\s*null', code), 'something clears the fit again'
+    # so the lookbehind matches the method itself rather than the tail of the private field's name.
+    #
+    # This pattern carried a stray 0x08 byte from 2026-08 until 2026-09: it was written through a
+    # shell heredoc, where a non-raw `\b` becomes the character it names. The regex therefore
+    # matched nothing, and `assert not re.search(...)` was true no matter what the JS did.
+    # `test_source_control_characters.py` is why it cannot happen again quietly.
+    assert not re.search(r'(?<!_)fitCard\s*=\s*null', code), 'something clears the fit again'
 
 
 def test_the_end_screen_is_a_scene_ON_the_stage():

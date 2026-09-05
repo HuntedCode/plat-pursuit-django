@@ -1,0 +1,76 @@
+{% extends 'moderation/_queue_shell.html' %}
+{# `load` is not inherited from a parent template -- each file that uses a filter loads it. #}
+{% load humanize %}
+
+{% comment %}
+The Quick Takes queue.
+
+A row has to answer three questions before a moderator can decide anything: what was written, who
+wrote it, and why somebody objected. The TEXT leads, quoted and unstyled, because every other fact
+on the row is context for it -- and because a moderator deciding from a reason code alone is not
+moderating, they are rubber-stamping the reporter.
+
+Both the author and the reporter are named. The owner asked for "all the information we can": a
+moderator needs to see a reporter who reports everything as much as an author who writes slurs, and
+neither pattern is visible if the row only shows one side.
+{% endcomment %}
+
+{% block queue_blurb %}
+Reported quick takes. Hiding removes the WORDS only. The rating keeps its scores and stays in the
+game's averages, because hiding text a hunter objected to should not quietly rewrite the numbers.
+{% endblock %}
+
+{% block row %}
+{# The take itself. #}
+<blockquote class="text-base text-base-content leading-relaxed border-l-4 border-base-300 pl-3 pr-1 italic">
+    {% if row.rating.blurb %}&ldquo;{{ row.rating.blurb }}&rdquo;{% else %}<span class="not-italic text-base-content/50">(the take is empty)</span>{% endif %}
+</blockquote>
+
+{% if row.rating.blurb_hidden %}
+<div class="text-xs font-bold text-warning">Currently hidden from the site.</div>
+{% endif %}
+
+{# Who, where, and what was claimed. #}
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/70">
+    {% comment %}`.all.0`, never `.first` -- `.first()` adds ORDER BY + LIMIT and so bypasses the
+    prefetch cache, which is one query per row on a queue that pages 25 at a time.{% endcomment %}
+    {% with game=row.rating.concept.games.all|first %}
+    <span>on {% if game %}<a class="link" href="{% url 'game_detail' game.np_communication_id %}">{{ row.rating.concept.unified_title }}</a>{% else %}{{ row.rating.concept.unified_title }}{% endif %}</span>
+    {% endwith %}
+    <span>&middot;</span>
+    <span>written by <a class="link" href="{% url 'profile_detail' row.rating.profile.psn_username %}">{{ row.rating.profile.display_psn_username|default:row.rating.profile.psn_username }}</a></span>
+    <span>&middot;</span>
+    <span>reported by <a class="link" href="{% url 'profile_detail' row.reporter.psn_username %}">{{ row.reporter.display_psn_username|default:row.reporter.psn_username }}</a></span>
+    <span>&middot;</span>
+    <span>{{ row.created_at|naturaltime }}</span>
+</div>
+
+<div class="flex flex-wrap items-center gap-2">
+    <span class="badge badge-sm badge-error font-bold">{{ row.get_reason_display }}</span>
+    {% if row.details %}<span class="text-xs text-base-content/70 italic pr-1">&ldquo;{{ row.details }}&rdquo;</span>{% endif %}
+</div>
+
+{% if row.status == 'pending' %}
+{% comment %}The reason field is REQUIRED at the service, so `required` here is the honest mirror of
+that rather than a UI nicety -- a mod who submits without one gets an error message, so the browser
+should say so first.{% endcomment %}
+<form method="post" class="flex flex-col sm:flex-row gap-2 pt-1" data-mod-form>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.path }}?status={{ status }}&amp;page={{ page }}">
+    <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
+           placeholder="Why? (recorded against your name)" aria-label="Reason for this decision">
+    <div class="flex gap-2">
+        <button type="submit" class="btn btn-sm btn-error"
+                formaction="{% url 'mod_hide_blurb' row.pk %}">Hide take</button>
+        <button type="submit" class="btn btn-sm btn-ghost"
+                formaction="{% url 'mod_dismiss_blurb' row.pk %}">Dismiss report</button>
+    </div>
+</form>
+{% else %}
+<div class="text-xs text-base-content/60 border-t border-base-300/70 pt-2">
+    {{ row.get_status_display }}
+    {% if row.reviewed_by %}by {{ row.reviewed_by.email }}{% endif %}
+    {% if row.reviewed_at %}&middot; {{ row.reviewed_at|naturaltime }}{% endif %}
+</div>
+{% endif %}
+{% endblock %}

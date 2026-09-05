@@ -25,6 +25,10 @@ from .collection_views import CollectionView, CollectionBadgeModalView
 from .company_views import CompanyListView, CompanyDetailView
 from .franchise_views import FranchiseListView, FranchiseDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
+from .moderation_views import (  # noqa: F401
+    ModCenterView, QuickTakeQueueView, GameFlagQueueView,
+    HideBlurbView, DismissBlurbReportView, ApproveGameFlagView, DismissGameFlagView,
+)
 
 __all__ = [
     # Game views
@@ -69,4 +73,7 @@ __all__ = [
     # Genre/Theme views
     'GenreThemeListView', 'GenreDetailView', 'ThemeDetailView',
     # Engine views
+    # Mod Center
+    'ModCenterView', 'QuickTakeQueueView', 'GameFlagQueueView',
+    'HideBlurbView', 'DismissBlurbReportView', 'ApproveGameFlagView', 'DismissGameFlagView',
 ]

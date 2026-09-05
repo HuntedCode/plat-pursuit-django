@@ -42,6 +42,9 @@ sitemaps = {
     # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
     # for the revamp, since nothing else about the system was deleted.
 }
+from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,
+                            HideBlurbView, DismissBlurbReportView, ApproveGameFlagView,
+                            DismissGameFlagView)
 from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
 from trophies.recap_views import RecapIndexView, RecapSlideView
@@ -496,6 +499,21 @@ urlpatterns = [
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.
+    # ── Mod Center ───────────────────────────────────────────────────────────────────────────────
+    # `/mod/`, not `/staff/`: moderators are not staff. The role split (2026-08) exists so
+    # `is_staff` can mean exactly "Django admin access", and hanging the mod tools off /staff/ would
+    # put the two back in one word. Every route is gated by ModeratorRequiredMixin -- admins reach
+    # them too, via `is_staff`.
+    path('mod/', ModCenterView.as_view(), name='mod_center'),
+    path('mod/quick-takes/', QuickTakeQueueView.as_view(), name='mod_quick_takes'),
+    path('mod/game-flags/', GameFlagQueueView.as_view(), name='mod_game_flags'),
+    # Actions are POST-only (the views enforce it by defining no `get`): each mutates live data, and
+    # a GET would be followed by a crawler, a prefetcher, or a bookmark.
+    path('mod/quick-takes/<int:pk>/hide/', HideBlurbView.as_view(), name='mod_hide_blurb'),
+    path('mod/quick-takes/<int:pk>/dismiss/', DismissBlurbReportView.as_view(), name='mod_dismiss_blurb'),
+    path('mod/game-flags/<int:pk>/approve/', ApproveGameFlagView.as_view(), name='mod_approve_flag'),
+    path('mod/game-flags/<int:pk>/dismiss/', DismissGameFlagView.as_view(), name='mod_dismiss_flag'),
+
     path('staff/badge-create/', BadgeSeriesCreationView.as_view(), name='badge_creation'),
     path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
     # NOTE: the Platinum Grid wizard is RETIRED (2026-08). /shareables/platinum-grid/ bounces to

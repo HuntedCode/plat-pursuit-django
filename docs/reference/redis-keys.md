@@ -241,10 +241,23 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `mod:pending_reports_count` | 60s | Pending CommentReport count (staff navbar) |
-| ~~`mod:pending_proposals_count`~~ | — | Removed in Phase 2.6 alongside the `GameFamilyProposal` model. |
+**Nothing here any more.** Both keys are gone, and the current moderation count is deliberately
+UNCACHED.
 
-**Files**: `plat_pursuit/context_processors.py`
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| ~~`mod:pending_reports_count`~~ | — | Gone with the 2026-08 staff strip-down (its navbar link went first). |
+| ~~`mod:pending_proposals_count`~~ | — | Removed in Phase 2.6 alongside the `GameFamilyProposal` model. |
+| ~~`moderation:open_total`~~ | — | Added and removed in 2026-09, before it ever shipped. |
+
+The navbar's attention count (`moderation_service.open_report_count()`) is two index-served
+aggregates on every moderator page render, and it stays that way on purpose: three separate paths
+could make the cached version disagree with the Mod Center page it points at, including Django-admin
+bulk actions that bypass the service entirely and fire no signal. The audience is about ten accounts.
+See the Cache Keys section of [Moderation Center](../features/moderation-center.md) before re-adding
+one.
+
+**Files**: `plat_pursuit/context_processors.py`, `trophies/services/moderation_service.py`
 
 ### Fundraiser
 

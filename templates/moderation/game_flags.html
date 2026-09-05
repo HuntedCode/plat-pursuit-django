@@ -1,0 +1,80 @@
+{% extends 'moderation/_queue_shell.html' %}
+{# `load` is not inherited from a parent template -- each file that uses a filter loads it. #}
+{% load humanize %}
+
+{% comment %}
+The Game Flags queue.
+
+The row leads with WHAT APPROVING WILL DO, not with the flag's name. "Game has been delisted" tells a
+moderator what was claimed; "this will set is_delisted on the game" tells them what they are about to
+change, which is the thing they are actually deciding. Two of these set `shovelware_lock`, which
+permanently overrides the automated classifier -- that one is called out in its own right, because it
+is by some distance the heaviest button on this page and it does not look it.
+
+Some flag types write nothing at all. Approving one means "confirmed, a human should act" -- so the
+row says that rather than implying a change is coming.
+
+WHICH ones is not decided here. Both sets come from `GameFlagService`, because this template used to
+name them and named two of the three: an `other` flag fell through to "approving updates this game's
+flags directly", which is the exact false promise the row exists to prevent.
+{% endcomment %}
+
+{% block queue_blurb %}
+Reported problems with a game. Approving APPLIES the change to live game data straight away, and
+the row says which field before you press it. Every decision is recorded with your name and your
+reason, and an admin can reverse it.
+{% endblock %}
+
+{% block row %}
+<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <a class="text-base font-bold link link-hover" href="{% url 'game_detail' row.game.np_communication_id %}">{{ row.game.title_name }}</a>
+    <span class="badge badge-sm badge-warning font-bold">{{ row.get_flag_type_display }}</span>
+</div>
+
+{# What approving actually writes. #}
+<div class="text-xs">
+    {% if row.flag_type in shovelware_flag_types %}
+    <span class="font-bold text-error">Approving sets the shovelware LOCK.</span>
+    <span class="text-base-content/70">
+        This overrides the automated classifier permanently, for this game, until an admin clears it.
+    </span>
+    {% elif row.flag_type in no_op_flag_types %}
+    <span class="text-base-content/70">
+        Approving records that this is <em>confirmed</em>. It changes no field, so a human follows up.
+    </span>
+    {% else %}
+    <span class="text-base-content/70">Approving updates this game's flags directly.</span>
+    {% endif %}
+</div>
+
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/70">
+    <span>reported by <a class="link" href="{% url 'profile_detail' row.reporter.psn_username %}">{{ row.reporter.display_psn_username|default:row.reporter.psn_username }}</a></span>
+    <span>&middot;</span>
+    <span>{{ row.created_at|naturaltime }}</span>
+</div>
+
+{% if row.details %}
+<div class="text-xs text-base-content/70 italic pr-1">&ldquo;{{ row.details }}&rdquo;</div>
+{% endif %}
+
+{% if row.status == 'pending' %}
+<form method="post" class="flex flex-col sm:flex-row gap-2 pt-1" data-mod-form>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.path }}?status={{ status }}&amp;page={{ page }}">
+    <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
+           placeholder="Why? (recorded against your name)" aria-label="Reason for this decision">
+    <div class="flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary"
+                formaction="{% url 'mod_approve_flag' row.pk %}">Approve</button>
+        <button type="submit" class="btn btn-sm btn-ghost"
+                formaction="{% url 'mod_dismiss_flag' row.pk %}">Dismiss</button>
+    </div>
+</form>
+{% else %}
+<div class="text-xs text-base-content/60 border-t border-base-300/70 pt-2">
+    {{ row.get_status_display }}
+    {% if row.reviewed_by %}by {{ row.reviewed_by.email }}{% endif %}
+    {% if row.reviewed_at %}&middot; {{ row.reviewed_at|naturaltime }}{% endif %}
+</div>
+{% endif %}
+{% endblock %}

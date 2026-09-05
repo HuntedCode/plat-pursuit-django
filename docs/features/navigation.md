@@ -62,7 +62,7 @@ The navbar is sticky at `top-0 z-50` so users can hub-jump at any scroll depth. 
 | **Leaderboards** | `hidden lg:flex`. Direct link to `/leaderboards/`. Active when `hub_section == 'leaderboards'`. |
 | **Support** | `hidden lg:flex`. Direct link to `/support/`. Active when `hub_section == 'support'`. |
 | **Notification bell** | Existing dropdown, unchanged. Visible at all breakpoints. |
-| **Avatar dropdown** | Theme · Profile · My Premium · Settings · Staff items · Logout |
+| **Avatar dropdown** | Profile *or* Link PSN · Membership (if member) · Settings · Mod Center (mods/admins) · Logout |
 
 That's it — up to 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/`, but the **My Pursuit button is hidden for logged-out visitors**: the logo already reaches `/` for them, and anon has no pursuit to show (the entry would be redundant and mislabeled, and wouldn't highlight anyway since the anon strip is gated off). So anon sees 4 buttons (logo + Browse/Leaderboards/Support). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
 
@@ -70,7 +70,13 @@ The "Customization" item that lived in the legacy My Pursuit dropdown is killed 
 
 ### Avatar dropdown
 
-Streamlined to essentials: Theme Toggle, Profile, My Premium (if premium), Settings, Staff items, Logout. Heavy features like Monthly Recap and Trophy Case are accessible through the Dashboard sub-nav and profile page instead.
+Streamlined to essentials: Profile, Membership (members only), Settings, Logout.
+
+The first row is a BRANCH, not a fixed item: a signed-in hunter who has not linked a PSN account gets
+**Link PSN** where Profile would be (and no Membership row), because there is no profile to link to
+yet. Everything below it is the same for both. The theme toggle went with light mode (2026-08), and the 2026-08 staff strip-down removed every staff link: staff pages are bookmark-reached and cross-link each other, so the menu reads the same for every signed-in hunter.
+
+**One exception, 2026-09**: the [Mod Center](moderation-center.md), shown only to moderators and admins, with an attention marker on the avatar itself when reports are waiting. Moderation is the only staff surface with a QUEUE, so it has something to say without being visited, and a bookmark cannot tell anyone three reports came in overnight. A future admin dashboard needs its own reason rather than this precedent.
 
 ## Hub Sub-Navigation Strip
 

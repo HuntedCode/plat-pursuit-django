@@ -267,8 +267,16 @@ Single-level (flat, not nested) reply to a Review. Supports soft delete.
 ### ReviewReport
 User-filed report on a Review for moderation review.
 
+### ModerationAction
+The live moderation audit log (2026-09). One immutable row per moderator decision across every
+queue: actor (plus `actor_label`, captured at write time so the entry survives a deleted staff
+account), the required reason, the `changed` before/after diff, `evidence` for context the action did
+not itself write, and a self-FK `reverses` so an undo is a NEW entry rather than an edit. Written
+only by `moderation_service`, which applies the change and the log entry in one transaction. See
+[Moderation Center](../features/moderation-center.md).
+
 ### ModerationLog
-Audit trail for comment moderation actions. Preserves original comment body, author, and context for accountability. Uses PROTECT on moderator FK to prevent history deletion.
+LEGACY, read-only with the comment system. Audit trail for comment moderation actions. Preserves original comment body, author, and context for accountability. Uses PROTECT on moderator FK to prevent history deletion. Its `related_name` (`moderation_actions`) is why `ModerationAction.actor` uses `moderation_decisions`.
 
 ### ReviewModerationLog
 Audit trail for review moderation actions. Same pattern as ModerationLog.

@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% comment %}
+The shell both queues share: header, status switcher, rows, paging.
+
+One shell because the two queues differ only in what a ROW says. Everything around the rows -- the
+filter vocabulary, the empty state, the paging -- is identical, and two hand-written copies would
+drift first on exactly those parts: the ones that are tedious to keep in step and least interesting
+to look at.
+
+The row itself comes from `{% block row %}`, which each queue fills.
+
+STATUS is a real filter and not a tab-shaped decoration: `pending` is the only value that means
+"work", so it leads and is the default. Every action posts back with the current filter in `next`,
+so acting on a report returns you to the list you were reading rather than to the top of `pending`.
+{% endcomment %}
+
+
+{% block title %}{{ queue_name }} - Mod Center{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-5xl px-3 md:px-5 lg:px-0 py-4 md:py-6">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% comment %}A real way back, and a real way sideways. The breadcrumb above is the smallest
+    target on the page and was the ONLY route out; moving between the two queues went via the
+    landing, which is two clicks for something a moderator does constantly. The sibling carries its
+    open count because that is the reason to go there.
+
+    OUTSIDE the header card, not inside it. `.pp-head-cascade` staggers its children by nth-child,
+    so putting this row in there made a transparent back-link the opening beat of the page and
+    pushed the title to second -- and left the landing, whose header still leads with its title,
+    animating on a different rhythm from its own queues. This is page-level navigation and belongs
+    beside the breadcrumb.
+
+    Bordered, not bare: `btn-ghost` alone has no resting state, and the design system's inactive
+    secondary button is `btn-ghost border border-base-300` (every other labelled one in the codebase
+    carries it; the bare ones are icon-only). A route out of the page should look like a control.
+    {% endcomment %}
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+        <a href="{% url 'mod_center' %}" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 px-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
+                <path d="m15 18-6-6 6-6"/>
+            </svg>
+            Mod Center
+        </a>
+        {% for other in other_queues %}
+        <a href="{{ other.url }}" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 px-3">
+            {{ other.name }}
+            {% if other.open %}<span class="badge badge-sm badge-warning font-bold">{{ other.open }} waiting</span>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
+        <div class="card-body p-4 md:p-6 pp-head-cascade">
+            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-base-content">{{ queue_name }}</h1>
+            <p class="text-sm text-base-content/70 mt-1 max-w-prose">{% block queue_blurb %}{% endblock %}</p>
+        </div>
+    </section>
+
+    {# ── Status filter ──────────────────────────────────────────────────────────────────── #}
+    {% comment %}The site-wide segmented switcher (components/switcher.css). The class is
+    `pp-switch__chip` -- an invented `__opt` has no CSS behind it, so the filters rendered as bare
+    inline links with nothing separating them, which is how this shipped the first time.
+    Anchors rather than buttons because this is a real navigation: the filter belongs in the URL so
+    a moderator can link a colleague to a queue state and Back works.{% endcomment %}
+    <div class="pp-switch mb-4" role="group" aria-label="Filter by status">
+        {% for value in status_filters %}
+        <a class="pp-switch__chip{% if value == status %} is-active{% endif %}"
+           href="?status={{ value }}"{% if value == status %} aria-current="true"{% endif %}>{{ value|capfirst }}</a>
+        {% endfor %}
+    </div>
+
+    {% if messages %}
+    <div class="flex flex-col gap-2 mb-4">
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} py-2 text-sm">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Rows ───────────────────────────────────────────────────────────────────────────── #}
+    {% if rows %}
+    <div class="flex flex-col gap-3">
+        {% for row in rows %}
+        <article class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body p-4 gap-3">
+                {% block row %}{% endblock %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    {# ── Paging ─────────────────────────────────────────────────────────────────────────── #}
+    {% if has_next or page > 1 %}
+    <nav class="flex items-center justify-between gap-3 mt-5" aria-label="Pagination">
+        {% if page > 1 %}
+        <a class="btn btn-sm btn-ghost" href="?status={{ status }}&amp;page={{ page|add:'-1' }}">&larr; Newer</a>
+        {% else %}<span></span>{% endif %}
+        <span class="text-xs text-base-content/60">Page {{ page }}</span>
+        {% if has_next %}
+        <a class="btn btn-sm btn-ghost" href="?status={{ status }}&amp;page={{ page|add:'1' }}">Older &rarr;</a>
+        {% else %}<span></span>{% endif %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
+        <div class="card-body items-center text-center py-10">
+            <p class="text-base font-bold text-base-content">
+                {% if status == 'pending' %}Nothing waiting{% else %}Nothing here{% endif %}
+            </p>
+            <p class="text-sm text-base-content/60 max-w-prose">
+                {% if status == 'pending' %}
+                The queue is clear. Reports land here as hunters submit them.
+                {% else %}
+                No {{ queue_name|lower }} with this status.
+                <a class="link link-primary" href="?status=pending">Back to what is waiting</a>.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

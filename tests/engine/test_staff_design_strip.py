@@ -129,15 +129,31 @@ def test_robots_disallows_the_design_namespace():
     assert 'Disallow: /design/' in robots
 
 
-def test_the_navbar_carries_no_staff_links_at_all():
+def test_the_navbar_carries_no_staff_links_except_the_mod_center():
     """The strip removed moderation + game families; the fundraiser link followed 2026-08-22
-    (his call: unneeded for now). The avatar menu is identical for every signed-in hunter;
-    staff pages are bookmark-reached and cross-link each other."""
+    (his call: unneeded for now). Staff pages are bookmark-reached and cross-link each other.
+
+    ONE exception since 2026-09: the Mod Center. It is the only staff surface with a QUEUE, so it
+    has something to say without being visited, and a bookmark cannot tell anyone three reports
+    came in overnight. Gated on `is_mod_or_admin`, so the menu still reads identically for every
+    ordinary hunter -- `test_mod_center.py` pins that in both directions. The bans below are
+    unchanged, and the exception needs its own reason rather than this precedent.
+    """
     navbar = (ROOT / 'templates' / 'partials' / 'navbar.html').read_text(encoding='utf-8')
 
     for marker in ('comment_moderation', 'game_family_management', 'fundraiser_admin',
                    'pending_reports_count', 'pending_proposals_count'):
         assert marker not in navbar, f'{marker} survived the strip'
+    # The ANCHOR, not the bare string `mod_center` -- which is also a substring of
+    # `show_mod_center` and of the comment above it, so deleting the link left this green.
+    assert "{% url 'mod_center' %}" in navbar, 'the one deliberate exception went missing'
+
+
+def test_robots_disallows_the_mod_namespace():
+    """Same belt-and-braces as /design/: the gate is the real defence, the crawl block is cheap."""
+    robots = (ROOT / 'static' / 'robots.txt').read_text(encoding='utf-8')
+
+    assert 'Disallow: /mod/' in robots
 
 
 def test_csp_no_longer_advertises_the_removed_report_endpoint(settings):

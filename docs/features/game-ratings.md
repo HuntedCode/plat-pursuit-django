@@ -22,7 +22,7 @@ All four rating filters (`rating_tone` / `rating_verdict` / `rating_summary` / `
 
 The **community snapshot** section is a shared partial (`_community_snapshot.html`) with two sanctioned looks via its `snapshot_chrome` flag: the Game page renders the framed band here with its across-every-list aggregation, and List detail renders the CHROME variant (a `.scard`/`.pp-tally` strip above its tab switcher) with that one list's denorms.
 
-**Quick-take blurbs** (Phase 1, shipped): optional field on `UserConceptRating`, written via the quick-rate modal, sanitized + banned-word filtered on submit, reactively moderated (publish → report → staff soft-hide), with a first-class **community-guidelines** agreement (persistent notice + in-context rules sheet, recorded on submit). See the backend detail in the [API reference](../reference/api-endpoints.md#ratings--quick-takes).
+**Quick-take blurbs** (Phase 1, shipped): optional field on `UserConceptRating`, written via the quick-rate modal, sanitized + banned-word filtered on submit, reactively moderated (publish → report → moderator soft-hide in the [Moderation Center](moderation-center.md), which requires a reason and logs the decision), with a first-class **community-guidelines** agreement (persistent notice + in-context rules sheet, recorded on submit). See the backend detail in the [API reference](../reference/api-endpoints.md#ratings--quick-takes).
 
 ## File map
 
@@ -108,6 +108,9 @@ The card shows **all three options, including the ones nobody picked**: showing 
 - `UserConceptRating.blurb` (CharField 140) + `blurb_hidden` (bool), partial index `rating_blurb_idx`.
 - `UserConceptRating.visible_blurbs()` — the ONLY supported blurb read path (present + not staff-hidden, index-backed).
 - `BlurbReport` — FKs the rating, so it follows the rating through `Concept.absorb()` with no absorb branch.
+  Reviewed in the [Moderation Center](moderation-center.md)'s Quick Takes queue. Hiding a take sets
+  `blurb_hidden` and leaves the RATING intact, so its scores stay in every average: hiding words a
+  hunter objected to must not silently rewrite the game's numbers.
 
 ## Gotchas and Pitfalls
 

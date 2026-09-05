@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate, ModerationAction
 
 
 # Register your models here.
@@ -1884,6 +1884,32 @@ class CommentReportAdmin(admin.ModelAdmin):
             f"Took action on {count} report(s) and soft-deleted the comments.",
             messages.WARNING
         )
+
+
+@admin.register(ModerationAction)
+class ModerationActionAdmin(admin.ModelAdmin):
+    """READ-ONLY by design. An audit trail staff can edit is not one -- a reversal is recorded as its
+    own entry through `moderation_service.reverse_action`, never by changing the original. Registered
+    before the mod centre has a UI so the log is readable from day one, which is also what makes the
+    owner's "admins can reverse an error" requirement true today rather than at commit 3."""
+    list_display = ('created_at', 'action', 'actor_label', 'target_label', 'short_reason')
+    list_filter = ('action', 'created_at')
+    search_fields = ('actor_label', 'target_label', 'reason')
+    date_hierarchy = 'created_at'
+    list_select_related = ('actor',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description='Reason')
+    def short_reason(self, obj):
+        return (obj.reason[:80] + '...') if len(obj.reason) > 80 else obj.reason
 
 
 @admin.register(ModerationLog)
