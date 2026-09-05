@@ -63,7 +63,13 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                 <div class="pp-navsearch__list" data-search-list></div>
                 <button type="submit" id="navsearch-add" class="pp-navsearch__add add-sync-btn" data-search-add hidden>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M11 8v6M8 11h6"/></svg>
-                    <span>Sync &ldquo;<b data-search-term></b>&rdquo; &mdash; a new hunter</span>
+                    {% comment %}A comma, not an em-dash entity: house style forbids em dashes in
+                    public copy, and the entity renders as one. Pre-existing, surfaced when the Mod
+                    Center's copy guard was repaired (its pattern had been matching nothing).
+                    `{% templatetag openvariable %}#` comments are SINGLE-LINE in Django, so a
+                    multi-line one leaks straight onto the page, which is how this comment's first
+                    draft failed the very guard it was explaining.{% endcomment %}
+                    <span>Sync &ldquo;<b data-search-term></b>&rdquo;, a new hunter</span>
                 </button>
                 <a id="navsearch-visit" class="pp-navsearch__visit add-sync-anchor hidden" aria-label="Visit synced profile">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -155,7 +161,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                     stays bookmark-reached; if the admin dashboard wants a place here it needs its
                     own reason, not this precedent. {% endcomment %}
                     {% if show_mod_center %}
-                    <a href="{% url 'mod_center' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Mod Center{% if mod_open_count %}<span class="pp-avmenu__count">{{ mod_open_count }} waiting</span>{% endif %}</a>
+                    <a href="{% url 'mod_center' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Mod Center{% if mod_open_count %} <span class="pp-avmenu__count">{{ mod_open_count }} waiting</span>{% endif %}</a>
                     {% endif %}
                     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="pp-avmenu__danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button></form>
                 </div>

@@ -144,7 +144,9 @@ def test_the_navbar_carries_no_staff_links_except_the_mod_center():
     for marker in ('comment_moderation', 'game_family_management', 'fundraiser_admin',
                    'pending_reports_count', 'pending_proposals_count'):
         assert marker not in navbar, f'{marker} survived the strip'
-    assert 'mod_center' in navbar, 'the one deliberate exception went missing'
+    # The ANCHOR, not the bare string `mod_center` -- which is also a substring of
+    # `show_mod_center` and of the comment above it, so deleting the link left this green.
+    assert "{% url 'mod_center' %}" in navbar, 'the one deliberate exception went missing'
 
 
 def test_robots_disallows_the_mod_namespace():

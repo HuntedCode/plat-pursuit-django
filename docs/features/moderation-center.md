@@ -88,20 +88,24 @@ answers yes for the blurb.
    and the hunter keeps their rating. Only the free text goes. That is the whole reason
    `blurb_hidden` is a separate field, so hiding words does not silently rewrite a game's numbers.
 4. Report closes as `action_taken`; a `ModerationAction` records the diff plus the blurb as evidence.
-5. The cached open count is dropped on commit.
-6. The moderator is redirected back to the list they were reading, not to the top of `pending`.
+5. The moderator is redirected back to the list they were reading, not to the top of `pending`.
 
 ### Approving a game flag
 
 Same shape, except the mutation is delegated to `GameFlagService.approve_flag`, which owns the
 per-type rules. The before/after is captured **around** that call, so the log records what the
-service actually did rather than what the view expected. Two flag types (missing VR, wrong region)
-change no field at all: approving them means "confirmed, a human should act", and the row says so
-rather than implying a change is coming.
+service actually did rather than what the view expected.
 
-Two others set `shovelware_lock`, which permanently overrides the automated classifier. The row calls
-that out in its own right: it is by some distance the heaviest button on the page and does not
-otherwise look it.
+Some flag types change no field at all: approving one means "confirmed, a human should act", and the
+row says so rather than implying a change is coming. **Which ones is derived, not listed** --
+`GameFlagService.NO_OP_FLAG_TYPES` is every valid type minus the ones with a field to write. The
+list was the bug: the queue template and two code comments each hand-named `missing_vr` and
+`region_incorrect`, and all three missed `other`, so an `other` row promised a moderator that
+approving would "update this game's flags directly" for a flag that updates nothing.
+
+Two types set `shovelware_lock`, which permanently overrides the automated classifier
+(`SHOVELWARE_FLAG_TYPES`, read by the template the same way). The row calls that out in its own
+right: it is by some distance the heaviest button on the page and does not otherwise look it.
 
 ### Reversing a decision
 
@@ -155,8 +159,10 @@ precedent.
 Three properties worth keeping:
 
 - **The gate runs before the work.** The processor fires on every page render on the site and almost
-  nobody who triggers it is a moderator, so non-moderators return an empty dict before any cache read
-  or query.
+  nobody who triggers it is a moderator, so non-moderators return an empty dict before any query.
+  The gate call itself sits *inside* the try/except: `is_mod_or_admin` reads `user.is_moderator` by
+  bare attribute access on purpose, so that losing the property breaks loudly, and "loudly" for a
+  site-wide context processor means a 500 on every authenticated request including Django admin.
 - **The entry is not conditional on the count.** Only the marker is. A link that materialises when
   there is work is a link nobody can find when they go looking for it.
 - **The marker and the Mod Center read one definition.** `moderation_service.queue_counts()`. A
@@ -166,21 +172,37 @@ The marker sits at the opposite corner from the sync LED (`.pp-av__queue` vs `.p
 and dot are about *your account*, the marker is about *the site's work*. It clamps at `9+`; the exact
 figure stays in the menu row, where there is room.
 
+It is `--pp-primary`, and that is not a free choice. Sync owns success, warning and error between
+them, so a marker in any of those reads as a fourth sync state: the first cut was `--pp-error`, which
+gave a moderator with a failed sync a red ring, a red halo, a red LED and a red pill, making "your
+account is broken" and "the site has work" the same signal. Primary is the one accent sync never
+uses. It also carries `z-index: 1`, because `.pp-av::after` (the ring) is generated content and
+otherwise paints straight over it.
+
 ## Cache Keys
 
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `moderation:open_total` | 5m | Total pending across every queue; the navbar marker's number |
+**None. The count is live, and that is the decision worth recording.**
 
-**The staleness is asymmetric on purpose.** A *new* report may take the full TTL to raise the marker,
-which is fine. A *decision* drops the key outright, because a marker still claiming work after a
-moderator emptied the queue is the one staleness they would actually notice, and the one that would
-teach them to stop believing it.
+It was cached for five minutes under `moderation:open_total`, with a story about the staleness being
+acceptable in one direction (a new report raising the marker late) and busted in the other (a
+decision clearing it at once). The audit took that story apart three ways:
 
-The bust lives in `moderation_service._log()`, on the write every action already makes, so an action
-added later inherits it rather than having to remember a second step. It fires via
-`transaction.on_commit`: a concurrent request repopulating from an uncommitted transaction would put
-the stale number straight back.
+- **The Django-admin bulk actions never went through the service at all**, and `queryset.update()`
+  fires no signal, so nothing could have caught them. An admin clearing twelve flags left every
+  moderator wearing a marker pointing at an empty queue.
+- **The Mod Center computed the true number on the very same render and threw it away.** The page
+  body could say "3 waiting" while the navbar beside it, in the same HTML, showed nothing.
+- **The get / compute / set was racy.** A read straddling a bust could reinstate the number the bust
+  had just removed, for a full TTL.
+
+All three end in the same place: a marker claiming work against a page saying "nothing waiting", one
+click apart, which is the exact failure the shared definition exists to prevent.
+
+Both report tables index `status`, so `open_report_count()` is two index-served counts, and it runs
+only for moderators and admins: an audience of about ten accounts, not the whole internet. The cache
+was protecting a per-request path that almost nobody takes and buying three ways for the marker to
+lie. If it ever does need caching, cache it where the truth is known (`queue_counts()`), not at the
+read.
 
 ## Integration Points
 
@@ -192,11 +214,12 @@ the stale number straight back.
 
 ## Gotchas and Pitfalls
 
-- **`WATCHED_GAME_FIELDS` is a class attribute, not derived.** It was first derived by running a
-  regex over `approve_flag`'s source. That drifted worse than a list would: a reformat, a quoting
-  change, a hoisted constant, or a field name with a digit each returned *fewer* fields, silently.
-  The real guard is `test_every_flag_type_lands_in_the_log`, which approves every flag type and fails
-  if a field the DB actually changed is missing from `changed`.
+- **`WATCHED_GAME_FIELDS` is derived from a DATA MAP, never from source text.** It is an alias for
+  `GameFlagService.WATCHED_FIELDS`, which is computed from `FIELD_ACTIONS` and `SHOVELWARE_FIELDS`.
+  What was removed is the original derivation by *regex over `approve_flag`'s source*: a reformat, a
+  quoting change, a hoisted constant, or a field name with a digit each returned *fewer* fields,
+  silently. The real guard is `test_every_flag_type_lands_in_the_log`, which approves every flag type
+  and fails if a field the DB actually changed is missing from `changed`.
 - **`_UNDO` is a dict, not a set of names.** The first cut gated on a set while the body was
   hardcoded to the blurb path, so adding a key would have told a moderator "the report behind this
   decision is gone" for a report that was never involved. A key with no handler is now a `KeyError`
@@ -204,16 +227,17 @@ the stale number straight back.
 - **`next` is validated.** It arrives in the POST body so a moderator lands back on the list they
   were reading. Unvalidated that is an open redirect. The leading-slash check is *also* a correctness
   check: `redirect()` treats a slashless string as a view name and raises `NoReverseMatch`.
-- **The queue templates use `.games.all|first`, never `.first`.** `.first()` adds `ORDER BY` +
-  `LIMIT` and so bypasses the prefetch cache, which is one query per row on a page of 25.
+- **`quick_takes.html` uses `.games.all|first`, never `.first`.** `.first()` adds `ORDER BY` +
+  `LIMIT` and so bypasses the prefetch cache, which is one query per row on a page of 25. (The game
+  flags queue reaches `row.game` directly and needs no such care.)
 - **`{% load %}` is not inherited from a parent template.** Each queue template loads `humanize`
   itself, and `{% extends %}` must be the first tag in `_queue_shell.html`.
 - **The switcher class is `pp-switch__chip`.** An invented `__opt` has no CSS behind it and fails
   silently: the filters render as bare inline links with nothing separating them, which is how the
   first cut shipped.
-- **`moderation:open_total` is in conftest's cache-leak list.** LocMem lives for the whole test run,
-  so the first test to render a page as a moderator would otherwise fix the number for every test
-  after it.
+- **Do not re-add a cache without reading the Cache Keys section above.** Three separate paths made
+  the cached version lie, and two of them are still there: Django admin still writes these statuses
+  without the service, and the Mod Center still computes the truth on its own render.
 
 ## Related Docs
 

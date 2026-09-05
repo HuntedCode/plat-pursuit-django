@@ -171,18 +171,22 @@ def moderation_alert(request):
     queues are empty -- a link that materialises only when there is work is a link nobody can find
     when they go looking for it. The count only decides whether it is wearing a marker.
     """
-    from trophies.mixins import is_mod_or_admin
-
-    if not is_mod_or_admin(getattr(request, 'user', None)):
-        return {}
     try:
+        # INSIDE the try, not above it. `is_mod_or_admin` reads `user.is_moderator` by bare attribute
+        # access, deliberately, so that losing the property breaks loudly -- which was the right call
+        # when its only caller was a /mod/ gate. This caller is every page render on the site,
+        # including the Django admin, so "loudly" would mean a site-wide 500.
+        from trophies.mixins import is_mod_or_admin
+        if not is_mod_or_admin(getattr(request, 'user', None)):
+            return {}
         from trophies.services import moderation_service
         return {'show_mod_center': True, 'mod_open_count': moderation_service.open_report_count()}
     except Exception:
-        # The menu entry still renders. Losing the count costs a moderator a marker; letting this
-        # raise would cost every moderator every page on the site.
+        # Nothing, rather than a guess. The gate now lives inside the try, so a failure here can mean
+        # "we could not establish whether this person is a moderator" -- and the safe answer to that
+        # is no. A moderator loses a shortcut for one render; nobody gains one.
         logger.debug("Failed to resolve the moderation attention count", exc_info=True)
-        return {'show_mod_center': True}
+        return {}
 
 
 def navsync(request):

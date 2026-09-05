@@ -42,7 +42,7 @@ which is the whole reason the actions are logged with a reason attached.
             <div class="flex items-baseline justify-between gap-3">
                 <span class="scard__label">{{ queue.name }}</span>
                 {% if queue.open %}
-                <span class="badge badge-sm badge-warning font-bold">{{ queue.open }} open</span>
+                <span class="badge badge-sm badge-warning font-bold">{{ queue.open }} waiting</span>
                 {% endif %}
             </div>
             <div class="scard__value pp-tally">{{ queue.open|intcomma }}</div>

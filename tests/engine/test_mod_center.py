@@ -7,6 +7,9 @@ a POST, and that acting returns you to the list you were reading.
 The gate is the part worth being paranoid about. These URLs write live game data -- one of them sets
 `shovelware_lock`, which permanently overrides the automated classifier.
 """
+import pathlib
+import re
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -15,6 +18,22 @@ from django.urls import reverse
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from trophies.models import BlurbReport, GameFlag, ModerationAction, UserConceptRating
 from trophies.services import moderation_service
+
+#: Repo root, for the source guards at the bottom of this file.
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _built_css():
+    """The compiled Tailwind sheet, as TRACKED.
+
+    `static/css/output.css`, never `staticfiles/`. staticfiles is gitignored and produced by
+    collectstatic at deploy time, so CI has no such directory: a test that read it would be red on
+    every run for reasons having nothing to do with the code. The tracked build output is what gets
+    deployed and then collected, so it is the honest thing to assert on. (Running collectstatic
+    locally still matters for SEEING a change -- WhiteNoise serves the collected copy in dev too --
+    but that is a dev-loop concern, not something a test can pin.)
+    """
+    return (ROOT / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
 
 pytestmark = pytest.mark.django_db
 
@@ -308,15 +327,38 @@ def test_the_status_filter_narrows_and_survives_a_bad_value(client):
 # ── copy and component discipline ────────────────────────────────────────────────────────────────
 
 def _rendered_text(body):
-    """The page's visible text: markup, script and style stripped out.
+    """Everything on the page a person can end up reading, with entities resolved.
 
     Asserted against the RENDER rather than the template source, because a template comment is not
     copy and a `{% comment %}` block may say whatever it likes.
+
+    The first cut of this helper was broken three ways at once, and every one of them made it weaker
+    than it read:
+
+    - Its script/style strip contained literal CONTROL BYTES. It was authored through a shell
+      heredoc, which turned the regex escapes into 0x08 and 0x01, leaving a pattern that matched
+      nothing. Script and style bodies counted as page copy.
+    - Entities were never decoded, so `&mdash;` -- which lands on screen as an em dash -- sailed
+      straight through the assertion named after it. The docstring claimed otherwise.
+    - Attribute text was discarded along with the tags. The newest user-visible copy on this branch
+      is an `aria-label`, which a screen reader reads out loud, so attributes are kept.
+
+    Keeping attributes puts class names and inline custom properties in scope too. That is safe for
+    these three assertions: `--pp-x` never produces a SPACE-hyphen-hyphen-SPACE run.
     """
+    import html
     import re
 
-    body = re.sub(r'(?is)<(script|style).*?</>', ' ', body)
-    return re.sub(r'(?s)<[^>]+>', ' ', body)
+    # Two plain patterns rather than one with a backreference: a backslash-one escape in a NON-raw
+    # Python string is an octal escape, and that is what mangled this helper into a control byte
+    # the first time, leaving a pattern that matched nothing. Nothing here needs a capture group.
+    # is an octal escape, and this helper has now been mangled twice by exactly that -- the
+    # first time into a control byte, which left the pattern matching nothing at all. Nothing
+    # here needs a capture group, so nothing here uses one.
+    for tag in ('script', 'style'):
+        body = re.sub(r"(?is)<%s[^>]*>.*?</%s\s*>" % (tag, tag), " ", body)
+    body = re.sub(r"(?s)<!--.*?-->", " ", body)
+    return html.unescape(body)
 
 
 @pytest.mark.parametrize('name', PAGES)
@@ -330,9 +372,12 @@ def test_no_em_dashes_in_what_a_moderator_reads(client, name):
 
     text = _rendered_text(client.get(reverse(name)).content.decode())
 
-    assert '—' not in text, 'an em dash reached the page'
-    assert '–' not in text, 'an en dash reached the page'
-    assert ' -- ' not in text, 'a double hyphen is reading as an em dash on the page'
+    for offender, label in (('—', 'an em dash'), ('–', 'an en dash'),
+                            (' -- ', 'a double hyphen reading as an em dash')):
+        at = text.find(offender)
+        # The context matters more than the verdict: "an em dash reached the page" sends you
+        # hunting through three templates and a context processor.
+        assert at == -1, f'{label} reached the page: ...{text[max(0, at - 90):at + 90]!r}...'
 
 
 @pytest.mark.parametrize('name', ['mod_quick_takes', 'mod_game_flags'])
@@ -347,20 +392,37 @@ def test_the_status_filter_uses_the_site_wide_switcher(client, name):
     body = client.get(reverse(name)).content.decode()
     assert 'pp-switch__chip' in body, 'the filter is not using the shared switcher'
 
-    # And the class has to actually exist in the compiled sheet the site serves.
-    css = (_pathlib.Path(__file__).resolve().parents[2]
-           / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
-    assert '.pp-switch__chip' in css, 'the switcher class is missing from the built CSS'
+    # And the class has to exist in the COMPILED sheet, not just in a source component file.
+    # `static/css/output.css` deliberately, not `staticfiles/`: staticfiles is gitignored and
+    # generated by collectstatic at deploy time, so CI has no such directory and a test that read
+    # it would be red on every run. static/output.css is the tracked artifact that gets deployed
+    # and then collected, which makes it the honest thing to assert on.
+    assert '.pp-switch__chip' in _built_css(), 'the switcher class is missing from the built CSS'
 
 # ── getting out, and getting sideways ────────────────────────────────────────────────────────────
+
+def _nav_row(body):
+    """The queue page's page-level nav row, isolated so an assertion about it cannot be answered by
+    something else on the page.
+
+    A helper rather than `body[body.index(a):body.index(b)]` inline. `str.index` raises ValueError
+    from inside the test body, which reports as a red traceback about string slicing instead of as
+    "the thing this test is about has gone" -- and if the two markers ever swapped order the slice
+    would silently become empty, quietly passing every negative assertion made against it.
+    """
+    start = body.find('flex flex-wrap items-center gap-2 mb-3')
+    assert start != -1, 'the queue page has no page-level nav row at all'
+    end = body.find('</div>', start)
+    assert end != -1, 'the nav row is never closed'
+    return body[start:end]
+
 
 @pytest.mark.parametrize('name', ['mod_quick_takes', 'mod_game_flags'])
 def test_a_queue_has_a_real_way_back_not_only_a_breadcrumb(client, name):
     """The breadcrumb is the smallest target on the page, and it was the only route out."""
     client.force_login(_user('moderator'))
 
-    body = client.get(reverse(name)).content.decode()
-    header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
+    header = _nav_row(client.get(reverse(name)).content.decode())
 
     assert reverse('mod_center') in header, 'no way back to the Mod Center from the queue header'
 
@@ -382,19 +444,20 @@ def test_the_sibling_link_carries_its_open_count(client):
     _flag()
     client.force_login(_user('moderator'))
 
-    body = client.get(reverse('mod_quick_takes')).content.decode()
-    header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
+    header = _nav_row(client.get(reverse('mod_quick_takes')).content.decode())
 
-    assert '>2<' in header, 'the sibling queue does not show how much is waiting in it'
+    assert '2 waiting' in header, 'the sibling queue does not show how much is waiting in it'
 
 
-def test_a_quiet_sibling_shows_no_count_badge(client):
-    """A zero badge is noise: it draws the eye to a queue with nothing in it."""
+def test_a_quiet_sibling_is_still_linked_but_wears_no_badge(client):
+    """A zero badge is noise: it draws the eye to a queue with nothing in it. But the LINK has to
+    survive the badge going -- asserting only the absence meant that deleting the entire nav row
+    kept this test green."""
     client.force_login(_user('moderator'))
 
-    body = client.get(reverse('mod_quick_takes')).content.decode()
-    header = body[body.index('pp-head-cascade'):body.index('pp-switch')]
+    header = _nav_row(client.get(reverse('mod_quick_takes')).content.decode())
 
+    assert reverse('mod_game_flags') in header, 'the sibling link went with its badge'
     assert 'badge-warning' not in header
 
 
@@ -417,6 +480,18 @@ def test_the_queue_registry_has_one_definition(client):
 # route to the Mod Center that is not a bookmark, and the marker that says it is worth taking.
 
 CHROME_PAGE = 'home'          # any page: the navbar is site-wide chrome, which is the point
+
+#: The marker, matched AS the marker. `'>2<' in body` was the first cut, and it was safe only by
+#: accident: the landing renders site-stat tallies, so a test that creates 11 games could have had
+#: its `'>11<'` answered by a stats tile rather than the avatar -- passing, or failing, for reasons
+#: with nothing to do with moderation.
+MARKER = re.compile(r'<span class="pp-av__queue"[^>]*>([^<]*)</span>')
+
+
+def _marker(body):
+    """What the avatar's queue marker says, or None when it is not rendered at all."""
+    found = MARKER.search(body)
+    return found.group(1).strip() if found else None
 
 
 def _chrome(client):
@@ -446,8 +521,8 @@ def test_the_entry_is_there_when_the_queues_are_empty(client):
 
     body = _chrome(client)
 
-    assert reverse('mod_center') in body
-    assert 'pp-av__queue' not in body, 'a marker with nothing behind it'
+    assert f'href="{reverse("mod_center")}"' in body, 'the word, but no link'
+    assert _marker(body) is None, 'a marker with nothing behind it'
 
 
 def test_open_reports_put_a_marker_on_the_avatar(client):
@@ -457,8 +532,7 @@ def test_open_reports_put_a_marker_on_the_avatar(client):
 
     body = _chrome(client)
 
-    assert 'pp-av__queue' in body
-    assert '>2<' in body, 'the marker does not carry how much is waiting'
+    assert _marker(body) == '2', 'the marker does not carry how much is waiting'
     assert '2 waiting' in body, 'the menu entry does not carry the count'
 
 
@@ -478,8 +552,7 @@ def test_a_crowded_queue_does_not_stretch_the_marker(client):
 
     body = _chrome(client)
 
-    assert '>9+<' in body
-    assert '>11<' not in body
+    assert _marker(body) == '9+'
     assert '11 waiting' in body, 'the exact number still belongs in the menu, where there is room'
 
 
@@ -497,36 +570,46 @@ def test_an_ordinary_hunters_page_does_not_count_anything(client):
     assert moderation == [], f'counted the queues for a non-moderator: {moderation}'
 
 
-def test_the_count_is_counted_once_and_then_remembered(client):
-    """Two aggregates on the first render, none on the next. It is the same number for every
-    moderator, so it is cached globally rather than per viewer."""
-    _report()
-    client.force_login(_user('moderator'))
-
-    def _counting_queries():
-        with CaptureQueriesContext(connection) as captured:
-            client.get(reverse(CHROME_PAGE))
-        return [q['sql'] for q in captured.captured_queries
-                if 'count(' in q['sql'].lower()
-                and ('blurbreport' in q['sql'].lower() or 'gameflag' in q['sql'].lower())]
-
-    assert len(_counting_queries()) == 2, 'expected one aggregate per queue on a cold cache'
-    assert _counting_queries() == [], 'the count was not cached'
-
-
-def test_clearing_the_queue_clears_the_marker(client, django_capture_on_commit_callbacks):
-    """The staleness that matters. A new report may take up to the TTL to raise the marker, which is
-    fine -- but a marker still claiming work after a moderator emptied the queue is the one they
-    would notice, and the one that would teach them to stop believing it."""
+def test_the_marker_counts_live_and_is_never_stale(client):
+    """The count was cached for five minutes. Three separate paths could leave the marker claiming
+    work against a page saying "nothing waiting", one click apart -- so it is not cached, and this
+    is the test that says the number is always the current one."""
     report = _report()
     moderator = _user('moderator')
     client.force_login(moderator)
-    assert 'pp-av__queue' in _chrome(client)          # warms the cache at 1
+    assert _marker(_chrome(client)) == '1'
 
-    with django_capture_on_commit_callbacks(execute=True):
-        moderation_service.dismiss_blurb_report(report, moderator, 'not a problem')
+    moderation_service.dismiss_blurb_report(report, moderator, 'not a problem')
 
-    assert 'pp-av__queue' not in _chrome(client)
+    assert _marker(_chrome(client)) is None, 'the marker outlived the work'
+
+
+def test_an_admin_bulk_sweep_does_not_leave_a_stale_marker(client):
+    """The path nothing could have caught. Django admin's bulk actions move these rows out of
+    `pending` with `queryset.update()`, which goes through no service and fires no signal."""
+    _flag()
+    _flag()
+    admin = _user('admin')
+    client.force_login(admin)
+    assert _marker(_chrome(client)) == '2'
+
+    GameFlag.objects.filter(status='pending').update(status='dismissed')
+
+    assert _marker(_chrome(client)) is None
+
+
+def test_the_marker_and_the_page_body_agree_on_one_render(client):
+    """Same response, two surfaces. The Mod Center pays for the exact number; the navbar beside it
+    must not be rendering a different one."""
+    _report()
+    _flag()
+    client.force_login(_user('moderator'))
+
+    resp = client.get(reverse('mod_center'))
+    body = resp.content.decode()
+
+    assert resp.context['open_total'] == 2
+    assert _marker(body) == '2', 'the navbar disagreed with the page it sits on'
 
 
 def test_the_marker_and_the_mod_center_agree(client):
@@ -713,3 +796,115 @@ def test_the_django_admin_bulk_actions_stay_out_of_a_moderators_reach(client):
         resp = client.get(url)
         assert resp.status_code == 302, f'{url} let a moderator in'
         assert '/admin/login' in resp.url, url
+
+
+# -- what a row promises approving will do -------------------------------------------------------
+
+def test_every_no_op_flag_type_says_it_changes_nothing(client):
+    """The row's whole job is saying what approving WILL do. The template used to name the no-op
+    types itself and named two of the three: an `other` flag was told it would update the game.
+    """
+    from trophies.services.game_flag_service import GameFlagService
+
+    for flag_type in GameFlagService.NO_OP_FLAG_TYPES:
+        GameFlag.objects.all().delete()
+        _flag(flag_type)
+        client.force_login(_user('moderator'))
+
+        body = client.get(reverse('mod_game_flags')).content.decode()
+
+        assert 'It changes no field' in body, f'{flag_type} promised a change it does not make'
+        assert 'updates this game' not in body, f'{flag_type} promised a change it does not make'
+
+
+def test_the_no_op_list_matches_what_approving_actually_writes(client):
+    """The round trip, in the direction that fails. Approve EVERY flag type and compare what the
+    database did against what the set claims, so a fourteenth flag type cannot be quietly
+    mis-described by a page written before it existed.
+
+    Each game is first set to the OPPOSITE of what its flag will write. Without that, `not_delisted`
+    looks like a no-op: it writes `is_delisted = False` onto a game that was already False, and
+    `changed` records real diffs, not attempted writes. That is a property of the log, not of the
+    flag, and reading it as one is how a genuinely-writing type would get called harmless.
+    """
+    from trophies.services.game_flag_service import GameFlagService
+
+    moderator = _user('moderator')
+    for flag_type, _label in GameFlag.FLAG_TYPES:
+        flag = _flag(flag_type)
+        if flag_type in GameFlagService.FIELD_ACTIONS:
+            field, value = GameFlagService.FIELD_ACTIONS[flag_type]
+            setattr(flag.game, field, not value)
+            flag.game.save(update_fields=[field])
+
+        action = moderation_service.approve_game_flag(flag, moderator, 'checking the contract')
+
+        if flag_type in GameFlagService.NO_OP_FLAG_TYPES:
+            assert not action.changed, f'{flag_type} is called a no-op but wrote {action.changed}'
+        else:
+            assert action.changed, f'{flag_type} wrote nothing but is missing from NO_OP_FLAG_TYPES'
+
+
+def test_the_shovelware_list_matches_what_sets_the_lock(client):
+    """`shovelware_lock` permanently overrides the automated classifier, and the row calls that out
+    on its own line. Which types earn that line is not the template's to decide.
+
+    Asserts the LOCK ITSELF rather than the log's diff: a lock that was already set writes no diff,
+    and the question here is which types leave a game locked.
+    """
+    from trophies.services.game_flag_service import GameFlagService
+
+    moderator = _user('moderator')
+    for flag_type, _label in GameFlag.FLAG_TYPES:
+        flag = _flag(flag_type)
+        assert flag.game.shovelware_lock is False
+
+        moderation_service.approve_game_flag(flag, moderator, 'checking the contract')
+        flag.game.refresh_from_db()
+
+        assert flag.game.shovelware_lock is (flag_type in GameFlagService.SHOVELWARE_FLAG_TYPES), \
+            flag_type
+
+
+def test_the_queue_marker_is_not_painted_over_by_the_avatar_ring():
+    """A source guard, because nothing else in the suite can see it.
+
+    `.pp-av::after` (the ring) and `::before` (the syncing arc) are generated content, so they paint
+    after every real child no matter the source order. Without a z-index the ring draws straight over
+    the marker -- which is what shipped, and what a human had to spot in a browser.
+    """
+    css = (ROOT / 'static' / 'css' / 'components' / 'chrome.css').read_text(encoding='utf-8')
+
+    rule = css[css.index('.pp-av__queue {'):]
+    rule = rule[:rule.index('}')]
+    assert 'z-index' in rule, 'the ring will paint over the marker'
+
+    built = _built_css()
+    assert '.pp-av__queue' in built, 'built css is stale: run npm run build'
+    built_rule = built[built.index('.pp-av__queue{'):]
+    assert 'z-index:1' in built_rule[:built_rule.index('}')], 'z-index missing from the built css'
+
+
+@pytest.mark.parametrize('css_class', ['pp-av__queue', 'pp-avmenu__count'])
+def test_the_navbar_classes_exist_in_the_served_css(css_class):
+    """The guard the switcher got, for the two classes this branch introduced.
+
+    An unmatched class fails SILENTLY: the element renders, the markup reads correctly, and the page
+    simply disagrees. Asserting the class appears in the rendered BODY proves nothing, because that
+    is exactly what a class with no CSS behind it also does.
+    """
+    assert f'.{css_class}' in _built_css(), f'{css_class} has no CSS behind it in the built sheet'
+
+
+def test_the_queue_marker_is_not_wearing_a_sync_colour():
+    """Sync owns success, warning and error between them. On the first cut the marker was --pp-error
+    -- the same red as a failed sync's ring and the LED that ring colours -- so a moderator with a
+    broken sync got a red ring, a red halo, a red dot and a red pill, and "your account is broken"
+    became indistinguishable from "the site has work"."""
+    css = (ROOT / 'static' / 'css' / 'components' / 'chrome.css').read_text(encoding='utf-8')
+
+    rule = css[css.index('.pp-av__queue {'):]
+    rule = rule[:rule.index('}')]
+
+    for sync_colour in ('--pp-error', '--pp-warning', '--pp-success'):
+        assert sync_colour not in rule, f'the marker is wearing {sync_colour}, a sync state'

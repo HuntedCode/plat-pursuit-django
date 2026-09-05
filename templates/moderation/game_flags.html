@@ -11,8 +11,12 @@ change, which is the thing they are actually deciding. Two of these set `shovelw
 permanently overrides the automated classifier -- that one is called out in its own right, because it
 is by some distance the heaviest button on this page and it does not look it.
 
-Two flag types write nothing at all (missing VR, wrong region). Approving them means "confirmed, a
-human should act" -- so the row says that rather than implying a change is coming.
+Some flag types write nothing at all. Approving one means "confirmed, a human should act" -- so the
+row says that rather than implying a change is coming.
+
+WHICH ones is not decided here. Both sets come from `GameFlagService`, because this template used to
+name them and named two of the three: an `other` flag fell through to "approving updates this game's
+flags directly", which is the exact false promise the row exists to prevent.
 {% endcomment %}
 
 {% block queue_blurb %}
@@ -29,12 +33,12 @@ reason, and an admin can reverse it.
 
 {# What approving actually writes. #}
 <div class="text-xs">
-    {% if row.flag_type == 'is_shovelware' or row.flag_type == 'not_shovelware' %}
+    {% if row.flag_type in shovelware_flag_types %}
     <span class="font-bold text-error">Approving sets the shovelware LOCK.</span>
     <span class="text-base-content/70">
         This overrides the automated classifier permanently, for this game, until an admin clears it.
     </span>
-    {% elif row.flag_type == 'missing_vr' or row.flag_type == 'region_incorrect' %}
+    {% elif row.flag_type in no_op_flag_types %}
     <span class="text-base-content/70">
         Approving records that this is <em>confirmed</em>. It changes no field, so a human follows up.
     </span>

@@ -77,20 +77,13 @@ def _clear_rarity_cache():
     """
     from django.core.cache import cache
 
-    from trophies.services.moderation_service import OPEN_COUNT_CACHE_KEY
     from trophies.services.rarity import COMMUNITY_SIZE_CACHE_KEY
 
     # site_heartbeat_{date}_{hour} is deliberately NOT here: the consuming views only cache.get
     # (the hourly cron is the sole writer in prod), so a render can never warm it -- every test
     # that seeds it does its own try/finally delete. A future test that forgets the finally
     # would leak it; add the dated key here if that class of bug ever shows up.
-    #
-    # The moderation open-count is the navbar's attention marker, cached for five minutes. Same leak
-    # shape as the two above: the first test to render a page as a moderator would fix the number
-    # for the rest of the session, so a later test that files a report would find the marker still
-    # reading zero.
-    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions',
-            OPEN_COUNT_CACHE_KEY]
+    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions']
 
     def _drop():
         for key in keys:

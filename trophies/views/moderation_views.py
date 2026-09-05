@@ -17,6 +17,7 @@ from django.views.generic import TemplateView, View
 from trophies.mixins import ModeratorRequiredMixin
 from trophies.models import BlurbReport, GameFlag, ModerationAction
 from trophies.services import moderation_service
+from trophies.services.game_flag_service import GameFlagService
 
 #: One page of a queue. Reports accumulate forever, so every queue view pages -- a moderator who
 #: comes back after a quiet month should not be handed six hundred rows in one response.
@@ -24,7 +25,6 @@ PER_PAGE = 25
 
 #: The status filter offered on both queues. 'pending' leads because it is the only one that is work.
 STATUS_FILTERS = ['pending', 'actioned', 'dismissed', 'all']
-
 
 
 def queue_summaries():
@@ -38,15 +38,19 @@ def queue_summaries():
     """
     counts = moderation_service.queue_counts()
     return [
-        {'slug': 'quick-takes', 'name': 'Quick Takes',
+        # The spread goes FIRST so the presentation keys below it always win. Harmless today (the
+        # counts carry only `open`/`total`), but a future count key named `name` or `url` would
+        # otherwise silently replace the queue's own.
+        {**counts['quick-takes'],
+         'slug': 'quick-takes', 'name': 'Quick Takes',
          'url': reverse_lazy('mod_quick_takes'),
-         'blurb': 'Reported quick takes, the only free text a hunter can write on the site.',
-         **counts['quick-takes']},
-        {'slug': 'game-flags', 'name': 'Game Flags',
+         'blurb': 'Reported quick takes, the only free text a hunter can write on the site.'},
+        {**counts['game-flags'],
+         'slug': 'game-flags', 'name': 'Game Flags',
          'url': reverse_lazy('mod_game_flags'),
-         'blurb': 'Reported problems with a game: delisted, unobtainable, shovelware, buggy.',
-         **counts['game-flags']},
+         'blurb': 'Reported problems with a game: delisted, unobtainable, shovelware, buggy.'},
     ]
+
 
 def _breadcrumb(*tail):
     items = [{'text': 'Home', 'url': reverse_lazy('home')},
@@ -151,6 +155,16 @@ class GameFlagQueueView(_QueueView):
         return (GameFlag.objects
                 .select_related('game__concept', 'reporter', 'reviewed_by')
                 .order_by('status', '-created_at'))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # The row says what approving will DO, so it has to know which types write nothing and which
+        # set the shovelware lock. Read from the service that writes them, never named here: the
+        # template hand-listed two of the three no-ops and told a moderator an `other` flag would
+        # change the game.
+        context['no_op_flag_types'] = GameFlagService.NO_OP_FLAG_TYPES
+        context['shovelware_flag_types'] = GameFlagService.SHOVELWARE_FLAG_TYPES
+        return context
 
 
 class _ActionView(ModeratorRequiredMixin, View):
