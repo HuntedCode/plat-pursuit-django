@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.staff_views import AdminHubView
+from core.staff_views import AdminHubView, DecisionLogView, ReverseDecisionView
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
@@ -506,6 +506,12 @@ urlpatterns = [
     # `is_staff` only, which the CustomUser.save() lockstep keeps FALSE for a moderator: /mod/ is the
     # moderators-and-admins surface, /staff/ is admins.
     path('staff/', AdminHubView.as_view(), name='admin_hub'),
+    # The decision log, and the one power the Mod Center does not have: taking a decision
+    # back. NOT under `staff/moderation/` -- that path is a pinned 404 from the 2026-08
+    # strip-down and `test_staff_design_strip.py` asserts it stays one.
+    path('staff/decisions/', DecisionLogView.as_view(), name='admin_decisions'),
+    path('staff/decisions/<int:pk>/reverse/', ReverseDecisionView.as_view(),
+         name='admin_reverse_decision'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.

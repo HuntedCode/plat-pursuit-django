@@ -1,0 +1,135 @@
+{% extends 'staff/_staff_shell.html' %}
+{# `load` is not inherited from a parent template -- each file that uses a filter loads it. #}
+{% load humanize %}
+
+{% comment %}
+The decision log, with the power to take one back.
+
+A RECORD first, a workbench second: `all` is the default filter, not `reversible`, because an admin
+opens this to read what happened far more often than to undo something. That is the opposite of the
+Mod Center's queues, where `pending` leads because it is the only thing that means work.
+
+Every row shows its REASON. It is the part that makes the log worth keeping, and a colleague reading
+down the page is exactly who it was written for.
+
+A row offers Reverse only when the SERVICE can actually undo it -- `undoable` comes from
+`moderation_service.UNDOABLE_ACTIONS`. Offering a button the service refuses is the worst of both:
+the admin has already typed a reason before being told no.
+{% endcomment %}
+
+{% block staff_blurb %}
+Everything moderators and admins have decided, newest first. Reversing writes a new entry rather
+than editing this one, so the original decision stays readable.
+{% endblock %}
+
+{% block staff_body %}
+
+<div class="pp-switch mb-4" role="group" aria-label="Filter the log">
+    {% for value in show_filters %}
+    <a class="pp-switch__chip{% if value == show %} is-active{% endif %}"
+       href="?show={{ value }}"{% if value == show %} aria-current="true"{% endif %}>{{ value|capfirst }}</a>
+    {% endfor %}
+</div>
+
+{% if messages %}
+<div class="flex flex-col gap-2 mb-4">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} py-2 text-sm">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="flex flex-col gap-3">
+    {% for row in rows %}
+    <article class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+        <div class="card-body p-4 gap-2">
+
+            <div class="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+                <span class="text-base font-bold text-base-content">{{ row.get_action_display }}</span>
+                {% if row.reverses_id %}<span class="badge badge-sm badge-info">reversal</span>{% endif %}
+                {% if row.is_reversed %}<span class="badge badge-sm badge-ghost">reversed</span>{% endif %}
+                <span class="text-xs text-base-content/60">
+                    by {{ row.actor_label|default:"a deleted account" }}
+                    &middot; {{ row.created_at|naturaltime }}
+                </span>
+            </div>
+
+            <div class="text-sm text-base-content/80">{{ row.target_label }}</div>
+            {% if row.subject_label %}
+            <div class="text-xs text-base-content/60">about {{ row.subject_label }}</div>
+            {% endif %}
+            <div class="text-sm text-base-content/60 italic pr-1">&ldquo;{{ row.reason }}&rdquo;</div>
+
+            {% comment %}What it actually wrote. An empty diff is a real outcome (missing VR and
+            wrong region are upheld for a human to act on), so it says so rather than showing an
+            empty box.{% endcomment %}
+            {% if row.changed %}
+            <div class="flex flex-wrap gap-1.5">
+                {% for field, pair in row.changed.items %}
+                <span class="badge badge-sm badge-ghost font-mono text-xs">{{ field }}: {{ pair.0 }} &rarr; {{ pair.1 }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% comment %}The half a reversal could NOT put back, because the field had moved on since
+            the decision. Loud, not tucked away: an admin who thinks a reversal fully undid something
+            when it did not will act on that belief.{% endcomment %}
+            {% if row.evidence.not_restored %}
+            <div class="alert alert-warning py-2 text-xs">
+                <span>
+                    <b>Not everything was put back.</b>
+                    {% for field, detail in row.evidence.not_restored.items %}
+                    <code>{{ field }}</code> had changed since (expected {{ detail.expected }}, found
+                    {{ detail.found }}), so it was left alone.
+                    {% endfor %}
+                </span>
+            </div>
+            {% endif %}
+
+            {% if row.action in undoable and not row.is_reversed and not row.reverses_id %}
+            <form method="post" action="{% url 'admin_reverse_decision' row.pk %}"
+                  class="flex flex-col sm:flex-row gap-2 pt-1">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}?show={{ show }}&amp;page={{ page }}">
+                <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
+                       placeholder="Why reverse this? (recorded against your name)"
+                       aria-label="Reason for reversing this decision">
+                <button type="submit" class="btn btn-sm btn-warning">Reverse</button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+
+{% if has_next or page > 1 %}
+<nav class="flex items-center justify-between gap-3 mt-5" aria-label="Pagination">
+    {% if page > 1 %}
+    <a class="btn btn-sm btn-ghost" href="?show={{ show }}&amp;page={{ page|add:'-1' }}">&larr; Newer</a>
+    {% else %}<span></span>{% endif %}
+    <span class="text-xs text-base-content/60">Page {{ page }}</span>
+    {% if has_next %}
+    <a class="btn btn-sm btn-ghost" href="?show={{ show }}&amp;page={{ page|add:'1' }}">Older &rarr;</a>
+    {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
+    <div class="card-body items-center text-center py-10">
+        <p class="text-base font-bold text-base-content">Nothing here</p>
+        <p class="text-sm text-base-content/60 max-w-prose">
+            {% if show == 'all' %}
+            No decisions have been recorded yet.
+            {% else %}
+            No decisions match this filter.
+            <a class="link link-primary" href="?show=all">Show everything</a>.
+            {% endif %}
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

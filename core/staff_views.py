@@ -13,12 +13,13 @@ admin arrives with is "is there anything for me", and only then offers the doors
 """
 import logging
 
+from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, View
 
 from core.models import AdminAction
 from fundraiser.models import DonationBadgeClaim
-from trophies.mixins import StaffRequiredMixin
+from trophies.mixins import PostActionMixin, StaffRequiredMixin
 from trophies.models import ModerationAction
 from trophies.services import moderation_service
 from trophies.util_modules.cache import redis_client
@@ -102,3 +103,81 @@ class AdminHubView(StaffRequiredMixin, TemplateView):
         context['is_hub'] = True
         context['seo_title'] = 'Admin - Platinum Pursuit'
         return context
+
+
+#: One page of the decision log. It only grows, so it pages.
+PER_PAGE = 25
+
+#: The filters offered over the decision log. `reversible` leads nothing -- `all` does -- because
+#: unlike a queue this page is a RECORD first and a workbench second: an admin arrives to read what
+#: happened far more often than to undo it.
+DECISION_FILTERS = ['all', 'reversible', 'reversed']
+
+
+class DecisionLogView(StaffRequiredMixin, TemplateView):
+    """Every moderation decision, with the power to undo one.
+
+    Admin-only, and that is the whole difference from the Mod Center's own rail: moderators can see
+    what they and their colleagues decided, admins can take it back. `reverse_action` has existed
+    since the log was built and has been unreachable from any page until now.
+    """
+    template_name = 'staff/decisions.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        requested = self.request.GET.get('show', 'all')
+        show = requested if requested in DECISION_FILTERS else 'all'
+
+        entries = (ModerationAction.objects
+                   # The rail renders `actor_label` and `subject_label`, both frozen at write time,
+                   # so neither FK is touched. The prefetch is for `is_reversed`, which is a query
+                   # per row without it.
+                   .prefetch_related('reversed_by_action'))
+        if show == 'reversed':
+            entries = entries.filter(reversed_by_action__isnull=False)
+        elif show == 'reversible':
+            # What the SERVICE can undo, asked of the service rather than restated here -- otherwise
+            # the page offers a button the service refuses, which is the worst of both.
+            entries = entries.filter(action__in=list(moderation_service.UNDOABLE_ACTIONS),
+                                     reversed_by_action__isnull=True, reverses__isnull=True)
+
+        try:
+            page = max(1, int(self.request.GET.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        start = (page - 1) * PER_PAGE
+        # One past the page, so "is there more" needs no COUNT over a table that only grows.
+        rows = list(entries[start:start + PER_PAGE + 1])
+
+        context['rows'] = rows[:PER_PAGE]
+        context['has_next'] = len(rows) > PER_PAGE
+        context['page'] = page
+        context['show'] = show
+        context['show_filters'] = DECISION_FILTERS
+        context['undoable'] = moderation_service.UNDOABLE_ACTIONS
+        context['page_name'] = 'Decisions'
+        context['breadcrumb'] = [{'text': 'Home', 'url': reverse_lazy('home')},
+                                 {'text': 'Admin', 'url': reverse_lazy('admin_hub')},
+                                 {'text': 'Decisions'}]
+        context['seo_title'] = 'Decisions - Admin'
+        return context
+
+
+class ReverseDecisionView(StaffRequiredMixin, PostActionMixin, View):
+    """Undo one moderation decision. POST-only, admin-only, reason required.
+
+    The gate is the difference that matters: `StaffRequiredMixin`, not the Mod Center's
+    `ModeratorRequiredMixin`. A moderator can decide; taking a colleague's decision back is an
+    admin's call.
+    """
+    error_class = moderation_service.ModerationError
+    success_message = 'Decision reversed.'
+
+    def act(self, pk, user, reason):
+        moderation_service.reverse_action(
+            get_object_or_404(ModerationAction, pk=pk), user, reason)
+
+    def default_redirect(self):
+        return reverse_lazy('admin_decisions')
+

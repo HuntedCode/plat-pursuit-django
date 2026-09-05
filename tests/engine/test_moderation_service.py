@@ -206,14 +206,41 @@ def test_a_decision_cannot_be_reversed_twice():
         mod.reverse_action(original, _moderator(), 'Restored again.')
 
 
-def test_a_dismissal_is_not_reversible_from_the_log():
-    """It changed nothing to put back. Re-opening a report is a queue operation, not an undo, and
-    pretending otherwise would write a reversal entry that reverses nothing."""
-    report = _reported_take()
-    action = mod.dismiss_blurb_report(report, _moderator(), 'Fine.')
+def test_a_dismissal_reopens_the_report():
+    """REVERSES an earlier decision of this suite's, deliberately.
 
-    with pytest.raises(mod.ModerationError):
-        mod.reverse_action(action, _moderator(), 'Changed my mind.')
+    This used to assert that a dismissal could not be undone, reasoning that "it changed nothing to
+    put back" and that reopening is a queue operation rather than an undo. That was wrong on its own
+    terms: a dismissal changed the report's status and took it out of the queue, and putting both
+    back is exactly an undo. The `changed` diff it writes is real, not ceremonial.
+
+    What made the old rule look right was that `_UNDO` had one entry, so "not reversible" and "not
+    implemented" were the same sentence.
+    """
+    report = _reported_take()
+    dismissal = mod.dismiss_blurb_report(report, _moderator(), 'Fine.')
+
+    reversal = mod.reverse_action(dismissal, _moderator(), 'On reflection it is not fine.')
+
+    report.refresh_from_db()
+    assert report.status == 'pending', 'the report did not go back into the queue'
+    assert report.reviewed_by is None, 'a pending report still named who dismissed it'
+    assert reversal.action == 'blurb_report_reopened'
+    assert reversal.changed == {'status': ['dismissed', 'pending']}
+
+
+def test_a_reversal_cannot_itself_be_reversed():
+    """Undoing an undo is re-deciding, and it should be done as a decision -- on the record, with
+    its own reason -- rather than by walking backwards up a chain of entries."""
+    report = _reported_take()
+    original = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    reversal = mod.reverse_action(original, _moderator(), 'Restored.')
+
+    with pytest.raises(mod.ModerationError) as refused:
+        mod.reverse_action(reversal, _moderator(), 'Hide it again.')
+
+    assert 'itself a reversal' in str(refused.value), (
+        'the message read as an unimplemented feature rather than a rule')
 
 
 # ── the log outlives its target ──────────────────────────────────────────────────────────────────
@@ -586,3 +613,164 @@ def test_a_subject_with_no_account_behind_the_profile_is_left_null():
 
     assert action.subject_user is None
     assert action.subject_label == ''
+
+
+# ── reversing a flag decision ────────────────────────────────────────────────────────────────────
+
+def test_reversing_an_approval_puts_the_games_field_back():
+    flag = _flag('delisted')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed delisted.')
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is True
+
+    reversal = mod.reverse_action(approval, _admin(), 'Store listing is live again.')
+
+    flag.game.refresh_from_db()
+    flag.refresh_from_db()
+    assert flag.game.is_delisted is False, 'the approval was not undone'
+    assert flag.status == 'pending', 'the flag did not go back into the queue'
+    assert reversal.action == 'game_flag_reversed'
+    assert reversal.changed['is_delisted'] == [True, False]
+
+
+def test_reversing_an_approval_does_NOT_clobber_a_later_change():
+    """THE trap. `changed` records values at DECISION time, and months can pass before a reversal --
+    the field may have moved since, by a sync, another flag, or a person. Writing the old value back
+    blindly would discard a legitimate later edit and call it a restoration.
+    """
+    flag = _flag('delisted')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed delisted.')
+
+    # Somebody puts the game back on sale, months later, for reasons of their own.
+    flag.game.refresh_from_db()
+    flag.game.is_delisted = False
+    flag.game.save(update_fields=['is_delisted'])
+
+    reversal = mod.reverse_action(approval, _admin(), 'The original call was wrong.')
+
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is False, 'the later change survived, as it must'
+    assert 'is_delisted' not in reversal.changed, 'the reversal claimed a write it did not make'
+    skipped = reversal.evidence['not_restored']['is_delisted']
+    assert skipped['expected'] is True and skipped['found'] is False
+    assert skipped['would_have_written'] is False
+
+
+def test_a_partly_applied_reversal_says_so_rather_than_going_quiet():
+    """A reversal that did three quarters of its job silently is worse than one that reports it: the
+    admin walks away believing the game is back as it was."""
+    flag = _flag('is_shovelware')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Asset flip.')
+
+    # One of the two fields it wrote moves on; the other does not.
+    flag.game.refresh_from_db()
+    flag.game.shovelware_status = 'auto_flagged'
+    flag.game.save(update_fields=['shovelware_status'])
+
+    reversal = mod.reverse_action(approval, _admin(), 'Misjudged, it is a real game.')
+
+    flag.game.refresh_from_db()
+    assert flag.game.shovelware_lock is False, 'the lock was not lifted'
+    assert flag.game.shovelware_status == 'auto_flagged', 'the later status change was clobbered'
+    assert 'shovelware_lock' in reversal.changed
+    assert 'shovelware_status' in reversal.evidence['not_restored']
+
+
+def test_reversing_a_dismissed_flag_reopens_it():
+    flag = _flag('unobtainable')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Trophies look fine.')
+
+    reversal = mod.reverse_action(dismissal, _admin(), 'Three more reports since.')
+
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+    assert flag.reviewed_by is None
+    assert reversal.action == 'game_flag_reopened'
+
+
+def test_reversing_a_no_op_approval_only_reopens_the_flag():
+    """`missing_vr` writes no field, so there is nothing to put back -- and the reversal must not
+    invent a diff to look busy."""
+    flag = _flag('missing_vr')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed, PSVR2.')
+
+    reversal = mod.reverse_action(approval, _admin(), 'Wrong game.')
+
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+    assert reversal.changed == {'status': ['approved', 'pending']}
+    assert reversal.evidence == {}
+
+
+@pytest.mark.parametrize('decide,undo_name', [
+    (mod.approve_game_flag, 'game_flag_reversed'),
+    (mod.dismiss_game_flag, 'game_flag_reopened'),
+])
+def test_every_flag_reversal_is_its_own_entry_not_an_edit(decide, undo_name):
+    flag = _flag()
+    original = decide(flag, _moderator(), 'A decision.')
+
+    reversal = mod.reverse_action(original, _admin(), 'A different view.')
+
+    original.refresh_from_db()
+    assert ModerationAction.objects.count() == 2, 'the original was rewritten instead of added to'
+    assert reversal.reverses_id == original.pk
+    assert reversal.action == undo_name
+    assert original.is_reversed is True
+
+
+def test_reversing_a_flag_decision_needs_a_reason_like_any_other():
+    flag = _flag()
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+
+    with pytest.raises(mod.ModerationError):
+        mod.reverse_action(approval, _admin(), '  ')
+
+    flag.refresh_from_db()
+    assert flag.status == 'approved', 'a refused reversal still reopened the flag'
+    assert ModerationAction.objects.count() == 1
+
+
+def test_a_flag_decision_cannot_be_reversed_twice():
+    flag = _flag()
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+    mod.reverse_action(approval, _admin(), 'Wrong.')
+
+    with pytest.raises(mod.ModerationError):
+        mod.reverse_action(approval, _admin(), 'Wrong again.')
+
+
+def test_a_reversal_whose_flag_is_gone_says_so_honestly():
+    """`game_flag` is SET_NULL, so the entry outlives the flag -- but the undo needs the flag, and
+    "cannot be undone here" beats a traceback or a silent no-op."""
+    flag = _flag()
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+    flag.delete()
+    approval.refresh_from_db()
+
+    with pytest.raises(mod.ModerationError) as refused:
+        mod.reverse_action(approval, _admin(), 'Undo it.')
+
+    assert 'deleted' in str(refused.value)
+
+
+def test_every_action_that_can_be_reversed_names_its_reversal():
+    """The map is (callable, name) pairs because the reversal's own `action` used to be hardcoded to
+    `blurb_restored` -- so the moment a second undo existed, reopening a game flag would have been
+    logged as a quick take being restored."""
+    valid = {choice for choice, _label in ModerationAction.ACTIONS}
+
+    for decided, (undo, reversal_action) in mod._UNDO.items():
+        assert decided in valid, f'{decided} is not a real action'
+        assert reversal_action in valid, f'{reversal_action} is not a real action'
+        assert callable(undo)
+        assert reversal_action != decided, f'{decided} logs its reversal as itself'
+
+
+def test_every_decision_the_service_makes_can_be_reversed():
+    """The owner asked for "reverse any decision". A decision the log records but cannot undo is a
+    gap that only shows up the day somebody needs it."""
+    decisions = {'blurb_hidden', 'blurb_report_dismissed', 'game_flag_approved',
+                 'game_flag_dismissed'}
+
+    assert decisions <= set(mod._UNDO), f'no undo for {decisions - set(mod._UNDO)}'

@@ -334,3 +334,173 @@ def test_no_em_dashes_in_what_an_admin_reads(client):
                             (' -- ', 'a double hyphen reading as an em dash')):
         at = text.find(offender)
         assert at == -1, f'{label} reached the page: ...{text[max(0, at - 90):at + 90]!r}...'
+
+
+# ── the decision log ─────────────────────────────────────────────────────────────────────────────
+#
+# The one power the Mod Center does not have. `reverse_action` has existed since the log was built
+# and has been unreachable from any page until now.
+
+def _decision():
+    """A real, reversible decision made by a moderator."""
+    from trophies.services import moderation_service
+
+    return moderation_service.hide_blurb(_report(), _user('moderator'), 'a slur')
+
+
+def test_a_moderator_cannot_reach_the_decision_log(client):
+    """Deciding is theirs; taking a colleague's decision back is not."""
+    client.force_login(_user('moderator'))
+
+    resp = client.get(reverse('admin_decisions'))
+
+    assert resp.status_code == 302 and resp.url == '/'
+
+
+def test_a_moderator_cannot_reverse_anything(client):
+    """Asserted on the DATABASE. A gate that redirects after acting passes a status-code test."""
+    decision = _decision()
+    client.force_login(_user('moderator'))
+
+    client.post(reverse('admin_reverse_decision', args=[decision.pk]), {'reason': 'let me in'})
+
+    decision.blurb_report.rating.refresh_from_db()
+    assert decision.blurb_report.rating.blurb_hidden is True, 'a moderator reversed a decision'
+    assert ModerationAction.objects.count() == 1, 'a moderator wrote a reversal'
+
+
+def test_an_admin_sees_every_decision_with_its_reason(client):
+    decision = _decision()
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_decisions')).content.decode()
+
+    assert 'a slur' in body, 'the reason is the part that makes the log worth keeping'
+    assert decision.target_label in body
+
+
+def test_an_admin_can_reverse_a_decision_from_the_page(client):
+    decision = _decision()
+    client.force_login(_user('admin'))
+
+    client.post(reverse('admin_reverse_decision', args=[decision.pk]),
+                {'reason': 'quoting, not endorsing'})
+
+    decision.blurb_report.rating.refresh_from_db()
+    assert decision.blurb_report.rating.blurb_hidden is False
+    assert ModerationAction.objects.count() == 2, 'the original was edited instead of added to'
+
+
+def test_reversing_without_a_reason_changes_nothing(client):
+    decision = _decision()
+    client.force_login(_user('admin'))
+
+    client.post(reverse('admin_reverse_decision', args=[decision.pk]), {'reason': '  '})
+
+    decision.blurb_report.rating.refresh_from_db()
+    assert decision.blurb_report.rating.blurb_hidden is True
+    assert ModerationAction.objects.count() == 1
+
+
+def test_a_reversal_cannot_be_performed_by_GET(client):
+    decision = _decision()
+    client.force_login(_user('admin'))
+
+    resp = client.get(reverse('admin_reverse_decision', args=[decision.pk]))
+
+    assert resp.status_code == 405
+    decision.blurb_report.rating.refresh_from_db()
+    assert decision.blurb_report.rating.blurb_hidden is True
+
+
+def test_an_offsite_next_is_refused_on_the_admin_actions_too(client):
+    """`PostActionMixin` is shared with the Mod Center precisely so this guard has one home. Both
+    families are tested, because a shared implementation is only safe if both callers are covered."""
+    decision = _decision()
+    client.force_login(_user('admin'))
+
+    resp = client.post(reverse('admin_reverse_decision', args=[decision.pk]),
+                       {'reason': 'fine', 'next': 'https://evil.example.com/'})
+
+    assert 'evil.example.com' not in resp.url
+
+
+def test_the_page_only_offers_reverse_for_what_the_service_can_undo(client):
+    """Offering a button the service refuses is the worst of both: the admin has already typed a
+    reason before being told no."""
+    from trophies.services import moderation_service
+
+    decision = _decision()
+    reversal = moderation_service.reverse_action(decision, _user('admin'), 'undone')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_decisions')).content.decode()
+
+    assert reverse('admin_reverse_decision', args=[decision.pk]) not in body, (
+        'an already-reversed decision still offered Reverse')
+    assert reverse('admin_reverse_decision', args=[reversal.pk]) not in body, (
+        'a reversal offered a Reverse button of its own')
+
+
+def test_the_reversible_filter_shows_only_what_can_be_undone(client):
+    from trophies.services import moderation_service
+
+    undoable = _decision()
+    already = moderation_service.dismiss_game_flag(
+        GameFlag.objects.create(game=GameFactory(), reporter=ProfileFactory(is_linked=True),
+                                flag_type='delisted'),
+        _user('moderator'), 'fine')
+    moderation_service.reverse_action(already, _user('admin'), 'undone')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_decisions') + '?show=reversible').content.decode()
+
+    assert reverse('admin_reverse_decision', args=[undoable.pk]) in body
+    assert 'undone' not in body, 'a reversed decision showed up under `reversible`'
+
+
+def test_a_bad_filter_falls_back_rather_than_500ing(client):
+    _decision()
+    client.force_login(_user('admin'))
+
+    resp = client.get(reverse('admin_decisions') + '?show=nonsense')
+
+    assert resp.status_code == 200
+    assert resp.context['show'] == 'all'
+
+
+def test_the_log_says_loudly_when_a_reversal_could_not_put_everything_back(client):
+    """An admin who believes a reversal fully undid something when it did not will act on that
+    belief. It gets an alert, not a tucked-away note."""
+    from trophies.services import moderation_service
+
+    flag = GameFlag.objects.create(game=GameFactory(), reporter=ProfileFactory(is_linked=True),
+                                   flag_type='delisted')
+    approval = moderation_service.approve_game_flag(flag, _user('moderator'), 'delisted')
+    flag.game.refresh_from_db()
+    flag.game.is_delisted = False                      # somebody else changes it back, later
+    flag.game.save(update_fields=['is_delisted'])
+    moderation_service.reverse_action(approval, _user('admin'), 'wrong call')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_decisions')).content.decode()
+
+    assert 'Not everything was put back' in body
+    assert 'is_delisted' in body
+
+
+def test_the_decision_log_does_not_query_per_row(client):
+    client.force_login(_user('admin'))
+    _decision()
+
+    with CaptureQueriesContext(connection) as few:
+        client.get(reverse('admin_decisions'))
+
+    for _ in range(6):
+        _decision()
+
+    with CaptureQueriesContext(connection) as many:
+        client.get(reverse('admin_decisions'))
+
+    assert len(many.captured_queries) <= len(few.captured_queries) + 2, (
+        f'{len(few.captured_queries)} queries for 1 row, {len(many.captured_queries)} for 7')

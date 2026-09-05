@@ -99,7 +99,11 @@ record of what has been done. Every action here is logged with your name and you
 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
     <a href="{% url 'mod_center' %}" class="scard hover:border-primary/50 transition-colors block">
         <span class="scard__label">Mod Center</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Reported quick takes and game flags, with the decision log.</p>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">The report queues, shared with the moderators.</p>
+    </a>
+    <a href="{% url 'admin_decisions' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Decisions</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">Every moderation decision, and the power to reverse one. Admins only.</p>
     </a>
     <a href="{% url 'subscription_admin' %}" class="scard hover:border-primary/50 transition-colors block">
         <span class="scard__label">Subscriptions</span>

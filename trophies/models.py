@@ -7740,12 +7740,18 @@ class ModerationAction(models.Model):
     `changed` carry enough of the target to read the entry years later without it -- which is the
     lesson `ModerationLog.comment_id_snapshot` and `.original_body` already learned the hard way.
     """
+    #: Every decision, and every undo of one. The reversals are named for what they DID rather than
+    #: for what they undid ("reopened", not "dismissal reversed"), because the rail reads as a list
+    #: of things that happened to a report and "dismissal reversed" describes the log instead.
     ACTIONS = [
         ('blurb_hidden', 'Quick take hidden'),
         ('blurb_restored', 'Quick take restored'),
         ('blurb_report_dismissed', 'Quick take report dismissed'),
+        ('blurb_report_reopened', 'Quick take report reopened'),
         ('game_flag_approved', 'Game flag approved'),
         ('game_flag_dismissed', 'Game flag dismissed'),
+        ('game_flag_reversed', 'Game flag approval reversed'),
+        ('game_flag_reopened', 'Game flag reopened'),
     ]
 
     actor = models.ForeignKey(
