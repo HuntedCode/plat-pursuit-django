@@ -25,6 +25,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from core.services import audit
 from trophies.models import BlurbReport, GameFlag, ModerationAction
 from trophies.services.game_flag_service import GameFlagService
 
@@ -47,23 +48,23 @@ class ModerationError(Exception):
 
 
 def _require_reason(reason):
-    reason = (reason or '').strip()
-    if len(reason) < 3:
-        raise ModerationError('A reason is required, and has to say something.')
-    return reason
+    """Delegates to `core.services.audit`, which both logs read.
+
+    The exception CLASS is passed through rather than caught and re-raised: `_ActionView` catches
+    `ModerationError` specifically, and handing it a bare `AuditError` would let a missing reason
+    escape as a 500 instead of a message the moderator can read.
+    """
+    return audit.require_reason(reason, error=ModerationError)
 
 
 def _label(user):
     """The actor's display name, captured NOW. `actor` is SET_NULL, so this is what keeps an entry
     readable once a staff account is gone.
 
-    `CustomUser.display_name` owns the PSN-then-email order; this only freezes it. The rule used to
-    be written out here as well as on the model, which is two places to disagree about whether a
-    moderator is a handle or an email address.
+    `CustomUser.display_name` owns the PSN-then-email order and `core.services.audit` owns the
+    freezing; this name is kept because the four call sites below read better for it.
     """
-    if user is None:
-        return ''
-    return (user.display_name or '')[:150]
+    return audit.frozen_label(user)
 
 
 def _lock_report(report):

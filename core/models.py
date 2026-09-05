@@ -1,5 +1,7 @@
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -159,3 +161,135 @@ class CommunityTrophyDay(models.Model):
 
     def __str__(self):
         return f"{self.date}: {self.total_trophies:,}T / {self.total_platinums:,}P / PP={self.pp_score:,}"
+
+
+class AdminAction(models.Model):
+    """Every act an admin performs on an account, a subscription or the site itself: who, why, and
+    what it changed.
+
+    The SECOND audit log, beside `trophies.ModerationAction`. Two tables on purpose:
+    `ModerationAction` carries real FKs to `BlurbReport` and `GameFlag`, which a billing entry has
+    nothing to put in, and a moderation entry has nothing to say about a Stripe subscription id.
+    Bending one table around both subjects is how a column ends up meaning two things.
+
+    They share their RULES, not their schema. See `core/services/audit.py`, and
+    `tests/engine/test_admin_audit.py`, which holds the two in step by introspection.
+
+    Lives in `core` because it spans users (subscriptions), fundraiser (badge claims) and trophies
+    (badge series), and `core` already owns the cross-app record tables (`SiteEvent`, `EmailLog`).
+
+    NO GenericForeignKey -- and there is not one anywhere in this codebase. A GFK stores a
+    content-type id with no label, so once the target row is gone the entry reads as "somebody did
+    something to nothing", which is exactly the failure the frozen-label design exists to prevent.
+    The `target_type` / `target_id` / `target_label` triple identifies a target BETTER after it is
+    deleted, `target_id` holds a Stripe id or a slug as happily as a primary key, and `subject_user`
+    answers "everything ever done to this person" with a single index -- which a GFK cannot do at all.
+    """
+    ACTIONS = [
+        ('restriction_applied', 'Restriction applied'),
+        ('restriction_lifted', 'Restriction lifted'),
+        ('subscription_force_deactivated', 'Subscription force-deactivated'),
+        ('subscription_email_resent', 'Subscription email resent'),
+        ('claim_status_changed', 'Badge claim status changed'),
+    ]
+
+    #: What KIND of thing was acted on. A type plus an id rather than a content-type FK: this
+    #: survives the target's deletion, and reading it needs no join.
+    TARGET_TYPES = [
+        ('user', 'User'),
+        ('subscription', 'Subscription'),
+        ('restriction', 'Restriction'),
+        ('badge_claim', 'Badge claim'),
+        ('fundraiser', 'Fundraiser'),
+        ('system', 'System'),
+    ]
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name='admin_actions',
+        help_text='The admin who acted. SET_NULL so deleting a staff account never erases what they '
+                  'did -- `actor_label` keeps the name.',
+    )
+    actor_label = models.CharField(
+        max_length=150, blank=True,
+        help_text="The actor's name at the time, so the entry still reads once the account is gone.",
+    )
+    action = models.CharField(max_length=40, choices=ACTIONS)
+    reason = models.TextField(
+        help_text='REQUIRED, and required by the service rather than by a form the next caller might '
+                  'not use -- a management command, a shell, or a Django-admin bulk action that '
+                  'renders no form at all.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    subject_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='admin_actions_received',
+        help_text='The person this was done TO, as distinct from the thing that was changed. This is '
+                  'what makes "everything ever done to this account" a single indexed query. Null '
+                  'for system actions with nobody on the other end.',
+    )
+    subject_label = models.CharField(
+        max_length=150, blank=True,
+        help_text="The subject's name at the time. Same reason as `actor_label`.",
+    )
+
+    target_type = models.CharField(max_length=32, choices=TARGET_TYPES, blank=True)
+    target_id = models.CharField(
+        max_length=64, blank=True,
+        help_text='Identifier of the thing acted on, as TEXT. Not an integer: a Stripe subscription '
+                  'id, a badge-series slug and a primary key all have to fit in this one column, and '
+                  'a log that can only reference integer PKs cannot describe half the actions here.',
+    )
+    target_label = models.CharField(
+        max_length=255, blank=True,
+        help_text='Human-readable identification of what was acted on, captured at the time.',
+    )
+
+    changed = models.JSONField(
+        default=dict, blank=True, encoder=DjangoJSONEncoder,
+        help_text="{field: [before, after]} for whatever the action actually WROTE -- read from the "
+                  "object, never assumed. An empty dict is a real outcome, not a bug. "
+                  "DjangoJSONEncoder so a datetime or Decimal cannot raise mid-transaction.",
+    )
+    evidence = models.JSONField(
+        default=dict, blank=True, encoder=DjangoJSONEncoder,
+        help_text="What the action was ABOUT but did not change. Kept beside the diff rather than "
+                  "inside it, so a diff view cannot render it as a field that was modified.",
+    )
+
+    reverses = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='reversed_by_action',
+        help_text='Set when this entry UNDOES an earlier one -- lifting a restriction, most of all. '
+                  'A reversal is its own entry rather than an edit to the original: an audit trail '
+                  'that can be rewritten is not one.',
+    )
+
+    class Meta:
+        # `-id` breaks ties: created_at is auto_now_add, so a bulk write can produce identical
+        # timestamps and leave paging through the log non-deterministic across page boundaries.
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['-created_at'], name='adminaction_recent_idx'),
+            models.Index(fields=['actor', '-created_at'], name='adminaction_actor_idx'),
+            models.Index(fields=['subject_user', '-created_at'], name='adminaction_subject_idx'),
+            models.Index(fields=['action', '-created_at'], name='adminaction_action_idx'),
+        ]
+        constraints = [
+            # One reversal per action, enforced by the DATABASE. The service takes a row lock; this
+            # is what holds if anything ever writes without one.
+            models.UniqueConstraint(
+                fields=['reverses'], condition=Q(reverses__isnull=False),
+                name='adminaction_one_reversal_per_action',
+            ),
+        ]
+
+    def __str__(self):
+        who = self.actor_label or 'deleted user'
+        return f"{self.get_action_display()} by {who} on {self.target_label or 'unknown target'}"
+
+    @property
+    def is_reversed(self):
+        """Derived, not stored: a flag would be a second copy of a fact the FK already carries, and
+        the two would eventually disagree."""
+        return self.reversed_by_action.exists()
