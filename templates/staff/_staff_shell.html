@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% comment %}
+The shell every admin page shares: breadcrumb, the way back, the header card.
+
+Modelled on `moderation/_queue_shell.html`, which learned these two things the hard way and should
+not have to teach them twice:
+
+  A BREADCRUMB IS NOT A WAY OUT. It is the smallest target on the page. Every admin page carries a
+  real back button, and its siblings beside it, OUTSIDE the header card -- inside, `.pp-head-cascade`
+  staggers by nth-child and a ghost button becomes the opening beat of the page instead of the title.
+
+  ROBOTS GOES IN THE SHELL. Of the five staff pages that predate this, exactly one carried
+  `noindex, nofollow`. Putting it here means a page cannot be added without it. The gate already
+  redirects an anonymous visitor, so a crawler never renders one of these -- this is the second lock,
+  the same belt-and-braces as `Disallow: /staff/` in robots.txt.
+
+`{% block staff_body %}` is the page. `admin_hub.html` is the reference filling.
+{% endcomment %}
+
+{% block title %}{{ page_name }} - Admin{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-5xl px-3 md:px-5 lg:px-0 py-4 md:py-6">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% if not is_hub %}
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+        <a href="{% url 'admin_hub' %}" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 px-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
+                <path d="m15 18-6-6 6-6"/>
+            </svg>
+            Admin
+        </a>
+        {% block staff_siblings %}{% endblock %}
+    </div>
+    {% endif %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4 md:mb-6">
+        <div class="card-body p-4 md:p-6 pp-head-cascade">
+            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-base-content">{{ page_name }}</h1>
+            <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-prose">{% block staff_blurb %}{% endblock %}</p>
+        </div>
+    </section>
+
+    {% block staff_body %}{% endblock %}
+</div>
+{% endblock %}

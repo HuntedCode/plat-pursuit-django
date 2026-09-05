@@ -31,15 +31,17 @@ class AuditError(Exception):
     """An audited action that cannot be applied. Carries a message fit to show the person acting."""
 
 
-def require_reason(reason, error=AuditError):
+def require_reason(reason, error):
     """Return the cleaned reason, or raise because there isn't one.
 
     Enforced HERE rather than in a form, because a form guarantees nothing about the next caller: a
     management command, a shell session, or a Django-admin bulk action that never renders one.
 
-    `error` is a parameter so each service raises the exception ITS callers already catch --
-    `moderation_service` raises `ModerationError`, and a view catching that must not be handed a
-    bare `AuditError` it will let escape into a 500.
+    `error` is REQUIRED and deliberately has no default. Each service must raise the exception ITS
+    callers already catch: `_ActionView` catches `ModerationError`, and nothing anywhere catches a
+    bare `AuditError`. A default would let the next service be written the obvious way --
+    `audit.require_reason(reason)` -- and turn a missing reason into a 500 instead of a message
+    somebody can read. A default that is wrong for every caller after the first is not a convenience.
     """
     reason = (reason or '').strip()
     if len(reason) < MIN_REASON_LENGTH:
@@ -56,7 +58,16 @@ def frozen_label(user):
 
     `CustomUser.display_name` owns the PSN-handle-then-email order; this only freezes it and clips it
     to the column width.
+
+    A PLAIN attribute access, never `getattr(user, 'display_name', '')`. Two things would go quiet
+    behind that default. Passing a `Profile` instead of a `CustomUser` -- easy, since
+    `moderation_service` handles both -- would write an entry with a LIVE actor and an empty label,
+    which renders as "by a deleted account" for an account that exists. And `display_name` reaches
+    through a reverse one-to-one whose failure is `RelatedObjectDoesNotExist`, a subclass of
+    AttributeError: the day somebody simplifies that property, every unlinked user's label would
+    silently become empty instead of breaking loudly. A corrupted audit row is worse than a crash,
+    because nothing ever goes looking for it.
     """
     if user is None:
         return ''
-    return (getattr(user, 'display_name', '') or '')[:MAX_LABEL_LENGTH]
+    return (user.display_name or '')[:MAX_LABEL_LENGTH]

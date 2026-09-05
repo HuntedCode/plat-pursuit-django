@@ -1,0 +1,129 @@
+{% extends 'staff/_staff_shell.html' %}
+{# `load` is not inherited from a parent template -- each file that uses a filter loads it. #}
+{% load humanize %}
+
+{% comment %}
+The Admin Hub landing: what needs a human, what was just done, and the doors.
+
+In that order, because the question an admin arrives with is "is there anything for me today", and a
+page that opens with a grid of links makes them work that out themselves.
+
+WHY THERE IS NO SUBSCRIPTION NUMBER IN THE ATTENTION BAND YET. There obviously should be one, and it
+is deliberately absent rather than forgotten. `/staff/subscriptions/` defines "past due" as a djstripe
+subscription in that state JOINED to a user who still has a premium tier, and "action required" as a
+deduplicated 7-day window of notifications. Counting those cheaply here means writing that definition
+a second time, and a number that disagrees with the page it links to is worse than no number -- the
+lesson the Mod Center marker paid for. The subscription page is rebuilt onto this shell in the next
+branch, where one definition can serve both. Until then it is a door, not a figure.
+{% endcomment %}
+
+{% block staff_blurb %}
+Moderators have the Mod Center. This is everything else: accounts, billing, the workers, and the
+record of what has been done. Every action here is logged with your name and your reason.
+{% endblock %}
+
+{% block staff_body %}
+
+{# ── What needs a human ──────────────────────────────────────────────────────────────────── #}
+<h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Needs a human</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-5 md:mb-7">
+
+    <a href="{% url 'mod_center' %}" class="scard hover:border-primary/50 transition-colors block">
+        <div class="flex items-baseline justify-between gap-3">
+            <span class="scard__label">Reports waiting</span>
+            {% if reports_waiting %}<span class="badge badge-sm badge-warning font-bold">{{ reports_waiting }} waiting</span>{% endif %}
+        </div>
+        <div class="scard__value pp-tally">{{ reports_waiting|intcomma }}</div>
+        <div class="scard__sub">{% if reports_waiting %}in the Mod Center{% else %}all clear{% endif %}</div>
+    </a>
+
+    <a href="{% url 'fundraiser_admin' %}" class="scard hover:border-primary/50 transition-colors block">
+        <div class="flex items-baseline justify-between gap-3">
+            <span class="scard__label">Badge claims</span>
+            {% if claims_waiting %}<span class="badge badge-sm badge-warning font-bold">{{ claims_waiting }} waiting</span>{% endif %}
+        </div>
+        <div class="scard__value pp-tally">{{ claims_waiting|intcomma }}</div>
+        <div class="scard__sub">{% if claims_waiting %}claimed, artwork not started{% else %}nothing waiting{% endif %}</div>
+    </a>
+
+    {% comment %}Redis being unreachable and every queue being empty are opposite facts, and showing
+    both as "0" would tell an admin the workers are idle when they may be unreachable.{% endcomment %}
+    <a href="{% url 'token_monitoring' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Worker backlog</span>
+        {% if worker_backlog %}
+        <div class="scard__value pp-tally">{{ worker_backlog.total|intcomma }}</div>
+        <div class="scard__sub">deepest: {{ worker_backlog.queue }} ({{ worker_backlog.depth|intcomma }})</div>
+        {% else %}
+        <div class="scard__value pp-tally text-base-content/40">?</div>
+        <div class="scard__sub text-warning">cannot reach Redis</div>
+        {% endif %}
+    </a>
+</div>
+
+{# ── Recent activity: both logs, one rail ────────────────────────────────────────────────── #}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-5 md:mb-7">
+    <div class="card-body p-4 md:p-6">
+        <h2 class="text-lg font-bold text-base-content mb-1">Recently done</h2>
+        <p class="text-xs text-base-content/60 mb-3">
+            Moderation decisions and admin actions together, newest first. A reversal appears as its
+            own entry rather than replacing the one it undid.
+        </p>
+
+        {% if recent %}
+        <ul class="flex flex-col divide-y divide-base-300/70">
+            {% for row in recent %}
+            <li class="py-2.5 flex flex-col gap-1">
+                <div class="flex items-baseline flex-wrap gap-x-2 gap-y-0.5">
+                    <span class="badge badge-xs {% if row.source == 'Admin' %}badge-primary{% else %}badge-ghost{% endif %}">{{ row.source }}</span>
+                    <span class="text-sm font-bold text-base-content">{{ row.entry.get_action_display }}</span>
+                    {% if row.entry.reverses_id %}<span class="badge badge-xs badge-info">reversal</span>{% endif %}
+                    {% if row.entry.is_reversed %}<span class="badge badge-xs badge-ghost">reversed</span>{% endif %}
+                    <span class="text-xs text-base-content/60">
+                        by {{ row.entry.actor_label|default:"a deleted account" }}
+                        &middot; {{ row.entry.created_at|naturaltime }}
+                    </span>
+                </div>
+                <div class="text-xs text-base-content/70">{{ row.entry.target_label }}</div>
+                <div class="text-xs text-base-content/55 italic pr-1">&ldquo;{{ row.entry.reason }}&rdquo;</div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-base-content/60 py-6 text-center">Nothing has been done yet.</p>
+        {% endif %}
+    </div>
+</section>
+
+{# ── The doors ───────────────────────────────────────────────────────────────────────────── #}
+<h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Tools</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+    <a href="{% url 'mod_center' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Mod Center</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">Reported quick takes and game flags, with the decision log.</p>
+    </a>
+    <a href="{% url 'subscription_admin' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Subscriptions</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">Members, past-due payments, and the ones awaiting bank verification.</p>
+    </a>
+    <a href="{% url 'fundraiser_admin' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Fundraiser</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">Campaigns, donations, and badge artwork claims.</p>
+    </a>
+    <a href="{% url 'token_monitoring' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Workers and tokens</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">PSN token health per machine, and the sync queues.</p>
+    </a>
+    <a href="{% url 'badge_creation' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Create a badge series</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">A series and its editions, in one step.</p>
+    </a>
+    <a href="{% url 'badge_reveal' %}" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Badge reveal</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">The spinner for revealing commissioned artwork.</p>
+    </a>
+    <a href="/admin/" class="scard hover:border-primary/50 transition-colors block">
+        <span class="scard__label">Django admin</span>
+        <p class="text-xs text-base-content/60 mt-1 leading-snug">Everything else. Most of it writes no audit entry, so prefer a tool above where one exists.</p>
+    </a>
+</div>
+{% endblock %}

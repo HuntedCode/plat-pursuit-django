@@ -50,14 +50,36 @@ def test_the_actors_name_is_frozen_beside_the_link(model):
 
 
 @pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
-def test_a_reason_is_structurally_required(model):
-    """The one field that turns a list of timestamps into an audit trail. Not nullable, not blank:
-    the services enforce it, and the column must not quietly allow what they refuse."""
+def test_a_reason_is_declared_required(model):
+    """The one field that turns a list of timestamps into an audit trail.
+
+    Note what this does NOT prove: `blank` is a forms attribute with no DDL behind it, and Postgres
+    NOT NULL does not exclude the empty string. The database half is the two tests below.
+    """
     reason = _field(model, 'reason')
 
     assert isinstance(reason, models.TextField)
     assert reason.null is False, 'a null reason answers "what happened" but never "why"'
     assert reason.blank is False
+
+
+@pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
+def test_the_database_itself_refuses_a_blank_reason(model, db):
+    """`create(reason='')` used to succeed on both tables while the help_text called a reason
+    REQUIRED -- the same shape as claiming a row lock and shipping no constraint. The DEPTH of a
+    reason stays a service rule; this is the floor beneath it."""
+    from django.db import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        model.objects.create(action=model.ACTIONS[0][0], reason='')
+
+
+@pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
+def test_the_database_refuses_a_reason_of_only_whitespace(model, db):
+    from django.db import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        model.objects.create(action=model.ACTIONS[0][0], reason='   \n  ')
 
 
 @pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
@@ -87,14 +109,43 @@ def test_an_undo_is_a_new_entry_pointing_at_the_old_one(model):
 
 
 @pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
-def test_the_database_allows_only_one_reversal_per_entry(model):
-    """The services take a row lock; this is what holds if anything ever writes without one."""
+def test_only_one_reversal_per_entry_is_DECLARED(model):
+    """The declaration only. The database half is `test_only_one_reversal_can_exist_per_entry_...`
+    below, now parametrized over both logs -- this one alone would pass against a model whose
+    constraint had never reached a migration."""
     unique = [c for c in model._meta.constraints if isinstance(c, models.UniqueConstraint)
               and c.fields == ('reverses',)]
 
     assert len(unique) == 1, f'{model.__name__} has no unique constraint on `reverses`'
     assert unique[0].condition == Q(reverses__isnull=False), (
         'without the partial condition, every non-reversal row collides on NULL')
+
+
+@pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
+def test_a_log_is_indexed_for_the_questions_it_exists_to_answer(model):
+    """"Who did this", "what happened lately", "what kind of thing was this" -- each an index.
+
+    Deleting `adminaction_subject_idx` used to leave this whole file green, which made the claim
+    that introspection beats an abstract base weaker than advertised: the contract covered what the
+    two tables SHARE and skipped the thing that makes `AdminAction` worth building.
+    """
+    indexed = {tuple(index.fields) for index in model._meta.indexes}
+
+    assert ('-created_at', '-id') in indexed, 'the log cannot be paged newest-first off an index'
+    assert any(fields[0] == 'actor' for fields in indexed), 'cannot ask what one actor has done'
+    assert any(fields[0] == 'action' for fields in indexed), 'cannot filter the log by kind'
+    for fields in indexed:
+        assert fields[-1] == '-id', (
+            f'{fields} stops before the `-id` tie-break `ordering` relies on, so paging needs a '
+            f'sort on top of the index')
+
+
+def test_the_admin_log_can_answer_everything_done_to_one_person():
+    """The claim the whole no-GFK argument rests on. A GenericForeignKey could not be indexed this
+    way at all, so if this index goes, the reason for the design goes with it."""
+    indexed = {tuple(index.fields) for index in AdminAction._meta.indexes}
+
+    assert any(fields[0] == 'subject_user' for fields in indexed)
 
 
 @pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
@@ -124,13 +175,23 @@ def test_the_admin_log_can_name_the_person_it_was_done_to():
     assert _field(AdminAction, 'subject_label').max_length == audit.MAX_LABEL_LENGTH
 
 
-def test_the_admin_logs_target_id_is_text_not_a_number():
-    """A Stripe subscription id, a badge-series slug and a primary key all have to fit. An integer
-    column can only describe the third, which is the smallest share of what this log records."""
+def test_the_admin_logs_target_id_fits_every_identifier_it_must_hold():
+    """Text, and WIDE ENOUGH -- the assertion that was missing while the column was 64.
+
+    A test can say "not an integer" and prove nothing about fitting; `max_length` is the only
+    property of this field carrying a design decision, and it was the one property untested. At 64 a
+    100-character badge-series slug could not physically be written, and since Django does not
+    truncate a CharField on save, that lands as a DataError which aborts the very transaction the
+    entry was auditing.
+    """
+    from djstripe.models import Subscription
+
     target_id = _field(AdminAction, 'target_id')
 
     assert isinstance(target_id, models.CharField)
-    assert not isinstance(target_id, models.IntegerField)
+    assert target_id.max_length >= Subscription._meta.get_field('id').max_length, (
+        'a Stripe subscription id does not fit')
+    assert target_id.max_length >= 255
 
 
 def test_the_admin_log_uses_no_generic_foreign_key():
@@ -141,17 +202,35 @@ def test_the_admin_log_uses_no_generic_foreign_key():
     assert 'GenericForeignKey' not in names
 
 
-def test_the_admin_log_can_be_read_without_joining_anything():
-    """The point of the type/id/label triple: an entry is legible on its own. If reading one needed
-    a join, a purged target would take the entry's meaning with it."""
-    row = AdminAction(
-        actor_label='Hunted47', action='restriction_applied', reason='spam',
-        subject_label='someone', target_type='user', target_id='42',
-        target_label='quick takes, 7 days')
+@pytest.mark.parametrize('model', LOGS, ids=LOG_IDS)
+def test_a_log_entry_can_be_read_without_joining_anything(model):
+    """An entry is legible on its own; if reading one needed a join, a purged target would take its
+    meaning with it.
+
+    Parametrized over BOTH -- which it was not at first, and the model left out was the one that
+    violated it: `ModerationAction.__str__` fell through to `self.actor.email`, which both joined and
+    put a private address into the repr of a row meant to be read by other people.
+    """
+    row = model(actor_label='Hunted47', action=model.ACTIONS[0][0], reason='spam',
+                target_label='quick takes, 7 days')
 
     rendered = str(row)
 
     assert 'Hunted47' in rendered and 'quick takes, 7 days' in rendered
+
+
+def test_reading_an_entry_never_reaches_for_an_email_address(db):
+    """`display_name` exists so a page names people by PSN handle rather than by email address. A
+    `__str__` that undoes that on the way to a log viewer or a traceback undoes it everywhere."""
+    from tests.factories import ProfileFactory, UserFactory
+
+    actor = UserFactory()
+    ProfileFactory(user=actor, psn_username='hunted47', is_linked=True)
+
+    for model in LOGS:
+        row = model.objects.create(actor=actor, actor_label='', action=model.ACTIONS[0][0],
+                                   reason='no label was captured', target_label='a thing')
+        assert actor.email not in str(row), model.__name__ + '.__str__ leaked an email address' 
 
 
 # ── the table itself, not just its declaration ───────────────────────────────────────────────────
@@ -219,11 +298,35 @@ def test_an_entry_still_names_everyone_after_both_accounts_are_deleted(db):
 @pytest.mark.parametrize('blank', ['', '   ', None, 'ok', ' x '])
 def test_a_reason_that_says_nothing_is_refused(blank):
     with pytest.raises(audit.AuditError):
-        audit.require_reason(blank)
+        audit.require_reason(blank, error=audit.AuditError)
 
 
 def test_a_real_reason_comes_back_trimmed():
-    assert audit.require_reason('  spam, third time  ') == 'spam, third time'
+    cleaned = audit.require_reason('  spam, third time  ', error=audit.AuditError)
+
+    assert cleaned == 'spam, third time'
+
+
+def test_the_error_class_has_no_default():
+    """Deliberately awkward. Nothing anywhere catches a bare `AuditError`, so a default would let the
+    next service be written the obvious way -- `require_reason(reason)` -- and turn a missing reason
+    into a 500 instead of a message somebody can read. Being made to name the exception is the point.
+    """
+    import inspect
+
+    signature = inspect.signature(audit.require_reason)
+
+    assert signature.parameters['error'].default is inspect.Parameter.empty
+
+
+def test_a_label_refuses_the_wrong_kind_of_object(db):
+    """Loud, not silent. `moderation_service` handles both `CustomUser` and `Profile`, so passing the
+    wrong one is an easy mistake -- and swallowing it writes an entry with a LIVE actor and an empty
+    label, which renders as "by a deleted account" for an account that exists."""
+    from tests.factories import ProfileFactory
+
+    with pytest.raises(AttributeError):
+        audit.frozen_label(ProfileFactory(is_linked=True))
 
 
 def test_each_service_raises_the_exception_its_callers_catch():

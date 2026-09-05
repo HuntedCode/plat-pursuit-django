@@ -14,6 +14,20 @@ from trophies.util_modules.cache import redis_client
 logger = logging.getLogger("psn_api")
 
 
+#: The worker job queues, in priority order (workers `brpop` them highest-first).
+#:
+#: A module constant because the Admin Hub watches the same queues for its backlog number, and a hub
+#: quietly watching four of five is worse than a hub watching none: it would report "all clear" while
+#: one queue was drowning. One list, two readers.
+WORKER_QUEUES = [
+    'orchestrator_jobs',
+    'high_priority_jobs',
+    'medium_priority_jobs',
+    'low_priority_jobs',
+    'bulk_priority_jobs',
+]
+
+
 class TokenMonitoringView(StaffRequiredMixin, TemplateView):
     """
     Admin dashboard for monitoring PSN API token usage and sync worker machines.
@@ -63,9 +77,8 @@ class TokenMonitoringView(StaffRequiredMixin, TemplateView):
         return aggregated
 
     def get_queue_stats(self):
-        queues = ['orchestrator_jobs', 'high_priority_jobs', 'medium_priority_jobs', 'low_priority_jobs', 'bulk_priority_jobs']
         stats = {}
-        for queue in queues:
+        for queue in WORKER_QUEUES:
             try:
                 length = redis_client.llen(queue)
                 stats[queue] = length

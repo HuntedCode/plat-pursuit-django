@@ -22,6 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
+from core.staff_views import AdminHubView
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
@@ -496,6 +497,15 @@ urlpatterns = [
     # `home` takes none -- so the pattern_name form raises NoReverseMatch (a hard 500, ungated) on every
     # hit. Any redirect on a path that captures something has to use this form.
     path('staff/notifications/scheduled/<int:pk>/cancel/', RedirectView.as_view(url='/', permanent=False), name='admin_cancel_scheduled'),
+    # ── Admin Hub ────────────────────────────────────────────────────────────────────────────────
+    # The landing over every staff tool. `/staff/` rather than a fresh namespace because four of the
+    # five tools already live here, `robots.txt` already blocks it, and `test_staff_design_strip.py`
+    # asserts those four still answer 200 at their current paths -- so the hub appears without moving
+    # anything and without editing a pinned test. `/admin/` is Django's.
+    #
+    # `is_staff` only, which the CustomUser.save() lockstep keeps FALSE for a moderator: /mod/ is the
+    # moderators-and-admins surface, /staff/ is admins.
+    path('staff/', AdminHubView.as_view(), name='admin_hub'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.

@@ -7751,7 +7751,11 @@ class ModerationAction(models.Model):
     actor = models.ForeignKey(
         # `moderation_actions` is already taken by the legacy comment-era ModerationLog, which is
         # retained deliberately. Another reason not to have bent that table into this job.
-        CustomUser, on_delete=models.SET_NULL, null=True, related_name='moderation_decisions',
+        # `db_index=False`: Django's automatic single-column FK index is a strict PREFIX of the
+        # `modaction_actor_idx` composite below, so it answers nothing that one cannot. On an
+        # append-only log that is an index of pure write cost.
+        CustomUser, on_delete=models.SET_NULL, null=True, db_index=False,
+        related_name='moderation_decisions',
         help_text='The moderator who acted. SET_NULL so deleting a staff account never erases what '
                   'they did -- `actor_label` keeps the name.',
     )
@@ -7813,10 +7817,13 @@ class ModerationAction(models.Model):
         # `-id` breaks ties: created_at is auto_now_add, so a bulk write can produce identical
         # timestamps and leave paging through the log non-deterministic across page boundaries.
         ordering = ['-created_at', '-id']
+        # `-id` on every index, matching `ordering`. The tie-break is not decoration here:
+        # `created_at` is auto_now_add, so a bulk write lands several rows on one timestamp, and an
+        # index that stops short leaves paging needing a sort on top of it.
         indexes = [
-            models.Index(fields=['-created_at'], name='modaction_recent_idx'),
-            models.Index(fields=['actor', '-created_at'], name='modaction_actor_idx'),
-            models.Index(fields=['action', '-created_at'], name='modaction_action_idx'),
+            models.Index(fields=['-created_at', '-id'], name='modaction_recent_idx'),
+            models.Index(fields=['actor', '-created_at', '-id'], name='modaction_actor_idx'),
+            models.Index(fields=['action', '-created_at', '-id'], name='modaction_action_idx'),
         ]
         constraints = [
             # One reversal per decision, enforced by the DATABASE. `is_reversed` is a plain read, so
@@ -7826,10 +7833,22 @@ class ModerationAction(models.Model):
                 fields=['reverses'], condition=Q(reverses__isnull=False),
                 name='modaction_one_reversal_per_action',
             ),
+            # The reason had this model's strongest rhetoric and none of its enforcement:
+            # `create(reason='')` succeeded while the help_text called it REQUIRED. Same floor
+            # `AdminAction` gets, for the same reason the reversal constraint exists -- what holds
+            # when something writes without going through the service.
+            models.CheckConstraint(
+                condition=Q(reason__regex=r'\S'),
+                name='modaction_reason_is_not_blank',
+            ),
         ]
 
     def __str__(self):
-        who = self.actor_label or (self.actor.email if self.actor else 'deleted user')
+        # `actor_label` only, never falling through to `self.actor.email`. That fallback did two
+        # unwanted things: it JOINED in order to render a string, and it put a private email address
+        # into the repr of a row that exists to be read by other people -- undoing, in every log
+        # viewer and traceback, the reason `display_name` exists at all.
+        who = self.actor_label or 'deleted user'
         return f"{self.get_action_display()} by {who} on {self.target_label or 'unknown target'}"
 
     @property

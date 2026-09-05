@@ -53,6 +53,7 @@ so acting on a report returns you to the list you were reading rather than to th
             {% if other.open %}<span class="badge badge-sm badge-warning font-bold">{{ other.open }} waiting</span>{% endif %}
         </a>
         {% endfor %}
+        {% include 'staff/_admin_link.html' %}
     </div>
 
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">

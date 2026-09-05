@@ -205,7 +205,7 @@ class AdminAction(models.Model):
     ]
 
     actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, db_index=False,
         related_name='admin_actions',
         help_text='The admin who acted. SET_NULL so deleting a staff account never erases what they '
                   'did -- `actor_label` keeps the name.',
@@ -223,7 +223,7 @@ class AdminAction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     subject_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, db_index=False,
         related_name='admin_actions_received',
         help_text='The person this was done TO, as distinct from the thing that was changed. This is '
                   'what makes "everything ever done to this account" a single indexed query. Null '
@@ -236,7 +236,13 @@ class AdminAction(models.Model):
 
     target_type = models.CharField(max_length=32, choices=TARGET_TYPES, blank=True)
     target_id = models.CharField(
-        max_length=64, blank=True,
+        # 255, matching the WIDEST thing it must hold rather than a round number that felt roomy.
+        # Measured: djstripe's StripeIdField and `CustomUser.stripe_customer_id` are 255, a
+        # badge-series slug is 100. At 64 a series slug could not physically be written -- and since
+        # Django does not truncate a CharField on save, that reaches Postgres unclipped, raises, and
+        # aborts the enclosing atomic block, rolling back the very change the entry was recording.
+        # Exactly the failure `changed`/`evidence` use DjangoJSONEncoder to avoid, one field up.
+        max_length=255, blank=True,
         help_text='Identifier of the thing acted on, as TEXT. Not an integer: a Stripe subscription '
                   'id, a badge-series slug and a primary key all have to fit in this one column, and '
                   'a log that can only reference integer PKs cannot describe half the actions here.',
@@ -269,11 +275,19 @@ class AdminAction(models.Model):
         # `-id` breaks ties: created_at is auto_now_add, so a bulk write can produce identical
         # timestamps and leave paging through the log non-deterministic across page boundaries.
         ordering = ['-created_at', '-id']
+        # Every index carries `-id`, for the same reason `ordering` does: stopping at `-created_at`
+        # leaves `ORDER BY created_at DESC, id DESC` needing a sort on top of the index instead of
+        # reading straight off it.
+        #
+        # `db_index=False` on both user FKs above: Django's automatic single-column FK index is a
+        # strict PREFIX of these composites and can answer nothing they cannot. On an append-only log
+        # that is two indexes of write cost for no read at all.
         indexes = [
-            models.Index(fields=['-created_at'], name='adminaction_recent_idx'),
-            models.Index(fields=['actor', '-created_at'], name='adminaction_actor_idx'),
-            models.Index(fields=['subject_user', '-created_at'], name='adminaction_subject_idx'),
-            models.Index(fields=['action', '-created_at'], name='adminaction_action_idx'),
+            models.Index(fields=['-created_at', '-id'], name='adminaction_recent_idx'),
+            models.Index(fields=['actor', '-created_at', '-id'], name='adminaction_actor_idx'),
+            models.Index(fields=['subject_user', '-created_at', '-id'],
+                         name='adminaction_subject_idx'),
+            models.Index(fields=['action', '-created_at', '-id'], name='adminaction_action_idx'),
         ]
         constraints = [
             # One reversal per action, enforced by the DATABASE. The service takes a row lock; this
@@ -281,6 +295,15 @@ class AdminAction(models.Model):
             models.UniqueConstraint(
                 fields=['reverses'], condition=Q(reverses__isnull=False),
                 name='adminaction_one_reversal_per_action',
+            ),
+            # The same treatment for the reason, which had the same rhetoric and none of the
+            # enforcement. `blank=False` is a forms attribute with no DDL behind it, and Postgres
+            # NOT NULL does not exclude the empty string -- so `create(reason='')` succeeded while
+            # the help_text called a reason REQUIRED. The DEPTH of a reason stays a service rule
+            # (three characters, stripped); this is the floor beneath it.
+            models.CheckConstraint(
+                condition=Q(reason__regex=r'\S'),
+                name='adminaction_reason_is_not_blank',
             ),
         ]
 
