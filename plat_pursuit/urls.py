@@ -22,7 +22,8 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.staff_views import AdminHubView, DecisionLogView, ReverseDecisionView
+from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, PeopleSearchView,
+                              PersonView, ReverseDecisionView)
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
@@ -512,6 +513,13 @@ urlpatterns = [
     path('staff/decisions/', DecisionLogView.as_view(), name='admin_decisions'),
     path('staff/decisions/<int:pk>/reverse/', ReverseDecisionView.as_view(),
          name='admin_reverse_decision'),
+    # One hunter, everything decided about them. Search-only by design: there is no listing
+    # of every account, because the reason to open this is always a specific person.
+    path('staff/people/', PeopleSearchView.as_view(), name='admin_people'),
+    path('staff/people/<int:user_id>/', PersonView.as_view(), name='admin_person'),
+    # Hiding a take nobody reported: admin-only, since it is acting on your own judgement
+    # rather than on a hunter's objection.
+    path('staff/quick-takes/<int:pk>/hide/', HideTakeView.as_view(), name='admin_hide_take'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.

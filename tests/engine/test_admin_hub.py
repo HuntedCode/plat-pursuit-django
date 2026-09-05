@@ -6,6 +6,7 @@ on `CustomUser.save()` keeping `is_staff` false for a moderator, so the assertio
 is the one about moderators -- who are trusted people, and are exactly who would find these URLs.
 """
 import pathlib
+import re
 
 import pytest
 from django.db import connection
@@ -48,7 +49,11 @@ def _every_staff_url():
         view_class = getattr(pattern.callback, 'view_class', None)
         if view_class is not None and issubclass(view_class, RedirectView):
             continue
-        found.append('/' + route.replace('<int:pk>', '1'))
+        # Any int converter, whatever it is named. Substituting only `<int:pk>` left
+        # `/staff/people/<int:user_id>/` in the list as a literal, which 404s -- and a 404 is not a
+        # 302, so the sweep failed loudly rather than skipping it. That is the guard working: a
+        # route it cannot address is a route it is not testing.
+        found.append('/' + re.sub(r'<int:[a-z_]+>', '1', route))
     return found
 
 
@@ -504,3 +509,217 @@ def test_the_decision_log_does_not_query_per_row(client):
 
     assert len(many.captured_queries) <= len(few.captured_queries) + 2, (
         f'{len(few.captured_queries)} queries for 1 row, {len(many.captured_queries)} for 7')
+
+
+# ── people, and acting without a report ──────────────────────────────────────────────────────────
+
+def _take(blurb='some words', psn='hunted47'):
+    """A hunter with a quick take to their name. Returns (user, rating)."""
+    profile = ProfileFactory(is_linked=True, psn_username=psn, display_psn_username=psn.title())
+    concept = ConceptFactory(unified_title='Hollow Knight')
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=None, blurb=blurb,
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0)
+    return profile.user, rating
+
+
+def test_the_people_page_shows_nobody_until_you_search(client):
+    """No listing of every account, on purpose: a staff tool that renders one invites browsing
+    through people, and the reason to open this page is always a specific person.
+
+    Asserted at BOTH layers. The view returns nothing AND the template hides the block, and a test
+    that only checks the render passes while the view happily selects every account -- which is what
+    a mutation of the view alone proved.
+    """
+    _take()
+    client.force_login(_user('admin'))
+
+    resp = client.get(reverse('admin_people'))
+    body = resp.content.decode()
+
+    assert resp.context['results'] == [], 'the view selected people for an empty search'
+    assert 'Search for somebody' in body
+    assert 'hunted47' not in body
+
+
+def test_searching_finds_a_hunter_by_psn_name(client):
+    person, _rating = _take(psn='hunted47')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_people') + '?q=hunted').content.decode()
+
+    assert reverse('admin_person', args=[person.pk]) in body
+
+
+def test_searching_finds_a_hunter_by_email(client):
+    """Sometimes an address is the only thing an admin has: a support email, a payment dispute."""
+    person, _rating = _take()
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_people') + f'?q={person.email}').content.decode()
+
+    assert reverse('admin_person', args=[person.pk]) in body
+
+
+def test_searching_ignores_case(client):
+    """`psn_username` is stored lowercased by `Profile.save()`, so a search for the name as somebody
+    actually writes it must still land."""
+    person, _rating = _take(psn='hunted47')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_people') + '?q=HUNTED47').content.decode()
+
+    assert reverse('admin_person', args=[person.pk]) in body
+
+
+def test_the_people_search_does_not_query_per_result(client):
+    """Every row renders `display_name`, which reaches through to the profile."""
+    for n in range(8):
+        _take(psn=f'hunter{n:04d}')
+    client.force_login(_user('admin'))
+
+    with CaptureQueriesContext(connection) as one:
+        client.get(reverse('admin_people') + '?q=hunter0000')
+    with CaptureQueriesContext(connection) as many:
+        client.get(reverse('admin_people') + '?q=hunter')
+
+    assert len(many.captured_queries) <= len(one.captured_queries) + 2, (
+        f'{len(one.captured_queries)} queries for 1 result, {len(many.captured_queries)} for 8')
+
+
+def test_a_moderator_cannot_look_anybody_up(client):
+    person, _rating = _take()
+    client.force_login(_user('moderator'))
+
+    assert client.get(reverse('admin_people')).url == '/'
+    assert client.get(reverse('admin_person', args=[person.pk])).url == '/'
+
+
+def test_the_person_page_shows_everything_decided_about_them(client):
+    """The question this page exists for. Before `subject_user`, the log reached a person only
+    through a report FK that goes null the moment the report is purged."""
+    from trophies.services import moderation_service
+
+    report = _report()
+    author = report.rating.profile
+    moderation_service.hide_blurb(report, _user('moderator'), 'a slur in the text')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_person', args=[author.user.pk])).content.decode()
+
+    assert 'a slur in the text' in body, 'the reason is what makes the history worth reading'
+    assert 'Quick take hidden' in body
+
+
+def test_the_person_page_shows_only_their_own_history(client):
+    from trophies.services import moderation_service
+
+    mine, theirs = _report(), _report()
+    moderation_service.hide_blurb(mine, _user('moderator'), 'about this person')
+    moderation_service.hide_blurb(theirs, _user('moderator'), 'about somebody else entirely')
+    client.force_login(_user('admin'))
+
+    body = client.get(
+        reverse('admin_person', args=[mine.rating.profile.user.pk])).content.decode()
+
+    assert 'about this person' in body
+    assert 'about somebody else entirely' not in body, 'one hunter saw another hunter history'
+
+
+def test_the_person_page_shows_both_logs(client):
+    from trophies.services import moderation_service
+
+    report = _report()
+    author = report.rating.profile
+    moderation_service.hide_blurb(report, _user('moderator'), 'a moderation decision')
+    AdminAction.objects.create(action='restriction_applied', reason='an account action',
+                               subject_user=author.user, subject_label='x', target_label='y')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_person', args=[author.user.pk])).content.decode()
+
+    assert 'a moderation decision' in body and 'an account action' in body
+
+
+def test_the_person_page_shows_hidden_takes_and_marks_them(client):
+    """Omitting the hidden ones would omit exactly the evidence; showing them unmarked would
+    misrepresent what is live on the site."""
+    from trophies.services import moderation_service
+
+    person, rating = _take(blurb='the offending words')
+    moderation_service.hide_blurb_without_a_report(rating, _user('admin'), 'a slur')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_person', args=[person.pk])).content.decode()
+
+    assert 'the offending words' in body
+    assert 'hidden' in body
+
+
+def test_an_admin_can_hide_a_take_nobody_reported(client):
+    """The reactive queue only ever sees what a hunter objected to, so the worst thing on the site is
+    invisible to it until somebody happens to look."""
+    person, rating = _take(blurb='something vile')
+    client.force_login(_user('admin'))
+
+    client.post(reverse('admin_hide_take', args=[rating.pk]), {'reason': 'slur, no report needed'})
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is True
+    entry = ModerationAction.objects.get()
+    assert entry.action == 'blurb_hidden_proactive', (
+        'a proactive hide is indistinguishable from one whose report was purged')
+    assert entry.blurb_report is None
+    assert entry.subject_user == person
+    assert entry.evidence['blurb'] == 'something vile'
+
+
+def test_hiding_without_a_report_still_needs_a_reason(client):
+    _person, rating = _take()
+    client.force_login(_user('admin'))
+
+    client.post(reverse('admin_hide_take', args=[rating.pk]), {'reason': ' '})
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is False
+    assert ModerationAction.objects.count() == 0
+
+
+def test_a_moderator_cannot_hide_a_take_without_a_report(client):
+    """Deciding on a REPORT is theirs. Going looking is an admin's."""
+    _person, rating = _take()
+    client.force_login(_user('moderator'))
+
+    client.post(reverse('admin_hide_take', args=[rating.pk]), {'reason': 'let me in'})
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is False
+    assert ModerationAction.objects.count() == 0
+
+
+def test_hiding_an_already_hidden_take_says_so_rather_than_lying(client):
+    """A second hide would write an entry claiming a change that did not happen -- the same false
+    record the queue's status precondition exists to prevent."""
+    from trophies.services import moderation_service
+
+    _person, rating = _take()
+    moderation_service.hide_blurb_without_a_report(rating, _user('admin'), 'first')
+    client.force_login(_user('admin'))
+
+    client.post(reverse('admin_hide_take', args=[rating.pk]), {'reason': 'second'})
+
+    assert ModerationAction.objects.count() == 1, 'a second hide wrote a false entry'
+
+
+def test_a_proactive_hide_can_be_reversed(client):
+    """It has no report to work back through, so the undo finds the rating by `target_id` -- the
+    first thing to actually need that column."""
+    from trophies.services import moderation_service
+
+    _person, rating = _take()
+    hidden = moderation_service.hide_blurb_without_a_report(rating, _user('admin'), 'a slur')
+
+    moderation_service.reverse_action(hidden, _user('admin'), 'misread it')
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is False

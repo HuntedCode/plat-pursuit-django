@@ -1,0 +1,80 @@
+{% extends 'staff/_staff_shell.html' %}
+
+{% comment %}
+Find one hunter.
+
+SEARCH-ONLY, with nothing shown for an empty query. A staff tool that renders a scrollable list of
+every account invites browsing through people, and the reason to open this page is always a specific
+person. An empty state that says "search for somebody" is the honest shape of that.
+
+Results name people by PSN handle, with the email underneath only because it is sometimes the only
+thing an admin has to go on (a support email, a payment dispute). It is a lookup key here, not a
+label -- everywhere else on the site, `display_name` puts the handle first.
+{% endcomment %}
+
+{% block staff_blurb %}
+Look somebody up by PSN name or email address to see everything the site has decided about them.
+{% endblock %}
+
+{% block staff_body %}
+
+<form method="get" class="flex flex-col sm:flex-row gap-2 mb-5" role="search">
+    <input type="search" name="q" value="{{ query }}" autofocus
+           class="input input-bordered flex-1" placeholder="PSN name or email"
+           aria-label="Search for a hunter by PSN name or email">
+    <button type="submit" class="btn btn-primary">Search</button>
+</form>
+
+{% if query %}
+    {% if results %}
+    <div class="flex flex-col gap-2">
+        {% for person in results %}
+        <a href="{% url 'admin_person' person.pk %}"
+           class="card bg-base-200/90 border-2 border-base-300 hover:border-primary/50 transition-colors">
+            <div class="card-body p-3 md:p-4 flex-row items-center gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-base-content truncate">{{ person.display_name }}</div>
+                    <div class="text-xs text-base-content/60 truncate">{{ person.email }}</div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    {% if person.role %}<span class="badge badge-sm badge-primary">{{ person.get_role_display|default:person.role }}</span>{% endif %}
+                    {% if not person.is_active %}<span class="badge badge-sm badge-error">deactivated</span>{% endif %}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-base-content/40" aria-hidden="true">
+                        <path d="m9 18 6-6-6-6"/>
+                    </svg>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if more_than_shown %}
+    <p class="text-xs text-base-content/60 mt-3">
+        More than this matched. Narrow the search rather than scrolling: an exact PSN name or the
+        full email address will land on one person.
+    </p>
+    {% endif %}
+
+    {% else %}
+    <div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
+        <div class="card-body items-center text-center py-10">
+            <p class="text-base font-bold text-base-content">Nobody matched &ldquo;{{ query }}&rdquo;</p>
+            <p class="text-sm text-base-content/60 max-w-prose">
+                PSN names are stored lowercase, but this search ignores case. A partial email works too.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+{% else %}
+<div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
+    <div class="card-body items-center text-center py-10">
+        <p class="text-base font-bold text-base-content">Search for somebody</p>
+        <p class="text-sm text-base-content/60 max-w-prose">
+            There is no list of everyone on purpose. Look up the person you came here about.
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

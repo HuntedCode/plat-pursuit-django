@@ -7745,6 +7745,10 @@ class ModerationAction(models.Model):
     #: of things that happened to a report and "dismissal reversed" describes the log instead.
     ACTIONS = [
         ('blurb_hidden', 'Quick take hidden'),
+        # Its own action, never `blurb_hidden` with a null report: that pair is
+        # indistinguishable from an entry whose report was later purged, and "nobody
+        # reported this, a moderator went looking" is what an appeal turns on.
+        ('blurb_hidden_proactive', 'Quick take hidden (no report)'),
         ('blurb_restored', 'Quick take restored'),
         ('blurb_report_dismissed', 'Quick take report dismissed'),
         ('blurb_report_reopened', 'Quick take report reopened'),

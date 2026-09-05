@@ -26,7 +26,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from core.services import audit
-from trophies.models import BlurbReport, GameFlag, ModerationAction
+from trophies.models import BlurbReport, GameFlag, ModerationAction, UserConceptRating
 from trophies.services.game_flag_service import GameFlagService
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,57 @@ def hide_blurb(report, moderator, reason):
         evidence={'blurb': rating.blurb},
     )
     logger.info('Moderation: blurb hidden report=%s rating=%s by=%s', report.pk, rating.pk,
+                getattr(moderator, 'pk', None))
+    return action
+
+
+def _lock_rating(rating):
+    """Re-read the rating FOR UPDATE and refuse it if the words are already gone.
+
+    The `_lock_report` shape, for the one action that has no report to lock. The precondition is
+    different because the thing being guarded is different: a report can be handled twice, a take can
+    only be hidden once, and hiding an already-hidden take would write an entry claiming a change
+    that did not happen.
+    """
+    try:
+        fresh = (UserConceptRating.objects.select_for_update()
+                 .select_related('concept', 'profile').get(pk=rating.pk))
+    except ObjectDoesNotExist:
+        raise ModerationError('That quick take no longer exists.')
+    if fresh.blurb_hidden:
+        raise ModerationError('That quick take is already hidden.')
+    if not (fresh.blurb or '').strip():
+        raise ModerationError('That rating has no quick take to hide.')
+    return fresh
+
+
+@transaction.atomic
+def hide_blurb_without_a_report(rating, moderator, reason):
+    """Hide a quick take nobody reported.
+
+    The reactive queue only ever sees what a hunter objected to, which means the worst thing on the
+    site is invisible to it until somebody happens to look. This is the same write as `hide_blurb`,
+    reached without waiting for a report.
+
+    Logged under its OWN action rather than as `blurb_hidden` with a null report. Those two states
+    would otherwise be indistinguishable from an entry whose report was purged -- and "nobody
+    reported this, a moderator went looking" is exactly the sort of thing an appeal turns on.
+    """
+    reason = _require_reason(reason)
+    rating = _lock_rating(rating)
+
+    rating.blurb_hidden = True
+    rating.save(update_fields=['blurb_hidden'])
+
+    action = ModerationAction.objects.create(
+        actor=moderator, actor_label=_label(moderator), action='blurb_hidden_proactive',
+        reason=reason, **_subject(rating.profile),
+        target_id=rating.pk,
+        target_label=f'Quick take on {rating.concept.unified_title}'[:255],
+        changed={'blurb_hidden': [False, True]},
+        evidence={'blurb': rating.blurb},
+    )
+    logger.info('Moderation: blurb hidden without a report rating=%s by=%s', rating.pk,
                 getattr(moderator, 'pk', None))
     return action
 
@@ -279,6 +330,25 @@ def _undo_blurb_hidden(action, moderator):
     return {'blurb_report': report}, {'blurb_hidden': [True, bool(was_hidden)]}, {}
 
 
+def _undo_blurb_hidden_proactive(action, moderator):
+    """Put back a take that was hidden without a report.
+
+    Finds the rating through `target_id` rather than a report FK, because there is no report -- which
+    is the whole difference between this and `_undo_blurb_hidden`. `target_id` was stored for exactly
+    this: the log documents it as "PK of the object acted on, captured at the time", and this is the
+    first thing to actually need it.
+    """
+    try:
+        rating = UserConceptRating.objects.get(pk=action.target_id)
+    except (UserConceptRating.DoesNotExist, ValueError, TypeError):
+        raise ModerationError('The quick take behind this decision no longer exists.')
+
+    was_hidden = action.changed.get('blurb_hidden', [False, True])[0]
+    rating.blurb_hidden = bool(was_hidden)
+    rating.save(update_fields=['blurb_hidden'])
+    return {}, {'blurb_hidden': [True, bool(was_hidden)]}, {}
+
+
 def _undo_blurb_report_dismissed(action, moderator):
     """Reopen a dismissed report: it goes back into the queue for somebody to decide again.
 
@@ -357,6 +427,7 @@ def _undo_game_flag_dismissed(action, moderator):
 #: it. A key with no handler is a KeyError at edit time; a handler with no name is impossible.
 _UNDO = {
     'blurb_hidden': (_undo_blurb_hidden, 'blurb_restored'),
+    'blurb_hidden_proactive': (_undo_blurb_hidden_proactive, 'blurb_restored'),
     'blurb_report_dismissed': (_undo_blurb_report_dismissed, 'blurb_report_reopened'),
     'game_flag_approved': (_undo_game_flag_approved, 'game_flag_reversed'),
     'game_flag_dismissed': (_undo_game_flag_dismissed, 'game_flag_reopened'),

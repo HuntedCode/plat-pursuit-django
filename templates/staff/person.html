@@ -1,0 +1,140 @@
+{% extends 'staff/_staff_shell.html' %}
+{# `load` is not inherited from a parent template -- each file that uses a filter loads it. #}
+{% load humanize %}
+
+{% comment %}
+One hunter, and everything the site has decided about them.
+
+The question an admin actually arrives with is "what is the story with this person", and before
+`ModerationAction.subject_user` existed it could not be asked: the log pointed at ratings and games
+and reached a person only through a report FK that goes null the moment the report is purged.
+
+BOTH LOGS, because an account can be on the receiving end of a moderation decision and an admin
+action, and having to check two pages to judge a repeat offender is how the second one gets skipped.
+
+Their own words are here too, HIDDEN ONES INCLUDED and marked. The point of the page is the pattern,
+and omitting the hidden takes would omit exactly the evidence -- while showing them without the mark
+would misrepresent what is live on the site.
+{% endcomment %}
+
+{% block staff_blurb %}
+Everything decided about this hunter, and everything they have written. Hiding a take from here is
+logged the same as hiding one from the queue.
+{% endblock %}
+
+{% block staff_body %}
+
+{% if messages %}
+<div class="flex flex-col gap-2 mb-4">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} py-2 text-sm">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Who they are ────────────────────────────────────────────────────────────────────────── #}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral mb-5">
+    <div class="card-body p-4 md:p-5 gap-2">
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            {% if profile %}
+            <a class="text-lg font-bold link link-hover" href="{% url 'profile_detail' profile.psn_username %}">{{ person.display_name }}</a>
+            {% else %}
+            <span class="text-lg font-bold text-base-content">{{ person.display_name }}</span>
+            {% endif %}
+            {% if person.role %}<span class="badge badge-sm badge-primary">{{ person.get_role_display|default:person.role }}</span>{% endif %}
+            {% if person.is_superuser %}<span class="badge badge-sm badge-warning">superuser</span>{% endif %}
+            {% if not person.is_active %}<span class="badge badge-sm badge-error">deactivated</span>{% endif %}
+        </div>
+        <div class="text-xs text-base-content/60">{{ person.email }}</div>
+        <div class="text-xs text-base-content/60">
+            {% if profile %}
+            PSN linked{% if profile.last_synced %}, last synced {{ profile.last_synced|naturaltime }}{% endif %}.
+            {% else %}
+            No PSN account linked.
+            {% endif %}
+            Joined {{ person.date_joined|naturaltime }}.
+        </div>
+    </div>
+</section>
+
+{# ── What was decided about them ─────────────────────────────────────────────────────────── #}
+<h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Moderation decisions</h2>
+{% if decisions %}
+<ul class="flex flex-col divide-y divide-base-300/70 mb-5 card bg-base-200/90 border-2 border-base-300 px-4">
+    {% for entry in decisions %}
+    <li class="py-2.5 flex flex-col gap-1">
+        <div class="flex items-baseline flex-wrap gap-x-2 gap-y-0.5">
+            <span class="text-sm font-bold text-base-content">{{ entry.get_action_display }}</span>
+            {% if entry.reverses_id %}<span class="badge badge-xs badge-info">reversal</span>{% endif %}
+            {% if entry.is_reversed %}<span class="badge badge-xs badge-ghost">reversed</span>{% endif %}
+            <span class="text-xs text-base-content/60">
+                by {{ entry.actor_label|default:"a deleted account" }} &middot; {{ entry.created_at|naturaltime }}
+            </span>
+        </div>
+        <div class="text-xs text-base-content/70">{{ entry.target_label }}</div>
+        <div class="text-xs text-base-content/55 italic pr-1">&ldquo;{{ entry.reason }}&rdquo;</div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="text-sm text-base-content/60 mb-5">Nothing has been decided about this hunter.</p>
+{% endif %}
+
+{# ── Admin actions on the account ────────────────────────────────────────────────────────── #}
+{% if admin_actions %}
+<h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Account actions</h2>
+<ul class="flex flex-col divide-y divide-base-300/70 mb-5 card bg-base-200/90 border-2 border-base-300 px-4">
+    {% for entry in admin_actions %}
+    <li class="py-2.5 flex flex-col gap-1">
+        <div class="flex items-baseline flex-wrap gap-x-2 gap-y-0.5">
+            <span class="text-sm font-bold text-base-content">{{ entry.get_action_display }}</span>
+            <span class="text-xs text-base-content/60">
+                by {{ entry.actor_label|default:"a deleted account" }} &middot; {{ entry.created_at|naturaltime }}
+            </span>
+        </div>
+        <div class="text-xs text-base-content/55 italic pr-1">&ldquo;{{ entry.reason }}&rdquo;</div>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+{# ── What they wrote ─────────────────────────────────────────────────────────────────────── #}
+<h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Their quick takes</h2>
+{% if takes %}
+<div class="flex flex-col gap-3">
+    {% for take in takes %}
+    <article class="card bg-base-200/90 border-2 border-base-300 {% if take.blurb_hidden %}opacity-60{% endif %}">
+        <div class="card-body p-4 gap-2">
+            <blockquote class="text-sm text-base-content leading-relaxed border-l-4 border-base-300 pl-3 pr-1 italic">
+                &ldquo;{{ take.blurb }}&rdquo;
+            </blockquote>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/70">
+                <span>on {{ take.concept.unified_title }}</span>
+                {% if take.blurb_hidden %}
+                <span class="badge badge-xs badge-warning font-bold">hidden</span>
+                {% endif %}
+            </div>
+
+            {% comment %}Hiding from here means acting WITHOUT a report -- nobody objected, a person
+            went looking. Same reason requirement, same log, its own action name.{% endcomment %}
+            {% if not take.blurb_hidden %}
+            <form method="post" action="{% url 'admin_hide_take' take.pk %}"
+                  class="flex flex-col sm:flex-row gap-2 pt-1">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
+                       placeholder="Why hide this? (recorded against your name)"
+                       aria-label="Reason for hiding this quick take">
+                <button type="submit" class="btn btn-sm btn-error">Hide</button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-sm text-base-content/60">This hunter has written no quick takes.</p>
+{% endif %}
+{% endblock %}

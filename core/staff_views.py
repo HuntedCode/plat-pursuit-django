@@ -13,14 +13,16 @@ admin arrives with is "is there anything for me", and only then offers the doors
 """
 import logging
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
 from core.models import AdminAction
 from fundraiser.models import DonationBadgeClaim
+from users.models import CustomUser
 from trophies.mixins import PostActionMixin, StaffRequiredMixin
-from trophies.models import ModerationAction
+from trophies.models import ModerationAction, UserConceptRating
 from trophies.services import moderation_service
 from trophies.util_modules.cache import redis_client
 from trophies.views.admin_views import WORKER_QUEUES
@@ -29,6 +31,11 @@ logger = logging.getLogger(__name__)
 
 #: How many entries the landing's activity rail shows, per log and after merging.
 RECENT_LIMIT = 12
+
+#: How much of one person's history the person page shows, per list. Bounded because a prolific
+#: reporter can accrue hundreds of entries and this page is a judgement aid, not an archive -- the
+#: full record is the decision log, which pages.
+HISTORY_LIMIT = 25
 
 
 def _worker_backlog():
@@ -180,4 +187,115 @@ class ReverseDecisionView(StaffRequiredMixin, PostActionMixin, View):
 
     def default_redirect(self):
         return reverse_lazy('admin_decisions')
+
+
+# ── people ───────────────────────────────────────────────────────────────────────────────────────
+
+#: How many search results to show. A staff lookup is a targeted question ("this hunter"), not a
+#: browse, so a short list that arrives instantly beats a long one behind a paginator.
+PEOPLE_LIMIT = 20
+
+
+class PeopleSearchView(StaffRequiredMixin, TemplateView):
+    """Find one hunter by PSN handle or email address.
+
+    Deliberately search-ONLY: there is no "all users" listing, and an empty query shows nothing
+    rather than everybody. A staff tool that renders a scrollable list of every account invites
+    browsing through people, and the reason to open this page is always a specific person.
+    """
+    template_name = 'staff/people.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = (self.request.GET.get('q') or '').strip()
+
+        results = []
+        if query:
+            # `select_related('profile')`: every row renders `display_name`, which reaches through
+            # to the profile. Without it this is a query per result.
+            matches = (CustomUser.objects
+                       .select_related('profile')
+                       .filter(Q(profile__psn_username__icontains=query)
+                               | Q(profile__display_psn_username__icontains=query)
+                               | Q(email__icontains=query))
+                       .order_by('profile__psn_username', 'email')[:PEOPLE_LIMIT + 1])
+            found = list(matches)
+            context['more_than_shown'] = len(found) > PEOPLE_LIMIT
+            results = found[:PEOPLE_LIMIT]
+
+        context['results'] = results
+        context['query'] = query
+        context['page_name'] = 'People'
+        context['breadcrumb'] = [{'text': 'Home', 'url': reverse_lazy('home')},
+                                 {'text': 'Admin', 'url': reverse_lazy('admin_hub')},
+                                 {'text': 'People'}]
+        context['seo_title'] = 'People - Admin'
+        return context
+
+
+class PersonView(StaffRequiredMixin, TemplateView):
+    """Everything this site has decided about one hunter, on one page.
+
+    The question an admin actually arrives with is "what is the story with this person", and before
+    `subject_user` existed it could not be asked: the log pointed at ratings and games, and reached a
+    person only through a report FK that goes null the moment the report is purged.
+
+    Both logs, because an account can be on the receiving end of a moderation decision and an admin
+    action, and having to check two pages to judge a repeat offender is how the second one gets
+    skipped.
+    """
+    template_name = 'staff/person.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        person = get_object_or_404(
+            CustomUser.objects.select_related('profile'), pk=self.kwargs['user_id'])
+
+        context['person'] = person
+        context['profile'] = getattr(person, 'profile', None)
+
+        # Bounded slices, newest first. Both logs order that way already.
+        context['decisions'] = list(
+            ModerationAction.objects.filter(subject_user=person)
+            .prefetch_related('reversed_by_action')[:HISTORY_LIMIT])
+        context['admin_actions'] = list(
+            AdminAction.objects.filter(subject_user=person)
+            .prefetch_related('reversed_by_action')[:HISTORY_LIMIT])
+
+        # Their own words, which is the other half of judging a pattern: the log says what was done
+        # about them, this says what they wrote. Hidden ones included and marked -- the point of the
+        # page is the pattern, and omitting the hidden ones would hide exactly the evidence.
+        profile = context['profile']
+        context['takes'] = list(
+            UserConceptRating.objects
+            .filter(profile=profile).exclude(blurb='')
+            .select_related('concept')
+            .order_by('-id')[:HISTORY_LIMIT]) if profile else []
+
+        context['page_name'] = person.display_name
+        context['breadcrumb'] = [{'text': 'Home', 'url': reverse_lazy('home')},
+                                 {'text': 'Admin', 'url': reverse_lazy('admin_hub')},
+                                 {'text': 'People', 'url': reverse_lazy('admin_people')},
+                                 {'text': person.display_name}]
+        context['seo_title'] = f'{person.display_name} - Admin'
+        return context
+
+
+class HideTakeView(StaffRequiredMixin, PostActionMixin, View):
+    """Hide a quick take nobody reported.
+
+    Admin-only, unlike the queue's own Hide. The reactive queue only ever sees what a hunter
+    objected to; acting without a report means acting on your own judgement, with nobody having
+    raised it -- so it carries the same reason requirement and lands in the same log, under its own
+    action name.
+    """
+    error_class = moderation_service.ModerationError
+    success_message = 'Quick take hidden.'
+
+    def act(self, pk, user, reason):
+        moderation_service.hide_blurb_without_a_report(
+            get_object_or_404(UserConceptRating, pk=pk), user, reason)
+
+    def default_redirect(self):
+        return reverse_lazy('admin_people')
 
