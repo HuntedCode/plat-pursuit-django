@@ -560,10 +560,12 @@ class SupportStorefrontView(TemplateView):
     def _support(self):
         """How the site is paid for: supporters, monthly support, months running, ads served.
 
-        COUNTS THE LEGACY TIERS TOO, and has to. Every real supporter today holds `premium_monthly`,
-        `premium_yearly` or `supporter`; nobody holds a ladder slug and nobody will until the twelve
-        SKUs exist and people move. A band that counted only the new ladder would read zero on a live
-        site, which is worse than not having one.
+        COUNTS THE LEGACY TIERS TOO, and still has to. It was written when every real supporter held
+        `premium_monthly`, `premium_yearly` or `supporter` and a ladder-only band would have read
+        zero on a live site. The ladder now sells and `migrate_legacy_tiers` moves the stragglers,
+        but the legacy tiers keep renewing for anyone the migration deliberately skipped (a
+        `past_due` or cancelling subscriber), so counting both stays correct rather than merely
+        cautious.
 
         The money is a MONTHLY EQUIVALENT so one figure means one thing: a yearly pledge is divided
         by twelve rather than counted whole. Legacy prices come from Stripe (the only place they
@@ -1298,7 +1300,7 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
             if membership.provider == 'stripe':
                 context['can_open_portal'] = bool(user.stripe_customer_id)
                 data = (membership.stripe_sub.stripe_data or {}) if membership.stripe_sub else {}
-                period_end_ts = data.get('current_period_end')
+                period_end_ts = SubscriptionService.subscription_period_end(data)
                 # dt_timezone.utc, NOT timezone.utc (django.utils alias removed in Django 5.0).
                 if period_end_ts and membership.state == 'active' and not membership.cancels_at:
                     context['next_billing'] = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)

@@ -14,6 +14,7 @@ from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 
+from users.constants import PAYPAL_PLANS
 from users.services.subscription_service import MembershipStatus, SubscriptionService
 from tests.factories import ProfileFactory, UserFactory
 
@@ -42,6 +43,13 @@ def _with_subs(*subs):
     class FakeQS:
         def __init__(self, statuses):
             self.statuses = statuses
+
+        def order_by(self, *args):
+            # The service orders canceled rows by `-created` (a repeat subscriber has more than one,
+            # and an unordered .first() is a heap-order coin flip between their dead sub and their
+            # recent one). This fake holds one row per status, so ordering is a no-op here; the real
+            # ordering is pinned against the real ORM in test_subscription_period_end.py.
+            return self
 
         def first(self):
             for status in self.statuses:
@@ -200,10 +208,45 @@ def test_tenure_math_and_the_milestones_parity():
 # --------------------------------------------------------------------------- billing ----
 
 def test_stripe_billing_reads_the_plan_from_the_sub():
+    """The pre-basil shape, kept working as a fallback."""
     user = _stripe_user()
     sub = _fake_sub(status='active', plan={'amount': 1500, 'interval': 'month'})
     ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
     assert SubscriptionService.describe_billing(user, ms) == {'amount': 15, 'cycle': 'month'}
+
+
+def test_stripe_billing_reads_the_item_when_there_is_no_plan():
+    """The shape production actually stores. `plan` is deprecated and only ever populated for
+    single-item subscriptions, so the amount and cycle come off the item's price now, with `plan`
+    as the fallback above. Nothing covered this branch when it was introduced."""
+    user = _stripe_user()
+    sub = _fake_sub(status='active', items={'data': [
+        {'id': 'si_1', 'price': {'unit_amount': 1500, 'recurring': {'interval': 'month'}}}]})
+    ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
+    assert SubscriptionService.describe_billing(user, ms) == {'amount': 15, 'cycle': 'month'}
+
+
+def test_stripe_billing_does_not_floor_a_legacy_price_read_off_the_item():
+    """$3.99 must not read as $3, on either payload shape. The rounding branch is the one place a
+    grandfathered member's real price could be misreported to them."""
+    user = _stripe_user()
+    sub = _fake_sub(status='active', items={'data': [
+        {'id': 'si_1', 'price': {'unit_amount': 399, 'recurring': {'interval': 'month'}}}]})
+    ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
+    assert SubscriptionService.describe_billing(user, ms) == {'amount': '3.99', 'cycle': 'month'}
+
+
+def test_stripe_billing_prefers_the_item_over_a_stale_plan():
+    """If a row carries both, the item wins: `plan` is the deprecated copy and the one that goes
+    stale, and showing a member the wrong price is worse than showing none."""
+    user = _stripe_user()
+    sub = _fake_sub(status='active',
+                    plan={'amount': 300, 'interval': 'year'},
+                    items={'data': [
+                        {'id': 'si_1', 'price': {'unit_amount': 400,
+                                                 'recurring': {'interval': 'month'}}}]})
+    ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
+    assert SubscriptionService.describe_billing(user, ms) == {'amount': 4, 'cycle': 'month'}
 
 
 def test_billing_is_omitted_not_guessed_when_unknown():
@@ -230,18 +273,40 @@ def test_paypal_ladder_billing_resolves_from_the_plan_id():
 
 
 def test_paypal_legacy_billing_gives_cycle_only():
-    """Legacy PayPal prices live only on the processor -- the cycle is knowable from the tier,
-    the dollar figure is never guessed."""
+    """Legacy PayPal prices live only on the processor -- the cycle is knowable, the dollar figure
+    is never guessed.
+
+    Keyed on the adopted PLAN rather than the tier since the legacy migration (2026-09-06): those
+    members hold `backer` now, and a ladder slug cannot tell monthly from yearly on its own.
+    """
     user = UserFactory()
     user.subscription_provider = 'paypal'
     user.paypal_subscription_id = 'I-LEGACY'
-    user.premium_tier = 'premium_yearly'
+    user.premium_tier = 'backer'
+    user.save()
+    ms = MembershipStatus('active', 'paypal')
+    with patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
+               return_value={'status': 'ACTIVE', 'next_billing_time': None,
+                             'plan_id': PAYPAL_PLANS['live']['premium_yearly']}):
+        billing = SubscriptionService.describe_billing(user, ms)
+    assert billing == {'amount': None, 'cycle': 'year'}
+
+
+def test_paypal_billing_omits_the_cycle_for_an_unrecognised_plan():
+    """No recognised plan (an unknown id, or a snapshot miss during a PayPal outage) means no
+    cycle, rather than one inferred from the tier. That inference was safe only while the tier was
+    `premium_yearly`; post-adoption it would have to guess between Backer monthly and yearly, so
+    omission is the honest answer."""
+    user = UserFactory()
+    user.subscription_provider = 'paypal'
+    user.paypal_subscription_id = 'I-LEGACY'
+    user.premium_tier = 'backer'
     user.save()
     ms = MembershipStatus('active', 'paypal')
     with patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
                return_value={'status': 'ACTIVE', 'next_billing_time': None, 'plan_id': 'P-UNKNOWN'}):
         billing = SubscriptionService.describe_billing(user, ms)
-    assert billing == {'amount': None, 'cycle': 'year'}
+    assert billing == {'amount': None, 'cycle': None}
 
 
 # -------------------------------------------------------------- the PayPal snapshot ----

@@ -87,4 +87,11 @@ Hard rule, enforced by the `--live-ok` flag rather than by memory:
   key suffix or transfer the lookup key), paste the new id, and leave the old price attached to
   existing subscriptions — same story as the legacy tiers. PayPal plans support price updates via
   `/update-pricing-schemes`, but a new plan + paste is simpler and keeps parity with Stripe.
+- **The two legacy PayPal plans are not disposable.** `P-6FE79903U4175840ENGLBP2A` and
+  `P-3SY42188DC612830VNGLBQMY` still bill live subscriptions and will keep doing so indefinitely:
+  the 2026-09 legacy migration moved Stripe holders onto real ladder prices but could only *adopt*
+  the PayPal ones, because PayPal requires subscriber re-approval for any billing-amount change.
+  Deactivating either plan, or tidying their entries out of `PAYPAL_PLANS` /
+  `LEGACY_PLAN_ADOPTION`, breaks paying members. The legacy Stripe products and prices carry no
+  such constraint and may be archived. See [subscription-lifecycle.md](../features/subscription-lifecycle.md).
 - **Refunds** remain a manual lever via the processor dashboards, same as donations.

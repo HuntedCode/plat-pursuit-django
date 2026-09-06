@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **87 custom management commands** spread across 7 Django apps: `trophies` (55), `core` (21), `notifications` (5), `users` (2), `milestones` (2), `fundraiser` (1), and `art_reveal` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **98 custom management commands** spread across 7 Django apps: `trophies` (62), `core` (23), `notifications` (5), `users` (4), `milestones` (2), `art_reveal` (1), `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -99,6 +99,8 @@ PlatPursuit has **87 custom management commands** spread across 7 Django apps: `
 |---------|---------|-----------|---------------|
 | `backfill_subscription_periods` | Create SubscriptionPeriod records for existing premium subscribers who don't have one, using a specified start date. | `--start` (required, format: YYYY-MM-DD), `--dry-run` | `python manage.py backfill_subscription_periods --start 2026-01-20 --dry-run` |
 | `audit_subscription_status` | Audit users marked as premium against actual Stripe/PayPal subscription status. Optionally revoke premium for users with unpaid or missing subscriptions. | `--fix`, `--dry-run` | `python manage.py audit_subscription_status --fix --dry-run` |
+| `bootstrap_support_skus` | Idempotently create the supporter ladder's Stripe products/prices and PayPal products/plans, then print the constants blocks to paste. Never edits source. | `--provider`, `--dry-run`, `--live-ok` | `python manage.py bootstrap_support_skus --dry-run` |
+| `migrate_legacy_tiers` | Move grandfathered tier holders onto the supporter ladder. Stripe gets a real price swap; PayPal is adopted in place (its plan keeps billing). One-time, but safe to re-run: a matching price still re-derives the tier, which is how an interrupted run is repaired. | `--fix`, `--provider`, `--live-ok` | `python manage.py migrate_legacy_tiers` (report), then `--fix --provider paypal` |
 
 ### fundraiser
 

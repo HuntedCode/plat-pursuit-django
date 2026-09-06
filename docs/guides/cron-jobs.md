@@ -341,6 +341,16 @@ historical pass after Phase 3's rematch run.
 
 - **Schedule**: Tue 14:00 UTC, as **ONE** cron entry.
 - **Command**: `python manage.py djstripe_sync_models Subscription && python manage.py audit_subscription_status --fix`
+> **Payload shape, worth knowing (2026-09-06).** This sync writes whatever the API returns,
+> verbatim, at stripe-python's pinned version. That shape has moved: `current_period_end` now lives
+> on the subscription's ITEMS, not at the top level (`plan` is still present, though deprecated and
+> single-item only). Five call sites read those fields directly and failed closed when they went
+> missing, revoking premium from members in a paid grace period. They now resolve through
+> `SubscriptionService.subscription_period_end` / `subscription_product_id` /
+> `subscription_price_id` / `subscription_charge`, which read item-first with the top-level as
+> fallback, so either shape works. **Never add a sixth direct read of those keys.** If a new Stripe
+> field is needed, check where it lives at the current API version first.
+
 - **Why one entry joined by `&&`, not two entries spaced apart.** The ordering is not a preference:
   the audit reads djstripe's LOCAL MIRROR, so against a stale mirror a paying subscriber reads as
   `[NO SUB]` and `--fix` revokes them. Two entries thirty minutes apart merely HOPE the sync

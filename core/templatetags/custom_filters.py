@@ -5,7 +5,7 @@ from django import template
 from django.utils import timezone
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from humanize import naturaltime
 from plat_pursuit.middleware import get_current_request
 from trophies.util_modules.constants import BRONZE_STAGE_XP, SILVER_STAGE_XP, GOLD_STAGE_XP, PLAT_STAGE_XP
@@ -46,7 +46,10 @@ def iso_naturaltime(value):
             value = value[:-1] + '+00:00'
         dt = datetime.fromisoformat(value)
         if not timezone.is_aware(dt):
-            dt = timezone.make_aware(dt, timezone.utc)
+            # dt_timezone.utc: django.utils.timezone lost `utc` in Django 5.0. Only reachable for an
+            # offset-less ISO string (the `Z` form is normalised above), so this never fired -- but
+            # AttributeError is not in the except clause, so it would have been a template crash.
+            dt = timezone.make_aware(dt, dt_timezone.utc)
         return naturaltime(dt)
     except (ValueError, TypeError):
         return value
@@ -61,7 +64,7 @@ def iso_datetime(value):
             value = value[:-1] + '+00:00'
         dt = datetime.fromisoformat(value)
         if not timezone.is_aware(dt):
-            dt = timezone.make_aware(dt, timezone.utc)
+            dt = timezone.make_aware(dt, dt_timezone.utc)  # see iso_naturaltime above
         return dt
     except (ValueError, TypeError):
         return value

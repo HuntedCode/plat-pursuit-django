@@ -289,7 +289,14 @@ PAYPAL_LADDER_PLANS = {
 }
 
 # Premium tiers that grant Discord roles. All six ladder levels grant the PREMIUM role (decided
-# 2026-08-20); the PLUS role stays with the legacy `supporter` tier only, until it dies out.
+# 2026-08-20); the PLUS role belongs to the legacy `supporter` tier only.
+#
+# KNOWN INCONSISTENCY, accepted 2026-09-06 rather than fixed: `migrate_legacy_tiers` moves a
+# `supporter` to `sponsor`, which grants PREMIUM -- and nothing takes PLUS away, because
+# `activate_subscription` only ever ADDS roles and `deactivate_subscription` picks what to remove
+# from `original_tier`, which is `sponsor` by then. So a migrated supporter holds both roles while
+# subscribed and keeps PLUS after they churn. Sweeping Discord by hand is the remedy; the deploy
+# checklist carries it.
 PREMIUM_DISCORD_ROLE_TIERS = ['premium_monthly', 'premium_yearly',
                               'backer', 'contributor', 'patron',
                               'sponsor', 'benefactor', 'cornerstone']
@@ -333,6 +340,50 @@ for _mode_plans in PAYPAL_LADDER_PLANS.values():
             if _plan_id:
                 PAYPAL_PLAN_TO_TIER[_plan_id] = _tier
 
+# LEGACY PAYPAL ADOPTION (2026-09-06): the two legacy PayPal plans now READ AS `backer`.
+#
+# Legacy STRIPE subscribers were migrated properly, by swapping the subscription onto the real
+# ladder price ($3.99 -> $4.00 monthly, $39.99 -> $40.00 yearly, a penny either way). PayPal cannot
+# be migrated that way: its revise endpoint requires the SUBSCRIBER to log in and re-approve
+# whenever the billing amount changes, so it is not something we can do on their behalf, and
+# cancel-and-resubscribe would fire the farewell email, drop the Discord role and risk losing a
+# paying member outright -- over one cent. So the legacy PayPal holders keep their plan and their
+# price, and the plan is simply read as Backer from here on.
+#
+# THIS MAP IS A DRIFT GUARD and that is the whole reason it exists. Nothing in the PayPal path
+# re-derives a tier on its own: PAYMENT.SALE.COMPLETED only sends an email, and the audit command's
+# PayPal arm checks presence and expiry but never the plan. The one exception is
+# BILLING.SUBSCRIPTION.ACTIVATED, which fires on re-activation after a suspension and would
+# otherwise hand these users their legacy slug back.
+#
+# The INTERVAL rides along because `describe_billing` needs it: after adoption the slug is `backer`,
+# which cannot tell monthly from yearly, and keying that lookup on `premium_tier` (as it used to)
+# silently drops the billing line off the membership page.
+#
+# WARNING: do NOT clean these two entries up with the rest of the legacy layer, and do not
+# deactivate the plans on PayPal. Unlike the legacy Stripe products (archivable once the swap is
+# verified), these name LIVE subscriptions. They go when the last holder churns, not before.
+# Ids are DERIVED from PAYPAL_PLANS above rather than restated: a live billing identifier written
+# twice is a live billing identifier that can drift, and the warning above tells you never to tidy
+# either copy. Same reasoning as PAYPAL_PLAN_TO_TIER itself, which walks the existing maps.
+#
+# The legacy `supporter` plan is deliberately ABSENT: confirmed by hand on 2026-09-06 that every
+# `supporter` holder is on Stripe, so they migrate through the price swap. That is an operator
+# observation with no code behind it, so `migrate_legacy_tiers` REFUSES to adopt any PayPal row
+# whose plan it cannot read back from PayPal, rather than trusting the headcount -- an unadopted
+# plan would drift back to `supporter` on its next re-activation.
+LEGACY_PLAN_ADOPTION = {
+    PAYPAL_PLANS['live']['premium_monthly']: ('backer', 'monthly'),   # $3.99/mo
+    PAYPAL_PLANS['live']['premium_yearly']: ('backer', 'yearly'),     # $39.99/yr
+}
+# ORDER MATTERS: this deliberately OVERRIDES the PAYPAL_PLANS-derived entries written by the loops
+# above, so those two ids no longer round-trip PAYPAL_PLANS. That override IS the drift guard.
+PAYPAL_PLAN_TO_TIER.update({_pid: _slug for _pid, (_slug, _iv) in LEGACY_PLAN_ADOPTION.items()})
+
+# Our interval key -> the word Stripe and the display layer use.
+# `bootstrap_support_skus.INTERVALS` is the fuller table that adds PayPal's spelling.
+INTERVAL_TO_STRIPE = {'monthly': 'month', 'yearly': 'year'}
+
 # Derived conveniences for the checkout path.
 LADDER_SLUGS = [t['slug'] for t in SUPPORT_TIERS]
 
@@ -348,16 +399,35 @@ SERVICE_MARKS = {
     'mod': {'label': 'Moderator', 'colour': '#ff9d45'},   # amber: off the supporter ramp (teal->pink) AND off staff crimson; was a green that sat next to backer teal
 }
 
-# GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their billing and their
-# tier slugs untouched, but WEAR the ladder level nearest their price -- colour, stars, level name
-# -- on the Credits wall and anywhere else supporter identity renders. Presentation only: nothing
-# reads this map for billing, availability, or role decisions. The mapping is by price proximity,
-# so if a legacy price ever changes on the processor side, revisit the target here.
+# GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their tier slugs
+# untouched but WEAR the ladder level nearest their price -- colour, stars, level name -- on the
+# Credits wall and anywhere else supporter identity renders. The mapping is by price proximity, so
+# if a legacy price ever changes on the processor side, revisit the target here.
+#
+# NO LONGER PRESENTATION ONLY (2026-09-06). This started as a display map that nothing read for
+# billing. `migrate_legacy_tiers` now reads it to decide which live Stripe price a paying member is
+# repriced onto, which makes it a BILLING map, pinned by `test_the_legacy_targets_are_exactly_these`.
+# Changing an entry here now moves real money.
 LEGACY_TIER_LEVEL_MAP = {
     'premium_monthly': 'backer',
     'premium_yearly': 'backer',
     'supporter': 'sponsor',   # legacy Supporter was $20/mo, an exact match on Sponsor
 }
+
+# THE MIGRATION TARGET is this map, unchanged: `migrate_legacy_tiers` reads the target slug straight
+# from it, because the migration is precisely "become the level you already wear".
+#
+# There is deliberately NO companion map of billing intervals. One existed briefly and was wrong in
+# principle: it hardcoded `supporter -> monthly`, so a legacy row whose real Stripe price recurred
+# yearly would have been swapped onto a MONTHLY Sponsor price -- and Stripe resets the billing anchor
+# on an interval change and invoices immediately, which `proration_behavior='none'` does not prevent.
+# The command reads each subscriber's interval off their live price instead.
+#
+# A pleasant consequence of the "become what you wear" identity: `Profile.display_mark` does not
+# change for a single migrated user. `worn_supporter_level` already collapses `premium_monthly` onto
+# `backer`, so the supporter wall, the leaderboards and every name on the site render identically
+# before and after. The user-visible change is the level NAME (see `worn_level_dict`: legacy holders
+# showed "Premium Yearly" in Backer colours and are now plain Backers).
 
 # The certainty tiers themselves: (key, display name, subline). ONE source -- the page's
 # sections, the storefront band's teaser and the tests all derive from this, so adding a tier is
