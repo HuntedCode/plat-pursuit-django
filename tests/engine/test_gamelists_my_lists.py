@@ -277,3 +277,83 @@ def test_creating_without_a_linked_profile_does_not_500(client):
 
     assert resp.status_code == 302
     assert GameList.objects.count() == 0
+
+
+# -- the limits, and the counter that shows them --------------------------------------------------
+
+def test_the_form_advertises_exactly_the_limit_the_service_enforces(client):
+    """The point of the shared constants.
+
+    A counter is only worth having if it is right, and these numbers used to be written three times
+    each -- the column, the service, and a literal in the template. A stale copy in the form is
+    worse than no counter at all, because it is confidently wrong: the hunter stops typing at 120
+    and the save is refused at 60, or the field lets them past a limit the server will reject.
+    """
+    from gamelists.models import DESCRIPTION_MAX_LENGTH, GameList, NAME_MAX_LENGTH
+
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+
+    assert f'maxlength="{NAME_MAX_LENGTH}"' in body
+    assert f'maxlength="{DESCRIPTION_MAX_LENGTH}"' in body
+
+    # And the column agrees with both, so the browser, the service and the database cannot disagree.
+    assert GameList._meta.get_field('name').max_length == NAME_MAX_LENGTH
+    assert GameList._meta.get_field('description').max_length == DESCRIPTION_MAX_LENGTH
+
+
+def test_a_name_at_the_limit_is_accepted_and_one_over_it_is_not(client):
+    """The boundary itself, from the endpoint. Off-by-one here means the counter turns red on a
+    name that would have saved fine."""
+    from gamelists.models import GameList, NAME_MAX_LENGTH
+
+    profile = _staff_hunter(client)
+
+    client.post(reverse('list_create'), {'name': 'x' * NAME_MAX_LENGTH})
+    assert GameList.objects.owned_by(profile).count() == 1
+
+    resp = client.post(
+        reverse('list_create'), {'name': 'y' * (NAME_MAX_LENGTH + 1)}, follow=True)
+    assert GameList.objects.owned_by(profile).count() == 1
+    assert 'too long' in ' '.join(str(m) for m in resp.context['messages'])
+
+
+def test_a_description_over_the_limit_is_refused_and_nothing_is_written(client):
+    from gamelists.models import DESCRIPTION_MAX_LENGTH, GameList
+
+    profile = _staff_hunter(client)
+
+    resp = client.post(reverse('list_create'), {
+        'name': 'Fine', 'description': 'z' * (DESCRIPTION_MAX_LENGTH + 1)}, follow=True)
+
+    assert GameList.objects.owned_by(profile).count() == 0, 'the refusal still wrote the list'
+    assert 'too long' in ' '.join(str(m) for m in resp.context['messages'])
+
+
+def test_both_fields_are_wired_to_a_counter(client):
+    """`data-charcount` on the field plus a `data-charcount-for` target is the whole contract of the
+    shared utility; without the pairing the counter silently renders nothing."""
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+
+    for field_id in ('gl-name', 'gl-description'):
+        assert f'id="{field_id}"' in body
+        assert f'data-charcount-for="{field_id}"' in body
+    assert body.count('data-charcount ') >= 2
+
+
+def test_the_shared_counter_is_not_a_fourth_copy():
+    """It went into `utils.js` because it was about to be the THIRD implementation
+    (`admin-notifications.js` and `comments.js` each have their own, both bound to specific ids).
+    Lists must not add a fourth."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    assert 'wireCharCounters' in (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+
+    gamelists_js = root / 'static' / 'js' / 'gamelists.js'
+    if gamelists_js.exists():
+        assert 'maxlength' not in gamelists_js.read_text(encoding='utf-8'), (
+            'lists rolled their own character counter instead of using the shared one'
+        )
+

@@ -3427,3 +3427,50 @@ document.addEventListener('keydown', function (e) {
     if (!input) { return; }
     e.preventDefault(); input.focus(); if (input.select) { input.select(); }
 });
+
+
+/* ── Character counters ──────────────────────────────────────────────────────────────────────────
+ *
+ * Declarative: put `data-charcount` on the input/textarea and give it a `maxlength`. The counter
+ * element is found by `data-charcount-for="<input id>"`, so the markup says which goes with which
+ * rather than the JS knowing both ids.
+ *
+ * SHARED because this is the THIRD copy. `admin-notifications.js` has one bound to three specific
+ * element ids, and `comments.js` has an inline listener that only ever writes a number. Neither is
+ * reusable and both re-implement the same escalation. Those two are candidates to migrate onto this,
+ * but not in this branch -- they belong to other systems.
+ *
+ * The count is what the BROWSER sees. The server sanitizes before it measures, so pasted markup can
+ * shrink server-side and the two disagree. The disagreement is always in the safe direction (the
+ * browser stops you sooner than the server would), and reproducing bleach's rules in JS to close a
+ * gap nobody can hit by typing is not worth the second source of truth.
+ */
+function wireCharCounters(root) {
+    var scope = root || document;
+    var fields = scope.querySelectorAll('[data-charcount]');
+    for (var i = 0; i < fields.length; i++) {
+        (function (field) {
+            var max = parseInt(field.getAttribute('maxlength'), 10);
+            var out = scope.querySelector('[data-charcount-for="' + field.id + '"]');
+            // No max or nowhere to render means nothing to do -- and silently doing nothing is right
+            // here: a missing counter is a cosmetic gap, not a reason to throw inside a form.
+            if (!max || !out) { return; }
+
+            function render() {
+                var len = field.value.length;
+                out.textContent = len + '/' + max;
+                // Quiet until it matters. Warning in the last tenth, error only when the field has
+                // actually stopped accepting input -- which is the moment the counter earns its
+                // place, because `maxlength` otherwise just stops typing with no explanation.
+                out.classList.toggle('text-warning', len >= max * 0.9 && len < max);
+                out.classList.toggle('text-error', len >= max);
+            }
+
+            field.addEventListener('input', render);
+            render();
+        })(fields[i]);
+    }
+}
+
+window.PlatPursuit.wireCharCounters = wireCharCounters;
+document.addEventListener('DOMContentLoaded', function () { wireCharCounters(document); });

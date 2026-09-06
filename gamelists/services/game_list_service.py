@@ -30,8 +30,11 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from gamelists.models import (
+    DESCRIPTION_MAX_LENGTH,
     FREE_MAX_LISTS,
     MEMBER_MAX_LISTS,
+    NAME_MAX_LENGTH,
+    NOTE_MAX_LENGTH,
     GameList,
     GameListFollow,
     GameListItem,
@@ -143,7 +146,7 @@ def _refuse_banned_words(text, *, field):
 
 
 def _check_name(raw):
-    name = _clean_text(raw, field='name', max_length=120)
+    name = _clean_text(raw, field='name', max_length=NAME_MAX_LENGTH)
     if not name:
         raise ListError('A list needs a name.')
     _refuse_banned_words(name, field='name')
@@ -151,7 +154,7 @@ def _check_name(raw):
 
 
 def _check_description(raw):
-    text = _clean_text(raw, field='description', max_length=1000)
+    text = _clean_text(raw, field='description', max_length=DESCRIPTION_MAX_LENGTH)
     _refuse_banned_words(text, field='description')
     return text
 
@@ -305,7 +308,7 @@ def add_concept(game_list, profile, concept, *, note=''):
     _refuse_if_unlinked(profile)
     _refuse_if_restricted(profile)
 
-    note = _clean_text(note, field='note', max_length=500)
+    note = _clean_text(note, field='note', max_length=NOTE_MAX_LENGTH)
     _refuse_banned_words(note, field='note')
 
     locked = _lock_list(game_list)

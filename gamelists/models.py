@@ -47,6 +47,23 @@ from trophies.models import Concept, Profile
 FREE_MAX_LISTS = 3
 MEMBER_MAX_LISTS = 10
 
+#: Field lengths, defined ONCE and read by the column, the service and the form.
+#:
+#: They used to be written three times each -- `max_length` on the field, a literal in
+#: `_clean_text`, and a hardcoded `maxlength` in the template -- which is fine until a counter shows
+#: the number to a hunter. A live "118/120" that disagrees with what the server accepts is worse
+#: than no counter, because it is confidently wrong, so the display and the enforcement have to read
+#: the same constant by construction rather than by somebody remembering.
+#: Sized against where each one RENDERS, not inherited from the old system (which allowed 200/1000).
+#: A name lives in a `.pp-gtile__name` inside a grid tile and line-clamps: at 120 it stops being a
+#: title and becomes an unreadable block. 60 is two comfortable lines. A description is a subtitle
+#: above the games, so 300 is two or three sentences saying why the list exists; 1000 was ~150 words,
+#: which pushed the games themselves below the fold on a phone. A note is an annotation beside ONE
+#: game, and a hundred of them at 500 characters is a page nobody reads.
+NAME_MAX_LENGTH = 60
+DESCRIPTION_MAX_LENGTH = 300
+NOTE_MAX_LENGTH = 200
+
 
 class GameListQuerySet(models.QuerySet):
     """Reads that cannot forget a flag.
@@ -93,8 +110,8 @@ class GameList(models.Model):
         related_name='lists',
         help_text='The hunter who made it. Lists do not have co-owners.',
     )
-    name = models.CharField(max_length=120)
-    description = models.TextField(max_length=1000, blank=True, default='')
+    name = models.CharField(max_length=NAME_MAX_LENGTH)
+    description = models.TextField(max_length=DESCRIPTION_MAX_LENGTH, blank=True, default='')
     is_public = models.BooleanField(
         default=False,
         help_text='Opt-IN. A list is private until its author decides otherwise.',
@@ -165,7 +182,7 @@ class GameListItem(models.Model):
 
     game_list = models.ForeignKey(GameList, on_delete=models.CASCADE, related_name='items')
     concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='list_entries')
-    note = models.CharField(max_length=500, blank=True, default='')
+    note = models.CharField(max_length=NOTE_MAX_LENGTH, blank=True, default='')
 
     #: 0-indexed and DENSE. The service re-compacts on removal, and that contract is load-bearing
     #: rather than tidy: the browse tile's cover prefetch bounds itself with `position__lt=4`, which

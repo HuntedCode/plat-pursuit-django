@@ -109,10 +109,17 @@ meaningless.
 
         <form method="post" action="{% url 'list_create' %}" class="mt-4 flex flex-col gap-3">
             {% csrf_token %}
+            {% comment %}`maxlength` comes from the model constant, not a literal, so the number the
+            counter shows is the number the service enforces by construction. It used to be written
+            three times -- column, service, template -- which is survivable until you SHOW it to
+            somebody, at which point a stale copy is confidently wrong.{% endcomment %}
             <label class="flex flex-col gap-1">
-                <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Name</span>
-                <input type="text" name="name" required maxlength="120" autofocus
-                       class="input input-bordered w-full" placeholder="The Backlog" aria-label="List name" />
+                <span class="flex items-baseline justify-between gap-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Name</span>
+                    <span class="text-[0.7rem] tabular-nums text-base-content/40" data-charcount-for="gl-name" aria-hidden="true"></span>
+                </span>
+                <input type="text" id="gl-name" name="name" required maxlength="{{ name_max_length }}" autofocus
+                       data-charcount class="input input-bordered w-full" placeholder="The Backlog" aria-label="List name" />
             </label>
 
             {% comment %}Suggestions, not a menu of the only options. Naming a list is how you tell two of
@@ -126,8 +133,12 @@ meaningless.
             </div>
 
             <label class="flex flex-col gap-1">
-                <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Description <span class="font-normal normal-case tracking-normal text-base-content/40">optional</span></span>
-                <textarea name="description" maxlength="1000" rows="2" class="textarea textarea-bordered w-full"
+                <span class="flex items-baseline justify-between gap-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Description <span class="font-normal normal-case tracking-normal text-base-content/40">optional</span></span>
+                    <span class="text-[0.7rem] tabular-nums text-base-content/40" data-charcount-for="gl-description" aria-hidden="true"></span>
+                </span>
+                <textarea id="gl-description" name="description" maxlength="{{ description_max_length }}" rows="3"
+                          data-charcount class="textarea textarea-bordered w-full"
                           placeholder="What is this list for?" aria-label="List description"></textarea>
             </label>
 

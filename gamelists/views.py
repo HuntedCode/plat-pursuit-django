@@ -17,7 +17,8 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import ListView, View
 
-from gamelists.models import GameList, GameListFollow, GameListLike
+from gamelists.models import (DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, GameList,
+                             GameListFollow, GameListLike)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games
 from trophies.mixins import HtmxListMixin, StaffRequiredMixin
@@ -218,6 +219,10 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, 
         context['list_cap'] = svc.max_lists_for(profile)
         context['at_cap'] = context['list_count'] >= context['list_cap']
         context['suggested_names'] = svc.SUGGESTED_NAMES
+        # From the model, so the form's `maxlength` and the counter cannot drift from
+        # what the service will accept.
+        context['name_max_length'] = NAME_MAX_LENGTH
+        context['description_max_length'] = DESCRIPTION_MAX_LENGTH
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
