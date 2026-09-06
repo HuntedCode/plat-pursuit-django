@@ -360,3 +360,70 @@ def test_a_stale_stripe_webhook_for_a_deleted_user_noops(client):
     a payment-failed event for a deleted customer must log and return, never raise."""
     SubscriptionService.handle_webhook_event(
         'invoice.payment_failed', {'customer': 'cus_deleted_long_ago'})
+
+
+# -- game lists (2026-09) -------------------------------------------------------------------------
+#
+# Lists arrived after the deletion semantics were locked in, and the flow's docstring already
+# promised that prose with the person's voice in it does not survive. Names, descriptions and
+# per-item notes are exactly that.
+
+
+def test_game_lists_do_not_survive_a_deleted_account(client):
+    """Deleted, not soft-deleted, and the difference is the point.
+
+    The PROFILE survives this flow (it unlinks rather than deletes), and `UserRestriction`'s own
+    docstring records the consequence: delete, re-register, re-verify the same PSN handle, and
+    `link_profile_to_user` reattaches THE SAME profile row. A soft-deleted list would sit there
+    waiting for whoever verifies that handle next -- retention with no purpose plus a leak-back
+    path, which is the argument this flow already makes about hidden blurbs.
+    """
+    from gamelists.models import GameList, GameListItem
+    from gamelists.services import game_list_service as svc
+
+    profile, user, _rating = _account(client)
+    private = svc.create_list(profile, name='My private backlog', description='personal notes')
+    public = svc.create_list(profile, name='Published picks', is_public=True)
+    svc.add_concept(private, profile, ConceptFactory(), note='a note in my own voice')
+
+    _delete(client)
+
+    assert not GameList.objects.filter(pk__in=[private.pk, public.pk]).exists()
+    assert GameListItem.objects.count() == 0
+    assert Profile.objects.filter(pk=profile.pk).exists(), 'the public pursuit should survive'
+
+
+def test_a_relinked_profile_does_not_inherit_the_previous_owners_lists(client):
+    """The hatch stated plainly. Somebody who verifies that PSN handle afterwards must not find the
+    last account's private lists sitting in their My Lists."""
+    from gamelists.models import GameList
+    from gamelists.services import game_list_service as svc
+    from trophies.services.verification_service import VerificationService
+
+    profile, _user, _rating = _account(client)
+    svc.create_list(profile, name='Nobody else should read this')
+
+    _delete(client)
+
+    newcomer = CustomUser.objects.create_user(
+        email='newcomer@example.com', password=PASSWORD)
+    profile.refresh_from_db()
+    VerificationService.link_profile_to_user(profile, newcomer)
+
+    assert GameList.objects.owned_by(profile).count() == 0
+
+
+def test_somebody_elses_lists_are_untouched_by_a_deletion(client):
+    """The delete is scoped by owner. Asserted because a filter typo here is silent and total."""
+    from gamelists.models import GameList
+    from gamelists.services import game_list_service as svc
+
+    profile, _user, _rating = _account(client)
+    svc.create_list(profile, name='Mine')
+    bystander = ProfileFactory(is_linked=True, psn_username='bystander')
+    theirs = svc.create_list(bystander, name='Theirs')
+
+    _delete(client)
+
+    assert GameList.objects.filter(pk=theirs.pk).exists()
+

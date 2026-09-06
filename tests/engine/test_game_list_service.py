@@ -7,12 +7,11 @@ mostly about the rules that only exist once a service does -- the gate, the cap,
 and the counters that the browse grid sorts on.
 """
 import pytest
-from django.db import connection
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from gamelists.models import (
     FREE_MAX_LISTS,
-    MAX_ITEMS_PER_LIST,
     MEMBER_MAX_LISTS,
     GameList,
     GameListFollow,
@@ -74,12 +73,22 @@ def test_a_restricted_hunter_cannot_rename_or_add_to_an_existing_list():
 
 
 def test_a_restriction_hides_nothing_already_published():
-    """The promise the restrict form makes out loud. Their lists stay up; they just cannot add."""
+    """The promise the restrict form makes out loud: their lists stay up, they just cannot add.
+
+    Asserted as "still readable AND still refusing writes" in one test. The first version only
+    checked the list was still public, which nothing in the codebase mutates on restriction -- so it
+    passed with the entire restriction feature deleted. An absence assertion needs a matching
+    presence assertion or it is measuring nothing.
+    """
     profile = _hunter()
     game_list = svc.create_list(profile, name='Still here', is_public=True)
+    svc.add_concept(game_list, profile, ConceptFactory())
     _restrict(profile)
 
     assert GameList.objects.public().filter(pk=game_list.pk).exists()
+    assert GameListItem.objects.filter(game_list=game_list).count() == 1
+    with pytest.raises(svc.ListError):
+        svc.add_concept(game_list, profile, ConceptFactory())
 
 
 def test_deleting_is_still_allowed_while_restricted():
@@ -192,14 +201,18 @@ def test_the_same_game_cannot_be_added_twice():
     assert game_list.game_count == 1, 'the refused add still moved the counter'
 
 
-def test_a_list_is_capped_at_its_item_limit():
+def test_there_is_no_cap_on_list_size():
+    """Members always had unlimited games per list, so a ceiling here would be a takeaway wearing a
+    perk's clothes -- and the per-list importer could then refuse a member's own data."""
     profile = _hunter()
-    game_list = svc.create_list(profile, name='Full')
-    GameList.objects.filter(pk=game_list.pk).update(game_count=MAX_ITEMS_PER_LIST)
-    game_list.refresh_from_db()
+    game_list = svc.create_list(profile, name='Long')
 
-    with pytest.raises(svc.ListError):
+    for _ in range(12):
         svc.add_concept(game_list, profile, ConceptFactory())
+
+    game_list.refresh_from_db()
+    assert game_list.game_count == 12
+    assert not hasattr(svc, 'max_items_for'), 'a size cap came back'
 
 
 def test_reorder_refuses_a_partial_order_rather_than_applying_it():
@@ -237,19 +250,59 @@ def test_a_blank_name_is_refused_by_the_service_and_by_the_database():
     with pytest.raises(svc.ListError):
         svc.create_list(profile, name='   ')
 
-    with pytest.raises(Exception):
-        with connection.constraint_checks_disabled():
-            GameList.objects.create(owner=profile, name='')
-            connection.check_constraints()
+    # IntegrityError specifically. `pytest.raises(Exception)` would have passed on a typo, an
+    # AttributeError, or the constraint helper being unsupported.
+    with pytest.raises(IntegrityError):
+        GameList.objects.create(owner=profile, name='')
 
 
-def test_a_name_is_stripped_of_markup():
+@pytest.mark.parametrize('raw, stored', [
+    ('<script>alert(1)</script>Backlog', 'alert(1)Backlog'),
+    ('Plain Backlog', 'Plain Backlog'),
+])
+def test_a_name_is_stripped_of_markup(raw, stored):
+    """Pins the OUTPUT, not just the absence of a '<'.
+
+    The first version asserted `'<' not in name` and `'Backlog' in name`, which three very different
+    sanitizer behaviours all satisfy -- including a buggy one.
+    """
     profile = _hunter()
 
-    game_list = svc.create_list(profile, name='<script>alert(1)</script>Backlog')
+    assert svc.create_list(profile, name=raw).name == stored
 
-    assert '<' not in game_list.name
-    assert 'Backlog' in game_list.name
+
+def test_entity_encoded_markup_is_never_stored_as_live_markup():
+    """`CommentService.sanitize_text` is NOT idempotent: it bleaches, then `html.unescape()`s its own
+    output, so `&lt;script&gt;` survives the bleach as TEXT and the unescape turns it back into a
+    live `<script>`. Verified by running it, not reasoned:
+
+        pass 0: '&lt;script&gt;alert(1)&lt;/script&gt;' -> '<script>alert(1)</script>'
+        pass 1: '<script>alert(1)</script>'          -> 'alert(1)'
+
+    So ONE pass stores raw markup. That is safe under Django auto-escaping, and list names are
+    headed for `og:title` and the Playwright share cards, which are not `{{ }}` contexts. The
+    service runs the sanitizer to a fixpoint, which converges on the harmless text.
+
+    The test this replaces asserted `'<' not in name` and passed only because it happened to pick
+    the one input that does not exhibit the bug.
+    """
+    profile = _hunter()
+
+    game_list = svc.create_list(profile, name='&lt;script&gt;alert(1)&lt;/script&gt;')
+
+    assert game_list.name == 'alert(1)'
+    assert '<' not in game_list.name and '>' not in game_list.name
+
+
+def test_markup_that_sanitizes_away_to_nothing_is_refused_as_a_blank_name():
+    """`&#60;img ...&#62;` decodes to an `<img>` tag, which the next pass strips entirely -- so the
+    fixpoint is the empty string rather than something to store."""
+    profile = _hunter()
+
+    with pytest.raises(svc.ListError, match='needs a name'):
+        svc.create_list(profile, name='&#60;img src=x onerror=alert(1)&#62;')
+
+    assert GameList.objects.count() == 0
 
 
 # ── social ───────────────────────────────────────────────────────────────────────────────────────
@@ -340,3 +393,295 @@ def test_a_signed_out_reader_never_matches_an_owner_row():
     svc.create_list(owner, name='Private')
 
     assert not GameList.objects.readable_by(None).exists()
+
+
+# -- what the L1 audit found had no test at all ---------------------------------------------------
+
+def test_every_length_limit_is_enforced():
+    """One shared branch validates three fields and nothing exercised it."""
+    profile = _hunter()
+
+    with pytest.raises(svc.ListError, match='too long'):
+        svc.create_list(profile, name='x' * 121)
+    with pytest.raises(svc.ListError, match='too long'):
+        svc.create_list(profile, name='Fine', description='x' * 1001)
+
+    game_list = svc.create_list(profile, name='Notes')
+    with pytest.raises(svc.ListError, match='too long'):
+        svc.add_concept(game_list, profile, ConceptFactory(), note='x' * 501)
+
+    assert GameList.objects.count() == 1
+    assert GameListItem.objects.count() == 0
+
+
+def test_banned_words_are_refused_in_the_name_the_description_and_a_note():
+    """The first cut checked the NAME only, leaving the 1000-character public description and every
+    per-item note outside the filter."""
+    from trophies.models import BannedWord
+    from django.core.cache import cache
+
+    BannedWord.objects.create(word='forbidden', is_active=True)
+    cache.delete('banned_words:active')
+    profile = _hunter()
+
+    with pytest.raises(svc.ListError, match='not allowed'):
+        svc.create_list(profile, name='A forbidden list')
+    with pytest.raises(svc.ListError, match='not allowed'):
+        svc.create_list(profile, name='Fine', description='something forbidden here')
+
+    game_list = svc.create_list(profile, name='Clean')
+    with pytest.raises(svc.ListError, match='not allowed'):
+        svc.add_concept(game_list, profile, ConceptFactory(), note='forbidden')
+
+    assert GameListItem.objects.count() == 0
+    cache.delete('banned_words:active')
+
+
+def test_an_unlinked_hunter_cannot_write_at_all():
+    """Every other UGC surface requires a linked profile; the inline views this replaces did too."""
+    unlinked = ProfileFactory(is_linked=False, psn_username='notlinked')
+
+    with pytest.raises(svc.ListError, match='Link your PSN'):
+        svc.create_list(unlinked, name='Nope')
+
+    assert GameList.objects.count() == 0
+
+
+# -- themes -------------------------------------------------------------------------------------
+
+def test_a_theme_must_be_a_real_theme():
+    """The rewrite dropped the whitelist the inline view had, so any 50-character string reached a
+    column the renderer looks up by key."""
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Themed')
+
+    with pytest.raises(svc.ListError, match='not available'):
+        svc.update_list(game_list, profile, selected_theme='<script>')
+
+    game_list.refresh_from_db()
+    assert game_list.selected_theme == ''
+
+
+def test_a_real_theme_is_accepted_for_a_member_and_refused_for_everybody_else():
+    from trophies.themes import GRADIENT_THEMES
+
+    real = next(k for k, v in GRADIENT_THEMES.items() if not v.get('requires_game_image'))
+    member, free = _hunter('member', premium=True), _hunter('free')
+
+    members_list = svc.create_list(member, name='Themed')
+    svc.update_list(members_list, member, selected_theme=real)
+    members_list.refresh_from_db()
+    assert members_list.selected_theme == real
+
+    frees_list = svc.create_list(free, name='Plain')
+    with pytest.raises(svc.ListError, match='member perk'):
+        svc.update_list(frees_list, free, selected_theme=real)
+
+
+def test_a_lapsed_member_can_still_clear_a_theme_but_not_set_one():
+    """Clearing is not setting. Refusing the empty string would strand a lapsed member's list in a
+    theme they can no longer change."""
+    from trophies.themes import GRADIENT_THEMES
+
+    real = next(k for k, v in GRADIENT_THEMES.items() if not v.get('requires_game_image'))
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Themed')
+    svc.update_list(game_list, profile, selected_theme=real)
+
+    profile.user_is_premium = False
+    profile.save(update_fields=['user_is_premium'])
+
+    svc.update_list(game_list, profile, selected_theme='')
+    game_list.refresh_from_db()
+    assert game_list.selected_theme == ''
+
+
+# -- the gate, scoped ------------------------------------------------------------------------------
+
+def test_a_restricted_hunter_can_still_unpublish_their_own_list():
+    """A restriction stops new WORDS. Gating the whole of `update_list` trapped somebody's list in
+    public as a side effect of a decision about their prose -- the failure `api/rating_views.py`
+    documents from the other direction."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Public', is_public=True)
+    _restrict(profile)
+
+    svc.update_list(game_list, profile, is_public=False)
+
+    game_list.refresh_from_db()
+    assert game_list.is_public is False
+
+
+def test_a_restricted_hunter_cannot_like_but_can_unlike():
+    """`GameListLike` is the same shape as the four vote models, and `CommentService.toggle_vote`
+    already refuses a restricted vote -- so leaving likes open reopens the hole this service exists
+    to close, on the one write that feeds a public ranking."""
+    owner, reader = _hunter('owner'), _hunter('reader')
+    game_list = svc.create_list(owner, name='Ranked', is_public=True)
+    svc.set_like(game_list, reader, liked=True)
+    _restrict(reader)
+
+    with pytest.raises(svc.ListError):
+        svc.set_like(game_list, reader, liked=True)
+
+    svc.set_like(game_list, reader, liked=False)
+    assert GameListLike.objects.count() == 0
+
+
+def test_nobody_can_like_their_own_list():
+    """Otherwise an author ranks themselves up the sort `like_count` drives."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Mine', is_public=True)
+
+    with pytest.raises(svc.ListError):
+        svc.set_like(game_list, profile, liked=True)
+
+    assert GameListLike.objects.count() == 0
+
+
+# -- the stale-pivot corruption -------------------------------------------------------------------
+
+def test_removing_the_same_item_twice_does_not_corrupt_the_order():
+    """No concurrency needed -- a double-click did it.
+
+    `remove_concept` read `position` off the CALLER's in-memory item. `Model.delete()` on an
+    already-deleted row removes nothing and does not raise, so the replay re-ran the shift with a
+    stale pivot and left two rows sharing a position, silently breaking the dense-ordering contract
+    the module calls load-bearing.
+    """
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Ordered')
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(4)]
+
+    svc.remove_concept(game_list, profile, items[1])
+    with pytest.raises(svc.ListError):
+        svc.remove_concept(game_list, profile, items[1])
+
+    surviving = list(
+        GameListItem.objects.filter(game_list=game_list).order_by('position')
+        .values_list('id', 'position')
+    )
+    assert [p for _id, p in surviving] == [0, 1, 2], f'positions corrupted: {surviving}'
+    assert [i for i, _p in surviving] == [items[0].id, items[2].id, items[3].id]
+    game_list.refresh_from_db()
+    assert game_list.game_count == 3
+
+
+def test_an_item_cannot_be_removed_through_another_list():
+    """A security-relevant guard with no coverage: removing an entry by passing a list you DO own
+    and an item that belongs to somebody else's."""
+    owner, other = _hunter('owner'), _hunter('other')
+    mine = svc.create_list(owner, name='Mine')
+    theirs = svc.create_list(other, name='Theirs')
+    their_item = svc.add_concept(theirs, other, ConceptFactory())
+
+    with pytest.raises(svc.ListError):
+        svc.remove_concept(mine, owner, their_item)
+
+    assert GameListItem.objects.filter(pk=their_item.pk).exists()
+
+
+def test_remove_and_reorder_refuse_a_list_that_is_not_yours():
+    """`test_somebody_elses_list_refuses_every_write` covered three of the six owner-guarded
+    writes; these were the two it missed."""
+    owner, stranger = _hunter('owner'), _hunter('stranger')
+    game_list = svc.create_list(owner, name='Mine', is_public=True)
+    item = svc.add_concept(game_list, owner, ConceptFactory())
+
+    with pytest.raises(svc.ListError):
+        svc.remove_concept(game_list, stranger, item)
+    with pytest.raises(svc.ListError):
+        svc.reorder(game_list, stranger, [item.id])
+
+    assert GameListItem.objects.filter(pk=item.pk).exists()
+
+
+def test_positions_start_at_zero_and_stay_dense_as_games_are_added():
+    """Never asserted directly before -- only inferred through the removal test."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Ordered')
+
+    positions = [svc.add_concept(game_list, profile, ConceptFactory()).position for _ in range(4)]
+
+    assert positions == [0, 1, 2, 3]
+
+
+def test_a_drifted_counter_does_not_hand_a_new_item_a_taken_position():
+    """`position` is derived from the ROWS, not from `game_count`.
+
+    The counter can drift from paths this service does not own (a concept merge dropping a
+    colliding entry, an admin deleting a Concept, the importer). Deriving position from it then
+    hands a new item a position another row already holds -- silently, since nothing constrains
+    position -- which is the exact three-covers-on-a-four-game-list bug the module warns about.
+    """
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Drifted')
+    svc.add_concept(game_list, profile, ConceptFactory())
+    svc.add_concept(game_list, profile, ConceptFactory())
+
+    GameList.objects.filter(pk=game_list.pk).update(game_count=0)
+    game_list.refresh_from_db()
+    fresh = svc.add_concept(game_list, profile, ConceptFactory())
+
+    assert fresh.position == 2, 'the new item took a position another row already holds'
+    positions = list(GameListItem.objects.filter(game_list=game_list)
+                     .order_by('position').values_list('position', flat=True))
+    assert positions == [0, 1, 2]
+    game_list.refresh_from_db()
+    assert game_list.game_count == 3, 'the counter did not self-heal'
+
+
+def test_deleting_a_list_twice_is_a_no_op():
+    """A second click should not answer "that list no longer exists" about a list you just
+    removed."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Gone')
+
+    svc.delete_list(game_list, profile)
+    svc.delete_list(game_list, profile)
+
+    game_list.refresh_from_db()
+    assert game_list.is_deleted is True
+
+
+def test_reorder_refuses_junk_ids_rather_than_raising_a_500():
+    """A service that bills itself as the sole writer coerces rather than assuming; string ids from
+    a JSON body used to raise TypeError out of `sorted()`."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Ordered')
+    item = svc.add_concept(game_list, profile, ConceptFactory())
+
+    with pytest.raises(svc.ListError):
+        svc.reorder(game_list, profile, ['not-an-id'])
+    # A string that IS numeric is coerced and accepted -- JSON bodies send those legitimately.
+    svc.reorder(game_list, profile, [str(item.id)])
+
+
+def test_removing_from_the_middle_keeps_the_right_games_in_the_right_order():
+    """The shape assertion (`[0, 1, 2]`) passed for an implementation that shuffled. This pins WHICH
+    item sits where."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Ordered')
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(4)]
+
+    svc.remove_concept(game_list, profile, items[1])
+
+    assert list(
+        GameListItem.objects.filter(game_list=game_list).order_by('position')
+        .values_list('id', flat=True)
+    ) == [items[0].id, items[2].id, items[3].id]
+
+
+def test_reorder_leaves_positions_dense():
+    """Comparing ids ordered BY position would pass for positions 5, 10, 20."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Ordered')
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(3)]
+
+    svc.reorder(game_list, profile, [items[2].id, items[0].id, items[1].id])
+
+    assert list(
+        GameListItem.objects.filter(game_list=game_list).order_by('position')
+        .values_list('position', flat=True)
+    ) == [0, 1, 2]
+

@@ -13,11 +13,15 @@ WHAT IS ACTUALLY DIFFERENT, since "rebuilt" should mean something:
    views -- which is exactly why lists are the one user-content system on the site with no
    restriction gate. `gamelists/services/game_list_service.py` is the only thing that writes here.
 
-2. **Visibility is un-bypassable.** `GameList.objects` cannot return a soft-deleted row at all, and
-   `.public()` is the single supported read path for somebody else's list. The old model exposed a
-   bare manager and left `is_deleted=False, is_public=True` to be remembered at each of ~20 call
-   sites. The partial indexes match those managers' predicates exactly, so the safe path is also the
-   fast one and nobody is tempted off it.
+2. **Visibility has ONE supported read path per question.** `.visible()` is the floor, `.public()`
+   is how you read somebody else's, `.readable_by()` is how a detail page asks. The old model
+   exposed a bare manager and left `is_deleted=False, is_public=True` to be remembered at ~20 call
+   sites. Note what this does NOT claim: `objects.all()` still returns soft-deleted rows on purpose
+   (see `GameListManager`), so the floor is opt-in and one word long rather than baked into the
+   default manager. `owned_by()` and the two explicit browse sorts ride partial indexes;
+   `readable_by()` cannot (its OR spans two columns) and neither can a `.public()` read that leans
+   on `Meta.ordering` instead of naming its sort -- so a public browse must `.order_by()`
+   explicitly, and `readable_by()` should stay bounded to one list or a small page.
 
 3. **Follows exist.** The first social relation on the site -- there is no follow/follower anything
    anywhere else, so this is a new abstraction rather than a borrowed one.
@@ -31,12 +35,17 @@ from django.db.models import Q
 
 from trophies.models import Concept, Profile
 
-#: What a free hunter gets. Members get `MEMBER_MAX_LISTS`, which is the same shape as the shipped
-#: `sync` perk (everyone syncs, members sync more often) rather than a capability they cannot reach.
-#: Both are read ONLY by the service, so the tier rule has exactly one enforcement point.
+#: How many LISTS you get. Everyone makes lists; members make more of them -- the same shape as the
+#: shipped `sync` perk (everyone syncs, members sync more often) rather than a capability a free
+#: hunter cannot reach. Read ONLY by `game_list_service.max_lists_for`, so the tier rule has exactly
+#: one enforcement point.
+#:
+#: THERE IS NO CAP ON LIST SIZE, and that absence is deliberate. The system this replaces gave
+#: members unlimited games per list, so any ceiling here would take a perk back rather than add one
+#: -- and the per-list importer could then refuse to bring a member's own data across. The first cut
+#: shipped a flat 100-item cap for everybody and described it as a perk; it was a reduction.
 FREE_MAX_LISTS = 3
 MEMBER_MAX_LISTS = 10
-MAX_ITEMS_PER_LIST = 100
 
 
 class GameListQuerySet(models.QuerySet):
@@ -124,9 +133,13 @@ class GameList(models.Model):
                          condition=Q(is_deleted=False, is_public=True)),
         ]
         constraints = [
-            # A name is the only way to tell two of your own lists apart, so it cannot be blank.
-            # Enforced in the DB and not only in the service, because the service is new and the
-            # admin, the shell and a future importer all write around it.
+            # A name is how you tell two of your own lists apart, so an EMPTY one is refused in the
+            # DB and not only in the service -- the admin, the shell and the importer all write
+            # around the service. Its limits, stated rather than implied: it catches `''` only, so a
+            # whitespace-only name still passes here (the service strips, `clean()` catches it, and
+            # neither runs for those same out-of-service writers), and nothing stops two lists
+            # sharing a name -- there is no unique constraint on (owner, name) and there should not
+            # be, since "Backlog" and "Backlog" are a user's problem, not a data-integrity one.
             models.CheckConstraint(condition=~Q(name=''), name='gamelist_name_not_blank'),
         ]
 

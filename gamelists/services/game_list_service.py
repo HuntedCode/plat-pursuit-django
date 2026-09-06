@@ -7,29 +7,39 @@ system on this site with no restriction gate -- `restriction_service.is_restrict
 by comments, ratings, flags, roadmap notes and the fundraiser, and by nothing in lists -- because
 there was no single place to put the call. This module is that place.
 
-Three rules hold everywhere below, and they are the reason to route through here:
+Four rules hold everywhere below.
 
-1. **A write refuses before it starts.** The restriction check and the tier cap run before any row
-   is touched, and raise rather than returning a flag nobody checks.
-2. **Denormalized counts move with the rows they count**, inside the same transaction, via `F()`.
+1. **A write refuses before it starts**, and refuses field-by-field where the site already draws
+   that line. A restriction stops new WORDS; it does not stop somebody taking their own list down
+   or un-publishing it. (`api/rating_views.py` sets this precedent: a restriction on quick takes
+   drops the prose and lets the SCORES through, because silently discarding those would rewrite a
+   game's averages as a side effect of a decision about somebody's writing.)
+2. **The lock comes before the value it protects, and the precondition is re-asserted on the row
+   that came back.** Both halves, the way `moderation_service._lock_report` does it. The first cut
+   took the lock and then read the pivot off the caller's stale object, which is a silent
+   corruption rather than an error.
+3. **Denormalized counts move with the rows they count**, inside the same transaction.
    `game_count` is what the browse grid sorts on, so drift silently reorders the page.
-3. **`position` stays dense.** Removal re-compacts. The browse tile bounds its cover prefetch with
-   `position__lt=4`, so a gap shows three covers where there should be four -- a bug that looks like
-   a rendering problem and is a data problem.
+4. **`position` stays dense, and is derived from the ROWS rather than from the counter.** The browse
+   tile bounds its cover prefetch with `position__lt=4`, so a gap shows three covers on a four-game
+   list -- a data bug wearing a rendering bug's clothes. Deriving it from `game_count` made the
+   counter load-bearing for correctness and not just for display, which is a much worse trade: a
+   merge or an admin delete could then hand a new item a position another row already holds.
 """
 from django.db import models, transaction
 from django.utils import timezone
 
 from gamelists.models import (
     FREE_MAX_LISTS,
-    MAX_ITEMS_PER_LIST,
     MEMBER_MAX_LISTS,
     GameList,
     GameListFollow,
     GameListItem,
     GameListLike,
 )
+from trophies.models import Profile
 from trophies.services.comment_service import CommentService
+from trophies.themes import GRADIENT_THEMES
 from users.services import restriction_service
 
 
@@ -39,8 +49,7 @@ class ListError(Exception):
 
 #: Offered in the UI as one-tap suggestions, NOT as the only choices. Naming a list is how you tell
 #: two of your own apart, so it stays free text for everyone, gated by the same banned-word check and
-#: `all_ugc` restriction that already govern every other public string a hunter can write. Paywalling
-#: the field would be a second, different answer to a problem the site already answers.
+#: `all_ugc` restriction that already govern every other public string a hunter can write.
 SUGGESTED_NAMES = (
     'The Backlog',
     'Currently Playing',
@@ -54,93 +63,213 @@ SUGGESTED_NAMES = (
 
 
 def max_lists_for(profile):
-    """The cap, in one place. Everyone gets lists; members get more of them."""
+    """The cap, in one place. Everyone gets lists; members get more of them.
+
+    There is deliberately no matching `max_items_for`. The system this replaces gave members
+    unlimited games per list, so capping list SIZE would take a perk back rather than add one --
+    and the importer would then be unable to bring a member's own data across. Only the list COUNT
+    is tiered.
+    """
     return MEMBER_MAX_LISTS if profile.user_is_premium else FREE_MAX_LISTS
 
+
+# ── gates ────────────────────────────────────────────────────────────────────────────────────────
 
 def _refuse_if_restricted(profile):
     """The call the old system had nowhere to put.
 
-    `all_ugc` is the right scope: a list name and a note are user-submitted content shown to other
-    people, which is exactly what that scope exists to stop. Restricting somebody hides nothing they
-    already published -- their existing lists stay up, they simply cannot write more.
+    `all_ugc` is the right scope: a list name, a description and a note are user-submitted content
+    shown to other people. Restricting somebody hides nothing they already published -- their lists
+    stay up, they simply cannot write more.
     """
     if restriction_service.is_restricted_from(profile, 'all_ugc'):
         raise ListError('Your account is currently restricted from posting.')
 
 
+def _refuse_if_unlinked(profile):
+    """The same bar every other UGC surface sets.
+
+    `CommentService.can_interact` bundles this with the restriction check and argues in its own
+    docstring for bundling, precisely so the next writer cannot forget one; the inline views this
+    replaces required a linked profile too. Dropping it in the rewrite would have made lists the one
+    surface an unlinked account can publish from.
+    """
+    if profile is None or not profile.is_linked:
+        raise ListError('Link your PSN account to build lists.')
+
+
+# ── text ─────────────────────────────────────────────────────────────────────────────────────────
+
 def _clean_text(raw, *, field, max_length):
     """Sanitize and validate one hunter-written string.
 
-    Reuses `CommentService.sanitize_text` rather than growing a second sanitizer: it strips every
-    tag (`ALLOWED_TAGS = []`) and un-escapes entities, so what is stored is plain text that is only
-    safe in an auto-escaped `{{ }}` context. Never render these with `|safe`.
+    Runs `CommentService.sanitize_text` TO A FIXPOINT, which is the part that matters. That function
+    bleaches and then `html.unescape()`s its own output, so it is NOT idempotent: `&lt;script&gt;`
+    survives the bleach (it is text, not a tag) and the unescape turns it back into a live
+    `<script>`. Verified by running it, not assumed. A single pass therefore stores raw markup for
+    entity-encoded input, which is safe only under Django auto-escaping -- and list names are headed
+    for `og:title` and the Playwright share cards, neither of which is a `{{ }}` context.
+
+    The final check refuses rather than storing a partly-cleaned string, so the guarantee this
+    function offers is one a caller can actually rely on.
     """
-    cleaned = (CommentService.sanitize_text(raw or '') or '').strip()
-    if len(cleaned) > max_length:
+    text = raw or ''
+    for _pass in range(3):
+        cleaned = (CommentService.sanitize_text(text) or '').strip()
+        if cleaned == text:
+            break
+        text = cleaned
+
+    if '<' in text or '>' in text:
+        raise ListError(f'That {field} contains characters that are not allowed.')
+    if len(text) > max_length:
         raise ListError(f'That {field} is too long (max {max_length} characters).')
-    return cleaned
+    return text
 
 
-def _check_name(profile, raw):
-    name = _clean_text(raw, field='name', max_length=120)
-    if not name:
-        raise ListError('A list needs a name.')
-    banned, _word = CommentService.check_banned_words(name)
+def _refuse_banned_words(text, *, field):
+    """Every hunter-written string, not just the name.
+
+    The first cut checked only `name`, leaving `description` -- 1000 public characters, the largest
+    free-text field the feature ships -- and `note` outside the filter entirely.
+    """
+    if not text:
+        return
+    banned, _word = CommentService.check_banned_words(text)
     if banned:
         # The matched word is deliberately not echoed back: it tells somebody probing the filter
         # exactly which term tripped it, which is a list they can then work around.
-        raise ListError('That name is not allowed. Please choose another.')
+        raise ListError(f'That {field} is not allowed. Please choose another.')
+
+
+def _check_name(raw):
+    name = _clean_text(raw, field='name', max_length=120)
+    if not name:
+        raise ListError('A list needs a name.')
+    _refuse_banned_words(name, field='name')
     return name
+
+
+def _check_description(raw):
+    text = _clean_text(raw, field='description', max_length=1000)
+    _refuse_banned_words(text, field='description')
+    return text
+
+
+def _check_theme(profile, raw):
+    """Validate against the real theme catalogue, which the rewrite had dropped.
+
+    The inline view this replaces checked exactly this, as do the recap and shareable endpoints.
+    Without it, any 50-character string reached a column the renderer looks up by key.
+    `requires_game_image` themes are excluded because a list has no single game to draw from.
+    """
+    theme = (raw or '').strip()
+    if not theme:
+        return ''
+    if not profile.user_is_premium:
+        raise ListError('Themes are a member perk.')
+    if theme not in GRADIENT_THEMES or GRADIENT_THEMES[theme].get('requires_game_image'):
+        raise ListError('That theme is not available.')
+    return theme
+
+
+# ── locking ──────────────────────────────────────────────────────────────────────────────────────
+
+def _lock_list(game_list):
+    """Re-read the list FOR UPDATE and re-assert the precondition on the row that came back.
+
+    Both halves, the way `moderation_service._lock_report` does it. Checking `is_deleted` on the
+    caller's instance and then locking leaves a window where a list deleted in another tab still
+    accepts item writes.
+    """
+    locked = GameList.objects.select_for_update().get(pk=game_list.pk)
+    if locked.is_deleted:
+        raise ListError('That list no longer exists.')
+    return locked
+
+
+def _lock_item(item, locked_list):
+    """The pivot, re-read under the parent's lock and scoped to the parent.
+
+    `remove_concept` used to read `item.position` off the caller's in-memory object. A double-submit
+    then re-ran the shift with a stale pivot -- `Model.delete()` on an already-deleted row removes
+    nothing and does NOT raise -- leaving two rows sharing a position and corrupting exactly the
+    dense ordering this module calls load-bearing.
+    """
+    fresh = (
+        GameListItem.objects.select_for_update()
+        .filter(pk=item.pk, game_list=locked_list)
+        .first()
+    )
+    if fresh is None:
+        raise ListError('That entry is no longer on this list.')
+    return fresh
+
+
+def _require_owner(game_list, profile):
+    """Ownership, asked about the row rather than about the URL."""
+    if game_list.is_deleted:
+        raise ListError('That list no longer exists.')
+    if game_list.owner_id != profile.id:
+        raise ListError('That is not your list.')
 
 
 # ── lists ────────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
 def create_list(profile, *, name, description='', is_public=False):
+    _refuse_if_unlinked(profile)
     _refuse_if_restricted(profile)
 
+    name = _check_name(name)
+    description = _check_description(description)
+
+    # THE LOCK GOES ON THE PROFILE, not on the lists. `@transaction.atomic` does nothing for this by
+    # itself: at READ COMMITTED two requests both COUNT 2, both pass `2 >= 3`, both insert, and the
+    # hunter ends up with four. `SELECT ... FOR UPDATE` locks rows that EXIST, so locking a filtered
+    # list queryset locks nothing in the case that matters -- the account always exists. Same
+    # reasoning `restriction_service.apply_restriction` writes down for the same shape of check.
+    Profile.objects.select_for_update().filter(pk=profile.pk).first()
+
     cap = max_lists_for(profile)
-    # Counted under the same transaction as the insert. Two tabs submitting at once is a real way to
-    # land on cap + 1, and the cap is the one rule a hunter would notice being wrong.
-    current = GameList.objects.owned_by(profile).count()
-    if current >= cap:
+    if GameList.objects.owned_by(profile).count() >= cap:
         raise ListError(
             f'You have reached your limit of {cap} lists. '
             'Delete one to make room, or become a member for more.'
         )
 
     return GameList.objects.create(
-        owner=profile,
-        name=_check_name(profile, name),
-        description=_clean_text(description, field='description', max_length=1000),
-        is_public=is_public,
-    )
+        owner=profile, name=name, description=description, is_public=bool(is_public))
 
 
 @transaction.atomic
 def update_list(game_list, profile, *, name=None, description=None,
                 is_public=None, selected_theme=None):
-    """Edit a list you own. Every argument is optional; only what is passed is touched."""
+    """Edit a list you own. Every argument is optional; only what is passed is touched.
+
+    The restriction gate is scoped to the fields that CARRY WORDS. A restricted hunter can still
+    un-publish their own list and still change its theme -- taking your own content down is the
+    opposite of the act being restricted, and a gradient is not user-submitted content. Gating the
+    whole function trapped a restricted hunter's list in public, which is the same failure
+    `api/rating_views.py` documents from the other direction.
+    """
     _require_owner(game_list, profile)
-    _refuse_if_restricted(profile)
+
+    if name is not None or description is not None:
+        _refuse_if_restricted(profile)
 
     changed = []
     if name is not None:
-        game_list.name = _check_name(profile, name)
+        game_list.name = _check_name(name)
         changed.append('name')
     if description is not None:
-        game_list.description = _clean_text(description, field='description', max_length=1000)
+        game_list.description = _check_description(description)
         changed.append('description')
     if is_public is not None:
         game_list.is_public = bool(is_public)
         changed.append('is_public')
     if selected_theme is not None:
-        # Themes are a member perk, and the check is here rather than in the view because the view
-        # is not the only caller and a theme set by an expired member should stop applying.
-        if selected_theme and not profile.user_is_premium:
-            raise ListError('Themes are a member perk.')
-        game_list.selected_theme = selected_theme
+        game_list.selected_theme = _check_theme(profile, selected_theme)
         changed.append('selected_theme')
 
     if changed:
@@ -150,9 +279,16 @@ def update_list(game_list, profile, *, name=None, description=None,
 
 @transaction.atomic
 def delete_list(game_list, profile):
-    """Soft delete. The row stays so a support request can undo it, and so a hunter who deletes the
-    wrong list has not lost forty games they curated by hand."""
-    _require_owner(game_list, profile)
+    """Soft delete, and idempotent.
+
+    The row stays so a support request can undo it, and so somebody who deletes the wrong list has
+    not lost forty games they curated by hand. Deleting twice is a no-op rather than an error: a
+    second click should not answer "that list no longer exists" about a list you just removed.
+    """
+    if game_list.owner_id != profile.id:
+        raise ListError('That is not your list.')
+    if game_list.is_deleted:
+        return game_list
 
     game_list.is_deleted = True
     game_list.deleted_at = timezone.now()
@@ -160,42 +296,29 @@ def delete_list(game_list, profile):
     return game_list
 
 
-def _require_owner(game_list, profile):
-    """Ownership, asked as a question about the row rather than about the URL.
-
-    Every write below takes an already-fetched list, so this is the single place that decides
-    "yours". Deleted lists refuse too: a soft-deleted list is not a list you can still edit.
-    """
-    if game_list.is_deleted:
-        raise ListError('That list no longer exists.')
-    if game_list.owner_id != profile.id:
-        raise ListError('That is not your list.')
-
-
 # ── items ────────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
 def add_concept(game_list, profile, concept, *, note=''):
+    """Append a game. No size cap: members always had unlimited, and free hunters keep it too."""
     _require_owner(game_list, profile)
+    _refuse_if_unlinked(profile)
     _refuse_if_restricted(profile)
 
-    locked = GameList.objects.select_for_update().get(pk=game_list.pk)
-    if locked.game_count >= MAX_ITEMS_PER_LIST:
-        raise ListError(f'A list holds up to {MAX_ITEMS_PER_LIST} games.')
+    note = _clean_text(note, field='note', max_length=500)
+    _refuse_banned_words(note, field='note')
 
+    locked = _lock_list(game_list)
     if GameListItem.objects.filter(game_list=locked, concept=concept).exists():
         raise ListError('That game is already on this list.')
 
+    highest = GameListItem.objects.filter(game_list=locked).aggregate(
+        top=models.Max('position'))['top']
     item = GameListItem.objects.create(
-        game_list=locked,
-        concept=concept,
-        note=_clean_text(note, field='note', max_length=500),
-        # Appended at the end, computed under the row lock taken above so two adds cannot claim the
-        # same position and break the dense-ordering contract.
-        position=locked.game_count,
-    )
-    GameList.objects.filter(pk=locked.pk).update(
-        game_count=models.F('game_count') + 1, updated_at=timezone.now())
+        game_list=locked, concept=concept, note=note,
+        position=0 if highest is None else highest + 1)
+
+    _recount(locked)
     return item
 
 
@@ -203,22 +326,34 @@ def add_concept(game_list, profile, concept, *, note=''):
 def remove_concept(game_list, profile, item):
     """Remove one entry and CLOSE THE GAP.
 
-    The re-compaction is the whole reason this is a service function rather than `item.delete()`.
-    Positions are consumed as dense by the cover prefetch (`position__lt=4`), so leaving a hole
-    shows a three-cover mosaic on a list with four games and reads as a rendering bug.
+    The re-compaction is why this is a service function rather than `item.delete()`. Positions are
+    consumed as dense by the cover prefetch (`position__lt=4`), so a hole shows a three-cover mosaic
+    on a list with four games and reads as a rendering bug.
     """
     _require_owner(game_list, profile)
 
-    locked = GameList.objects.select_for_update().get(pk=game_list.pk)
-    if item.game_list_id != locked.pk:
-        raise ListError('That entry is not on this list.')
+    locked = _lock_list(game_list)
+    fresh = _lock_item(item, locked)
 
-    removed_position = item.position
-    item.delete()
+    removed_position = fresh.position
+    fresh.delete()
     GameListItem.objects.filter(game_list=locked, position__gt=removed_position).update(
         position=models.F('position') - 1)
+    _recount(locked)
+
+
+def _recount(locked):
+    """Set `game_count` from the rows, rather than nudging it by one.
+
+    Self-healing on purpose. The counter can drift from paths this service does not own -- a concept
+    merge dropping a colliding entry, an admin deleting a Concept, the importer -- and `+1`/`-1`
+    carries an old error forward forever. `PositiveIntegerField` is a DB CHECK on Postgres, so a
+    counter that drifted high would eventually raise IntegrityError out of a `-1` instead of the
+    ListError a caller is catching. Cheap: one COUNT under a lock we already hold.
+    """
     GameList.objects.filter(pk=locked.pk).update(
-        game_count=models.F('game_count') - 1, updated_at=timezone.now())
+        game_count=GameListItem.objects.filter(game_list=locked).count(),
+        updated_at=timezone.now())
 
 
 @transaction.atomic
@@ -227,17 +362,21 @@ def reorder(game_list, profile, item_ids):
 
     Refuses a partial list rather than accepting one. A drag-reorder that posts a subset means the
     client and the server disagree about what is on the list, and applying it would silently drop
-    the entries the client forgot -- so the mismatch is an error, not something to paper over.
+    the entries the client forgot.
     """
     _require_owner(game_list, profile)
 
-    locked = GameList.objects.select_for_update().get(pk=game_list.pk)
-    existing = list(GameListItem.objects.filter(game_list=locked).values_list('id', flat=True))
-    if sorted(item_ids) != sorted(existing):
-        raise ListError('That order does not match the list. Reload and try again.')
+    locked = _lock_list(game_list)
+    try:
+        wanted = [int(i) for i in item_ids]
+    except (TypeError, ValueError):
+        raise ListError('That order is not valid. Reload and try again.')
 
     items = {i.id: i for i in GameListItem.objects.filter(game_list=locked)}
-    for position, item_id in enumerate(item_ids):
+    if sorted(wanted) != sorted(items):
+        raise ListError('That order does not match the list. Reload and try again.')
+
+    for position, item_id in enumerate(wanted):
         items[item_id].position = position
     GameListItem.objects.bulk_update(items.values(), ['position'])
     GameList.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
@@ -249,27 +388,41 @@ def reorder(game_list, profile, item_ids):
 def set_like(game_list, profile, *, liked):
     """Like or unlike. Idempotent in both directions.
 
-    Returns the new count, read back from the row rather than computed, so the caller renders what
-    the database holds instead of a number it guessed.
+    GATED on the way in. `GameListLike` is deliberately the same shape as the four vote models in
+    `trophies`, and `CommentService.toggle_vote` already refuses a vote from a restricted hunter --
+    so leaving this open would reopen the exact hole this service exists to close, on the one list
+    write that feeds a public ranking. Un-liking stays available: withdrawing a signal is not
+    publishing one.
     """
+    if liked:
+        _refuse_if_restricted(profile)
     return _set_social(GameListLike, game_list, profile, on=liked, field='like_count')
 
 
 @transaction.atomic
 def set_follow(game_list, profile, *, following):
+    """Follow or unfollow. Ungated: a follow is a private bookmark with no public effect.
+
+    NOTE FOR CALLERS: there is no notification surface behind this, and there will not be one this
+    release -- the notifications system is itself withdrawn. Following a list means it appears under
+    "Lists I follow". The UI must not imply an alert that cannot arrive.
+    """
     return _set_social(GameListFollow, game_list, profile, on=following, field='follower_count')
 
 
 def _set_social(model, game_list, profile, *, on, field):
     """One implementation for like and follow, because they are the same operation twice.
 
-    Both refuse on a list the hunter cannot see -- otherwise liking is an oracle that tells you a
-    private list exists, and by whom, from its id alone.
+    Both refuse a list the hunter cannot see -- otherwise liking is an oracle that tells you a
+    private list exists, and whose, from its id alone.
     """
+    _refuse_if_unlinked(profile)
     if not GameList.objects.readable_by(profile).filter(pk=game_list.pk).exists():
         raise ListError('That list is not available.')
-    if game_list.owner_id == profile.id and model is GameListFollow:
-        raise ListError('You already own that list.')
+    if game_list.owner_id == profile.id:
+        # Neither is meaningful on your own list, and self-liking would let an author push their own
+        # list up the ranking that `like_count` drives.
+        raise ListError('That is your own list.')
 
     if on:
         _row, created = model.objects.get_or_create(game_list=game_list, profile=profile)

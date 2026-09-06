@@ -258,3 +258,60 @@ def test_absorb_only_drops_the_collision_and_moves_everybody_elses_entry():
     assert moved.concept_id == survivor.pk
     assert GameListItem.objects.filter(game_list=collided).count() == 1
 
+
+def test_absorb_repairs_the_count_and_the_order_it_disturbs():
+    """The collision drop is a DELETE out of the middle of a list, and it broke both denormalized
+    invariants the lists module calls load-bearing.
+
+    `game_count` is what the browse grid shows and sorts on, and nothing recomputes it -- an
+    inflated counter cannot even come back down, because `PositiveIntegerField` is a DB CHECK and
+    the service's decrements floor at zero. Positions are consumed as dense by the cover prefetch
+    (`position__lt=4`), so the hole shows three covers on a four-game list.
+
+    Neither was asserted by the first three absorb tests: they seeded `game_count` by hand and then
+    never looked at it again.
+    """
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='hadboth')
+    other = ConceptFactory()
+
+    backlog = GameList.objects.create(owner=profile, name='Backlog', game_count=3)
+    GameListItem.objects.create(game_list=backlog, concept=survivor, position=0)
+    GameListItem.objects.create(game_list=backlog, concept=doomed, position=1)
+    tail = GameListItem.objects.create(game_list=backlog, concept=other, position=2)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    backlog.refresh_from_db()
+    assert backlog.game_count == 2, 'the counter is stranded high and nothing can bring it back'
+
+    tail.refresh_from_db()
+    assert tail.position == 1, 'the merge left a hole in the dense-position contract'
+    assert list(
+        GameListItem.objects.filter(game_list=backlog).order_by('position')
+        .values_list('position', flat=True)
+    ) == [0, 1]
+
+
+def test_absorb_fixes_the_count_on_a_list_that_only_had_the_doomed_concept():
+    """Re-pointing alone changes no counts, but the repair pass must not BREAK the lists it did not
+    have to dedup."""
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='hadone')
+    game_list = GameList.objects.create(owner=profile, name='Only doomed', game_count=1)
+    entry = GameListItem.objects.create(game_list=game_list, concept=doomed, position=0)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    entry.refresh_from_db()
+    game_list.refresh_from_db()
+    assert entry.concept_id == survivor.pk
+    assert entry.position == 0
+    assert game_list.game_count == 1
+

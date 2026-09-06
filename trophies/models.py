@@ -1445,26 +1445,6 @@ class Concept(models.Model):
                 other.concept_id, self.concept_id,
             )
 
-        # Game list entries (gamelists.GameListItem -> Concept, added 2026-09 when the rebuilt lists
-        # moved from Game to Concept keying).
-        #
-        # Re-pointed rather than left to cascade, because a cascade here deletes a hunter's curation
-        # -- they added a game to their backlog and a catalogue merge they never saw would silently
-        # remove it. The dedup is the whole reason this cannot be a bare `.update()`: a list may
-        # already hold the SURVIVOR, and `unique(game_list, concept)` would raise mid-merge on the
-        # first one that does, taking down an admin's concept reassignment. So the colliding entries
-        # are dropped (the list already has that game, by definition) and the rest move.
-        #
-        # Imported locally: `trophies` must not import `gamelists` at module scope, or the app
-        # loading order becomes a cycle.
-        from gamelists.models import GameListItem
-
-        already_holding = set(
-            GameListItem.objects.filter(concept=self).values_list('game_list_id', flat=True)
-        )
-        GameListItem.objects.filter(concept=other, game_list_id__in=already_holding).delete()
-        GameListItem.objects.filter(concept=other).update(concept=self)
-
         # ContractBundle satisfier membership (per-bundle M2M): move other's links to self.
         for cbundle in other.contract_bundles.all():
             if not cbundle.concepts.filter(pk=self.pk).exists():
@@ -1613,6 +1593,52 @@ class Concept(models.Model):
                 self.title_ids.append(tid)
         if other.title_ids:
             self.save(update_fields=['title_ids'])
+
+        # Game list entries (gamelists.GameListItem -> Concept, added 2026-09 when the rebuilt lists
+        # moved from Game keying to Concept keying).
+        #
+        # DELIBERATELY LAST. absorb() is not transactional, so a branch that raises commits
+        # everything above it, skips everything below it, and stops the caller's `other.delete()` --
+        # leaving a half-migrated orphan Concept. That risk is real here and not theoretical:
+        # `gamelists` is a new app, so during a rolling deploy a worker running new code before
+        # `migrate` has created the table raises `ProgrammingError` on the first query below. The
+        # PSN branch above answers the same risk by swallowing, which is right for a capture table
+        # nothing reads and wrong for hand-curated user content -- so this one is positioned instead
+        # of silenced. A raise here costs only the list re-point.
+        #
+        # Re-pointed rather than left to cascade, because a cascade deletes a hunter's curation: they
+        # added a game to their backlog and a catalogue merge they never saw would remove it.
+        #
+        # The dedup cannot be a bare `.update()`: a list may already hold the SURVIVOR, and
+        # `unique(game_list, concept)` would then raise mid-merge. A subquery rather than a
+        # materialized set of ids, both to keep it one statement and to narrow the window in which a
+        # hunter adding the survivor between the read and the write reintroduces that collision.
+        from gamelists.models import GameList, GameListItem
+
+        touched = set(
+            GameListItem.objects.filter(concept__in=[self.pk, other.pk])
+            .values_list('game_list_id', flat=True)
+        )
+        GameListItem.objects.filter(
+            concept=other,
+            game_list_id__in=GameListItem.objects.filter(concept=self).values('game_list_id'),
+        ).delete()
+        GameListItem.objects.filter(concept=other).update(concept=self)
+
+        # Both denormalized invariants have to be restored, and neither is optional. `game_count` is
+        # what the browse grid shows and sorts on, and a drop above leaves it high FOREVER (nothing
+        # recomputes it, and the service's own decrements can never bring an inflated counter back
+        # down past zero). Positions are consumed as dense by the cover prefetch, so the hole a drop
+        # leaves shows three covers on a four-game list.
+        for game_list in GameList.objects.filter(pk__in=touched):
+            items = list(
+                GameListItem.objects.filter(game_list=game_list).order_by('position', 'pk')
+            )
+            for index, item in enumerate(items):
+                if item.position != index:
+                    item.position = index
+                    item.save(update_fields=['position'])
+            GameList.objects.filter(pk=game_list.pk).update(game_count=len(items))
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):
