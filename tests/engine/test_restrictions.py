@@ -341,13 +341,15 @@ def test_a_full_restriction_blocks_every_way_of_writing(client):
     content, asserted on the DATABASE -- a gate that redirects after writing passes a status-code
     test, and the whole failure mode here is silent.
 
-    THIS CLAIM WAS FALSE WHEN FIRST WRITTEN. It said "every UGC endpoint" and posted at three, which
-    happened to be the three that had gates. An audit enumerating the routed writers found four more
-    -- roadmap notes (create and edit), roadmap merge/publish, comment edit, and the donor-wall
-    message -- none of which this would have caught. A sweep that only visits the doors you
-    remembered to lock proves nothing about the building.
+    THIS CLAIM WAS FALSE TWICE. It first said "every UGC endpoint" while posting at three -- the
+    three that happened to have gates. An audit enumerating the routed writers found four more, and
+    the fix rewrote this docstring to claim MORE ("every routed way of writing") while still posting
+    at the same three. A sweep that visits only the doors you remembered to lock proves nothing
+    about the building, and saying otherwise twice is worse than saying it once.
 
-    The list below is the answer to "did we cover everything", so a new UGC endpoint belongs in it.
+    The list below is now the actual answer to "did we cover everything", and a new UGC writer
+    belongs in it. The service-level ones are called directly because they have no single endpoint
+    of their own; the point is that every WRITER is represented.
     """
     hunter, author = _hunter(), _hunter(psn='someoneelse')
     concept = ConceptFactory()
@@ -358,16 +360,28 @@ def test_a_full_restriction_blocks_every_way_of_writing(client):
     _restrict(hunter, 'all_ugc')
     client.force_login(hunter.user)
 
+    from trophies.models import Comment
+    from trophies.services import roadmap_note_service
+    from trophies.services.comment_service import CommentService
+
+    comment = Comment.objects.create(profile=hunter, concept=concept, body='original words')
+
     _rate(client, hunter, blurb='a quick take')
     client.post(f'/api/v1/games/{game.pk}/flag/', {'flag_type': 'delisted'},
                 content_type='application/json')
     client.post(f'/api/v1/ratings/blurb/{their_rating.pk}/report/', {'reason': 'spam'},
                 content_type='application/json')
+    edited, _why = CommentService.edit_comment(comment, hunter, 'replaced words')
+    with pytest.raises(roadmap_note_service.NoteError):
+        roadmap_note_service.refuse_if_restricted(hunter)
 
     assert GameFlag.objects.count() == 0, 'flagged a game'
     assert BlurbReport.objects.count() == 0, 'reported a take'
     assert not UserConceptRating.objects.filter(profile=hunter).exclude(blurb='').exists(), (
         'wrote a quick take')
+    assert edited is False, 'edited a comment'
+    comment.refresh_from_db()
+    assert comment.body == 'original words'
 
 
 def test_lifting_lets_them_write_again(client):
@@ -699,4 +713,145 @@ def test_an_unrestricted_hunter_can_still_edit_their_comment():
     ok, _refusal = CommentService.edit_comment(comment, hunter, 'replaced words')
 
     assert ok is True
+
+
+# ── what the re-audit of the escape-hatch fix found ──────────────────────────────────────────────
+
+def test_the_restriction_list_renders_after_the_account_is_deleted():
+    """`user` is SET_NULL, so `user_id` is None on exactly the row the design exists to preserve --
+    and `{% url 'admin_person' None %}` raises NoReverseMatch rather than rendering nothing, which
+    took out the whole list for every filter. This is the ONLY page carrying the Lift form, so the
+    restriction that survived became unliftable."""
+    from django.test import Client
+
+    hunter = _hunter()
+    _restrict(hunter, 'all_ugc')
+    old_user = hunter.user            # `unlink_user()` nulls it on the instance
+    hunter.unlink_user()
+    old_user.delete()
+
+    client = Client()
+    client.force_login(_admin())
+    resp = client.get(reverse('admin_restrictions'))
+
+    assert resp.status_code == 200, 'one orphaned row poisons the list for every filter'
+    assert 'account deleted' in resp.content.decode()
+
+
+def test_a_surviving_restriction_is_visible_on_the_person_page():
+    """It said "this hunter has never been restricted" about somebody the gate was actively
+    blocking -- the same "still barred with nothing saying so" the clash check exists to kill,
+    reintroduced through the other key."""
+    from django.test import Client
+    from trophies.services.verification_service import VerificationService
+
+    hunter = _hunter()
+    _restrict(hunter, 'all_ugc')
+    old_user = hunter.user
+    hunter.unlink_user()
+    old_user.delete()
+    new_user = UserFactory()
+    VerificationService.link_profile_to_user(hunter, new_user)
+
+    client = Client()
+    client.force_login(_admin())
+    body = client.get(reverse('admin_person', args=[new_user.pk])).content.decode()
+
+    assert 'never been restricted' not in body
+    assert 'spam, third time' in body
+
+
+def test_a_second_restriction_cannot_be_stacked_on_a_surviving_one():
+    """The admin's natural next move after seeing nothing on the page. It succeeded, producing two
+    live rows covering one person -- and lifting the visible one left them barred by the other."""
+    from trophies.services.verification_service import VerificationService
+
+    hunter = _hunter()
+    _restrict(hunter, 'all_ugc')
+    old_user = hunter.user
+    hunter.unlink_user()
+    old_user.delete()
+    new_user = UserFactory()
+    VerificationService.link_profile_to_user(hunter, new_user)
+
+    with pytest.raises(restriction_service.RestrictionError):
+        restriction_service.apply_restriction(new_user, 'all_ugc', _admin(), 'again')
+
+    assert UserRestriction.objects.count() == 1
+
+
+def test_restricting_before_a_psn_link_still_survives_the_account_going():
+    """`profile` was snapshotted at write time, so a restriction applied BEFORE the hunter linked
+    stored none -- and when the account was later deleted BOTH halves went null and the row matched
+    nothing, forever. An admin can absolutely restrict somebody who has not linked: People search
+    matches on email and the person page renders for them."""
+    from trophies.services.verification_service import VerificationService
+
+    unlinked = UserFactory()
+    restriction_service.apply_restriction(unlinked, 'all_ugc', _admin(), 'abusive support emails')
+    assert UserRestriction.objects.get().profile_id is None
+
+    profile = ProfileFactory(user=unlinked, is_linked=True, psn_username='latelinker')
+    restriction_service.attach_profile(profile)
+
+    profile.unlink_user()
+    unlinked.delete()
+    new_user = UserFactory()
+    profile.refresh_from_db()
+    VerificationService.link_profile_to_user(profile, new_user)
+
+    assert restriction_service.is_restricted_from(profile, 'quick_takes') is True, (
+        'the restriction lost both halves and matched nothing'
+    )
+
+
+def test_linking_a_psn_account_attaches_the_restrictions_automatically():
+    """The wiring, not just the helper: `link_profile_to_user` is the moment the durable half comes
+    into existence, so it is where the attach has to happen."""
+    from trophies.services.verification_service import VerificationService
+
+    user = UserFactory()
+    restriction_service.apply_restriction(user, 'reports', _admin(), 'a reason')
+    profile = ProfileFactory(user=None, is_linked=False, psn_username='newlylinked')
+
+    UserRestriction.objects.filter(user=user).update(user=user)
+    profile.user = None
+    profile.save(update_fields=['user'])
+    VerificationService.link_profile_to_user(profile, user)
+
+    assert UserRestriction.objects.get().profile_id == profile.pk
+
+
+def test_a_refused_reversal_is_reported_as_a_warning_not_a_success():
+    """`report()` had no test at all. It exists because "Decision reversed." for a reversal that
+    deliberately did nothing is the page contradicting its own banner."""
+    from django.contrib import messages as django_messages
+    from django.test import Client
+
+    from trophies.models import ModerationAction
+    from trophies.services import moderation_service
+
+    profile = _hunter()
+    concept = ConceptFactory()
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=None, blurb='words',
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0)
+    admin = _admin()
+    first = moderation_service.hide_blurb_without_a_report(rating, admin, 'went looking')
+    report = BlurbReport.objects.create(
+        rating=rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+    moderation_service.hide_blurb(report, admin, 'reported too')
+
+    client = Client()
+    client.force_login(admin)
+    resp = client.post(reverse('admin_reverse_decision', args=[first.pk]),
+                       {'reason': 'my call was wrong'}, follow=True)
+
+    banner = [m for m in resp.context['messages']]
+    assert len(banner) == 1
+    assert banner[0].level == django_messages.WARNING, 'a no-op reversal announced as success'
+    assert 'nothing was put back' in str(banner[0])
+    assert 'alert-warning' in resp.content.decode(), 'the warning still renders green'
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is True
 

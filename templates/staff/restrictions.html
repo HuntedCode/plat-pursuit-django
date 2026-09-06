@@ -29,7 +29,10 @@ nothing already published, and it never touches an account's trophies, badges or
 {% if messages %}
 <div class="flex flex-col gap-2 mb-4">
     {% for message in messages %}
-    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} py-2 text-sm">
+    {% comment %}Three levels, not two. A `WARNING` -- "recorded, but nothing was put back" -- rendered
+        GREEN under an error/else branch, so the words changed and the signal an admin actually reads
+        did not.{% endcomment %}
+        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %} py-2 text-sm">
         {{ message }}
     </div>
     {% endfor %}
@@ -43,7 +46,18 @@ nothing already published, and it never touches an account's trophies, badges or
         <div class="card-body p-4 gap-2">
 
             <div class="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+{% comment %}`user` is SET_NULL, so `user_id` is None for exactly the row that survived an account
+            deletion -- and `{% templatetag openblock %} url %}` raises NoReverseMatch rather than
+            rendering nothing, which took out the whole list for every filter. This is the only page
+            carrying the Lift form, so the restriction that survived became unliftable.{% endcomment %}
+                {% if row.user_id %}
                 <a class="text-base font-bold link link-hover" href="{% url 'admin_person' row.user_id %}">{{ row.user.display_name }}</a>
+                {% elif row.profile %}
+                <span class="text-base font-bold text-base-content">{{ row.profile.psn_username }}</span>
+                <span class="badge badge-sm badge-ghost">account deleted</span>
+                {% else %}
+                <span class="text-base font-bold text-base-content/60">a deleted account</span>
+                {% endif %}
                 <span class="badge badge-sm badge-error font-bold">{{ row.get_scope_display }}</span>
                 {% if row.is_live %}
                     {% if row.expires_at %}

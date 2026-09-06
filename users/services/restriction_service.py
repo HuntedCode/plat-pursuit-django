@@ -58,6 +58,23 @@ def _live(queryset):
             .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())))
 
 
+def live_for(user=None, profile=None):
+    """Every live restriction covering this hunter, matched on EITHER half.
+
+    One definition, because the gate, the clash check and the person page each need it and each had
+    its own: the gate learned about the profile half and the other two did not, so a restriction that
+    survived an account deletion blocked writes while the admin page said "never been restricted" --
+    and the clash check let a second one be applied on top of it.
+    """
+    match = Q(pk__in=[])          # matches nothing until we are given something to match on
+    if user is not None:
+        match |= Q(user=user)
+        profile = profile or getattr(user, 'profile', None)
+    if profile is not None:
+        match |= Q(profile=profile)
+    return _live(UserRestriction.objects.filter(match))
+
+
 def active_scopes_for(profile):
     """The scopes this hunter is currently restricted from. One query.
 
@@ -65,11 +82,8 @@ def active_scopes_for(profile):
     be null: the account is gone after a self-service deletion, the profile is absent for an account
     that never linked PSN. Asking for only one of them is how somebody walks away from a sanction.
     """
-    user_id = getattr(profile, 'user_id', None)
-    match = Q(profile=profile)
-    if user_id:
-        match |= Q(user_id=user_id)
-    return set(_live(UserRestriction.objects.filter(match)).values_list('scope', flat=True))
+    return set(live_for(user=getattr(profile, 'user', None), profile=profile)
+               .values_list('scope', flat=True))
 
 
 def active_scopes(user_id):
@@ -109,8 +123,7 @@ def apply_restriction(user, scope, admin, reason, expires_at=None):
     shape the moderation queue uses: without it two admins acting at once both succeed, and the
     second writes an entry claiming it restricted somebody who was already restricted.
 
-    The lock is taken over the account's restriction ROWS rather than the account, so it does not
-    serialise unrelated admin work on the same person.
+    The lock is on the ACCOUNT row, not on the restrictions -- see the comment at the lock itself.
     """
     reason = _require_reason(reason)
     if scope not in dict(UserRestriction.SCOPES):
@@ -129,7 +142,10 @@ def apply_restriction(user, scope, admin, reason, expires_at=None):
     # the case where an unlocked read would have caught it too. The account always exists.
     CustomUser.objects.select_for_update().filter(pk=user.pk).first()
 
-    live = list(_live(UserRestriction.objects.filter(user=user)))
+    # BOTH halves, or the clash check cannot see a restriction that outlived an account deletion --
+    # and the admin's natural next move (restrict them again) produces two live rows covering one
+    # person, where lifting the visible one leaves them barred by the invisible one.
+    live = list(live_for(user=user))
     # Coverage OVERLAP, not membership. `covering = {'all_ugc', scope}` refused broad-then-narrow and
     # waved narrow-then-broad straight through, so `quick_takes` followed by `all_ugc` produced two
     # live rows -- and lifting the one an admin could see left the hunter still barred, with no page
@@ -159,6 +175,22 @@ def apply_restriction(user, scope, admin, reason, expires_at=None):
     logger.info('Restriction applied: user=%s scope=%s by=%s until=%s',
                 user.pk, scope, getattr(admin, 'pk', None), expires_at)
     return restriction
+
+
+def attach_profile(profile):
+    """Point this profile's account's restrictions at the profile, now that there is one.
+
+    `apply_restriction` snapshots `user.profile` at write time, so a restriction applied BEFORE the
+    hunter linked PSN stored `profile=None` -- and when the account was later deleted, both halves
+    went null and the row matched nothing, forever. An admin can absolutely restrict somebody who has
+    not linked yet: People search matches on email, and the person page renders for them.
+
+    Called from `link_profile_to_user`, which is the moment the durable half comes into existence.
+    """
+    user = getattr(profile, 'user', None)
+    if user is None:
+        return 0
+    return UserRestriction.objects.filter(user=user, profile__isnull=True).update(profile=profile)
 
 
 @transaction.atomic

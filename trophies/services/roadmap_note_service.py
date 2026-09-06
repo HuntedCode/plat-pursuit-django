@@ -280,6 +280,19 @@ def notify_new_mentions(note: 'RoadmapNote', *, prior_body: Optional[str] = None
 #  CRUD
 # --------------------------------------------------------------------------- #
 
+def refuse_if_restricted(author, doing='post'):
+    """Public twin of the note guard, for the other roadmap writers.
+
+    Merging a branch and publishing a guide put a hunter's prose in front of everybody, exactly as a
+    note does. They were enumerated as ungated writers and then not gated, which is the same gap
+    twice: the audit named four and three were closed.
+    """
+    from users.services import restriction_service
+
+    if restriction_service.is_restricted_from(author, 'reports'):
+        raise NoteError(f'Your account is currently restricted from {doing}ing.')
+
+
 def _refuse_if_restricted(author):
     """Roadmap notes are user-authored prose, so a restriction covers them.
 
@@ -313,6 +326,10 @@ def create_note(
         require pre-writing a guide body. Django's TextField permits ''
         at the DB level, so empty-body guides are valid.
     """
+    # FIRST, before anything writes. It used to sit just above `RoadmapNote.objects.create`, by
+    # which point the editor path had already committed a `TrophyGuide` row via `get_or_create` --
+    # nothing here opens a transaction, so a refused note still left that behind.
+    _refuse_if_restricted(author)
     body = (body or '').strip()
     if not body:
         raise NoteError("Note body is required.")
@@ -362,7 +379,6 @@ def create_note(
     else:
         raise NoteError(f"Unknown target_kind '{target_kind}'.")
 
-    _refuse_if_restricted(author)
     note = RoadmapNote.objects.create(
         roadmap=roadmap,
         author=author,

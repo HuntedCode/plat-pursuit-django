@@ -4357,9 +4357,10 @@ class GameFlagAdmin(admin.ModelAdmin):
         from trophies.services import moderation_service
 
         return run_with_a_reason(
-            # NOT pre-filtered to pending. The service's own precondition refuses a row somebody
-            # already handled and says so per row, where a `.filter()` here would drop it silently --
-            # and "four of your five were already done" is exactly what a sweeping admin needs told.
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
             self, request, queryset,
             title='Approve these flags?', verb='Approved',
             apply=moderation_service.approve_game_flag)
@@ -4370,9 +4371,10 @@ class GameFlagAdmin(admin.ModelAdmin):
         from trophies.services import moderation_service
 
         return run_with_a_reason(
-            # NOT pre-filtered to pending. The service's own precondition refuses a row somebody
-            # already handled and says so per row, where a `.filter()` here would drop it silently --
-            # and "four of your five were already done" is exactly what a sweeping admin needs told.
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
             self, request, queryset,
             title='Dismiss these flags?', verb='Dismissed',
             apply=moderation_service.dismiss_game_flag)
@@ -4829,9 +4831,10 @@ class BlurbReportAdmin(admin.ModelAdmin):
         from trophies.services import moderation_service
 
         return run_with_a_reason(
-            # NOT pre-filtered to pending. The service's own precondition refuses a row somebody
-            # already handled and says so per row, where a `.filter()` here would drop it silently --
-            # and "four of your five were already done" is exactly what a sweeping admin needs told.
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
             self, request, queryset,
             title='Hide these quick takes?', verb='Hid',
             apply=moderation_service.hide_blurb)
@@ -4842,9 +4845,10 @@ class BlurbReportAdmin(admin.ModelAdmin):
         from trophies.services import moderation_service
 
         return run_with_a_reason(
-            # NOT pre-filtered to pending. The service's own precondition refuses a row somebody
-            # already handled and says so per row, where a `.filter()` here would drop it silently --
-            # and "four of your five were already done" is exactly what a sweeping admin needs told.
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
             self, request, queryset,
             title='Dismiss these reports?', verb='Dismissed',
             apply=moderation_service.dismiss_blurb_report)

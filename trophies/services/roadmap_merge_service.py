@@ -1543,6 +1543,13 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
 
     Raises MergeError on permission failure, schema mismatch, or stale lock.
     """
+    # A merge puts a hunter's prose in front of everybody, exactly as a note does. This was
+    # enumerated as an ungated writer alongside the notes and then not gated -- the same gap twice.
+    from users.services import restriction_service
+
+    if restriction_service.is_restricted_from(profile, 'reports'):
+        raise MergeError('Your account is currently restricted from publishing.')
+
     if lock.payload_version != RoadmapEditLock.PAYLOAD_VERSION:
         raise MergeError(f"Unsupported payload version {lock.payload_version}")
 

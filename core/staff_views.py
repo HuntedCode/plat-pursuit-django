@@ -296,8 +296,12 @@ class PersonView(StaffRequiredMixin, TemplateView):
 
         # Live first, then the ended ones: an admin deciding whether to restrict somebody again
         # needs to know both that nothing is in force AND that three things have been.
+        # Both halves, via the service. Keying on `user` alone told an admin "this hunter has never
+        # been restricted" about somebody the gate was actively blocking -- the restriction having
+        # survived an account deletion, which is the state the profile FK exists to produce.
         context['restrictions'] = list(
-            UserRestriction.objects.filter(user=person)[:HISTORY_LIMIT])
+            UserRestriction.objects
+            .filter(Q(user=person) | Q(profile=getattr(person, 'profile', None)))[:HISTORY_LIMIT])
         context['scopes'] = UserRestriction.SCOPES
         context['durations'] = RESTRICTION_DURATIONS
 

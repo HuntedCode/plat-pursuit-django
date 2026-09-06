@@ -106,16 +106,22 @@ a `CustomUser` returned "not restricted", and a gate whose default is permissive
 | `GameFlagService.submit_flag` | `trophies/services/game_flag_service.py` | the only writer of `GameFlag`, so a future caller cannot route around the view |
 | `GroupRatingView.post` | `api/rating_views.py` | writing a quick take |
 | `roadmap_note_service` | `trophies/services/roadmap_note_service.py` | notes, on create **and edit** |
-| `FundraiserDonateView` | `api/fundraiser_views.py` | the donor-wall message only — the donation itself is never refused |
+| `CreateDonationView` | `api/fundraiser_views.py` | the donor-wall message only — the donation itself is never refused |
+| `merge_branch` | `trophies/services/roadmap_merge_service.py` | merging a branch into a live guide |
 
 **A quick-take restriction stops the words and nothing else.** The scores save as normal, because
 dropping them would rewrite a game's averages as a side effect of a decision about somebody's prose —
 the same principle that keeps `blurb_hidden` separate from the blurb.
 
-`can_interact` takes an `action` parameter so its refusal names what the caller was doing. All three
-of its messages said "interact with comments" while it is called from the quick-take report endpoint
-and now the game-flag one; a hunter told they cannot "interact with comments" after pressing Report
-on a game goes looking for a comment they never wrote.
+`can_interact` takes an `action` parameter so its refusal names what the caller was doing. Both of
+its messages said "interact with comments" while it is called from the quick-take report endpoint and
+now the game-flag one; a hunter told they cannot "interact with comments" after pressing Report on a
+game goes looking for a comment they never wrote.
+
+**Two behaviour changes ship with these gates that are not about restrictions.** `edit_comment` gains
+a linked-profile check it never had (the comment system is legacy and read-only, so the practical
+impact is nil), and the game-flag endpoint's refusal moves from `400` to `403` with reworded copy —
+its only consumer reads `error` off the JSON regardless of status, so the UX is unchanged.
 
 ## The audit log
 
@@ -149,9 +155,13 @@ Two details worth keeping:
 - **Each row is its own transaction.** Being refused because a colleague got there first is an
   ordinary outcome on a queue two people work, and it must not roll back the thirty-nine that
   succeeded. The page reports both counts.
-- **The queryset is NOT pre-filtered to pending.** The service's precondition refuses an
-  already-handled row and says which, where a `.filter()` would drop it silently — and "four of your
-  five were already done" is the thing a sweeping admin needs told.
+- **The rows are re-resolved from the posted pks on the confirming submit.** Django hands an action
+  the *ChangeList* queryset, and the confirmation page posts back to the same URL — query string
+  included — so the changelist filter is re-applied on the second submit. Working the queue at
+  `?status=pending` (the intended workflow), a row a colleague decided in between no longer matched,
+  was dropped before the service saw it, and the success line counted a smaller denominator: the page
+  listed five and the result said "Approved 4 of 4". `_selected_rows` resolves from the model manager
+  so every row the admin was shown reaches the service and can be refused **by name**.
 
 `unhide_blurb` was **removed** rather than rerouted. It was a bare `queryset.update(blurb_hidden=False)`
 — a reversal with no record that anything was reversed, which is the one thing the log exists to make

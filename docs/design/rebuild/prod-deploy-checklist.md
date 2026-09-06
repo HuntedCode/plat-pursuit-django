@@ -1198,3 +1198,29 @@ their name on the leaderboard. `PURSUER_RANKS` is calibrated on the floored scal
       on BOTH `recompute_profile_job_xp` and `grant_job_xp_bulk` (the pattern
       `badge_xp.recompute_standing` already uses) -- deliberately NOT done here, because it touches
       the accept hot path and that wants its own branch and a differential test.
+
+## Admin Hub / Django-admin lockdown (2026-09, branch `feat/admin/admin-hub`)
+
+- [ ] **BEFORE merging: confirm a production superuser exists.** `/admin/` now requires
+      `is_active AND is_staff AND is_superuser` (`core/admin_site.py`). An account provisioned as
+      `role='admin'` has `is_staff` and NOT `is_superuser`, and would be locked out the moment this
+      deploys -- recoverable only from a Render shell. Check with:
+      `python manage.py shell -c "from users.models import CustomUser; print(list(CustomUser.objects.filter(is_superuser=True).values_list('id','email','is_staff','is_active')))"`
+- [ ] **Confirm the admin-team roster.** Every non-superuser Administrator loses `/admin/` on
+      deploy, and there is no `/staff/` equivalent yet for Contract `is_live` flipping or BadgeSeries
+      artwork work -- both of which this checklist's own tasks #3 and #8 describe doing there. Grant
+      `is_superuser` to whoever needs it, or expect to be asked.
+- [ ] **Prefer a low-sync window, or set `lock_timeout` on the migrate step.** Five FK-constraint
+      adds take `SHARE ROW EXCLUSIVE` on `users_customuser` and `trophies_profile`. The work is
+      milliseconds, but the ALTER waits behind any in-flight long transaction on those tables, and
+      every subsequent write queues behind it. `trophies_profile` is written constantly by sync.
+- [ ] **Sanity-check the backfill's input size** before migrating:
+      `SELECT count(*) FROM trophies_moderationaction;` -- expect well under 100 (the table was
+      created 2026-09-04). `0328` loads the whole table into memory; that is fine at this size and
+      would not be at 50k.
+- [ ] **Rollback is CODE-ONLY.** Redeploy `main`'s commit and LEAVE all nine migrations applied:
+      `main` never references the new tables or columns, and its own `_require_reason` cannot violate
+      the new CheckConstraint. Do NOT `migrate` backwards -- reversing `users/0027` restores
+      `user_id NOT NULL`, which fails if any restriction has outlived its account (the exact case
+      that migration exists for) and leaves the rollback half-applied.
+

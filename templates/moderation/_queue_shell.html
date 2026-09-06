@@ -79,7 +79,10 @@ so acting on a report returns you to the list you were reading rather than to th
     {% if messages %}
     <div class="flex flex-col gap-2 mb-4">
         {% for message in messages %}
-        <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %} py-2 text-sm">
+        {% comment %}Three levels, not two. A `WARNING` -- "recorded, but nothing was put back" -- rendered
+        GREEN under an error/else branch, so the words changed and the signal an admin actually reads
+        did not.{% endcomment %}
+        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %} py-2 text-sm">
             {{ message }}
         </div>
         {% endfor %}

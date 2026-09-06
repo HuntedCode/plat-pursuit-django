@@ -54,6 +54,37 @@ def _sweep(client, url, action, rows, reason=None):
     return client.post(url, data, follow=True)
 
 
+def _submit_the_confirm_page(client, url, action, rows, reason):
+    """Click through the confirmation page by POSTING THE FORM IT RENDERED.
+
+    Hand-building the second POST -- which the other tests here do, for brevity -- leaves the page's
+    own hidden inputs completely untested: delete the `action` field from the template and all of
+    them still pass, while a browser gets Django's "No action selected." and the sweep silently does
+    nothing. This one parses the rendered form and submits exactly what it contains.
+    """
+    import re
+
+    page = client.post(url, {'action': action,
+                             '_selected_action': [str(r.pk) for r in rows]})
+    html = page.content.decode()
+    assert 'Why?' in html, 'the confirmation page did not render'
+
+    # The close tag AFTER our form's start, not the first one in the document -- the admin shell
+    # renders its own forms above ours, so slicing to `index('</form>')` produced an empty span.
+    start = html.index('<form method="post"')
+    form = html[start:html.index('</form>', start)]
+    fields = dict(re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"', form))
+    selected = re.findall(r'<input type="hidden" name="_selected_action" value="([^"]+)"', form)
+    fields.pop('_selected_action', None)
+    fields.pop('csrfmiddlewaretoken', None)
+
+    assert selected, 'the page carries no selected rows, so the submit would act on nothing'
+    assert fields.get('action') == action, 'the page does not round-trip which action to run'
+
+    return client.post(url, {**fields, '_selected_action': selected, 'reason': reason},
+                       follow=True)
+
+
 # ── the confirmation page ────────────────────────────────────────────────────────────────────────
 
 def test_a_sweep_stops_and_asks_why(client):
@@ -87,7 +118,11 @@ def test_a_sweep_with_no_reason_is_refused_and_changes_nothing(client):
 
     resp = _sweep(client, FLAG_CHANGELIST, 'approve_selected', [flag], reason='  ')
 
-    assert 'A reason is required' in resp.content.decode()
+    # The PAGE, not the phrase. "A reason is required" has two producers -- this template's
+    # errornote and the service's own refusal, which surfaces as a message on the redirect -- so
+    # asserting the string alone passed with the admin-side gate deleted entirely.
+    assert 'Why?' in resp.content.decode(), 'it did not come back to ask'
+    assert not resp.redirect_chain, 'it ran the action and redirected instead of asking again'
     flag.refresh_from_db()
     assert flag.status == 'pending'
     assert ModerationAction.objects.count() == 0
@@ -212,3 +247,85 @@ def test_there_is_no_bulk_unhide(client):
 
     assert 'unhide_blurb' not in BlurbReportAdmin.actions
     assert not hasattr(BlurbReportAdmin, 'unhide_blurb')
+
+
+# ── the page's own form, and the race it exists to report ────────────────────────────────────────
+
+def test_submitting_the_rendered_confirmation_page_works(client):
+    """The round trip a human actually performs."""
+    flags = [_flag(), _flag()]
+    client.force_login(_owner())
+
+    _submit_the_confirm_page(client, FLAG_CHANGELIST, 'approve_selected', flags,
+                             reason='confirmed, both delisted')
+
+    assert ModerationAction.objects.count() == 2
+    for flag in flags:
+        flag.refresh_from_db()
+        assert flag.status == 'approved'
+
+
+def test_a_row_handled_while_the_page_was_open_is_named_not_dropped(client):
+    """THE race this module exists to report, and the one it got wrong.
+
+    Django hands an action the ChangeList queryset, and the confirm page posts back to the same URL
+    with its query string -- so on a FILTERED changelist the second submit re-applies the filter. A
+    row a colleague decided in between stopped matching, was dropped before the service saw it, and
+    the success line counted a smaller denominator: the page listed two, the result said "1 of 1".
+    """
+    from trophies.services import moderation_service
+
+    mine, theirs = _flag(), _flag()
+    moderator = UserFactory()
+    moderator.role = 'moderator'
+    moderator.save()
+    client.force_login(_owner())
+
+    filtered = FLAG_CHANGELIST + '?status=pending'
+    page = client.post(filtered, {'action': 'approve_selected',
+                                  '_selected_action': [str(mine.pk), str(theirs.pk)]})
+    assert 'Why?' in page.content.decode()
+
+    # ...and while the admin is reading it, somebody else decides one of them.
+    moderation_service.dismiss_game_flag(theirs, moderator, 'got there first')
+
+    body = client.post(filtered, {'action': 'approve_selected',
+                                  '_selected_action': [str(mine.pk), str(theirs.pk)],
+                                  '_reasoned_confirm': '1', 'reason': 'sweeping'},
+                       follow=True).content.decode()
+
+    assert '1 of 2' in body, 'the count silently dropped the row instead of reporting it'
+    assert 'Already handled' in body, 'the admin was not told which row was skipped'
+    theirs.refresh_from_db()
+    assert theirs.status == 'dismissed', "the sweep overwrote somebody else's decision"
+
+
+def test_the_admin_gate_uses_the_same_reason_length_as_the_service():
+    """They were two hardcoded 3s. On drift the admin would pass a reason the service then refuses
+    for every row -- N warnings, the typed reason gone, and no page left to retype it in."""
+    from core.services.audit import MIN_REASON_LENGTH
+    from trophies import admin_reasoned_actions
+
+    assert admin_reasoned_actions.MIN_REASON_LENGTH is MIN_REASON_LENGTH
+
+
+def test_a_long_run_of_refusals_is_summarised(client):
+    """One message per row is unbounded: a full changelist page of already-handled rows renders a
+    wall of near-identical warnings and grows the session row holding them."""
+    from trophies.admin_reasoned_actions import MAX_NAMED_REFUSALS
+    from trophies.services import moderation_service
+
+    moderator = UserFactory()
+    moderator.role = 'moderator'
+    moderator.save()
+    flags = [_flag() for _ in range(MAX_NAMED_REFUSALS + 4)]
+    for flag in flags:
+        moderation_service.dismiss_game_flag(flag, moderator, 'all already done')
+    client.force_login(_owner())
+
+    body = _sweep(client, FLAG_CHANGELIST, 'approve_selected', flags,
+                  reason='sweeping').content.decode()
+
+    assert 'and 4 more already handled' in body
+    assert body.count('Already handled') <= MAX_NAMED_REFUSALS
+

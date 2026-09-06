@@ -279,9 +279,11 @@ class SubscriptionPeriod(models.Model):
 class UserRestriction(models.Model):
     """A hunter barred from writing something, for a while or indefinitely.
 
-    FK to `CustomUser`, NOT `Profile`. A restriction is an ACCOUNT fact: hanging it off the profile
-    would make unlinking and relinking a PSN account a way to shed it, and the gates that read this
-    all have a profile in hand and can reach the user through it.
+    FKs to BOTH `CustomUser` and `Profile`, because neither survives alone.
+
+    The first cut keyed on the account only, reasoning that a restriction is an ACCOUNT fact and that
+    hanging it off the profile would make unlinking PSN a way to shed it. That reasoning holds and is
+    incomplete -- see the `profile` field below for the hatch it missed.
 
     WHAT IT IS NOT. It is not `is_active=False`, which kills login and every read; this is a targeted
     write ban that leaves their trophies, badges and leaderboard positions exactly as they were. And
