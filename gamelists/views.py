@@ -9,12 +9,16 @@ exist for tests and for a browser pass but are closed to everybody else until th
 both on. `_DevelopmentGate` is one mixin and its removal is the switch -- see `test_lists_hidden`,
 which pins that nothing links here yet.
 """
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
-from django.views.generic import ListView
+from django.views.generic import ListView, View
 
-from gamelists.models import GameList, GameListLike
+from gamelists.models import GameList, GameListFollow, GameListLike
+from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games
 from trophies.mixins import HtmxListMixin, StaffRequiredMixin
 
@@ -137,3 +141,118 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
         if not self.request.user.is_authenticated:
             return None
         return getattr(self.request.user, 'profile', None)
+
+
+class _LinkedProfileRequired:
+    """A list belongs to a PROFILE, so a signed-in account without one has nothing to show.
+
+    Same shape and same message as `CareerView`, which is the other page whose entire content hangs
+    off a linked profile. Without it, `request.user.profile` raises `RelatedObjectDoesNotExist` and
+    the page 500s -- which a test caught here rather than a hunter catching it in production.
+    """
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if not profile or not profile.is_linked:
+                messages.info(request, 'Link your PSN account to build lists.')
+                return redirect('link_psn')
+        return super().dispatch(request, *args, **kwargs)
+
+
+class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, ListView):
+    """Your own lists, and the ones you follow.
+
+    ONE VIEW WITH A `scope`, not two pages -- the Career Board|History pattern: a single argument
+    threaded through a single pipeline, no schema, and a URL that reloads into the state you left.
+
+    This is also where following finally MEANS something. There is no notification surface and there
+    will not be one this release, so a follow is a bookmark; "Following" is where the bookmark
+    lives. Building the follow button without this tab would have shipped a promise with nowhere to
+    land.
+    """
+
+    template_name = 'gamelists/my_lists.html'
+    context_object_name = 'game_lists'
+    paginate_by = 24
+
+    SCOPES = (
+        ('mine', 'Mine'),
+        ('following', 'Following'),
+    )
+    _DEFAULT_SCOPE = 'mine'
+
+    def _scope(self):
+        raw = self.request.GET.get('scope', self._DEFAULT_SCOPE)
+        return raw if raw in dict(self.SCOPES) else self._DEFAULT_SCOPE
+
+    def get_queryset(self):
+        profile = self.request.user.profile
+        if self._scope() == 'following':
+            # `.public()` and not `.visible()`: a list you follow can be un-published by its author,
+            # and following it must not become a private window into their library afterwards.
+            return (
+                GameList.objects.public()
+                .filter(followers__profile=profile)
+                .select_related('owner')
+                .order_by('-updated_at')
+            )
+        # Your own INCLUDES your private ones -- that is the whole point of "mine".
+        return GameList.objects.owned_by(profile).select_related('owner')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lists = context['game_lists']
+        attach_cover_games(lists, per_list=LIST_TILE_COVERS)
+
+        profile = self.request.user.profile
+        scope = self._scope()
+        context['scope'] = scope
+        context['scopes'] = self.SCOPES
+        context['is_mine'] = scope == 'mine'
+
+        # The cap, shown rather than discovered by being refused. `owned_by` excludes soft-deleted
+        # rows, which is the same count `create_list` enforces against -- so the number on screen and
+        # the number the service will act on cannot disagree.
+        context['list_count'] = GameList.objects.owned_by(profile).count()
+        context['list_cap'] = svc.max_lists_for(profile)
+        context['at_cap'] = context['list_count'] >= context['list_cap']
+        context['suggested_names'] = svc.SUGGESTED_NAMES
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'My Lists'},
+        ]
+        return context
+
+
+class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
+    """The create modal's POST target.
+
+    A plain form post rather than JSON: creating a list is a navigation (you land on the new list),
+    and a form that works without JavaScript is the cheaper, sturdier version of that. The modal is
+    progressive enhancement over a form that would submit fine on its own.
+
+    Every rule lives in the service -- the cap, the restriction gate, the linked-account check, the
+    banned words, the sanitiser. This translates a refusal into a message and a redirect and does
+    nothing else, which is the point of having the service at all.
+    """
+
+    def post(self, request):
+        try:
+            game_list = svc.create_list(
+                request.user.profile,
+                name=request.POST.get('name', ''),
+                description=request.POST.get('description', ''),
+                # Deliberately NOT read from the form. A list is private on creation and publishing
+                # is a separate, deliberate act on the list itself -- the decision that makes the
+                # public/private state mean something rather than being a checkbox you tick while
+                # thinking about a name.
+                is_public=False,
+            )
+        except svc.ListError as exc:
+            messages.error(request, str(exc))
+            return redirect('my_lists')
+
+        messages.success(request, f'"{game_list.name}" is ready. Add some games to it.')
+        return redirect('my_lists')

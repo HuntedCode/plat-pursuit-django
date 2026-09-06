@@ -49,6 +49,17 @@ rather than here. That is also why the loop reads `item.display_image_url` and n
         <span class="pp-gtile__author">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</span>
         <span class="pp-gtile__meta">
             <span class="pp-gtile__count">{{ game_list.game_count|intcomma }} game{{ game_list.game_count|pluralize }}</span>
+            {% comment %} Privacy reads only on YOUR OWN lists (`show_privacy`), because on the public
+            browse grid every tile is public by definition and a "public" chip on all of them is noise.
+            Marking the PRIVATE state rather than the public one is the same choice: a list is private
+            when it is born, so the chip marks the exception, and its absence is the signal that this
+            one is out in the world. {% endcomment %}
+            {% if show_privacy and not game_list.is_public %}
+            <span class="pp-gtile__stat" title="Only you can see this list">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Private
+            </span>
+            {% endif %}
             {% comment %} The like count earns its accent pill only when there is one -- a "0" in the
             highlight colour advertises the wrong thing about somebody's list. {% endcomment %}
             {% if game_list.like_count %}

@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}My Lists{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% comment %}
+My Lists. Built from scratch: unlike browse and list detail, this page was never rebuilt in 2026-08
+and was still a pre-rebuild DaisyUI shell (plain `card` divs, a raw grid, no head cascade).
+
+Structure follows the site-wide rule -- STACKED chrome cards, then the content flowing FREE. Header
+card, then the segmented switcher, then the tile grid with no outer wrapper around it, because an
+outer card traps a paginated grid inside an ever-growing border.
+
+The switcher EARNS its place here, where the browse page's deliberately does not: there are two real
+kinds of thing to see. "Following" is also the only delivery surface a follow has -- there is no
+notification system this release -- so the tab is the feature, not decoration on it.
+{% endcomment %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Header: identity, the cap as a fact rather than a surprise, and the one primary action ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">My Lists</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        A backlog, a ranking, a run in order. Yours until you publish one.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-3 shrink-0">
+                    <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                        <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ list_count }}<span class="text-base-content/40">/{{ list_cap }}</span></span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
+                    </div>
+                    {% comment %}Disabled rather than hidden at the cap: a button that vanishes reads as a
+                    bug, and the title says what to do about it.{% endcomment %}
+                    <button type="button" class="btn btn-sm md:btn-md btn-primary gap-1.5 shrink-0"
+                            onclick="document.getElementById('gl-create').showModal()"
+                            {% if at_cap %}disabled title="You are at your limit of {{ list_cap }} lists. Delete one to make room."{% endif %}>
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        <span class="hidden md:inline">New list</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ── The one sanctioned tab treatment: segmented chips, right-aligned, an icon each ── #}
+    <div class="flex items-center justify-end mt-5 mb-3">
+        <div class="pp-switch" role="tablist" aria-label="Which lists to show">
+            {% for value, label in scopes %}
+            <a href="?scope={{ value }}" role="tab" aria-selected="{% if scope == value %}true{% else %}false{% endif %}"
+               class="pp-switch__chip{% if scope == value %} is-active{% endif %}">
+                {% if value == 'mine' %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                {% endif %}
+                <span class="pp-switch__lbl">{{ label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Content, flowing free ── #}
+    <div class="pp-gtile-grid">
+        {% for game_list in game_lists %}
+        {% include 'gamelists/partials/list_tile.html' with game_list=game_list show_privacy=is_mine %}
+        {% empty %}
+        <div class="pp-gtile-empty">
+            {% if is_mine %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <p class="pp-gtile-empty__title">No lists yet</p>
+            <p class="pp-gtile-empty__hint">Start one and add games as you go.</p>
+            {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+            <p class="pp-gtile-empty__title">Not following any lists</p>
+            <p class="pp-gtile-empty__hint">Follow a list and it waits here for you.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% comment %}
+Create, in a native <dialog> -- the house pattern (guidelines, badge picker, email). It wraps a plain
+form that posts and redirects, so the modal is progressive enhancement over something that already
+works: no JSON round trip, no optimistic DOM, nothing to reconcile if the service refuses.
+
+There is deliberately NO public/private control here. A list is private when it is born, and
+publishing is its own act on the list itself. Offering the toggle at creation would make it a
+checkbox somebody ticks while thinking about a name, which is exactly what makes the state
+meaningless.
+{% endcomment %}
+<dialog id="gl-create" class="modal">
+    <div class="modal-box max-w-lg">
+        <h3 class="text-lg font-bold">New list</h3>
+        <p class="text-xs text-base-content/60 mt-1">Private to start. You can publish it whenever it is ready.</p>
+
+        <form method="post" action="{% url 'list_create' %}" class="mt-4 flex flex-col gap-3">
+            {% csrf_token %}
+            <label class="flex flex-col gap-1">
+                <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Name</span>
+                <input type="text" name="name" required maxlength="120" autofocus
+                       class="input input-bordered w-full" placeholder="The Backlog" aria-label="List name" />
+            </label>
+
+            {% comment %}Suggestions, not a menu of the only options. Naming a list is how you tell two of
+            your own apart, so it stays free text for everyone -- these are a shortcut past the blank
+            field, which is the actual friction.{% endcomment %}
+            <div class="flex flex-wrap gap-1.5">
+                {% for suggestion in suggested_names %}
+                <button type="button" class="btn btn-xs btn-ghost border border-base-300"
+                        onclick="this.closest('form').name.value = this.textContent.trim(); this.closest('form').name.focus();">{{ suggestion }}</button>
+                {% endfor %}
+            </div>
+
+            <label class="flex flex-col gap-1">
+                <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Description <span class="font-normal normal-case tracking-normal text-base-content/40">optional</span></span>
+                <textarea name="description" maxlength="1000" rows="2" class="textarea textarea-bordered w-full"
+                          placeholder="What is this list for?" aria-label="List description"></textarea>
+            </label>
+
+            <div class="flex items-center justify-end gap-2 mt-1">
+                <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('gl-create').close()">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Create list</button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button aria-label="Close">close</button></form>
+</dialog>
+{% endblock %}

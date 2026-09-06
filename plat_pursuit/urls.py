@@ -23,7 +23,7 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
-from gamelists.views import BrowseListsView
+from gamelists.views import BrowseListsView, CreateListView, MyListsView
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
@@ -389,10 +389,10 @@ urlpatterns = [
     # somebody can find. The curtain moved from "redirects home" to "turns non-staff away"; the
     # guarantee is stronger, not weaker. Removing `_DevelopmentGate` is the switch.
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
-    path('community/lists/create/', RedirectView.as_view(url='/', permanent=False), name='list_create'),
+    path('community/lists/create/', CreateListView.as_view(), name='list_create'),
     path('community/lists/<int:list_id>/', RedirectView.as_view(url='/', permanent=False), name='list_detail'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
-    path('my-lists/', RedirectView.as_view(url='/', permanent=False), name='my_lists'),
+    path('my-lists/', MyListsView.as_view(), name='my_lists'),
 
     # Rate My Games wizard (ratings-only). Rehoused 2026-08 from /community/ to a root path under the
     # My Pursuit hub: it is login-required, noindex, and works only on YOUR library -- a personal tool

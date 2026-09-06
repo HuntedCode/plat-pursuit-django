@@ -26,13 +26,12 @@ ROOT = Path(__file__).resolve().parents[2]
 #: findable, a gated one is not.
 GATED_PAGES = [
     '/community/lists/',
+    '/my-lists/',
 ]
 
 PAGES = [
-    '/community/lists/create/',
     '/community/lists/1/',
     '/community/lists/1/edit/',
-    '/my-lists/',
     '/lists/',                # the pre-2026 paths, which used to 301 into the ones above
     '/lists/1/',
 ]
@@ -50,8 +49,8 @@ def test_the_redirect_is_temporary_so_it_can_be_taken_back():
     """A 301 is cached by the browser indefinitely. Using one here would keep sending people to the
     homepage long after the rebuilt system ships -- and specifically the people who used lists most,
     because they are the ones holding the bookmarks."""
-    assert client_status('/my-lists/') == 302
-    assert client_status('/community/lists/create/') == 302
+    assert client_status('/community/lists/1/') == 302
+    assert client_status('/community/lists/1/edit/') == 302
 
 
 @pytest.mark.parametrize('url', GATED_PAGES)
@@ -70,6 +69,9 @@ def test_a_rebuilt_page_is_reachable_by_staff_and_nobody_else(client, url):
     staff = UserFactory()
     staff.role = 'admin'
     staff.save()
+    # A linked profile too: My Lists hangs entirely off one, and without it the page redirects to
+    # link_psn rather than rendering -- which is correct behaviour, not a gate failure.
+    ProfileFactory(user=staff, is_linked=True, psn_username=f'staff{staff.pk}')
     client.force_login(staff)
     assert client.get(url).status_code == 200, f'{url} does not render for staff'
 
