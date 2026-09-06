@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load humanize %}
 {% block title %}My Lists{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
@@ -44,8 +45,10 @@ notification system this release -- so the tab is the feature, not decoration on
                     </div>
                     {% comment %}Disabled rather than hidden at the cap: a button that vanishes reads as a
                     bug, and the title says what to do about it.{% endcomment %}
-                    <button type="button" class="btn btn-sm md:btn-md btn-primary gap-1.5 shrink-0"
-                            onclick="document.getElementById('gl-create').showModal()"
+                    {% comment %}`.pp-cta`, the shared button primitive, rather than DaisyUI's `btn` --
+                    it carries the house glow-on-hover and focus ring, and it is what the modal's own
+                    actions use, so the button and the thing it opens speak the same language.{% endcomment %}
+                    <button type="button" class="pp-cta shrink-0" data-gl-open
                             {% if at_cap %}disabled title="You are at your limit of {{ list_cap }} lists. Delete one to make room."{% endif %}>
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                         <span class="hidden md:inline">New list</span>
@@ -102,52 +105,61 @@ publishing is its own act on the list itself. Offering the toggle at creation wo
 checkbox somebody ticks while thinking about a name, which is exactly what makes the state
 meaningless.
 {% endcomment %}
-<dialog id="gl-create" class="modal">
-    <div class="modal-box max-w-lg">
-        <h3 class="text-lg font-bold">New list</h3>
-        <p class="text-xs text-base-content/60 mt-1">Private to start. You can publish it whenever it is ready.</p>
+<dialog id="gl-create" class="gl-dialog" aria-labelledby="gl-create-title">
+    <div class="gl-dialog__box pp-dismissable">
+        <div class="gl-dialog__head">
+            <div>
+                <h2 class="gl-dialog__title" id="gl-create-title">New list</h2>
+                <p class="gl-dialog__sub">Private to start. You can publish it whenever it is ready.</p>
+            </div>
+            <button type="button" class="gl-dialog__close" data-gl-close aria-label="Close">&times;</button>
+        </div>
 
-        <form method="post" action="{% url 'list_create' %}" class="mt-4 flex flex-col gap-3">
+        <form method="post" action="{% url 'list_create' %}" class="stg-form" style="margin-top:16px">
             {% csrf_token %}
-            {% comment %}`maxlength` comes from the model constant, not a literal, so the number the
-            counter shows is the number the service enforces by construction. It used to be written
-            three times -- column, service, template -- which is survivable until you SHOW it to
-            somebody, at which point a stale copy is confidently wrong.{% endcomment %}
-            <label class="flex flex-col gap-1">
-                <span class="flex items-baseline justify-between gap-2">
-                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Name</span>
-                    <span class="text-[0.7rem] tabular-nums text-base-content/40" data-charcount-for="gl-name" aria-hidden="true"></span>
-                </span>
-                <input type="text" id="gl-name" name="name" required maxlength="{{ name_max_length }}" autofocus
-                       data-charcount class="input input-bordered w-full" placeholder="The Backlog" aria-label="List name" />
-            </label>
 
-            {% comment %}Suggestions, not a menu of the only options. Naming a list is how you tell two of
-            your own apart, so it stays free text for everyone -- these are a shortcut past the blank
-            field, which is the actual friction.{% endcomment %}
-            <div class="flex flex-wrap gap-1.5">
+            {% comment %}`.stg-field` / `.stg-input` / `.pp-cta` are the site's own form primitives --
+            reused rather than re-minted, which is the whole reason this file is short. `maxlength`
+            comes from the model constant, so the number the counter shows is the number the service
+            enforces by construction.{% endcomment %}
+            <div class="stg-field">
+                <label class="stg-field__label" for="gl-name">
+                    Name
+                    <span class="gl-count" data-charcount-for="gl-name" aria-hidden="true"></span>
+                </label>
+                <input type="text" id="gl-name" name="name" class="stg-input" required autofocus
+                       maxlength="{{ name_max_length }}" data-charcount autocomplete="off"
+                       placeholder="The Backlog" />
+            </div>
+
+            {% comment %}Suggestions, not a menu of the only options. Naming a list is how you tell two
+            of your own apart, so it stays free text -- these are a shortcut past the blank field,
+            which is the actual friction.{% endcomment %}
+            <div class="gl-suggest">
                 {% for suggestion in suggested_names %}
-                <button type="button" class="btn btn-xs btn-ghost border border-base-300"
-                        onclick="this.closest('form').name.value = this.textContent.trim(); this.closest('form').name.focus();">{{ suggestion }}</button>
+                <button type="button" class="gl-suggest__chip" data-gl-suggest>{{ suggestion }}</button>
                 {% endfor %}
             </div>
 
-            <label class="flex flex-col gap-1">
-                <span class="flex items-baseline justify-between gap-2">
-                    <span class="text-xs font-bold uppercase tracking-wider text-base-content/50">Description <span class="font-normal normal-case tracking-normal text-base-content/40">optional</span></span>
-                    <span class="text-[0.7rem] tabular-nums text-base-content/40" data-charcount-for="gl-description" aria-hidden="true"></span>
-                </span>
-                <textarea id="gl-description" name="description" maxlength="{{ description_max_length }}" rows="3"
-                          data-charcount class="textarea textarea-bordered w-full"
-                          placeholder="What is this list for?" aria-label="List description"></textarea>
-            </label>
+            <div class="stg-field">
+                <label class="stg-field__label" for="gl-description">
+                    Description <span class="stg-field__hint" style="display:inline">optional</span>
+                    <span class="gl-count" data-charcount-for="gl-description" aria-hidden="true"></span>
+                </label>
+                <textarea id="gl-description" name="description" class="stg-input" rows="3"
+                          maxlength="{{ description_max_length }}" data-charcount
+                          placeholder="What is this list for?"></textarea>
+            </div>
 
-            <div class="flex items-center justify-end gap-2 mt-1">
-                <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('gl-create').close()">Cancel</button>
-                <button type="submit" class="btn btn-sm btn-primary">Create list</button>
+            <div class="gl-dialog__foot">
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-close>Cancel</button>
+                <button type="submit" class="pp-cta">Create list</button>
             </div>
         </form>
     </div>
-    <form method="dialog" class="modal-backdrop"><button aria-label="Close">close</button></form>
 </dialog>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/gamelists.js' %}"></script>
 {% endblock %}

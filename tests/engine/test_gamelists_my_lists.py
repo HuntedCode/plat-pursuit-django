@@ -26,6 +26,18 @@ MY_LISTS = '/my-lists/'
 PRIVATE_CHIP = 'Only you can see this list'
 
 
+def _dialog(body):
+    """Just the create dialog.
+
+    `base.html` includes five site-wide modals of its own (unsaved-changes, theme nudge, guidelines
+    ...), all still on the legacy `modal-box` idiom -- so a whole-page search for DaisyUI classes is
+    answered by the chrome and says nothing about this page. Third time a substring assertion here
+    has been answered by something outside the thing under test.
+    """
+    start = body.index('<dialog id="gl-create"')
+    return body[start:body.index('</dialog>', start)]
+
+
 def _grid(body):
     """Just the tile grid, so a substring assertion cannot be answered by the page chrome."""
     start = body.index('pp-gtile-grid')
@@ -339,7 +351,7 @@ def test_both_fields_are_wired_to_a_counter(client):
     for field_id in ('gl-name', 'gl-description'):
         assert f'id="{field_id}"' in body
         assert f'data-charcount-for="{field_id}"' in body
-    assert body.count('data-charcount ') >= 2
+    assert body.count('data-charcount') >= 4, 'a field or its counter target is unwired'
 
 
 def test_the_shared_counter_is_not_a_fourth_copy():
@@ -356,4 +368,38 @@ def test_the_shared_counter_is_not_a_fourth_copy():
         assert 'maxlength' not in gamelists_js.read_text(encoding='utf-8'), (
             'lists rolled their own character counter instead of using the shared one'
         )
+
+
+def test_the_create_modal_uses_the_sites_own_primitives_not_daisyui(client):
+    """The design pass, pinned.
+
+    The first cut wore raw DaisyUI -- `modal-box`, `input input-bordered`, `btn btn-ghost` -- and
+    read as a different product sitting inside this one: DaisyUI's radii, its borders, its button
+    weight, none of them the site's. This asserts the page reaches for the house primitives instead,
+    because "looks wrong" is not something the suite can see and the drift comes back one class at a
+    time.
+    """
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+    dialog = _dialog(body)
+
+    for daisy in ('modal-box', 'input-bordered', 'textarea-bordered', 'btn-ghost', 'btn-primary'):
+        assert daisy not in dialog, f'the DaisyUI idiom is back: {daisy}'
+    # The header's own action button too -- it opens this dialog, so the two must match.
+    assert 'btn btn-' not in body[:body.index('<dialog')], 'the page header is still on DaisyUI buttons'
+
+    for house in ('gl-dialog__box', 'stg-input', 'stg-field__label', 'pp-cta', 'gl-suggest__chip'):
+        assert house in dialog or house in body, f'the page stopped using the shared primitive {house}'
+
+
+def test_the_dialog_is_a_native_dialog_so_focus_and_escape_come_for_free(client):
+    """Kept as `<dialog>` on purpose. It is the house pattern for FORM sheets (the guidelines sheet,
+    the badge picker) and brings a focus trap, Escape and an inert background that
+    `.pp-detail-modal` -- the content-VIEW primitive -- has to hand-roll."""
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+
+    assert '<dialog id="gl-create"' in body
+    assert 'aria-labelledby="gl-create-title"' in body
+    assert 'pp-dismissable' in body, 'no swipe-to-dismiss affordance on touch'
 

@@ -1,0 +1,87 @@
+/* ============================================================
+   Game Lists
+   ============================================================
+   Only what the app needs beyond the shared primitives. Fields are `.stg-field` / `.stg-input`,
+   buttons are `.pp-cta`, tiles are `.pp-gtile` -- all reused rather than re-minted, which is why
+   this file is short.
+
+   THE DIALOG. The first cut of the create modal was raw DaisyUI (`modal-box`, `input input-bordered`,
+   `btn btn-ghost`) and read as a different product: DaisyUI's own radii, its own borders, its own
+   button weight, none of them the site's. It stays a NATIVE <dialog> -- that is the house pattern for
+   FORM sheets (the guidelines sheet, the badge picker) and it brings a real focus trap, Escape and
+   inert-background for free, which `.pp-detail-modal` (the content-view primitive) has to hand-roll.
+   What changes is that it now wears the site's surface: `--pp-bg-1` on `--pp-border`, the house
+   radius, the same 0 30px 90px lift the detail modal uses.
+   ============================================================ */
+
+.gl-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    padding: 0;
+    color: var(--pp-text);
+    background: transparent;
+    border: none;
+    overflow: visible;
+}
+
+/* The dim, matching `.pp-detail-modal__scrim` exactly: a SOLID rgba, never a backdrop-filter. The
+   blur has to re-sample the page behind it every frame, which is the documented mobile-GPU trap. */
+.gl-dialog::backdrop { background: rgba(2, 4, 8, 0.8); }
+
+.gl-dialog__box {
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+    padding: 22px;
+}
+@media (min-width: 768px) { .gl-dialog__box { padding: 26px; } }
+
+.gl-dialog__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.gl-dialog__title { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
+.gl-dialog__sub { margin-top: 4px; font-size: 0.76rem; color: var(--pp-text-dim); }
+
+.gl-dialog__close {
+    flex: none; background: none; border: none; cursor: pointer;
+    color: var(--pp-text-mute); font-size: 26px; line-height: 1; padding: 0 2px;
+}
+.gl-dialog__close:hover { color: var(--pp-text); }
+.gl-dialog__close:focus-visible {
+    color: var(--pp-text); outline: 2px solid var(--pp-primary);
+    outline-offset: 2px; border-radius: var(--pp-radius-sm);
+}
+
+.gl-dialog__foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+/* Suggested names: a row of quiet chips, deliberately lighter than a `.pp-cta` so they read as a
+   shortcut past a blank field rather than as actions competing with "Create list". */
+.gl-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.gl-suggest__chip {
+    padding: 3px 9px; font-size: 0.72rem; cursor: pointer;
+    color: var(--pp-text-mute);
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+    border-radius: 999px;
+    transition: color 140ms ease, border-color 140ms ease;
+}
+.gl-suggest__chip:hover {
+    color: var(--pp-text);
+    border-color: color-mix(in oklch, var(--pp-primary) 50%, var(--pp-border));
+}
+.gl-suggest__chip:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px; color: var(--pp-text);
+}
+
+/* The live character count. Muted at rest so it is a reference and not a warning; `tabular-nums`
+   because a proportional font makes the number jitter sideways as you type, which reads as the
+   layout being unstable. Escalation classes come from the shared `wireCharCounters`. */
+.gl-count { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); }
+
+/* Entrance: a short rise-and-settle rather than a pop. The site's modals all enter with a scale
+   from just under 1 -- matching that is most of why this now feels like the same product. */
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes glDialogIn {
+        from { opacity: 0; transform: translateY(8px) scale(0.98); }
+        to   { opacity: 1; transform: none; }
+    }
+    .gl-dialog[open] .gl-dialog__box { animation: glDialogIn 0.22s cubic-bezier(0.2, 0.7, 0.3, 1); }
+}
