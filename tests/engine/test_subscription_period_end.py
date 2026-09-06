@@ -29,29 +29,41 @@ from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
 
+#: Test-mode product for the tier every fixture here uses, so the payload and the tier agree.
+PATRON_PRODUCT = 'prod_V735dER1GhMN4k'
+
 
 def _ts(**delta):
     return int((timezone.now() + timedelta(**delta)).timestamp())
 
 
-def _clover(status='canceled', period_end=None, **extra):
-    """A payload shaped the way production stores it: period on the item, absent up top."""
+def _clover(status='canceled', period_end=None, product=PATRON_PRODUCT, **extra):
+    """The post-basil shape: period AND product on the item, neither at the top level.
+
+    Deliberately carries NO top-level `plan`. An earlier version of this fixture invented one, which
+    was inert but false, and inventing the exact field production code depends on is precisely how
+    the previous generation of these tests hid a live bug. Anything that needs the product must now
+    read it off the item, which is what production code has to do anyway.
+    """
     return {
         'status': status,
-        'plan': {'product': 'prod_ThsIi3Xd8fY2Hk', 'id': 'price_legacy'},
         'items': {'data': [{'id': 'si_1', 'current_period_end': period_end,
-                            'price': {'id': 'price_legacy'}}]},
+                            'price': {'id': 'price_patron', 'product': product}}]},
         **extra,
     }
 
 
-def _legacy_shape(status='canceled', period_end=None, **extra):
-    """The pre-basil payload: period at the top level, no item period."""
+def _legacy_shape(status='canceled', period_end=None, product=PATRON_PRODUCT, **extra):
+    """The pre-basil payload: period and `plan` at the top level, no item period.
+
+    Both shapes must keep working: the mirror still holds rows written before the change, and a
+    webhook delivers whatever version the account's endpoint is pinned to.
+    """
     return {
         'status': status,
-        'plan': {'product': 'prod_ThsIi3Xd8fY2Hk', 'id': 'price_legacy'},
+        'plan': {'product': product, 'id': 'price_patron'},
         'current_period_end': period_end,
-        'items': {'data': [{'id': 'si_1', 'price': {'id': 'price_legacy'}}]},
+        'items': {'data': [{'id': 'si_1', 'price': {'id': 'price_patron', 'product': product}}]},
         **extra,
     }
 
@@ -185,12 +197,11 @@ def test_the_membership_page_shows_a_next_billing_date():
     """The display path. Cosmetic next to the revocations, but it is the same missing key: an active
     member simply saw no next-billing date."""
     end = _ts(days=25)
-    user, _ = _subscriber(_clover(status='active', period_end=end), tier='patron')
-    client_user = user
+    user, _ = _subscriber(_clover(status='active', period_end=end))
 
     from django.test import Client
     client = Client()
-    client.force_login(client_user)
+    client.force_login(user)
     response = client.get('/support/membership/')
 
     assert response.status_code == 200
@@ -240,6 +251,17 @@ def test_the_renewal_receipt_computes_its_billing_date_and_sends():
     log = EmailLog.objects.filter(user=user, email_type='payment_succeeded').first()
     assert log is not None, 'the renewal receipt did not send'
     assert log.status == 'sent'
+    # The DATE ITSELF, not just the absence of a raise: without this, replacing the whole
+    # computation with a hardcoded string passes. Derived from the timestamp rather than typed in,
+    # so the assertion cannot drift away from the input.
+    from datetime import datetime, timezone as dt_tz
+    from django.core import mail
+
+    expected = datetime.fromtimestamp(1798940526, tz=dt_tz.utc).strftime('%B %d, %Y')
+    assert mail.outbox, 'nothing reached the outbox'
+    # The date renders in the HTML part; `.body` is the stripped plain-text alternative.
+    html = ' '.join(content for content, _mime in mail.outbox[-1].alternatives)
+    assert expected in html, f'the billing date {expected!r} was not rendered'
 
 
 def test_an_offset_less_iso_string_does_not_crash_the_template_filters():
@@ -251,3 +273,171 @@ def test_an_offset_less_iso_string_does_not_crash_the_template_filters():
     naive = '2026-09-06T12:00:00'
     assert iso_datetime(naive).tzinfo is not None, 'the naive string was not made aware'
     assert isinstance(iso_naturaltime(naive), str)
+
+
+# ── Newly load-bearing behaviour the fix exposed ─────────────────────────
+
+
+def test_the_most_recent_canceled_subscription_decides_grace():
+    """A repeat subscriber has MORE THAN ONE canceled row, and `.first()` on an unordered queryset
+    is a heap-order coin flip. While the period read always returned None this was invisible (always
+    revoke); the fix made it decide whether a paying member keeps access.
+
+    Old sub: cancelled and long expired. New sub: cancelled with paid time left. Grace must be read
+    from the new one. `audit_subscription_status` already ordered its lookup, so before this the
+    audit could report GRACE for the very member the service was revoking.
+    """
+    user, _ = _subscriber(_clover(period_end=_ts(days=-300)), customer_id='cus_repeat',
+                          sub_id='sub_old')
+    old = Subscription.objects.get(id='sub_old')
+    old.created = timezone.now() - timedelta(days=400)
+    old.save(update_fields=['created'])
+    Subscription.objects.create(
+        id='sub_new', customer=Customer.objects.get(id='cus_repeat'),
+        created=timezone.now() - timedelta(days=30),
+        stripe_data=_clover(period_end=_ts(days=20)),
+    )
+
+    assert SubscriptionService.update_user_subscription(user) is True
+    user.refresh_from_db()
+    assert user.premium_tier == 'patron', 'the stale canceled row revoked a member still in grace'
+    assert SubscriptionService.membership_status(user).state == 'grace'
+
+
+def test_an_active_subscription_resolves_its_tier_without_a_top_level_plan():
+    """`update_user_subscription` resolved the tier through the deprecated top-level `plan`, whose
+    miss arm is `deactivate_subscription`. Stripe only ever populates `plan` for SINGLE-item
+    subscriptions and stripe-python 14 no longer models it, so the day it stops arriving every
+    ACTIVE member's next webhook would revoke premium they are paying for. Reading the item's
+    `price.product` first makes that unreachable.
+
+    A live prod row still carried `plan` on 2026-09-06, so this is defensive rather than a fix for
+    something currently firing -- which is exactly why it needs a test rather than a comment.
+    """
+    no_plan = {
+        'status': 'active',
+        'items': {'data': [{'id': 'si_1', 'current_period_end': _ts(days=25),
+                            'price': {'id': 'price_x', 'product': 'prod_ThqpPjDyERnoaF'}}]},
+    }
+    user, profile = _subscriber(no_plan, tier='premium_yearly')
+
+    assert SubscriptionService.update_user_subscription(user) is True
+
+    user.refresh_from_db()
+    profile.refresh_from_db()
+    assert user.premium_tier == 'premium_yearly', 'an active paying member was revoked'
+    assert profile.user_is_premium is True
+
+
+def test_a_ladder_price_still_rescues_a_tier_when_the_product_map_misses():
+    """The existing belt: an active subscription on a known ladder PRICE is a paying supporter even
+    if the product map has a gap. It read `plan['id']`, so it needed the same item-first treatment."""
+    unknown_product = {
+        'status': 'active',
+        'items': {'data': [{'id': 'si_1', 'current_period_end': _ts(days=25),
+                            'price': {'id': 'price_1U6ozjR5jhcbjB32vStaZGFu',
+                                      'product': 'prod_NOT_IN_THE_MAP'}}]},
+    }
+    user, _ = _subscriber(unknown_product, tier='backer')
+
+    assert SubscriptionService.update_user_subscription(user) is True
+    user.refresh_from_db()
+    assert user.premium_tier == 'backer'
+
+
+@pytest.mark.parametrize('payload,expected', [
+    ({'items': [{'current_period_end': 111}], 'current_period_end': 222}, 111),
+    ({'items': {'data': [None, {'current_period_end': 333}]}}, 333),
+    ({'items': {'data': [{'current_period_end': '900000000'},
+                         {'current_period_end': '1798940526'}]}}, None),
+    ({'items': {'data': [{'current_period_end': True}]}, 'current_period_end': 444}, 444),
+])
+def test_malformed_payloads_never_raise_and_never_return_a_wrong_value(payload, expected):
+    """None of these are shapes Stripe emits, but this reader sits on the membership page and inside
+    the weekly cron, so a raise is a 500 or a dead run with no report email. The string case is the
+    sharp one: `max()` over strings compares LEXICALLY, so '900000000' beats '1798940526' and the
+    helper would hand back the EARLIER date -- a wrong answer, which revokes premium."""
+    assert SubscriptionService.subscription_period_end(payload) == expected
+
+
+def test_an_unmigrated_paypal_holder_keeps_their_cycle_when_paypal_is_unreachable():
+    """The `describe_billing` legacy fallback, which had no positive test after the adoption path
+    was added: replacing the whole branch with `cycle = None` was caught by nothing.
+
+    Its whole purpose is that the membership page's Billing row must not VANISH for an un-migrated
+    legacy holder during a PayPal snapshot miss (an outage, or the 60s failure marker). A migrated
+    member correctly still falls through to omission, because `backer` cannot say which cycle.
+    """
+    from users.services.subscription_service import MembershipStatus
+
+    profile = ProfileFactory()
+    user = profile.user
+    SubscriptionService.activate_subscription(user, 'premium_yearly', 'paypal')
+    user.paypal_subscription_id = 'I-UNMIGRATED'
+    user.save(update_fields=['paypal_subscription_id'])
+
+    with patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
+               return_value=None):
+        billing = SubscriptionService.describe_billing(user, MembershipStatus('active', 'paypal'))
+
+    assert billing == {'amount': None, 'cycle': 'year'}
+
+
+def test_the_audit_repoints_a_duplicate_customer_instead_of_calling_it_grace():
+    """The regression the grace fix itself introduced.
+
+    In the duplicate-customer case the OLD customer keeps the old canceled sub while the member pays
+    under a new one. Granting grace `continue`d past `_resolve_stripe_row`, where the repoint lives,
+    so a PAYING member was filed as GRACE and their stale pointer survived for a whole period, with
+    the membership page telling them they had cancelled.
+    """
+    user, _ = _subscriber(_clover(period_end=_ts(days=20)), customer_id='cus_stale',
+                          sub_id='sub_stale')
+    live_customer = Customer.objects.create(id='cus_live', subscriber=user)
+    Subscription.objects.create(
+        id='sub_live', customer=live_customer,
+        stripe_data={'status': 'active',
+                     'items': {'data': [{'id': 'si_1', 'current_period_end': _ts(days=25),
+                                         'price': {'id': 'price_patron',
+                                                   'product': PATRON_PRODUCT}}]}},
+    )
+
+    out = StringIO()
+    call_command('audit_subscription_status', '--fix', '--no-email', stdout=out)
+    output = out.getvalue()
+
+    user.refresh_from_db()
+    assert 'GRACE+MISMATCH' in output or '[MISMATCH]' in output
+    assert user.stripe_customer_id == 'cus_live', 'the stale customer pointer was not repointed'
+    assert user.premium_tier == 'patron', 'a paying member lost premium'
+
+
+@pytest.mark.parametrize('lines', [
+    {'data': [{'period': {'end': 'not-a-timestamp'}}]},   # TypeError
+    {'data': [{'period': {'end': 1e20}}]},                # OverflowError
+    {'data': [{'period': None}]},                         # AttributeError
+    None,                                                 # AttributeError on .get('data')
+])
+def test_a_malformed_invoice_still_sends_the_receipt_without_a_date(lines):
+    """The receipt must degrade to "no date", never to "no receipt".
+
+    The original guard was `except (ValueError, OSError)`, which catches none of these. Each one
+    would raise out of the email path into the webhook's catch-all, which logs and returns 200 --
+    the member is charged and hears nothing. That is the exact failure mode this file already fixed
+    once, so the guard has to cover the shapes that reach it rather than the one that was noticed.
+    """
+    from core.models import EmailLog
+
+    profile = ProfileFactory()
+    user = profile.user
+    SubscriptionService.activate_subscription(user, 'patron', 'stripe')
+
+    SubscriptionService.handle_payment_succeeded(user, {
+        'billing_reason': 'subscription_cycle',
+        'amount_paid': 1500,
+        'currency': 'usd',
+        'lines': lines,
+    })
+
+    assert EmailLog.objects.filter(user=user, email_type='payment_succeeded',
+                                   status='sent').exists(), 'the receipt was dropped entirely'

@@ -44,6 +44,13 @@ def _with_subs(*subs):
         def __init__(self, statuses):
             self.statuses = statuses
 
+        def order_by(self, *args):
+            # The service orders canceled rows by `-created` (a repeat subscriber has more than one,
+            # and an unordered .first() is a heap-order coin flip between their dead sub and their
+            # recent one). This fake holds one row per status, so ordering is a no-op here; the real
+            # ordering is pinned against the real ORM in test_subscription_period_end.py.
+            return self
+
         def first(self):
             for status in self.statuses:
                 if status in by_status:

@@ -84,10 +84,25 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('--dry-run has no effect without --fix'))
 
         self.stdout.write(self.style.MIGRATE_HEADING('\nAuditing Stripe subscribers...'))
-        stripe_results = self._audit_stripe(fix=fix, dry_run=dry_run)
+        # Guarded for the same reason the orphan sweep below is: one malformed row must not abort
+        # the run, because that skips every arm after it AND the report email, leaving the operator
+        # with silence rather than a failure notice. This became a live risk when the period-end fix
+        # made the grace branch's `datetime.fromtimestamp` reachable for the first time.
+        empty = {'ok': 0, 'grace': 0, 'needs_fix': 0, 'fixed': 0, 'mismatch': 0}
+        try:
+            stripe_results = self._audit_stripe(fix=fix, dry_run=dry_run)
+        except Exception:
+            logger.exception('Stripe audit arm failed')
+            self.stdout.write(self.style.ERROR('  Stripe audit FAILED (see logs).'))
+            stripe_results = dict(empty)
 
         self.stdout.write(self.style.MIGRATE_HEADING('\nAuditing PayPal subscribers...'))
-        paypal_results = self._audit_paypal(fix=fix, dry_run=dry_run)
+        try:
+            paypal_results = self._audit_paypal(fix=fix, dry_run=dry_run)
+        except Exception:
+            logger.exception('PayPal audit arm failed')
+            self.stdout.write(self.style.ERROR('  PayPal audit FAILED (see logs).'))
+            paypal_results = dict(empty)
 
         self.stdout.write(self.style.MIGRATE_HEADING('\nSweeping for orphaned subscriptions...'))
         try:
@@ -254,6 +269,22 @@ class Command(BaseCommand):
                     # the key fix alone would turn a silent wrong answer into a crashing weekly cron.
                     period_end = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)
                     if period_end > timezone.now():
+                        # CHECK FOR A LIVE SUBSCRIPTION ELSEWHERE BEFORE GRANTING GRACE. In the
+                        # duplicate-customer case the OLD customer keeps the old canceled sub --
+                        # that is what makes it a duplicate -- while the member pays under a new
+                        # one. This whole branch only became reachable when the period-end fix
+                        # landed, and it `continue`s past `_resolve_stripe_row`, which is where the
+                        # repoint lives: without this check a PAYING member is filed as GRACE, their
+                        # stale `stripe_customer_id` survives for a full period, and the membership
+                        # page tells them they cancelled while their card is still being charged.
+                        if self._find_subscription_elsewhere(user) is not None:
+                            self.stdout.write(self.style.WARNING(
+                                f'  [GRACE+MISMATCH] {user.email} ({psn}) - canceled under the '
+                                f'stored customer, but a live subscription exists elsewhere'
+                            ))
+                            results['needs_fix'] += 1
+                            self._resolve_stripe_row(user, results, fix, dry_run)
+                            continue
                         self.stdout.write(self.style.WARNING(
                             f'  [GRACE] {user.email} ({psn}) - canceled, grace until {period_end}'
                         ))

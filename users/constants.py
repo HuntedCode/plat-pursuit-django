@@ -364,7 +364,7 @@ for _mode_plans in PAYPAL_LADDER_PLANS.values():
 # deactivate the plans on PayPal. Unlike the legacy Stripe products (archivable once the swap is
 # verified), these name LIVE subscriptions. They go when the last holder churns, not before.
 # Ids are DERIVED from PAYPAL_PLANS above rather than restated: a live billing identifier written
-# twice is a live billing identifier that can drift, and the comment below tells you never to tidy
+# twice is a live billing identifier that can drift, and the warning above tells you never to tidy
 # either copy. Same reasoning as PAYPAL_PLAN_TO_TIER itself, which walks the existing maps.
 #
 # The legacy `supporter` plan is deliberately ABSENT: confirmed by hand on 2026-09-06 that every
@@ -380,9 +380,8 @@ LEGACY_PLAN_ADOPTION = {
 # above, so those two ids no longer round-trip PAYPAL_PLANS. That override IS the drift guard.
 PAYPAL_PLAN_TO_TIER.update({_pid: _slug for _pid, (_slug, _iv) in LEGACY_PLAN_ADOPTION.items()})
 
-# Our interval key -> the word Stripe and the display layer use. Was written out inline in three
-# places (`describe_billing` twice, the migration command); `bootstrap_support_skus.INTERVALS` is
-# the fuller table that adds PayPal's spelling.
+# Our interval key -> the word Stripe and the display layer use.
+# `bootstrap_support_skus.INTERVALS` is the fuller table that adds PayPal's spelling.
 INTERVAL_TO_STRIPE = {'monthly': 'month', 'yearly': 'year'}
 
 # Derived conveniences for the checkout path.
@@ -400,11 +399,15 @@ SERVICE_MARKS = {
     'mod': {'label': 'Moderator', 'colour': '#ff9d45'},   # amber: off the supporter ramp (teal->pink) AND off staff crimson; was a green that sat next to backer teal
 }
 
-# GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their billing and their
-# tier slugs untouched, but WEAR the ladder level nearest their price -- colour, stars, level name
-# -- on the Credits wall and anywhere else supporter identity renders. Presentation only: nothing
-# reads this map for billing, availability, or role decisions. The mapping is by price proximity,
-# so if a legacy price ever changes on the processor side, revisit the target here.
+# GRANDFATHERED PRESENTATION (decided 2026-08-21): legacy subscribers keep their tier slugs
+# untouched but WEAR the ladder level nearest their price -- colour, stars, level name -- on the
+# Credits wall and anywhere else supporter identity renders. The mapping is by price proximity, so
+# if a legacy price ever changes on the processor side, revisit the target here.
+#
+# NO LONGER PRESENTATION ONLY (2026-09-06). This started as a display map that nothing read for
+# billing. `migrate_legacy_tiers` now reads it to decide which live Stripe price a paying member is
+# repriced onto, which makes it a BILLING map, pinned by `test_the_legacy_targets_are_exactly_these`.
+# Changing an entry here now moves real money.
 LEGACY_TIER_LEVEL_MAP = {
     'premium_monthly': 'backer',
     'premium_yearly': 'backer',

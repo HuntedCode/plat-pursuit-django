@@ -217,12 +217,15 @@ member outright. So `LEGACY_PLAN_ADOPTION` (in `users/constants.py`) makes the t
 plan ids resolve to `backer` instead, and those members keep their price as a grandfathered
 discount.
 
-**Why the migration is silent, per arm.** The Stripe arm reaches `activate_subscription` through
-`update_user_subscription` with `event_type=None`, and that method announces only for the event types
-in its `activation_events` list, so no welcome email and no Discord embed fire. The PayPal arm never
-calls `activate_subscription` at all: it writes the tier and calls `reconcile_premium` directly,
-because `activate_subscription` clears `paypal_cancel_at` for PayPal and would resurrect a member who
-is mid-cancellation. Same silence, different mechanism, and no Discord role is re-pushed on that arm.
+**Why the migration is silent.** NEITHER arm calls `activate_subscription` and neither re-derives
+the tier from the djstripe mirror. Both write `premium_tier` directly and then call
+`reconcile_premium`, the one premium truth-writer, so nothing announces and no Discord role is
+re-pushed on either arm. Each arm has its own reason for avoiding the usual entry points: the Stripe
+arm would otherwise write a payload at the SDK's pinned API version over a mirror whose other rows
+came from webhooks at the account's version, and would expose itself to `update_user_subscription`'s
+four fall-throughs to `deactivate_subscription`, for no gain when the target slug is already known;
+the PayPal arm cannot use `activate_subscription` because it clears `paypal_cancel_at` and would
+resurrect a member who is mid-cancellation.
 
 `reconcile_premium` leaves an open `SubscriptionPeriod` alone while premium stays true, so tenure and
 the `premium_months` milestone survive intact. `Profile.display_mark` does not change for a single

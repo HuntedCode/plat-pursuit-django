@@ -246,7 +246,7 @@ class Command(BaseCommand):
         """
         subs = Subscription.objects.filter(customer__id=customer_id).order_by(
             F('created').desc(nulls_last=True), '-djstripe_created')
-        return subs.filter(stripe_data__status__in=list(MODIFIABLE_STATUSES)).first() or subs.first()
+        return subs.filter(stripe_data__status__in=MODIFIABLE_STATUSES).first() or subs.first()
 
     def _migrate_stripe(self, user, fix, results):
         label = f'{user.email} ({self._psn(user)})'

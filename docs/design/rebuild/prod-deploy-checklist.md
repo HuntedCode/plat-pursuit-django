@@ -853,8 +853,8 @@ survived the service changes and recreate it if it did not. Row + rationale:
 > payloads no longer carry. Verified on a live row: top-level `current_period_end` is `None`,
 > `items.data[0].current_period_end` holds the real value.
 >
-> It failed silently and it failed CLOSED, which is why nobody saw it. Three of the four readers
-> then revoked premium from members who had paid for time they had not used:
+> It failed silently and it failed CLOSED, which is why nobody saw it. TWO of the five readers
+> revoked premium from members who had paid for time they had not used; the other three only misled:
 >
 > | Site | Effect before the fix |
 > |---|---|
@@ -1282,27 +1282,22 @@ adoption that makes no billing change. Full reasoning in the `migrate_legacy_tie
       whose `BILLING.SUBSCRIPTION.ACTIVATED` fires (re-activation after a suspension) is written to
       `backer` whether or not step 3 has run. That is intended, and it is the first irreversible-ish
       moment, not step 3.
-- [ ] **Do NOT run `djstripe_sync_models Subscription` for this.** It is the usual prerequisite for
-      `audit_subscription_status`, and it is a trap here. dj-stripe syncs at
-      `djstripe_settings.STRIPE_API_VERSION`, which resolves to stripe-python 14's pinned
-      `2025-12-15.clover` because the project sets no override, while every existing row was written
-      by a webhook at the ACCOUNT's version. `sync_from_stripe_data` stores the response verbatim, so
-      a sync rewrites every row into a shape the rest of the codebase was not written against. A prod
-      row checked 2026-09-06 has `plan` but no `current_period_end`, and four call sites read that
-      already-missing key (see the grace-period warning earlier in this doc). Changing which keys are
-      present site-wide, immediately before a billing migration, is not a risk worth taking for a
-      prerequisite this command does not have.
+- [ ] **`djstripe_sync_models Subscription` is optional here, and it is SAFE.** An earlier draft of
+      this checklist called it unsafe, reasoning that dj-stripe syncs at stripe-python's pinned
+      `2025-12-15.clover` while existing rows came from webhooks at the account's version, so a sync
+      would rewrite every row into a shape the codebase was not written against. **The prod row
+      inspected 2026-09-06 disproves the alarming half of that**: it carries `plan` and lacks
+      `current_period_end`, which is what the sync itself produces, and nothing is broken by it.
+      What was broken was the code READING that payload, which this branch fixes by resolving the
+      period, product, price and charge item-first with the top-level as fallback. Either shape now
+      resolves, so the sync is harmless either way.
 
-      This migration does not need it: the Stripe arm reads the mirror only to find the subscription
-      id, then asks Stripe directly for the authoritative status, item and price, and writes the tier
-      itself rather than re-deriving it. If the mirror is stale enough that a paying subscriber is
-      missing entirely, the command says so and points at `audit_subscription_status --fix`.
+      This migration does not need it regardless: the Stripe arm reads the mirror only to find the
+      subscription id, then asks Stripe directly for the authoritative status, item and price, and
+      writes the tier itself rather than re-deriving it. Run it if you want the audit fresh; skip it
+      if you would rather change nothing on the day.
 
-      **Worth its own branch, separately from this one:** pin `STRIPE_API_VERSION` in settings to the
-      account's version, or migrate the `plan` / `current_period_end` reads onto the item. Until one
-      of those lands, `djstripe_sync_models Subscription` is unsafe to run against prod at all, which
-      is a live footgun sitting in the weekly audit's documented workflow.
-- [ ] **Dry run, and read the Population block.** `python manage.py migrate_legacy_tiers` reports
+- [ ] **Report run, and read the Population block.** `python manage.py migrate_legacy_tiers` reports
       counts by tier and provider and touches nothing (it does make read-only calls to both
       processors, which is what makes the preview worth reading). This is where the Stripe-side
       counts finally surface; the PayPal side was confirmed by hand on 2026-09-06 as 4 monthly +

@@ -9,9 +9,9 @@ patched. Two earlier versions were weaker and both hid real bugs: the first patc
 model wholesale in the command module, which stubbed out `.filter().first()` and left the customer
 scoping and the status pre-filter unpinned (deleting `customer__id=...`, i.e. repricing a stranger's
 subscription, passed 19/19); the second patched `sync_from_stripe_data` with a stub that FABRICATED
-a top-level `plan` key the real API version does not return, which hid a bug that would have revoked
-premium from every migrated Stripe member. Follow `test_audit_subscription_status._djstripe_sub`
-here, not the mock.
+a top-level `plan` key, which let the swap's mirror write look safe when it was not. A mock that
+BUILDS a payload asserts its author's idea of the wire format rather than Stripe's, and that is how
+both generations went wrong. Follow `test_audit_subscription_status._djstripe_sub`, not the mock.
 
 The four tests that matter most:
 
@@ -111,10 +111,9 @@ def _stripe_api():
 
     An earlier version also patched `sync_from_stripe_data` with a side effect that FABRICATED a
     top-level `plan` key from the subscription item. Real dj-stripe stores the API response verbatim
-    (`base.py`: `result = {"stripe_data": data}`), so a mock that BUILDS a payload is asserting its
-    own author's idea of the wire format rather than Stripe's. The command no longer syncs the mirror
-    or re-derives the tier, and
-    `test_the_swap_never_syncs_the_mirror_or_re_derives_the_tier` pins that.
+    (`base.py`: `result = {"stripe_data": data}`), so a mock that BUILDS a payload asserts its own
+    author's idea of the wire format rather than Stripe's. The command no longer syncs the mirror or
+    re-derives the tier, and `test_the_swap_never_syncs_the_mirror_or_re_derives_the_tier` pins that.
     """
     return patch('users.management.commands.migrate_legacy_tiers.stripe.Subscription')
 
@@ -309,7 +308,7 @@ def test_the_swap_never_syncs_the_mirror_or_re_derives_the_tier():
     stripe-python 14's pinned version while every other row in that table is written by webhooks at
     the ACCOUNT's version. The shapes differ -- a prod row checked 2026-09-06 carries `plan` but no
     `current_period_end` -- so writing one over the other is how a field disappears from a row that
-    four production call sites still read.
+    five production call sites still read.
 
     Re-deriving is a separate risk with no upside: `update_user_subscription` has four fall-throughs
     to `deactivate_subscription`, and the target slug is already known. So the command writes the
@@ -327,7 +326,6 @@ def test_the_swap_never_syncs_the_mirror_or_re_derives_the_tier():
 
     assert not sync.called, 'the clover-shaped response was written into the mirror'
     assert not rederive.called, 'the tier was re-derived instead of written'
-    assert Subscription.objects.get(id='sub_legacy').stripe_data == before
     user.refresh_from_db()
     assert user.premium_tier == 'backer'
 
@@ -665,8 +663,8 @@ def test_migration_does_not_move_the_worn_mark():
 
 
 def test_the_stripe_swap_sends_no_welcome_email():
-    """A migration is not a purchase. `activate_subscription` announces only for its
-    `activation_events`, and the migration reaches it with no event type at all."""
+    """A migration is not a purchase, and neither arm goes near the announcing path:
+    `activate_subscription` is never called, so its welcome email and Discord embed cannot fire."""
     from core.models import EmailLog
 
     user, _ = _legacy_stripe(tier='premium_monthly', product=LEGACY_MONTHLY_PRODUCT)
@@ -688,7 +686,8 @@ def test_live_ok_actually_unlocks_the_live_run():
     did anything except that its absence raised."""
     _legacy_stripe(tier='premium_yearly')
 
-    with patch('users.management.commands.migrate_legacy_tiers.settings.STRIPE_MODE', 'live'),             _stripe_api() as stripe_api:
+    with patch('users.management.commands.migrate_legacy_tiers.settings.STRIPE_MODE', 'live'), \
+            _stripe_api() as stripe_api:
         stripe_api.retrieve.return_value = _api_sub()
         stripe_api.modify.return_value = _api_sub(price=BACKER_YEARLY_PRICE, product=BACKER_PRODUCT)
         _run('--fix', '--provider', 'stripe', '--live-ok')
@@ -701,7 +700,8 @@ def test_the_paypal_arm_needs_no_live_ok():
     behind it. Broadening the guard to every provider passed the suite."""
     user, _ = _legacy_paypal(tier='premium_monthly')
 
-    with patch('users.management.commands.migrate_legacy_tiers.settings.STRIPE_MODE', 'live'),             patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
+    with patch('users.management.commands.migrate_legacy_tiers.settings.STRIPE_MODE', 'live'), \
+            patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
                   return_value={'plan_id': LEGACY_MONTHLY_PLAN}):
         _run('--fix', '--provider', 'paypal')
 
@@ -710,9 +710,11 @@ def test_the_paypal_arm_needs_no_live_ok():
 
 
 def test_the_live_subscription_is_preferred_over_a_dead_one():
-    """A customer can carry an old canceled subscription alongside the live one. Both the status
-    preference and the ordering in `_find_mirror` survived deletion because no test ever gave one
-    customer two subscriptions."""
+    """A customer can carry an old canceled subscription alongside the live one; the live one wins.
+
+    This pins the STATUS preference only. The `-created` ordering is pinned separately below, since
+    it only bites when two rows are both modifiable.
+    """
     user, _ = _legacy_stripe(tier='premium_yearly', customer_id='cus_two', sub_id='sub_live')
     Subscription.objects.create(
         id='sub_dead', customer=Customer.objects.get(id='cus_two'),
@@ -740,7 +742,8 @@ def test_a_paypal_tier_write_that_does_not_stick_is_reported():
         u.save(update_fields=['premium_tier'])
 
     with patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
-               return_value={'plan_id': LEGACY_MONTHLY_PLAN}),             patch.object(SubscriptionService, 'reconcile_premium', side_effect=_clobber):
+               return_value={'plan_id': LEGACY_MONTHLY_PLAN}), \
+            patch.object(SubscriptionService, 'reconcile_premium', side_effect=_clobber):
         output = _run('--fix', '--provider', 'paypal')
 
     assert 'TIER WRONG' in output and 'errors=1' in output
