@@ -56,15 +56,30 @@ The audit log. One row per decision, never updated after it is written.
 | Field | Notes |
 |-------|-------|
 | `actor` / `actor_label` | `SET_NULL` FK plus the name captured at write time, so an entry stays readable after a staff account is deleted. `related_name='moderation_decisions'` because `moderation_actions` is taken by the legacy `ModerationLog` |
-| `action` | `blurb_hidden`, `blurb_report_dismissed`, `game_flag_approved`, `game_flag_dismissed`, `blurb_restored` |
+| `action` | Ten values: five decisions and the five reversals that undo them. See **Reversing a decision** |
 | `reason` | Required, minimum 3 characters, enforced in the service |
 | `blurb_report` / `game_flag` | Both `SET_NULL`: the entry outlives its subject |
+| `subject_user` / `subject_label` | The hunter this entry is **evidence about** (2026-09). See below |
 | `target_id` / `target_label` | What was acted on, in words, frozen at write time |
 | `changed` | `{field: [before, after]}`. What this action **wrote**. Empty dict is a real outcome, not a bug |
 | `evidence` | Things worth keeping beside the diff that the action did not write (the blurb's text) |
 | `reverses` | Self-FK. Unique-constrained where non-null: one reversal per action |
 
 `is_reversed` is derived from `reversed_by_action`, not stored.
+
+**`subject_user` is not "who owns the thing acted on".** It is the hunter whose *behaviour* the entry
+is evidence about, and those differ for half the actions:
+
+| Action | Subject |
+|--------|---------|
+| A take hidden | its **author** |
+| A report dismissed | the **reporter** (a dismissal is evidence about who filed it, and none about the person they filed it against) |
+| A flag approved or dismissed | the **reporter** (a game has no hunter behind it) |
+| Any reversal | copied from the entry it undoes, never re-derived |
+
+It exists because the report FKs are `SET_NULL`: before it, purging a `BlurbReport` left an entry
+that could not be traced to anybody, losing exactly the old history an appeal is about. It is also
+what makes the per-person page one indexed query.
 
 **Why `changed` and `evidence` are separate.** `changed` means "what this action wrote", and hiding a
 quick take does not write the blurb. Filing the text under `evidence` keeps a generic diff view from
@@ -130,11 +145,59 @@ Two types set `shovelware_lock`, which permanently overrides the automated class
 (`SHOVELWARE_FLAG_TYPES`, read by the template the same way). The row calls that out in its own
 right: it is by some distance the heaviest button on the page and does not otherwise look it.
 
+### Hiding a take nobody reported
+
+`hide_blurb_without_a_report`, admin-only, from a hunter's page in the Admin Hub. The reactive queue
+only ever sees what somebody objected to, so the worst thing on the site is invisible to it until a
+person goes looking.
+
+Logged as **`blurb_hidden_proactive`**, never as `blurb_hidden` with a null report: that pair is
+indistinguishable from an entry whose report was later purged, and "nobody reported this, a moderator
+went looking" is what an appeal turns on. It has its own lock with a different precondition from the
+queue's, because a report can be handled twice and a take can only be hidden once.
+
 ### Reversing a decision
 
-Only `blurb_hidden` can be reversed automatically today. The previous value is read out of the
-original entry's `changed` rather than assumed to be `False`, because a take that was already hidden
-when it was actioned would otherwise be *un*hidden and the system would call that a restoration.
+**Every decision can be reversed**, each to its own named result:
+
+| Decision | Reversal | What the undo does |
+|----------|----------|--------------------|
+| `blurb_hidden` | `blurb_restored` | unhides, and the report goes back to `reviewed` |
+| `blurb_hidden_proactive` | `blurb_restored_proactive` | unhides; finds the take through `target_id`, having no report |
+| `blurb_report_dismissed` | `blurb_report_reopened` | back to `pending`, `reviewed_by` cleared |
+| `game_flag_approved` | `game_flag_reversed` | puts the Game fields back, then reopens |
+| `game_flag_dismissed` | `game_flag_reopened` | back to `pending` |
+
+`_UNDO` maps each decision to `(callable, reversal-name)`. The name is in the map because it was once
+hardcoded to `blurb_restored` — so the moment a second undo existed, reopening a game flag would have
+been logged as a quick take being restored.
+
+**A reversal cannot itself be reversed**, and says so in those words. Undoing an undo is re-deciding,
+and should be done as a decision with its own reason rather than by walking backwards up a chain.
+
+#### What a reversal will NOT put back, and why it says so
+
+`changed` records values as they were at *decision* time, and months can pass. Three rules keep an
+undo from destroying what it cannot see:
+
+1. **The value moved on.** A field is restored only if the target still holds exactly what the
+   decision left there. Otherwise it is skipped and recorded under `evidence['not_restored']` — a
+   sync, another flag or a person may have changed it legitimately since.
+2. **Somebody else's decision still stands.** Two decisions can hide one take, and the second writes
+   no diff because the words were already gone. So reversing either one finds exactly what it left
+   and would happily unhide the take against a call nobody disputed. Comparing values cannot see
+   that; the undo asks whether another unreversed hide exists.
+3. **The flag was re-filed.** `submit_flag` deliberately lets a hunter file again once the original
+   is decided, so reopening the old one would put two identical rows in the queue. The game data is
+   still restored — that is the undo's primary job — and only the reopen is skipped
+   (`evidence['not_reopened']`).
+
+All three are rendered as a warning on the decision log, and the action's own success message says
+"Recorded, but nothing was put back" rather than "Decision reversed". An admin who believes a
+reversal fully undid something when it did not will act on that belief.
+
+Every one of these was found by an audit after the naive version shipped. The naive version passed
+its tests.
 
 ## URLs
 
@@ -243,7 +306,8 @@ read.
 
 - [Community Flags](community-flags.md): where `GameFlag` rows come from, and what each type means
 - [Game Ratings Tab](game-ratings.md): where quick takes and `BlurbReport` rows come from
-- [Marks & Roles](marks-and-roles.md): the moderator/admin role split this gate reads
+- [Marks & Roles](marks-and-roles.md): the moderator/admin role split this gate reads, and what
+  `is_staff` means since Django admin was narrowed to superusers (2026-09)
 - [Navigation](navigation.md): the avatar menu the entry lives in
 - [Shovelware Detection](../reference/shovelware-detection.md): what `shovelware_lock` overrides
 

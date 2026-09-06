@@ -117,6 +117,13 @@ class VerificationService:
             profile.is_linked = True
             profile.save(update_fields=['user', 'is_linked'])
 
+            # A restriction applied before this account had a profile stored none, and would lose
+            # its only durable half the moment the account was deleted. This is the moment that half
+            # exists, so this is where it gets attached.
+            from users.services import restriction_service
+
+            restriction_service.attach_profile(profile)
+
             # Update premium status from the shared tier list, NOT a hardcoded copy: the old
             # inline three-tier list silently excluded the supporter ladder, so a paying `patron`
             # who then linked their PSN profile lost the premium denorm (sync cadence, Discord

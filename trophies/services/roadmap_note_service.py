@@ -280,6 +280,34 @@ def notify_new_mentions(note: 'RoadmapNote', *, prior_body: Optional[str] = None
 #  CRUD
 # --------------------------------------------------------------------------- #
 
+def refuse_if_restricted(author, doing='post'):
+    """Public twin of the note guard, for the other roadmap writers.
+
+    Merging a branch and publishing a guide put a hunter's prose in front of everybody, exactly as a
+    note does. They were enumerated as ungated writers and then not gated, which is the same gap
+    twice: the audit named four and three were closed.
+    """
+    from users.services import restriction_service
+
+    if restriction_service.is_restricted_from(author, 'reports'):
+        raise NoteError(f'Your account is currently restricted from {doing}ing.')
+
+
+def _refuse_if_restricted(author):
+    """Roadmap notes are user-authored prose, so a restriction covers them.
+
+    They were missed by the first cut of the restriction gates because their permission check is
+    `IsRoadmapAuthor`, which is deliberately independent of staff status and admits per-roadmap trial
+    writers -- so they looked like a staff surface and are not one. A note carries 5000 characters
+    and pushes `@mentions` to other hunters as notifications, which makes it the most reachable thing
+    a restricted person could still have done.
+    """
+    from users.services import restriction_service
+
+    if restriction_service.is_restricted_from(author, 'reports'):
+        raise NoteError('Your account is currently restricted from posting.')
+
+
 def create_note(
     *, roadmap: Roadmap, author: Profile, body: str,
     target_kind: str,
@@ -298,6 +326,10 @@ def create_note(
         require pre-writing a guide body. Django's TextField permits ''
         at the DB level, so empty-body guides are valid.
     """
+    # FIRST, before anything writes. It used to sit just above `RoadmapNote.objects.create`, by
+    # which point the editor path had already committed a `TrophyGuide` row via `get_or_create` --
+    # nothing here opens a transaction, so a refused note still left that behind.
+    _refuse_if_restricted(author)
     body = (body or '').strip()
     if not body:
         raise NoteError("Note body is required.")
@@ -363,6 +395,9 @@ def edit_note(*, note: RoadmapNote, actor: Profile, body: str) -> RoadmapNote:
     """Edit a note's body. Authors can edit their own only."""
     if note.author_id != actor.id:
         raise NoteError("You can only edit notes you wrote.")
+    # EDITING is writing. A gate on create alone leaves the whole body replaceable afterwards, which
+    # is the same words on the same page by the same person.
+    _refuse_if_restricted(actor)
     body = (body or '').strip()
     if not body:
         raise NoteError("Note body is required.")

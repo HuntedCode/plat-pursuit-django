@@ -25,7 +25,9 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from trophies.models import BlurbReport, GameFlag, ModerationAction
+from core.services import audit
+from trophies.models import (BlurbReport, Game, GameFlag, ModerationAction,
+                             UserConceptRating)
 from trophies.services.game_flag_service import GameFlagService
 
 logger = logging.getLogger(__name__)
@@ -47,23 +49,23 @@ class ModerationError(Exception):
 
 
 def _require_reason(reason):
-    reason = (reason or '').strip()
-    if len(reason) < 3:
-        raise ModerationError('A reason is required, and has to say something.')
-    return reason
+    """Delegates to `core.services.audit`, which both logs read.
+
+    The exception CLASS is passed through rather than caught and re-raised: `_ActionView` catches
+    `ModerationError` specifically, and handing it a bare `AuditError` would let a missing reason
+    escape as a 500 instead of a message the moderator can read.
+    """
+    return audit.require_reason(reason, error=ModerationError)
 
 
 def _label(user):
     """The actor's display name, captured NOW. `actor` is SET_NULL, so this is what keeps an entry
     readable once a staff account is gone.
 
-    `CustomUser.display_name` owns the PSN-then-email order; this only freezes it. The rule used to
-    be written out here as well as on the model, which is two places to disagree about whether a
-    moderator is a handle or an email address.
+    `CustomUser.display_name` owns the PSN-then-email order and `core.services.audit` owns the
+    freezing; this name is kept because the four call sites below read better for it.
     """
-    if user is None:
-        return ''
-    return (user.display_name or '')[:150]
+    return audit.frozen_label(user)
 
 
 def _lock_report(report):
@@ -93,6 +95,22 @@ def _lock_flag(flag):
     return fresh
 
 
+def _subject(profile):
+    """The `subject_user` / `subject_label` pair for the hunter an entry is evidence ABOUT.
+
+    Takes a `Profile` and returns kwargs for the `CustomUser` behind it, because every hunter-shaped
+    thing in this service (a rating's author, a report's reporter) is a Profile while the log points
+    at accounts. A restriction or a ban is an ACCOUNT fact, and pointing the history at profiles
+    would make unlinking and relinking PSN a way to shed it.
+
+    WHO counts as the subject is a rule with exactly one right answer per action, written down on
+    the field: hiding a take is evidence about its AUTHOR, dismissing a report is evidence about the
+    REPORTER. Left to each call site it would quietly become two rules.
+    """
+    user = getattr(profile, 'user', None)
+    return {'subject_user': user, 'subject_label': audit.frozen_label(user)}
+
+
 # ── quick takes ──────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
@@ -108,8 +126,15 @@ def hide_blurb(report, moderator, reason):
     rating = report.rating
     was_hidden = rating.blurb_hidden
 
-    rating.blurb_hidden = True
-    rating.save(update_fields=['blurb_hidden'])
+    # Only write, and only claim a diff, if the words were actually still showing. `_lock_report`
+    # preconditions on the REPORT's status, which says nothing about the take -- so a second report
+    # against an already-hidden take used to log `blurb_hidden: [True, True]`, an entry claiming a
+    # change that did not happen. This module's own docstring calls that affirmatively misleading
+    # evidence, and `_lock_rating` was written to prevent it on the proactive path while the queue
+    # path kept doing it.
+    if not was_hidden:
+        rating.blurb_hidden = True
+        rating.save(update_fields=['blurb_hidden'])
     report.status = 'action_taken'
     report.reviewed_by = moderator
     report.reviewed_at = timezone.now()
@@ -117,16 +142,70 @@ def hide_blurb(report, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='blurb_hidden', reason=reason,
+        # The AUTHOR: hiding somebody's words is evidence about the person who wrote them.
+        **_subject(rating.profile),
         blurb_report=report, target_id=rating.pk,
         target_label=f'Quick take on {rating.concept.unified_title}'[:255],
-        changed={'blurb_hidden': [was_hidden, True]},
+        changed={} if was_hidden else {'blurb_hidden': [False, True]},
         # The words are the EVIDENCE, kept beside the diff rather than inside it: `changed` means
         # "what this action wrote", and the blurb was not written. Filed under its own key so a
         # generic diff view cannot render a "blurb: unchanged" row, and so "did this action modify
         # field X" never answers yes for the blurb.
-        evidence={'blurb': rating.blurb},
+        evidence=({'blurb': rating.blurb, 'already_hidden': True} if was_hidden
+                  else {'blurb': rating.blurb}),
     )
     logger.info('Moderation: blurb hidden report=%s rating=%s by=%s', report.pk, rating.pk,
+                getattr(moderator, 'pk', None))
+    return action
+
+
+def _lock_rating(rating):
+    """Re-read the rating FOR UPDATE and refuse it if the words are already gone.
+
+    The `_lock_report` shape, for the one action that has no report to lock. The precondition is
+    different because the thing being guarded is different: a report can be handled twice, a take can
+    only be hidden once, and hiding an already-hidden take would write an entry claiming a change
+    that did not happen.
+    """
+    try:
+        fresh = (UserConceptRating.objects.select_for_update()
+                 .select_related('concept', 'profile').get(pk=rating.pk))
+    except ObjectDoesNotExist:
+        raise ModerationError('That quick take no longer exists.')
+    if fresh.blurb_hidden:
+        raise ModerationError('That quick take is already hidden.')
+    if not (fresh.blurb or '').strip():
+        raise ModerationError('That rating has no quick take to hide.')
+    return fresh
+
+
+@transaction.atomic
+def hide_blurb_without_a_report(rating, moderator, reason):
+    """Hide a quick take nobody reported.
+
+    The reactive queue only ever sees what a hunter objected to, which means the worst thing on the
+    site is invisible to it until somebody happens to look. This is the same write as `hide_blurb`,
+    reached without waiting for a report.
+
+    Logged under its OWN action rather than as `blurb_hidden` with a null report. Those two states
+    would otherwise be indistinguishable from an entry whose report was purged -- and "nobody
+    reported this, a moderator went looking" is exactly the sort of thing an appeal turns on.
+    """
+    reason = _require_reason(reason)
+    rating = _lock_rating(rating)
+
+    rating.blurb_hidden = True
+    rating.save(update_fields=['blurb_hidden'])
+
+    action = ModerationAction.objects.create(
+        actor=moderator, actor_label=_label(moderator), action='blurb_hidden_proactive',
+        reason=reason, **_subject(rating.profile),
+        target_id=rating.pk,
+        target_label=f'Quick take on {rating.concept.unified_title}'[:255],
+        changed={'blurb_hidden': [False, True]},
+        evidence={'blurb': rating.blurb},
+    )
+    logger.info('Moderation: blurb hidden without a report rating=%s by=%s', rating.pk,
                 getattr(moderator, 'pk', None))
     return action
 
@@ -145,7 +224,11 @@ def dismiss_blurb_report(report, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='blurb_report_dismissed',
-        reason=reason, blurb_report=report, target_id=report.rating_id,
+        reason=reason,
+        # The REPORTER, not the author. A dismissal says the report was wrong, which is evidence
+        # about the person who filed it and none at all about the person they filed it against.
+        **_subject(report.reporter),
+        blurb_report=report, target_id=report.rating_id,
         target_label=f'Quick take on {report.rating.concept.unified_title}'[:255],
         changed={'status': [was, 'dismissed']},   # READ, never assumed to have been 'pending'
     )
@@ -181,6 +264,9 @@ def approve_game_flag(flag, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='game_flag_approved', reason=reason,
+        # The reporter. A game has no hunter behind it, so the only person this is evidence about is
+        # the one who raised it -- and "who reports well" is exactly what this history is for.
+        **_subject(flag.reporter),
         game_flag=flag, target_id=game.pk,
         target_label=f'{flag.get_flag_type_display()} on {game.title_name}'[:255],
         # An approval that changed NOTHING is a real outcome, not a bug: missing_vr and
@@ -203,6 +289,7 @@ def dismiss_game_flag(flag, moderator, reason):
 
     action = ModerationAction.objects.create(
         actor=moderator, actor_label=_label(moderator), action='game_flag_dismissed', reason=reason,
+        **_subject(flag.reporter),
         game_flag=flag, target_id=flag.game_id,
         target_label=f'{flag.get_flag_type_display()} on {flag.game.title_name}'[:255],
         changed={'status': [was, 'dismissed']},
@@ -213,37 +300,272 @@ def dismiss_game_flag(flag, moderator, reason):
 
 # ── reversal ─────────────────────────────────────────────────────────────────────────────────────
 
-def _undo_blurb_hidden(action, moderator, reason):
-    """Put a hidden quick take back, using what the ORIGINAL entry recorded rather than assuming."""
+def _report_behind(action):
+    """The BlurbReport an entry was about, or a message saying why it cannot be undone."""
     report = action.blurb_report
     if report is None:
         raise ModerationError(
             'The report behind this decision has been deleted, so it cannot be undone here.')
+    return report
+
+
+def _flag_behind(action):
+    """The flag an entry was about, LOCKED, or a message saying why it cannot be undone.
+
+    `select_for_update` for the same reason the forward actions take it. Without it the undo reads
+    the game, compares, and blind-writes -- so a sync or another moderator writing between the read
+    and the save has their change silently overwritten AND no `not_restored` warning raised, which
+    is the exact failure the stale-value guard was built to prevent. A guard that is not serialised
+    is a guard with a window in it.
+
+    The GAME is locked too, not just the flag: the game is the thing being compared and written, and
+    locking only the flag would leave that window exactly as wide.
+    """
+    if action.game_flag_id is None:
+        raise ModerationError(
+            'The flag behind this decision has been deleted, so it cannot be undone here.')
     try:
-        rating = report.rating
+        return (GameFlag.objects.select_for_update()
+                .select_related('game').get(pk=action.game_flag_id))
     except ObjectDoesNotExist:
+        raise ModerationError(
+            'The flag behind this decision has been deleted, so it cannot be undone here.')
+
+
+def _has_duplicate_pending(flag):
+    """Whether an identical flag from the same hunter is already waiting in the queue.
+
+    `GameFlagService.submit_flag` dedups on `status='pending'` and deliberately lets a reporter file
+    again once a prior flag is decided -- so reopening an old one can put two identical pending rows
+    in the queue. A moderator then sees the same complaint twice, and `submit_flag`'s own dedup
+    starts picking between them non-deterministically. There is no DB constraint to catch it.
+
+    Refusing beats merging: the newer flag carries the reporter's newer words, and silently folding
+    two reports into one loses that.
+    """
+    return (GameFlag.objects
+            .filter(game_id=flag.game_id, reporter_id=flag.reporter_id,
+                    flag_type=flag.flag_type, status='pending')
+            .exclude(pk=flag.pk).exists())
+
+
+def _refuse_duplicate_reopen(flag):
+    """For the undo whose ONLY job is reopening. Refusing is right there and wrong for an approval,
+    whose job is putting the game back."""
+    if _has_duplicate_pending(flag):
+        raise ModerationError(
+            'The same hunter has already filed this flag again, and it is waiting in the queue. '
+            'Decide that one instead.')
+
+
+def _rating_behind(action, report=None):
+    """The rating an entry acted on: through the report if it survives, else through `target_id`.
+
+    The FALLBACK is the point. `blurb_report` is SET_NULL, so a purged report used to make a queue
+    hide permanently unreversible -- the take stayed hidden with no way back through the log, which
+    is the same "traceable to nobody" failure `subject_user` was added to fix, left in place on the
+    reversal path. `_undo_blurb_hidden_proactive` already proved `target_id` resolves a rating
+    perfectly well; there was never a reason for the two paths to differ.
+
+    LOCKED ON BOTH PATHS. The first version took the lock only on the fallback, so the ORDINARY
+    reversal -- the frequent one -- did its compare-and-write against an unlocked row: exactly the
+    window this was meant to close for games, left open for takes. It is also what makes the
+    standing-decision check below safe, since two admins reversing the two hides on one take now
+    serialise on this row instead of each seeing the other as standing and both refusing, which
+    stranded the take hidden with no entry left that could unhide it.
+    """
+    LOCKED = UserConceptRating.objects.select_for_update()
+    if report is not None and report.rating_id:
+        try:
+            return LOCKED.get(pk=report.rating_id)
+        except ObjectDoesNotExist:
+            pass
+    try:
+        return LOCKED.get(pk=action.target_id)
+    except (UserConceptRating.DoesNotExist, ValueError, TypeError):
         raise ModerationError('The quick take behind this decision no longer exists.')
 
-    # Read the previous value out of the log instead of hardcoding False. `changed` is documented as
-    # the thing that "makes a reversal possible without guessing at the previous state", and the
-    # first cut guessed anyway -- which for a take that was already hidden when it was actioned
-    # would have UNhidden it, and called that a restoration.
-    was_hidden = action.changed.get('blurb_hidden', [False, True])[0]
-    rating.blurb_hidden = bool(was_hidden)
+
+def _restore_hidden(action, rating):
+    """Put `blurb_hidden` back to what the entry recorded, unless it has moved on since.
+
+    The same current-value rule the flag undo uses, and for the same reason: `changed` records the
+    state at DECISION time, and a second decision may have landed on this take since. Reversing only
+    your own entry must not quietly undo somebody else's standing one.
+    """
+    before, after = action.changed.get('blurb_hidden', [False, True])
+    if rating.blurb_hidden != after:
+        return {}, {'not_restored': {'blurb_hidden': {
+            'expected': after, 'found': rating.blurb_hidden, 'would_have_written': before}}}
+
+    # And the check the current-value comparison CANNOT make. Two decisions can hide one take -- a
+    # moderator acting on a report and an admin who went looking -- and the second writes no diff,
+    # because the words were already gone. So reversing either one finds exactly what it left and
+    # happily unhides, putting the take back up against a decision that still stands and was never
+    # disputed. Comparing values cannot see this; only asking whether anybody else's call is still
+    # standing can.
+    if not before:
+        standing = (ModerationAction.objects
+                    .filter(target_id=rating.pk,
+                            action__in=('blurb_hidden', 'blurb_hidden_proactive'),
+                            reversed_by_action__isnull=True)
+                    .exclude(pk=action.pk).exists())
+        if standing:
+            return {}, {'not_restored': {'blurb_hidden': {
+                'expected': after, 'found': rating.blurb_hidden,
+                'would_have_written': before,
+                'why': 'another decision to hide this take has not been reversed'}}}
+
+    rating.blurb_hidden = bool(before)
     rating.save(update_fields=['blurb_hidden'])
-    report.status = 'reviewed'
-    report.reviewed_by = moderator          # the standing decision is now this person's
-    report.reviewed_at = timezone.now()
+    return {'blurb_hidden': [after, bool(before)]}, {}
+
+
+def _undo_blurb_hidden(action, moderator):
+    """Put a hidden quick take back, using what the ORIGINAL entry recorded rather than assuming."""
+    report = action.blurb_report
+    rating = _rating_behind(action, report)
+
+    # The previous value comes out of the log rather than being hardcoded to False: for a take that
+    # was already hidden when it was actioned, hardcoding would UNhide it and call that a
+    # restoration.
+    changed, evidence = _restore_hidden(action, rating)
+
+    # Only when the take actually came back. Flipping the report to `reviewed` after a REFUSED
+    # restore put a still-hidden take into the queue's dismissed bucket and credited the standing
+    # decision to whoever tried to reverse it -- a call they did not make. Before the restore could
+    # refuse, this was always accurate; it stopped being so the moment it could.
+    if report is not None and changed:
+        report.status = 'reviewed'
+        report.reviewed_by = moderator      # the standing decision is now this person's
+        report.reviewed_at = timezone.now()
+        report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+    return {'blurb_report': report} if report is not None else {}, changed, evidence
+
+
+def _undo_blurb_hidden_proactive(action, moderator):
+    """Put back a take that was hidden without a report.
+
+    Finds the rating through `target_id` rather than a report FK, because there is no report -- which
+    is the whole difference between this and `_undo_blurb_hidden`. `target_id` was stored for exactly
+    this: the log documents it as "PK of the object acted on, captured at the time", and this is the
+    first thing to actually need it.
+    """
+    rating = _rating_behind(action)
+    changed, evidence = _restore_hidden(action, rating)
+    return {}, changed, evidence
+
+
+def _undo_blurb_report_dismissed(action, moderator):
+    """Reopen a dismissed report: it goes back into the queue for somebody to decide again.
+
+    `reviewed_by` and `reviewed_at` are CLEARED rather than reassigned. The report is genuinely
+    pending again, and a row saying "dismissed by X" while sitting in the pending queue is a
+    contradiction on the page. Who dismissed it is not lost -- it is in the entry being reversed,
+    which is the whole reason that entry is not edited or deleted.
+    """
+    report = _report_behind(action)
+    was = report.status
+    report.status = 'pending'
+    report.reviewed_by = None
+    report.reviewed_at = None
     report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
-    return report, {'blurb_hidden': [True, bool(was_hidden)]}
+    return {'blurb_report': report}, {'status': [was, 'pending']}, {}
 
 
-#: action -> the callable that undoes it. A DICT, not a set of names: the first cut gated on a set
-#: while the body was hardcoded to the blurb path, so adding a key would have sent a moderator the
-#: message "the report behind this decision is gone" for a report that was never involved -- telling
-#: them data was lost when the real cause was unimplemented code. Here a key with no handler is a
-#: KeyError at edit time.
-_UNDO = {'blurb_hidden': _undo_blurb_hidden}
+def _undo_game_flag_approved(action, moderator):
+    """Put back what the approval wrote, and be honest about what it will not put back.
+
+    THE TRAP THIS AVOIDS. `changed` records values as they were at DECISION time. Months can pass
+    before a reversal, and `is_delisted` may have been changed since by a sync, another flag, or a
+    person -- so blindly writing the old value back would silently discard a legitimate later edit
+    and call it a restoration.
+
+    So each field is restored ONLY if the game still holds exactly what this approval left there.
+    Anything else is skipped and recorded under the reversal's `evidence` as `not_restored`, because
+    a reversal that quietly did three quarters of its job is worse than one that says so.
+    """
+    flag = _flag_behind(action)
+    # `flag.game` is already the locked row: `_flag_behind`'s `select_for_update` joins Game with no
+    # `OF` clause, so Postgres locks both and returns the post-lock version.
+    game = flag.game
+    restored, skipped = {}, {}
+
+    for field, (before, after) in (action.changed or {}).items():
+        current = getattr(game, field, None)
+        if current != after:
+            skipped[field] = {'expected': after, 'found': current, 'would_have_written': before}
+            continue
+        setattr(game, field, before)
+        restored[field] = [after, before]
+
+    if restored:
+        game.save(update_fields=list(restored))
+
+    changed, evidence = dict(restored), {}
+    if skipped:
+        evidence['not_restored'] = skipped
+
+    # The REOPEN is refused when an identical flag is already waiting; the RESTORE above is not.
+    # Refusing the whole reversal was the first cut and it was wrong: putting the game field back is
+    # this undo's primary job, and a re-filed flag -- which `submit_flag` deliberately allows once
+    # the original is decided -- left `is_delisted` set with a message telling the admin to go and
+    # decide an unrelated flag, which would not have restored it either.
+    if _has_duplicate_pending(flag):
+        evidence['not_reopened'] = {
+            'why': 'the same hunter has already filed this flag again, and it is waiting'}
+    else:
+        was = flag.status
+        flag.status = 'pending'
+        flag.reviewed_by = None
+        flag.reviewed_at = None
+        flag.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+        changed['status'] = [was, 'pending']
+
+    return {'game_flag': flag}, changed, evidence
+
+
+def _undo_game_flag_dismissed(action, moderator):
+    """Reopen a dismissed flag. The game was never touched, so there is nothing to put back."""
+    flag = _flag_behind(action)
+    _refuse_duplicate_reopen(flag)
+    was = flag.status
+    flag.status = 'pending'
+    flag.reviewed_by = None
+    flag.reviewed_at = None
+    flag.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+    return {'game_flag': flag}, {'status': [was, 'pending']}, {}
+
+
+#: action -> (the callable that undoes it, what the resulting REVERSAL is called).
+#:
+#: A DICT, not a set of names: the first cut gated on a set while the body was hardcoded to the blurb
+#: path, so adding a key would have told a moderator "the report behind this decision is gone" for a
+#: report that was never involved -- reporting data loss when the real cause was unimplemented code.
+#:
+#: The pair, not just the callable: the reversal's own `action` used to be hardcoded to
+#: `blurb_restored`, so the moment a second undo existed, reopening a game flag would have been
+#: logged as a quick take being restored. The name of the result belongs beside the thing producing
+#: it. A key with no handler is a KeyError at edit time; a handler with no name is impossible.
+_UNDO = {
+    'blurb_hidden': (_undo_blurb_hidden, 'blurb_restored'),
+    # Its OWN reversal name. Both hides reversing to `blurb_restored` re-created exactly the
+    # ambiguity `blurb_hidden_proactive` exists to remove: a `blurb_restored` row with a null report
+    # would be indistinguishable between "undid a proactive hide" and "undid a queue hide whose
+    # report was purged".
+    'blurb_hidden_proactive': (_undo_blurb_hidden_proactive, 'blurb_restored_proactive'),
+    'blurb_report_dismissed': (_undo_blurb_report_dismissed, 'blurb_report_reopened'),
+    'game_flag_approved': (_undo_game_flag_approved, 'game_flag_reversed'),
+    'game_flag_dismissed': (_undo_game_flag_dismissed, 'game_flag_reopened'),
+}
+
+
+#: The actions a page may offer a Reverse button for, derived from the map that implements them.
+#:
+#: Public, and derived rather than listed, because the alternative is a page that offers a button the
+#: service then refuses -- the worst of both, since the admin has already typed a reason by then. Any
+#: undo added to `_UNDO` becomes offerable the same moment it becomes possible.
+UNDOABLE_ACTIONS = tuple(_UNDO)
 
 
 @transaction.atomic
@@ -259,19 +581,31 @@ def reverse_action(action, moderator, reason):
     # the same entry would both see False and both insert. The DB constraint on `reverses` is the
     # backstop; this is what turns the loser into a clean message instead of an IntegrityError.
     locked = ModerationAction.objects.select_for_update().get(pk=action.pk)
-    undo = _UNDO.get(locked.action)
-    if undo is None:
+    # BEFORE the handler lookup, not after. A reversal's own action has no `_UNDO` key, so the
+    # generic "cannot be reversed automatically" would win the race and describe a missing feature
+    # rather than the deliberate rule. Undoing an undo is re-deciding: do it as a decision, on the
+    # record, with its own reason.
+    if locked.reverses_id:
+        raise ModerationError(
+            'That entry is itself a reversal. To change the outcome again, act on the report.')
+    handler = _UNDO.get(locked.action)
+    if handler is None:
         raise ModerationError(f'{locked.get_action_display()} cannot be reversed automatically.')
     if locked.is_reversed:
         raise ModerationError('That decision has already been reversed.')
 
-    report, changed = undo(locked, moderator, reason)
+    undo, reversal_action = handler
+    links, changed, evidence = undo(locked, moderator)
 
     reversal = ModerationAction.objects.create(
-        actor=moderator, actor_label=_label(moderator), action='blurb_restored', reason=reason,
-        blurb_report=report, reverses=locked,
+        actor=moderator, actor_label=_label(moderator), action=reversal_action, reason=reason,
+        reverses=locked, **links,
+        # Copied from the entry being undone rather than re-derived: a reversal is evidence about the
+        # same hunter, and re-deriving it could disagree with the original if the report has since
+        # been purged.
+        subject_user=locked.subject_user, subject_label=locked.subject_label,
         target_id=locked.target_id, target_label=locked.target_label,
-        changed=changed,
+        changed=changed, evidence=evidence,
     )
     logger.info('Moderation: action %s reversed by=%s', locked.pk, getattr(moderator, 'pk', None))
     return reversal

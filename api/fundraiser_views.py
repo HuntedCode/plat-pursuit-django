@@ -65,6 +65,16 @@ class CreateDonationView(LoginRequiredMixin, View):
             return JsonResponse({'error': 'Invalid payment provider.'}, status=400)
         is_anonymous = bool(data.get('is_anonymous', False))
         message = str(data.get('message', ''))[:200]
+        # The message goes on the public donor wall, so a restriction covers it. The DONATION
+        # is never refused: taking somebody's money and then silencing them would be the wrong
+        # shape entirely. Their words simply do not go up.
+        if message:
+            from users.services import restriction_service
+
+            donor_profile = getattr(request.user, 'profile', None)
+            if donor_profile and restriction_service.is_restricted_from(donor_profile,
+                                                                        'reports'):
+                message = ''
 
         success_url = request.build_absolute_uri(f'/fundraiser/{slug}/success/')
         cancel_url = request.build_absolute_uri(f'/fundraiser/{slug}/')

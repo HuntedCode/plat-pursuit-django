@@ -20,6 +20,12 @@ which is the whole reason the actions are logged with a reason attached.
 <div class="mx-auto max-w-5xl px-3 md:px-5 lg:px-0 py-4 md:py-6">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
+    {% comment %}Outside the header card, matching the queue pages: `.pp-head-cascade` staggers its
+    children, and a button in there would take the title's opening beat.{% endcomment %}
+    <div class="flex flex-wrap items-center gap-2 mb-3 empty:hidden">
+        {% include 'staff/_admin_link.html' %}
+    </div>
+
     {# ── Header ─────────────────────────────────────────────────────────────────────────── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4 md:mb-6">
         <div class="card-body p-4 md:p-6 pp-head-cascade">

@@ -329,7 +329,8 @@ class BetaStaffGateMiddleware:
 
     def _is_allowed(self, request):
         # Staff, plus moderators (2026-08-23: the mod team reviews the beta too). The role
-        # split deliberately keeps mods OFF is_staff -- Django-admin access exactly -- so the
+        # split deliberately keeps mods OFF is_staff -- the admin tools at /staff/ exactly, Django
+        # admin itself having been narrowed to superusers in 2026-09 -- so the
         # beta door checks the role, not the admin bit.
         if request.user.is_staff or getattr(request.user, 'is_moderator', False):
             return True

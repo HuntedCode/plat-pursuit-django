@@ -22,6 +22,9 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
+from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
+                              PeopleSearchView, PersonView, RestrictionListView, RestrictView,
+                              ReverseDecisionView)
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
@@ -496,12 +499,39 @@ urlpatterns = [
     # `home` takes none -- so the pattern_name form raises NoReverseMatch (a hard 500, ungated) on every
     # hit. Any redirect on a path that captures something has to use this form.
     path('staff/notifications/scheduled/<int:pk>/cancel/', RedirectView.as_view(url='/', permanent=False), name='admin_cancel_scheduled'),
+    # ── Admin Hub ────────────────────────────────────────────────────────────────────────────────
+    # The landing over every staff tool. `/staff/` rather than a fresh namespace because four of the
+    # five tools already live here, `robots.txt` already blocks it, and `test_staff_design_strip.py`
+    # asserts those four still answer 200 at their current paths -- so the hub appears without moving
+    # anything and without editing a pinned test. `/admin/` is Django's.
+    #
+    # `is_staff` only, which the CustomUser.save() lockstep keeps FALSE for a moderator: /mod/ is the
+    # moderators-and-admins surface, /staff/ is admins.
+    path('staff/', AdminHubView.as_view(), name='admin_hub'),
+    # The decision log, and the one power the Mod Center does not have: taking a decision
+    # back. NOT under `staff/moderation/` -- that path is a pinned 404 from the 2026-08
+    # strip-down and `test_staff_design_strip.py` asserts it stays one.
+    path('staff/decisions/', DecisionLogView.as_view(), name='admin_decisions'),
+    path('staff/decisions/<int:pk>/reverse/', ReverseDecisionView.as_view(),
+         name='admin_reverse_decision'),
+    # One hunter, everything decided about them. Search-only by design: there is no listing
+    # of every account, because the reason to open this is always a specific person.
+    path('staff/people/', PeopleSearchView.as_view(), name='admin_people'),
+    path('staff/people/<int:user_id>/', PersonView.as_view(), name='admin_person'),
+    # Hiding a take nobody reported: admin-only, since it is acting on your own judgement
+    # rather than on a hunter's objection.
+    path('staff/quick-takes/<int:pk>/hide/', HideTakeView.as_view(), name='admin_hide_take'),
+    # Restrictions: the one admin power that changes what an ordinary hunter can do.
+    path('staff/restrictions/', RestrictionListView.as_view(), name='admin_restrictions'),
+    path('staff/people/<int:pk>/restrict/', RestrictView.as_view(), name='admin_restrict'),
+    path('staff/restrictions/<int:pk>/lift/', LiftRestrictionView.as_view(),
+         name='admin_lift_restriction'),
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     # Keeps the pre-cutover route name: any staff bookmark still resolves.
     # ── Mod Center ───────────────────────────────────────────────────────────────────────────────
     # `/mod/`, not `/staff/`: moderators are not staff. The role split (2026-08) exists so
-    # `is_staff` can mean exactly "Django admin access", and hanging the mod tools off /staff/ would
+    # `is_staff` can mean exactly "the admin tools" (Django admin itself is superusers only), and hanging the mod tools off /staff/ would
     # put the two back in one word. Every route is gated by ModeratorRequiredMixin -- admins reach
     # them too, via `is_staff`.
     path('mod/', ModCenterView.as_view(), name='mod_center'),

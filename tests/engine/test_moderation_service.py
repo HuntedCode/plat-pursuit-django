@@ -14,6 +14,7 @@ from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFac
 from trophies.mixins import is_mod_or_admin
 from trophies.models import BlurbReport, GameFlag, ModerationAction, UserConceptRating
 from trophies.services import moderation_service as mod
+from trophies.services.game_flag_service import GameFlagService
 
 pytestmark = pytest.mark.django_db
 
@@ -206,14 +207,41 @@ def test_a_decision_cannot_be_reversed_twice():
         mod.reverse_action(original, _moderator(), 'Restored again.')
 
 
-def test_a_dismissal_is_not_reversible_from_the_log():
-    """It changed nothing to put back. Re-opening a report is a queue operation, not an undo, and
-    pretending otherwise would write a reversal entry that reverses nothing."""
-    report = _reported_take()
-    action = mod.dismiss_blurb_report(report, _moderator(), 'Fine.')
+def test_a_dismissal_reopens_the_report():
+    """REVERSES an earlier decision of this suite's, deliberately.
 
-    with pytest.raises(mod.ModerationError):
-        mod.reverse_action(action, _moderator(), 'Changed my mind.')
+    This used to assert that a dismissal could not be undone, reasoning that "it changed nothing to
+    put back" and that reopening is a queue operation rather than an undo. That was wrong on its own
+    terms: a dismissal changed the report's status and took it out of the queue, and putting both
+    back is exactly an undo. The `changed` diff it writes is real, not ceremonial.
+
+    What made the old rule look right was that `_UNDO` had one entry, so "not reversible" and "not
+    implemented" were the same sentence.
+    """
+    report = _reported_take()
+    dismissal = mod.dismiss_blurb_report(report, _moderator(), 'Fine.')
+
+    reversal = mod.reverse_action(dismissal, _moderator(), 'On reflection it is not fine.')
+
+    report.refresh_from_db()
+    assert report.status == 'pending', 'the report did not go back into the queue'
+    assert report.reviewed_by is None, 'a pending report still named who dismissed it'
+    assert reversal.action == 'blurb_report_reopened'
+    assert reversal.changed == {'status': ['dismissed', 'pending']}
+
+
+def test_a_reversal_cannot_itself_be_reversed():
+    """Undoing an undo is re-deciding, and it should be done as a decision -- on the record, with
+    its own reason -- rather than by walking backwards up a chain of entries."""
+    report = _reported_take()
+    original = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    reversal = mod.reverse_action(original, _moderator(), 'Restored.')
+
+    with pytest.raises(mod.ModerationError) as refused:
+        mod.reverse_action(reversal, _moderator(), 'Hide it again.')
+
+    assert 'itself a reversal' in str(refused.value), (
+        'the message read as an unimplemented feature rather than a rule')
 
 
 # ── the log outlives its target ──────────────────────────────────────────────────────────────────
@@ -417,14 +445,42 @@ def test_reversing_hands_the_standing_decision_to_whoever_reversed_it():
     assert report.reviewed_by == admin
 
 
-def test_a_reversal_whose_report_is_gone_says_so_honestly():
+def test_a_hide_can_be_reversed_after_its_report_is_purged():
+    """REVERSES an earlier decision of this file's, which pinned the opposite.
+
+    It used to assert that a purged report made the reversal refuse, and called that honest. It was
+    not: `blurb_report` is SET_NULL precisely so an entry outlives its report, and refusing left the
+    take hidden with no way back through the log -- the same "traceable to nobody" failure
+    `subject_user` was added to fix, still sitting on the reversal path.
+
+    `target_id` has held the rating's pk since the log was built, and the proactive undo already
+    resolved a rating through it. There was never a reason for the two paths to differ.
+    """
     report = _reported_take()
     action = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    rating = report.rating
     report.delete()
     action.refresh_from_db()
+    assert action.blurb_report is None, 'the report did not actually go'
 
-    with pytest.raises(mod.ModerationError, match='deleted'):
-        mod.reverse_action(action, _moderator(), 'Undo.')
+    mod.reverse_action(action, _admin(), 'On appeal.')
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is False, 'the take stayed hidden with no route back'
+
+
+def test_a_reversal_whose_take_is_gone_too_says_so_honestly():
+    """The genuinely unrecoverable case: nothing left to put back, and saying so beats a traceback
+    or a silent no-op."""
+    report = _reported_take()
+    action = mod.hide_blurb(report, _moderator(), 'Hidden.')
+    rating_pk = report.rating.pk
+    report.delete()
+    UserConceptRating.objects.filter(pk=rating_pk).delete()
+    action.refresh_from_db()
+
+    with pytest.raises(mod.ModerationError, match='no longer exists'):
+        mod.reverse_action(action, _admin(), 'Undo.')
 
 
 def test_only_one_reversal_can_exist_per_decision_even_without_the_service():
@@ -482,3 +538,429 @@ def test_a_deactivated_moderator_loses_access():
     moderator.save()
 
     assert is_mod_or_admin(moderator) is False
+
+
+# ── who an entry is evidence ABOUT ───────────────────────────────────────────────────────────────
+#
+# `subject_user` is not "the owner of the thing acted on". It is the hunter whose BEHAVIOUR the entry
+# is evidence about, and those differ for half the actions. One settled rule, or the column means two
+# things and the per-person history is wrong for both.
+
+def test_hiding_a_take_records_its_author_as_the_subject():
+    report = _reported_take()
+    author = report.rating.profile
+
+    action = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    assert action.subject_user == author.user
+    assert action.subject_label == author.user.display_name
+
+
+def test_dismissing_a_report_records_the_REPORTER_not_the_author():
+    """The one most likely to be got wrong. A dismissal says the report was wrong: that is evidence
+    about the person who filed it, and none at all about the person they filed it against."""
+    report = _reported_take()
+    author, reporter = report.rating.profile, report.reporter
+    assert author.user != reporter.user
+
+    action = mod.dismiss_blurb_report(report, _moderator(), 'nothing wrong with it')
+
+    assert action.subject_user == reporter.user
+    assert action.subject_user != author.user, 'a dismissal was filed against the author'
+
+
+@pytest.mark.parametrize('decide,expected', [
+    (mod.approve_game_flag, 'game_flag_approved'),
+    (mod.dismiss_game_flag, 'game_flag_dismissed'),
+])
+def test_a_flag_decision_records_the_reporter(decide, expected):
+    """A game has no hunter behind it, so the only person a flag decision is evidence about is the
+    one who raised it -- and "who reports well" is what the history is for."""
+    flag = _flag()
+
+    action = decide(flag, _moderator(), 'checked, correct')
+
+    assert action.action == expected
+    assert action.subject_user == flag.reporter.user
+
+
+def test_a_reversal_is_evidence_about_the_same_person():
+    report = _reported_take()
+    author = report.rating.profile
+    original = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    reversal = mod.reverse_action(original, _moderator(), 'on appeal, it was fine')
+
+    assert reversal.subject_user == original.subject_user == author.user
+    assert reversal.subject_label == original.subject_label
+
+
+def test_the_history_survives_the_report_being_purged():
+    """THE reason this column exists. `blurb_report` is SET_NULL, so before it, purging a report
+    left an entry that could not be traced to anybody -- losing exactly the old history an appeal is
+    about."""
+    report = _reported_take()
+    author = report.rating.profile
+    action = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    report.delete()
+    action.refresh_from_db()
+
+    assert action.blurb_report is None, 'the report did not actually go'
+    assert action.subject_user == author.user, 'the entry lost the person it was about'
+    assert action.subject_label
+
+
+def test_one_query_answers_everything_about_one_hunter():
+    """The claim that made a real FK worth having over anything cleverer."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from trophies.models import ModerationAction
+
+    report = _reported_take()
+    author = report.rating.profile
+    mod.hide_blurb(report, _moderator(), 'a slur')
+    mod.dismiss_game_flag(_flag(), _moderator(), 'not delisted')
+
+    with CaptureQueriesContext(connection) as captured:
+        theirs = list(ModerationAction.objects.filter(subject_user=author.user))
+
+    assert len(theirs) == 1
+    assert len(captured.captured_queries) == 1
+
+
+def test_a_subject_with_no_account_behind_the_profile_is_left_null():
+    """Honest rather than clever. A profile with no user has nobody to name, and inventing a label
+    would put a name on an entry that never had one."""
+    report = _reported_take()
+    report.rating.profile.user = None
+    report.rating.profile.save(update_fields=['user'])
+    report.rating.profile.refresh_from_db()
+
+    action = mod.hide_blurb(report, _moderator(), 'a slur')
+
+    assert action.subject_user is None
+    assert action.subject_label == ''
+
+
+# ── reversing a flag decision ────────────────────────────────────────────────────────────────────
+
+def test_reversing_an_approval_puts_the_games_field_back():
+    flag = _flag('delisted')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed delisted.')
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is True
+
+    reversal = mod.reverse_action(approval, _admin(), 'Store listing is live again.')
+
+    flag.game.refresh_from_db()
+    flag.refresh_from_db()
+    assert flag.game.is_delisted is False, 'the approval was not undone'
+    assert flag.status == 'pending', 'the flag did not go back into the queue'
+    assert reversal.action == 'game_flag_reversed'
+    assert reversal.changed['is_delisted'] == [True, False]
+
+
+def test_reversing_an_approval_does_NOT_clobber_a_later_change():
+    """THE trap. `changed` records values at DECISION time, and months can pass before a reversal --
+    the field may have moved since, by a sync, another flag, or a person. Writing the old value back
+    blindly would discard a legitimate later edit and call it a restoration.
+    """
+    flag = _flag('delisted')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed delisted.')
+
+    # Somebody puts the game back on sale, months later, for reasons of their own.
+    flag.game.refresh_from_db()
+    flag.game.is_delisted = False
+    flag.game.save(update_fields=['is_delisted'])
+
+    reversal = mod.reverse_action(approval, _admin(), 'The original call was wrong.')
+
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is False, 'the later change survived, as it must'
+    assert 'is_delisted' not in reversal.changed, 'the reversal claimed a write it did not make'
+    skipped = reversal.evidence['not_restored']['is_delisted']
+    assert skipped['expected'] is True and skipped['found'] is False
+    assert skipped['would_have_written'] is False
+
+
+def test_a_partly_applied_reversal_says_so_rather_than_going_quiet():
+    """A reversal that did three quarters of its job silently is worse than one that reports it: the
+    admin walks away believing the game is back as it was."""
+    flag = _flag('is_shovelware')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Asset flip.')
+
+    # One of the two fields it wrote moves on; the other does not.
+    flag.game.refresh_from_db()
+    flag.game.shovelware_status = 'auto_flagged'
+    flag.game.save(update_fields=['shovelware_status'])
+
+    reversal = mod.reverse_action(approval, _admin(), 'Misjudged, it is a real game.')
+
+    flag.game.refresh_from_db()
+    assert flag.game.shovelware_lock is False, 'the lock was not lifted'
+    assert flag.game.shovelware_status == 'auto_flagged', 'the later status change was clobbered'
+    assert 'shovelware_lock' in reversal.changed
+    assert 'shovelware_status' in reversal.evidence['not_restored']
+
+
+def test_reversing_a_dismissed_flag_reopens_it():
+    flag = _flag('unobtainable')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Trophies look fine.')
+
+    reversal = mod.reverse_action(dismissal, _admin(), 'Three more reports since.')
+
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+    assert flag.reviewed_by is None
+    assert reversal.action == 'game_flag_reopened'
+
+
+def test_reversing_a_no_op_approval_only_reopens_the_flag():
+    """`missing_vr` writes no field, so there is nothing to put back -- and the reversal must not
+    invent a diff to look busy."""
+    flag = _flag('missing_vr')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed, PSVR2.')
+
+    reversal = mod.reverse_action(approval, _admin(), 'Wrong game.')
+
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+    assert reversal.changed == {'status': ['approved', 'pending']}
+    assert reversal.evidence == {}
+
+
+@pytest.mark.parametrize('decide,undo_name', [
+    (mod.approve_game_flag, 'game_flag_reversed'),
+    (mod.dismiss_game_flag, 'game_flag_reopened'),
+])
+def test_every_flag_reversal_is_its_own_entry_not_an_edit(decide, undo_name):
+    flag = _flag()
+    original = decide(flag, _moderator(), 'A decision.')
+
+    reversal = mod.reverse_action(original, _admin(), 'A different view.')
+
+    original.refresh_from_db()
+    assert ModerationAction.objects.count() == 2, 'the original was rewritten instead of added to'
+    assert reversal.reverses_id == original.pk
+    assert reversal.action == undo_name
+    assert original.is_reversed is True
+
+
+def test_reversing_a_flag_decision_needs_a_reason_like_any_other():
+    flag = _flag()
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+
+    with pytest.raises(mod.ModerationError):
+        mod.reverse_action(approval, _admin(), '  ')
+
+    flag.refresh_from_db()
+    assert flag.status == 'approved', 'a refused reversal still reopened the flag'
+    assert ModerationAction.objects.count() == 1
+
+
+def test_a_flag_decision_cannot_be_reversed_twice():
+    flag = _flag()
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+    mod.reverse_action(approval, _admin(), 'Wrong.')
+
+    with pytest.raises(mod.ModerationError):
+        mod.reverse_action(approval, _admin(), 'Wrong again.')
+
+
+def test_a_reversal_whose_flag_is_gone_says_so_honestly():
+    """`game_flag` is SET_NULL, so the entry outlives the flag -- but the undo needs the flag, and
+    "cannot be undone here" beats a traceback or a silent no-op."""
+    flag = _flag()
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed.')
+    flag.delete()
+    approval.refresh_from_db()
+
+    with pytest.raises(mod.ModerationError) as refused:
+        mod.reverse_action(approval, _admin(), 'Undo it.')
+
+    assert 'deleted' in str(refused.value)
+
+
+def test_every_action_that_can_be_reversed_names_its_reversal():
+    """The map is (callable, name) pairs because the reversal's own `action` used to be hardcoded to
+    `blurb_restored` -- so the moment a second undo existed, reopening a game flag would have been
+    logged as a quick take being restored."""
+    valid = {choice for choice, _label in ModerationAction.ACTIONS}
+
+    for decided, (undo, reversal_action) in mod._UNDO.items():
+        assert decided in valid, f'{decided} is not a real action'
+        assert reversal_action in valid, f'{reversal_action} is not a real action'
+        assert callable(undo)
+        assert reversal_action != decided, f'{decided} logs its reversal as itself'
+
+
+def test_every_decision_the_service_makes_can_be_reversed():
+    """The owner asked for "reverse any decision". A decision the log records but cannot undo is a
+    gap that only shows up the day somebody needs it."""
+    decisions = {'blurb_hidden', 'blurb_report_dismissed', 'game_flag_approved',
+                 'game_flag_dismissed'}
+
+    assert decisions <= set(mod._UNDO), f'no undo for {decisions - set(mod._UNDO)}'
+
+
+# ── what the audit of P2 found ───────────────────────────────────────────────────────────────────
+
+def test_a_second_report_on_an_already_hidden_take_claims_no_change():
+    """`_lock_report` preconditions on the REPORT's status, which says nothing about the take. So a
+    second report against a take that is already hidden used to log `blurb_hidden: [True, True]` --
+    an entry claiming a change that did not happen, which this module calls affirmatively misleading
+    evidence and which `_lock_rating` was written to prevent on the other path only."""
+    report = _reported_take()
+    mod.hide_blurb(report, _moderator(), 'First.')
+    second = BlurbReport.objects.create(
+        rating=report.rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+
+    action = mod.hide_blurb(second, _moderator(), 'Second report, same take.')
+
+    assert action.changed == {}, 'the log claimed a write that did not happen'
+    assert action.evidence.get('already_hidden') is True, 'the log does not say why it wrote nothing'
+    report.rating.refresh_from_db()
+    assert report.rating.blurb_hidden is True
+
+
+def test_reversing_only_your_own_hide_does_not_undo_somebody_elses():
+    """The current-value rule, applied to the blurb undos as well as the flag one. Two decisions can
+    land on one take; reversing yours must not quietly lift theirs."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory()
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=None, blurb='words',
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0)
+    proactive = mod.hide_blurb_without_a_report(rating, _admin(), 'Went looking.')
+    queue_report = BlurbReport.objects.create(
+        rating=rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+    mod.hide_blurb(queue_report, _moderator(), 'And a hunter reported it too.')
+
+    reversal = mod.reverse_action(proactive, _admin(), 'My call was wrong.')
+
+    rating.refresh_from_db()
+    assert rating.blurb_hidden is True, "reversing one entry lifted somebody else's decision"
+    assert reversal.changed == {}
+    assert 'blurb_hidden' in reversal.evidence['not_restored']
+
+
+def test_reopening_a_flag_refuses_when_the_same_one_is_already_waiting():
+    """`submit_flag` dedups on `status='pending'` and lets a reporter file again once a flag is
+    decided -- so reopening the old one puts two identical pending rows in the queue, which no DB
+    constraint catches. A moderator then sees the same complaint twice."""
+    flag = _flag('delisted')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Looks fine.')
+    refiled, error = GameFlagService.submit_flag(flag.game, flag.reporter, 'delisted', 'again')
+    assert error is None and refiled.pk != flag.pk
+
+    with pytest.raises(mod.ModerationError, match='already filed this flag again'):
+        mod.reverse_action(dismissal, _admin(), 'Actually they were right.')
+
+    assert GameFlag.objects.filter(status='pending').count() == 1, 'the queue has a duplicate'
+
+
+def test_reopening_is_allowed_when_nothing_duplicate_is_waiting():
+    flag = _flag('delisted')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Looks fine.')
+
+    mod.reverse_action(dismissal, _admin(), 'Actually they were right.')
+
+    flag.refresh_from_db()
+    assert flag.status == 'pending'
+
+
+def test_the_two_hides_reverse_to_different_names():
+    """Both reversing to `blurb_restored` re-created the ambiguity `blurb_hidden_proactive` exists to
+    remove: a restored row with a null report would be indistinguishable between "undid a proactive
+    hide" and "undid a queue hide whose report was purged"."""
+    names = {decided: reversal for decided, (_undo, reversal) in mod._UNDO.items()}
+
+    assert names['blurb_hidden'] != names['blurb_hidden_proactive']
+
+
+def test_the_flag_undo_locks_the_row_it_compares():
+    """A guard that is not serialised is a guard with a window in it: the undo read the game,
+    compared, and blind-wrote, so a sync writing in between was silently overwritten with no
+    `not_restored` warning -- the exact failure the guard exists to prevent."""
+    import inspect
+
+    # `_flag_behind` alone, because its ONE `select_for_update` locks both rows: the join to Game
+    # carries no `OF` clause, so Postgres locks the game too and returns the post-lock version. The
+    # previous version of this test counted two calls across two functions, which meant deleting the
+    # now-redundant second one would have failed it for no reason.
+    source = inspect.getsource(mod._flag_behind)
+
+    assert '.select_for_update()' in source, (
+        'the flag undo compares and writes against rows nothing is holding still')
+
+
+# ── what the RE-audit of those fixes found ───────────────────────────────────────────────────────
+
+def test_reversing_an_approval_restores_the_game_even_if_the_flag_was_refiled():
+    """The first fix for the duplicate-queue problem refused the WHOLE reversal, which was the wrong
+    half. Putting the game field back is this undo's primary job, and `submit_flag` deliberately
+    lets a hunter re-file once the original is decided -- so an ordinary re-file left `is_delisted`
+    set, with a message telling the admin to go and decide an unrelated flag, which would not have
+    restored it either."""
+    flag = _flag('delisted')
+    approval = mod.approve_game_flag(flag, _moderator(), 'Confirmed delisted.')
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is True
+    GameFlagService.submit_flag(flag.game, flag.reporter, 'delisted', 'still gone')
+
+    reversal = mod.reverse_action(approval, _admin(), 'Store listing is live again.')
+
+    flag.game.refresh_from_db()
+    assert flag.game.is_delisted is False, 'the game data was never put back'
+    assert reversal.changed['is_delisted'] == [True, False]
+    flag.refresh_from_db()
+    assert flag.status == 'approved', 'the old flag was reopened beside the new one'
+    assert reversal.evidence['not_reopened'], 'the log does not say the flag was left alone'
+
+
+def test_reopening_a_dismissed_flag_still_refuses_on_a_duplicate():
+    """The refusal is right for THIS undo, whose only job is the reopen."""
+    flag = _flag('delisted')
+    dismissal = mod.dismiss_game_flag(flag, _moderator(), 'Looks fine.')
+    GameFlagService.submit_flag(flag.game, flag.reporter, 'delisted', 'again')
+
+    with pytest.raises(mod.ModerationError, match='already filed this flag again'):
+        mod.reverse_action(dismissal, _admin(), 'They were right.')
+
+
+def test_a_refused_restore_does_not_mark_the_report_reviewed():
+    """It flipped the report to `reviewed` and credited the standing decision to whoever tried to
+    reverse it -- a call they did not make -- putting a still-hidden take in the queue's dismissed
+    bucket. Accurate while the restore could not refuse; wrong the moment it could."""
+    profile = ProfileFactory(is_linked=True)
+    concept = ConceptFactory()
+    rating = UserConceptRating.objects.create(
+        profile=profile, concept=concept, concept_trophy_group=None, blurb='words',
+        difficulty=5, grindiness=5, hours_to_platinum=20, fun_ranking=8, overall_rating=4.0)
+    mod.hide_blurb_without_a_report(rating, _admin(), 'Went looking.')
+    report = BlurbReport.objects.create(
+        rating=rating, reporter=ProfileFactory(is_linked=True), reason='spam')
+    queue_hide = mod.hide_blurb(report, _moderator(), 'Reported too.')
+
+    mod.reverse_action(queue_hide, _admin(), 'My call was wrong.')
+
+    report.refresh_from_db()
+    assert report.status == 'action_taken', 'a refused restore moved the report to dismissed'
+    assert report.reviewed_by is not None
+
+
+def test_the_ordinary_reversal_locks_the_take_it_compares():
+    """The lock was taken only on the fallback path, so the FREQUENT reversal compared and wrote
+    against an unlocked row -- the window this was meant to close for games, left open for takes.
+    It is also what stops two admins reversing two hides on one take from each seeing the other as
+    standing, both refusing, and stranding it hidden with no entry left that could unhide it."""
+    import inspect
+
+    source = inspect.getsource(mod._rating_behind)
+
+    assert source.count('select_for_update') >= 1
+    assert 'return report.rating' not in source, (
+        'the common path returns an unlocked related object')
+

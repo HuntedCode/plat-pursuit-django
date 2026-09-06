@@ -107,6 +107,9 @@ The card shows **all three options, including the ones nobody picked**: showing 
 - `UserConceptRating.recommendation` (CharField 20, choices, `blank=True`) — see above.
 - `UserConceptRating.blurb` (CharField 140) + `blurb_hidden` (bool), partial index `rating_blurb_idx`.
 - `UserConceptRating.visible_blurbs()` — the ONLY supported blurb read path (present + not staff-hidden, index-backed).
+- A hunter [restricted from quick takes](admin-hub.md#restrictions) cannot write the WORDS; their
+  scores still save, because dropping those would rewrite the game's averages as a side effect of
+  a decision about their prose.
 - `BlurbReport` — FKs the rating, so it follows the rating through `Concept.absorb()` with no absorb branch.
   Reviewed in the [Moderation Center](moderation-center.md)'s Quick Takes queue. Hiding a take sets
   `blurb_hidden` and leaves the RATING intact, so its scores stay in every average: hiding words a

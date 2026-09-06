@@ -164,6 +164,22 @@ class GroupRatingView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            # A restriction on quick takes stops the WORDS and nothing else. The scores go through
+            # exactly as before, for the same reason `blurb_hidden` is a separate field from the
+            # blurb: a hunter's opinion of a game's difficulty is not the thing being restricted, and
+            # silently dropping their rating would rewrite the game's averages as a side effect of a
+            # moderation decision about their prose.
+            from users.services import restriction_service
+
+            if (blurb_submitted and form.cleaned_data.get('blurb')
+                    and restriction_service.is_restricted_from(profile, 'quick_takes')):
+                return Response(
+                    {'success': False,
+                     'error': 'Your account is currently restricted from writing quick takes. '
+                              'Your rating can still be saved without one.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             rating = form.save(commit=False)
             rating.profile = profile
             rating.concept = concept

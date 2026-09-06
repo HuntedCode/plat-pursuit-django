@@ -1,12 +1,12 @@
 # Community Game Flags
 
-Community game flags let users report data quality issues on individual games. Each flag is reviewed by a moderator in the [Moderation Center](moderation-center.md) before any changes are applied (Django admin still works, and is the only route for bulk review). This helps catch delisted games, unobtainable platinums, shovelware misclassifications, missing VR tags, online trophy requirements, buggy trophies, regional errors, and other issues that automated systems miss.
+Community game flags let users report data quality issues on individual games. A hunter [restricted from reports](admin-hub.md#restrictions) cannot file one, enforced in `GameFlagService.submit_flag` (the only writer) as well as at the view. Each flag is reviewed by a moderator in the [Moderation Center](moderation-center.md) before any changes are applied (Django admin still works, and is the only route for bulk review). This helps catch delisted games, unobtainable platinums, shovelware misclassifications, missing VR tags, online trophy requirements, buggy trophies, regional errors, and other issues that automated systems miss.
 
 ## Architecture Overview
 
 The system follows a simple submit-then-review pattern. Users submit flags through a modal on game detail pages, which creates `GameFlag` rows with `status='pending'`. Moderators review flags one at a time in the [Moderation Center](moderation-center.md)'s Game Flags queue; Django admin keeps its bulk approve/dismiss actions for sweeps. Approving a flag automatically applies the corresponding Game field change (where applicable).
 
-The two routes differ in what they record. The Mod Center goes through `moderation_service`, which requires a reason and writes a `ModerationAction` capturing the before/after of every Game field the approval touched. Django admin calls `GameFlagService` directly and writes no audit entry, so **prefer the Mod Center for anything a hunter might ask about**.
+Both routes now record the same thing. Django admin's bulk actions were rerouted through `moderation_service` in 2026-09 behind a confirmation page that requires a reason, so a sweep writes one `ModerationAction` per flag with the before/after of every Game field it touched, and skips (with a message) any a colleague already decided. Before that they called `GameFlagService` directly and wrote nothing. Django admin is also superusers only now, so most admins reach the queue and not the changelist.
 
 **Why Game-level, not Concept-level**: Flags target specific Game rows because some issues are variant-specific (a regional version may be delisted while others aren't). This also avoids needing `Concept.absorb()` updates since games are never deleted during concept absorption.
 
@@ -20,7 +20,7 @@ The two routes differ in what they record. The Mod Center goes through `moderati
 | `trophies/services/game_flag_service.py` | submit_flag, approve_flag, dismiss_flag logic |
 | `api/game_flag_views.py` | POST endpoint for flag submission |
 | `api/urls.py` | URL registration |
-| `trophies/admin.py` (GameFlagAdmin) | Bulk staff review. No audit entry: see the note above |
+| `trophies/admin.py` (GameFlagAdmin) | Bulk review, superuser-only, routed through `moderation_service` behind a reason prompt |
 | `trophies/views/moderation_views.py` | The Game Flags queue: one flag at a time, reason required, audited |
 | `static/js/game-flag.js` | Frontend modal and API submission |
 | `templates/trophies/partials/game_detail/game_detail_header.html` | Flag button placement |

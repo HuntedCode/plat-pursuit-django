@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
@@ -273,3 +274,106 @@ class SubscriptionPeriod(models.Model):
             return 0
         end = self.ended_at or timezone.now()
         return (end - self.started_at).days
+
+
+class UserRestriction(models.Model):
+    """A hunter barred from writing something, for a while or indefinitely.
+
+    FKs to BOTH `CustomUser` and `Profile`, because neither survives alone.
+
+    The first cut keyed on the account only, reasoning that a restriction is an ACCOUNT fact and that
+    hanging it off the profile would make unlinking PSN a way to shed it. That reasoning holds and is
+    incomplete -- see the `profile` field below for the hatch it missed.
+
+    WHAT IT IS NOT. It is not `is_active=False`, which kills login and every read; this is a targeted
+    write ban that leaves their trophies, badges and leaderboard positions exactly as they were. And
+    it hides nothing already published -- an existing quick take stays up unless somebody hides it.
+    Both of those are said on the page too, because an admin reaching for "restrict" when they meant
+    "hide" is the likely mistake.
+
+    LIFTING NEVER EDITS THIS ROW'S HISTORY. It stamps the lift fields and writes an `AdminAction`
+    pointing at the entry that applied it -- the same grammar as reversing a moderation decision, so
+    "who lifted this, and why" has an answer.
+    """
+    SCOPES = [
+        ('quick_takes', 'Writing quick takes'),
+        ('reports', 'Filing reports and flags'),
+        ('all_ugc', 'All user-submitted content'),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='restrictions',
+        help_text='The account restricted. SET_NULL, not CASCADE -- see `profile` below.',
+    )
+    profile = models.ForeignKey(
+        'trophies.Profile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='restrictions',
+        help_text='The PSN profile behind the account, and the half that actually survives.\n\n'
+                  'Both, because neither alone is durable. The FIRST cut keyed on the user only, '
+                  'reasoning that a restriction is an account fact and that hanging it off the '
+                  'profile would make unlinking PSN an escape hatch. True, and it missed the bigger '
+                  'hatch: Settings has a self-service DELETE ACCOUNT, `Profile.user` is SET_NULL, '
+                  'and `link_profile_to_user` reattaches THE SAME profile row to a new account. So '
+                  'delete, re-register, re-verify the same PSN account, and a CASCADE took every '
+                  'restriction with it -- while the trophies, badges, ranking and handle all came '
+                  'back. The profile is what persists across that, so the profile is what a '
+                  'restriction has to remember.',
+    )
+    scope = models.CharField(max_length=16, choices=SCOPES)
+    reason = models.TextField(help_text='REQUIRED by the service, like every other audited action.')
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name='restrictions_applied')
+    created_by_label = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    expires_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='NULL means indefinite. ONE field rather than a boolean plus a duration, because '
+                  'two fields describing one fact are two fields that can disagree -- and the '
+                  'disagreement would be silent, since nothing reads them together.',
+    )
+
+    lifted_at = models.DateTimeField(null=True, blank=True)
+    lifted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='restrictions_lifted')
+    lifted_by_label = models.CharField(max_length=150, blank=True)
+    lift_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            # The gate's query: every live restriction for one account. It runs on UGC writes, so it
+            # reads off this index rather than scanning.
+            models.Index(fields=['user', 'lifted_at', 'expires_at'], name='restriction_live_idx'),
+            # The same shape for the profile half, because the gate asks about both in one query.
+            models.Index(fields=['profile', 'lifted_at', 'expires_at'],
+                         name='restriction_live_prof_idx'),
+            models.Index(fields=['-created_at', '-id'], name='restriction_recent_idx'),
+        ]
+        # NO unique constraint on (user, scope). A partial unique on `lifted_at IS NULL` would also
+        # cover EXPIRED rows -- which are not lifted, merely lapsed -- and so would refuse to
+        # re-restrict somebody who had served a previous one. The service takes a row lock and
+        # checks for a LIVE restriction instead, which is the same shape as `_lock_report`.
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(reason__regex=r'\S'),
+                name='restriction_reason_is_not_blank',
+            ),
+        ]
+
+    def __str__(self):
+        until = f' until {self.expires_at:%Y-%m-%d}' if self.expires_at else ' indefinitely'
+        return f'{self.get_scope_display()}{until} ({self.created_by_label or "unknown"})'
+
+    @property
+    def is_live(self):
+        """Derived, never stored. A cached boolean would be wrong the moment `expires_at` passed,
+        with nothing to notice: expiry happens by the clock, not by anybody writing a row."""
+        if self.lifted_at is not None:
+            return False
+        return self.expires_at is None or self.expires_at > timezone.now()
+

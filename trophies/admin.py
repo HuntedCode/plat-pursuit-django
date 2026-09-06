@@ -4348,25 +4348,36 @@ class GameFlagAdmin(admin.ModelAdmin):
         return obj.details[:80] + ('...' if len(obj.details) > 80 else '')
     details_preview.short_description = 'Details'
 
+    # Both go through `moderation_service`, not `GameFlagService` directly, so a bulk sweep writes
+    # the same audit entry a Mod Center decision does. That service requires a reason, which a Django
+    # action has nowhere to type -- hence the confirmation page. See trophies/admin_reasoned_actions.
     @admin.action(description='Approve selected flags (apply game changes)')
     def approve_selected(self, request, queryset):
-        from trophies.services.game_flag_service import GameFlagService
-        count = 0
-        with transaction.atomic():
-            for flag in queryset.filter(status='pending'):
-                GameFlagService.approve_flag(flag, request.user)
-                count += 1
-        messages.success(request, f'Approved {count} flag(s) and applied game changes.')
+        from trophies.admin_reasoned_actions import run_with_a_reason
+        from trophies.services import moderation_service
+
+        return run_with_a_reason(
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
+            self, request, queryset,
+            title='Approve these flags?', verb='Approved',
+            apply=moderation_service.approve_game_flag)
 
     @admin.action(description='Dismiss selected flags')
     def dismiss_selected(self, request, queryset):
-        from trophies.services.game_flag_service import GameFlagService
-        count = 0
-        with transaction.atomic():
-            for flag in queryset.filter(status='pending'):
-                GameFlagService.dismiss_flag(flag, request.user)
-                count += 1
-        messages.success(request, f'Dismissed {count} flag(s).')
+        from trophies.admin_reasoned_actions import run_with_a_reason
+        from trophies.services import moderation_service
+
+        return run_with_a_reason(
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
+            self, request, queryset,
+            title='Dismiss these flags?', verb='Dismissed',
+            apply=moderation_service.dismiss_game_flag)
 
 
 @admin.register(ScoutAccount)
@@ -4796,7 +4807,7 @@ class BlurbReportAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'reviewed_at']
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
-    actions = ['hide_blurb_and_resolve', 'mark_as_dismissed', 'unhide_blurb']
+    actions = ['hide_blurb_and_resolve', 'mark_as_dismissed']
 
     fieldsets = (
         ('Report', {'fields': ('rating', 'reporter', 'reason', 'details')}),
@@ -4816,25 +4827,37 @@ class BlurbReportAdmin(admin.ModelAdmin):
 
     @admin.action(description='Hide the blurb + resolve report(s)')
     def hide_blurb_and_resolve(self, request, queryset):
-        from django.utils import timezone
-        from trophies.models import UserConceptRating
-        rating_ids = list(queryset.values_list('rating_id', flat=True))
-        hidden = UserConceptRating.objects.filter(id__in=rating_ids, blurb_hidden=False).update(blurb_hidden=True)
-        resolved = queryset.update(status='action_taken', reviewed_by=request.user, reviewed_at=timezone.now())
-        self.message_user(request, f'Hid {hidden} blurb(s); resolved {resolved} report(s).')
+        from trophies.admin_reasoned_actions import run_with_a_reason
+        from trophies.services import moderation_service
+
+        return run_with_a_reason(
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
+            self, request, queryset,
+            title='Hide these quick takes?', verb='Hid',
+            apply=moderation_service.hide_blurb)
 
     @admin.action(description='Dismiss report(s) (blurb is fine)')
     def mark_as_dismissed(self, request, queryset):
-        from django.utils import timezone
-        n = queryset.update(status='dismissed', reviewed_by=request.user, reviewed_at=timezone.now())
-        self.message_user(request, f'Dismissed {n} report(s).')
+        from trophies.admin_reasoned_actions import run_with_a_reason
+        from trophies.services import moderation_service
 
-    @admin.action(description='Un-hide the blurb (reverse a hide)')
-    def unhide_blurb(self, request, queryset):
-        from trophies.models import UserConceptRating
-        rating_ids = list(queryset.values_list('rating_id', flat=True))
-        n = UserConceptRating.objects.filter(id__in=rating_ids, blurb_hidden=True).update(blurb_hidden=False)
-        self.message_user(request, f'Un-hid {n} blurb(s).')
+        return run_with_a_reason(
+            # Not pre-filtered: the service's precondition refuses an already-handled row BY NAME.
+            # (`run_with_a_reason` re-resolves the rows from the posted pks on the confirming submit,
+            # because Django re-applies the changelist filter there and would otherwise drop such a
+            # row silently -- see `_selected_rows`.)
+            self, request, queryset,
+            title='Dismiss these reports?', verb='Dismissed',
+            apply=moderation_service.dismiss_blurb_report)
+
+    # `unhide_blurb` is GONE rather than rerouted. It was a bare `queryset.update(blurb_hidden=False)`
+    # -- a reversal with no record that anything was reversed, which is the one thing this whole log
+    # exists to make impossible. Un-hiding is `/staff/decisions/`: it finds the decision, undoes what
+    # that decision actually did, and writes an entry pointing at it. There is no bulk equivalent
+    # because reversing forty decisions for one reason is not a thing anybody should do quickly.
 
 
 # =====================================================================================================

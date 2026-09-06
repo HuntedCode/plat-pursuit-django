@@ -1,8 +1,10 @@
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Page, Paginator
 from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
 from django.utils.cache import patch_vary_headers
+from django.utils.http import url_has_allowed_host_and_scheme
 
 
 class PremiumRequiredMixin(LoginRequiredMixin):
@@ -318,3 +320,75 @@ class BackgroundContextMixin:
         if landscape:
             return {'bg_url': landscape}
         return {}
+
+
+class PostActionMixin:
+    """POST-only, act, tell the user, go back where they came from.
+
+    Shared by the moderation actions and the admin ones. It carries NO GATE of its own on purpose --
+    each family pairs it with theirs (`ModeratorRequiredMixin` for /mod/, `StaffRequiredMixin` for
+    /staff/), and a mixin that silently supplied one would make the gate invisible at the point where
+    it is chosen.
+
+    Hoisted rather than copied because of `_safe_next`. `next` arrives in the POST body so somebody
+    lands back on the list they were reading; unvalidated that is an OPEN REDIRECT, and an
+    open-redirect guard is precisely the code that must not exist in two places where one can be
+    fixed and the other forgotten.
+
+    Subclasses provide `act(pk, user, reason)`, `success_message`, `error_class`, and optionally
+    `default_redirect()`.
+    """
+    #: The exception this family raises for a refusable action. Its message is SHOWN to the user, so
+    #: it must be one written to be read -- "already handled by somebody else", not a traceback.
+    #:
+    #: No default. It was `Exception`, which would have caught AttributeError, KeyError and every
+    #: other programming mistake in a subclass that forgot to set it, and rendered the traceback text
+    #: to an admin as though it were an explanation. Same treatment as `default_redirect`: a subclass
+    #: that does not answer this does not work.
+    error_class = None
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.error_class is None:
+            raise NotImplementedError(
+                f'{type(self).__name__} must set `error_class` to the exception its service raises.')
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, pk):
+        reason = (request.POST.get('reason') or '').strip()
+        try:
+            outcome = self.act(pk, request.user, reason)
+        except self.error_class as exc:
+            messages.error(request, str(exc))
+        else:
+            # `report(outcome)`, not a flat success. An action can now succeed at the level of "no
+            # exception" while having deliberately done nothing -- a reversal that refused to
+            # restore because somebody else's decision still stands -- and telling the admin
+            # "Decision reversed." there is a lie the page then contradicts.
+            level, text = self.report(outcome)
+            messages.add_message(request, level, text)
+        return redirect(self._safe_next(request))
+
+    def report(self, outcome):
+        """(level, message) for what actually happened. Overridden where "it worked" is not binary."""
+        return messages.SUCCESS, self.success_message
+
+    def _safe_next(self, request):
+        """Where to send them back to, refusing anything that is not our own path.
+
+        Unvalidated, `next` is an open redirect: a crafted form could bounce a signed-in moderator
+        or admin to another origin. `url_has_allowed_host_and_scheme` is Django's own check and is
+        what `LoginView` uses for exactly this.
+        """
+        candidate = request.POST.get('next') or ''
+        # Must look like a path. `url_has_allowed_host_and_scheme` accepts a bare querystring as
+        # "relative", but `redirect()` treats a string with no slash as a VIEW NAME and raises
+        # NoReverseMatch -- so the leading slash is both a correctness check and the safety one.
+        if not candidate.startswith('/'):
+            return self.default_redirect()
+        if url_has_allowed_host_and_scheme(
+                candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+            return candidate
+        return self.default_redirect()
+
+    def default_redirect(self):
+        raise NotImplementedError

@@ -1,0 +1,28 @@
+{% comment %}
+The route into the Admin Hub, for admins, from the Mod Center.
+
+WHY THIS EXISTS AND NOT A NAVBAR ROW. `docs/features/moderation-center.md` asked that a future admin
+dashboard supply its own reason for a place in the avatar menu rather than inheriting the Mod
+Center's. Having built it, it does not have one: the Mod Center earned that row because it has a
+QUEUE that accrues while nobody is looking, and nothing in the hub does. A lapsed restriction lapses
+by itself, subscriptions have webhooks, badge claims arrive with a donation email. The only accruing
+thing the hub reports is the mod queues, which already have their marker -- and every admin already
+sees that row.
+
+So the hub sits one click from the surface every admin already visits. `navbar.html` is untouched,
+`test_the_navbar_carries_no_staff_links_except_the_mod_center` stays green with no edit, and the Mod
+Center's own sibling-count tests cannot trip on it because they run as a moderator, for whom this
+renders nothing.
+
+A partial rather than two copies of the markup: the Mod Center has two page families (the landing and
+the queue shell) and this belongs in both.
+{% endcomment %}
+{% if user.is_staff %}
+<a href="{% url 'admin_hub' %}" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 px-3">
+    Admin
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
+        <path d="m9 18 6-6-6-6"/>
+    </svg>
+</a>
+{% endif %}
