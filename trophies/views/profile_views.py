@@ -23,7 +23,6 @@ from ..forms import (
 from ..models import (
     Profile,
     ProfileGame,
-    GameList,
     TrophyGroup,
     UserTitle,
 )
@@ -608,10 +607,6 @@ class ProfileDetailView(DetailView):
             'scroll_per_page': RATINGS_PER_PAGE,
         }
 
-    def _build_lists_tab_context(self, public_lists_qs):
-        """Build context for lists tab — public game lists for this profile."""
-        return {'profile_lists': public_lists_qs.order_by('-like_count', '-created_at')}
-
     def get_context_data(self, **kwargs):
         """Build context for profile detail page with tab-specific content.
 
@@ -663,10 +658,6 @@ class ProfileDetailView(DetailView):
         # bounded by the profile's ProfileGame rows).
         context['header_stats'] = self._build_header_stats(profile)
 
-        # Public game lists count (shown in tab header regardless of active tab)
-        public_lists_qs = GameList.objects.filter(profile=profile, is_public=True, is_deleted=False)
-        context['profile_lists_count'] = public_lists_qs.count()
-
         # Gaming history is opt-out, and until now the ONLY thing enforcing that was
         # `{% if profile.psn_history_public %}` in profile_detail.html. An HTMX request is answered with
         # the tab template DIRECTLY (get_template_names), which never renders that parent -- so
@@ -688,8 +679,6 @@ class ProfileDetailView(DetailView):
             tab_context = self._build_badges_tab_context(profile)
         elif tab == 'ratings':
             tab_context = self._build_ratings_tab_context(profile)
-        elif tab == 'lists':
-            tab_context = self._build_lists_tab_context(public_lists_qs)
         elif tab == 'card':
             tab_context = self._build_card_tab_context(profile)
         else:
@@ -705,9 +694,11 @@ class ProfileDetailView(DetailView):
             {'text': f"{profile.display_psn_username}"}
         ]
         context['current_tab'] = tab
-        # The tabs the switcher renders, in order. Lists is deliberately NOT here: Game Lists is parked
-        # and every route into it redirects home, so the tab offered cards whose links bounced the reader
-        # to the homepage. Its builder and template stay (hidden, not deleted); only the door is closed.
+        # The tabs the switcher renders, in order. Lists is not here, and as of 2026-09 the view no
+        # longer knows how to build it either. Closing the door was not enough: `?tab=lists` still
+        # RENDERED for anybody who typed it, and the count feeding its header ran a `COUNT(*)` against
+        # the parked system on every profile render -- into a context key no template read. The
+        # rebuilt system brings its own tab rather than inheriting this one.
         profile_tabs = [
             ('games', 'Games'),
             ('trophies', 'Trophies'),
@@ -747,7 +738,6 @@ class ProfileDetailView(DetailView):
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
         'ratings': 'trophies/partials/profile_detail/tabs/ratings_tab.html',
-        'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
         'card': 'trophies/partials/profile_detail/tabs/card_tab.html',
     }
     _RESULTS_TEMPLATES = {

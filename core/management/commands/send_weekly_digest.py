@@ -186,12 +186,16 @@ class Command(BaseCommand):
                 suppressed += 1
                 continue
 
+            # Badges, not challenges. `build_digest_data` stopped returning a 'challenges' key when the
+            # challenge section came out of the digest (0824ffc4) and this line was missed, so --dry-run
+            # raised KeyError on the first eligible profile. The real send path never touched it.
             trophy_stats = digest_data['trophy_stats']
+            badges_earned = digest_data['badge_updates']['badges_earned']
             self.stdout.write(
                 f"  \u2022 {user.email} ({profile.psn_username})\n"
                 f"    {trophy_stats['total']} trophies, "
                 f"{trophy_stats['platinum']} plat(s), "
-                f"{len(digest_data['challenges'])} active challenge(s)"
+                f"{len(badges_earned)} badge(s)"
             )
             would_send += 1
 
