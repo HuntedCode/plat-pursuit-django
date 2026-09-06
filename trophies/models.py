@@ -1445,6 +1445,26 @@ class Concept(models.Model):
                 other.concept_id, self.concept_id,
             )
 
+        # Game list entries (gamelists.GameListItem -> Concept, added 2026-09 when the rebuilt lists
+        # moved from Game to Concept keying).
+        #
+        # Re-pointed rather than left to cascade, because a cascade here deletes a hunter's curation
+        # -- they added a game to their backlog and a catalogue merge they never saw would silently
+        # remove it. The dedup is the whole reason this cannot be a bare `.update()`: a list may
+        # already hold the SURVIVOR, and `unique(game_list, concept)` would raise mid-merge on the
+        # first one that does, taking down an admin's concept reassignment. So the colliding entries
+        # are dropped (the list already has that game, by definition) and the rest move.
+        #
+        # Imported locally: `trophies` must not import `gamelists` at module scope, or the app
+        # loading order becomes a cycle.
+        from gamelists.models import GameListItem
+
+        already_holding = set(
+            GameListItem.objects.filter(concept=self).values_list('game_list_id', flat=True)
+        )
+        GameListItem.objects.filter(concept=other, game_list_id__in=already_holding).delete()
+        GameListItem.objects.filter(concept=other).update(concept=self)
+
         # ContractBundle satisfier membership (per-bundle M2M): move other's links to self.
         for cbundle in other.contract_bundles.all():
             if not cbundle.concepts.filter(pk=self.pk).exists():

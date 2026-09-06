@@ -29,7 +29,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
-from trophies.models import Game, Profile
+from trophies.models import Concept, Profile
 
 #: What a free hunter gets. Members get `MEMBER_MAX_LISTS`, which is the same shape as the shipped
 #: `sync` perk (everyone syncs, members sync more often) rather than a capability they cannot reach.
@@ -139,8 +139,19 @@ class GameList(models.Model):
 
 
 class GameListItem(models.Model):
+    """One game on a list.
+
+    KEYED ON CONCEPT, NOT ON `Game`. The site's word "game" is the Concept (the work); the `Game`
+    model is one platform's TROPHY LIST -- see docs/design/games-and-trophy-lists-ia.md, which
+    settled that vocabulary in 2026-08 and asked every page rebuilt after it to inherit the decision
+    rather than re-litigate it. The old model FK'd `Game`, so a backlog held Elden Ring twice, once
+    per stack, and lists were the last concept-blind feature on a site whose contracts, ratings,
+    roadmaps, badges and grouping pages are all concept-level. Somebody who genuinely means one
+    stack has the concept page's list switcher.
+    """
+
     game_list = models.ForeignKey(GameList, on_delete=models.CASCADE, related_name='items')
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='+')
+    concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='list_entries')
     note = models.CharField(max_length=500, blank=True, default='')
 
     #: 0-indexed and DENSE. The service re-compacts on removal, and that contract is load-bearing
@@ -152,14 +163,15 @@ class GameListItem(models.Model):
     class Meta:
         ordering = ['position']
         constraints = [
-            models.UniqueConstraint(fields=['game_list', 'game'], name='gamelistitem_unique_game'),
+            models.UniqueConstraint(fields=['game_list', 'concept'],
+                                    name='gamelistitem_unique_concept'),
         ]
         indexes = [
             models.Index(fields=['game_list', 'position'], name='glstitem_position_idx'),
         ]
 
     def __str__(self):
-        return f'{self.game.title_name} in {self.game_list.name}'
+        return f'{self.concept.unified_title} in {self.game_list.name}'
 
 
 class GameListLike(models.Model):

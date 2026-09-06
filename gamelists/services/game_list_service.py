@@ -175,7 +175,7 @@ def _require_owner(game_list, profile):
 # ── items ────────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def add_game(game_list, profile, game, *, note=''):
+def add_concept(game_list, profile, concept, *, note=''):
     _require_owner(game_list, profile)
     _refuse_if_restricted(profile)
 
@@ -183,12 +183,12 @@ def add_game(game_list, profile, game, *, note=''):
     if locked.game_count >= MAX_ITEMS_PER_LIST:
         raise ListError(f'A list holds up to {MAX_ITEMS_PER_LIST} games.')
 
-    if GameListItem.objects.filter(game_list=locked, game=game).exists():
+    if GameListItem.objects.filter(game_list=locked, concept=concept).exists():
         raise ListError('That game is already on this list.')
 
     item = GameListItem.objects.create(
         game_list=locked,
-        game=game,
+        concept=concept,
         note=_clean_text(note, field='note', max_length=500),
         # Appended at the end, computed under the row lock taken above so two adds cannot claim the
         # same position and break the dense-ordering contract.
@@ -200,7 +200,7 @@ def add_game(game_list, profile, game, *, note=''):
 
 
 @transaction.atomic
-def remove_game(game_list, profile, item):
+def remove_concept(game_list, profile, item):
     """Remove one entry and CLOSE THE GAP.
 
     The re-compaction is the whole reason this is a service function rather than `item.delete()`.

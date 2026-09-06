@@ -20,7 +20,7 @@ from gamelists.models import (
     GameListLike,
 )
 from gamelists.services import game_list_service as svc
-from tests.factories import GameFactory, ProfileFactory, UserFactory
+from tests.factories import ConceptFactory, ProfileFactory
 from users.models import UserRestriction
 
 pytestmark = pytest.mark.django_db
@@ -60,13 +60,13 @@ def test_a_restricted_hunter_cannot_rename_or_add_to_an_existing_list():
     """Restriction stops NEW writing, and editing an old list is new writing."""
     profile = _hunter()
     game_list = svc.create_list(profile, name='Before')
-    game = GameFactory()
+    concept = ConceptFactory()
     _restrict(profile)
 
     with pytest.raises(svc.ListError):
         svc.update_list(game_list, profile, name='After')
     with pytest.raises(svc.ListError):
-        svc.add_game(game_list, profile, game)
+        svc.add_concept(game_list, profile, concept)
 
     game_list.refresh_from_db()
     assert game_list.name == 'Before'
@@ -134,11 +134,11 @@ def test_somebody_elses_list_refuses_every_write():
     that raises AFTER writing is the failure worth catching."""
     owner, stranger = _hunter('owner'), _hunter('stranger')
     game_list = svc.create_list(owner, name='Mine', is_public=True)
-    game = GameFactory()
+    concept = ConceptFactory()
 
     for call in (
         lambda: svc.update_list(game_list, stranger, name='Yours'),
-        lambda: svc.add_game(game_list, stranger, game),
+        lambda: svc.add_concept(game_list, stranger, concept),
         lambda: svc.delete_list(game_list, stranger),
     ):
         with pytest.raises(svc.ListError):
@@ -166,9 +166,9 @@ def test_removing_from_the_middle_closes_the_gap():
     on a four-game list and reads as a rendering bug. Dense positions are a data contract."""
     profile = _hunter()
     game_list = svc.create_list(profile, name='Ordered')
-    items = [svc.add_game(game_list, profile, GameFactory()) for _ in range(4)]
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(4)]
 
-    svc.remove_game(game_list, profile, items[1])
+    svc.remove_concept(game_list, profile, items[1])
 
     positions = list(
         GameListItem.objects.filter(game_list=game_list).order_by('position')
@@ -182,11 +182,11 @@ def test_removing_from_the_middle_closes_the_gap():
 def test_the_same_game_cannot_be_added_twice():
     profile = _hunter()
     game_list = svc.create_list(profile, name='Dupes')
-    game = GameFactory()
-    svc.add_game(game_list, profile, game)
+    concept = ConceptFactory()
+    svc.add_concept(game_list, profile, concept)
 
     with pytest.raises(svc.ListError):
-        svc.add_game(game_list, profile, game)
+        svc.add_concept(game_list, profile, concept)
 
     game_list.refresh_from_db()
     assert game_list.game_count == 1, 'the refused add still moved the counter'
@@ -199,7 +199,7 @@ def test_a_list_is_capped_at_its_item_limit():
     game_list.refresh_from_db()
 
     with pytest.raises(svc.ListError):
-        svc.add_game(game_list, profile, GameFactory())
+        svc.add_concept(game_list, profile, ConceptFactory())
 
 
 def test_reorder_refuses_a_partial_order_rather_than_applying_it():
@@ -207,7 +207,7 @@ def test_reorder_refuses_a_partial_order_rather_than_applying_it():
     silently drop whatever the client forgot."""
     profile = _hunter()
     game_list = svc.create_list(profile, name='Ordered')
-    items = [svc.add_game(game_list, profile, GameFactory()) for _ in range(3)]
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(3)]
 
     with pytest.raises(svc.ListError):
         svc.reorder(game_list, profile, [items[1].id, items[0].id])
@@ -219,7 +219,7 @@ def test_reorder_refuses_a_partial_order_rather_than_applying_it():
 def test_reorder_applies_a_full_order():
     profile = _hunter()
     game_list = svc.create_list(profile, name='Ordered')
-    items = [svc.add_game(game_list, profile, GameFactory()) for _ in range(3)]
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(3)]
 
     svc.reorder(game_list, profile, [items[2].id, items[0].id, items[1].id])
 

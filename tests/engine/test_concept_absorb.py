@@ -185,3 +185,76 @@ def test_rating_dedups_by_profile_and_group_keeping_survivors():
     assert UserConceptRating.objects.filter(profile=profile, concept=survivor).count() == 1
     # the doomed duplicate was not migrated and died with the cascade
     assert not UserConceptRating.objects.filter(pk=doomed_rating.pk).exists()
+
+
+# -- game list entries (gamelists.GameListItem, 2026-09) ------------------------------------------
+#
+# The rebuilt lists moved from Game keying to Concept keying, which put them inside absorb()'s
+# contract. CLAUDE.md is blunt about what happens to a new Concept FK that does not get a branch
+# here, and lists are a case where the loss would be invisible AND personal: a hunter curated a
+# backlog by hand, an admin merged two catalogue rows months later, and the entry is gone with
+# nothing anywhere saying why.
+
+
+def test_absorb_moves_list_entries_to_the_survivor():
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='curator')
+    backlog = GameList.objects.create(owner=profile, name='Backlog', game_count=1)
+    entry = GameListItem.objects.create(game_list=backlog, concept=doomed, position=0)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    entry.refresh_from_db()
+    assert entry.concept_id == survivor.pk, 'the merge took a curated entry with it'
+
+
+def test_absorb_drops_a_list_entry_that_would_collide_rather_than_raising():
+    """A list already holding the survivor is the case a bare `.update()` cannot survive.
+
+    `unique(game_list, concept)` would raise mid-merge on the first such list, and absorb() is not
+    transactional -- so the exception lands after several branches have already committed, skips
+    every branch below it, and stops the caller's `other.delete()`. One hunter having both sides of
+    a merge on one list would break an admin's reassignment entirely.
+    """
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='hadboth')
+    backlog = GameList.objects.create(owner=profile, name='Backlog', game_count=2)
+    kept = GameListItem.objects.create(game_list=backlog, concept=survivor, position=0)
+    doomed_entry = GameListItem.objects.create(game_list=backlog, concept=doomed, position=1)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert GameListItem.objects.filter(pk=kept.pk).exists(), 'the survivor entry was dropped'
+    assert not GameListItem.objects.filter(pk=doomed_entry.pk).exists()
+    assert GameListItem.objects.filter(game_list=backlog).count() == 1
+
+
+def test_absorb_only_drops_the_collision_and_moves_everybody_elses_entry():
+    """The dedup must be per LIST, not global. Somebody else's list that holds only the doomed
+    concept has no collision and must be re-pointed, not swept up with the ones that do."""
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    collider = ProfileFactory(is_linked=True, psn_username='hadboth')
+    innocent = ProfileFactory(is_linked=True, psn_username='hadone')
+
+    collided = GameList.objects.create(owner=collider, name='Both', game_count=2)
+    GameListItem.objects.create(game_list=collided, concept=survivor, position=0)
+    GameListItem.objects.create(game_list=collided, concept=doomed, position=1)
+
+    untouched = GameList.objects.create(owner=innocent, name='Only the doomed one', game_count=1)
+    moved = GameListItem.objects.create(game_list=untouched, concept=doomed, position=0)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    moved.refresh_from_db()
+    assert moved.concept_id == survivor.pk
+    assert GameListItem.objects.filter(game_list=collided).count() == 1
+
