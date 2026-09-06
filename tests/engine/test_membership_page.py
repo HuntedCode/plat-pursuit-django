@@ -208,10 +208,45 @@ def test_tenure_math_and_the_milestones_parity():
 # --------------------------------------------------------------------------- billing ----
 
 def test_stripe_billing_reads_the_plan_from_the_sub():
+    """The pre-basil shape, kept working as a fallback."""
     user = _stripe_user()
     sub = _fake_sub(status='active', plan={'amount': 1500, 'interval': 'month'})
     ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
     assert SubscriptionService.describe_billing(user, ms) == {'amount': 15, 'cycle': 'month'}
+
+
+def test_stripe_billing_reads_the_item_when_there_is_no_plan():
+    """The shape production actually stores. `plan` is deprecated and only ever populated for
+    single-item subscriptions, so the amount and cycle come off the item's price now, with `plan`
+    as the fallback above. Nothing covered this branch when it was introduced."""
+    user = _stripe_user()
+    sub = _fake_sub(status='active', items={'data': [
+        {'id': 'si_1', 'price': {'unit_amount': 1500, 'recurring': {'interval': 'month'}}}]})
+    ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
+    assert SubscriptionService.describe_billing(user, ms) == {'amount': 15, 'cycle': 'month'}
+
+
+def test_stripe_billing_does_not_floor_a_legacy_price_read_off_the_item():
+    """$3.99 must not read as $3, on either payload shape. The rounding branch is the one place a
+    grandfathered member's real price could be misreported to them."""
+    user = _stripe_user()
+    sub = _fake_sub(status='active', items={'data': [
+        {'id': 'si_1', 'price': {'unit_amount': 399, 'recurring': {'interval': 'month'}}}]})
+    ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
+    assert SubscriptionService.describe_billing(user, ms) == {'amount': '3.99', 'cycle': 'month'}
+
+
+def test_stripe_billing_prefers_the_item_over_a_stale_plan():
+    """If a row carries both, the item wins: `plan` is the deprecated copy and the one that goes
+    stale, and showing a member the wrong price is worse than showing none."""
+    user = _stripe_user()
+    sub = _fake_sub(status='active',
+                    plan={'amount': 300, 'interval': 'year'},
+                    items={'data': [
+                        {'id': 'si_1', 'price': {'unit_amount': 400,
+                                                 'recurring': {'interval': 'month'}}}]})
+    ms = MembershipStatus('active', 'stripe', stripe_sub=sub)
+    assert SubscriptionService.describe_billing(user, ms) == {'amount': 4, 'cycle': 'month'}
 
 
 def test_billing_is_omitted_not_guessed_when_unknown():
