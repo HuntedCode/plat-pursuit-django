@@ -783,11 +783,15 @@ def test_a_hunter_cannot_report_a_take_straight_into_action_taken(client):
 
 
 def test_the_django_admin_bulk_actions_stay_out_of_a_moderators_reach(client):
-    """The admin can approve flags and hide blurbs too, and it does NOT go through
-    `moderation_service` -- so it writes no reason and no audit entry. That is acceptable for an
-    admin doing a sweep and is not something a moderator should have: their route is the queue,
-    which records why. `is_staff` is False for a moderator by the role lockstep, and this is what
-    holds the two apart."""
+    """Django admin can approve flags and hide takes too, and a moderator must not reach it.
+
+    The premise changed in 2026-09 and this docstring changed with it. It used to say the admin
+    path "writes no reason and no audit entry" and called that acceptable for a sweep. Those
+    actions now route through `moderation_service` behind a confirmation page that requires a
+    reason, so a bulk sweep is logged exactly like a queue decision -- see
+    `test_admin_bulk_actions.py`. What still holds the two apart is narrower and stronger:
+    `/admin/` is superusers only now, so a moderator cannot reach it and neither can most admins.
+    """
     moderator = _user('moderator')
     assert moderator.is_staff is False, 'the role lockstep changed; the admin is now open to mods'
     client.force_login(moderator)

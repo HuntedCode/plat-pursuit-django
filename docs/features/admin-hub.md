@@ -132,6 +132,32 @@ of a GenericForeignKey — a GFK stores a content-type id and no label, so a del
 **Lifting a restriction writes a new entry whose `reverses` points at the one that applied it** —
 the same grammar as reversing a moderation decision, so the two read alike in the log.
 
+## Django-admin bulk sweeps
+
+`GameFlagAdmin` and `BlurbReportAdmin` carry the same decisions the queues do. They used to apply
+them with `queryset.update()` and a direct service call: same writes, no reason, no audit entry, and
+no status precondition, so a sweep could overwrite a decision made a minute earlier and leave no sign.
+
+They now route through `moderation_service`, which collides with one thing — the service requires a
+reason and a Django action has nowhere to type one. A hardcoded string would satisfy the check and
+produce exactly the log the check exists to prevent, so the actions render a **confirmation page**
+listing what is about to be decided, with a required reason
+(`trophies/admin_reasoned_actions.py`).
+
+Two details worth keeping:
+
+- **Each row is its own transaction.** Being refused because a colleague got there first is an
+  ordinary outcome on a queue two people work, and it must not roll back the thirty-nine that
+  succeeded. The page reports both counts.
+- **The queryset is NOT pre-filtered to pending.** The service's precondition refuses an
+  already-handled row and says which, where a `.filter()` would drop it silently — and "four of your
+  five were already done" is the thing a sweeping admin needs told.
+
+`unhide_blurb` was **removed** rather than rerouted. It was a bare `queryset.update(blurb_hidden=False)`
+— a reversal with no record that anything was reversed, which is the one thing the log exists to make
+impossible. Un-hiding is `/staff/decisions/`, which finds the decision, undoes what it actually did,
+and writes an entry pointing at it. There is deliberately no bulk equivalent.
+
 ## File Map
 
 | File | Purpose |
