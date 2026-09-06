@@ -32,7 +32,12 @@ def _badges_builder_source():
     src = SRC.read_text(encoding='utf-8')
     builder = src[src.index('def _build_badges_tab_context'):]
     nxt = _NEXT_METHOD.search(builder, 1)
-    return builder[:nxt.start()] if nxt else builder
+    # Loud, not `or builder`. A miss would hand back the remaining ~550 lines of the module, and the
+    # in-progress test below asserts on strings that appear NOWHERE in that region -- so it would
+    # pass, vacuously, while checking a slice it was never scoped to. That is the same class of bug
+    # this helper was written to fix, one level up.
+    assert nxt, 'the badges builder has no following method; the slice would swallow the module'
+    return builder[:nxt.start()]
 
 
 def test_the_tab_no_longer_reads_the_dead_badge_tables():

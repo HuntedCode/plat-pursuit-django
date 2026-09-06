@@ -197,7 +197,35 @@ def test_typing_the_lists_tab_does_not_render_it(client):
                       HTTP_CF_RAY='8f0000000000abcd-LHR')
 
     for label, resp in (('full page', full), ('htmx swap', htmx)):
+        # The status check is not ceremony. Without it a 404 -- a renamed route, a changed factory --
+        # satisfies "the list is absent" while proving nothing, which is how the guard this replaced
+        # managed to pass for the whole time the tab was live.
+        assert resp.status_code == 200, f'{label} answered {resp.status_code}, so this proves nothing'
         assert 'Bounced list' not in resp.content.decode(), f'{label} still renders the lists tab'
+
+
+def test_an_unknown_tab_gets_a_fragment_not_the_whole_site(client):
+    """`get_template_names` had no default, so a tab that was not in either template map fell all the
+    way through to the full page -- which htmx then swapped INTO the tab panel. `?tab=lists` walked
+    into that when the map entry was removed, but it was never specific to lists: any junk value did
+    it, and the InfiniteScroller rebuilds the query string from the address bar, so a stale
+    `?tab=lists` link plus one scroll appended a second copy of the document into the grid.
+    """
+    owner = ProfileFactory(is_linked=True)
+
+    for junk in ('lists', 'nonsense'):
+        resp = client.get(
+            f'/hunters/{owner.psn_username}/?tab={junk}',
+            HTTP_HX_REQUEST='true', HTTP_HX_TARGET='tab-content',
+            HTTP_CF_RAY='8f0000000000abcd-LHR',
+        )
+        body = resp.content.decode()
+
+        assert resp.status_code == 200
+        assert '<!doctype html' not in body.lower(), (
+            f'?tab={junk} answered an htmx swap with the entire page'
+        )
+        assert '<nav' not in body.lower(), f'?tab={junk} nested the site chrome inside the tab panel'
 
 
 def test_no_profile_render_counts_a_parked_systems_rows(client):
@@ -210,7 +238,10 @@ def test_no_profile_render_counts_a_parked_systems_rows(client):
     GameList.objects.create(profile=owner, name='Public list', is_public=True, game_count=2)
 
     with CaptureQueriesContext(connection) as captured:
-        client.get(f'/hunters/{owner.psn_username}/', HTTP_CF_RAY='8f0000000000abcd-LHR')
+        resp = client.get(f'/hunters/{owner.psn_username}/', HTTP_CF_RAY='8f0000000000abcd-LHR')
+
+    # A 404 runs no queries at all, so "no query mentions gamelist" would be trivially true.
+    assert resp.status_code == 200, 'the profile did not render; the query assertion is vacuous'
 
     listy = [q['sql'] for q in captured.captured_queries if 'gamelist' in q['sql'].lower()]
     assert not listy, f'the profile still queries the parked list tables: {listy}'

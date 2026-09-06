@@ -636,6 +636,15 @@ class ProfileDetailView(DetailView):
         # re-reads the raw query string on the HTMX path.
         if tab == 'card' and not is_own_profile:
             tab = 'games'
+        # And the same normalization for anything that is not a tab at all. The dispatch below
+        # already defaults an unknown slug to games, but `_resolved_tab` kept the raw string, and
+        # `get_template_names` has no default of its own -- so `?tab=lists` (or `?tab=anything`) over
+        # HTMX fell past both template maps and answered with the WHOLE PAGE, which htmx then swapped
+        # into the tab panel: a complete document nested inside a card grid. The InfiniteScroller
+        # path reached it too, since it rebuilds the query string from the address bar, so a stale
+        # `?tab=lists` bookmark plus a scroll appended a second copy of the site to the results.
+        if tab not in self._TAB_TEMPLATES:
+            tab = 'games'
         self._resolved_tab = tab
         per_page = 50
         page_number = self.request.GET.get('page', 1)
