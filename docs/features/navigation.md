@@ -158,15 +158,18 @@ Three tabs were retired rather than rebuilt, and the reasons are in the
 [rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (Game Lists is hidden pending a
 revamp, so the tab linked to cards whose links bounced you home), **Challenges** (the system was
 retired), and **Reviews** (text reviews were archived in 2026-05 — the ratings that survived them are
-what the Ratings tab shows). `_build_lists_tab_context` and its template are parked intact with the rest
-of Game Lists; the other two are gone.
+what the Ratings tab shows). All three builders are gone: `_build_lists_tab_context` went in 2026-09,
+because removing only the CHIP left `?tab=lists` still rendering for anyone who typed it (and running a
+`COUNT(*)` against the parked tables on every profile view, into a context key no template read). The
+revamped Game Lists brings its own tab rather than inheriting the parked one. `lists_tab.html` is still
+on disk, now orphaned, and goes with the rebuild.
 
 There is deliberately **no About tab** — see the Hunter Profile row in the playbook for why the trophy
 timeline and the showcases it was going to pair both came off the page instead.
 
 Tab handlers in `ProfileDetailView`:
 - `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`,
-  `_build_ratings_tab_context()` (plus the parked `_build_lists_tab_context()`)
+  `_build_ratings_tab_context()`, `_build_card_tab_context()` (owner-only)
 - `_TAB_TEMPLATES` maps a tab to its panel; `_RESULTS_TEMPLATES` to the partial an HTMX filter swap
   returns; `_INFINITE_SCROLL_TEMPLATES` / `_INFINITE_SCROLL_VIEWS` to the bare items a scroll append
   returns. A tab in the template map with no branch in the dispatcher renders someone else's data, which

@@ -17,13 +17,33 @@ ROOT = Path(__file__).resolve().parents[2]
 CF = {'HTTP_CF_RAY': '8f0000000000abcd-LHR'}
 SRC = ROOT / 'trophies' / 'views' / 'profile_views.py'
 
+#: Where one method's source ends: the next `def` or decorator at method indentation.
+_NEXT_METHOD = re.compile(r'\n    (?:@\w|def )')
+
+
+def _badges_builder_source():
+    """The badges builder's source, sliced to the NEXT method rather than to a NAMED one.
+
+    It used to slice to `def _build_lists_tab_context`, which quietly made this a test about which
+    method happened to sit underneath it. Deleting that neighbour (the parked Game Lists tab, 2026-09)
+    failed two badge tests with `ValueError: substring not found` instead of anything about badges.
+    What must not appear in the slice is the callers' business; this only has to find the end.
+    """
+    src = SRC.read_text(encoding='utf-8')
+    builder = src[src.index('def _build_badges_tab_context'):]
+    nxt = _NEXT_METHOD.search(builder, 1)
+    # Loud, not `or builder`. A miss would hand back the remaining ~550 lines of the module, and the
+    # in-progress test below asserts on strings that appear NOWHERE in that region -- so it would
+    # pass, vacuously, while checking a slice it was never scoped to. That is the same class of bug
+    # this helper was written to fix, one level up.
+    assert nxt, 'the badges builder has no following method; the slice would swallow the module'
+    return builder[:nxt.start()]
+
 
 def test_the_tab_no_longer_reads_the_dead_badge_tables():
     """The whole point of the rebuild. Scoped to the badges builder rather than the file, because other
     parts of this module legitimately mention badges."""
-    src = SRC.read_text(encoding='utf-8')
-    builder = src[src.index('def _build_badges_tab_context'):]
-    builder = builder[:builder.index('def _build_lists_tab_context')]
+    builder = _badges_builder_source()
     builder = re.sub(r'"""[\s\S]*?"""', '', builder)   # the docstring NAMES the legacy tables it replaced
 
     for dead in ('UserBadge', 'UserBadgeProgress', 'Badge.objects'):
@@ -47,9 +67,7 @@ def test_in_progress_badges_are_not_filtered_out():
     """A deliberate product call: what someone is CHASING is as interesting to a visitor as what they
     hold. The builder must not drop non-earned frames -- the medallion's state treatment already tells
     them apart, so a filter here would only hide them."""
-    src = SRC.read_text(encoding='utf-8')
-    builder = src[src.index('def _build_badges_tab_context'):]
-    builder = builder[:builder.index('def _build_lists_tab_context')]
+    builder = _badges_builder_source()
 
     assert "state'] == 'earned'" not in builder, 'the tab filters the wall down to earned badges'
     assert 'is_earned' not in builder

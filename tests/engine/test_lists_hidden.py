@@ -172,11 +172,10 @@ def test_no_profile_tab_leads_into_lists(client):
     /lists/<id>/ -- routes that redirect home -- so following one from a profile bounced the reader to
     the homepage. Chrome, ads, the sitemap and game cards were all checked; a per-profile tab was not.
 
-    Hidden, not deleted: `_build_lists_tab_context` and `lists_tab.html` are intact for the revamp. What
-    must not come back before the system does is the way IN.
+    Hidden, not deleted -- but that was scoped too narrowly. Removing the CHIP left the tab still
+    RENDERING for anyone who typed `?tab=lists`, with cards whose links bounce home. The builder and
+    the template map entry are gone as of 2026-09; the rebuilt system brings its own tab.
     """
-    from trophies.views.profile_views import ProfileDetailView
-
     owner = ProfileFactory(is_linked=True)
     GameList.objects.create(profile=owner, name='Public list', is_public=True, game_count=2)
 
@@ -184,3 +183,65 @@ def test_no_profile_tab_leads_into_lists(client):
 
     assert 'data-tab="lists"' not in body, 'the profile still offers a Lists tab'
     assert '?tab=lists' not in body, 'something on the profile still links into lists'
+
+
+def test_typing_the_lists_tab_does_not_render_it(client):
+    """The chip was removed and the tab still answered. Asserted on the RESPONSE, not the chrome:
+    the previous guard passed the whole time this was live, because it only looked for a way in."""
+    owner = ProfileFactory(is_linked=True)
+    GameList.objects.create(profile=owner, name='Bounced list', is_public=True, game_count=2)
+
+    url = f'/hunters/{owner.psn_username}/?tab=lists'
+    full = client.get(url, HTTP_CF_RAY='8f0000000000abcd-LHR')
+    htmx = client.get(url, HTTP_HX_REQUEST='true', HTTP_HX_TARGET='tab-content',
+                      HTTP_CF_RAY='8f0000000000abcd-LHR')
+
+    for label, resp in (('full page', full), ('htmx swap', htmx)):
+        # The status check is not ceremony. Without it a 404 -- a renamed route, a changed factory --
+        # satisfies "the list is absent" while proving nothing, which is how the guard this replaced
+        # managed to pass for the whole time the tab was live.
+        assert resp.status_code == 200, f'{label} answered {resp.status_code}, so this proves nothing'
+        assert 'Bounced list' not in resp.content.decode(), f'{label} still renders the lists tab'
+
+
+def test_an_unknown_tab_gets_a_fragment_not_the_whole_site(client):
+    """`get_template_names` had no default, so a tab that was not in either template map fell all the
+    way through to the full page -- which htmx then swapped INTO the tab panel. `?tab=lists` walked
+    into that when the map entry was removed, but it was never specific to lists: any junk value did
+    it, and the InfiniteScroller rebuilds the query string from the address bar, so a stale
+    `?tab=lists` link plus one scroll appended a second copy of the document into the grid.
+    """
+    owner = ProfileFactory(is_linked=True)
+
+    for junk in ('lists', 'nonsense'):
+        resp = client.get(
+            f'/hunters/{owner.psn_username}/?tab={junk}',
+            HTTP_HX_REQUEST='true', HTTP_HX_TARGET='tab-content',
+            HTTP_CF_RAY='8f0000000000abcd-LHR',
+        )
+        body = resp.content.decode()
+
+        assert resp.status_code == 200
+        assert '<!doctype html' not in body.lower(), (
+            f'?tab={junk} answered an htmx swap with the entire page'
+        )
+        assert '<nav' not in body.lower(), f'?tab={junk} nested the site chrome inside the tab panel'
+
+
+def test_no_profile_render_counts_a_parked_systems_rows(client):
+    """It ran `GameList.objects.filter(...).count()` on EVERY hunter profile render, feeding a
+    context key no template read. A query for a hidden system, for nobody."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    owner = ProfileFactory(is_linked=True)
+    GameList.objects.create(profile=owner, name='Public list', is_public=True, game_count=2)
+
+    with CaptureQueriesContext(connection) as captured:
+        resp = client.get(f'/hunters/{owner.psn_username}/', HTTP_CF_RAY='8f0000000000abcd-LHR')
+
+    # A 404 runs no queries at all, so "no query mentions gamelist" would be trivially true.
+    assert resp.status_code == 200, 'the profile did not render; the query assertion is vacuous'
+
+    listy = [q['sql'] for q in captured.captured_queries if 'gamelist' in q['sql'].lower()]
+    assert not listy, f'the profile still queries the parked list tables: {listy}'
