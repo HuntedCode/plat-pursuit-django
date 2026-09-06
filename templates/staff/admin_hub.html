@@ -18,8 +18,7 @@ branch, where one definition can serve both. Until then it is a door, not a figu
 {% endcomment %}
 
 {% block staff_blurb %}
-Moderators have the Mod Center. This is everything else: accounts, billing, the workers, and the
-record of what has been done. Every action here is logged with your name and your reason.
+Accounts, subscriptions, workers, and a record of every staff action.
 {% endblock %}
 
 {% block staff_body %}
@@ -34,7 +33,7 @@ record of what has been done. Every action here is logged with your name and you
             {% if reports_waiting %}<span class="badge badge-sm badge-warning font-bold">{{ reports_waiting }} waiting</span>{% endif %}
         </div>
         <div class="scard__value pp-tally">{{ reports_waiting|intcomma }}</div>
-        <div class="scard__sub">{% if reports_waiting %}in the Mod Center{% else %}all clear{% endif %}</div>
+        <div class="scard__sub">{% if reports_waiting %}reports to review{% else %}all clear{% endif %}</div>
     </a>
 
     <a href="{% url 'fundraiser_admin' %}" class="scard hover:border-primary/50 transition-colors block">
@@ -43,7 +42,7 @@ record of what has been done. Every action here is logged with your name and you
             {% if claims_waiting %}<span class="badge badge-sm badge-warning font-bold">{{ claims_waiting }} waiting</span>{% endif %}
         </div>
         <div class="scard__value pp-tally">{{ claims_waiting|intcomma }}</div>
-        <div class="scard__sub">{% if claims_waiting %}claimed, artwork not started{% else %}nothing waiting{% endif %}</div>
+        <div class="scard__sub">{% if claims_waiting %}artwork not started{% else %}all clear{% endif %}</div>
     </a>
 
     {% comment %}Redis being unreachable and every queue being empty are opposite facts, and showing
@@ -64,10 +63,7 @@ record of what has been done. Every action here is logged with your name and you
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-5 md:mb-7">
     <div class="card-body p-4 md:p-6">
         <h2 class="text-lg font-bold text-base-content mb-1">Recently done</h2>
-        <p class="text-xs text-base-content/60 mb-3">
-            Moderation decisions and admin actions together, newest first. A reversal appears as its
-            own entry rather than replacing the one it undid.
-        </p>
+        <p class="text-xs text-base-content/60 mb-3">Moderation and admin actions, newest first.</p>
 
         {% if recent %}
         <ul class="flex flex-col divide-y divide-base-300/70">
@@ -89,58 +85,59 @@ record of what has been done. Every action here is logged with your name and you
             {% endfor %}
         </ul>
         {% else %}
-        <p class="text-sm text-base-content/60 py-6 text-center">Nothing has been done yet.</p>
+        <p class="text-sm text-base-content/60 py-6 text-center">Nothing yet.</p>
         {% endif %}
     </div>
 </section>
 
-{# ── The doors ───────────────────────────────────────────────────────────────────────────── #}
+{% comment %}The doors: icon and label only. A description under each was a paragraph an admin who
+already knows what "Subscriptions" means has to read past, every visit.{% endcomment %}
 <h2 class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2">Tools</h2>
-<div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-    <a href="{% url 'mod_center' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Mod Center</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">The report queues, shared with the moderators.</p>
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <a href="{% url 'mod_center' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span class="text-xs font-bold text-base-content">Mod Center</span>
     </a>
-    <a href="{% url 'admin_people' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">People</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Look somebody up: everything decided about them, and everything they wrote.</p>
+    <a href="{% url 'admin_people' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span class="text-xs font-bold text-base-content">People</span>
     </a>
-    <a href="{% url 'admin_restrictions' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Restrictions</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Who is barred from writing, and who has been.</p>
+    <a href="{% url 'admin_decisions' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg>
+        <span class="text-xs font-bold text-base-content">Decisions</span>
     </a>
-    <a href="{% url 'admin_decisions' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Decisions</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Every moderation decision, and the power to reverse one. Admins only.</p>
+    <a href="{% url 'admin_restrictions' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>
+        <span class="text-xs font-bold text-base-content">Restrictions</span>
     </a>
-    <a href="{% url 'subscription_admin' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Subscriptions</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Members, past-due payments, and the ones awaiting bank verification.</p>
+    <a href="{% url 'subscription_admin' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+        <span class="text-xs font-bold text-base-content">Subscriptions</span>
     </a>
-    <a href="{% url 'fundraiser_admin' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Fundraiser</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Campaigns, donations, and badge artwork claims.</p>
+    <a href="{% url 'fundraiser_admin' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+        <span class="text-xs font-bold text-base-content">Fundraiser</span>
     </a>
-    <a href="{% url 'token_monitoring' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Workers and tokens</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">PSN token health per machine, and the sync queues.</p>
+    <a href="{% url 'token_monitoring' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg>
+        <span class="text-xs font-bold text-base-content">Workers</span>
     </a>
-    <a href="{% url 'badge_creation' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Create a badge series</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">A series and its editions, in one step.</p>
+    <a href="{% url 'badge_creation' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        <span class="text-xs font-bold text-base-content">New badge</span>
     </a>
-    <a href="{% url 'badge_reveal' %}" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Badge reveal</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">The spinner for revealing commissioned artwork.</p>
+    <a href="{% url 'badge_reveal' %}" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="text-xs font-bold text-base-content">Badge reveal</span>
     </a>
     {% comment %}Superusers only, matching the gate rather than merely echoing it. Django admin is
     the owner's: ~90 bulk actions that mutate live data, most writing no audit entry. Showing the
     card to an Administrator who would be turned away is worse than not showing it -- it advertises
     a door, and being refused at one reads as a fault rather than a boundary.{% endcomment %}
     {% if user.is_superuser %}
-    <a href="/admin/" class="scard hover:border-primary/50 transition-colors block">
-        <span class="scard__label">Django admin</span>
-        <p class="text-xs text-base-content/60 mt-1 leading-snug">Everything else, and the sharpest edges. Most of it writes no audit entry, so prefer a tool above where one exists.</p>
+    <a href="/admin/" class="scard flex flex-col items-center justify-center gap-2 min-h-24 text-center hover:border-primary/50 transition-colors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="w-7 h-7 text-primary/80" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg>
+        <span class="text-xs font-bold text-base-content">Django admin</span>
     </a>
     {% endif %}
 </div>

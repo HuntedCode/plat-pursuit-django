@@ -13,7 +13,7 @@ label -- everywhere else on the site, `display_name` puts the handle first.
 {% endcomment %}
 
 {% block staff_blurb %}
-Look somebody up by PSN name or email address to see everything the site has decided about them.
+Find a hunter by PSN name or email.
 {% endblock %}
 
 {% block staff_body %}
@@ -50,19 +50,14 @@ Look somebody up by PSN name or email address to see everything the site has dec
     </div>
 
     {% if more_than_shown %}
-    <p class="text-xs text-base-content/60 mt-3">
-        More than this matched. Narrow the search rather than scrolling: an exact PSN name or the
-        full email address will land on one person.
-    </p>
+    <p class="text-xs text-base-content/60 mt-3">More matched. Try an exact name or full email.</p>
     {% endif %}
 
     {% else %}
     <div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
         <div class="card-body items-center text-center py-10">
             <p class="text-base font-bold text-base-content">Nobody matched &ldquo;{{ query }}&rdquo;</p>
-            <p class="text-sm text-base-content/60 max-w-prose">
-                PSN names are stored lowercase, but this search ignores case. A partial email works too.
-            </p>
+            <p class="text-sm text-base-content/60 max-w-prose">Try a partial name or email.</p>
         </div>
     </div>
     {% endif %}
@@ -70,10 +65,8 @@ Look somebody up by PSN name or email address to see everything the site has dec
 {% else %}
 <div class="card bg-base-200/70 border-2 border-base-300 border-dashed">
     <div class="card-body items-center text-center py-10">
-        <p class="text-base font-bold text-base-content">Search for somebody</p>
-        <p class="text-sm text-base-content/60 max-w-prose">
-            There is no list of everyone on purpose. Look up the person you came here about.
-        </p>
+        <p class="text-base font-bold text-base-content">Search for a hunter</p>
+        <p class="text-sm text-base-content/60 max-w-prose">Search by PSN name or email to begin.</p>
     </div>
 </div>
 {% endif %}

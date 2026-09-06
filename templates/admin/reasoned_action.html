@@ -15,16 +15,12 @@ of stopping here is that somebody reads what they selected.
 <h1>{{ title }}</h1>
 
 {% if reason_was_too_short %}
-<p class="errornote">
-    A reason is required, and has to say something. It is recorded against your name and is what an
-    appeal is answered with.
-</p>
+<p class="errornote">A reason is required.</p>
 {% endif %}
 
 <p>
-    {{ verb }} the {{ objects|length }} item{{ objects|length|pluralize }} below. Each one is applied
-    through the same service the Mod Center uses, so each writes an audit entry with your name and
-    your reason, and any that somebody else has already handled will be skipped and reported.
+    {{ verb }} the {{ objects|length }} item{{ objects|length|pluralize }} below. Each is logged with
+    your name and reason. Anything already handled by somebody else is skipped.
 </p>
 
 <ul>

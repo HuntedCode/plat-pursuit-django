@@ -544,7 +544,7 @@ def test_the_people_page_shows_nobody_until_you_search(client):
     body = resp.content.decode()
 
     assert resp.context['results'] == [], 'the view selected people for an empty search'
-    assert 'Search for somebody' in body
+    assert 'Search for a hunter' in body
     assert 'hunted47' not in body
 
 

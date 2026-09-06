@@ -543,7 +543,7 @@ def test_the_person_page_offers_the_restrict_form(client):
     body = client.get(reverse('admin_person', args=[hunter.user.pk])).content.decode()
 
     assert reverse('admin_restrict', args=[hunter.user.pk]) in body
-    assert 'Stops new words only' in body, (
+    assert 'Nothing already published is hidden' in body, (
         'the page does not say what a restriction does NOT do, which is the likely mistake')
 
 
@@ -755,9 +755,13 @@ def test_a_surviving_restriction_is_visible_on_the_person_page():
 
     client = Client()
     client.force_login(_admin())
-    body = client.get(reverse('admin_person', args=[new_user.pk])).content.decode()
+    resp = client.get(reverse('admin_person', args=[new_user.pk]))
+    body = resp.content.decode()
 
-    assert 'never been restricted' not in body
+    # Asserted off the context rather than off the empty state's wording: the original checked that
+    # one sentence was absent, so rewording it turned this into a test that passes no matter what
+    # the page says.
+    assert list(resp.context['restrictions']), 'the page found no restriction to show'
     assert 'spam, third time' in body
 
 

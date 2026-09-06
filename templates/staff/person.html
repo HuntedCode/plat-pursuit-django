@@ -18,8 +18,7 @@ would misrepresent what is live on the site.
 {% endcomment %}
 
 {% block staff_blurb %}
-Everything decided about this hunter, and everything they have written. Hiding a take from here is
-logged the same as hiding one from the queue.
+What has been decided about this hunter, and what they have written.
 {% endblock %}
 
 {% block staff_body %}
@@ -82,7 +81,7 @@ logged the same as hiding one from the queue.
     {% endfor %}
 </ul>
 {% else %}
-<p class="text-sm text-base-content/60 mb-5">Nothing has been decided about this hunter.</p>
+<p class="text-sm text-base-content/60 mb-5">No decisions yet.</p>
 {% endif %}
 
 {# ── Admin actions on the account ────────────────────────────────────────────────────────── #}
@@ -127,7 +126,7 @@ Restricting from a list of names is restricting without looking.{% endcomment %}
     {% endfor %}
 </ul>
 {% else %}
-<p class="text-sm text-base-content/60 mb-3">This hunter has never been restricted.</p>
+<p class="text-sm text-base-content/60 mb-3">Never restricted.</p>
 {% endif %}
 
 <form method="post" action="{% url 'admin_restrict' person.pk %}"
@@ -150,13 +149,12 @@ Restricting from a list of names is restricting without looking.{% endcomment %}
             </label>
         </div>
         <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered"
-               placeholder="Why? (recorded against your name, and shown on appeal)"
+               placeholder="Reason (recorded with your name)"
                aria-label="Reason for restricting this hunter">
         <div class="flex flex-wrap items-center gap-3">
             <button type="submit" class="btn btn-sm btn-error">Restrict</button>
             <span class="text-xs text-base-content/60">
-                Stops new words only. Nothing already published is hidden, and their trophies,
-                badges and ranking are untouched.
+                Stops new posts. Nothing already published is hidden.
             </span>
         </div>
     </div>
@@ -187,7 +185,7 @@ Restricting from a list of names is restricting without looking.{% endcomment %}
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
-                       placeholder="Why hide this? (recorded against your name)"
+                       placeholder="Reason for hiding (recorded with your name)"
                        aria-label="Reason for hiding this quick take">
                 <button type="submit" class="btn btn-sm btn-error">Hide</button>
             </form>
@@ -197,6 +195,6 @@ Restricting from a list of names is restricting without looking.{% endcomment %}
     {% endfor %}
 </div>
 {% else %}
-<p class="text-sm text-base-content/60">This hunter has written no quick takes.</p>
+<p class="text-sm text-base-content/60">No quick takes.</p>
 {% endif %}
 {% endblock %}
