@@ -403,3 +403,26 @@ def test_the_dialog_is_a_native_dialog_so_focus_and_escape_come_for_free(client)
     assert 'aria-labelledby="gl-create-title"' in body
     assert 'pp-dismissable' in body, 'no swipe-to-dismiss affordance on touch'
 
+
+def test_the_dialog_centres_itself_rather_than_trusting_the_user_agent():
+    """It shipped in the top-left corner, and the cause is a trap worth pinning.
+
+    A native <dialog> centres via the user agent's `dialog { margin: auto }`. Tailwind's preflight
+    zeroes it -- `*, ::before, ::after, ::backdrop { margin: 0 }` -- so on this site a bare <dialog>
+    lands at the top-left. DaisyUI's `.modal` had been hiding that by filling the viewport and
+    centring `.modal-box` itself, so removing that class in the design pass silently removed the
+    centring with it.
+
+    Asserted on the SOURCE, because layout is not something the Django suite can see: the dialog has
+    to own the viewport and centre with grid, the way `.pp-detail-modal` does, rather than depending
+    on a UA default one preflight change away from vanishing again.
+    """
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'gamelists.css').read_text(encoding='utf-8')
+    rule = css[css.index('.gl-dialog {'):css.index('}', css.index('.gl-dialog {'))]
+
+    for declaration in ('position: fixed', 'inset: 0', 'place-items: center'):
+        assert declaration in rule, f'.gl-dialog no longer centres itself: missing {declaration}'
+

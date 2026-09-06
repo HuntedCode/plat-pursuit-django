@@ -14,20 +14,45 @@
    radius, the same 0 30px 90px lift the detail modal uses.
    ============================================================ */
 
+/* CENTRED THE WAY `.pp-detail-modal` IS, and not by leaning on the UA default.
+ *
+ * A native <dialog> normally centres itself with the user-agent's `margin: auto`. Tailwind's
+ * preflight zeroes it -- `*, ::before, ::after, ::backdrop { margin: 0 }` -- so a bare `<dialog>` on
+ * this site lands in the top-left corner. DaisyUI's `.modal` hid that by filling the viewport and
+ * centring `.modal-box` inside itself, so dropping that class silently removed the centring too.
+ *
+ * Restoring `margin: auto` would work and would still be one preflight change away from breaking
+ * again. Filling the viewport and centring with grid is what the site's own modal primitive already
+ * does, owes nothing to the UA sheet, and makes "click the dialog but not the box" a reliable
+ * backdrop hit for the JS.
+ */
 .gl-dialog {
-    width: min(30rem, calc(100vw - 2rem));
-    padding: 0;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    display: grid;
+    place-items: center;
+    padding: 16px;
     color: var(--pp-text);
     background: transparent;
     border: none;
-    overflow: visible;
+    overflow: auto;
 }
+.gl-dialog:not([open]) { display: none; }
 
 /* The dim, matching `.pp-detail-modal__scrim` exactly: a SOLID rgba, never a backdrop-filter. The
    blur has to re-sample the page behind it every frame, which is the documented mobile-GPU trap. */
 .gl-dialog::backdrop { background: rgba(2, 4, 8, 0.8); }
 
+/* The box owns the width now that the dialog owns the viewport. `max-height` plus its own scroll so
+   a long form on a short phone scrolls the FORM rather than pushing its own actions off-screen. */
 .gl-dialog__box {
+    width: min(30rem, 100%);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
     background: var(--pp-bg-1);
     border: 1px solid var(--pp-border);
     border-radius: var(--pp-radius-lg);
