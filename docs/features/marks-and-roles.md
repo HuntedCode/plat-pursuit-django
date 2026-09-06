@@ -66,6 +66,9 @@ admin *team* gets the Admin Hub; Django admin is the owner's.
 | `is_staff` | `/mod/` **and** the Admin Hub at `/staff/` |
 | `is_superuser` | all of the above **and** Django admin |
 
+Admins additionally hold three powers moderators do not: reversing a moderation decision, hiding a
+quick take nobody reported, and [restricting a hunter from writing](admin-hub.md#restrictions).
+
 `is_superuser` rather than a hardcoded username or id: Django-native, grantable and revocable from
 the admin itself, and it does not rot when an email changes.
 

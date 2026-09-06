@@ -1,6 +1,6 @@
 # Community Game Flags
 
-Community game flags let users report data quality issues on individual games. Each flag is reviewed by a moderator in the [Moderation Center](moderation-center.md) before any changes are applied (Django admin still works, and is the only route for bulk review). This helps catch delisted games, unobtainable platinums, shovelware misclassifications, missing VR tags, online trophy requirements, buggy trophies, regional errors, and other issues that automated systems miss.
+Community game flags let users report data quality issues on individual games. A hunter [restricted from reports](admin-hub.md#restrictions) cannot file one, enforced in `GameFlagService.submit_flag` (the only writer) as well as at the view. Each flag is reviewed by a moderator in the [Moderation Center](moderation-center.md) before any changes are applied (Django admin still works, and is the only route for bulk review). This helps catch delisted games, unobtainable platinums, shovelware misclassifications, missing VR tags, online trophy requirements, buggy trophies, regional errors, and other issues that automated systems miss.
 
 ## Architecture Overview
 

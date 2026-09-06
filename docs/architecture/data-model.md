@@ -267,12 +267,22 @@ Single-level (flat, not nested) reply to a Review. Supports soft delete.
 ### ReviewReport
 User-filed report on a Review for moderation review.
 
+### UserRestriction
+A hunter barred from writing, by scope (`quick_takes` / `reports` / `all_ugc`), for a period or
+indefinitely (`expires_at IS NULL`). Carries FKs to BOTH `CustomUser` and `Profile`, because neither
+survives alone: a self-service account deletion takes the user while `Profile.user` goes SET_NULL and
+the same profile can be relinked to a new account. Lifting stamps the row and writes an `AdminAction`;
+lapsing happens by the clock with nobody writing anything, so `is_live` is derived. See
+[Admin Hub](../features/admin-hub.md#restrictions).
+
 ### ModerationAction
 The live moderation audit log (2026-09). One immutable row per moderator decision across every
 queue: actor (plus `actor_label`, captured at write time so the entry survives a deleted staff
 account), the required reason, the `changed` before/after diff, `evidence` for context the action did
 not itself write, and a self-FK `reverses` so an undo is a NEW entry rather than an edit. Written
-only by `moderation_service`, which applies the change and the log entry in one transaction. See
+only by `moderation_service`, which applies the change and the log entry in one transaction. Also
+carries `subject_user`/`subject_label` — the hunter an entry is EVIDENCE ABOUT, which is not always
+the owner of the thing acted on (a dismissed report is evidence about the reporter). See
 [Moderation Center](../features/moderation-center.md).
 
 ### ModerationLog
