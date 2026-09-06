@@ -19,7 +19,27 @@
         if (!dialog || dialog.dataset.wired === '1') { return; }
         dialog.dataset.wired = '1';
 
-        var close = function () { if (dialog.close && dialog.open) { dialog.close(); } };
+        // Choreographed exit, the way `.gd-modal` does it: add `.is-closing`, wait for the
+        // animation, then close. The standard asks for exits as carefully handled as entrances, and
+        // the previous version's comment claimed a single close path existed "so a future exit
+        // animation only has to be added in one place" -- this is that place, now used.
+        var close = function () {
+            if (!dialog.close || !dialog.open) { return; }
+            var reduced = window.matchMedia
+                && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduced) { dialog.close(); return; }
+            if (dialog.classList.contains('is-closing')) { return; }
+            dialog.classList.add('is-closing');
+            var done = function () {
+                dialog.classList.remove('is-closing');
+                dialog.close();
+            };
+            dialog.addEventListener('animationend', done, { once: true });
+            // A dropped `animationend` would strand the dialog open and un-closable.
+            setTimeout(function () {
+                if (dialog.classList.contains('is-closing')) { done(); }
+            }, 400);
+        };
 
         document.querySelectorAll('[data-gl-open]').forEach(function (opener) {
             opener.addEventListener('click', function () {
@@ -54,7 +74,15 @@
         });
 
         if (window.PlatPursuit && window.PlatPursuit.dismissableSheet) {
-            window.PlatPursuit.dismissableSheet(dialog, { onClose: close });
+            // `handle` is REQUIRED here, and the helper's own docs say why: omit it on a sheet you
+            // READ, pass one on a sheet you OPERATE, "where an accidental dismiss costs unsaved
+            // work". This is a form holding a typed name and up to 300 characters of description.
+            // Without a handle, a downward swipe starting on the header, a label, the chip row or
+            // the footer armed the drag and destroyed the lot past 90px with no confirmation.
+            window.PlatPursuit.dismissableSheet(dialog, {
+                onClose: close,
+                handle: '.gl-dialog__head',
+            });
         }
     }
 

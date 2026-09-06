@@ -26,6 +26,29 @@ from trophies.mixins import HtmxListMixin, StaffRequiredMixin
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
 LIST_TILE_COVERS = 4
 
+#: Ceiling for the game-count filter. Anything above it is treated as "no filter" rather than passed
+#: to the database: a 40-digit number compared against a PositiveIntegerField is backend-dependent
+#: behaviour for a query nobody meant to run.
+MAX_GAME_COUNT_FILTER = 10_000
+
+
+def _count_filter(raw):
+    """One `?min_games=` / `?max_games=` value, or None for "no filter".
+
+    `str.isdigit()` alone is a 500 waiting to happen: it is True for Unicode superscripts, where
+    `int()` then raises. Verified rather than assumed -- `'²'.isdigit()` is True and
+    `int('²')` is a ValueError, so `?min_games=` with a superscript two took the browse page
+    down. `isascii()` is what makes the two agree.
+
+    Junk is ignored rather than refused, because a filter is not a form: somebody arriving on a
+    mangled link should see the grid, not an error about a query parameter.
+    """
+    text = (raw or '').strip()
+    if not (text.isascii() and text.isdigit()):
+        return None
+    value = int(text)
+    return value if value <= MAX_GAME_COUNT_FILTER else None
+
 
 class _DevelopmentGate(StaffRequiredMixin):
     """Temporary. Lists turn on with the Challenges beta, in one commit, not before.
@@ -85,12 +108,12 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
                 | Q(owner__psn_username__icontains=query)
             )
 
-        min_games = self.request.GET.get('min_games', '')
-        max_games = self.request.GET.get('max_games', '')
-        if min_games.isdigit():
-            queryset = queryset.filter(game_count__gte=int(min_games))
-        if max_games.isdigit():
-            queryset = queryset.filter(game_count__lte=int(max_games))
+        minimum = _count_filter(self.request.GET.get('min_games'))
+        maximum = _count_filter(self.request.GET.get('max_games'))
+        if minimum is not None:
+            queryset = queryset.filter(game_count__gte=minimum)
+        if maximum is not None:
+            queryset = queryset.filter(game_count__lte=maximum)
 
         sort = self._selected_sort()
         if sort == 'alpha':
@@ -109,10 +132,10 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
         # Django's prefetch cannot express. See `gamelists/services/covers.py`.
         attach_cover_games(lists, per_list=LIST_TILE_COVERS)
 
-        # `paginator.count` is the number the page has already paid for. A second unfiltered
-        # `COUNT(*)` here would also make the header disagree with the grid the moment anybody
-        # searched -- which it used to.
-        context['total_lists'] = context['paginator'].count
+        # The header renders `paginator.count` directly -- the number the page has already paid for.
+        # There was a `total_lists` key here mirroring it, which no template read; a test asserted on
+        # it and therefore proved nothing about the header. A second unfiltered `COUNT(*)` is the
+        # thing to avoid, and not having one is what keeps the header agreeing with the grid.
         context['sort_choices'] = self.SORT_CHOICES
         context['current_sort'] = self._selected_sort()
         context['query'] = (self.request.GET.get('q') or '').strip()
@@ -215,7 +238,12 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, 
         # The cap, shown rather than discovered by being refused. `owned_by` excludes soft-deleted
         # rows, which is the same count `create_list` enforces against -- so the number on screen and
         # the number the service will act on cannot disagree.
-        context['list_count'] = GameList.objects.owned_by(profile).count()
+        # On the `mine` scope the paginator has already counted exactly this queryset, so asking
+        # again is a second COUNT for the same answer.
+        context['list_count'] = (
+            context['paginator'].count if scope == 'mine'
+            else GameList.objects.owned_by(profile).count()
+        )
         context['list_cap'] = svc.max_lists_for(profile)
         context['at_cap'] = context['list_count'] >= context['list_cap']
         context['suggested_names'] = svc.SUGGESTED_NAMES

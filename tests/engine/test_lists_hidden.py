@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from django.urls import reverse
 
-from tests.factories import ProfileFactory
+from tests.factories import ProfileFactory, UserFactory
 from trophies.models import GameList
 
 pytestmark = pytest.mark.django_db
@@ -274,3 +274,26 @@ def test_no_profile_render_counts_a_parked_systems_rows(client):
 
     listy = [q['sql'] for q in captured.captured_queries if 'gamelist' in q['sql'].lower()]
     assert not listy, f'the profile still queries the parked list tables: {listy}'
+
+
+def test_the_create_endpoint_refuses_a_post_from_anyone_but_staff(client):
+    """The highest-consequence gate check in the branch, and it had no test.
+
+    `GATED_PAGES` covers the two GET pages; `/community/lists/create/` is the only route that WRITES,
+    and no test asserted an anonymous or ordinary-hunter POST to it is turned away. The gate does
+    refuse it -- but "it does" and "we would notice if it stopped" are different properties, and only
+    the second one survives somebody reordering a mixin.
+    """
+    from gamelists.models import GameList as RebuiltGameList
+
+    url = '/community/lists/create/'
+    payload = {'name': 'Should not exist'}
+
+    assert client.post(url, payload).status_code == 302, 'anonymous POST was not refused'
+
+    hunter = UserFactory()
+    ProfileFactory(user=hunter, is_linked=True, psn_username='ordinary')
+    client.force_login(hunter)
+    assert client.post(url, payload).status_code == 302, 'an ordinary hunter can POST'
+
+    assert RebuiltGameList.objects.count() == 0, 'a refused POST still created a list'

@@ -39,9 +39,20 @@ def _dialog(body):
 
 
 def _grid(body):
-    """Just the tile grid, so a substring assertion cannot be answered by the page chrome."""
+    """Just the tile grid, so a substring assertion cannot be answered by the page chrome.
+
+    Bounded by the DIALOG that follows it rather than by the last `pp-gtile` in the document: the
+    original searched to end-of-page, so adding any tile preview inside the create modal would have
+    silently re-widened the slice past the grid and reopened the hole this helper closes.
+    """
     start = body.index('pp-gtile-grid')
-    return body[start:body.index('</div>', body.rindex('pp-gtile', start))]
+    end = body.index('<dialog', start) if '<dialog' in body[start:] else len(body)
+    return body[start:end]
+
+
+def _header(body):
+    """The page header, above the dialog. Same reason as `_grid`."""
+    return body[:body.index('<dialog')]
 
 
 def _staff_hunter(client, psn='curator', premium=False):
@@ -69,10 +80,10 @@ def test_my_lists_shows_my_private_lists_too():
     svc.create_list(profile, name='Kept back')
     svc.create_list(profile, name='Shared', is_public=True)
 
-    body = client.get(MY_LISTS).content.decode()
+    grid = _grid(client.get(MY_LISTS).content.decode())
 
-    assert 'Kept back' in body
-    assert 'Shared' in body
+    assert 'Kept back' in grid
+    assert 'Shared' in grid
 
 
 def test_my_lists_does_not_show_anybody_elses(client):
@@ -104,7 +115,11 @@ def test_the_public_browse_grid_never_marks_privacy(client):
     profile = _staff_hunter(client)
     svc.create_list(profile, name='Out there', is_public=True)
 
-    assert PRIVATE_CHIP not in client.get('/community/lists/').content.decode()
+    body = client.get('/community/lists/').content.decode()
+
+    # The positive half matters: without it a 302, a 500 or an empty grid satisfies "no chip".
+    assert 'Out there' in body, 'the tile did not render, so the absence proves nothing'
+    assert PRIVATE_CHIP not in body
 
 
 def test_the_cap_is_shown_rather_than_discovered_by_being_refused(client):
@@ -125,11 +140,15 @@ def test_at_the_cap_the_create_button_is_disabled_not_hidden(client):
         svc.create_list(profile, name=f'List {n}')
 
     resp = client.get(MY_LISTS)
-    body = resp.content.decode()
+    header = _header(resp.content.decode())
 
     assert resp.context['at_cap'] is True
-    assert 'disabled' in body
-    assert 'New list' in body, 'the button disappeared instead of explaining itself'
+    # Scoped to the header: "New list" is ALSO the dialog's own <h2> title, which renders
+    # unconditionally, so a whole-page search stayed green with the button deleted -- precisely the
+    # failure this test is named for.
+    assert 'New list' in header, 'the button disappeared instead of explaining itself'
+    assert 'disabled' in header, 'the button is enabled at the cap'
+    assert 'data-gl-open' in header
 
 
 def test_the_page_is_query_flat_as_lists_are_added(client):
@@ -226,8 +245,7 @@ def test_the_create_form_offers_no_way_to_publish_and_ignores_one_if_posted(clie
     guarantee is not a guarantee."""
     profile = _staff_hunter(client)
 
-    body = client.get(MY_LISTS).content.decode()
-    form = body[body.index('id="gl-create"'):]
+    form = _dialog(client.get(MY_LISTS).content.decode())
     assert 'is_public' not in form, 'the create modal grew a visibility control'
 
     client.post(reverse('list_create'), {'name': 'Forged', 'is_public': 'true'})
@@ -304,10 +322,10 @@ def test_the_form_advertises_exactly_the_limit_the_service_enforces(client):
     from gamelists.models import DESCRIPTION_MAX_LENGTH, GameList, NAME_MAX_LENGTH
 
     _staff_hunter(client)
-    body = client.get(MY_LISTS).content.decode()
+    dialog = _dialog(client.get(MY_LISTS).content.decode())
 
-    assert f'maxlength="{NAME_MAX_LENGTH}"' in body
-    assert f'maxlength="{DESCRIPTION_MAX_LENGTH}"' in body
+    assert f'maxlength="{NAME_MAX_LENGTH}"' in dialog
+    assert f'maxlength="{DESCRIPTION_MAX_LENGTH}"' in dialog
 
     # And the column agrees with both, so the browser, the service and the database cannot disagree.
     assert GameList._meta.get_field('name').max_length == NAME_MAX_LENGTH
@@ -348,10 +366,16 @@ def test_both_fields_are_wired_to_a_counter(client):
     _staff_hunter(client)
     body = client.get(MY_LISTS).content.decode()
 
+    import re
+
     for field_id in ('gl-name', 'gl-description'):
         assert f'id="{field_id}"' in body
         assert f'data-charcount-for="{field_id}"' in body
-    assert body.count('data-charcount') >= 4, 'a field or its counter target is unwired'
+
+    # The SOURCE attribute specifically. `count('data-charcount')` also matched every
+    # `data-charcount-for`, so four targets and zero wired fields passed while nothing counted.
+    sources = re.findall(r'data-charcount(?![-\w])', body)
+    assert len(sources) == 2, f'expected two wired fields, found {len(sources)}'
 
 
 def test_the_shared_counter_is_not_a_fourth_copy():
@@ -388,7 +412,8 @@ def test_the_create_modal_uses_the_sites_own_primitives_not_daisyui(client):
     # The header's own action button too -- it opens this dialog, so the two must match.
     assert 'btn btn-' not in body[:body.index('<dialog')], 'the page header is still on DaisyUI buttons'
 
-    for house in ('gl-dialog__box', 'stg-input', 'stg-field__label', 'pp-cta', 'gl-suggest__chip'):
+    for house in ('gl-dialog__head', 'gl-dialog__body', 'gl-dialog__foot',
+                  'stg-input', 'stg-field__label', 'pp-cta', 'gl-suggest__chip'):
         assert house in dialog or house in body, f'the page stopped using the shared primitive {house}'
 
 
@@ -401,28 +426,77 @@ def test_the_dialog_is_a_native_dialog_so_focus_and_escape_come_for_free(client)
 
     assert '<dialog id="gl-create"' in body
     assert 'aria-labelledby="gl-create-title"' in body
-    assert 'pp-dismissable' in body, 'no swipe-to-dismiss affordance on touch'
+    # `pp-dismissable` is added by `dismissableSheet` at runtime, deliberately NOT in the
+    # template -- setting both rendered two grab pills on touch.
+    assert 'pp-dismissable' not in _dialog(body), 'the duplicate grabber is back'
 
 
-def test_the_dialog_centres_itself_rather_than_trusting_the_user_agent():
-    """It shipped in the top-left corner, and the cause is a trap worth pinning.
+def _css_rule(css, selector):
+    """The declarations of one rule, with comments stripped FIRST.
 
-    A native <dialog> centres via the user agent's `dialog { margin: auto }`. Tailwind's preflight
-    zeroes it -- `*, ::before, ::after, ::backdrop { margin: 0 }` -- so on this site a bare <dialog>
-    lands at the top-left. DaisyUI's `.modal` had been hiding that by filling the viewport and
-    centring `.modal-box` itself, so removing that class in the design pass silently removed the
-    centring with it.
+    Slicing to the next `}` on the raw file finds the brace inside a comment -- and this file's
+    comments quote CSS, including `* { margin: 0 }`. The slice then stops three lines early and the
+    assertion fails on a declaration that is present.
+    """
+    import re
 
-    Asserted on the SOURCE, because layout is not something the Django suite can see: the dialog has
-    to own the viewport and centre with grid, the way `.pp-detail-modal` does, rather than depending
-    on a UA default one preflight change away from vanishing again.
+    bare = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    start = bare.index(selector + ' {')
+    return bare[start:bare.index('}', start)]
+
+
+def test_the_dialog_centres_itself_and_scrolls_only_its_body():
+    """It shipped in the top-left corner, and the fix for that was itself wrong.
+
+    A native <dialog> centres via the user agent's `dialog { margin: auto }`, which Tailwind's
+    preflight zeroes (`*, ::before, ::after, ::backdrop { margin: 0 }`). The first fix filled the
+    viewport and centred with grid -- which worked, and made overflow past the block-START edge
+    unreachable, so with a soft keyboard up the form's own title scrolled out of reach. It also
+    re-minted a recipe `.gd-modal` already had.
+
+    Restoring `margin: auto` is correct and not fragile: an author declaration outranks preflight on
+    specificity AND source order. The second half is the scroll region -- head and foot are `flex:
+    none` siblings of a scrolling BODY, so a long form cannot push its own actions off-screen. The
+    version this replaces put `overflow-y` on the box containing all three and claimed the opposite
+    in its comment.
     """
     from pathlib import Path
 
     css = (Path(__file__).resolve().parents[2]
            / 'static' / 'css' / 'components' / 'gamelists.css').read_text(encoding='utf-8')
-    rule = css[css.index('.gl-dialog {'):css.index('}', css.index('.gl-dialog {'))]
+    rule = _css_rule(css, '.gl-dialog')
 
-    for declaration in ('position: fixed', 'inset: 0', 'place-items: center'):
+    for declaration in ('position: fixed', 'inset: 0', 'margin: auto'):
         assert declaration in rule, f'.gl-dialog no longer centres itself: missing {declaration}'
+    assert 'dvh' in rule, 'vh does not shrink for the soft keyboard; the header scrolls out of reach'
+    assert 'overflow: hidden' in rule, 'the dialog scrolls as one piece, taking the footer with it'
 
+    assert 'overflow-y: auto' in _css_rule(css, '.gl-dialog__body'), 'the body is not the scroll region'
+
+
+def test_the_dialog_has_a_choreographed_exit_not_just_an_entrance():
+    """The reference standard asks for exits handled as carefully as entrances, and `.gd-modal` --
+    the primitive this follows -- does it with `.is-closing` plus `animationend`."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'gamelists.css').read_text(encoding='utf-8')
+    js = (root / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert '.gl-dialog.is-closing' in css
+    assert 'glDialogOut' in css
+    assert "classList.add('is-closing')" in js
+    assert 'animationend' in js
+
+
+def test_the_swipe_sheet_is_armed_only_from_its_header():
+    """`dismissableSheet`'s own docs: omit `handle` on a sheet you READ, pass one on a sheet you
+    OPERATE, "where an accidental dismiss costs unsaved work". This holds a typed name and up to 300
+    characters of description, and without a handle a downward swipe starting anywhere -- a label,
+    the chip row, the footer -- destroyed it past 90px with no confirmation."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert 'handle:' in js, 'the create sheet can be swiped away from anywhere, losing typed work'

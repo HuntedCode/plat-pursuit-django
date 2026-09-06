@@ -14,7 +14,6 @@ removal is the whole of "turn it on".
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
 
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
@@ -57,12 +56,19 @@ def _list(owner, games, *, name, public=True):
 #: measure the site chrome too -- and the chrome caches, so an unrelated `art_reveal` lookup fires on
 #: the first render and not the second, which showed up as the grid getting FASTER as it grew. A
 #: flatness test that moves for reasons outside the page cannot say anything about the page.
-_LIST_TABLES = ('gamelists_', 'trophies_game"', 'trophies_concept')
+#: `trophies_profile` is here because of `select_related('owner')`. Without it, dropping that
+#: select_related adds a query PER CARD -- the exact N+1 this file exists to catch -- and every
+#: flatness test stays green, because those queries hit a table the filter ignores.
+_LIST_TABLES = ('gamelists_', 'trophies_game"', 'trophies_concept', 'trophies_profile')
 
 
 def _queries(client, url):
     with CaptureQueriesContext(connection) as ctx:
-        client.get(url)
+        resp = client.get(url)
+    # A redirect runs no page queries, so `few == many` would hold at 0 == 0 and every flatness test
+    # here would pass green on a broken gate, a renamed URL or a regressed profile guard. The
+    # equivalent guard already existed in `test_lists_hidden` and was not carried across.
+    assert resp.status_code == 200, f'{url} answered {resp.status_code}; the count proves nothing'
     return len([
         q for q in ctx.captured_queries
         if any(table in q['sql'] for table in _LIST_TABLES)
@@ -162,15 +168,21 @@ def test_the_infinite_scroller_page_fetch_also_gets_the_partial(staff_client):
 
 def test_the_header_count_is_the_one_the_grid_is_showing(staff_client):
     """It used to run a second, unfiltered `COUNT(*)`, so the header disagreed with the grid the
-    moment anybody searched."""
+    moment anybody searched.
+
+    Asserted on what is RENDERED. The first version read `context['total_lists']` -- a key no
+    template reads, since the header renders `paginator.count` -- and then compared `paginator.count`
+    against itself, which `ListView` guarantees by construction. Neither line could have detected the
+    regression the docstring names.
+    """
     owner = _hunter()
     _list(owner, 1, name='Alpha')
     _list(owner, 1, name='Beta')
 
-    resp = staff_client.get(BROWSE, {'q': 'Alpha'})
+    body = staff_client.get(BROWSE, {'q': 'Alpha'}).content.decode()
 
-    assert resp.context['total_lists'] == 1
-    assert resp.context['paginator'].count == 1
+    assert 'data-countup="1"' in body, 'the header is not showing the filtered count'
+    assert 'Beta' not in body
 
 
 # ── the rules that are not about speed ───────────────────────────────────────────────────────────
@@ -199,19 +211,37 @@ def test_a_junk_sort_falls_back_rather_than_rendering_an_unselected_toolbar(staf
     assert resp.context['current_sort'] == 'popular'
 
 
-@pytest.mark.parametrize('sort', ['popular', 'recent', 'updated', 'most_games', 'alpha'])
-def test_every_offered_sort_actually_sorts(staff_client, sort):
-    """The toolbar reads `SORT_CHOICES`, and a sort that appears in the dropdown and does nothing is
-    the failure that made those choices DATA in the first place."""
+@pytest.mark.parametrize('sort, expected', [
+    ('popular', ['Loved', 'Newest', 'Big']),
+    ('most_games', ['Big', 'Newest', 'Loved']),
+    ('alpha', ['Big', 'Loved', 'Newest']),
+    ('recent', ['Newest', 'Loved', 'Big']),
+    ('updated', ['Newest', 'Loved', 'Big']),
+])
+def test_every_offered_sort_actually_sorts(staff_client, sort, expected):
+    """ORDER, not an echo of the parameter.
+
+    The first version asserted `current_sort == sort` and a row count -- the input coming straight
+    back out -- and its two same-shaped lists could not have distinguished the orderings anyway, so
+    pointing every entry in `_ORDERING` at `-created_at` would have passed all five parametrizations.
+    This builds rows that differ on each axis the sorts read and compares the sequence.
+    """
+    from gamelists.models import GameList
+
     owner = _hunter()
-    _list(owner, 2, name='Zeta')
-    _list(owner, 1, name='Alpha')
+    big = _list(owner, 4, name='Big')
+    loved = _list(owner, 1, name='Loved')
+    newest = _list(owner, 2, name='Newest')
 
-    resp = staff_client.get(BROWSE, {'sort': sort})
+    GameList.objects.filter(pk=loved.pk).update(like_count=9)
+    GameList.objects.filter(pk=newest.pk).update(like_count=5)
+    for pk, day in ((big.pk, '2026-01-01'), (loved.pk, '2026-02-01'), (newest.pk, '2026-03-01')):
+        GameList.objects.filter(pk=pk).update(
+            created_at=f'{day}T00:00:00+00:00', updated_at=f'{day}T00:00:00+00:00')
 
-    assert resp.status_code == 200
-    assert resp.context['current_sort'] == sort
-    assert len(resp.context['game_lists']) == 2
+    names = [gl.name for gl in staff_client.get(BROWSE, {'sort': sort}).context['game_lists']]
+
+    assert names == expected, f'sort={sort} produced {names}'
 
 
 def test_alphabetical_sorting_ignores_case(staff_client):
@@ -247,13 +277,28 @@ def test_the_game_count_range_filters_both_ends(staff_client):
     assert [gl.name for gl in found] == ['Middling']
 
 
-def test_a_junk_range_is_ignored_rather_than_emptying_the_grid(staff_client):
+@pytest.mark.parametrize('bad', [
+    'lots',
+    '-',
+    '-5',
+    '\u00b2',      # superscript two: isdigit() is True and int() RAISES -- this was a 500
+    '\u0663',      # Arabic-Indic three: both agree, but nobody typed it into a game-count box
+    '9' * 40,      # larger than the column can hold
+])
+def test_a_junk_range_is_ignored_rather_than_crashing_or_emptying_the_grid(staff_client, bad):
+    """A filter is not a form: somebody arriving on a mangled link should see the grid, not an error.
+
+    The superscript case is the one that mattered. `str.isdigit()` is True for it and `int()` then
+    raises, so `?min_games=` with a superscript two was an unhandled ValueError -- a 500 on a public
+    browse page, reachable from a query string.
+    """
     owner = _hunter()
     _list(owner, 2, name='Still here')
 
-    found = staff_client.get(BROWSE, {'min_games': 'lots', 'max_games': '-'}).context['game_lists']
+    resp = staff_client.get(BROWSE, {'min_games': bad, 'max_games': bad})
 
-    assert len(found) == 1
+    assert resp.status_code == 200, f'{bad!r} took the page down'
+    assert len(resp.context['game_lists']) == 1
 
 
 # ── the mosaic ───────────────────────────────────────────────────────────────────────────────────

@@ -120,16 +120,25 @@ def test_the_browse_grid_costs_the_same_for_two_lists_as_for_eight():
                 GameFactory(concept=concept, title_platform='PS5')
             _list_with(profile, f'List {n}-{count}', concepts)
 
+    # The queryset is materialized OUTSIDE the capture: measuring `attach_cover_games` means
+    # measuring what IT costs, not what fetching its argument costs.
     build(2)
+    few_lists = list(GameList.objects.owned_by(profile))
     with CaptureQueriesContext(connection) as few:
-        covers.attach_cover_games(list(GameList.objects.owned_by(profile)))
+        covers.attach_cover_games(few_lists)
 
     build(6)
+    many_lists = list(GameList.objects.owned_by(profile))
     with CaptureQueriesContext(connection) as many:
-        covers.attach_cover_games(list(GameList.objects.owned_by(profile)))
+        covers.attach_cover_games(many_lists)
 
     assert len(few.captured_queries) == len(many.captured_queries), (
         f'{len(few.captured_queries)} queries for 2 lists, {len(many.captured_queries)} for 8'
+    )
+    # Equality alone would hold at a constant fifty. The contract is TWO -- one bounded item read,
+    # one batched cover read -- so the number is asserted as well as its flatness.
+    assert len(few.captured_queries) == 2, (
+        f'expected 2 queries, got {len(few.captured_queries)}'
     )
 
 

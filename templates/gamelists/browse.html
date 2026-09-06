@@ -2,6 +2,10 @@
 {% load static %}
 {% load humanize %}
 {% block title %}Game Lists{% endblock %}
+{% comment %}Same guard Franchises uses, and for the same reason: this toolbar produces
+an unbounded number of filter permutations, and every one of them is a near-duplicate of
+the canonical page. `follow` so the tiles still pass authority to the lists themselves.{% endcomment %}
+{% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="pp-gbrowse">
@@ -30,7 +34,11 @@
                         <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
                     </div>
                     {% if user.is_authenticated and user.profile %}
-                    <a href="{% url 'my_lists' %}" class="btn btn-sm md:btn-md btn-primary gap-1.5 shrink-0">
+                    {% comment %}`.pp-cta`, not DaisyUI's `btn` -- its sibling page argues the same
+                    point in its own header, and two pages of one feature using two button systems is
+                    the drift this rebuild removes. `aria-label` unconditionally, because the label
+                    span is `hidden` below md and `hidden` drops it from the accessibility tree.{% endcomment %}
+                    <a href="{% url 'my_lists' %}" class="pp-cta shrink-0" aria-label="My lists">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                         <span class="hidden md:inline">My lists</span>
                     </a>

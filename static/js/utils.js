@@ -3462,6 +3462,8 @@ function wireCharCounters(root) {
                 // Quiet until it matters. Warning in the last tenth, error only when the field has
                 // actually stopped accepting input -- which is the moment the counter earns its
                 // place, because `maxlength` otherwise just stops typing with no explanation.
+                // Both classes are in the Tailwind safelist -- this file is not scanned for
+                // classes, so a THIRD one toggled here would be purged from the build silently.
                 out.classList.toggle('text-warning', len >= max * 0.9 && len < max);
                 out.classList.toggle('text-error', len >= max);
             }

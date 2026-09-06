@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load humanize %}
 {% block title %}My Lists{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
@@ -36,6 +35,11 @@ notification system this release -- so the tab is the feature, not decoration on
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         A backlog, a ranking, a run in order. Yours until you publish one.
                     </p>
+                    {% if at_cap %}
+                    <p class="text-xs text-warning mt-1">
+                        You are at your limit of {{ list_cap }} lists. Delete one to make room.
+                    </p>
+                    {% endif %}
                 </div>
 
                 <div class="flex items-center gap-3 shrink-0">
@@ -43,13 +47,19 @@ notification system this release -- so the tab is the feature, not decoration on
                         <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ list_count }}<span class="text-base-content/40">/{{ list_cap }}</span></span>
                         <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
                     </div>
-                    {% comment %}Disabled rather than hidden at the cap: a button that vanishes reads as a
-                    bug, and the title says what to do about it.{% endcomment %}
+                    {% comment %}`aria-disabled`, NOT `disabled`. A truly disabled button takes no
+                    pointer events (so its title never renders as a tooltip) and leaves the tab order
+                    (so it can never be focused or announced) -- the at-cap explanation was
+                    unreachable by every route including the mouse. This stays focusable and
+                    announced, and the reason is rendered as visible text below rather than hidden in
+                    an attribute. The `aria-label` is unconditional because the label span is
+                    `hidden` below md, and `hidden` removes it from the accessibility tree, leaving
+                    the page's primary action announced as bare "button".{% endcomment %}
                     {% comment %}`.pp-cta`, the shared button primitive, rather than DaisyUI's `btn` --
                     it carries the house glow-on-hover and focus ring, and it is what the modal's own
                     actions use, so the button and the thing it opens speak the same language.{% endcomment %}
                     <button type="button" class="pp-cta shrink-0" data-gl-open
-                            {% if at_cap %}disabled title="You are at your limit of {{ list_cap }} lists. Delete one to make room."{% endif %}>
+                            aria-label="New list"{% if at_cap %} aria-disabled="true"{% endif %}>
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                         <span class="hidden md:inline">New list</span>
                     </button>
@@ -58,11 +68,16 @@ notification system this release -- so the tab is the feature, not decoration on
         </div>
     </section>
 
-    {# ── The one sanctioned tab treatment: segmented chips, right-aligned, an icon each ── #}
+    {% comment %}The segmented switcher's LOOK, with navigation semantics rather than tab semantics.
+    Each chip is a full page load to `?scope=`, and `role="tablist"`/`role="tab"` promises a widget
+    that is not here -- no panel, no `aria-controls`, no roving tabindex, no arrow-key model. A
+    screen reader would announce tabs and its user would press Arrow keys that do nothing. Franchises
+    resolves the identical "segmented control that navigates" case the same way: a group of links
+    with `aria-current`.{% endcomment %}
     <div class="flex items-center justify-end mt-5 mb-3">
-        <div class="pp-switch" role="tablist" aria-label="Which lists to show">
+        <div class="pp-switch" role="group" aria-label="Which lists to show">
             {% for value, label in scopes %}
-            <a href="?scope={{ value }}" role="tab" aria-selected="{% if scope == value %}true{% else %}false{% endif %}"
+            <a href="?scope={{ value }}"{% if scope == value %} aria-current="page"{% endif %}
                class="pp-switch__chip{% if scope == value %} is-active{% endif %}">
                 {% if value == 'mine' %}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -96,46 +111,57 @@ notification system this release -- so the tab is the feature, not decoration on
 </div>
 
 {% comment %}
-Create, in a native <dialog> -- the house pattern (guidelines, badge picker, email). It wraps a plain
-form that posts and redirects, so the modal is progressive enhancement over something that already
-works: no JSON round trip, no optimistic DOM, nothing to reconcile if the service refuses.
+Create, in a native <dialog> on the `.gd-modal` recipe -- the house pattern for form sheets, and the
+element that brings a real focus trap, Escape, and focus restoration on close for free.
+
+It wraps a plain form that posts and redirects, which is worth having: no JSON round trip, no
+optimistic DOM, nothing to reconcile when the service refuses. It is NOT progressive enhancement,
+though -- an earlier comment here claimed that and it was false. With JavaScript off the dialog is
+`display: none` and the only opener is a `<button type="button">`, so creating a list is impossible.
+Graceful degradation of the skin over a working endpoint is the honest description.
 
 There is deliberately NO public/private control here. A list is private when it is born, and
 publishing is its own act on the list itself. Offering the toggle at creation would make it a
 checkbox somebody ticks while thinking about a name, which is exactly what makes the state
 meaningless.
 {% endcomment %}
-<dialog id="gl-create" class="gl-dialog" aria-labelledby="gl-create-title">
-    <div class="gl-dialog__box pp-dismissable">
-        <div class="gl-dialog__head">
-            <div>
-                <h2 class="gl-dialog__title" id="gl-create-title">New list</h2>
-                <p class="gl-dialog__sub">Private to start. You can publish it whenever it is ready.</p>
-            </div>
-            <button type="button" class="gl-dialog__close" data-gl-close aria-label="Close">&times;</button>
+<dialog id="gl-create" class="gl-dialog" aria-labelledby="gl-create-title"
+        aria-describedby="gl-create-sub">
+    {% comment %}`pp-dismissable` is NOT set here: `dismissableSheet` adds it to the element it is
+    handed, and setting it in the template too rendered a second grab pill floating at the top of the
+    screen on touch.{% endcomment %}
+    <div class="gl-dialog__head">
+        <div>
+            <h2 class="gl-dialog__title" id="gl-create-title">New list</h2>
+            <p class="gl-dialog__sub" id="gl-create-sub">Private to start. You can publish it whenever it is ready.</p>
         </div>
+        <button type="button" class="gl-dialog__close" data-gl-close aria-label="Close">&times;</button>
+    </div>
 
-        <form method="post" action="{% url 'list_create' %}" class="stg-form" style="margin-top:16px">
-            {% csrf_token %}
+    <form method="post" action="{% url 'list_create' %}">
+        {% csrf_token %}
+        <div class="gl-dialog__body stg-form">
+            {% comment %}The counters sit OUTSIDE the <label> and are reached by `aria-describedby`.
+            Inside it they polluted the accessible name ("Name 0/60"), which is why the first version
+            marked them `aria-hidden` -- but that hid the only signal that the field has stopped
+            accepting input, since `maxlength` swallows keystrokes silently. `aria-live="polite"`
+            announces the escalation.
 
-            {% comment %}`.stg-field` / `.stg-input` / `.pp-cta` are the site's own form primitives --
-            reused rather than re-minted, which is the whole reason this file is short. `maxlength`
-            comes from the model constant, so the number the counter shows is the number the service
-            enforces by construction.{% endcomment %}
+            `maxlength` comes from the model constant, so the number the counter shows is the number
+            the service enforces by construction.{% endcomment %}
             <div class="stg-field">
-                <label class="stg-field__label" for="gl-name">
-                    Name
-                    <span class="gl-count" data-charcount-for="gl-name" aria-hidden="true"></span>
-                </label>
+                <label class="stg-field__label" for="gl-name">Name</label>
                 <input type="text" id="gl-name" name="name" class="stg-input" required autofocus
                        maxlength="{{ name_max_length }}" data-charcount autocomplete="off"
-                       placeholder="The Backlog" />
+                       aria-describedby="gl-name-count" placeholder="The Backlog" />
+                <span class="gl-countchars" id="gl-name-count" data-charcount-for="gl-name"
+                      aria-live="polite"></span>
             </div>
 
-            {% comment %}Suggestions, not a menu of the only options. Naming a list is how you tell two
-            of your own apart, so it stays free text -- these are a shortcut past the blank field,
-            which is the actual friction.{% endcomment %}
-            <div class="gl-suggest">
+            {% comment %}Suggestions, not a menu of the only options -- naming a list is how you tell
+            two of your own apart, so it stays free text. Grouped and labelled, because otherwise a
+            keyboard or screen-reader user tabbing off Name meets eight unexplained buttons.{% endcomment %}
+            <div class="gl-suggest" role="group" aria-label="Suggested names">
                 {% for suggestion in suggested_names %}
                 <button type="button" class="gl-suggest__chip" data-gl-suggest>{{ suggestion }}</button>
                 {% endfor %}
@@ -143,20 +169,22 @@ meaningless.
 
             <div class="stg-field">
                 <label class="stg-field__label" for="gl-description">
-                    Description <span class="stg-field__hint" style="display:inline">optional</span>
-                    <span class="gl-count" data-charcount-for="gl-description" aria-hidden="true"></span>
+                    Description <span class="stg-field__hint">optional</span>
                 </label>
                 <textarea id="gl-description" name="description" class="stg-input" rows="3"
                           maxlength="{{ description_max_length }}" data-charcount
+                          aria-describedby="gl-description-count"
                           placeholder="What is this list for?"></textarea>
+                <span class="gl-countchars" id="gl-description-count"
+                      data-charcount-for="gl-description" aria-live="polite"></span>
             </div>
+        </div>
 
-            <div class="gl-dialog__foot">
-                <button type="button" class="pp-cta pp-cta--ghost" data-gl-close>Cancel</button>
-                <button type="submit" class="pp-cta">Create list</button>
-            </div>
-        </form>
-    </div>
+        <div class="gl-dialog__foot">
+            <button type="button" class="pp-cta pp-cta--ghost" data-gl-close>Cancel</button>
+            <button type="submit" class="pp-cta">Create list</button>
+        </div>
+    </form>
 </dialog>
 {% endblock %}
 
