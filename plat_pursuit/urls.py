@@ -22,6 +22,8 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
+
+from gamelists.views import BrowseListsView
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
@@ -382,7 +384,11 @@ urlpatterns = [
     # The NAMES stay resolvable. Templates that are no longer reachable still contain
     # `{% url 'list_detail' %}`, and the views, models, data and the rebuilt browse page are all intact:
     # this is a curtain, not a demolition. Restoring it is putting these four lines back.
-    path('community/lists/', RedirectView.as_view(url='/', permanent=False), name='lists_browse'),
+    # BROWSE is rebuilt (2026-09) and now answers here for real -- but STAFF ONLY, because lists and
+    # the Challenges beta ship as one update and a routed page with no entry points is still a page
+    # somebody can find. The curtain moved from "redirects home" to "turns non-staff away"; the
+    # guarantee is stronger, not weaker. Removing `_DevelopmentGate` is the switch.
+    path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', RedirectView.as_view(url='/', permanent=False), name='list_create'),
     path('community/lists/<int:list_id>/', RedirectView.as_view(url='/', permanent=False), name='list_detail'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),

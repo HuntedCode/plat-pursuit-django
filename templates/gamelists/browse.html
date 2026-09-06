@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}Game Lists{% endblock %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Page header: accented card + the opening-beat cascade, same shell as every rebuilt browse. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Game Lists</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        A backlog, a ranking, a run in order. Lists other hunters made and published.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-3 shrink-0">
+                    <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                        <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
+                    </div>
+                    {% if user.is_authenticated and user.profile %}
+                    <a href="{% url 'my_lists' %}" class="btn btn-sm md:btn-md btn-primary gap-1.5 shrink-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        <span class="hidden md:inline">My lists</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %} Sticky mini-bar: identity + live count + a quick search/sort proxy, re-surfaced once the
+    toolbar scrolls away. OUTSIDE #browse-results so it survives every filter swap. {% endcomment %}
+    <div class="pp-minibar" data-sticky-reveal data-sticky-sentinel="#gl-minibar-sentinel">
+        <div class="pp-minibar__inner container mx-auto">
+            <span class="pp-minibar__id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span class="pp-minibar__title">Lists</span>
+                <span class="pp-minibar__count" data-minibar-count title="shown">{{ paginator.count|intcomma }}</span>
+            </span>
+            <div class="pp-minibar__controls">
+                <span class="pp-minibar__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" data-minibar-search value="{{ query }}" placeholder="Search&hellip;" aria-label="Search lists" />
+                </span>
+                <select data-minibar-sort class="pp-gallery__select pp-minibar__sort" aria-label="Sort results"></select>
+            </div>
+        </div>
+    </div>
+
+    {% comment %} Toolbar: search + sort + the game-count range, all auto-applying through
+    browse-filters.js (HTMX grid swap). No segmented switcher here -- unlike Franchises there is no second
+    KIND of list to toggle between, and a switcher with one option is chrome pretending to be a control.
+    {% endcomment %}
+    <form data-browse-form data-live-search id="gl-form"
+          hx-get="{% url 'lists_browse' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit"
+          hx-indicator="#browse-results">
+        <div class="pp-toolbar-card pp-gbrowse__toolbar mt-4">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-bgal__search" data-search-wrap>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" name="q" value="{{ query }}" placeholder="Search lists or creators&hellip;" aria-label="Search by list name, description or creator" data-page-search />
+                    <span class="pp-search-spin" aria-hidden="true"></span>
+                    <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+                </span>
+
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% for value, display in sort_choices %}
+                        <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                {% comment %} The size range, kept from the old toolbar but folded into one quiet control
+                instead of two loose number boxes with a label between them. {% endcomment %}
+                <span class="pp-gl-range" title="Filter by how many games a list holds">
+                    <span class="pp-gl-range__label">Games</span>
+                    <input type="number" name="min_games" value="{{ request.GET.min_games }}" min="0" inputmode="numeric" placeholder="min" aria-label="Minimum games" />
+                    <span class="pp-gl-range__dash" aria-hidden="true">&ndash;</span>
+                    <input type="number" name="max_games" value="{{ request.GET.max_games }}" min="0" inputmode="numeric" placeholder="max" aria-label="Maximum games" />
+                </span>
+            </div>
+        </div>
+
+        <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
+    </form>
+
+    {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar. Outside the swap. #}
+    <span id="gl-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
+    <div id="browse-results">
+        {% include 'gamelists/partials/browse_results.html' %}
+    </div>
+
+    {% comment %} Infinite scroll: sentinel + spinner OUTSIDE #browse-results so they persist across filter
+    swaps; InfiniteScroller re-binds to the fresh #items-grid in htmx:afterSwap. {% endcomment %}
+    <div id="gl-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="gl-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/lists-browse.js' %}"></script>
+{% endblock %}

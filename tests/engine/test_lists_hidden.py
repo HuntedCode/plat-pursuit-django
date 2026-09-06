@@ -20,8 +20,15 @@ pytestmark = pytest.mark.django_db
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PAGES = [
+#: Rebuilt and now answering for real, but STAFF ONLY while the branch is open -- lists and the
+#: Challenges beta ship as one update. The curtain moved from "redirects home" to "turns non-staff
+#: away", which is a stronger guarantee than a redirect: a routed page with no entry points is still
+#: findable, a gated one is not.
+GATED_PAGES = [
     '/community/lists/',
+]
+
+PAGES = [
     '/community/lists/create/',
     '/community/lists/1/',
     '/community/lists/1/edit/',
@@ -32,7 +39,7 @@ PAGES = [
 
 
 @pytest.mark.parametrize('url', PAGES)
-def test_every_list_page_sends_you_home(client, url):
+def test_every_unbuilt_list_page_sends_you_home(client, url):
     resp = client.get(url)
 
     assert resp.status_code in (301, 302), f'{url} still renders (got {resp.status_code})'
@@ -43,8 +50,28 @@ def test_the_redirect_is_temporary_so_it_can_be_taken_back():
     """A 301 is cached by the browser indefinitely. Using one here would keep sending people to the
     homepage long after the rebuilt system ships -- and specifically the people who used lists most,
     because they are the ones holding the bookmarks."""
-    assert client_status('/community/lists/') == 302
     assert client_status('/my-lists/') == 302
+    assert client_status('/community/lists/create/') == 302
+
+
+@pytest.mark.parametrize('url', GATED_PAGES)
+def test_a_rebuilt_page_is_reachable_by_staff_and_nobody_else(client, url):
+    """Both halves. Asserting only the refusal would pass with the page deleted, and asserting only
+    that staff get in would pass with the gate removed -- which is the thing that must not happen by
+    accident before the Challenges beta is ready."""
+    from tests.factories import UserFactory
+
+    assert client.get(url).status_code == 302, f'{url} is open to anonymous visitors'
+
+    hunter = UserFactory()
+    client.force_login(hunter)
+    assert client.get(url).status_code == 302, f'{url} is open to ordinary hunters'
+
+    staff = UserFactory()
+    staff.role = 'admin'
+    staff.save()
+    client.force_login(staff)
+    assert client.get(url).status_code == 200, f'{url} does not render for staff'
 
 
 def client_status(url):
