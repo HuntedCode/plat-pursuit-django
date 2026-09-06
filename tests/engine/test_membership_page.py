@@ -14,6 +14,7 @@ from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 
+from users.constants import PAYPAL_PLANS
 from users.services.subscription_service import MembershipStatus, SubscriptionService
 from tests.factories import ProfileFactory, UserFactory
 
@@ -230,18 +231,40 @@ def test_paypal_ladder_billing_resolves_from_the_plan_id():
 
 
 def test_paypal_legacy_billing_gives_cycle_only():
-    """Legacy PayPal prices live only on the processor -- the cycle is knowable from the tier,
-    the dollar figure is never guessed."""
+    """Legacy PayPal prices live only on the processor -- the cycle is knowable, the dollar figure
+    is never guessed.
+
+    Keyed on the adopted PLAN rather than the tier since the legacy migration (2026-09-06): those
+    members hold `backer` now, and a ladder slug cannot tell monthly from yearly on its own.
+    """
     user = UserFactory()
     user.subscription_provider = 'paypal'
     user.paypal_subscription_id = 'I-LEGACY'
-    user.premium_tier = 'premium_yearly'
+    user.premium_tier = 'backer'
+    user.save()
+    ms = MembershipStatus('active', 'paypal')
+    with patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
+               return_value={'status': 'ACTIVE', 'next_billing_time': None,
+                             'plan_id': PAYPAL_PLANS['live']['premium_yearly']}):
+        billing = SubscriptionService.describe_billing(user, ms)
+    assert billing == {'amount': None, 'cycle': 'year'}
+
+
+def test_paypal_billing_omits_the_cycle_for_an_unrecognised_plan():
+    """No recognised plan (an unknown id, or a snapshot miss during a PayPal outage) means no
+    cycle, rather than one inferred from the tier. That inference was safe only while the tier was
+    `premium_yearly`; post-adoption it would have to guess between Backer monthly and yearly, so
+    omission is the honest answer."""
+    user = UserFactory()
+    user.subscription_provider = 'paypal'
+    user.paypal_subscription_id = 'I-LEGACY'
+    user.premium_tier = 'backer'
     user.save()
     ms = MembershipStatus('active', 'paypal')
     with patch('users.services.paypal_service.PayPalService.get_cached_subscription_snapshot',
                return_value={'status': 'ACTIVE', 'next_billing_time': None, 'plan_id': 'P-UNKNOWN'}):
         billing = SubscriptionService.describe_billing(user, ms)
-    assert billing == {'amount': None, 'cycle': 'year'}
+    assert billing == {'amount': None, 'cycle': None}
 
 
 # -------------------------------------------------------------- the PayPal snapshot ----

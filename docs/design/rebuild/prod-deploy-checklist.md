@@ -842,6 +842,48 @@ refuses live mode without `--live-ok` for exactly this reason.
 survived the service changes and recreate it if it did not. Row + rationale:
 [cron-jobs.md](../../guides/cron-jobs.md).
 
+> ✅ **STRIPE GRACE PERIODS WERE BROKEN IN PRODUCTION; FIXED 2026-09-06** on branch
+> `feat/payments/legacy-tier-migration` (folded in rather than split out because the second half of
+> the fix was un-masked by the first). Kept here because the deploy is what makes it true on prod,
+> and because the shape of it is worth not re-learning.
+>
+> Stripe moved `current_period_end` off the subscription and onto its ITEMS (the 2025-03-31 "basil"
+> API version). `stripe==14.1.0` was pinned 2025-12-26, defaulting to `2025-12-15.clover`; the
+> grace-period code was written 2026-01-14, three weeks later, against a top-level key production
+> payloads no longer carry. Verified on a live row: top-level `current_period_end` is `None`,
+> `items.data[0].current_period_end` holds the real value.
+>
+> It failed silently and it failed CLOSED, which is why nobody saw it. Three of the four readers
+> then revoked premium from members who had paid for time they had not used:
+>
+> | Site | Effect before the fix |
+> |---|---|
+> | `update_user_subscription` | A member cancelling with paid time left lost premium immediately instead of at period end. |
+> | `audit_subscription_status` (**weekly `--fix` cron**) | Same miss, so the sweep revoked grace members' premium early, every week. |
+> | `membership_status` | Never returned `grace`, so a paying member was told they had no membership. |
+> | `users/views.py` next-billing | No date shown. |
+>
+> All five readers (including the one that survived only because `cancel_at` happened to be set) now
+> go through `SubscriptionService.subscription_period_end`, which reads item-first with the
+> top-level as fallback, so rows written at either API version resolve.
+>
+> **Two Django 5 landmines came with it.** `django.utils.timezone.utc` was removed in Django 5.0,
+> and `AttributeError` sits outside the `except` clauses that surround these calls:
+> - `audit_subscription_status:248` was UNREACHABLE while `period_end_ts` was always `None`. Fixing
+>   the key is what made it run, so the key fix alone would have turned a silent wrong answer into a
+>   crashing weekly cron. The two had to ship together.
+> - `_send_payment_succeeded_email` raised on every renewal, so the webhook logged it and returned
+>   200 while **renewal receipts silently stopped sending**. Members were charged with no receipt.
+>   The existing template tests could not catch it: they pass `next_billing_date` in ready-made.
+>
+> `tests/engine/test_subscription_period_end.py` pins all of it against clover-shaped payloads.
+> A repo-wide sweep found no remaining `django.utils.timezone.utc` uses.
+>
+> **Still worth its own branch:** pin `STRIPE_API_VERSION` in settings so the wire shape stops moving
+> underneath us. dj-stripe 2.10.3 carries the same stale assumption in its own
+> `Subscription.current_period_end` property (and `is_period_current()` would raise comparing `None`
+> to a datetime); we never call those, but that is why the fix could not simply delegate to it.
+
 ### Marks & Roles (2026-08-22) — migrations users/0022, users/0023, trophies/0315
 
 Additive fields (`CustomUser.role`, `Profile.display_mark`) plus a data backfill: every
@@ -1224,3 +1266,102 @@ their name on the leaderboard. `PURSUER_RANKS` is calibrated on the floored scal
       `user_id NOT NULL`, which fails if any restriction has outlived its account (the exact case
       that migration exists for) and leaves the rollback half-applied.
 
+
+## Legacy tier migration (2026-09, branch `feat/payments/legacy-tier-migration`)
+
+Moves the last grandfathered subscribers (`premium_monthly` $3.99/mo, `premium_yearly` $39.99/yr,
+`supporter` $20/mo) onto the supporter ladder, so the legacy layer can be deleted rather than
+maintained forever. Two arms, deliberately different: Stripe is a real price swap, PayPal is an
+adoption that makes no billing change. Full reasoning in the `migrate_legacy_tiers` docstring and
+`users/constants.py` -> `LEGACY_PLAN_ADOPTION`.
+
+**No migration, no backfill.** Everything below is a command run against prod.
+
+- [ ] **Note what the DEPLOY alone changes, before any command runs.** `LEGACY_PLAN_ADOPTION` merges
+      into `PAYPAL_PLAN_TO_TIER` at import, so from the moment this ships, a legacy PayPal holder
+      whose `BILLING.SUBSCRIPTION.ACTIVATED` fires (re-activation after a suspension) is written to
+      `backer` whether or not step 3 has run. That is intended, and it is the first irreversible-ish
+      moment, not step 3.
+- [ ] **Do NOT run `djstripe_sync_models Subscription` for this.** It is the usual prerequisite for
+      `audit_subscription_status`, and it is a trap here. dj-stripe syncs at
+      `djstripe_settings.STRIPE_API_VERSION`, which resolves to stripe-python 14's pinned
+      `2025-12-15.clover` because the project sets no override, while every existing row was written
+      by a webhook at the ACCOUNT's version. `sync_from_stripe_data` stores the response verbatim, so
+      a sync rewrites every row into a shape the rest of the codebase was not written against. A prod
+      row checked 2026-09-06 has `plan` but no `current_period_end`, and four call sites read that
+      already-missing key (see the grace-period warning earlier in this doc). Changing which keys are
+      present site-wide, immediately before a billing migration, is not a risk worth taking for a
+      prerequisite this command does not have.
+
+      This migration does not need it: the Stripe arm reads the mirror only to find the subscription
+      id, then asks Stripe directly for the authoritative status, item and price, and writes the tier
+      itself rather than re-deriving it. If the mirror is stale enough that a paying subscriber is
+      missing entirely, the command says so and points at `audit_subscription_status --fix`.
+
+      **Worth its own branch, separately from this one:** pin `STRIPE_API_VERSION` in settings to the
+      account's version, or migrate the `plan` / `current_period_end` reads onto the item. Until one
+      of those lands, `djstripe_sync_models Subscription` is unsafe to run against prod at all, which
+      is a live footgun sitting in the weekly audit's documented workflow.
+- [ ] **Dry run, and read the Population block.** `python manage.py migrate_legacy_tiers` reports
+      counts by tier and provider and touches nothing (it does make read-only calls to both
+      processors, which is what makes the preview worth reading). This is where the Stripe-side
+      counts finally surface; the PayPal side was confirmed by hand on 2026-09-06 as 4 monthly +
+      4 yearly with no `supporter`, and this run is the chance to re-confirm that before `--fix`.
+      **Save this output.** It is the only record of which legacy tier each PayPal member held:
+      `premium_monthly` and `premium_yearly` both collapse to `backer`, and afterwards the
+      distinction survives only on the PayPal plan id.
+- [ ] **Run the PayPal arm first**: `python manage.py migrate_legacy_tiers --fix --provider paypal`.
+      No billing change is made, so this is the reversible half: it rewrites `premium_tier` to
+      `backer` and nothing else. Their $3.99/$39.99 plan stays exactly as it is. Rows PayPal cannot
+      confirm the plan for are refused (`[UNVERIFIED]`) rather than migrated on trust; re-run when
+      PayPal answers.
+- [ ] **Then the Stripe arm**: `python manage.py migrate_legacy_tiers --fix --provider stripe
+      --live-ok`. The `--live-ok` flag is mandatory in live mode, matching `bootstrap_support_skus`.
+      This modifies live subscriptions onto the real ladder prices ($3.99 -> $4.00,
+      $39.99 -> $40.00, $20 -> $20 for `supporter` -> `sponsor`) with `proration_behavior='none'`,
+      so nothing is charged or credited now and no renewal date moves. The billing interval is read
+      from each subscriber's live price, never assumed from their tier.
+- [ ] **Expect `past_due` / `canceled` / cancelling members under `errors` or `skipped`, not
+      migrated.** They are deliberately left alone. A `[NO SUB]` line means no subscription exists
+      under that customer at all, most likely the duplicate-customer case: run
+      `audit_subscription_status --fix` to repoint, then re-run this command.
+- [ ] **Verify by re-running `python manage.py migrate_legacy_tiers`** (no flags). It should report
+      no legacy holders. Do NOT use `audit_subscription_status` for this: it branches on
+      subscription STATUS and never compares the tier to the product, so it cannot see a member left
+      on a legacy slug. Run it too, as the separate "nobody moved sideways" check.
+- [ ] **Rollback (Stripe arm), time-boxed.** There is no `--revert` flag; this is per-subscription
+      and manual, which is fine at this population. `STRIPE_PRICES['live']` and `STRIPE_PRODUCTS`
+      still hold the legacy ids, so
+      `stripe.Subscription.modify(sub_id, items=[{'id': <item id>, 'price': <legacy price>}], proration_behavior='none')`
+      followed by `djstripe_sync_models Subscription` restores both the price and, through
+      `get_tier_from_product_id`, the legacy tier. **This only undoes anything before the member's
+      next renewal invoice generates.** Once they have actually been billed $4.00, reverting the
+      price does not refund the difference.
+- [ ] **DO NOT deactivate the two legacy PayPal plans** (`P-6FE79903U4175840ENGLBP2A`,
+      `P-3SY42188DC612830VNGLBQMY`). They bill live subscriptions and `LEGACY_PLAN_ADOPTION` is what
+      names them. The legacy Stripe prices and products may be archived once the swap is verified,
+      but leave their `STRIPE_PRODUCTS` entries in place for one release: late or replayed webhooks
+      still resolve through them, and so does any subscription the command deliberately skipped.
+- [ ] **Known and accepted: migrated `supporter` holders keep the Discord Premium+ role forever.**
+      `activate_subscription` only adds roles, and `deactivate_subscription` picks the role to
+      remove from `original_tier`, which is `sponsor` by then. So they hold both roles while
+      subscribed and keep Premium+ after they churn. Sweep it by hand in Discord if that matters;
+      `users/constants.py`'s comment that Premium+ "stays with the legacy `supporter` tier only,
+      until it dies out" stops being true on migration day.
+- [ ] **User-visible changes worth a line in release notes.** The level name stops saying "Premium
+      Yearly" and starts saying "Backer" on the membership page, the settings page, the welcome page
+      and in renewal/cancellation emails. Migrated members also lose the "a founding tier"
+      recognition line. Adopted PayPal members read as ordinary Backers while still paying $3.99
+      against Backer's advertised $4. `Profile.display_mark` does NOT change, so the supporter wall,
+      the leaderboards and every name on the site are unaffected.
+- [ ] **Follow-up PR, once the verify re-run reports zero legacy holders**: delete
+      `LEGACY_TIER_LEVEL_MAP`, `worn_level_dict`'s `is_legacy` branch, the membership page's
+      `legacy` preview state, `STRIPE_PRICES` (and with it the all-or-nothing
+      `get_prices_from_stripe` shape that exists only to serve those three tiers), the three legacy
+      `PREMIUM_TIER_CHOICES` entries (choices-only migration, zero rows touched), and
+      `migrate_legacy_tiers` itself. `LEGACY_PLAN_ADOPTION` and the legacy `PAYPAL_PLANS` entries
+      are the exception and stay until the last PayPal holder churns.
+- [ ] **Decide, do not just delete, the three notification `target_type` options** (`premium_monthly`,
+      `premium_yearly`, `premium_supporter` in `notifications/models.py`). They select nobody after
+      the migration, but there is no ladder-slug replacement, so removing them loses per-tier
+      announcement targeting outright rather than migrating it.

@@ -242,10 +242,17 @@ class Command(BaseCommand):
             elif status == 'canceled':
                 # Check grace period
                 canceled_data = sub.stripe_data or {}
-                period_end_ts = canceled_data.get('current_period_end')
+                period_end_ts = SubscriptionService.subscription_period_end(canceled_data)
                 if period_end_ts:
-                    from datetime import datetime
-                    period_end = datetime.fromtimestamp(period_end_ts, tz=timezone.utc)
+                    from datetime import datetime, timezone as dt_timezone
+                    # dt_timezone.utc, NOT timezone.utc: `timezone` here is django.utils.timezone,
+                    # whose `utc` alias was removed in Django 5.0. The same bug was fixed twice in
+                    # subscription_service.py and missed here, and it stayed invisible because the
+                    # line was UNREACHABLE: `period_end_ts` was always None while the grace check
+                    # read the top-level `current_period_end` Stripe had moved onto the item. Fixing
+                    # that key is what made this line run, so the two fixes have to ship together --
+                    # the key fix alone would turn a silent wrong answer into a crashing weekly cron.
+                    period_end = datetime.fromtimestamp(period_end_ts, tz=dt_timezone.utc)
                     if period_end > timezone.now():
                         self.stdout.write(self.style.WARNING(
                             f'  [GRACE] {user.email} ({psn}) - canceled, grace until {period_end}'

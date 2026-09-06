@@ -46,7 +46,7 @@ The admin dashboard at `/staff/subscriptions/` provides subscriber stats, an att
 | `paypal_subscription_id` | CharField (nullable) | PayPal Subscription ID, set by webhook |
 | `subscription_provider` | CharField (nullable) | "stripe" or "paypal" |
 | `paypal_cancel_at` | DateTimeField (nullable) | When PayPal sub expires after cancellation |
-| `premium_tier` | CharField (nullable) | Internal tier name: premium_monthly, premium_yearly, supporter |
+| `premium_tier` | CharField (nullable) | Internal tier SLUG: one of the six ladder levels (backer ... cornerstone), or one of the three legacy slugs (premium_monthly, premium_yearly, supporter) until their holders are migrated. See Legacy Tier Migration below |
 | `email_preferences` | JSONField | Dict of preference key to boolean |
 
 ### SubscriptionPeriod
@@ -191,6 +191,55 @@ All actions POST to the same endpoint with `action` and `user_id` in the request
 | `send_payment_succeeded_email` | None | Re-sends payment confirmation email |
 | `resend_action_required_email` | None | Re-sends 3D Secure email (finds invoice URL from latest notification) |
 
+## Legacy Tier Migration (2026-09)
+
+The three tiers that predate the supporter ladder (`premium_monthly` $3.99/mo, `premium_yearly`
+$39.99/yr, `supporter` $20/mo) were withdrawn from sale in 2026-08 but kept renewing for existing
+holders. `python manage.py migrate_legacy_tiers` moves them onto the ladder so the legacy layer can
+be deleted rather than maintained forever. **Whether it has run against production is tracked in the
+[deploy checklist](../design/rebuild/prod-deploy-checklist.md), not here.** Targets are by price
+proximity, read from
+`LEGACY_TIER_LEVEL_MAP`: both premium tiers become **Backer** ($4/$40, a one-cent increase),
+`supporter` becomes **Sponsor** (an exact $20 match).
+
+**The two arms are different, and one asymmetry is permanent.**
+
+| | Stripe | PayPal |
+|---|---|---|
+| Mechanism | Real price swap (`Subscription.modify`, `proration_behavior='none'`, billing anchor untouched) | Adoption: no processor call at all |
+| What the member pays after | The real ladder price | Their original legacy price, forever |
+| Legacy processor objects | Archivable once verified | **Must stay live** |
+
+PayPal's revise endpoint requires the *subscriber* to log in and re-approve whenever the billing
+amount changes, so a one-cent increase is not something the site can apply on their behalf, and
+cancel-and-resubscribe would fire the farewell email, pull the Discord role and risk losing a paying
+member outright. So `LEGACY_PLAN_ADOPTION` (in `users/constants.py`) makes the two legacy PayPal
+plan ids resolve to `backer` instead, and those members keep their price as a grandfathered
+discount.
+
+**Why the migration is silent, per arm.** The Stripe arm reaches `activate_subscription` through
+`update_user_subscription` with `event_type=None`, and that method announces only for the event types
+in its `activation_events` list, so no welcome email and no Discord embed fire. The PayPal arm never
+calls `activate_subscription` at all: it writes the tier and calls `reconcile_premium` directly,
+because `activate_subscription` clears `paypal_cancel_at` for PayPal and would resurrect a member who
+is mid-cancellation. Same silence, different mechanism, and no Discord role is re-pushed on that arm.
+
+`reconcile_premium` leaves an open `SubscriptionPeriod` alone while premium stays true, so tenure and
+the `premium_months` milestone survive intact. `Profile.display_mark` does not change for a single
+user either, because `worn_supporter_level` already collapsed `premium_monthly` onto `backer`: the
+supporter wall, the leaderboards and every name on the site render identically before and after.
+
+**What members do see.** The level NAME changes from "Premium Yearly" to "Backer" on the membership
+page, the settings page and the welcome page, and in renewal and cancellation emails (all of which
+render `get_tier_display_name(premium_tier)`). They also lose the "a founding tier" recognition line,
+since `worn_level_dict`'s `is_legacy` branch stops matching. Adopted PayPal members are the sharp
+case: they read as ordinary Backers while still being charged $3.99 against Backer's advertised $4.
+
+**Discord roles are knowingly left inconsistent for `supporter` holders.** `sponsor` grants the
+Premium role, and nothing removes the Premium+ role their legacy tier granted, because removal keys
+off `original_tier` in `deactivate_subscription` (now `sponsor`). They keep both roles while
+subscribed, and keep Premium+ after they churn. Accepted rather than fixed; see the deploy checklist.
+
 ## Email Preference System
 
 ### Default Preferences
@@ -226,7 +275,8 @@ When `global_unsubscribe` is set to `True`, all other preferences are forced to 
 
 - **PayPal double-email guard**: PayPal fires both `BILLING.SUBSCRIPTION.ACTIVATED` and `PAYMENT.SALE.COMPLETED` on initial subscription. The welcome email is sent in `activate_subscription()` (from the activation event), and `handle_payment_succeeded()` skips initial invoices by checking `billing_reason`. For PayPal, the payment succeeded handler also checks for a recent `subscription_welcome` EmailLog before sending.
 - **past_due keeps premium active**: Unlike `unpaid` which triggers full deactivation, `past_due` preserves premium features. This is intentional: Stripe is still retrying payment, and revoking access during retry would cause a bad user experience. However, `SubscriptionPeriod` is closed to prevent milestone time from accumulating during the unpaid window.
-- **Stripe grace period for canceled subscriptions**: A subscription with status `canceled` may still have paid time remaining (`current_period_end` in the future). The system checks this before deactivating.
+- **Stripe grace period for canceled subscriptions**: A subscription with status `canceled` may still have paid time remaining. The system checks this before deactivating. **Always read that end date through `SubscriptionService.subscription_period_end`, never `stripe_data['current_period_end']` directly.** Stripe moved the field onto the subscription's ITEMS in the 2025-03-31 API version, so the top-level key is `None` on every payload written since; the five call sites that read it directly failed closed, and three of them revoked premium from members who had paid for time they had not used. The helper reads item-first with the top-level as fallback, so rows written at either API version resolve.
+- **`django.utils.timezone.utc` does not exist**: it was removed in Django 5.0. Use `from datetime import timezone as dt_timezone` and `dt_timezone.utc`. This has bitten this subsystem four separate times, in three files, and each time it was invisible because `AttributeError` fell outside the surrounding `except` clause: two grace checks raised on every run, the audit command's copy sat unreachable behind the bug above, and `_send_payment_succeeded_email` raised on every renewal, which silently stopped renewal receipts sending entirely.
 - **14-day recovery window**: When reopening a closed `SubscriptionPeriod`, only periods closed within the last 14 days are eligible. This covers Stripe's retry window. Older periods get a fresh start to keep milestone calculations accurate.
 - **on_commit for Discord calls**: Discord role assignment/removal uses `transaction.on_commit()` to avoid blocking the webhook response with HTTP calls to the Discord bot. If the transaction rolls back, the role change is never sent.
 - **Email suppression logging**: When an email is suppressed due to user preferences, `EmailService.log_suppressed()` creates an EmailLog entry with status "suppressed". This is critical for the admin dashboard to distinguish "user opted out" from "email failed to send".

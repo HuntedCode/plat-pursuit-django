@@ -107,6 +107,42 @@ class SubscriptionService:
         return None
 
     @staticmethod
+    def subscription_period_end(stripe_data) -> Optional[int]:
+        """When the paid period ends, as a unix timestamp, or None. THE one reader of that field.
+
+        Stripe moved `current_period_end` off the subscription and onto its ITEMS (the 2025-03-31
+        "basil" API version; stripe-python 14 pins 2025-12-15.clover, and nothing here overrides it).
+        The move landed three weeks before the grace-period code was written, so that code has been
+        reading a key production payloads no longer carry -- verified on a live row 2026-09-06:
+        top-level `current_period_end` is None, `items.data[0].current_period_end` is the real value.
+
+        THE FAILURE IS SILENT AND FAILS CLOSED, which is why it survived. `.get()` returns None, the
+        `if period_end_ts and ...` guard short-circuits, and every caller takes its not-in-grace
+        branch. Three of the four then revoke premium from a member who has paid for time they have
+        not used yet -- including `audit_subscription_status --fix`, which runs weekly on prod. The
+        visible symptom is a cancelled member's access ending at cancellation rather than at period
+        end, which is indistinguishable from an ordinary expiry unless they complain.
+
+        (dj-stripe's own `Subscription.current_period_end` property has the same stale assumption,
+        and its `is_period_current()` would raise TypeError comparing None to a datetime. We never
+        call those, but it is why this cannot simply delegate to the library.)
+
+        Reads item-first, top-level as fallback, so a row written at EITHER API version resolves --
+        old rows in the mirror keep working, and this does not break again if a webhook delivers the
+        older shape. Takes the LATEST end across items: with more than one, the member is still paid
+        up until the last of them lapses, and the safe direction here is to keep access.
+        """
+        data = stripe_data or {}
+        ends = [
+            item.get('current_period_end')
+            for item in ((data.get('items') or {}).get('data') or [])
+            if item.get('current_period_end')
+        ]
+        if ends:
+            return max(ends)
+        return data.get('current_period_end')
+
+    @staticmethod
     def get_tier_display_name(tier: str) -> str:
         """
         Get the display name for a premium tier.
@@ -421,7 +457,8 @@ class SubscriptionService:
                     # scheduled for a specific date sets cancel_at ALONE. Either way the end date
                     # is real information. `dt_timezone.utc`, never django.utils.timezone.utc
                     # (removed in Django 5.0).
-                    end_ts = data.get('cancel_at') or data.get('current_period_end')
+                    end_ts = (data.get('cancel_at')
+                              or SubscriptionService.subscription_period_end(data))
                     if end_ts:
                         cancels_at = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
                 return MembershipStatus('active', 'stripe', cancels_at=cancels_at, stripe_sub=sub)
@@ -449,7 +486,7 @@ class SubscriptionService:
                     customer__id=user.stripe_customer_id, stripe_data__status='canceled'
                 ).first()
                 if canceled:
-                    end_ts = (canceled.stripe_data or {}).get('current_period_end')
+                    end_ts = SubscriptionService.subscription_period_end(canceled.stripe_data)
                     if end_ts:
                         until = datetime.fromtimestamp(end_ts, tz=dt_timezone.utc)
                         if until > timezone.now():
@@ -504,7 +541,8 @@ class SubscriptionService:
 
         elif membership.provider == 'paypal':
             from users.services.paypal_service import PayPalService
-            from users.constants import PAYPAL_LADDER_PLANS, SUPPORT_TIERS
+            from users.constants import (INTERVAL_TO_STRIPE, LEGACY_PLAN_ADOPTION,
+                                         PAYPAL_LADDER_PLANS, SUPPORT_TIERS)
 
             snapshot = PayPalService.get_cached_subscription_snapshot(user.paypal_subscription_id)
             plan_id = (snapshot or {}).get('plan_id')
@@ -520,9 +558,21 @@ class SubscriptionService:
                             break
                     if cycle:
                         break
+            if cycle is None and plan_id:
+                # ADOPTED legacy PayPal plans, keyed on the PLAN. The tier cannot answer this for
+                # a migrated member: they hold `backer`, which does not say monthly or yearly.
+                adopted = LEGACY_PLAN_ADOPTION.get(plan_id)
+                if adopted:
+                    cycle = INTERVAL_TO_STRIPE[adopted[1]]
             if cycle is None:
-                # Legacy PayPal tiers: the cycle is knowable from the tier, the dollar figure
-                # lives only on the processor -- never guess it.
+                # Un-migrated legacy holders, and any legacy plan absent from the adoption map.
+                # Kept rather than replaced by the branch above: this also covers a snapshot miss
+                # (PayPal outage, or the 60s failure marker), where dropping it would make the
+                # membership page's whole Billing row VANISH for someone it used to serve.
+                #
+                # A MIGRATED member still falls through to omission here, because `backer` genuinely
+                # cannot say which cycle they are on. That is the honest answer, and the dollar
+                # figure remains something we never guess.
                 cycle = {'premium_monthly': 'month', 'premium_yearly': 'year',
                          'supporter': 'month'}.get(user.premium_tier)
 
@@ -632,7 +682,7 @@ class SubscriptionService:
 
             if canceled_sub:
                 canceled_data = canceled_sub.stripe_data or {}
-                period_end_ts = canceled_data.get('current_period_end')
+                period_end_ts = SubscriptionService.subscription_period_end(canceled_data)
                 # dt_timezone.utc, NOT timezone.utc: `timezone` is django.utils.timezone, whose
                 # `utc` alias was removed in Django 5.0 -- this line raised AttributeError for
                 # every grace-period check since the 5.x upgrade (same bug class as the one fixed
@@ -1276,7 +1326,13 @@ class SubscriptionService:
             period_end = lines[0].get('period', {}).get('end')
             if period_end:
                 try:
-                    next_billing_date = datetime.fromtimestamp(period_end, tz=timezone.utc).strftime('%B %d, %Y')
+                    # dt_timezone.utc, NOT timezone.utc: django.utils.timezone lost its `utc` alias
+                    # in Django 5.0, and AttributeError is not in the except clause below -- so this
+                    # raised out of the email path on EVERY renewal, and the webhook view's
+                    # catch-all logged it. Renewal receipts silently stopped sending. The template
+                    # tests never caught it because they pass `next_billing_date` in ready-made.
+                    next_billing_date = datetime.fromtimestamp(
+                        period_end, tz=dt_timezone.utc).strftime('%B %d, %Y')
                 except (ValueError, OSError):
                     pass
 

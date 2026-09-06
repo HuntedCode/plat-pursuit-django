@@ -241,11 +241,41 @@ If the `BILLING.SUBSCRIPTION.CANCELLED` event arrives without a `next_billing_ti
 
 ## Subscription Tier Reference
 
-| Tier | Grants Premium | Discord Role | Stripe Product (live) | PayPal Plan (live) |
-|------|---------------|--------------|----------------------|-------------------|
-| `premium_monthly` | Yes | Premium | `prod_ThsI3EuCssYlTT` | `P-6FE79903U4175840ENGLBP2A` |
-| `premium_yearly` | Yes | Premium | `prod_ThsIi3Xd8fY2Hk` | `P-3SY42188DC612830VNGLBQMY` |
-| `supporter` | Yes | Supporter (Premium+) | `prod_ThtYQAPoY5pSCN` | `P-5PM309711C131563TNGLBQ3Q` |
+All nine tiers grant premium (`ACTIVE_PREMIUM_TIERS`). Discord roles: every ladder level and both
+legacy premium tiers grant the **Premium** role (`PREMIUM_DISCORD_ROLE_TIERS`); the legacy
+`supporter` tier alone grants **Premium+** (`SUPPORTER_DISCORD_ROLE_TIERS`).
+
+The six ladder levels (`backer` ... `cornerstone`) are what the storefront sells; their ids live in
+`STRIPE_PRODUCTS` / `STRIPE_LADDER_PRICES` / `PAYPAL_LADDER_PLANS`. The three tiers below are the
+LEGACY ones, withdrawn from sale in 2026-08. `migrate_legacy_tiers` moves their holders onto the
+ladder; the deploy checklist tracks whether it has run against production.
+
+| Legacy tier | Migrates to | Discord role | Stripe Product (live) | PayPal Plan (live) |
+|------|---------------|------|----------------------|-------------------|
+| `premium_monthly` ($3.99/mo) | `backer` | Premium | `prod_ThsI3EuCssYlTT` | `P-6FE79903U4175840ENGLBP2A` |
+| `premium_yearly` ($39.99/yr) | `backer` | Premium | `prod_ThsIi3Xd8fY2Hk` | `P-3SY42188DC612830VNGLBQMY` |
+| `supporter` ($20/mo) | `sponsor` | Premium+ | `prod_ThtYQAPoY5pSCN` | `P-5PM309711C131563TNGLBQ3Q` |
+
+⚠ A migrated `supporter` keeps the **Premium+** role permanently: `activate_subscription` only ever
+adds roles, and `deactivate_subscription` picks the role to remove from `original_tier`, which is
+`sponsor` by then. Known and accepted.
+
+**The two providers migrate differently, and the asymmetry is permanent.** Stripe subscribers are
+swapped onto the real ladder price (`migrate_legacy_tiers`, `proration_behavior='none'`, billing
+anchor untouched). Subscriptions the command deliberately skips (`past_due`, `canceled`, or a
+scheduled cancellation) stay on their legacy product, which is why the legacy `STRIPE_PRODUCTS`
+entries must outlive the migration by a release. PayPal cannot be done that way: its revise endpoint requires the SUBSCRIBER to log in and re-approve whenever the billing
+amount changes, and cancel-and-resubscribe would fire the farewell email and risk losing a paying
+member over a one-cent difference. So the legacy PayPal holders keep their plan and their price, and
+`LEGACY_PLAN_ADOPTION` in `users/constants.py` makes those two plan ids resolve to `backer`.
+
+That map is a **drift guard**: nothing in the PayPal path re-derives a tier on its own
+(`PAYMENT.SALE.COMPLETED` only emails, and the audit command's PayPal arm never reads the plan)
+except `BILLING.SUBSCRIPTION.ACTIVATED`, which fires on re-activation after a suspension and would
+otherwise hand those members their legacy slug straight back.
+
+⚠ Do not deactivate the two legacy PayPal plans and do not clean their entries out of
+`PAYPAL_PLANS`. They bill live subscriptions.
 
 ## Related Docs
 
