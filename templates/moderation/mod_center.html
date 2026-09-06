@@ -44,7 +44,7 @@ which is the whole reason the actions are logged with a reason attached.
     {# ── The queues ─────────────────────────────────────────────────────────────────────── #}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-5 md:mb-7">
         {% for queue in queues %}
-        <a href="{{ queue.url }}" class="scard hover:border-primary/50 transition-colors block">
+        <a href="{{ queue.url }}" class="scard block">
             <div class="flex items-baseline justify-between gap-3">
                 <span class="scard__label">{{ queue.name }}</span>
                 {% if queue.open %}

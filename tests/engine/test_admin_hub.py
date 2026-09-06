@@ -824,3 +824,66 @@ def test_the_person_page_gets_back_to_the_hub_and_to_people(client):
     assert f'href="{reverse("admin_hub")}"' in body
     assert reverse('admin_people') in body, 'no route back to the search that found them'
 
+
+# -- what the copy audit found --------------------------------------------------------------------
+#
+# Cutting the verbose copy took three sentences with it that were NOT explaining the page to somebody
+# who already knew what it was. Each one is the thing that stops a wrong action, so each gets pinned.
+
+
+def test_the_restrict_form_says_what_a_restriction_leaves_alone(client):
+    """`UserRestriction`'s docstring says BOTH guarantees are "said on the page too", and the copy
+    pass left only one. An admin who thinks restricting might cost somebody their trophies reaches
+    for a milder tool, or for nothing."""
+    hunter = ProfileFactory(is_linked=True, psn_username='guarantees')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_person', args=[hunter.user.pk])).content.decode()
+
+    assert 'Nothing already published is hidden' in body
+    assert 'trophies' in body and 'untouched' in body, (
+        "the form no longer says a restriction leaves trophies, badges and ranking alone -- which "
+        "`users/models.py` and `docs/features/admin-hub.md` both still promise it says")
+
+
+def test_the_django_admin_door_says_it_is_not_audited(client):
+    """The one caution on the page that was not restating its own label. It is also the only door
+    whose destination behaves differently from every other tile, and the tile no longer looks any
+    different from the nine audited ones."""
+    owner = UserFactory()
+    owner.is_superuser = owner.is_staff = True
+    owner.save()
+    client.force_login(owner)
+
+    body = client.get(reverse('admin_hub')).content.decode()
+
+    assert 'writes no audit entry' in body
+
+
+def test_an_administrator_is_not_shown_the_unaudited_door_or_its_caution(client):
+    """Both halves are superuser-only. A caution about a door somebody cannot open is noise."""
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_hub')).content.decode()
+
+    assert 'writes no audit entry' not in body
+    assert 'href="/admin/"' not in body
+
+
+def test_a_clickable_scard_gets_its_hover_from_the_component_not_a_utility():
+    """`.scard` sets the `border` SHORTHAND from OUTSIDE Tailwind's layers, so a `hover:border-*`
+    utility on one can never win -- the tiles carried that utility and had no hover at all. Pinned
+    at both ends: the rule has to exist, and no template may go back to asking a utility for it,
+    because that failure is invisible (the class is present, the build is clean, nothing happens).
+    """
+    css = (ROOT / 'static/css/output.css').read_text(encoding='utf-8')
+    assert 'a.scard:hover' in css, 'clickable scards have no hover affordance'
+
+    for template in (ROOT / 'templates').rglob('*.html'):
+        markup = template.read_text(encoding='utf-8')
+        for line in markup.splitlines():
+            if 'scard' in line and 'hover:border-' in line:
+                raise AssertionError(
+                    f'{template.name}: a scard is asking a utility for its hover border, which the '
+                    f'unlayered shorthand overrides -- it will silently do nothing:\n{line.strip()}')
+
