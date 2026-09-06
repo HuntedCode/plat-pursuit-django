@@ -62,7 +62,7 @@ reason, and an admin can reverse it.
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.path }}?status={{ status }}&amp;page={{ page }}">
     <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
-           placeholder="Why? (recorded against your name)" aria-label="Reason for this decision">
+           placeholder="Reason (recorded with your name)" aria-label="Reason for this decision">
     <div class="flex gap-2">
         <button type="submit" class="btn btn-sm btn-primary"
                 formaction="{% url 'mod_approve_flag' row.pk %}">Approve</button>

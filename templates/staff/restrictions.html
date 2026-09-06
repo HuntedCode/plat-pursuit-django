@@ -13,8 +13,7 @@ is currently in force.
 {% endcomment %}
 
 {% block staff_blurb %}
-Who is currently barred from writing, and who has been. A restriction stops new words only: it hides
-nothing already published, and it never touches an account's trophies, badges or ranking.
+Who is barred from writing, and who has been. Nothing already published is hidden.
 {% endblock %}
 
 {% block staff_body %}
@@ -93,7 +92,7 @@ nothing already published, and it never touches an account's trophies, badges or
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.path }}?show={{ show }}">
                 <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
-                       placeholder="Why lift this? (recorded against your name)"
+                       placeholder="Reason for lifting (recorded with your name)"
                        aria-label="Reason for lifting this restriction">
                 <button type="submit" class="btn btn-sm btn-ghost border border-base-300">Lift</button>
             </form>
@@ -110,8 +109,7 @@ nothing already published, and it never touches an account's trophies, badges or
         </p>
         <p class="text-sm text-base-content/60 max-w-prose">
             {% if show == 'live' %}
-            Restrictions are applied from a hunter's own page, where you can see what they have
-            written first.
+            Restrictions are applied from a hunter's page.
             {% else %}
             No restrictions match this filter.
             <a class="link link-primary" href="?show=live">Show what is in force</a>.

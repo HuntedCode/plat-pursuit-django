@@ -71,7 +71,7 @@ A hunter barred from writing, for a period or indefinitely. Scopes: `quick_takes
 
 ### What it is, and what it is not
 
-- It stops **new words only**. Nothing already published is hidden.
+- It stops **new writing only**. Nothing already published is hidden.
 - It never touches trophies, badges, ratings or ranking.
 - It is **not** `is_active=False`, which kills login and every read. This is a targeted write ban.
 - **Lapsing is not lifting.** Expiry happens by the clock with nobody writing a row, so `is_live` is

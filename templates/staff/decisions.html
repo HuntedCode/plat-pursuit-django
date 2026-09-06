@@ -18,8 +18,7 @@ the admin has already typed a reason before being told no.
 {% endcomment %}
 
 {% block staff_blurb %}
-Everything moderators and admins have decided, newest first. Reversing writes a new entry rather
-than editing this one, so the original decision stays readable.
+Every moderation decision, newest first. Reversing adds a new entry; the original stays.
 {% endblock %}
 
 {% block staff_body %}
@@ -107,7 +106,7 @@ than editing this one, so the original decision stays readable.
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.path }}?show={{ show }}&amp;page={{ page }}">
                 <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
-                       placeholder="Why reverse this? (recorded against your name)"
+                       placeholder="Reason for reversing (recorded with your name)"
                        aria-label="Reason for reversing this decision">
                 <button type="submit" class="btn btn-sm btn-warning">Reverse</button>
             </form>
@@ -135,7 +134,7 @@ than editing this one, so the original decision stays readable.
         <p class="text-base font-bold text-base-content">Nothing here</p>
         <p class="text-sm text-base-content/60 max-w-prose">
             {% if show == 'all' %}
-            No decisions have been recorded yet.
+            No decisions yet.
             {% else %}
             No decisions match this filter.
             <a class="link link-primary" href="?show=all">Show everything</a>.

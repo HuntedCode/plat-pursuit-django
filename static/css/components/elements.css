@@ -44,6 +44,13 @@
    dissolve into them, like the badge tier rungs) + a soft lift, keeping the left accent bar. Shared with
    Home's stat tiles. */
 .scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: linear-gradient(90deg, color-mix(in oklab, var(--scard-accent, transparent) 7%, transparent), transparent 55%), var(--pp-bg-2); padding: 12px 8px; box-shadow: inset 2px 0 0 var(--scard-accent, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 10px rgba(0, 0, 0, 0.20); }  /* --scard-accent (default transparent): tier-tint the trophy cells; neutral everywhere else */
+/* A CLICKABLE scard needs its hover from the component, not from a utility. `.scard` sets the `border`
+   SHORTHAND, and every component file imported after `@import "tailwindcss"` lands OUTSIDE Tailwind's
+   layers -- an unlayered normal declaration beats a layered one whatever its specificity. So the
+   `hover:border-primary/50` those anchors have been carrying could never win: no hover affordance at
+   all, and the `transition-colors` beside it transitioning nothing. Confirmed in the built file, where
+   the utility sits inside `@layer utilities` and `.scard` sits 160KB past where that layer closes. */
+@media (hover: hover) { a.scard { transition: border-color 150ms ease; } a.scard:hover { border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent); } }
 .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
 .scard__value { font-size: 18px; line-height: 1; }  /* face via shared .pp-tally */
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }

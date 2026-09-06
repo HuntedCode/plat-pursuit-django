@@ -34,6 +34,13 @@ not have to teach them twice:
             </svg>
             Admin
         </a>
+        {% comment %}And a way SIDEWAYS. A back button alone leaves People-to-Decisions costing a
+        round trip through the landing -- two clicks for a move an admin makes constantly, which is
+        the same thing the Mod Center queues fixed one layer down. The page never lists itself.
+        {% endcomment %}
+        {% for sibling in siblings %}
+        <a href="{{ sibling.url }}" class="btn btn-sm btn-ghost border border-base-300 px-3">{{ sibling.name }}</a>
+        {% endfor %}
         {% block staff_siblings %}{% endblock %}
     </div>
     {% endif %}

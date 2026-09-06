@@ -544,7 +544,7 @@ def test_the_people_page_shows_nobody_until_you_search(client):
     body = resp.content.decode()
 
     assert resp.context['results'] == [], 'the view selected people for an empty search'
-    assert 'Search for somebody' in body
+    assert 'Search for a hunter' in body
     assert 'hunted47' not in body
 
 
@@ -733,3 +733,157 @@ def test_a_proactive_hide_can_be_reversed(client):
 
     rating.refresh_from_db()
     assert rating.blurb_hidden is False
+
+
+# ── getting back, and getting sideways ───────────────────────────────────────────────────────────
+#
+# The hub links out to nine pages. Five of them predate it and were dead ends: no breadcrumb, no back
+# link, nothing but the browser button. That is the same complaint the Mod Center queues got, arriving
+# one layer up.
+
+
+def _every_admin_page(client):
+    """Every GET-able page under `/staff/`, resolved and fetched as an admin.
+
+    Enumerated from the URL conf rather than listed, for the reason its twin gives: a hand-written
+    list is what somebody forgets, and the whole point of this group of tests is that a page cannot
+    be ADDED without a way back out of it.
+    """
+    pages = {}
+    for url in _every_staff_url():
+        resp = client.get(url)
+        if resp.status_code == 200:
+            pages[url] = resp.content.decode()
+    return pages
+
+
+def test_every_admin_page_has_a_way_back_to_the_hub(client):
+    """Including the five that predate it. The hub links out to them and they went nowhere."""
+    client.force_login(_user('admin'))
+    hub = reverse('admin_hub')
+
+    pages = _every_admin_page(client)
+    assert len(pages) >= 6, f'the sweep only reached {sorted(pages)}'
+
+    for url, body in pages.items():
+        if url == hub:
+            continue
+        # A BUTTON, not merely an href. The breadcrumb also points at the hub, and accepting that
+        # made this pass with the shell's whole back-link row deleted -- which is the Mod Center's
+        # lesson exactly: a breadcrumb is the smallest target on the page and is not a way out.
+        button = f'href="{hub}" class="btn'
+        assert button in body, f'{url} has no real way back to the hub, only a breadcrumb at best'
+
+
+def test_every_admin_page_carries_a_breadcrumb(client):
+    """The breadcrumb is not the way back -- it is the smallest target on the page -- but it is how
+    somebody knows where they are."""
+    client.force_login(_user('admin'))
+
+    for url, body in _every_admin_page(client).items():
+        assert 'breadcrumb' in body.lower() or f'href="{reverse("admin_hub")}"' in body, (
+            f'{url} says nothing about where it sits')
+
+
+def test_the_hub_does_not_offer_a_link_to_itself(client):
+    """A page that links to itself wastes a slot somebody is scanning."""
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_hub')).content.decode()
+
+    assert f'href="{reverse("admin_hub")}"' not in body
+
+
+@pytest.mark.parametrize('page,expected_absent', [
+    ('admin_people', 'admin_people'),
+    ('admin_decisions', 'admin_decisions'),
+    ('admin_restrictions', 'admin_restrictions'),
+])
+def test_a_hub_page_links_to_its_siblings_but_not_itself(client, page, expected_absent):
+    """People to Decisions used to cost a round trip through the landing -- two clicks for a move an
+    admin makes constantly, which is what the Mod Center queues fixed one layer down."""
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse(page)).content.decode()
+    row = body[body.index('flex flex-wrap items-center gap-2 mb-3'):]
+    row = row[:row.index('</div>')]
+
+    siblings = {'admin_people', 'admin_decisions', 'admin_restrictions'} - {expected_absent}
+    for sibling in siblings:
+        assert reverse(sibling) in row, f'{page} does not offer {sibling}'
+    assert reverse(expected_absent) not in row, f'{page} links to itself'
+
+
+def test_the_person_page_gets_back_to_the_hub_and_to_people(client):
+    """Two levels down is where a back button matters most."""
+    person, _rating = _take()
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_person', args=[person.pk])).content.decode()
+
+    assert f'href="{reverse("admin_hub")}"' in body
+    assert reverse('admin_people') in body, 'no route back to the search that found them'
+
+
+# -- what the copy audit found --------------------------------------------------------------------
+#
+# Cutting the verbose copy took three sentences with it that were NOT explaining the page to somebody
+# who already knew what it was. Each one is the thing that stops a wrong action, so each gets pinned.
+
+
+def test_the_restrict_form_says_what_a_restriction_leaves_alone(client):
+    """`UserRestriction`'s docstring says BOTH guarantees are "said on the page too", and the copy
+    pass left only one. An admin who thinks restricting might cost somebody their trophies reaches
+    for a milder tool, or for nothing."""
+    hunter = ProfileFactory(is_linked=True, psn_username='guarantees')
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_person', args=[hunter.user.pk])).content.decode()
+
+    assert 'Nothing already published is hidden' in body
+    assert 'trophies' in body and 'untouched' in body, (
+        "the form no longer says a restriction leaves trophies, badges and ranking alone -- which "
+        "`users/models.py` and `docs/features/admin-hub.md` both still promise it says")
+
+
+def test_the_django_admin_door_says_it_is_not_audited(client):
+    """The one caution on the page that was not restating its own label. It is also the only door
+    whose destination behaves differently from every other tile, and the tile no longer looks any
+    different from the nine audited ones."""
+    owner = UserFactory()
+    owner.is_superuser = owner.is_staff = True
+    owner.save()
+    client.force_login(owner)
+
+    body = client.get(reverse('admin_hub')).content.decode()
+
+    assert 'writes no audit entry' in body
+
+
+def test_an_administrator_is_not_shown_the_unaudited_door_or_its_caution(client):
+    """Both halves are superuser-only. A caution about a door somebody cannot open is noise."""
+    client.force_login(_user('admin'))
+
+    body = client.get(reverse('admin_hub')).content.decode()
+
+    assert 'writes no audit entry' not in body
+    assert 'href="/admin/"' not in body
+
+
+def test_a_clickable_scard_gets_its_hover_from_the_component_not_a_utility():
+    """`.scard` sets the `border` SHORTHAND from OUTSIDE Tailwind's layers, so a `hover:border-*`
+    utility on one can never win -- the tiles carried that utility and had no hover at all. Pinned
+    at both ends: the rule has to exist, and no template may go back to asking a utility for it,
+    because that failure is invisible (the class is present, the build is clean, nothing happens).
+    """
+    css = (ROOT / 'static/css/output.css').read_text(encoding='utf-8')
+    assert 'a.scard:hover' in css, 'clickable scards have no hover affordance'
+
+    for template in (ROOT / 'templates').rglob('*.html'):
+        markup = template.read_text(encoding='utf-8')
+        for line in markup.splitlines():
+            if 'scard' in line and 'hover:border-' in line:
+                raise AssertionError(
+                    f'{template.name}: a scard is asking a utility for its hover border, which the '
+                    f'unlayered shorthand overrides -- it will silently do nothing:\n{line.strip()}')
+
