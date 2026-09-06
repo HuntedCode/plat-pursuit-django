@@ -1,0 +1,24 @@
+{% comment %}
+The way back to the Admin Hub, for the staff pages that predate it.
+
+The hub links OUT to five tools -- subscriptions, fundraiser, badge create, badge reveal, worker
+monitoring -- and every one of them was a dead end: no breadcrumb, no back link, nothing. An admin
+who followed a card from the landing had the browser Back button and nothing else. That is the same
+complaint the Mod Center queues got and fixed, arriving one layer up.
+
+These five are NOT on `_staff_shell.html` and are not rebuilt here -- that is a separate branch. This
+is the smallest thing that makes them reachable-from and returnable-to: one partial, five includes,
+no restructuring of pages nobody has touched since 2026-08.
+
+Rendered unconditionally rather than behind `{% if user.is_staff %}`: every page including it is
+already `StaffRequiredMixin`-gated, so anybody who can read this markup can follow the link.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-2 mb-3">
+    <a href="{% url 'admin_hub' %}" class="btn btn-sm btn-ghost border border-base-300 gap-1.5 px-3">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
+            <path d="m15 18-6-6 6-6"/>
+        </svg>
+        Admin
+    </a>
+</div>

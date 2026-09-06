@@ -91,6 +91,42 @@ def recent_activity(limit=RECENT_LIMIT):
     return merged[:limit]
 
 
+def hub_sections():
+    """The hub's own pages, named and linked. ONE definition, read by the landing and by each page's
+    sibling row.
+
+    The Mod Center learned this: a back button alone leaves the sideways move -- People to Decisions,
+    Decisions to Restrictions -- costing a round trip through the landing, which is two clicks for
+    something an admin does constantly.
+    """
+    return [
+        {'slug': 'people', 'name': 'People', 'url': reverse_lazy('admin_people')},
+        {'slug': 'decisions', 'name': 'Decisions', 'url': reverse_lazy('admin_decisions')},
+        {'slug': 'restrictions', 'name': 'Restrictions', 'url': reverse_lazy('admin_restrictions')},
+    ]
+
+
+class StaffPageMixin(StaffRequiredMixin):
+    """Shared chrome for every page below the hub: the breadcrumb trail and the sibling row.
+
+    `section` names which of the hub's pages this is, so it can be left out of its own sibling list.
+    A page that links to itself is a page that wasted one of the three slots an admin is scanning.
+    """
+    section = ''
+    page_name = ''
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault('page_name', self.page_name)
+        context['siblings'] = [s for s in hub_sections() if s['slug'] != self.section]
+        context.setdefault('breadcrumb', [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Admin', 'url': reverse_lazy('admin_hub')},
+            {'text': context.get('page_name') or self.page_name},
+        ])
+        return context
+
+
 class AdminHubView(StaffRequiredMixin, TemplateView):
     """The landing. Admins only -- `is_staff`, which the `CustomUser.save()` lockstep keeps false for
     a moderator, so the Mod Center's audience cannot reach this."""
@@ -128,7 +164,10 @@ PER_PAGE = 25
 DECISION_FILTERS = ['all', 'reversible', 'reversed']
 
 
-class DecisionLogView(StaffRequiredMixin, TemplateView):
+class DecisionLogView(StaffPageMixin, TemplateView):
+    section = 'decisions'
+    page_name = 'Decisions'
+
     """Every moderation decision, with the power to undo one.
 
     Admin-only, and that is the whole difference from the Mod Center's own rail: moderators can see
@@ -218,7 +257,10 @@ class ReverseDecisionView(StaffRequiredMixin, PostActionMixin, View):
 PEOPLE_LIMIT = 20
 
 
-class PeopleSearchView(StaffRequiredMixin, TemplateView):
+class PeopleSearchView(StaffPageMixin, TemplateView):
+    section = 'people'
+    page_name = 'People'
+
     """Find one hunter by PSN handle or email address.
 
     Deliberately search-ONLY: there is no "all users" listing, and an empty query shows nothing
@@ -255,7 +297,9 @@ class PeopleSearchView(StaffRequiredMixin, TemplateView):
         return context
 
 
-class PersonView(StaffRequiredMixin, TemplateView):
+class PersonView(StaffPageMixin, TemplateView):
+    section = 'people'
+
     """Everything this site has decided about one hunter, on one page.
 
     The question an admin actually arrives with is "what is the story with this person", and before
@@ -350,7 +394,10 @@ RESTRICTION_DURATIONS = [
 RESTRICTION_FILTERS = ['live', 'ended', 'all']
 
 
-class RestrictionListView(StaffRequiredMixin, TemplateView):
+class RestrictionListView(StaffPageMixin, TemplateView):
+    section = 'restrictions'
+    page_name = 'Restrictions'
+
     """Every restriction, live and ended.
 
     "Ended" covers both LAPSED and LIFTED, and the rows say which. They are different facts about the
