@@ -78,3 +78,15 @@ the class with nothing to reveal it is what left the My Lists panel blank.
     </div>
     {% endfor %}
 </div>
+
+{% if items_truncated %}
+{% comment %}Surfaced rather than silently dropped. Lists are uncapped by design, so a very long one
+is real -- but one render is bounded, and a reader is owed the difference between "that is the whole
+list" and "that is as much as this page shows".
+
+INSIDE the partial, so it re-renders with the grid. Outside it, every add and remove left this
+sentence quoting a stale count next to a header tally that had just been updated.{% endcomment %}
+<p class="text-xs text-base-content/50 mt-3 text-center">
+    Showing the first {{ items_shown|intcomma }} of {{ game_list.game_count|intcomma }} games.
+</p>
+{% endif %}

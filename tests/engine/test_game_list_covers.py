@@ -270,3 +270,21 @@ def test_a_cross_buy_stack_wins_the_cover_over_an_older_single_platform_list():
     picked = covers.cover_games_for([concept.pk])
 
     assert picked[concept.pk].pk == cross_buy.pk
+
+
+def test_the_factory_refuses_a_scalar_platform():
+    """The guard that closes this class, tested rather than assumed.
+
+    `test_title_platform_is_a_list_...` above pins the SCHEMA, and the schema was never wrong. What
+    needed pinning is what tests WRITE into the field: 22 call sites wrote a string, jsonb stored it
+    without complaint, and the suite stayed green through a 500 on four surfaces. 21 were literals
+    and a text sweep caught them; the 22nd passed a loop variable and survived it.
+    """
+    with pytest.raises(TypeError, match='JSONField'):
+        GameFactory(title_platform='PS5')
+
+    # The real shapes all still work, including the empty case and the untouched default.
+    assert GameFactory(title_platform=['PS5']).title_platform == ['PS5']
+    assert GameFactory(title_platform=['PS4', 'PS5']).title_platform == ['PS4', 'PS5']
+    assert GameFactory(title_platform=[]).title_platform == []
+    assert GameFactory().title_platform == ['PS5']

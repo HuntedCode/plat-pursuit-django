@@ -239,6 +239,34 @@ class GameFactory(factory.django.DjangoModelFactory):
     concept = factory.SubFactory(ConceptFactory)
     title_platform = factory.LazyFunction(lambda: ['PS5'])   # current-gen by default; fresh list per instance
 
+    @classmethod
+    def _adjust_kwargs(cls, **kwargs):
+        """Refuse a scalar `title_platform`, because a caller who passes one gets no other warning.
+
+        `title_platform` is `JSONField(default=list)` and jsonb will happily store the scalar
+        `"PS5"`. Django runs no `full_clean` on `create()`, so the wrong shape saves silently and
+        every read then works on data the application cannot actually produce.
+
+        This is not hypothetical. Twenty-two call sites across the Game Lists tests passed
+        `title_platform='PS5'`, which made `_RANK.get(game.title_platform)` look correct while it
+        raised `TypeError: unhashable type: 'list'` against every real row -- a 500 on four
+        surfaces, with the whole suite green. Twenty-one were literals and a text sweep found them;
+        the twenty-second passed a loop variable and survived, and by then the crash had been fixed
+        in a way that made a string return the unknown-platform rank INSTEAD of raising. So the
+        remaining instance was silently wrong with nothing to signal it.
+
+        A schema assertion (`the field is a JSONField`) does not close this: the field was always
+        correct. What needed pinning was what the tests WRITE into it, which is here.
+        """
+        platform = kwargs.get('title_platform')
+        if platform is not None and not isinstance(platform, list):
+            raise TypeError(
+                f'GameFactory(title_platform={platform!r}) -- title_platform is a JSONField(list). '
+                f'Pass a list of platforms, e.g. [{platform!r}] or ["PS4", "PS5"] for cross-buy. '
+                f'A scalar saves without error and silently mis-ranks every cover.'
+            )
+        return kwargs
+
 
 class ProfileGameFactory(factory.django.DjangoModelFactory):
     """A profile's play record for a game. has_plat / progress drive badge eval."""

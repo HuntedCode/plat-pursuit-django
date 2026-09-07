@@ -606,3 +606,79 @@ def test_the_adder_min_query_matches_the_endpoint(client):
 
     assert match, 'the adder no longer declares a MIN_QUERY'
     assert int(match.group(1)) == ListGameSearchView.MIN_QUERY
+
+
+# -- guards against the audit's findings ----------------------------------------------------------
+
+def test_no_gl_class_is_used_without_a_rule():
+    """An orphaned class name is invisible until somebody looks at the page.
+
+    `.gl-adder__field` was on the search wrapper with ZERO rules anywhere -- source or built. It had
+    had a rule, and the refactor onto the shared search chrome deleted it and left the class behind.
+    The consequence was not cosmetic: `[data-search-wrap]` supplies `position: relative`, but with no
+    `display: block` the wrapper stayed an INLINE span, so the absolutely-positioned icon, spinner
+    and clear button anchored to its ~19px line box instead of the 38px input.
+
+    Checked against the BUILT stylesheet, because that is what the browser loads and this project has
+    been bitten before by markup that disagreed with the compiled CSS.
+    """
+    import glob
+
+    root = Path(__file__).resolve().parents[2]
+    built = (root / 'staticfiles' / 'css' / 'output.css').read_text(encoding='utf-8')
+
+    used = set()
+    for path in glob.glob(str(root / 'templates' / 'gamelists' / '**' / '*.html'), recursive=True):
+        for attr in re.findall(r'class="([^"]+)"', Path(path).read_text(encoding='utf-8')):
+            used.update(c for c in attr.split() if c.startswith('gl-'))
+
+    assert used, 'found no gl-* classes at all -- the scan is broken, not the CSS'
+    orphaned = sorted(name for name in used if f'.{name}' not in built)
+    assert not orphaned, f'gl-* classes with no rule in the built CSS: {orphaned}'
+
+
+def test_the_truncation_line_re_renders_with_the_games(client):
+    """It sat outside `#gl-items-panel`, so every add and remove left it quoting a stale count next
+    to a header tally that HAD just been updated."""
+    from gamelists.views import MAX_ITEMS_RENDERED
+
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+    for n in range(MAX_ITEMS_RENDERED + 3):
+        svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Bulk {n:04d}'))
+
+    # The partial alone -- what an add or remove actually re-renders -- must carry the sentence.
+    swapped = client.get(_url(game_list), HTTP_HX_REQUEST='true').content.decode()
+
+    assert 'Showing the first' in swapped
+
+
+def test_the_writes_refuse_a_redirected_html_page(client):
+    """`fetch` follows redirects, so an expired session arrives as 200 text/html and `API.request`
+    hands back a STRING. Read as success it printed the literal toast "Added undefined." and flipped
+    the row to a state the server never reached. Django's test client does not follow redirects
+    unless asked, so no server test can see this -- it is pinned at the client instead."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    assert 'function postJson(' in js
+    # Every write goes through the guard; none may call the raw helper directly.
+    assert js.count('postJson(') >= 4
+    assert 'API.postFormData(' in js, 'postJson should still be built on the shared helper'
+    assert js.count('API.postFormData(') == 1, 'a write is bypassing the redirect guard'
+
+
+def test_owner_actions_have_somewhere_to_announce(client):
+    """The add path toasted and the remove path said nothing at all -- and the toast is not a
+    fallback, because `#toast-container` carries no aria-live, so ToastManager is never announced."""
+    owner = _staff(client)
+    game_list = _list(owner, 1)
+
+    owner_body = client.get(_url(game_list)).content.decode()
+    assert 'data-gl-status' in owner_body
+    assert 'aria-live="polite"' in owner_body
+
+    # Not rendered for someone who cannot act.
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    theirs = _list(author, 1)
+    _staff(client, psn='reader')
+    assert 'data-gl-status' not in client.get(_url(theirs)).content.decode()

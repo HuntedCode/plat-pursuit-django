@@ -221,8 +221,16 @@ def test_the_search_returns_concepts_not_trophy_lists(client):
     owner = _staff(client)
     game_list = svc.create_list(owner, name='Backlog')
     concept = ConceptFactory(unified_title='Hollow Knight')
-    for platform in ('PS4', 'PS5'):
-        GameFactory(concept=concept, title_platform=platform, title_name='HK stack')
+    # `[platform]`, not `platform`. This line passed a loop VARIABLE, so it survived the sweep that
+    # fixed the 21 string literals -- and the fix for the crash then INSULATED it rather than
+    # correcting it: `platform_priority_rank` iterates its argument, so the string 'PS4' is walked
+    # character by character, every char misses, and it silently returns the unknown-platform
+    # fallback. Both stacks then tied and the pk tiebreak picked the PS4 row, which is the opposite
+    # of the rule. No raise, no failing test, just a quietly wrong cover.
+    ps4 = GameFactory(concept=concept, title_platform=['PS4'], title_name='HK stack',
+                      title_image='https://img.test/ps4.jpg')
+    ps5 = GameFactory(concept=concept, title_platform=['PS5'], title_name='HK stack',
+                      title_image='https://img.test/ps5.jpg')
 
     results = client.get(reverse('list_game_search', args=[game_list.id]),
                          {'q': 'hollow'}).json()['results']
@@ -230,6 +238,12 @@ def test_the_search_returns_concepts_not_trophy_lists(client):
     assert len(results) == 1, 'a two-stack game appeared twice'
     assert results[0]['concept_id'] == concept.pk
     assert results[0]['title'] == 'Hollow Knight'
+    # This is the ONLY test that drives the search through `cover_games_for` with a multi-stack
+    # concept -- the exact case the platform ordering exists to resolve -- and it previously asserted
+    # nothing about WHICH stack won, so it could not tell the right answer from the wrong one.
+    # PS5 outranks PS4, and it must win regardless of which row was created first.
+    assert results[0]['cover'] == ps5.display_image_url
+    assert results[0]['cover'] != ps4.display_image_url
 
 
 def test_the_search_marks_what_is_already_on_the_list(client):

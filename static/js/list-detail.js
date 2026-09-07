@@ -30,6 +30,7 @@
     var revealHandle = null;
     var handledGrid = null;
     var searchField = null;
+    var pendingFocusIndex = null;
 
     /* ------------------------------------------------------------------ reveal ---- */
 
@@ -60,6 +61,14 @@
         if (el) { el.textContent = value.toLocaleString(); }
     }
 
+    // Owner actions were entirely silent to a screen reader: the add path toasted and the remove
+    // path emitted nothing, and the toast is not a fallback -- `#toast-container` has no `aria-live`,
+    // so ToastManager's output is never announced.
+    function announce(message) {
+        var el = document.querySelector('[data-gl-status]');
+        if (el) { el.textContent = message; }
+    }
+
     /**
      * Surface the server's own message when there is one.
      *
@@ -73,6 +82,12 @@
         var show = function (msg) {
             if (PP.ToastManager) { PP.ToastManager.show(msg || fallback, 'error'); }
         };
+        // A followed redirect, not a refusal -- so say the thing the person can act on rather than
+        // a generic failure they would read as a bug in the list.
+        if (err && err.signedOut) {
+            show('You may have been signed out. Reload the page and try again.');
+            return;
+        }
         if (err && err.response && typeof err.response.json === 'function') {
             err.response.json()
                 .then(function (data) { show(data && data.error); })
@@ -84,6 +99,36 @@
 
     function statusOf(err) {
         return (err && err.response && err.response.status) || 0;
+    }
+
+    /**
+     * POST, and refuse to call a redirected HTML page a successful write.
+     *
+     * `fetch` follows redirects transparently and reports only the FINAL response, so a bounce from
+     * `LoginRequiredMixin`, `_LinkedProfileRequired` or the staff gate -- a session that expired, a
+     * sign-out in another tab, a profile that became unlinked -- arrives here as `200 text/html`.
+     * `API.request` sees `response.ok`, finds no JSON content type, and hands back the page as a
+     * STRING. Every caller then read a property off it and got `undefined`:
+     *
+     *   like/follow -> the button silently reverted, reading as "the click did nothing"
+     *   remove      -> a silent no-op, the entry still there
+     *   add         -> the toast literally said "Added undefined." and the row flipped to
+     *                  "On this list" for a game the server never received
+     *
+     * Server tests cannot see this: Django's test client does not follow redirects unless asked, so
+     * a test asserting 302 passes while the browser gets 200. Checked here rather than in
+     * `API.request`, because changing that helper changes every page on the site and is its own
+     * decision.
+     */
+    function postJson(url, body) {
+        return PP.API.postFormData(url, body).then(function (data) {
+            if (data === null || typeof data !== 'object') {
+                var err = new Error('expected JSON, got a redirected page');
+                err.signedOut = true;
+                throw err;
+            }
+            return data;
+        });
     }
 
     /**
@@ -180,7 +225,7 @@
 
         var body = new FormData();
         body.append(cfg.field, next ? 'true' : 'false');
-        PP.API.postFormData(btn.dataset.url, body)
+        postJson(btn.dataset.url, body)
             .then(function (data) {
                 paintToggle(btn, cfg, !!data[cfg.field]);
                 if (cfg.countSel) { setTally(cfg.countSel, data[cfg.countKey]); }
@@ -200,10 +245,29 @@
         var tile = btn.closest('.gl-item');
         if (tile) { tile.classList.add('is-removing'); }
 
-        PP.API.postFormData(btn.dataset.removeUrl, new FormData())
+        // Remember the position ONLY if the keyboard is what pressed this, so the post-swap restore
+        // does not yank focus away from a mouse user reading elsewhere on the page.
+        if (document.activeElement === btn) {
+            var all = Array.prototype.slice.call(
+                document.querySelectorAll('#gl-items [data-gl-remove]'));
+            pendingFocusIndex = all.indexOf(btn);
+        }
+
+        postJson(btn.dataset.removeUrl, new FormData())
             .then(function (data) {
                 setTally('[data-game-count]', data.game_count);
-                return refreshItems();
+                announce('Removed from the list.');
+                // The refresh gets its OWN catch. Chained into the one below, a failed re-render
+                // restored a row the server had already deleted and toasted "That game could not be
+                // removed" -- the opposite of what happened. The write succeeded; only the view of
+                // it did not.
+                return refreshItems().catch(function (err) {
+                    logFailure('items refresh after remove', err);
+                    if (PP.ToastManager) {
+                        PP.ToastManager.show(
+                            'Removed. Reload to see the updated list.', 'warning');
+                    }
+                });
             })
             .catch(function (err) {
                 // The row comes back: nothing was removed, so nothing should look removed.
@@ -320,6 +384,12 @@
         var search = PP.debounce(function () {
             var query = input.value.trim();
             if (query.length < MIN_QUERY) {
+                // `++seq` here too, and it is not cosmetic. Without it: type "hollow", then clear
+                // the field while the request is in flight. This branch closes the panel but leaves
+                // `seq` alone, so the in-flight response still satisfies `mine === seq`, renders,
+                // and RE-OPENS the panel with twelve results for a query the field no longer holds.
+                // The guard below only ever covered longer-query to longer-query.
+                seq++;
                 if (searchField) { searchField.setBusy(false); }
                 closePanel();
                 say('');
@@ -349,7 +419,16 @@
         // the spinner. Same helper the browse toolbar and the game page's hunter search use.
         if (PP.wireSearchField) {
             searchField = PP.wireSearchField(input, {
-                onClear: function () { seq++; closePanel(); say(''); },
+                // `setBusy(false)` is required, not tidiness. `seq++` orphans any in-flight request,
+                // so its `.finally` fails the `mine === seq` test and never clears the busy flag --
+                // leaving `.is-searching` set, which keeps the spinner turning on an empty field AND
+                // hides the clear button, so the visible control is stuck until the next keystroke.
+                onClear: function () {
+                    seq++;
+                    if (searchField) { searchField.setBusy(false); }
+                    closePanel();
+                    say('');
+                },
             });
         }
 
@@ -387,7 +466,7 @@
 
             var body = new FormData();
             body.append('concept_id', row.dataset.conceptId);
-            PP.API.postFormData(root.dataset.addUrl, body)
+            postJson(root.dataset.addUrl, body)
                 .then(function (data) {
                     setTally('[data-game-count]', data.game_count);
                     // The row stays and flips to its added state rather than vanishing: somebody
@@ -399,7 +478,17 @@
                     if (PP.ToastManager) {
                         PP.ToastManager.show('Added ' + data.title + '.', 'success');
                     }
-                    return refreshItems();
+                    announce('Added ' + data.title + ' to the list.');
+                    // Its own catch, for the same reason as remove -- and worse here, because the
+                    // success toast has ALREADY fired. Chained into the catch below, a failed
+                    // re-render put "Added Hollow Knight." and "That game could not be added."
+                    // on screen together, and re-armed a row that had just been disabled.
+                    return refreshItems().catch(function (err) {
+                        logFailure('items refresh after add', err);
+                        if (PP.ToastManager) {
+                            PP.ToastManager.show('Added. Reload to see it in the list.', 'warning');
+                        }
+                    });
                 })
                 .catch(function (err) {
                     row.dataset.busy = '';
@@ -438,6 +527,39 @@
         if (grid && grid === handledGrid) { return; }
         handledGrid = grid;
         initReveal();
+
+        // The sort toolbar is rendered `{% if items %}` and lives OUTSIDE the swapped panel, so it
+        // cannot appear or disappear on its own. Add the first game to an empty list and the grid
+        // gains a tile while the toolbar stays absent until a manual reload; remove the last one and
+        // a dead sort control is left behind. Crossing that boundary is rare and once per list, so
+        // reload rather than teach the client to build a control the server owns.
+        var hasItems = !!(grid && grid.querySelector('.pp-gtile'));
+        var hasToolbar = !!document.getElementById('gl-detail-form');
+        if (hasItems !== hasToolbar) { window.location.reload(); return; }
+
+        restoreRemoveFocus();
+    }
+
+    /**
+     * Put the keyboard back where it was after a removal.
+     *
+     * The refresh replaces the whole panel, so the focused remove button is destroyed and focus
+     * resets to <body>. Somebody pruning five games with the keyboard was thrown to the top of the
+     * document five times, re-tabbing past the header, toolbar and adder each time.
+     *
+     * Only acts when focus actually WAS on a remove control (`pendingFocusIndex` is set by
+     * `onRemove`), so a sort swap or a mouse-driven removal does not steal focus from wherever the
+     * reader had it.
+     */
+    function restoreRemoveFocus() {
+        if (pendingFocusIndex === null) { return; }
+        var index = pendingFocusIndex;
+        pendingFocusIndex = null;
+        var buttons = document.querySelectorAll('#gl-items [data-gl-remove]');
+        if (!buttons.length) { return; }
+        // The row that took the removed one's place, or the new last row if it was the last.
+        var next = buttons[Math.min(index, buttons.length - 1)];
+        if (next) { next.focus(); }
     }
 
     function boot(first) {

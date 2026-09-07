@@ -178,18 +178,20 @@ below with no outer wrapper.
     </section>
     {% endif %}
 
+    {% comment %}Owner actions announce here. Separate from the adder's own status region, which is
+    scoped to search results: adding and removing are page-level changes, and the toast that reports
+    them is not an announcement -- `#toast-container` in base.html carries no `aria-live`, so nothing
+    ToastManager writes is read out at all.{% endcomment %}
+    {% if is_owner %}<p class="sr-only" aria-live="polite" data-gl-status></p>{% endif %}
+
     <div id="gl-items-panel">
         {% include 'gamelists/partials/detail_items.html' %}
     </div>
 
-    {% if items_truncated %}
-    {% comment %}Surfaced rather than silently dropped. Lists are uncapped by design, so a very long
-    one is real -- but one render is bounded, and a reader is owed the difference between "that is
-    the whole list" and "that is as much as this page shows".{% endcomment %}
-    <p class="text-xs text-base-content/50 mt-3 text-center">
-        Showing the first {{ items_shown|intcomma }} of {{ game_list.game_count|intcomma }} games.
-    </p>
-    {% endif %}
+{% comment %}The truncation line used to sit HERE, outside `#gl-items-panel`, so it never updated:
+    every add and remove re-rendered the grid and left the sentence beside it reporting the old
+    count, while the header tally directly above it did update. It now lives inside the partial and
+    travels with the thing it describes.{% endcomment %}
 </div>
 {% endblock %}
 
