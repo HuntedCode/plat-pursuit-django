@@ -13,15 +13,17 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import DetailView, ListView, View
 
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, GameList,
-                             GameListFollow, GameListLike)
+                             GameListFollow, GameListItem, GameListLike)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
 from trophies.mixins import HtmxListMixin, StaffRequiredMixin
+from trophies.models import Concept
 
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
 LIST_TILE_COVERS = 4
@@ -398,3 +400,157 @@ class GameListDetailView(_DevelopmentGate, DetailView):
             {'text': game_list.name},
         ]
         return context
+
+
+# ── the write half ───────────────────────────────────────────────────────────────────────────────
+#
+# Plain Django views returning JSON rather than DRF, because these are page behaviour rather than a
+# public API: they are gated by the same `_DevelopmentGate` the pages are, they answer one template's
+# fetches, and routing them through DRF would mean a second permission stack that has to agree with
+# the first. `PlatPursuit.API` is the client, so a non-2xx body reaches the caller as `.response`.
+#
+# EVERY rule lives in `game_list_service`. These translate a refusal into a status code and a message
+# and do nothing else -- which is the entire point of having the service.
+
+
+class _ListActionView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
+    """POST-only, resolves the list through `readable_by`, and answers JSON.
+
+    `readable_by` and not `get_object_or_404` on the bare table: a private list must 404 for anybody
+    who cannot see it, so an id alone can never confirm that a list exists or whose it is.
+    """
+
+    def get_list(self, request, list_id):
+        """The list, or None -- the caller answers with `self.not_found()`.
+
+        Deliberately NOT `raise Http404`. This project installs a custom `handler404` that is a
+        GET-only view, so an Http404 raised from a POST comes back as a 405 listing GET/HEAD/OPTIONS
+        rather than as a 404. `ContractsResultsView` documents the same workaround for the same
+        reason. A caller checking for 404 would otherwise be told the wrong thing about what went
+        wrong, and a JSON client would get an HTML error page.
+        """
+        return GameList.objects.readable_by(self._viewer(request)).filter(pk=list_id).first()
+
+    def not_found(self):
+        return JsonResponse({'error': 'That list is not available.'}, status=404)
+
+    def _viewer(self, request):
+        return getattr(request.user, 'profile', None)
+
+    def fail(self, exc, status=400):
+        return JsonResponse({'error': str(exc)}, status=status)
+
+
+class ToggleLikeView(_ListActionView):
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+        if game_list is None:
+            return self.not_found()
+        if game_list is None:
+            return self.not_found()
+        liked = request.POST.get('liked') == 'true'
+        try:
+            count = svc.set_like(game_list, self._viewer(request), liked=liked)
+        except svc.ListError as exc:
+            return self.fail(exc)
+        return JsonResponse({'liked': liked, 'like_count': count})
+
+
+class ToggleFollowView(_ListActionView):
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        following = request.POST.get('following') == 'true'
+        try:
+            count = svc.set_follow(game_list, self._viewer(request), following=following)
+        except svc.ListError as exc:
+            return self.fail(exc)
+        return JsonResponse({'following': following, 'follower_count': count})
+
+
+class AddConceptView(_ListActionView):
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        concept = Concept.objects.filter(pk=request.POST.get('concept_id')).first()
+        if concept is None:
+            return self.fail('That game could not be found.', status=404)
+        try:
+            item = svc.add_concept(game_list, self._viewer(request), concept,
+                                   note=request.POST.get('note', ''))
+        except svc.ListError as exc:
+            return self.fail(exc)
+        game_list.refresh_from_db()
+        return JsonResponse({
+            'item_id': item.pk,
+            'game_count': game_list.game_count,
+            'title': concept.unified_title,
+        })
+
+
+class RemoveItemView(_ListActionView):
+    def post(self, request, list_id, item_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+        item = GameListItem.objects.filter(pk=item_id, game_list=game_list).first()
+        if item is None:
+            return self.fail('That entry is no longer on this list.', status=404)
+        try:
+            svc.remove_concept(game_list, self._viewer(request), item)
+        except svc.ListError as exc:
+            return self.fail(exc)
+        game_list.refresh_from_db()
+        return JsonResponse({'game_count': game_list.game_count})
+
+
+class ListGameSearchView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
+    """Typeahead for the adder: CONCEPTS, not trophy lists.
+
+    Mirrors `SiteSuggestView`'s query shape rather than reusing it -- that view is the nav search and
+    answers five rows per group across mixed entity types, which is the wrong shape for an adder --
+    but it rides the same `pg_trgm` GIN index on `Concept.unified_title` (migration 0257) and defers
+    `raw_response` for the same reason.
+
+    Deliberately NOT `Game.title_name`, which the old list search used: that is the trophy-list name,
+    it is unreliable for matching, and it would return one row per stack for a game somebody wants to
+    add once.
+    """
+
+    LIMIT = 12
+    MIN_QUERY = 2
+
+    def get(self, request, list_id):
+        game_list = GameList.objects.readable_by(
+            getattr(request.user, 'profile', None)).filter(pk=list_id).first()
+        if game_list is None:
+            # JSON rather than Http404: this answers a fetch, and the project's handler404 renders
+            # an HTML page (at 200, per its own documented quirk) which no JSON caller can read.
+            return JsonResponse({'error': 'That list is not available.'}, status=404)
+
+        query = (request.GET.get('q') or '').strip()
+        if len(query) < self.MIN_QUERY:
+            return JsonResponse({'results': []})
+
+        already = set(
+            GameListItem.objects.filter(game_list=game_list).values_list('concept_id', flat=True)
+        )
+        concepts = list(
+            Concept.objects.filter(unified_title__icontains=query)
+            .exclude(unified_title='')
+            .select_related('igdb_match')
+            .defer('igdb_match__raw_response')
+            .order_by('unified_title')[:self.LIMIT]
+        )
+        covers = cover_games_for([c.pk for c in concepts])
+        return JsonResponse({'results': [
+            {
+                'concept_id': concept.pk,
+                'title': concept.unified_title,
+                'cover': covers[concept.pk].display_image_url if concept.pk in covers else '',
+                # Marked rather than filtered out: a hunter searching for something already on the
+                # list should be told it is there, not left wondering why it does not appear.
+                'already_added': concept.pk in already,
+            }
+            for concept in concepts
+        ]})

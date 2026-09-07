@@ -23,8 +23,9 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
-from gamelists.views import (BrowseListsView, CreateListView, GameListDetailView,
-                            MyListsView)
+from gamelists.views import (AddConceptView, BrowseListsView, CreateListView,
+                            GameListDetailView, ListGameSearchView, MyListsView,
+                            RemoveItemView, ToggleFollowView, ToggleLikeView)
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
@@ -392,6 +393,16 @@ urlpatterns = [
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
+    # The list's own write endpoints. Under the page's path rather than /api/v1/, because they are
+    # this page's behaviour and share its gate -- routing them through the API app would mean a
+    # second permission stack that has to agree with the first.
+    path('community/lists/<int:list_id>/like/', ToggleLikeView.as_view(), name='list_like'),
+    path('community/lists/<int:list_id>/follow/', ToggleFollowView.as_view(), name='list_follow'),
+    path('community/lists/<int:list_id>/add/', AddConceptView.as_view(), name='list_add_game'),
+    path('community/lists/<int:list_id>/items/<int:item_id>/remove/',
+         RemoveItemView.as_view(), name='list_remove_game'),
+    path('community/lists/<int:list_id>/search/', ListGameSearchView.as_view(),
+         name='list_game_search'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
     path('my-lists/', MyListsView.as_view(), name='my_lists'),
 
