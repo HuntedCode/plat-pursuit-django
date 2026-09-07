@@ -45,7 +45,11 @@ from trophies.models import Concept, Profile
 #: -- and the per-list importer could then refuse to bring a member's own data across. The first cut
 #: shipped a flat 100-item cap for everybody and described it as a perk; it was a reduction.
 FREE_MAX_LISTS = 3
-MEMBER_MAX_LISTS = 10
+# 25, not 10: once lists come in several TYPES (collection, ranked, progress, tier), a hunter using
+# the feature properly holds far more than ten -- a backlog tracker, a couple of ranked top-tens, a
+# tier list per franchise. The free cap stays at 3 deliberately, as spam control rather than as a
+# tease; three is enough to see what lists are for.
+MEMBER_MAX_LISTS = 25
 
 #: Field lengths, defined ONCE and read by the column, the service and the form.
 #:

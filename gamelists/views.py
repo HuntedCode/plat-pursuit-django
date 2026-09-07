@@ -262,7 +262,8 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
         # the number the service will act on cannot disagree.
         # `paginator.count` is only the real total on the NON-scroll branches. `HtmxListMixin`'s
         # countless scroll path hands back a fake paginator over one page's rows (its docstring says
-        # so out loud), so reusing it there would render "3/10" on a hunter with ten lists. The
+        # so out loud), so reusing it there would render one page's worth as the total -- a member
+        # with 25 lists would read "24/25" and think they were one from the cap. The
         # header is full-page-only, but a wrong number that is merely unrendered is a trap for
         # whoever renders it next.
         if scope == 'mine' and not self._is_scroll_fetch():
