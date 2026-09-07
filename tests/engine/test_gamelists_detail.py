@@ -852,3 +852,31 @@ def test_every_sort_asks_the_database_for_a_TOTAL_order(client, sort):
     assert 'position' in order_by, f'{sort!r} has no tiebreak: ORDER BY{order_by}'
     # And the tiebreak is a TIEBREAK, not the primary key -- it must not be the only term.
     assert order_by.count(',') >= 1, f'{sort!r} orders by position alone: ORDER BY{order_by}'
+
+
+def test_the_publish_sweep_is_clipped_to_the_card():
+    """It shipped escaping the card and sweeping the whole page.
+
+    The beat is a pseudo-element the width of the header card that travels from -30% to 130% of
+    itself. `position: relative` establishes a positioning context, not a CLIPPING one, so with
+    nothing to clip it the highlight left the card and slid across the viewport. Invisible to every
+    other test here -- it renders correctly, it just renders in the wrong place.
+
+    Asserted against the BUILT stylesheet, because that is what the browser loads.
+    """
+    built = _read('staticfiles/css/output.css')
+
+    # ALL the blocks, not the first one. lightningcss splits this selector across three rules -- two
+    # of them custom-property fallbacks for `color-mix()` -- and `re.search` returns the fallback,
+    # which carries no layout at all. The first version of this test failed against correct CSS for
+    # exactly that reason.
+    blocks = re.findall(r'\.gl-published\{([^}]*)\}', built)
+    assert blocks, 'the publish beat has no rule in the built CSS'
+    declarations = ''.join(blocks).replace(' ', '')
+    assert 'overflow:hidden' in declarations, (
+        f'the sweep is unclipped and will escape the card: {blocks}'
+    )
+
+    # And the animation it needs to contain is still there -- so this cannot pass by the beat having
+    # been quietly deleted.
+    assert '@keyframes glPublishSweep' in built
