@@ -345,7 +345,11 @@
 
         var input = root.querySelector('[data-gl-adder-input]');
         var panel = root.querySelector('[data-gl-adder-results]');
-        var status = root.querySelector('[data-gl-adder-status]');
+        // `document`, not `root`: the status line is a SIBLING of the search field in the toolbar
+        // bar, not a child of it. Scoped to `root` this silently returned null and every count
+        // announcement was dropped -- no error, just an accessibility feature that quietly did
+        // nothing. (`sr-only` is absolutely positioned, so it is not a flex item in the bar.)
+        var status = document.querySelector('[data-gl-adder-status]');
         if (!input || !panel) { return; }
 
         // Matches ListGameSearchView.MIN_QUERY. Below it the endpoint answers an empty list, so
@@ -457,6 +461,16 @@
             if (e.key === 'ArrowUp' && at === 0) { input.focus(); return; }
             var next = rows[at + (e.key === 'ArrowDown' ? 1 : -1)];
             if (next) { next.focus(); }
+        });
+
+        // Now that the results FLOAT over the page, they have to be dismissable by clicking away --
+        // in flow they merely pushed content down and could be left open harmlessly. Bound on the
+        // document, and only while a panel is actually open, so it costs nothing at rest.
+        document.addEventListener('click', function (e) {
+            if (panel.hidden) { return; }
+            if (root.contains(e.target)) { return; }
+            closePanel();
+            say('');
         });
 
         panel.addEventListener('click', function (e) {

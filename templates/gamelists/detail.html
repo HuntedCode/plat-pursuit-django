@@ -107,24 +107,82 @@ below with no outer wrapper.
         </div>
     </section>
 
-    {% comment %}Sort toolbar. Swaps the items only -- re-sorting a 200-game list should not
-    re-render the header and the chrome. `innerHTML` into a stable wrapper, which is the pattern that
-    works on this site (the outerHTML variant duplicated the page on My Lists).{% endcomment %}
-    {% if items %}
-    <form data-browse-form id="gl-detail-form"
-          hx-get="{% url 'list_detail' game_list.id %}"
-          hx-target="#gl-items-panel"
-          hx-swap="innerHTML"
-          hx-push-url="true"
-          hx-trigger="submit"
-          hx-indicator="#gl-items-panel">
-        <div class="pp-toolbar-card pp-gbrowse__toolbar">
-            <div class="pp-gbrowse__bar">
-                <span class="pp-ltoolbar__title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                    Games
-                </span>
-                <label class="pp-gbrowse__sort">
+    {% comment %}ONE toolbar card: title, the owner's adder, and sort -- the same bar the browse pages
+    use (`.pp-toolbar-card` > `.pp-gbrowse__bar`, a flex row that wraps on narrow phones). The adder
+    was previously a hand-rolled card of its own sitting directly beneath this one, which put two
+    control surfaces in two visual languages back to back and read as bolted-on.
+
+    THE ADDER IS DELIBERATELY OUTSIDE THE SORT FORM. `browse-filters.js` wires every input inside a
+    `[data-browse-form]` and auto-submits it, so nesting the adder here would fire a sort request per
+    keystroke AND serialize the search text into the sort URL. Keeping the form around the sort alone
+    is what makes the two coexist in one bar.{% endcomment %}
+    {% if items or is_owner %}
+    <div class="pp-toolbar-card pp-gbrowse__toolbar">
+        <div class="pp-gbrowse__bar">
+            <span class="pp-ltoolbar__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                Games
+            </span>
+
+            {% if is_owner %}
+            {% comment %}The adder. One of the three entry points the design conversation settled (the
+            other two are the shared game card and the concept Game page), and the only one that lives
+            on the list itself. Owner-only: `can_act` governs the social acts, and this is not one.
+
+            `.pp-bgal__search` is the site's search field -- the same class browse.html and the share
+            picker use -- rather than a private `.gl-adder__field`. The private one had drifted on
+            every dimension (padding, radius, icon offset, font size, background) so two search fields
+            on one feature disagreed, and it also carried the bug that started this: it had no rule at
+            all, leaving the wrapper inline so the chrome anchored to a 19px line box.
+
+            `data-page-search` opts into the global "/" and Cmd/Ctrl+K shortcut, with the `.pp-search-kbd`
+            hint the other pages show. Safe here: the handler takes the first VISIBLE candidate, and
+            this page has no other -- the sort form holds a select, which the fallback does not
+            match.{% endcomment %}
+            <div class="pp-bgal__search" data-search-wrap data-gl-adder
+                 data-search-url="{% url 'list_game_search' game_list.id %}"
+                 data-add-url="{% url 'list_add_game' game_list.id %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                {% comment %}Deliberately NOT `role="combobox"`. The results are real <button>s, so they
+                are already focusable, activatable and announced correctly; layering a combobox on top
+                would mean owning aria-activedescendant and a selection model to describe what the
+                buttons already say for themselves. A half-built combobox reads worse to a screen
+                reader than plain semantics. The count goes to the status line instead.{% endcomment %}
+                <input type="search" id="gl-adder-input" autocomplete="off"
+                       placeholder="Add a game to this list&hellip;"
+                       aria-label="Search for a game to add to this list"
+                       data-page-search data-gl-adder-input />
+                <span class="pp-search-spin" aria-hidden="true"></span>
+                <button type="button" class="pp-search-clear" data-search-clear tabindex="-1"
+                        aria-label="Clear search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+                <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+
+                {% comment %}An OVERLAY, anchored to this wrapper's `position: relative`, the way the
+                nav search and the game page's hunter search do it. In flow it pushed the entire grid
+                down by up to 336px on every debounced keystroke that changed the result count, which
+                on a phone left roughly one tile row visible and contradicted the reason the adder sits
+                above the games at all.{% endcomment %}
+                <div class="gl-adder__panel" id="gl-adder-results" data-gl-adder-results hidden></div>
+            </div>
+            {% comment %}The count goes to a polite live region rather than the results container:
+            marking the container live would read all twelve rows aloud on every keystroke.{% endcomment %}
+            <p class="sr-only" aria-live="polite" data-gl-adder-status></p>
+            {% endif %}
+
+            {% comment %}Sort swaps the items only -- re-sorting a 200-game list should not re-render
+            the header and the chrome. `innerHTML` into a stable wrapper, the pattern that works on
+            this site (the outerHTML variant duplicated the page on My Lists).{% endcomment %}
+            {% if items %}
+            <form data-browse-form id="gl-detail-form" class="pp-gbrowse__sort"
+                  hx-get="{% url 'list_detail' game_list.id %}"
+                  hx-target="#gl-items-panel"
+                  hx-swap="innerHTML"
+                  hx-push-url="true"
+                  hx-trigger="submit"
+                  hx-indicator="#gl-items-panel">
+                <label>
                     <span class="sr-only">Sort games</span>
                     <select name="sort" class="pp-gallery__select">
                         {% for value, display in sort_choices %}
@@ -132,50 +190,10 @@ below with no outer wrapper.
                         {% endfor %}
                     </select>
                 </label>
-            </div>
+            </form>
+            {% endif %}
         </div>
-    </form>
-    {% endif %}
-
-    {% if is_owner %}
-    {% comment %}The adder. One of the three entry points the design conversation settled (the other
-    two are the shared game card and the concept Game page), and the only one that lives on the list
-    itself. Owner-only: `can_act` is about the social acts, and this is not one of them.
-
-    Searches CONCEPTS, which is why a game appears once here rather than once per platform stack.
-    Rendered above the games so the result of using it is visible in the same screen.{% endcomment %}
-    <section class="gl-adder" data-gl-adder data-list-id="{{ game_list.id }}"
-             data-search-url="{% url 'list_game_search' game_list.id %}"
-             data-add-url="{% url 'list_add_game' game_list.id %}">
-        {% comment %}`data-search-wrap` + `.pp-search-spin` + `.pp-search-clear` is the shared search
-        chrome (see browse.html's toolbar and the game page's hunter search). `wireSearchField` drives
-        it, which also brings Escape-to-clear for free. No `.pp-search-kbd` here: the "/" hint belongs
-        to a page's ONE primary search, and on this page that is the nav's.{% endcomment %}
-        <span class="gl-adder__field" data-search-wrap>
-            <svg class="gl-adder__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            {% comment %}Deliberately NOT `role="combobox"`. The results below are real <button>s, so
-            they are already focusable, activatable and announced correctly by default; layering a
-            combobox on top would mean owning aria-activedescendant and a selection model to describe
-            what the buttons already say for themselves. A half-built combobox reads worse to a screen
-            reader than plain semantics. The count is announced by the status line instead.
-            `autocomplete="off"` so the browser's own history dropdown does not cover the results.{% endcomment %}
-            <input type="search" class="gl-adder__input" id="gl-adder-input"
-                   placeholder="Add a game to this list&hellip;" autocomplete="off"
-                   aria-label="Search for a game to add to this list"
-                   data-gl-adder-input />
-            <span class="pp-search-spin" aria-hidden="true"></span>
-            <button type="button" class="pp-search-clear" data-search-clear tabindex="-1"
-                    aria-label="Clear search">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        </span>
-        {% comment %}The count goes to a polite live region rather than the results container itself:
-        marking the container live would read all twelve rows aloud on every keystroke.{% endcomment %}
-        <p class="sr-only" aria-live="polite" data-gl-adder-status></p>
-        <div class="gl-adder__panel" id="gl-adder-results" data-gl-adder-results hidden></div>
-    </section>
+    </div>
     {% endif %}
 
     {% comment %}Owner actions announce here. Separate from the adder's own status region, which is

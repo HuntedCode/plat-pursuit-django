@@ -453,7 +453,11 @@ def test_the_owner_gets_the_adder_and_a_visitor_never_does(client):
     _staff(client, psn='reader')
     visitor = client.get(_url(game_list)).content.decode()
     assert 'data-gl-adder' not in visitor
-    assert 'gl-adder__input' not in visitor
+    # `gl-adder__input` used to be asserted here and became VACUOUS when the field moved onto the
+    # shared `.pp-bgal__search`: the class stopped existing anywhere, so `not in` was trivially true.
+    # These name things the page really renders, so removing the guard would fail them.
+    assert 'data-gl-adder-input' not in visitor
+    assert '/search/' not in visitor
     # The control it must NOT be confused with: the visitor does still get the social acts.
     assert 'data-gl-like' in visitor
 
@@ -682,3 +686,55 @@ def test_owner_actions_have_somewhere_to_announce(client):
     theirs = _list(author, 1)
     _staff(client, psn='reader')
     assert 'data-gl-status' not in client.get(_url(theirs)).content.decode()
+
+
+def test_the_adder_lives_in_the_toolbar_card_and_uses_the_shared_field(client):
+    """One control surface, not two. The adder was a hand-rolled card sitting directly beneath the
+    shared `.pp-toolbar-card`, which put two visual languages back to back and read as bolted-on.
+
+    Also pins the shared FIELD (`.pp-bgal__search`, the class browse.html uses) over the private one
+    that had drifted from it on padding, radius, icon offset, font-size and background.
+    """
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    card = body.index('pp-toolbar-card')
+    bar_end = body.index('</div>', body.index('data-gl-adder'))
+    assert body.index('data-gl-adder') > card, 'the adder is not inside the toolbar card'
+    assert bar_end > card
+
+    assert 'pp-bgal__search' in body, 'the adder is not using the shared search field'
+    # The shared chrome, all three pieces, plus the "/" hint the other browse toolbars carry.
+    assert 'pp-search-spin' in body
+    assert 'data-search-clear' in body
+    assert 'pp-search-kbd' in body
+    assert 'data-page-search' in body
+
+
+def test_the_adder_is_outside_the_sort_form(client):
+    """Load-bearing. `browse-filters.js` wires every input inside a `[data-browse-form]` and
+    auto-submits it, so nesting the adder in the sort form would fire a sort request per keystroke
+    AND serialize the search text into the sort URL."""
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    form_open = body.index('data-browse-form')
+    adder_at = body.index('data-gl-adder')
+    assert adder_at < form_open, 'the adder is inside the sort form and will be serialized into it'
+
+
+def test_the_results_panel_is_an_overlay_not_in_flow():
+    """In flow it pushed the whole grid down by up to 336px on every debounced keystroke that changed
+    the result count -- on a 375px phone that left about one tile row visible. Asserted against the
+    BUILT stylesheet, because that is what the browser loads."""
+    built = _read('staticfiles/css/output.css')
+
+    rule = re.search(r'\.gl-adder__panel\{([^}]*)\}', built)
+    assert rule, 'the results panel has no rule in the built CSS'
+    body = rule.group(1)
+    assert 'position:absolute' in body, 'the results panel is still in flow'
+    assert 'z-index' in body

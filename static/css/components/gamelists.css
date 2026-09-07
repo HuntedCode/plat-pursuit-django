@@ -241,66 +241,36 @@
 .gl-item.is-removing { opacity: 0.35; pointer-events: none; transition: opacity 0.18s ease; }
 
 /* ---- The adder ------------------------------------------------------------
-   A discrete owner-only SECTION, so it is carded rather than floating on the page background. Its
-   field and result rows mirror the nav search's structure (`.pp-navsearch__*` in chrome.css) without
+   The FIELD is `.pp-bgal__search` -- the site's search field, shared with the browse toolbars -- with
+   the shared `.pp-search-spin` / `.pp-search-clear` / `.pp-search-kbd` chrome inside it and
+   `PlatPursuit.wireSearchField` driving them. This file used to carry a private
+   `.gl-adder`/`__field`/`__icon`/`__input` set instead, and that went wrong twice over: `__field`
+   ended up with NO rule at all, so the wrapper stayed inline and the absolutely-positioned chrome
+   anchored to a ~19px line box; and the rest had drifted off the shared values on every dimension
+   (padding, radius, icon offset, font-size, background), so two search fields on one feature
+   disagreed about what a search field looks like. All of it is deleted.
+
+   Only the RESULT ROWS below are still this file's, because nothing shared renders a cover + title +
+   state row. They mirror the nav search's structure (`.pp-navsearch__*` in chrome.css) without
    borrowing its block name: that block belongs to the site FRAME, and a page module reaching into it
    couples the two. Same grammar, own namespace. */
-.gl-adder {
-    position: relative;
-    margin-bottom: 10px;
-    padding: 10px;
-    border-radius: 14px;
-    background: var(--pp-bg-2);
-    border: 1px solid var(--pp-border);
-}
-@media (min-width: 768px) { .gl-adder { padding: 12px; margin-bottom: 12px; } }
 
-/* The field opts into the SHARED search chrome rather than re-minting it: `data-search-wrap` on the
-   wrapper plus `.pp-search-spin` / `.pp-search-clear` inside, driven by `PlatPursuit.wireSearchField`
-   (`.has-value` / `.is-searching`). That is the established idiom -- `.pp-bgal__search` on browse and
-   `.gd-lb__find` on the game page both do exactly this: own wrapper block, shared inner chrome.
-   The first cut here hand-rolled a flex row with its own spinner and clear button, which duplicated
-   ~40 lines of that chrome AND had to fight `[hidden]`'s specificity to stay hidden. `position:
-   relative` comes free from `[data-search-wrap]`, which the shared button/spinner anchor against. */
-/* `display: block` is LOAD-BEARING and was missing, which is the whole bug this block had.
-   `[data-search-wrap]` supplies `position: relative`, and the comment above once concluded from that
-   the wrapper needed no rule of its own. Wrong: for a `position: relative` INLINE element the
-   containing block is the bounding box of its line boxes -- the font strut, ~19px -- not the 38px
-   input inside it. So the icon, spinner and clear button all centred against the wrong box and sat
-   high. Both established users of this idiom are blockified and neither says so out loud:
-   `.pp-bgal__search` is a flex item (browse-gallery.css:75) and `.gd-lb__find` is a form
-   (game-detail.css:1035). The class had NO rule at all -- zero hits in this file and zero in the
-   built output -- so nothing contradicted the comment. */
-.gl-adder__field { position: relative; display: block; }
-
-.gl-adder__icon {
-    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
-    width: 15px; height: 15px;
-    color: var(--pp-text-mute); pointer-events: none;
-}
-.gl-adder__input {
-    width: 100%;
-    padding: 9px 12px 9px 34px;
-    font-size: 0.85rem; color: var(--pp-text);
-    background: var(--pp-bg-1);
-    border: 1px solid var(--pp-border);
-    border-radius: 10px;
-    transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-.gl-adder__input::placeholder { color: var(--pp-text-mute); }
-.gl-adder__input:focus {
-    outline: none;
-    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 15%, transparent);
-}
-
+/* An OVERLAY, like `.pp-navsearch__panel` and `.gd-lb__suggest`. In flow it pushed the whole grid
+   down by up to 336px on every debounced keystroke that changed the result count -- on a 375px phone
+   that left about one tile row visible, which contradicts the reason the adder sits above the games
+   at all. Anchors to `.pp-bgal__search`'s own `position: relative`; neither `.pp-toolbar-card` nor
+   `.pp-gbrowse__toolbar` sets `overflow`, so it escapes the card rather than being clipped. */
 .gl-adder__panel {
-    margin-top: 8px;
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 6px);
+    left: 0; right: 0;
     max-height: 21rem;
     overflow-y: auto;
-    border-radius: 10px;
+    border-radius: var(--pp-radius-md);
     border: 1px solid var(--pp-border);
     background: var(--pp-bg-1);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
 }
 .gl-adder__opt {
     display: flex; align-items: center; gap: 10px;
