@@ -86,5 +86,64 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', wireCreateDialog);
+
+    /**
+     * The Mine|Following scope switcher.
+     *
+     * HTMX does the fetch and the swap; this supplies everything HTMX does not: the roving tabindex
+     * and Arrow/Home/End model (`wireTablist`), the one-shot activation bloom (`igniteTab`), and the
+     * directional panel slide (`slideViewIn`) -- the three beats the design system and motion-patterns
+     * ask a tab group for. `{manual: true}` because the chips are `<a hx-get>`: wireTablist must not
+     * also bind click, or the panel switches twice.
+     */
+    function wireScopeSwitcher() {
+        var strip = document.querySelector('[data-gl-scopes]');
+        if (!strip || strip.dataset.wired === '1') { return; }
+        strip.dataset.wired = '1';
+
+        var chips = strip.querySelectorAll('.pp-switch__chip');
+        var order = Array.prototype.map.call(chips, function (c) { return c.dataset.scope; });
+
+        if (window.PlatPursuit && window.PlatPursuit.wireTablist) {
+            window.PlatPursuit.wireTablist(chips, { manual: true });
+        }
+
+        // Active state moves on the REQUEST, not on the response: the chip should light the instant
+        // it is pressed rather than after a round trip, which is what makes the switch feel local.
+        document.body.addEventListener('htmx:beforeRequest', function (e) {
+            var chip = e.target.closest ? e.target.closest('[data-gl-scopes] .pp-switch__chip') : null;
+            if (!chip) { return; }
+            Array.prototype.forEach.call(chips, function (c) {
+                var on = c === chip;
+                c.classList.toggle('is-active', on);
+                c.setAttribute('aria-selected', on ? 'true' : 'false');
+                c.tabIndex = on ? 0 : -1;
+            });
+            if (window.PlatPursuit && window.PlatPursuit.igniteTab) {
+                window.PlatPursuit.igniteTab(chip);
+            }
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function (e) {
+            var grid = e.target && e.target.id === 'my-lists-grid'
+                ? e.target : document.getElementById('my-lists-grid');
+            if (!grid) { return; }
+            // Direction comes from the panel's own `data-scope`, which the server rendered -- so the
+            // slide follows what actually arrived rather than what was clicked.
+            var from = strip.dataset.lastScope || null;
+            var to = grid.dataset.scope;
+            if (window.PlatPursuit && window.PlatPursuit.slideViewIn) {
+                window.PlatPursuit.slideViewIn(grid, from, to, order);
+            }
+            strip.dataset.lastScope = to;
+        });
+
+        var current = document.getElementById('my-lists-grid');
+        if (current) { strip.dataset.lastScope = current.dataset.scope; }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        wireCreateDialog();
+        wireScopeSwitcher();
+    });
 })();

@@ -68,16 +68,25 @@ notification system this release -- so the tab is the feature, not decoration on
         </div>
     </section>
 
-    {% comment %}The segmented switcher's LOOK, with navigation semantics rather than tab semantics.
-    Each chip is a full page load to `?scope=`, and `role="tablist"`/`role="tab"` promises a widget
-    that is not here -- no panel, no `aria-controls`, no roving tabindex, no arrow-key model. A
-    screen reader would announce tabs and its user would press Arrow keys that do nothing. Franchises
-    resolves the identical "segmented control that navigates" case the same way: a group of links
-    with `aria-current`.{% endcomment %}
+    {% comment %}The site's one sanctioned tab treatment, with the behaviour that makes it one: the
+    chips HTMX-swap the panel below instead of reloading the page, exactly as Badges' Series|Gallery
+    toggle does. `href` is kept as the no-JS fallback -- the server honours `?scope=` either way --
+    and `wireTablist` supplies the roving tabindex and Arrow/Home/End model.
+
+    An earlier cut used plain links with `role="group"`. That was an honest description of what it
+    did and a dishonest one of what it should do: on this site a segmented switcher swaps.{% endcomment %}
     <div class="flex items-center justify-end mt-5 mb-3">
-        <div class="pp-switch" role="group" aria-label="Which lists to show">
+        <div class="pp-switch" role="tablist" aria-label="Which lists to show" data-gl-scopes>
             {% for value, label in scopes %}
-            <a href="?scope={{ value }}"{% if scope == value %} aria-current="page"{% endif %}
+            <a href="?scope={{ value }}"
+               hx-get="{% url 'my_lists' %}?scope={{ value }}"
+               hx-target="#my-lists-grid"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               role="tab" id="gl-scope-{{ value }}"
+               aria-controls="my-lists-grid"
+               aria-selected="{% if scope == value %}true{% else %}false{% endif %}"
+               data-scope="{{ value }}"
                class="pp-switch__chip{% if scope == value %} is-active{% endif %}">
                 {% if value == 'mine' %}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -90,24 +99,8 @@ notification system this release -- so the tab is the feature, not decoration on
         </div>
     </div>
 
-    {# ── Content, flowing free ── #}
-    <div class="pp-gtile-grid">
-        {% for game_list in game_lists %}
-        {% include 'gamelists/partials/list_tile.html' with game_list=game_list show_privacy=is_mine %}
-        {% empty %}
-        <div class="pp-gtile-empty">
-            {% if is_mine %}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            <p class="pp-gtile-empty__title">No lists yet</p>
-            <p class="pp-gtile-empty__hint">Start one and add games as you go.</p>
-            {% else %}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-            <p class="pp-gtile-empty__title">Not following any lists</p>
-            <p class="pp-gtile-empty__hint">Follow a list and it waits here for you.</p>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
+    {# ── Content, flowing free. The swap target. ── #}
+    {% include 'gamelists/partials/my_lists_results.html' %}
 </div>
 
 {% comment %}

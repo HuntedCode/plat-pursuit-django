@@ -184,11 +184,19 @@ class _LinkedProfileRequired:
         return super().dispatch(request, *args, **kwargs)
 
 
-class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, ListView):
+class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
+                  HtmxListMixin, ListView):
     """Your own lists, and the ones you follow.
 
     ONE VIEW WITH A `scope`, not two pages -- the Career Board|History pattern: a single argument
     threaded through a single pipeline, no schema, and a URL that reloads into the state you left.
+
+    The scope chips SWAP the panel rather than reloading the page, which is what every other tab
+    group on this site does (Badges' Series|Gallery, Career's Jobs|Radar|Contracts). The first cut
+    shipped them as plain links; an audit then flagged that `role="tablist"` was announcing a widget
+    that did not exist, and I resolved that by making the SEMANTICS honest instead of making the
+    BEHAVIOUR match the site -- the cheaper of the two fixes and the wrong one. With a real panel
+    swap, `role="tab"` is simply true.
 
     This is also where following finally MEANS something. There is no notification surface and there
     will not be one this release, so a follow is a bookmark; "Following" is where the bookmark
@@ -197,6 +205,7 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, 
     """
 
     template_name = 'gamelists/my_lists.html'
+    partial_template_name = 'gamelists/partials/my_lists_results.html'
     context_object_name = 'game_lists'
     paginate_by = 24
 

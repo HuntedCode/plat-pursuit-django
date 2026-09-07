@@ -500,3 +500,93 @@ def test_the_swipe_sheet_is_armed_only_from_its_header():
           / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
 
     assert 'handle:' in js, 'the create sheet can be swiped away from anywhere, losing typed work'
+
+
+# -- the scope switcher swaps, like every other tab group on the site ----------------------------
+
+def test_switching_scope_over_htmx_returns_the_grid_and_nothing_else(client):
+    """The behaviour Jeffrey caught missing: the chips reloaded the whole page while every other tab
+    group on the site swaps a panel in place. A full document arriving here would be nested inside
+    the grid it replaces."""
+    _staff_hunter(client)
+
+    body = client.get(MY_LISTS, {'scope': 'following'}, HTTP_HX_REQUEST='true').content.decode()
+
+    assert 'my-lists-grid' in body
+    assert '<!doctype html' not in body.lower(), 'the swap returned the whole page'
+    assert '<nav' not in body.lower()
+
+
+def test_the_swap_partial_bakes_in_the_reveal_class_and_the_full_page_does_not(client):
+    """htmx's settle step restores server attributes on id'd swapped elements, so a class added by
+    JS in afterSwap is wiped and the tiles unhide with a flash."""
+    profile = _staff_hunter(client)
+    svc.create_list(profile, name='Revealed')
+
+    full = client.get(MY_LISTS).content.decode()
+    swapped = client.get(MY_LISTS, HTTP_HX_REQUEST='true').content.decode()
+
+    assert 'pp-reveal' in swapped
+    assert 'pp-reveal' not in full
+
+
+def test_the_chips_are_a_real_tablist_now_that_there_is_a_panel(client):
+    """`role="tab"` was a lie while the chips were plain navigation -- no panel, no `aria-controls`,
+    no keyboard model. It is true once they swap one, which is why the fix was to change the
+    BEHAVIOUR rather than to downgrade the semantics."""
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+
+    assert 'role="tablist"' in body
+    assert body.count('role="tab"') >= 2
+    assert body.count('aria-controls="my-lists-grid"') >= 2
+    assert 'id="my-lists-grid"' in body
+    # Both states rendered, so the active chip is announced rather than merely tinted.
+    assert 'aria-selected="true"' in body and 'aria-selected="false"' in body
+
+
+def test_the_chips_keep_an_href_so_they_work_without_javascript(client):
+    """The server honours `?scope=` either way. Losing the href would make the switcher JS-only, and
+    the whole point of driving it with `hx-get` on an `<a>` is that it degrades."""
+    _staff_hunter(client)
+    body = client.get(MY_LISTS).content.decode()
+
+    assert 'href="?scope=mine"' in body
+    assert 'href="?scope=following"' in body
+    assert 'hx-get' in body and 'hx-target="#my-lists-grid"' in body
+
+
+def test_the_swapped_panel_says_which_scope_it_is(client):
+    """The directional slide reads the panel's own `data-scope`, so the animation follows what
+    ARRIVED rather than what was clicked -- they differ if a request is superseded."""
+    _staff_hunter(client)
+
+    body = client.get(MY_LISTS, {'scope': 'following'}, HTTP_HX_REQUEST='true').content.decode()
+
+    assert 'data-scope="following"' in body
+
+
+def test_the_switcher_uses_the_shared_motion_helpers_rather_than_its_own(client):
+    """`wireTablist` for the roving tabindex and arrow keys, `igniteTab` for the activation bloom,
+    `slideViewIn` for the directional panel slide -- the three beats the design system asks a tab
+    group for, and all three already exist."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    # The CALL, not the word: these helper names also appear in this file's own comments, so a bare
+    # substring check stayed green when the call was ripped out and replaced with a hand-rolled
+    # `chips[0].tabIndex = 0`. Caught by mutating exactly that.
+    import re
+
+    stripped = re.sub(r'/\*.*?\*/', '', js, flags=re.S)
+    stripped = re.sub(r'^\s*//.*$', '', stripped, flags=re.M)
+    for helper in ('wireTablist', 'igniteTab', 'slideViewIn'):
+        assert f'PlatPursuit.{helper}(' in stripped, (
+            f'the switcher re-rolls {helper} instead of calling the shared one'
+        )
+    assert 'manual: true' in stripped, (
+        'wireTablist must not also bind click on hx-get chips, or the panel switches twice'
+    )
+
