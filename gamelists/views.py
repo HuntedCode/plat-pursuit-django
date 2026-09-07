@@ -22,7 +22,7 @@ from django.views.generic import DetailView, ListView, View
 
 from django_ratelimit.decorators import ratelimit
 
-from api.utils import safe_int
+from api.utils import safe_bool, safe_int
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, GameList,
                              GameListFollow, GameListItem, GameListLike)
 from gamelists.services import game_list_service as svc
@@ -42,6 +42,11 @@ MAX_ITEMS_RENDERED = 200
 #: to the database: a 40-digit number compared against a PositiveIntegerField is backend-dependent
 #: behaviour for a query nobody meant to run.
 MAX_GAME_COUNT_FILTER = 10_000
+
+#: Ceiling on any free-text search term before it reaches a LIKE. Shared by the browse filter and the
+#: adder's typeahead so the two cannot drift: an unbounded `q` is an unbounded pattern, and the
+#: browse page becomes anonymous the moment `_DevelopmentGate` comes off.
+MAX_QUERY_LENGTH = 64
 
 
 def _count_filter(raw):
@@ -112,7 +117,11 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
         # exactly, so the safe way is also the indexed way.
         queryset = GameList.objects.public().select_related('owner')
 
-        query = (self.request.GET.get('q') or '').strip()
+        # BOUNDED, like the typeahead in this same file. An unbounded `q` becomes an unbounded
+        # LIKE pattern across three columns and a join to Profile, on the surface that becomes
+        # ANONYMOUS the moment `_DevelopmentGate` comes off. `_count_filter` below bounds the
+        # numeric filters and none of that discipline had reached the text one.
+        query = (self.request.GET.get('q') or '').strip()[:MAX_QUERY_LENGTH]
         if query:
             queryset = queryset.filter(
                 Q(name__icontains=query)
@@ -293,6 +302,11 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
 class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
     """The create modal's POST target.
 
+    RATE LIMITED like every other write here, which it was not. The cap (3 free / 25 member) bounds
+    the steady state but not the RATE: `delete_list` is a soft delete that frees a slot immediately,
+    so create-delete-create is an unthrottled INSERT loop that also runs the fixpoint sanitiser and
+    the banned-word scan on every pass.
+
     A plain form post rather than JSON: creating a list is a navigation (you land on the new list),
     and a form that works without JavaScript is the cheaper, sturdier version of that. The modal is
     progressive enhancement over a form that would submit fine on its own.
@@ -302,6 +316,7 @@ class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequire
     nothing else, which is the point of having the service at all.
     """
 
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
     def post(self, request):
         try:
             game_list = svc.create_list(
@@ -521,7 +536,13 @@ class UpdateListView(_ListActionView):
 
         fields = {name: request.POST[name] for name in self.FIELDS if name in request.POST}
         if 'is_public' in request.POST:
-            fields['is_public'] = request.POST['is_public'] == 'true'
+            # `safe_bool`, not `== 'true'`. The bare comparison read 'True', '1', 'on' and 'yes' as
+            # FALSE, so anything but the exact lowercase literal silently took a published list back
+            # down and answered 200 -- verified: posting `is_public=on`, which is what a plain HTML
+            # checkbox sends, un-published a live list. Fail-closed is the safe direction for a
+            # privacy control, but "safe" is not the same as "correct", and destroying somebody's
+            # publication without telling them is its own harm.
+            fields['is_public'] = safe_bool(request.POST['is_public'])
         if not fields:
             return self.fail('Nothing to change.')
 
@@ -685,7 +706,7 @@ class ListGameSearchView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileReq
 
     LIMIT = 12
     MIN_QUERY = 3
-    MAX_QUERY = 64
+    MAX_QUERY = MAX_QUERY_LENGTH          # shared with the browse filter, so the two cannot drift
     CACHE_TTL = 60
 
     @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))

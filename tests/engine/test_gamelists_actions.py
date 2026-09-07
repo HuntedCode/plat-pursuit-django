@@ -64,6 +64,11 @@ def test_following_and_unfollowing(client):
     ('list_follow', (), {'following': 'true'}),
     ('list_add_game', (), {'concept_id': 1}),
     ('list_remove_game', (1,), {}),
+    # Added after an audit found the list incomplete AGAIN -- and `list_update` is the PUBLISH
+    # endpoint, so it is the one that most needed to be here. The docstring below already explains
+    # that this exact omission is how two endpoints shipped 500ing on a private id.
+    ('list_update', (), {'name': 'probe'}),
+    ('list_reorder', (), {'item_ids[]': [1]}),
 ])
 def test_no_endpoint_confirms_a_private_list_exists(client, name, extra_args, payload):
     """404 from EVERY endpoint -- never 403, never a service error, and never a 500.
@@ -612,3 +617,90 @@ def test_an_empty_reorder_is_refused(client):
     svc.add_concept(game_list, owner, ConceptFactory(unified_title='Only one'))
 
     assert client.post(reverse('list_reorder', args=[game_list.id]), {}).status_code == 400
+
+
+# ── the restriction gate on publishing ───────────────────────────────────────────────────────────
+
+def test_a_restricted_hunter_cannot_publish(client):
+    """The moderation bypass this shipped with, pinned in both directions.
+
+    The gate only fired when `name` or `description` was passed, and did not care which way
+    `is_public` moved -- so a POST carrying nothing but `is_public=true` reached the write with no
+    restriction check at all. The bypass was: write lists privately, get restricted for something
+    else, publish the lot. A moderator's only remaining lever was deletion.
+
+    Confirmed end to end before fixing: rename answered 400 while publish answered 200 and flipped
+    the row.
+    """
+    owner = _staff(client, psn='restricted')
+    game_list = svc.create_list(owner, name='Written before the ban', is_public=False)
+    UserRestriction.objects.create(user=owner.user, profile=owner, scope='all_ugc',
+                                   reason='spam', created_by_label='Admin')
+
+    resp = client.post(reverse('list_update', args=[game_list.id]), {'is_public': 'true'})
+
+    assert resp.status_code == 400
+    game_list.refresh_from_db()
+    assert game_list.is_public is False, 'a restricted hunter published their list'
+
+
+def test_a_restricted_hunter_can_still_take_their_own_list_down(client):
+    """The other half, and the reason the gate is not simply on the whole function. Un-publishing is
+    a hunter removing their OWN content, which restriction exists to encourage. Gating everything
+    trapped a restricted hunter's list in public."""
+    owner = _staff(client, psn='restricted')
+    game_list = svc.create_list(owner, name='Already out there', is_public=True)
+    UserRestriction.objects.create(user=owner.user, profile=owner, scope='all_ugc',
+                                   reason='spam', created_by_label='Admin')
+
+    resp = client.post(reverse('list_update', args=[game_list.id]), {'is_public': 'false'})
+
+    assert resp.status_code == 200
+    game_list.refresh_from_db()
+    assert game_list.is_public is False
+    # And deleting stays available too.
+    assert svc.delete_list(game_list, owner).is_deleted is True
+
+
+@pytest.mark.parametrize('sent, expected', [
+    ('true', True), ('True', True), ('1', True), ('on', True), ('yes', True),
+    ('false', False), ('0', False), ('', False), ('garbage', False),
+])
+def test_visibility_parsing_accepts_what_clients_actually_send(client, sent, expected):
+    """`== 'true'` read 'True', '1', 'on' and 'yes' as FALSE, so anything but the exact lowercase
+    literal silently took a published list down and answered 200. Verified: posting `is_public=on`,
+    which is what a plain HTML checkbox sends, un-published a live list.
+
+    Fail-closed is the safe direction for a privacy control, but safe is not the same as correct --
+    destroying somebody's publication without telling them is its own harm.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Toggle me', is_public=False)
+
+    resp = client.post(reverse('list_update', args=[game_list.id]), {'is_public': sent})
+
+    assert resp.status_code == 200
+    game_list.refresh_from_db()
+    assert game_list.is_public is expected, f'is_public={sent!r} stored {game_list.is_public}'
+
+
+def test_creating_a_list_is_rate_limited_like_every_other_write(client):
+    """The cap bounds the steady state, not the RATE. `delete_list` is a soft delete that frees a
+    slot immediately, so create-delete-create was an unthrottled INSERT loop that also ran the
+    fixpoint sanitiser and the banned-word scan on every pass."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[2] / 'gamelists' / 'views.py').read_text(
+        encoding='utf-8')
+    create_block = source[source.index('class CreateListView'):
+                          source.index('class GameListDetailView')]
+    assert 'ratelimit(' in create_block, 'CreateListView is the one write with no rate limit'
+
+    # Every other write carries one too -- asserted together so a new endpoint added without a limit
+    # fails here rather than being noticed by an audit two rounds later.
+    for view in ('UpdateListView', 'ReorderItemsView', 'ToggleLikeView', 'ToggleFollowView',
+                 'AddConceptView', 'RemoveItemView', 'ListGameSearchView'):
+        start = source.index(f'class {view}')
+        nxt = source.find('\nclass ', start + 1)
+        block = source[start:nxt if nxt != -1 else len(source)]
+        assert 'ratelimit(' in block, f'{view} has no rate limit'

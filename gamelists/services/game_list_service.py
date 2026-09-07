@@ -250,15 +250,29 @@ def update_list(game_list, profile, *, name=None, description=None,
                 is_public=None, selected_theme=None):
     """Edit a list you own. Every argument is optional; only what is passed is touched.
 
-    The restriction gate is scoped to the fields that CARRY WORDS. A restricted hunter can still
-    un-publish their own list and still change its theme -- taking your own content down is the
-    opposite of the act being restricted, and a gradient is not user-submitted content. Gating the
-    whole function trapped a restricted hunter's list in public, which is the same failure
-    `api/rating_views.py` documents from the other direction.
+    The restriction gate is scoped to the acts that PUT WORDS IN FRONT OF PEOPLE, in either of the
+    two ways that can happen: writing them, or making already-written ones visible. A restricted
+    hunter can still un-publish their own list, still delete it, and still change its theme -- taking
+    your own content down is the opposite of the act being restricted, and a gradient is not
+    user-submitted content. Gating the whole function trapped a restricted hunter's list in public,
+    which is the same failure `api/rating_views.py` documents from the other direction.
+
+    PUBLISHING IS GATED and the first version did not gate it, because the condition only looked at
+    `name`/`description` and did not care which way `is_public` moved. A POST carrying nothing but
+    `is_public=true` reached the write with no restriction check at all -- so the bypass was: write
+    lists privately, get restricted for something else, then publish the lot. The moderator's only
+    remaining lever was deletion. Confirmed end to end before fixing: rename answered 400 while
+    publish answered 200 and flipped the row.
+
+    `is_public is False` still passes, deliberately. Un-publishing is a hunter taking their OWN
+    content down, which restriction exists to encourage rather than prevent.
     """
     _require_owner(game_list, profile)
 
-    if name is not None or description is not None:
+    # `bool(is_public)` and not `is not None`: None means "not passed" and False means "take it
+    # down", and only the third case -- making it public -- is the one restriction speaks to.
+    publishing = is_public is not None and bool(is_public)
+    if name is not None or description is not None or publishing:
         _refuse_if_restricted(profile)
 
     changed = []
@@ -348,11 +362,22 @@ def remove_concept(game_list, profile, item):
 def _recount(locked):
     """Set `game_count` from the rows, rather than nudging it by one.
 
-    Self-healing on purpose. The counter can drift from paths this service does not own -- a concept
-    merge dropping a colliding entry, an admin deleting a Concept, the importer -- and `+1`/`-1`
-    carries an old error forward forever. `PositiveIntegerField` is a DB CHECK on Postgres, so a
-    counter that drifted high would eventually raise IntegrityError out of a `-1` instead of the
-    ListError a caller is catching. Cheap: one COUNT under a lock we already hold.
+    Recomputed rather than nudged, so an existing error is corrected instead of carried forward.
+    `PositiveIntegerField` is a DB CHECK on Postgres, so a counter that drifted high would eventually
+    raise IntegrityError out of a `-1` instead of the ListError a caller is catching. Cheap: one
+    COUNT under a lock we already hold.
+
+    NOT self-healing, which this docstring used to claim. It named "an admin deleting a Concept" as a
+    drift source it recovered from; it does not, because it only ever runs from inside `add_concept`
+    and `remove_concept`. `GameListItem.concept` is CASCADE, so deleting a Concept removes rows with
+    no service involvement, and an untouched list then carries BOTH a stale `game_count` (which the
+    browse grid sorts on) and a GAP in `position` -- which `attach_cover_games` reads through
+    `position__lt=4`, so the tile quietly composes a three-cover mosaic for a four-game list.
+    `Concept.absorb()` repairs both, but that is the MERGE path; nothing repairs a plain delete.
+
+    Closing that needs a `post_delete` receiver or a reconciliation command, and it is recorded in
+    docs/design/game-list-types.md rather than fixed here because it wants to be decided alongside
+    the same question for the other denormalized counters.
     """
     GameList.objects.filter(pk=locked.pk).update(
         game_count=GameListItem.objects.filter(game_list=locked).count(),
