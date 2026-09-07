@@ -880,3 +880,64 @@ def test_the_publish_sweep_is_clipped_to_the_card():
     # And the animation it needs to contain is still there -- so this cannot pass by the beat having
     # been quietly deleted.
     assert '@keyframes glPublishSweep' in built
+
+
+def test_the_editor_hooks_the_audit_findings_depend_on_are_rendered(client):
+    """Each of these is a hook a JS fix reaches for. A renamed or dropped attribute turns the fix
+    into a silent no-op, which is how several defects on this branch survived a browser pass."""
+    owner = _staff(client)
+    game_list = _list(owner, 1)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    # The tallies yield while the editor is open (at 375px they left the name field ~11 chars wide).
+    assert 'data-gl-tallies' in body
+    # The trailing breadcrumb is the third place the name appears and was the one left stale.
+    assert 'data-breadcrumb-current' in body
+    # Publish moves focus to the control that replaces it rather than dropping it on <body>.
+    assert 'data-gl-unpublish' in body
+
+
+def test_the_drag_removal_left_no_orphaned_hooks(client):
+    """`data-item-id` was read only by the deleted drag manager. A markup hook with no reader is
+    how a future reader concludes a feature still exists."""
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+    assert 'data-item-id' not in body
+
+    # And the partial's comment names the file that actually wires the reveal. It said `gamelists.js`
+    # -- the My Lists page, deliberately not loaded here -- pointing a reader at the wrong file for
+    # exactly the blank-grid bug it describes.
+    partial = _read('templates/gamelists/partials/detail_items.html')
+    assert 'list-detail.js' in partial
+    assert 'gamelists.js` wires' not in partial
+
+
+def test_the_adder_panel_is_reachable_with_a_keyboard_up_and_above_the_tabbar():
+    """Two mobile defects in one rule. A fixed 21rem cap put most of the panel off-screen with the
+    soft keyboard up, and z-index 30 painted it under `.mobile-tabbar` (z-index 40, fixed, below
+    `lg`)."""
+    built = _read('staticfiles/css/output.css')
+
+    rule = re.search(r'\.gl-adder__panel\{([^}]*)\}', built)
+    assert rule, 'the results panel has no rule in the built CSS'
+    declarations = rule.group(1)
+
+    assert 'dvh' in declarations, 'the panel cap does not shrink for the soft keyboard'
+    z = re.search(r'z-index:(\d+)', declarations)
+    assert z and int(z.group(1)) > 40, f'the panel paints under the mobile tabbar: {declarations}'
+
+
+def test_the_rename_control_is_a_real_touch_target():
+    """26px, in a file that bumps a less consequential control to 44 citing the design system, and
+    that explains two hundred lines later why every button needs an explicit `cursor: pointer`."""
+    built = _read('staticfiles/css/output.css')
+
+    blocks = re.findall(r'\.gl-edit-open\{([^}]*)\}', built)
+    assert blocks, 'the rename control has no rule in the built CSS'
+    declarations = ''.join(blocks)
+
+    assert 'width:44px' in declarations, f'the pencil is under the 44px minimum: {declarations}'
+    assert 'cursor:pointer' in declarations

@@ -94,7 +94,12 @@ below with no outer wrapper.
                     {% endif %}
                 </div>
 
-                <div class="flex items-center gap-4 shrink-0 text-right">
+                {% comment %}Yields while the editor is open. At 375px the card body is ~307px and
+                these two tallies plus the gaps take ~136px, leaving the identity column ~171px --
+                so the name field rendered about eleven characters wide for a 60-character limit.
+                The counts are not what somebody is looking at mid-rename, and they come straight
+                back on save or cancel.{% endcomment %}
+                <div class="flex items-center gap-4 shrink-0 text-right" data-gl-tallies>
                     <div>
                         <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl" data-game-count>{{ game_list.game_count|intcomma }}</span>
                         <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>

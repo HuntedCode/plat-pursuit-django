@@ -2,7 +2,9 @@
 The games on a list -- the sort swap's payload, and nothing else.
 
 `pp-reveal` is baked in on htmx requests only (settle strips a JS-added class from id'd swapped
-elements), and `gamelists.js` wires the observer that clears it. Both halves, deliberately: baking
+elements), and `list-detail.js` wires the observer that clears it. NOT `gamelists.js`, which this
+said until an audit caught it -- that file is the My Lists page and is deliberately not loaded here,
+so the sentence pointed a reader at the wrong file for exactly the blank-grid bug it describes. Both halves, deliberately: baking
 the class with nothing to reveal it is what left the My Lists panel blank.
 {% endcomment %}
 {% load humanize %}
@@ -14,7 +16,7 @@ the class with nothing to reveal it is what left the My Lists panel blank.
     DOM shape. Safe to add because `.pp-gtile-grid` styles no direct children -- it sets only
     grid-template-columns and gap -- and `.pp-gtile` takes its height from `aspect-ratio`, so the
     wrapper becomes the grid item and the tile fills it.{% endcomment %}
-    <div class="gl-item" data-item-id="{{ item.pk }}">
+    <div class="gl-item">
     {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
     which is the whole reason entries are concept-keyed.{% endcomment %}
     <a href="{{ item.concept.game_page_url }}" class="pp-gtile" data-gtile

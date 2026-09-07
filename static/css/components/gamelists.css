@@ -262,10 +262,17 @@
    `.pp-gbrowse__toolbar` sets `overflow`, so it escapes the card rather than being clipped. */
 .gl-adder__panel {
     position: absolute;
-    z-index: 30;
+    /* Above `.mobile-tabbar` (z-index 40, fixed to the bottom below `lg`), which the previous 30
+       painted underneath. `.pp-navsearch__panel` uses 100 for the same job. */
+    z-index: 100;
     top: calc(100% + 6px);
     left: 0; right: 0;
-    max-height: 21rem;
+    /* `dvh`, not a fixed cap. 21rem is 336px; with the soft keyboard up on a 667px phone the
+       visual viewport is around 300px, so a panel anchored below a field that has itself been
+       pushed up was mostly off-screen -- and being `absolute` rather than `fixed`, the only way to
+       reach it was scrolling the page, which drags the input away too. The dialog in this same file
+       already carries this reasoning; the panel had none of it. */
+    max-height: min(21rem, 45dvh);
     overflow-y: auto;
     border-radius: var(--pp-radius-md);
     border: 1px solid var(--pp-border);
@@ -329,21 +336,36 @@
 }
 
 /* ============================================================
-   In-place editing: rename, reorder, publish
+   In-place editing: rename and publish
    ============================================================ */
 
 /* The pencil beside the title. Quiet at rest like the remove control, but never hover-only -- it is
    the only route to renaming, so it stays reachable by keyboard and visible on touch. */
+/* 44px, not the 26px this shipped with -- and this file already makes both arguments against
+   itself: it bumps `.gl-item__remove` to 44 on touch citing the design system, and it explains that
+   Tailwind v4's preflight sets no `cursor: pointer` on buttons so every comparable control must
+   declare it. The pencil is the ONLY route to renaming and had neither. The visible circle stays
+   26px; the rest is transparent padding, so the target grows without the button gaining weight. */
 .gl-edit-open {
     display: inline-grid; place-items: center;
-    width: 26px; height: 26px;
+    width: 44px; height: 44px;
+    margin: -9px;                       /* keeps the 26px glyph optically beside the title */
     border-radius: 999px;
     color: var(--pp-text-mute);
+    cursor: pointer;
     transition: color 0.16s ease, background 0.16s ease;
 }
 .gl-edit-open svg { width: 14px; height: 14px; }
+.gl-edit-open::before {
+    content: ''; position: absolute; inset: 9px;
+    border-radius: 999px;
+    transition: background 0.16s ease;
+}
+.gl-edit-open { position: relative; }
 @media (hover: hover) {
-    .gl-edit-open:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.07); }
+    /* The tint goes on the ::before so it traces the 26px circle, not the 44px hit area. */
+    .gl-edit-open:hover { color: var(--pp-text); }
+    .gl-edit-open:hover::before { background: oklch(1 0 0 / 0.07); }
 }
 .gl-edit-open:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 

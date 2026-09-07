@@ -20,8 +20,18 @@
  * absent, i.e. false, on every press. `API.postFormData` is the matching half, and it is also what
  * the 27 other `request.POST` views on the site are called with.
  *
- * Wired via PlatPursuit.onPageReady(boot): element wiring re-runs on first load AND on an HTMX
- * Back/Forward history restore; body-level listeners are guarded by `first` so they bind once.
+ * Wired via PlatPursuit.onPageReady(boot). The contract is that element wiring re-runs on first
+ * load AND on an HTMX Back/Forward restore, while body-level listeners are guarded by `first` so
+ * they bind once. On THIS site the restore half never actually fires: base.html sets
+ * `historyCacheSize = 0` and `refreshOnHistoryMiss = true`, so htmx stores no snapshot, misses on
+ * Back, and does a full page reload instead. `boot` only ever sees `first === true`.
+ *
+ * The code still honours the contract rather than the current config, because the config is one
+ * line away from changing and the failure would be silent. That is also why the wiring guard below
+ * is a WeakSet and not a `data-` attribute: htmx's snapshot is `cloneNode(true).innerHTML`, so an
+ * attribute survives serialization and would come back stamped "already wired" on nodes that carry
+ * no listeners -- leaving the adder, the editor and publish inert while the delegated controls kept
+ * working, which reads as half the page being broken rather than as a wiring bug.
  */
 (function () {
     'use strict';
@@ -31,6 +41,10 @@
     var handledGrid = null;
     var searchField = null;
     var pendingFocusIndex = null;
+    var refreshSeq = 0;
+    // Per-node, and NOT serializable -- see the header. A `data-` attribute here
+    // survives htmx's history snapshot and disables the wiring it was meant to guard.
+    var wired = new WeakSet();
 
     /* ------------------------------------------------------------------ reveal ---- */
 
@@ -81,6 +95,11 @@
         logFailure('write', err);
         var show = function (msg) {
             if (PP.ToastManager) { PP.ToastManager.show(msg || fallback, 'error'); }
+            // The toast is NOT a fallback for this: `#toast-container` carries no `aria-live`, as
+            // both this file and the template note, so nothing ToastManager writes is announced.
+            // Successes called `announce()` and failures did not, so a blind owner whose rename was
+            // refused got silence -- no announcement, no inline error, and a form still open.
+            announce(msg || fallback);
         };
         // A followed redirect, not a refusal -- so say the thing the person can act on rather than
         // a generic failure they would read as a bug in the list.
@@ -161,7 +180,7 @@
         }
         if (status === 404) { return 'This list is no longer available.'; }
         if (status === 400) { return 'That search was too long.'; }
-        return 'That search could not be run (error ' + (status || 'network') + ').';
+        return 'That search could not be run. Try again in a moment.';
     }
 
     /**
@@ -179,10 +198,30 @@
         var select = form && form.querySelector('select[name="sort"]');
         var url = base + (select && select.value
             ? '?sort=' + encodeURIComponent(select.value) : '');
-        if (!window.htmx) { window.location.reload(); return Promise.resolve(); }
         // No `hx-push-url` here on purpose: this is a content update, not navigation. Pushing would
         // make Back step through every add and remove.
-        return window.htmx.ajax('GET', url, { target: '#gl-items-panel', swap: 'innerHTML' });
+        //
+        // A RESOLVED PROMISE IS NOT EVIDENCE OF A SWAP. htmx resolves its ajax promise for every
+        // HTTP status -- only a network error, an abort or a timeout rejects -- and its
+        // `responseHandling` maps 4xx/5xx to `swap: false`. So a 500 here resolved successfully,
+        // never swapped, never fired `htmx:afterSwap`, and left the header tally reading N+1 over a
+        // grid still showing N with no warning anywhere. Both `.catch` blocks that were written to
+        // report exactly that were unreachable for the case that matters.
+        //
+        // The grid node identity is the signal: an `innerHTML` swap always builds new nodes, so if
+        // `#gl-items` is the same object afterwards, nothing was swapped.
+        var mine = ++refreshSeq;
+        var before = document.getElementById('gl-items');
+        return window.htmx.ajax('GET', url, { target: '#gl-items-panel', swap: 'innerHTML' })
+            .then(function () {
+                // A later refresh already superseded this one -- two quick removals issue two
+                // independent GETs and the older response can land last, repainting the grid with a
+                // row that is already deleted.
+                if (mine !== refreshSeq) { return; }
+                if (document.getElementById('gl-items') === before) {
+                    throw new Error('the items panel did not swap');
+                }
+            });
     }
 
     /* ------------------------------------------------------------------ social ---- */
@@ -263,6 +302,12 @@
                 // it did not.
                 return refreshItems().catch(function (err) {
                     logFailure('items refresh after remove', err);
+                    // The write LANDED, so the row is gone server-side -- but the grid was not
+                    // repainted, so the button is not replaced after all. Without this it keeps
+                    // `busy` and the tile keeps `.is-removing` (opacity .35, pointer-events none):
+                    // a ghost row with a dead control, recoverable only by reloading.
+                    btn.dataset.busy = '';
+                    pendingFocusIndex = null;
                     if (PP.ToastManager) {
                         PP.ToastManager.show(
                             'Removed. Reload to see the updated list.', 'warning');
@@ -273,6 +318,10 @@
                 // The row comes back: nothing was removed, so nothing should look removed.
                 if (tile) { tile.classList.remove('is-removing'); }
                 btn.dataset.busy = '';
+                // Cleared here too. It was only ever cleared by a SUCCESSFUL restore, so a failed
+                // removal left it set until the next swap of any kind -- and then a sort change
+                // yanked focus onto a remove button the reader never touched.
+                pendingFocusIndex = null;
                 toastError(err, 'That game could not be removed.');
             });
         // No `finally` resetting `busy` on the success path -- the button is about to be replaced by
@@ -340,8 +389,8 @@
 
     function wireAdder() {
         var root = document.querySelector('[data-gl-adder]');
-        if (!root || root.dataset.wired === '1') { return; }
-        root.dataset.wired = '1';
+        if (!root || wired.has(root)) { return; }
+        wired.add(root);
 
         var input = root.querySelector('[data-gl-adder-input]');
         var panel = root.querySelector('[data-gl-adder-results]');
@@ -362,6 +411,24 @@
         function closePanel() {
             panel.hidden = true;
             panel.textContent = '';
+        }
+
+        /**
+         * Close the results AND orphan whatever is in flight.
+         *
+         * One helper because the `seq++` was applied to only two of the four exits, and the two it
+         * missed are both reachable without the debounce to rescue them. The clean reproducer:
+         * type "hol", results render; type "low", the debounce fires and a request goes out; press
+         * ArrowDown into the panel then Escape. The panel closes, `seq` is untouched, the response
+         * lands, passes `mine === seq` and RE-OPENS the panel over a field the reader has already
+         * dismissed. The comment above the guard described exactly this and the fix had reached
+         * half the exits.
+         */
+        function abandon() {
+            seq++;
+            if (searchField) { searchField.setBusy(false); }
+            closePanel();
+            say('');
         }
 
         function note(message) {
@@ -406,12 +473,23 @@
             PP.API.get(root.dataset.searchUrl + '?q=' + encodeURIComponent(query))
                 .then(function (data) {
                     if (mine !== seq) { return; }
-                    render((data && data.results) || []);
+                    // Same redirect trap `postJson` guards on the write side: `fetch` follows a
+                    // bounce to the login page, `API.request` finds no JSON content type and hands
+                    // back the page as a STRING, and `(data && data.results) || []` then reports
+                    // "No games match that search" for a session that has simply expired.
+                    if (data === null || typeof data !== 'object') {
+                        var err = new Error('expected JSON, got a redirected page');
+                        err.signedOut = true;
+                        throw err;
+                    }
+                    render(data.results || []);
                 })
                 .catch(function (err) {
                     if (mine !== seq) { return; }
                     logFailure('search ' + root.dataset.searchUrl, err);
-                    note(failureCopy(statusOf(err)));
+                    note(err && err.signedOut
+                         ? 'You may have been signed out. Reload the page and try again.'
+                         : failureCopy(statusOf(err)));
                     say('Search failed.');
                 })
                 .finally(function () {
@@ -427,12 +505,7 @@
                 // so its `.finally` fails the `mine === seq` test and never clears the busy flag --
                 // leaving `.is-searching` set, which keeps the spinner turning on an empty field AND
                 // hides the clear button, so the visible control is stuck until the next keystroke.
-                onClear: function () {
-                    seq++;
-                    if (searchField) { searchField.setBusy(false); }
-                    closePanel();
-                    say('');
-                },
+                onClear: abandon,
             });
         }
 
@@ -441,7 +514,7 @@
         // Escape with an empty field closes the results; with text in it, wireSearchField clears
         // first (and its onClear closes the panel), which is the expected two-step.
         input.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && !input.value) { closePanel(); say(''); return; }
+            if (e.key === 'Escape' && !input.value) { abandon(); return; }
             if (e.key === 'ArrowDown') {
                 var first = panel.querySelector('.gl-adder__opt:not(:disabled)');
                 if (first) { e.preventDefault(); first.focus(); }
@@ -451,7 +524,7 @@
         // Arrow keys walk the results; Escape anywhere in them returns to the field. Rows are real
         // buttons, so Tab already works and this only adds the vertical shortcut.
         panel.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') { input.focus(); closePanel(); say(''); return; }
+            if (e.key === 'Escape') { input.focus(); abandon(); return; }
             if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') { return; }
             var rows = Array.prototype.slice.call(
                 panel.querySelectorAll('.gl-adder__opt:not(:disabled)'));
@@ -469,14 +542,18 @@
         document.addEventListener('click', function (e) {
             if (panel.hidden) { return; }
             if (root.contains(e.target)) { return; }
-            closePanel();
-            say('');
+            abandon();
         });
 
         panel.addEventListener('click', function (e) {
             var row = e.target.closest ? e.target.closest('.gl-adder__opt') : null;
             if (!row || row.disabled || row.dataset.busy === '1') { return; }
             row.dataset.busy = '1';
+            // NOT `abandon()` -- the panel stays open on purpose so several games can be added from
+            // one search. But the in-flight search must still be orphaned: its response rebuilds
+            // every row from an `already_added` snapshot taken BEFORE this add, which would undo the
+            // flip below and re-enable a row for a game that is now on the list.
+            seq++;
 
             var body = new FormData();
             body.append('concept_id', row.dataset.conceptId);
@@ -521,18 +598,25 @@
      */
     function wireIdentityEditor() {
         var root = document.querySelector('[data-gl-identity]');
-        if (!root || root.dataset.wired === '1') { return; }
+        if (!root || wired.has(root)) { return; }
         var form = root.querySelector('[data-gl-identity-edit]');
         var view = root.querySelector('[data-gl-identity-view]');
         if (!form || !view) { return; }          // a visitor: no form rendered
-        root.dataset.wired = '1';
+        wired.add(root);
 
         var nameField = form.querySelector('[name="name"]');
         var descField = form.querySelector('[name="description"]');
 
         function open() {
+            // RESYNC on the way in, not only on cancel. The save writes the SERVER's normalized
+            // values to the heading (`_check_name` trims and sanitizes) but left the fields holding
+            // whatever was typed -- so saving "  My List  " and reopening showed the padded string
+            // in a form whose heading read the trimmed one.
+            reset();
             view.hidden = true;
             form.hidden = false;
+            var tallies = document.querySelector('[data-gl-tallies]');
+            if (tallies) { tallies.hidden = true; }
             nameField.focus();
             nameField.setSelectionRange(nameField.value.length, nameField.value.length);
         }
@@ -540,6 +624,8 @@
         function close() {
             form.hidden = true;
             view.hidden = false;
+            var tallies = document.querySelector('[data-gl-tallies]');
+            if (tallies) { tallies.hidden = false; }
             var opener = root.querySelector('[data-gl-edit-open]');
             if (opener) { opener.focus(); }       // focus goes back where it came from
         }
@@ -547,7 +633,11 @@
         function reset() {
             // Cancel restores from the DOM the server rendered, not from a snapshot taken at open --
             // a successful save updates that DOM, so a later cancel must not resurrect the old text.
-            nameField.value = (root.querySelector('[data-gl-name]') || {}).textContent.trim();
+            // `|| {}` LOOKED like a null guard and was the opposite: `{}.textContent` is
+            // undefined, so `.trim()` threw and cancel died silently. Its sibling line below guards
+            // correctly, which is what made the difference easy to miss.
+            var heading = root.querySelector('[data-gl-name]');
+            nameField.value = heading ? heading.textContent.trim() : '';
             var desc = root.querySelector('[data-gl-description]');
             descField.value = desc && !desc.hidden ? desc.textContent.trim() : '';
             [nameField, descField].forEach(function (el) {
@@ -558,11 +648,23 @@
         var opener = root.querySelector('[data-gl-edit-open]');
         if (opener) { opener.addEventListener('click', open); }
 
+        // Both dismissals refuse while a save is in flight. Neither was guarded, and the response
+        // does not care that the form closed: press Save then Escape and `reset()` read the
+        // PRE-save heading back into the fields, then the response wrote the NEW name into the
+        // heading. Heading and form then disagreed, and pressing Save again renamed it back -- so an
+        // Escape that read as "cancel" let the rename through and then offered to undo it.
+        function dismiss() {
+            var save = form.querySelector('[data-gl-edit-save]');
+            if (save && save.dataset.busy === '1') { return; }
+            reset();
+            close();
+        }
+
         var cancel = form.querySelector('[data-gl-edit-cancel]');
-        if (cancel) { cancel.addEventListener('click', function () { reset(); close(); }); }
+        if (cancel) { cancel.addEventListener('click', dismiss); }
 
         form.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') { e.preventDefault(); reset(); close(); }
+            if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
         });
 
         form.addEventListener('submit', function (e) {
@@ -574,6 +676,11 @@
             var body = new FormData();
             body.append('name', nameField.value);
             body.append('description', descField.value);
+
+            // Captured before the write so the announcement can say which thing changed. It used to
+            // say "renamed" unconditionally, including when only the description was edited.
+            var heading = root.querySelector('[data-gl-name]');
+            var previousName = heading ? heading.textContent.trim() : '';
 
             postJson(root.dataset.updateUrl, body)
                 .then(function (data) {
@@ -587,7 +694,13 @@
                         desc.hidden = !data.description;
                     }
                     document.title = data.name;
-                    announce('List renamed to ' + data.name + '.');
+                    // The breadcrumb is the third place the name appears, and it was the one left
+                    // showing the old value until a reload.
+                    var crumb = document.querySelector('[data-breadcrumb-current]');
+                    if (crumb) { crumb.textContent = data.name; }
+                    announce(data.name !== previousName
+                             ? 'List renamed to ' + data.name + '.'
+                             : 'List details saved.');
                     close();
                 })
                 .catch(function (err) { toastError(err, 'Those changes could not be saved.'); })
@@ -599,8 +712,8 @@
 
     function wireVisibility() {
         var root = document.querySelector('[data-gl-visibility]');
-        if (!root || root.dataset.wired === '1') { return; }
-        root.dataset.wired = '1';
+        if (!root || wired.has(root)) { return; }
+        wired.add(root);
 
         var privateState = root.querySelector('[data-gl-private-state]');
         var publicState = root.querySelector('[data-gl-public-state]');
@@ -625,6 +738,15 @@
             setTimeout(function () { card.classList.remove('gl-published'); }, 1000);
         }
 
+        // The pressed button lives inside the block `paint()` is about to hide, so focus fell to
+        // <body> and a keyboard user re-tabbed from the top of the document. `wireIdentityEditor`
+        // solves the same problem correctly two functions up ("focus goes back where it came from")
+        // and this path did not. Focus moves to the control that replaces it.
+        function refocusAfter(isPublic) {
+            var next = root.querySelector(isPublic ? '[data-gl-unpublish]' : '[data-gl-publish]');
+            if (next && document.activeElement === document.body) { next.focus(); }
+        }
+
         function set(btn, isPublic) {
             if (btn.dataset.busy === '1') { return; }
             btn.dataset.busy = '1';
@@ -633,11 +755,10 @@
             postJson(root.dataset.updateUrl, body)
                 .then(function (data) {
                     paint(data.is_public, data.is_public);
+                    refocusAfter(data.is_public);
                     if (PP.ToastManager) {
                         PP.ToastManager.show(
-                            data.is_public
-                                ? 'Published. Anyone with the link can read this list.'
-                                : 'This list is private again.',
+                            data.is_public ? 'Published.' : 'This list is private again.',
                             'success');
                     }
                     announce(data.is_public ? 'List published.' : 'List is now private.');
