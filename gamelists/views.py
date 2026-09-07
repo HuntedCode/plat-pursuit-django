@@ -503,10 +503,15 @@ class AddConceptView(_ListActionView):
         if game_list is None:
             return self.not_found()
 
-        # `safe_int`, not the raw POST value. `Concept.objects.filter(pk='abc')` raises ValueError
-        # and a 20-digit id raises DataError -- both 500s from a query string. This file already
-        # carries `_count_filter`, written after `'\u00b2'.isdigit()` took the browse page down, and
-        # none of that discipline reached here.
+        # `safe_int`, not the raw POST value: `Concept.objects.filter(pk='abc')` raises ValueError,
+        # which is a 500 from a form field anyone can post. This file already carries `_count_filter`,
+        # written after `'\u00b2'.isdigit()` took the browse page down, and none of that discipline
+        # had reached here.
+        #
+        # This comment used to ALSO claim a 20-digit id raises DataError. It does not -- Django 5.2
+        # absorbs an out-of-range pk and returns an empty queryset (checked directly, which is why
+        # the guard that was written for it was deleted rather than kept as insurance). The test
+        # pins the behaviour so a future Django that stops absorbing it fails loudly here.
         concept_id = safe_int(request.POST.get('concept_id'), None)
         concept = (Concept.objects.filter(pk=concept_id).first()
                    if concept_id is not None else None)

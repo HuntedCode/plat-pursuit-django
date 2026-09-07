@@ -7,6 +7,9 @@ Two rules carry most of the weight here. A private list must 404 rather than 403
 its owner -- a 403 confirms the list exists and whose it is, from nothing but an id. And the page
 must not scale with the list: a 200-game list should cost what a 5-game one does.
 """
+import re
+from pathlib import Path
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -40,6 +43,24 @@ def _list(owner, games=0, *, name='A list', public=True):
 
 def _url(game_list):
     return f'/community/lists/{game_list.id}/'
+
+
+def _read(relative):
+    return (Path(__file__).resolve().parents[2] / relative).read_text(encoding='utf-8')
+
+
+def _decommented(source):
+    """Strip comments before asserting a call exists.
+
+    Written after several assertions on this branch were satisfied by prose that merely NAMED the
+    thing -- a comment explaining `wireTablist`, a docstring mentioning `hx-swap="outerHTML"`. A
+    comment is a claim; only code is evidence.
+
+    Line comments are cut only where `//` opens the line (after indentation). A mid-line rule would
+    also slice `'http://www.w3.org/2000/svg'` in half and quietly change what is being searched.
+    """
+    source = re.sub(r'/\*.*?\*/', '', source, flags=re.S)
+    return re.sub(r'^\s*//.*$', '', source, flags=re.M)
 
 
 # ── who can read it ──────────────────────────────────────────────────────────────────────────────
@@ -314,9 +335,18 @@ def test_the_swap_targets_a_stable_wrapper(client):
 
 
 def test_the_swapped_items_carry_the_reveal_class_and_something_reveals_them(client):
-    """Baking `pp-reveal` with no observer is what left the My Lists panel blank."""
-    from pathlib import Path
+    """Baking `pp-reveal` with no observer is what left the My Lists panel blank -- and then did
+    exactly the same thing HERE, because the server half of the pattern was copied to this page and
+    the client half was not. Sorting a list rendered every tile at `opacity: 0`.
 
+    The earlier version of this test passed throughout that bug. It asserted
+    `'PlatPursuit.staggerReveal(' in gamelists.js` -- true, because that file reveals MY LISTS' grid,
+    `#my-lists-grid`. Nothing tied the observer to THIS page's grid or to the script THIS page loads,
+    so the assertion was answered by a different page's code.
+
+    So bind all three together: the script the template actually loads, that script observing this
+    page's grid id, and the grid carrying that id.
+    """
     owner = _staff(client)
     game_list = _list(owner, 2)
 
@@ -325,10 +355,22 @@ def test_the_swapped_items_carry_the_reveal_class_and_something_reveals_them(cli
 
     assert 'pp-reveal' in swapped
     assert 'pp-reveal' not in full
+    # The id the observer has to find, asserted against the rendered page rather than assumed.
+    assert 'id="gl-items"' in swapped
 
-    js = (Path(__file__).resolve().parents[2]
-          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
-    assert 'PlatPursuit.staggerReveal(' in js
+    template = _read('templates/gamelists/detail.html')
+    loaded = re.findall(r"js/([a-z0-9-]+\.js)", template)
+    assert loaded, 'the detail template loads no JS at all'
+
+    # Whichever script this page loads, ONE of them must reveal this page's grid.
+    sources = {name: _read(f'static/js/{name}') for name in loaded}
+    revealing = [
+        name for name, src in sources.items()
+        if 'staggerReveal(' in _decommented(src) and "'gl-items'" in _decommented(src)
+    ]
+    assert revealing, (
+        f'no script loaded by detail.html reveals #gl-items; loaded={sorted(sources)}'
+    )
 
 
 # ── indexing ─────────────────────────────────────────────────────────────────────────────────────
@@ -398,3 +440,169 @@ def test_a_very_long_list_renders_a_bounded_page(client):
     assert resp.context['items_truncated'] is True
     assert 'Showing the first' in resp.content.decode()
 
+
+
+# -- the owner's edit controls -------------------------------------------------------------------
+
+def test_the_owner_gets_the_adder_and_a_visitor_never_does(client):
+    """The adder is an OWNER control, not a social one. `can_act` gates likes and follows; a visitor
+    passing that check must still not be handed a way to edit somebody else's list."""
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+
+    _staff(client, psn='reader')
+    visitor = client.get(_url(game_list)).content.decode()
+    assert 'data-gl-adder' not in visitor
+    assert 'gl-adder__input' not in visitor
+    # The control it must NOT be confused with: the visitor does still get the social acts.
+    assert 'data-gl-like' in visitor
+
+    # Staff, because every gamelists surface is still behind `_DevelopmentGate`. Without this the
+    # request redirects and `owner_body` is '' -- where every `not in` assertion passes vacuously.
+    author.user.role = 'admin'
+    author.user.save()
+    client.force_login(author.user)
+    owner_resp = client.get(_url(game_list))
+    assert owner_resp.status_code == 200
+    owner_body = owner_resp.content.decode()
+    assert 'data-gl-adder' in owner_body
+    assert f'/community/lists/{game_list.id}/search/' in owner_body
+    assert f'/community/lists/{game_list.id}/add/' in owner_body
+
+
+def test_every_entry_carries_its_own_remove_endpoint(client):
+    """The URL is rendered per row rather than assembled in JS from a base path. Asserted against
+    the real item ids, so a route rename fails here instead of silently 404ing in a browser --
+    which nearly happened: the route is `list_remove_game`, not the `list_remove_item` its view
+    class name suggests."""
+    owner = _staff(client)
+    game_list = _list(owner, 3)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    item_ids = list(game_list.items.values_list('pk', flat=True))
+    assert len(item_ids) == 3
+    for item_id in item_ids:
+        assert f'/community/lists/{game_list.id}/items/{item_id}/remove/' in body
+    assert body.count('data-gl-remove') == 3
+
+
+def test_a_visitor_gets_no_remove_controls(client):
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 2)
+    _staff(client, psn='reader')
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-remove' not in body
+    assert '/remove/' not in body
+    # The games themselves are still there -- this is not an empty page passing by accident.
+    assert body.count('data-gtile') == 2
+
+
+def test_the_remove_control_sits_beside_the_tile_and_not_inside_it(client):
+    """A <button> nested in an <a> is invalid HTML and swallows the link's own activation, so the
+    control lives in a sibling wrapper. Pinned because the fix is invisible in a screenshot."""
+    owner = _staff(client)
+    game_list = _list(owner, 1)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'class="gl-item"' in body
+
+    # Scoped to the item block. The first version searched from `body.index('<a href=')`, which finds
+    # a NAV link in the chrome hundreds of lines earlier, so the comparison was true no matter where
+    # the button sat -- mutation-checked, and it caught nothing. Chrome answering a page assertion is
+    # the recurring failure on this branch, so the search starts inside the thing under test.
+    region = body[body.index('class="gl-item"'):]
+    anchor_close = region.index('</a>')
+    remove_at = region.index('data-gl-remove')
+    assert anchor_close < remove_at, 'the remove button is inside the tile anchor'
+
+
+def test_the_social_buttons_carry_their_own_endpoints(client):
+    """Same rule as remove: the server owns URL shapes. Before this the buttons carried only
+    `data-list-id`, which forces the client to know the path layout."""
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+    _staff(client, psn='reader')
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert f'data-url="/community/lists/{game_list.id}/like/"' in body
+    assert f'data-url="/community/lists/{game_list.id}/follow/"' in body
+
+
+def test_the_count_the_writes_update_is_addressable(client):
+    """add/remove return `game_count` and the header has to be able to receive it."""
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    assert 'data-game-count' in client.get(_url(game_list)).content.decode()
+
+
+# -- the JS/endpoint contract ---------------------------------------------------------------------
+
+def test_the_list_writes_post_form_data_not_json(client):
+    """Django populates `request.POST` for form and multipart bodies and leaves it EMPTY for
+    `application/json`. Every one of these endpoints reads `request.POST`, so posting JSON would
+    send a body the view cannot see -- `liked` would read as absent, i.e. false, on every press,
+    with no error anywhere. `API.post` serializes JSON; `API.postFormData` is the matching half.
+
+    This is a silent-failure class, which is why it is pinned rather than left to a browser pass.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    assert 'API.postFormData(' in js
+    assert 'API.post(' not in js, 'API.post sends JSON, which request.POST cannot read'
+
+
+def test_the_write_endpoints_read_form_encoded_bodies(client):
+    """The server half of the contract above, exercised for real rather than asserted from source:
+    a form-encoded POST must actually flip the state."""
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+    reader = _staff(client, psn='reader')
+
+    resp = client.post(f'/community/lists/{game_list.id}/like/', {'liked': 'true'})
+
+    assert resp.status_code == 200
+    assert resp.json()['liked'] is True
+    assert game_list.likes.filter(profile=reader).exists()
+
+
+def test_the_adder_uses_the_shared_search_chrome(client):
+    """`data-search-wrap` + `.pp-search-spin` + `.pp-search-clear` is the site's search field, driven
+    by `wireSearchField`. The first cut hand-rolled a parallel spinner and clear button. Both halves
+    are asserted: the markup contract, and the helper that drives it."""
+    owner = _staff(client)
+    game_list = _list(owner, 1)
+
+    body = client.get(_url(game_list)).content.decode()
+    assert 'data-search-wrap' in body
+    assert 'pp-search-spin' in body
+    assert 'data-search-clear' in body
+
+    js = _decommented(_read('static/js/list-detail.js'))
+    assert 'wireSearchField(' in js
+
+
+def test_the_detail_page_does_not_load_the_my_lists_script(client):
+    """`gamelists.js` is the My Lists page (a create dialog and a scope switcher). This page loaded
+    all of it and used none of it."""
+    template = _read('templates/gamelists/detail.html')
+
+    assert 'js/list-detail.js' in template
+    assert 'js/gamelists.js' not in template
+
+
+def test_the_adder_min_query_matches_the_endpoint(client):
+    """Two copies of a threshold drift. If the endpoint's floor rises, the client must not keep
+    firing requests below it that can only ever return nothing."""
+    from gamelists.views import ListGameSearchView
+
+    js = _decommented(_read('static/js/list-detail.js'))
+    match = re.search(r'MIN_QUERY\s*=\s*(\d+)', js)
+
+    assert match, 'the adder no longer declares a MIN_QUERY'
+    assert int(match.group(1)) == ListGameSearchView.MIN_QUERY

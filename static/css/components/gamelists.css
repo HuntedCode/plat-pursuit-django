@@ -153,3 +153,146 @@
     .gl-dialog.is-closing { animation: glDialogOut 0.18s cubic-bezier(0.4, 0, 1, 1) both; }
     .gl-dialog.is-closing::backdrop { animation: glScrimOut 0.18s ease both; }
 }
+
+/* ============================================================
+   The owner's edit controls: remove, and the adder
+   ============================================================ */
+
+/* The tile wrapper. Exists ONLY to anchor the remove control, so it deliberately sets nothing that
+   could disturb the grid -- `.pp-gtile-grid` styles no direct children (just columns and gap) and
+   `.pp-gtile` takes its height from `aspect-ratio`, so the wrapper inherits the column's width and
+   the tile fills it. Adding layout here is what would break the grid. */
+.gl-item { position: relative; }
+
+/* Quiet at rest, per the design conversation's "an icon, not a labelled button". Hidden from the
+   pointer until hover, but ALWAYS present for the keyboard: `:focus-visible` opens it, so tabbing a
+   list reaches every control. `opacity`/`transform` only -- no `filter` on a tile-sized element. */
+.gl-item__remove {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    display: grid; place-items: center;
+    width: 26px; height: 26px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: rgba(6, 8, 12, 0.82);
+    color: var(--pp-text-dim);
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.16s ease, transform 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.gl-item__remove svg { width: 13px; height: 13px; }
+.gl-item:hover .gl-item__remove,
+.gl-item__remove:focus-visible { opacity: 1; transform: none; }
+.gl-item__remove:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+    color: var(--pp-text);
+}
+@media (hover: hover) {
+    .gl-item__remove:hover {
+        color: var(--pp-error);
+        border-color: color-mix(in oklab, var(--pp-error) 55%, var(--pp-border));
+        transform: scale(1.06);
+    }
+}
+/* Touch has no hover, so the control would never appear. Show it at rest instead -- a 26px target is
+   small for a thumb, so it also grows. */
+@media (hover: none) {
+    .gl-item__remove { opacity: 1; transform: none; width: 30px; height: 30px; }
+}
+/* The row being removed, held for the length of the exit before the panel re-renders. */
+.gl-item.is-removing { opacity: 0.35; pointer-events: none; transition: opacity 0.18s ease; }
+
+/* ---- The adder ------------------------------------------------------------
+   A discrete owner-only SECTION, so it is carded rather than floating on the page background. Its
+   field and result rows mirror the nav search's structure (`.pp-navsearch__*` in chrome.css) without
+   borrowing its block name: that block belongs to the site FRAME, and a page module reaching into it
+   couples the two. Same grammar, own namespace. */
+.gl-adder {
+    position: relative;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 14px;
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+}
+@media (min-width: 768px) { .gl-adder { padding: 12px; margin-bottom: 12px; } }
+
+/* The field opts into the SHARED search chrome rather than re-minting it: `data-search-wrap` on the
+   wrapper plus `.pp-search-spin` / `.pp-search-clear` inside, driven by `PlatPursuit.wireSearchField`
+   (`.has-value` / `.is-searching`). That is the established idiom -- `.pp-bgal__search` on browse and
+   `.gd-lb__find` on the game page both do exactly this: own wrapper block, shared inner chrome.
+   The first cut here hand-rolled a flex row with its own spinner and clear button, which duplicated
+   ~40 lines of that chrome AND had to fight `[hidden]`'s specificity to stay hidden. `position:
+   relative` comes free from `[data-search-wrap]`, which the shared button/spinner anchor against. */
+.gl-adder__icon {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    width: 15px; height: 15px;
+    color: var(--pp-text-mute); pointer-events: none;
+}
+.gl-adder__input {
+    width: 100%;
+    padding: 9px 12px 9px 34px;
+    font-size: 0.85rem; color: var(--pp-text);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: 10px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.gl-adder__input::placeholder { color: var(--pp-text-mute); }
+.gl-adder__input:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 15%, transparent);
+}
+
+.gl-adder__panel {
+    margin-top: 8px;
+    max-height: 21rem;
+    overflow-y: auto;
+    border-radius: 10px;
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+}
+.gl-adder__opt {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    text-align: left;
+    color: inherit;
+    transition: background 0.14s ease;
+}
+.gl-adder__opt + .gl-adder__opt { border-top: 1px solid var(--pp-divider); }
+.gl-adder__opt.is-active, .gl-adder__opt:hover:not(:disabled) { background: oklch(1 0 0 / 0.06); }
+.gl-adder__opt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.gl-adder__opt:disabled { cursor: default; }
+
+.gl-adder__thumb {
+    width: 34px; height: 34px; flex-shrink: 0;
+    border-radius: 6px; overflow: hidden;
+    background: var(--pp-bg-2);
+    display: grid; place-items: center;
+    color: var(--pp-text-mute);
+}
+/* `object-cover object-top`, the site's rule for game art: PSN fallback covers are wider than the
+   portrait IGDB ratio and anchoring to the top keeps the game's logo in frame. */
+.gl-adder__thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.gl-adder__thumb svg { width: 15px; height: 15px; }
+
+.gl-adder__name {
+    flex: 1; min-width: 0;
+    font-size: 0.83rem; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gl-adder__state {
+    flex-shrink: 0;
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--pp-text-mute);
+}
+.gl-adder__opt:not(:disabled) .gl-adder__state { color: var(--pp-primary); }
+
+.gl-adder__note {
+    padding: 12px 10px;
+    font-size: 0.76rem;
+    color: var(--pp-text-mute);
+    text-align: center;
+}

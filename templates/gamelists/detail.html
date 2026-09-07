@@ -52,7 +52,7 @@ below with no outer wrapper.
 
                 <div class="flex items-center gap-4 shrink-0 text-right">
                     <div>
-                        <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl">{{ game_list.game_count|intcomma }}</span>
+                        <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl" data-game-count>{{ game_list.game_count|intcomma }}</span>
                         <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
                     </div>
                     {% if game_list.is_public %}
@@ -70,7 +70,7 @@ below with no outer wrapper.
             <div class="flex flex-wrap items-center gap-2 mt-5">
                 {% if can_act %}
                 <button type="button" class="pp-cta{% if not viewer_has_liked %} pp-cta--ghost{% endif %}"
-                        data-gl-like data-list-id="{{ game_list.id }}"
+                        data-gl-like data-url="{% url 'list_like' game_list.id %}"
                         aria-pressed="{% if viewer_has_liked %}true{% else %}false{% endif %}">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_has_liked %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                     <span data-gl-like-label>{% if viewer_has_liked %}Liked{% else %}Like{% endif %}</span>
@@ -82,7 +82,7 @@ below with no outer wrapper.
                 copy: nothing here claims an alert that cannot yet arrive, so when the notification
                 surface lands there is a feature to add and nothing to walk back.{% endcomment %}
                 <button type="button" class="pp-cta{% if not viewer_follows %} pp-cta--ghost{% endif %}"
-                        data-gl-follow data-list-id="{{ game_list.id }}"
+                        data-gl-follow data-url="{% url 'list_follow' game_list.id %}"
                         aria-pressed="{% if viewer_follows %}true{% else %}false{% endif %}">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_follows %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                     <span data-gl-follow-label>{% if viewer_follows %}Following{% else %}Follow{% endif %}</span>
@@ -137,6 +137,47 @@ below with no outer wrapper.
     </form>
     {% endif %}
 
+    {% if is_owner %}
+    {% comment %}The adder. One of the three entry points the design conversation settled (the other
+    two are the shared game card and the concept Game page), and the only one that lives on the list
+    itself. Owner-only: `can_act` is about the social acts, and this is not one of them.
+
+    Searches CONCEPTS, which is why a game appears once here rather than once per platform stack.
+    Rendered above the games so the result of using it is visible in the same screen.{% endcomment %}
+    <section class="gl-adder" data-gl-adder data-list-id="{{ game_list.id }}"
+             data-search-url="{% url 'list_game_search' game_list.id %}"
+             data-add-url="{% url 'list_add_game' game_list.id %}">
+        {% comment %}`data-search-wrap` + `.pp-search-spin` + `.pp-search-clear` is the shared search
+        chrome (see browse.html's toolbar and the game page's hunter search). `wireSearchField` drives
+        it, which also brings Escape-to-clear for free. No `.pp-search-kbd` here: the "/" hint belongs
+        to a page's ONE primary search, and on this page that is the nav's.{% endcomment %}
+        <span class="gl-adder__field" data-search-wrap>
+            <svg class="gl-adder__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            {% comment %}Deliberately NOT `role="combobox"`. The results below are real <button>s, so
+            they are already focusable, activatable and announced correctly by default; layering a
+            combobox on top would mean owning aria-activedescendant and a selection model to describe
+            what the buttons already say for themselves. A half-built combobox reads worse to a screen
+            reader than plain semantics. The count is announced by the status line instead.
+            `autocomplete="off"` so the browser's own history dropdown does not cover the results.{% endcomment %}
+            <input type="search" class="gl-adder__input" id="gl-adder-input"
+                   placeholder="Add a game to this list&hellip;" autocomplete="off"
+                   aria-label="Search for a game to add to this list"
+                   data-gl-adder-input />
+            <span class="pp-search-spin" aria-hidden="true"></span>
+            <button type="button" class="pp-search-clear" data-search-clear tabindex="-1"
+                    aria-label="Clear search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </span>
+        {% comment %}The count goes to a polite live region rather than the results container itself:
+        marking the container live would read all twelve rows aloud on every keystroke.{% endcomment %}
+        <p class="sr-only" aria-live="polite" data-gl-adder-status></p>
+        <div class="gl-adder__panel" id="gl-adder-results" data-gl-adder-results hidden></div>
+    </section>
+    {% endif %}
+
     <div id="gl-items-panel">
         {% include 'gamelists/partials/detail_items.html' %}
     </div>
@@ -153,6 +194,10 @@ below with no outer wrapper.
 {% endblock %}
 
 {% block js_scripts %}
+    {% comment %}`browse-filters.js` is what auto-submits the sort select (the form itself only
+    listens for `submit`). `list-detail.js` replaces `gamelists.js` here: that file is the My Lists
+    page -- a create dialog and a scope switcher -- and this page loaded all of it to use none of
+    it.{% endcomment %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
-    <script src="{% static 'js/gamelists.js' %}"></script>
+    <script src="{% static 'js/list-detail.js' %}"></script>
 {% endblock %}

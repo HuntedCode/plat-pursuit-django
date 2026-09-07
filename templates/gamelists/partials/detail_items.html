@@ -8,6 +8,13 @@ the class with nothing to reveal it is what left the My Lists panel blank.
 {% load humanize %}
 <div id="gl-items" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}">
     {% for item in items %}
+    {% comment %}The wrapper exists so the owner's remove control can sit BESIDE the tile rather than
+    inside it: the tile is an <a>, and a <button> nested in a link is invalid HTML that swallows the
+    link's own activation. It is rendered for everyone, not just owners, so the grid has exactly one
+    DOM shape. Safe to add because `.pp-gtile-grid` styles no direct children -- it sets only
+    grid-template-columns and gap -- and `.pp-gtile` takes its height from `aspect-ratio`, so the
+    wrapper becomes the grid item and the tile fills it.{% endcomment %}
+    <div class="gl-item">
     {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
     which is the whole reason entries are concept-keyed.{% endcomment %}
     <a href="{{ item.concept.game_page_url }}" class="pp-gtile" data-gtile
@@ -36,6 +43,26 @@ the class with nothing to reveal it is what left the My Lists panel blank.
             {% endif %}
         </span>
     </a>
+
+    {% if is_owner %}
+    {% comment %}Quiet by default and revealed on hover or keyboard focus -- the design conversation
+    asked the card affordance to be "an icon, not a labelled button". It stays reachable without a
+    pointer because `:focus-visible` opens it too, so tabbing through a list surfaces each control in
+    turn. The accessible name carries the game, since "Remove" repeated forty times tells a screen
+    reader nothing about which entry it is on.{% endcomment %}
+    {% comment %}The endpoint is rendered per row rather than assembled in JS from a base path: the
+    server owns URL shapes, and a hand-built string is what breaks silently the day a route moves.
+    (It nearly did here -- the route is `list_remove_game`, not the `list_remove_item` its view class
+    name suggests.){% endcomment %}
+    <button type="button" class="gl-item__remove" data-gl-remove
+            data-remove-url="{% url 'list_remove_game' game_list.id item.pk %}"
+            aria-label="Remove {{ item.concept.unified_title }} from this list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+    </button>
+    {% endif %}
+    </div>
     {% empty %}
     <div class="pp-gtile-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
