@@ -48,6 +48,19 @@
         el.tagName === 'SELECT' ||
         el.closest('[data-auto-submit]');
 
+      // NUMBER RANGES COALESCE for the same reason radios do. A spinner click fires `change` in
+      // Chrome, so stepping a game-count range from 0 to 5 is five requests and -- with
+      // `hx-push-url` -- five history entries, so Back needs six presses to leave. Typing a value
+      // and tabbing away still fires one, within the same ~120ms.
+      if (el.type === 'number' && el.closest('[data-auto-submit]')) {
+        clearTimeout(radioTimer);
+        const numPage = form.querySelector('input[name="page"]');
+        if (numPage) numPage.value = '1';
+        updateFilterBadge();
+        radioTimer = setTimeout(function () { htmx.trigger(form, 'submit'); }, 120);
+        return;
+      }
+
       if (el.type === 'radio') {
         clearTimeout(radioTimer);
         const radioPage = form.querySelector('input[name="page"]');

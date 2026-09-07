@@ -341,11 +341,15 @@ def test_the_tile_uses_the_sites_own_cover_chain(staff_client):
 def test_only_controls_that_submit_dim_the_grid():
     """A dim is a promise that something is coming.
 
-    `onFormChangeDim` used to dim for anything that was not a text or search input, which caught this
-    toolbar's `min_games` / `max_games` NUMBER inputs -- and `browse-filters.js` auto-submits only
-    checkboxes, radios, selects and `[data-auto-submit]`. So changing a game-count value greyed
-    `#browse-results` to 40% and no request ever fired to clear it. Live, visible, and inherited
-    verbatim from the page this one was ported from.
+    `onFormChangeDim` used to dim for anything that was not a text or search input, which caught the
+    toolbar's `min_games` / `max_games` NUMBER inputs while `browse-filters.js` auto-submitted only
+    checkboxes, radios, selects and `[data-auto-submit]`. Changing a game-count value greyed
+    `#browse-results` to 40% and no request ever fired to clear it.
+
+    THAT FIX TREATED THE SYMPTOM. It stopped the dim instead of asking why a FILTER control did not
+    submit -- and it did not, so the game-count filter did nothing at all until Jeffrey tried it on a
+    real list. The range now carries `data-auto-submit`, so both halves work off the same attribute
+    and this assertion holds for the right reason: the dim matches what actually submits.
     """
     from pathlib import Path
 
@@ -452,3 +456,61 @@ def test_the_browse_action_sits_in_the_toolbar_not_the_header(linked_staff_clien
     # And it is inside the toolbar's control row rather than floating between the two.
     bar = body[body.index('pp-gbrowse__bar'):]
     assert 'My lists' in bar[:bar.index('</form>')]
+
+
+def test_the_game_count_range_actually_submits(linked_staff_client):
+    """The bug Jeffrey found: a published six-game list could not be filtered out by any range.
+
+    The server side was correct and tested all along -- the request simply never fired.
+    `browse-filters.js` submits on `change` for checkboxes, radios, selects and anything inside
+    `[data-auto-submit]`, and a bare `<input type="number">` matches none of them. The attribute
+    existed in the JS and was used by NO template on the site, which is why nothing caught it.
+
+    Both halves are asserted, because either alone passes while the filter stays broken.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    tpl = (root / 'templates' / 'gamelists' / 'browse.html').read_text(encoding='utf-8')
+    js = (root / 'static' / 'js' / 'browse-filters.js').read_text(encoding='utf-8')
+
+    # The markup opts in -- asserted on the OPENING TAG, not on a region around it. The first
+    # version sliced from the explanatory comment, which contains the literal `data-auto-submit`, so
+    # it was satisfied by its own prose: deleting the real attribute left it green. Caught by
+    # mutation, which is the only reason this reads the tag instead.
+    tag_start = tpl.index('<span class="pp-gl-range"')
+    tag = tpl[tag_start:tpl.index('>', tag_start)]
+    assert 'data-auto-submit' in tag, f'the range no longer opts in: {tag}'
+    assert 'min_games' in tpl and 'max_games' in tpl
+
+    # ...and the controller still honours that opt-in.
+    assert "closest('[data-auto-submit]')" in js, 'browse-filters no longer honours the attribute'
+
+
+def test_stepping_the_range_does_not_fire_a_request_per_click(linked_staff_client):
+    """A spinner click fires `change` in Chrome, so stepping 0 to 5 would be five requests and --
+    with `hx-push-url` -- five history entries, so Back needs six presses to leave the page. The
+    same reasoning the radio groups already carry, applied to the control that just gained the
+    ability to submit at all."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'browse-filters.js').read_text(
+        encoding='utf-8')
+
+    handler = js[js.index('form.addEventListener(\'change\''):]
+    handler = handler[:handler.index('// ── Toggle buttons')]
+    assert "el.type === 'number'" in handler, 'number ranges are not coalesced'
+    assert handler.count('setTimeout') >= 2, 'the coalescing debounce is gone'
+
+
+def test_the_server_side_range_filter_was_never_the_problem(linked_staff_client):
+    """Stated explicitly because the failure looked like a backend bug and was not. A six-game list
+    is excluded by any range that does not contain six."""
+    # A distinct psn_username: `linked_staff_client` already holds the default 'curator'.
+    owner = _hunter(psn='six-game-author')
+    _list(owner, 6, name='Six games')
+
+    assert len(linked_staff_client.get(BROWSE, {'max_games': '3'}).context['game_lists']) == 0
+    assert len(linked_staff_client.get(BROWSE, {'min_games': '9'}).context['game_lists']) == 0
+    assert len(linked_staff_client.get(BROWSE, {'min_games': '5', 'max_games': '7'})
+               .context['game_lists']) == 1

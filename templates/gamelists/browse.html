@@ -93,7 +93,16 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
 
                 {% comment %} The size range, kept from the old toolbar but folded into one quiet control
                 instead of two loose number boxes with a label between them. {% endcomment %}
-                <span class="pp-gl-range" title="Filter by how many games a list holds">
+                {% comment %}`data-auto-submit` is LOAD-BEARING and was missing, which is why this filter never
+                worked: `browse-filters.js` submits on `change` for checkboxes, radios, selects and
+                anything inside `[data-auto-submit]` -- and nothing else. A bare number input matches
+                none of those, so typing a range and tabbing away fired no request at all.
+
+                It was noticed once from the wrong end. Changing a value used to DIM the grid with no
+                request to clear it, and that was "fixed" by excluding number inputs from the dim --
+                treating the symptom and leaving the filter inert. `lists-browse.js` tests the same
+                attribute, so the dim starts working again by the same change.{% endcomment %}
+                <span class="pp-gl-range" data-auto-submit title="Filter by how many games a list holds">
                     <span class="pp-gl-range__label">Games</span>
                     <input type="number" name="min_games" value="{{ request.GET.min_games }}" min="0" inputmode="numeric" placeholder="min" aria-label="Minimum games" />
                     <span class="pp-gl-range__dash" aria-hidden="true">&ndash;</span>
