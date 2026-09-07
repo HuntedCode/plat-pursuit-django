@@ -59,16 +59,45 @@ def test_following_and_unfollowing(client):
     assert GameListFollow.objects.count() == 0
 
 
-def test_a_private_list_cannot_be_liked_through_its_id(client):
-    """404, not 403 and not a service error -- otherwise the endpoint is an oracle that confirms a
-    private list exists, and whose it is, from nothing but a number."""
+@pytest.mark.parametrize('name, extra_args, payload', [
+    ('list_like', (), {'liked': 'true'}),
+    ('list_follow', (), {'following': 'true'}),
+    ('list_add_game', (), {'concept_id': 1}),
+    ('list_remove_game', (1,), {}),
+])
+def test_no_endpoint_confirms_a_private_list_exists(client, name, extra_args, payload):
+    """404 from EVERY endpoint -- never 403, never a service error, and never a 500.
+
+    This existed for `list_like` alone, and that omission is exactly why `list_follow` and
+    `list_add_game` shipped passing `None` into the service: `get_list` returns None for an
+    unreadable list, and neither view checked. Both raised AttributeError inside the service, so a
+    private id answered 500 while a readable one answered 400 -- which is the very distinction the
+    uniform 404 exists to erase.
+    """
     author = ProfileFactory(is_linked=True, psn_username='author')
     private = svc.create_list(author, name='Private')
     _staff(client, psn='stranger')
 
-    assert client.post(reverse('list_like', args=[private.id]),
-                       {'liked': 'true'}).status_code == 404
+    resp = client.post(reverse(name, args=(private.id, *extra_args)), payload)
+
+    assert resp.status_code == 404, f'{name} answered {resp.status_code} for a private list'
     assert GameListLike.objects.count() == 0
+    assert GameListFollow.objects.count() == 0
+    assert GameListItem.objects.count() == 0
+
+
+def test_no_endpoint_500s_on_a_list_that_never_existed(client):
+    """Same guard, from the other side: an id nobody owns must answer the same way a private one
+    does, or the difference between them is itself the oracle."""
+    _staff(client)
+
+    for name, args, payload in (
+        ('list_like', (99999,), {'liked': 'true'}),
+        ('list_follow', (99999,), {'following': 'true'}),
+        ('list_add_game', (99999,), {'concept_id': 1}),
+        ('list_remove_game', (99999, 1), {}),
+    ):
+        assert client.post(reverse(name, args=args), payload).status_code == 404, name
 
 
 def test_you_cannot_like_your_own_list_through_the_endpoint(client):
@@ -218,13 +247,27 @@ def test_the_search_marks_what_is_already_on_the_list(client):
     assert results[0]['already_added'] is True
 
 
-def test_a_short_query_returns_nothing_rather_than_the_catalogue(client):
+@pytest.mark.parametrize('short', ['', 'a', 'ab'])
+def test_a_short_query_returns_nothing_rather_than_the_catalogue(client, short):
+    """Three characters, not two: pg_trgm extracts no trigrams from a two-character pattern, so a
+    2-char query is a guaranteed full pass over the catalogue however the index question lands."""
     owner = _staff(client)
     game_list = svc.create_list(owner, name='Backlog')
-    _concept('A')
+    _concept('Abc')
 
     assert client.get(reverse('list_game_search', args=[game_list.id]),
-                      {'q': 'a'}).json()['results'] == []
+                      {'q': short}).json()['results'] == []
+
+
+def test_an_enormous_query_is_refused_rather_than_becoming_a_like_pattern(client):
+    """An unbounded `q` is an unbounded LIKE pattern. `SiteSuggestView` refuses these and this
+    copied its query shape without its protections."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+
+    resp = client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'x' * 5000})
+
+    assert resp.status_code == 400
 
 
 def test_the_search_is_bounded(client):
@@ -248,9 +291,13 @@ def test_the_search_does_not_fetch_the_igdb_blob(client):
     _concept('Blob Test')
 
     with CaptureQueriesContext(connection) as ctx:
-        client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'blob'})
+        client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'blobtest'})
 
-    for sql in (q['sql'] for q in ctx.captured_queries if 'igdb' in q['sql'].lower()):
+    joined = [q['sql'] for q in ctx.captured_queries if 'igdb' in q['sql'].lower()]
+    # The guard its sibling in test_gamelists_detail.py has and this dropped: an empty generator
+    # passes the loop below, so without this the test is green when the query never runs at all.
+    assert joined, 'the cover chain is not being joined at all'
+    for sql in joined:
         assert 'raw_response' not in sql.lower()
 
 
@@ -289,3 +336,116 @@ def test_the_write_endpoints_refuse_a_get(client):
 
     assert client.get(reverse('list_like', args=[game_list.id])).status_code == 405
     assert client.get(reverse('list_add_game', args=[game_list.id])).status_code == 405
+
+
+# -- what the endpoint audit found had no test ---------------------------------------------------
+
+@pytest.mark.parametrize('bad', ['abc', '99999999999999999999', '-1', ''])
+def test_a_malformed_concept_id_is_refused_rather_than_raising(client, bad):
+    """`Concept.objects.filter(pk='abc')` raises ValueError and a 20-digit id raises DataError --
+    both 500s reachable from a form field. This file already carried `_count_filter`, written after
+    a superscript two took the browse page down, and none of that discipline had reached here."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]), {'concept_id': bad})
+
+    assert resp.status_code == 404, f'{bad!r} produced {resp.status_code}'
+    assert GameListItem.objects.count() == 0
+
+
+def test_an_overflowing_list_id_answers_404_rather_than_erroring(client):
+    """Django's `<int:...>` converter is `[0-9]+` with no length bound, so a 20-digit id reaches the
+    ORM. An audit expected that to raise `DataError` and 500; it does not -- Django 5.2 returns an
+    empty queryset for an out-of-range pk, verified rather than assumed. So there is no guard here
+    to test, and this pins the BEHAVIOUR instead: if a future Django stops absorbing it, this fails
+    and tells us to add one."""
+    _staff(client)
+
+    huge = '99999999999999999999'
+    assert client.post(f'/community/lists/{huge}/like/', {'liked': 'true'}).status_code == 404
+    assert client.get(f'/community/lists/{huge}/').status_code == 404
+
+
+def test_the_write_endpoints_enforce_csrf():
+    """No test in this file would have noticed `@csrf_exempt` being added: the default client has
+    CSRF checks OFF. The house already has the strict-client pattern in test_mod_center."""
+    from django.test import Client
+
+    strict = Client(enforce_csrf_checks=True)
+    owner = _staff(strict)
+    game_list = svc.create_list(owner, name='Mine', is_public=True)
+
+    resp = strict.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': _concept().pk})
+
+    assert resp.status_code == 403, 'the write endpoints accept a POST with no CSRF token'
+    assert GameListItem.objects.count() == 0
+
+
+def test_every_write_endpoint_is_rate_limited():
+    """The endpoints these replace all carried limits (120/m add and remove, 60/m like and follow),
+    and the replacements carried none. Asserted on the view rather than by bursting: the decorator
+    is the contract, and a burst test would couple this file to the cache backend."""
+    import inspect
+
+    from gamelists import views
+
+    for name in ('ToggleLikeView', 'ToggleFollowView', 'AddConceptView', 'RemoveItemView',
+                 'ListGameSearchView'):
+        source = inspect.getsource(getattr(views, name))
+        assert 'ratelimit' in source, f'{name} is unthrottled'
+
+
+def test_the_search_is_cached_so_the_catalogue_scan_is_not_per_keystroke(client):
+    """The cache is one of the three protections `SiteSuggestView` has and this had copied none of.
+    It is keyed on the QUERY, not the list, because the catalogue half of the answer is the same for
+    everybody and is the expensive half."""
+    from django.core.cache import cache
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    cache.clear()
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _concept('Cached Game')
+
+    url = reverse('list_game_search', args=[game_list.id])
+    with CaptureQueriesContext(connection) as first:
+        client.get(url, {'q': 'cached'})
+    with CaptureQueriesContext(connection) as second:
+        client.get(url, {'q': 'cached'})
+
+    def catalogue_queries(ctx):
+        return len([q for q in ctx.captured_queries if 'trophies_concept' in q['sql']])
+
+    assert catalogue_queries(first) >= 1
+    assert catalogue_queries(second) == 0, 'the catalogue is scanned again on an identical query'
+    cache.clear()
+
+
+def test_the_cache_does_not_leak_one_hunters_list_into_anothers_results(client):
+    """`already_added` is per-list and must be applied AFTER the cache, or the second hunter to
+    search a term sees the first one's list state."""
+    from django.core.cache import cache
+    from django.test import Client
+
+    cache.clear()
+    concept = _concept('Shared Game')
+
+    owner_a = _staff(client, psn='huntera')
+    list_a = svc.create_list(owner_a, name='A')
+    svc.add_concept(list_a, owner_a, concept)
+    results_a = client.get(reverse('list_game_search', args=[list_a.id]),
+                           {'q': 'shared'}).json()['results']
+    assert results_a[0]['already_added'] is True
+
+    other = Client()
+    owner_b = _staff(other, psn='hunterb')
+    list_b = svc.create_list(owner_b, name='B')
+    results_b = other.get(reverse('list_game_search', args=[list_b.id]),
+                          {'q': 'shared'}).json()['results']
+
+    assert results_b[0]['already_added'] is False, "the cache leaked another hunter's list state"
+    cache.clear()
+

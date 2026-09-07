@@ -88,16 +88,30 @@ def test_a_soft_deleted_list_is_gone_even_for_its_owner(client):
 
 def test_a_visitor_gets_the_social_actions_and_the_owner_does_not(client):
     """Nobody gets both, because there is no state in which both apply -- you cannot like your own
-    list (the service refuses it) and you have no use for saving it."""
+    list (the service refuses it) and you have no use for following it.
+
+    BOTH halves. The first version only ever loaded the page as the reader, so the half after the
+    "and" was unasserted and a `can_act` that was unconditionally true would have passed.
+    """
+    from django.test import Client
+
     author = ProfileFactory(is_linked=True, psn_username='author')
-    game_list = _list(author, 1)
+    game_list = _list(author, 1, public=False)
+    svc.update_list(game_list, author, is_public=True)
+
     _staff(client, psn='reader')
+    reader_body = client.get(_url(game_list)).content.decode()
+    assert 'data-gl-like' in reader_body
+    assert 'data-gl-follow' in reader_body
+    assert 'data-gl-publish' not in reader_body
 
-    body = client.get(_url(game_list)).content.decode()
-
-    assert 'data-gl-like' in body
-    assert 'data-gl-follow' in body
-    assert 'data-gl-publish' not in body
+    owner_client = Client()
+    owner_client.force_login(author.user)
+    author.user.role = 'admin'
+    author.user.save()
+    owner_body = owner_client.get(_url(game_list)).content.decode()
+    assert 'data-gl-like' not in owner_body, 'the owner is offered a like the service would refuse'
+    assert 'data-gl-follow' not in owner_body
 
 
 def test_the_owner_gets_a_publish_affordance_only_while_it_is_private(client):
@@ -239,15 +253,20 @@ def test_entries_link_to_the_game_not_to_a_trophy_list(client):
 
 
 @pytest.mark.parametrize('sort, expected', [
-    ('position', ['First', 'Second', 'Third']),
-    ('name', ['First', 'Second', 'Third']),
-    ('added', ['Third', 'Second', 'First']),
+    ('position', ['Zulu', 'Alpha', 'Mike']),
+    ('name', ['Alpha', 'Mike', 'Zulu']),
+    ('added', ['Mike', 'Alpha', 'Zulu']),
 ])
 def test_every_offered_sort_actually_sorts(client, sort, expected):
-    """Order, not an echo of the parameter."""
+    """Order, not an echo of the parameter.
+
+    The titles are deliberately NOT in alphabetical insertion order. They were First/Second/Third,
+    whose alphabetical order IS their insertion order -- so the `name` case expected exactly what
+    `position` produces, and a view that ignored `sort=name` entirely passed it.
+    """
     owner = _staff(client)
     game_list = _list(owner)
-    for title in ('First', 'Second', 'Third'):
+    for title in ('Zulu', 'Alpha', 'Mike'):
         concept = ConceptFactory(unified_title=title)
         GameFactory(concept=concept, title_platform='PS5')
         svc.add_concept(game_list, owner, concept)
@@ -274,7 +293,9 @@ def test_sorting_swaps_the_items_and_nothing_else(client):
     body = client.get(_url(game_list), {'sort': 'name'},
                       HTTP_HX_REQUEST='true').content.decode()
 
-    assert 'gl-items' in body
+    # `id="gl-items"` exactly: the bare string `gl-items` is a substring of the full page's
+    # `id="gl-items-panel"` wrapper, so it was answered by the page this test exists to exclude.
+    assert 'id="gl-items"' in body
     assert '<!doctype html' not in body.lower(), 'the sort swap returned the whole page'
     assert '<nav' not in body.lower()
 
@@ -325,3 +346,55 @@ def test_a_sorted_public_list_is_not_indexed_as_a_duplicate(client):
     _staff(client, psn='reader')
 
     assert 'noindex' in client.get(_url(game_list), {'sort': 'name'}).content.decode()
+
+
+def test_a_plain_public_list_is_indexable():
+    """The negative control the two noindex tests lacked. Both asserted `noindex in body`, so
+    hardcoding the block to `noindex, nofollow` passed both and silently de-indexed every public
+    list on the site."""
+    from django.test import Client
+
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+
+    client = Client()
+    _staff(client, psn='reader')
+
+    assert 'noindex' not in client.get(_url(game_list)).content.decode()
+
+
+def test_an_unlinked_viewer_is_not_offered_actions_the_endpoints_would_refuse(client):
+    """The page computed `can_act` from "has a profile" while the endpoints require `is_linked` --
+    so an unlinked viewer saw both buttons and their JSON fetch got an HTML redirect back."""
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+
+    user = UserFactory()
+    user.role = 'admin'
+    user.save()
+    ProfileFactory(user=user, is_linked=False, psn_username='unlinked')
+    client.force_login(user)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-like' not in body
+    assert 'data-gl-follow' not in body
+
+
+def test_a_very_long_list_renders_a_bounded_page(client):
+    """Query COUNT was already O(1) and would stay O(1) at half a million rows -- the failure mode
+    is rows and bytes. List size is uncapped by design, so this number is attacker-controlled."""
+    from gamelists.views import MAX_ITEMS_RENDERED
+
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+    for n in range(MAX_ITEMS_RENDERED + 5):
+        concept = ConceptFactory(unified_title=f'Bulk {n:04d}')
+        svc.add_concept(game_list, owner, concept)
+
+    resp = client.get(_url(game_list))
+
+    assert len(resp.context['items']) == MAX_ITEMS_RENDERED
+    assert resp.context['items_truncated'] is True
+    assert 'Showing the first' in resp.content.decode()
+

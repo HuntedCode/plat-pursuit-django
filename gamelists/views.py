@@ -10,14 +10,19 @@ both on. `_DevelopmentGate` is one mixin and its removal is the switch -- see `t
 which pins that nothing links here yet.
 """
 from django.contrib import messages
+from django.core.cache import cache
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views.generic import DetailView, ListView, View
 
+from django_ratelimit.decorators import ratelimit
+
+from api.utils import safe_int
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, GameList,
                              GameListFollow, GameListItem, GameListLike)
 from gamelists.services import game_list_service as svc
@@ -27,6 +32,11 @@ from trophies.models import Concept
 
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
 LIST_TILE_COVERS = 4
+
+#: How many entries a list page renders at once. Not a cap on the list -- lists are uncapped, which
+#: is deliberate -- but a bound on one render, so a very long list is slow to page through rather
+#: than able to exhaust a worker. Real pagination here is a follow-up; this is the floor under it.
+MAX_ITEMS_RENDERED = 200
 
 #: Ceiling for the game-count filter. Anything above it is treated as "no filter" rather than passed
 #: to the database: a 40-digit number compared against a PositiveIntegerField is backend-dependent
@@ -362,7 +372,10 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         sort = self._selected_sort()
         order = {
             'name': ('concept__unified_title',),
-            'added': ('-added_at',),
+            # `position` as the tiebreak: `added_at` is `auto_now_add`, set in Python, so ties are
+            # rare rather than impossible -- and a future bulk-add path would tie outright. Without
+            # it the same list renders in two different orders on two loads.
+            'added': ('-added_at', 'position'),
         }.get(sort, ('position',))
 
         # `concept__igdb_match`, deferred, because the tile calls `concept.game_page_url` -- whose
@@ -371,12 +384,21 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         # The flatness test could not see it (it counts gamelists_ and trophies_game tables), which
         # is the same blind spot an audit flagged on the browse page; the raw_response guard caught
         # it instead.
+        # BOUNDED. There is no cap on list SIZE (members always had unlimited, and removing that
+        # was a perk takeback), so the row count here is attacker-controlled: one account can build a
+        # 50,000-item list and hand out the URL. `cover_games_for` then fetches every Game row for
+        # every concept -- several per concept once stacks are counted -- which is the largest
+        # allocation on the page and invisible to a query-COUNT test, because the shape stays O(1)
+        # while the bytes do not. CLAUDE.md's whale rule names exactly this: an explicit `[:N]` slice
+        # is the acceptable form. The overflow is surfaced rather than silently dropped.
         items = list(
             game_list.items
             .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
-            .order_by(*order)
+            .order_by(*order)[:MAX_ITEMS_RENDERED]
         )
+        context['items_truncated'] = game_list.game_count > len(items)
+        context['items_shown'] = len(items)
         # One batched query for every cover on the page, not one per row -- the same helper the
         # browse tiles use, for the same reason.
         covers = cover_games_for([item.concept_id for item in items])
@@ -387,7 +409,12 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         context['sort'] = sort
         context['sort_choices'] = self.SORT_CHOICES
         context['is_owner'] = viewer is not None and game_list.owner_id == viewer.id
-        context['can_act'] = viewer is not None and not context['is_owner']
+        # `is_linked`, not merely "has a profile". The action ENDPOINTS carry
+        # `_LinkedProfileRequired`, which 302s to link_psn -- so without this an unlinked viewer was
+        # shown both buttons and got an HTML redirect back from a JSON fetch. The page and the
+        # endpoint have to agree about who can act.
+        context['can_act'] = (
+            viewer is not None and viewer.is_linked and not context['is_owner'])
         if context['can_act']:
             context['viewer_has_liked'] = GameListLike.objects.filter(
                 game_list=game_list, profile=viewer).exists()
@@ -442,12 +469,9 @@ class _ListActionView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequir
 
 
 class ToggleLikeView(_ListActionView):
+    @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
     def post(self, request, list_id):
         game_list = self.get_list(request, list_id)
-        if game_list is None:
-            return self.not_found()
-        if game_list is None:
-            return self.not_found()
         if game_list is None:
             return self.not_found()
         liked = request.POST.get('liked') == 'true'
@@ -459,8 +483,11 @@ class ToggleLikeView(_ListActionView):
 
 
 class ToggleFollowView(_ListActionView):
+    @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
     def post(self, request, list_id):
         game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
         following = request.POST.get('following') == 'true'
         try:
             count = svc.set_follow(game_list, self._viewer(request), following=following)
@@ -470,9 +497,19 @@ class ToggleFollowView(_ListActionView):
 
 
 class AddConceptView(_ListActionView):
+    @method_decorator(ratelimit(key='user', rate='120/m', method='POST', block=True))
     def post(self, request, list_id):
         game_list = self.get_list(request, list_id)
-        concept = Concept.objects.filter(pk=request.POST.get('concept_id')).first()
+        if game_list is None:
+            return self.not_found()
+
+        # `safe_int`, not the raw POST value. `Concept.objects.filter(pk='abc')` raises ValueError
+        # and a 20-digit id raises DataError -- both 500s from a query string. This file already
+        # carries `_count_filter`, written after `'\u00b2'.isdigit()` took the browse page down, and
+        # none of that discipline reached here.
+        concept_id = safe_int(request.POST.get('concept_id'), None)
+        concept = (Concept.objects.filter(pk=concept_id).first()
+                   if concept_id is not None else None)
         if concept is None:
             return self.fail('That game could not be found.', status=404)
         try:
@@ -489,6 +526,7 @@ class AddConceptView(_ListActionView):
 
 
 class RemoveItemView(_ListActionView):
+    @method_decorator(ratelimit(key='user', rate='120/m', method='POST', block=True))
     def post(self, request, list_id, item_id):
         game_list = self.get_list(request, list_id)
         if game_list is None:
@@ -507,10 +545,23 @@ class RemoveItemView(_ListActionView):
 class ListGameSearchView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
     """Typeahead for the adder: CONCEPTS, not trophy lists.
 
-    Mirrors `SiteSuggestView`'s query shape rather than reusing it -- that view is the nav search and
-    answers five rows per group across mixed entity types, which is the wrong shape for an adder --
-    but it rides the same `pg_trgm` GIN index on `Concept.unified_title` (migration 0257) and defers
-    `raw_response` for the same reason.
+    Mirrors `SiteSuggestView`'s query shape rather than reusing it -- that view is the nav search,
+    answering five rows per group across mixed entity types, which is the wrong shape for an adder.
+
+    THE INDEX CLAIM THAT WAS HERE WAS FALSE, and worth recording rather than quietly deleting. It
+    said this "rides the pg_trgm GIN index on Concept.unified_title". It does not: Django compiles
+    `__icontains` on Postgres to `UPPER(col::text) LIKE UPPER(%q%)` (verified, not assumed), and a
+    `gin_trgm_ops` index on the RAW column cannot serve a LIKE against a function of that column.
+    There is no expression index on `UPPER(unified_title::text)` anywhere in the tree, so this is a
+    sequential scan of the catalogue. `SiteSuggestView` has exactly the same shape -- fixing that,
+    and deciding whether `trophies_concept` gains an expression index, is a change to shared
+    catalogue infrastructure and belongs in its own lane with EXPLAIN output from production.
+
+    What this view CAN do is stop being the dangerous consumer of that shape, by taking the three
+    protections `SiteSuggestView` has and this copied none of: a rate limit, a short cache keyed on
+    the normalized query, and an upper bound on `q`. `MIN_QUERY` is 3 rather than 2 because pg_trgm
+    extracts no trigrams from a two-character pattern, so a 2-char query is a guaranteed full pass
+    even once the index question is settled.
 
     Deliberately NOT `Game.title_name`, which the old list search used: that is the trophy-list name,
     it is unreliable for matching, and it would return one row per stack for a game somebody wants to
@@ -518,39 +569,58 @@ class ListGameSearchView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileReq
     """
 
     LIMIT = 12
-    MIN_QUERY = 2
+    MIN_QUERY = 3
+    MAX_QUERY = 64
+    CACHE_TTL = 60
 
+    @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
     def get(self, request, list_id):
         game_list = GameList.objects.readable_by(
             getattr(request.user, 'profile', None)).filter(pk=list_id).first()
         if game_list is None:
-            # JSON rather than Http404: this answers a fetch, and the project's handler404 renders
-            # an HTML page (at 200, per its own documented quirk) which no JSON caller can read.
+            # JSON rather than Http404: this answers a fetch, and `handler404` is a GET-only
+            # TemplateView, so raising from here would render an HTML page a JSON caller cannot
+            # read. (An earlier version of this comment also claimed that handler renders at 200.
+            # It does not -- `NotFoundView` sets status 404 explicitly. The reason to avoid Http404
+            # is the method, not the status.)
             return JsonResponse({'error': 'That list is not available.'}, status=404)
 
         query = (request.GET.get('q') or '').strip()
+        if len(query) > self.MAX_QUERY:
+            # An unbounded `q` becomes an unbounded LIKE pattern. `SiteSuggestView` refuses these.
+            return JsonResponse({'error': 'That search is too long.'}, status=400)
         if len(query) < self.MIN_QUERY:
             return JsonResponse({'results': []})
+
+        # Cached on the normalized query, NOT on the list: the catalogue half of the answer is the
+        # same for everybody, and it is the expensive half. `already_added` is per-list and applied
+        # after the cache, so one hunter's list never leaks into another's results.
+        cache_key = f'gamelists:search:{query.lower()}'
+        cached = cache.get(cache_key)
+        if cached is None:
+            concepts = list(
+                Concept.objects.filter(unified_title__icontains=query)
+                .exclude(unified_title='')
+                .select_related('igdb_match')
+                .defer('igdb_match__raw_response')
+                .order_by('unified_title')[:self.LIMIT]
+            )
+            covers = cover_games_for([c.pk for c in concepts])
+            cached = [
+                {
+                    'concept_id': concept.pk,
+                    'title': concept.unified_title,
+                    'cover': covers[concept.pk].display_image_url if concept.pk in covers else '',
+                }
+                for concept in concepts
+            ]
+            cache.set(cache_key, cached, self.CACHE_TTL)
 
         already = set(
             GameListItem.objects.filter(game_list=game_list).values_list('concept_id', flat=True)
         )
-        concepts = list(
-            Concept.objects.filter(unified_title__icontains=query)
-            .exclude(unified_title='')
-            .select_related('igdb_match')
-            .defer('igdb_match__raw_response')
-            .order_by('unified_title')[:self.LIMIT]
-        )
-        covers = cover_games_for([c.pk for c in concepts])
+        # Marked rather than filtered out: a hunter searching for something already on the list
+        # should be told it is there, not left wondering why it does not appear.
         return JsonResponse({'results': [
-            {
-                'concept_id': concept.pk,
-                'title': concept.unified_title,
-                'cover': covers[concept.pk].display_image_url if concept.pk in covers else '',
-                # Marked rather than filtered out: a hunter searching for something already on the
-                # list should be told it is there, not left wondering why it does not appear.
-                'already_added': concept.pk in already,
-            }
-            for concept in concepts
+            dict(row, already_added=row['concept_id'] in already) for row in cached
         ]})

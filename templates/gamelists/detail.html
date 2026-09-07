@@ -140,6 +140,15 @@ below with no outer wrapper.
     <div id="gl-items-panel">
         {% include 'gamelists/partials/detail_items.html' %}
     </div>
+
+    {% if items_truncated %}
+    {% comment %}Surfaced rather than silently dropped. Lists are uncapped by design, so a very long
+    one is real -- but one render is bounded, and a reader is owed the difference between "that is
+    the whole list" and "that is as much as this page shows".{% endcomment %}
+    <p class="text-xs text-base-content/50 mt-3 text-center">
+        Showing the first {{ items_shown|intcomma }} of {{ game_list.game_count|intcomma }} games.
+    </p>
+    {% endif %}
 </div>
 {% endblock %}
 
